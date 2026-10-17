@@ -21,34 +21,44 @@ GOLANGCI_LINT_PKG := github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 GOFUMPT_PKG := mvdan.cc/gofumpt
 GOTESTSUM_PKG := gotest.tools/gotestsum
 
-INSTALL_BINS := golangci-lint gofumpt gotestsum gg testcachefix
-# install_tool_if_missing installs a Makefile-managed tool only when it is unavailable.
-define install_tool_if_missing
-	@if ! command -v $(1) >/dev/null 2>&1 && [ ! -x "$(GO_BIN_DIR)/$(1)" ]; then \
-		echo "Installing $(1)@$(2)..."; \
-		mkdir -p "$(GO_BIN_DIR)"; \
-		go install $(3)@$(2); \
-	fi
+# The tools make runs, each the binary of the version go.mod pins, installed
+# under GO_BIN_DIR in a directory named after the tool and its version, as
+# golangci-lint-v2.14.0/golangci-lint. A tool on PATH is never run, whatever
+# its version, so a run here and a run in CI judge the code by the same tool;
+# an upgrade installs the new version beside the old one.
+GOLANGCI_LINT := $(GO_BIN_DIR)/golangci-lint-$(GOLANGCI_LINT_VERSION)/golangci-lint
+GOFUMPT := $(GO_BIN_DIR)/gofumpt-$(GOFUMPT_VERSION)/gofumpt
+GOTESTSUM := $(GO_BIN_DIR)/gotestsum-$(GOTESTSUM_VERSION)/gotestsum
+
+# install_tool installs the tool at the path $(1), the binary of the package
+# $(2) at the version $(3), when it is not there yet. go install names the
+# binary after its package, so the version goes on the directory, which is
+# the GOBIN of the install alone: the module and build caches serve the
+# build like any other, and nothing else of the environment changes.
+define install_tool
+	@[ -x "$(1)" ] || { \
+		echo "Installing $(2)@$(3)..."; \
+		mkdir -p "$(dir $(1))"; \
+		GOBIN="$(dir $(1))" go install $(2)@$(3); \
+	}
 endef
 
-# run_tool resolves tools installed during the current make invocation before
-# running them, with the environment TOOL_ENV sets, empty but for test.
+# run_tool runs the tool at the path $(1), with the environment TOOL_ENV
+# sets, empty but for test.
 define run_tool
-	@tool="$$(command -v $(1) 2>/dev/null || printf '%s' "$(GO_BIN_DIR)/$(1)")"; \
-		echo "$(1) $(2)"; \
-		$(TOOL_ENV) "$$tool" $(2)
+	@echo "$(notdir $(1)) $(2)"; \
+		$(TOOL_ENV) "$(1)" $(2)
 endef
 
-# run_tool_in runs a resolved tool from another directory. Neither tool it
-# serves has a flag of its own for this: golangci-lint discovers its
+# run_tool_in runs the tool at the path $(1) from another directory. Neither
+# tool it serves has a flag of its own for this: golangci-lint discovers its
 # configuration by walking up from the working directory, so an example is
 # only linted against its own .golangci.yml when the tool actually runs inside
 # the example -- which is also what gg lint does in a generated project -- and
 # gotestsum tests the module of the directory it runs in.
 define run_tool_in
-	@tool="$$(command -v $(1) 2>/dev/null || printf '%s' "$(GO_BIN_DIR)/$(1)")"; \
-		echo "$(1) $(3) ($(2))"; \
-		cd $(2) && $(TOOL_ENV) "$$tool" $(3)
+	@echo "$(notdir $(1)) $(3) ($(2))"; \
+		cd $(2) && $(TOOL_ENV) "$(1)" $(3)
 endef
 
 # Default target
@@ -93,9 +103,9 @@ build:
 	CGO_ENABLED=0 go build ./...
 
 format:
-	$(call install_tool_if_missing,gofumpt,$(GOFUMPT_VERSION),$(GOFUMPT_PKG))
+	$(call install_tool,$(GOFUMPT),$(GOFUMPT_PKG),$(GOFUMPT_VERSION))
 	@echo "Running gofumpt..."
-	$(call run_tool,gofumpt,-l -w .)
+	$(call run_tool,$(GOFUMPT),-l -w .)
 
 # Run go vet, on the example modules too: each example is a module of its own,
 # which go vet ./... does not reach into, and an API change that breaks one
@@ -112,12 +122,12 @@ vet:
 # gg new writes into a project, so the rules a generated project is held to are
 # the rules the examples demonstrate.
 lint:
-	$(call install_tool_if_missing,golangci-lint,$(GOLANGCI_LINT_VERSION),$(GOLANGCI_LINT_PKG))
+	$(call install_tool,$(GOLANGCI_LINT),$(GOLANGCI_LINT_PKG),$(GOLANGCI_LINT_VERSION))
 	@echo "Running golangci-lint..."
-	$(call run_tool,golangci-lint,run ./...)
-	$(call run_tool_in,golangci-lint,examples/demo,run ./...)
-	$(call run_tool_in,golangci-lint,examples/cluster,run ./...)
-	$(call run_tool_in,golangci-lint,examples/bench,run ./...)
+	$(call run_tool,$(GOLANGCI_LINT),run ./...)
+	$(call run_tool_in,$(GOLANGCI_LINT),examples/demo,run ./...)
+	$(call run_tool_in,$(GOLANGCI_LINT),examples/cluster,run ./...)
+	$(call run_tool_in,$(GOLANGCI_LINT),examples/bench,run ./...)
 
 # Hold the framework's own source to the rules golangci-lint cannot express
 # (see internal/cmd/selfcheck): testpackage in golangci-lint, for one, makes a
@@ -199,26 +209,24 @@ testcachefix:
 # records every test binary the run links and files the results under their
 # link keys afterwards, whatever the run's status, which it then reports.
 define run_test_suite
-	@tool="$$(command -v gotestsum 2>/dev/null || printf '%s' "$(GO_BIN_DIR)/gotestsum")"; \
-		record="$$(mktemp -d)"; \
+	@record="$$(mktemp -d)"; \
 		echo "gotestsum $(TEST_OUTPUT) -- $(TEST_FLAGS) $(1)"; \
-		$(TOOL_ENV) "$$tool" $(TEST_OUTPUT) -- $(TEST_FLAGS) -toolexec "$(TESTCACHEFIX) record-link $$record" $(1); status=$$?; \
+		$(TOOL_ENV) "$(GOTESTSUM)" $(TEST_OUTPUT) -- $(TEST_FLAGS) -toolexec "$(TESTCACHEFIX) record-link $$record" $(1); status=$$?; \
 		$(TOOL_ENV) "$(TESTCACHEFIX)" writeback "$$record"; rm -rf "$$record"; exit $$status
 endef
 
 # run_test_suite_in runs a suite from another directory, the way run_tool_in
 # does: gotestsum tests the module of the directory it runs in.
 define run_test_suite_in
-	@tool="$$(command -v gotestsum 2>/dev/null || printf '%s' "$(GO_BIN_DIR)/gotestsum")"; \
-		record="$$(mktemp -d)"; \
+	@record="$$(mktemp -d)"; \
 		echo "gotestsum $(TEST_OUTPUT) -- $(TEST_FLAGS) $(2) ($(1))"; \
-		cd $(1) && $(TOOL_ENV) "$$tool" $(TEST_OUTPUT) -- $(TEST_FLAGS) -toolexec "$(TESTCACHEFIX) record-link $$record" $(2); status=$$?; \
+		cd $(1) && $(TOOL_ENV) "$(GOTESTSUM)" $(TEST_OUTPUT) -- $(TEST_FLAGS) -toolexec "$(TESTCACHEFIX) record-link $$record" $(2); status=$$?; \
 		$(TOOL_ENV) "$(TESTCACHEFIX)" writeback "$$record"; rm -rf "$$record"; exit $$status
 endef
 
 test: TOOL_ENV = PATH="$(TEST_PATH)"
 test: testcachefix
-	$(call install_tool_if_missing,gotestsum,$(GOTESTSUM_VERSION),$(GOTESTSUM_PKG))
+	$(call install_tool,$(GOTESTSUM),$(GOTESTSUM_PKG),$(GOTESTSUM_VERSION))
 	@echo "Running unit tests (the per-dialect suites run against mysql here)..."
 	$(call run_test_suite,./...)
 	@echo "Running the per-dialect suites against postgres..."
@@ -238,7 +246,7 @@ test: testcachefix
 test-short: TOOL_ENV = PATH="$(TEST_PATH)"
 test-short: TEST_FLAGS += -short
 test-short: testcachefix
-	$(call install_tool_if_missing,gotestsum,$(GOTESTSUM_VERSION),$(GOTESTSUM_PKG))
+	$(call install_tool,$(GOTESTSUM),$(GOTESTSUM_PKG),$(GOTESTSUM_VERSION))
 	@echo "Running unit tests in short mode (main module; the gg end-to-end cases skipped)..."
 	$(call run_test_suite,./...)
 
@@ -265,38 +273,37 @@ generate:
 # root already covers them.
 fix:
 	@echo "Running auto-fix tools..."
-	$(call install_tool_if_missing,gofumpt,$(GOFUMPT_VERSION),$(GOFUMPT_PKG))
+	$(call install_tool,$(GOFUMPT),$(GOFUMPT_PKG),$(GOFUMPT_VERSION))
 	@echo "Running gofumpt..."
-	$(call run_tool,gofumpt,-l -w .)
-	$(call install_tool_if_missing,golangci-lint,$(GOLANGCI_LINT_VERSION),$(GOLANGCI_LINT_PKG))
+	$(call run_tool,$(GOFUMPT),-l -w .)
+	$(call install_tool,$(GOLANGCI_LINT),$(GOLANGCI_LINT_PKG),$(GOLANGCI_LINT_VERSION))
 	@echo "Running golangci-lint --fix..."
-	$(call run_tool,golangci-lint,run --fix ./...)
-	$(call run_tool_in,golangci-lint,examples/demo,run --fix ./...)
-	$(call run_tool_in,golangci-lint,examples/cluster,run --fix ./...)
-	$(call run_tool_in,golangci-lint,examples/bench,run --fix ./...)
+	$(call run_tool,$(GOLANGCI_LINT),run --fix ./...)
+	$(call run_tool_in,$(GOLANGCI_LINT),examples/demo,run --fix ./...)
+	$(call run_tool_in,$(GOLANGCI_LINT),examples/cluster,run --fix ./...)
+	$(call run_tool_in,$(GOLANGCI_LINT),examples/bench,run --fix ./...)
 	@echo "All auto-fix operations completed!"
 
-# Install gg command and development tools
-# Versions are defined at the top of this file and must match go.mod exactly
+# Install gg and the tools make runs, at the versions go.mod pins (see
+# GOLANGCI_LINT and the others above)
 install:
 	@echo "Installing development tools from go.mod..."
-	@echo "Installing golangci-lint@$(GOLANGCI_LINT_VERSION)..."
-	@go install $(GOLANGCI_LINT_PKG)@$(GOLANGCI_LINT_VERSION)
-	@echo "Installing gofumpt@$(GOFUMPT_VERSION)..."
-	@go install $(GOFUMPT_PKG)@$(GOFUMPT_VERSION)
-	@echo "Installing gotestsum@$(GOTESTSUM_VERSION)..."
-	@go install $(GOTESTSUM_PKG)@$(GOTESTSUM_VERSION)
+	$(call install_tool,$(GOLANGCI_LINT),$(GOLANGCI_LINT_PKG),$(GOLANGCI_LINT_VERSION))
+	$(call install_tool,$(GOFUMPT),$(GOFUMPT_PKG),$(GOFUMPT_VERSION))
+	$(call install_tool,$(GOTESTSUM),$(GOTESTSUM_PKG),$(GOTESTSUM_VERSION))
 	@echo "Installing gg command..."
 	@go install ./cmd/gg
 	@echo "Installation completed!"
 
-# Uninstall gg command and development tools
+# Uninstall gg, the test cache helper and the tools make runs, at the
+# versions go.mod pins: a version installed by an earlier go.mod is left
+# where it is.
+INSTALL_PATHS := $(GO_BIN_DIR)/gg $(GO_BIN_DIR)/testcachefix $(patsubst %/,%,$(dir $(GOLANGCI_LINT) $(GOFUMPT) $(GOTESTSUM)))
 uninstall:
 	@echo "Uninstalling development tools from $(GO_BIN_DIR)..."
-	@for bin in $(INSTALL_BINS); do \
-		path="$(GO_BIN_DIR)/$$bin"; \
+	@for path in $(INSTALL_PATHS); do \
 		if [ -e "$$path" ]; then \
-			rm -f "$$path"; \
+			rm -rf "$$path"; \
 			echo "Removed $$path"; \
 		else \
 			echo "Skipped $$path (not installed)"; \
