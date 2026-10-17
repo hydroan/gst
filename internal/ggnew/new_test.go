@@ -77,3 +77,29 @@ func TestProjectFilesStartTheGeneratedFilesEmpty(t *testing.T) {
 		}
 	}
 }
+
+// TestProjectFilesAnchorTheRootOnlyIgnoreRules pins that the .gitignore gg
+// new writes names the build outputs and temporary directories it ignores
+// from the project root: gg gen and gg check read the project through its
+// Git ignore rules, and an unanchored "build/" would hide a model package
+// named build, wherever it lies, from both without a word.
+func TestProjectFilesAnchorTheRootOnlyIgnoreRules(t *testing.T) {
+	files, err := ggnew.ProjectFiles("example.com/sampleapp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gitignore := ""
+	for _, file := range files {
+		if file.Path == ".gitignore" {
+			gitignore = file.Content
+		}
+	}
+	for _, rule := range []string{"/tmp/", "/temp/", "/dist/", "/build/", "/generated/"} {
+		if !strings.Contains(gitignore, "\n"+rule+"\n") {
+			t.Errorf(".gitignore lacks the anchored rule %q", rule)
+		}
+		if unanchored := "\n" + strings.TrimPrefix(rule, "/") + "\n"; strings.Contains(gitignore, unanchored) {
+			t.Errorf(".gitignore carries the unanchored rule %q, which matches a directory at any depth", strings.TrimSpace(unanchored))
+		}
+	}
+}

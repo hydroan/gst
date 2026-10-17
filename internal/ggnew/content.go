@@ -588,13 +588,13 @@ Thumbs.db
 /logs/
 
 # Temporary files
-tmp/
-temp/
+/tmp/
+/temp/
 
 # Build output
-dist/
-build/
+/dist/
+/build/
 
 # Generated files
-generated/
+/generated/
 `

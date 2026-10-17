@@ -35,15 +35,15 @@ Thumbs.db
 
 # Log files
 *.log
+/logs/
 
 # Temporary files
-tmp/
-temp/
+/tmp/
+/temp/
 
 # Build output
-dist/
-build/
+/dist/
+/build/
 
 # Generated files
-generated/
-
+/generated/

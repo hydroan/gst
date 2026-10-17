@@ -1,6 +1,8 @@
 package ggnew
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -23,5 +25,19 @@ func TestScaffoldCoversEveryImportedDirectory(t *testing.T) {
 			}
 		}
 		require.Truef(t, found, "directory %q is imported by main.go but has no scaffold file", dir)
+	}
+}
+
+// TestExamplesCarryTheScaffoldGitignore proves the example projects ignore
+// what gg new writes, byte for byte: they stand in for a generated project,
+// so a rule that changes here changes there, and gg gen and gg check read
+// them through the same rules a generated project is read through.
+func TestExamplesCarryTheScaffoldGitignore(t *testing.T) {
+	for _, example := range []string{"demo", "cluster", "bench"} {
+		t.Run(example, func(t *testing.T) {
+			content, err := os.ReadFile(filepath.Join("..", "..", "examples", example, ".gitignore"))
+			require.NoError(t, err)
+			require.Equal(t, gitignoreContent, string(content))
+		})
 	}
 }

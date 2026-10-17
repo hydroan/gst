@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/ggnew"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1293,6 +1294,53 @@ func (Token) Design() {
 	err := genRunWithOptions(genRunOptions{Quiet: true})
 
 	require.EqualError(t, err, "model/token.go: the List action of Token registers GET /api/tokens, as the List action of Token in model/api/token.go does; a path is served by one action")
+}
+
+// TestGenRunReachesAModelPackageNamedLikeABuildOutput pins that a model
+// package named build, dist, tmp, temp or generated is generated for like
+// any other under the .gitignore gg new writes: gg gen reads the project
+// through its Git ignore rules, so a rule matching such a directory at any
+// depth would leave the package out of the registrations without a word.
+func TestGenRunReachesAModelPackageNamedLikeABuildOutput(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	files, err := ggnew.ProjectFiles("tmpapp")
+	require.NoError(t, err)
+	for _, file := range files {
+		if file.Path == ".gitignore" {
+			writeProjectFile(t, filepath.Join(projectDir, file.Path), file.Content)
+		}
+	}
+	writeProjectFile(t, filepath.Join(projectDir, "model/build/job.go"), `package build
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Job struct {
+	Name string `+"`json:\"name\"`"+`
+
+	model.Base
+}
+
+func (Job) TableName() string { return "build_jobs" }
+
+func (Job) Design() {
+	dsl.Migrate()
+	dsl.Endpoint("jobs")
+	dsl.Create(func() {})
+	dsl.List(func() {})
+}
+`)
+
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+
+	registrations, err := os.ReadFile(filepath.Join(projectDir, "model", "model.gen.go"))
+	require.NoError(t, err)
+	require.Contains(t, string(registrations), `"tmpapp/model/build"`, "the build model package must be registered like any other")
 }
 
 // TestGenRunKeepsTheTestMainFilesImportingPBWhileTheProjectServesGRPC pins
