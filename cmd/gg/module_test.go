@@ -322,18 +322,18 @@ func (%[1]s) Design() {
 		t.Fatalf("runModuleCopyGen() error = %v", genErr)
 	}
 
-	merged, err := os.ReadFile(filepath.Join(projectDir, "service", "record", "create.go"))
+	shell, err := os.ReadFile(filepath.Join(projectDir, "service", "record", "create.go"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{"type Creator struct", ") Create(ctx *gst.ServiceContext"} {
-		if !strings.Contains(string(merged), want) {
-			t.Fatalf("the shell must carry %q:\n%s", want, merged)
+		if !strings.Contains(string(shell), want) {
+			t.Fatalf("the shell must carry %q:\n%s", want, shell)
 		}
 	}
 	for _, placeholder := range []string{"CreateBefore", "CreateAfter"} {
-		if strings.Contains(string(merged), placeholder) {
-			t.Fatalf("the shell must carry no %s placeholder:\n%s", placeholder, merged)
+		if strings.Contains(string(shell), placeholder) {
+			t.Fatalf("the shell must carry no %s placeholder:\n%s", placeholder, shell)
 		}
 	}
 	for _, scaffold := range []string{"create_test.go", "main_test.go"} {

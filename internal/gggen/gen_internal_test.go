@@ -545,9 +545,9 @@ func (u *Creator) CreateAfter(ctx *gst.ServiceContext, user *model.User) error {
 	}
 }
 
-// TestGenerateServiceShellOmitsTheHookPlaceholders compares the whole file
-// GenerateServiceShell returns for the Create action of the model above with
-// what GenerateService returns for it: the struct and the action method, and
+// TestGenerateServiceShellOmitsTheHookPlaceholders pins the example in the
+// GenerateServiceShell documentation: the whole file it returns for the
+// Create action of the model above, the struct and the action method and
 // none of the hook placeholders.
 func TestGenerateServiceShellOmitsTheHookPlaceholders(t *testing.T) {
 	info := &modelinfo.Model{
