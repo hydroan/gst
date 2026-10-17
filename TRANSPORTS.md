@@ -277,7 +277,7 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 
 ## 9. 与 AIP、Buf 的有意差异
 
-生成的 .proto 过 buf lint 的 STANDARD 规则，只报 PACKAGE_VERSION_SUFFIX；下面是与 Google 的 API 设计规范（AIP）和 Buf 风格指南对不上、而且是有意为之的地方，每条写明差在哪、为什么。
+生成的 .proto 过 buf lint 的 STANDARD 规则，只报 PACKAGE_VERSION_SUFFIX（模型和 Payload/Result 类型的导出字段由 gg check 的「JSON tag naming」规则钉在 snake_case 上；它们嵌套引用的命名类型不在该规则之内，照抄外部契约的 camelCase 键会多报 FIELD_LOWER_SNAKE_CASE）；下面是与 Google 的 API 设计规范（AIP）和 Buf 风格指南对不上、而且是有意为之的地方，每条写明差在哪、为什么。
 
 | 差异 | 规范怎么说 | gst 怎么做、为什么 |
 |---|---|---|

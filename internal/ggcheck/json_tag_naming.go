@@ -14,19 +14,21 @@ import (
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
+	"github.com/stoewer/go-strcase"
 )
 
-// JSONTagNaming holds the json tags of models and of explicit DSL Payload and
-// Result types to snake_case.
+// JSONTagNaming holds every exported field of models and of explicit DSL
+// Payload and Result types to a snake_case json tag.
 var JSONTagNaming = Check{
 	Name: "JSON tag naming",
-	Rule: "model struct and explicit DSL Payload/Result type json tags must use snake_case naming",
+	Rule: "model struct and explicit DSL Payload/Result type fields must carry snake_case json tags; an exported field without a json key would be served under its Go name",
 	run:  checkJSONTagNaming,
 }
 
-// checkJSONTagNaming checks that json tags declared under the model directory
-// use snake_case naming. It covers model structs and the explicit DSL Payload
-// and Result types referenced by Design methods.
+// checkJSONTagNaming checks that the structs declared under the model
+// directory carry snake_case json tags on every exported field. It covers
+// model structs and the explicit DSL Payload and Result types referenced by
+// Design methods.
 func checkJSONTagNaming(ignore gghelper.ProjectIgnore) []string {
 	var violations []string
 
@@ -208,32 +210,67 @@ func checkPackageActionTypeJSONTagNaming(paths []string) []string {
 	return violations
 }
 
-// structJSONTagViolations reports the fields of one struct whose json tags are
-// not snake_case.
+// structJSONTagViolations reports the fields of one struct that would be
+// served under a key that is not snake_case: an exported field without a
+// json key, served under its Go name, and a field whose json key is not
+// snake_case. An embedded field without a json key promotes fields carrying
+// keys of their own, an unexported field never reaches JSON, and json:"-"
+// keeps a field off the wire, so none of those is reported; an embedded
+// field given a json key is served under that key, like any other field.
 func structJSONTagViolations(relPath string, structType *ast.StructType) []string {
 	var violations []string
 
 	for _, field := range structType.Fields.List {
-		if field.Tag == nil {
+		jsonTag := ""
+		if field.Tag != nil {
+			jsonTag = extractJSONTag(strings.Trim(field.Tag.Value, "`"))
+		}
+		if len(field.Names) == 0 {
+			if jsonTag != "" && !isSnakeCase(jsonTag) {
+				violations = append(violations, fmt.Sprintf(
+					"%s: embedded field '%s' json tag '%s' should be '%s'",
+					relPath, embeddedTypeName(field.Type), jsonTag, strcase.SnakeCase(jsonTag),
+				))
+			}
 			continue
 		}
-		tagValue := strings.Trim(field.Tag.Value, "`")
-		jsonTag := extractJSONTag(tagValue)
-		if jsonTag == "" || isSnakeCase(jsonTag) {
-			continue
+		for _, name := range field.Names {
+			switch {
+			case jsonTag == "":
+				if ast.IsExported(name.Name) {
+					violations = append(violations, fmt.Sprintf(
+						"%s: field '%s' has no json key, so its key is '%s'; tag it json:%q, json:\"-\" to keep it off the wire, or unexport it",
+						relPath, name.Name, name.Name, strcase.SnakeCase(name.Name),
+					))
+				}
+			case !isSnakeCase(jsonTag):
+				violations = append(violations, fmt.Sprintf(
+					"%s: field '%s' json tag '%s' should be '%s'",
+					relPath, name.Name, jsonTag, strcase.SnakeCase(jsonTag),
+				))
+			}
 		}
-
-		fieldName := ""
-		if len(field.Names) > 0 {
-			fieldName = field.Names[0].Name
-		}
-		violations = append(violations, fmt.Sprintf(
-			"%s: field '%s' json tag '%s' should be '%s'",
-			relPath, fieldName, jsonTag, toSnakeCase(jsonTag),
-		))
 	}
 
 	return violations
+}
+
+// embeddedTypeName names the type an embedded field embeds, the way the
+// field is referred to: Inner for Inner, *Inner and model.Inner alike.
+func embeddedTypeName(expr ast.Expr) string {
+	switch t := expr.(type) {
+	case *ast.StarExpr:
+		return embeddedTypeName(t.X)
+	case *ast.SelectorExpr:
+		return t.Sel.Name
+	case *ast.Ident:
+		return t.Name
+	case *ast.IndexExpr:
+		return embeddedTypeName(t.X)
+	case *ast.IndexListExpr:
+		return embeddedTypeName(t.X)
+	}
+	return ""
 }
 
 // jsonTagPattern matches the json key of a struct tag, capturing its value.
@@ -278,30 +315,4 @@ func isSnakeCase(s string) bool {
 	}
 
 	return true
-}
-
-// toSnakeCase converts camelCase or kebab-case to snake_case: userId and
-// user-id both give user_id.
-func toSnakeCase(s string) string {
-	if s == "" {
-		return s
-	}
-
-	// Replace hyphens with underscores
-	s = strings.ReplaceAll(s, "-", "_")
-
-	// Convert camelCase to snake_case
-	var result strings.Builder
-	for i, r := range s {
-		if r >= 'A' && r <= 'Z' {
-			if i > 0 {
-				result.WriteRune('_')
-			}
-			result.WriteRune(r - 'A' + 'a')
-		} else {
-			result.WriteRune(r)
-		}
-	}
-
-	return result.String()
 }
