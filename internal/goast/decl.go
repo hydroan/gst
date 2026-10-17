@@ -3,6 +3,8 @@ package goast
 import (
 	"go/ast"
 	"go/token"
+
+	"github.com/cockroachdb/errors"
 )
 
 // FindStructTypeSpec returns the struct type spec file declares with the
@@ -34,22 +36,72 @@ func FindStructTypeSpec(file *ast.File, name string) *ast.TypeSpec {
 	return nil
 }
 
-// RenameIdent renames every identifier named oldName in the tree under node
-// to newName. It goes by the name alone, so a field or method sharing it is
-// renamed too: RenameIdent(fn, "u", "c") on
+// RenameIdent renames the object decl declares — a receiver, a parameter, a
+// result or a local — to newName throughout node: every identifier that
+// resolves to that object, decl itself when node holds it, and no other.
+// go/parser resolves the identifiers of a file to the objects they name as
+// it parses, so a selector's field name and an identifier of another object
+// that shares the name stay as they are: with decl the receiver u,
 //
 //	func (u *Creator) Create() error { return u.check(req.u) }
 //
-// turns it into
+// turns into
 //
-//	func (c *Creator) Create() error { return c.check(req.c) }
-func RenameIdent(node ast.Node, oldName, newName string) {
-	ast.Inspect(node, func(n ast.Node) bool {
-		if ident, ok := n.(*ast.Ident); ok && ident.Name == oldName {
+//	func (c *Creator) Create() error { return c.check(req.u) }
+//
+// It returns an error when decl was parsed without object resolution, or
+// when node already names something else newName — a local, a parameter, a
+// package-level name — because the rename would turn one of the two into a
+// reference to the other; the caller leaves the name or fails.
+func RenameIdent(node ast.Node, decl *ast.Ident, newName string) error {
+	if decl == nil || decl.Obj == nil {
+		return errors.Newf("cannot rename %s: the identifier was parsed without object resolution", declName(decl))
+	}
+	var clash bool
+	walkScopedIdents(node, func(ident *ast.Ident) {
+		clash = clash || ident.Name == newName && ident.Obj != decl.Obj
+	})
+	if clash {
+		return errors.Newf("cannot rename %s to %s: %s already names something else there; rename one of the two", decl.Name, newName, newName)
+	}
+	walkScopedIdents(node, func(ident *ast.Ident) {
+		if ident.Obj == decl.Obj {
 			ident.Name = newName
 		}
-		return true
 	})
+	return nil
+}
+
+// declName returns the name of decl, or the name of a nil declaration.
+func declName(decl *ast.Ident) string {
+	if decl == nil {
+		return "<nil>"
+	}
+	return decl.Name
+}
+
+// walkScopedIdents calls visit on every identifier under node that the scope
+// resolves: the field name of a selector and the field key of a composite
+// literal, named by the type they belong to and not by the scope, are left
+// out.
+func walkScopedIdents(node ast.Node, visit func(*ast.Ident)) {
+	var walk func(n ast.Node) bool
+	walk = func(n ast.Node) bool {
+		switch x := n.(type) {
+		case *ast.SelectorExpr:
+			ast.Inspect(x.X, walk)
+			return false
+		case *ast.KeyValueExpr:
+			if key, ok := x.Key.(*ast.Ident); ok && key.Obj == nil {
+				ast.Inspect(x.Value, walk)
+				return false
+			}
+		case *ast.Ident:
+			visit(x)
+		}
+		return true
+	}
+	ast.Inspect(node, walk)
 }
 
 // RemoveStructInteriorComments drops every comment group of file positioned

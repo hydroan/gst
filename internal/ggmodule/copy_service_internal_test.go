@@ -364,6 +364,125 @@ func (b *Binding) ListAfter(ctx *gst.ServiceContext, bindings *[]*copytest.Bindi
 	}
 }
 
+// TestMergeModuleServiceSourceKeepsAFieldNamedLikeTheReceiver pins the graft
+// of a source body onto the shell's receiver name: the receiver's uses take
+// the shell's name, a field that shares the source receiver's name does not.
+func TestMergeModuleServiceSourceKeepsAFieldNamedLikeTheReceiver(t *testing.T) {
+	source := []byte(`package servicecopytest
+
+import (
+	"github.com/hydroan/gst"
+	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
+	"github.com/hydroan/gst/service"
+)
+
+type BindingService struct {
+	service.Base[*modelcopytest.Binding, *modelcopytest.Binding, *modelcopytest.Binding]
+}
+
+func (s *BindingService) ListAfter(ctx *gst.ServiceContext, data *[]*modelcopytest.Binding) error {
+	return s.check(ctx.s)
+}
+`)
+	target := []byte(`package copytest
+
+import (
+	"tmpapp/model/copytest"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Binding struct {
+	service.Base[*copytest.Binding, *copytest.Binding, *copytest.Binding]
+}
+
+func (b *Binding) ListAfter(ctx *gst.ServiceContext, bindings *[]*copytest.Binding) error {
+	return nil
+}
+`)
+
+	got, err := mergeModuleServiceSource(moduleServiceMergeInput{
+		SourcePath: "binding.go",
+		Source:     source,
+		TargetPath: "service/copytest/binding.go",
+		Target:     target,
+		Rewrite: moduleCopyRewriteConfig{
+			ModuleName:        "copytest",
+			ProjectModulePath: "tmpapp",
+			ModelDir:          "model",
+			ServiceDir:        "service",
+			TargetPackage:     "copytest",
+		},
+	})
+	if err != nil {
+		t.Fatalf("mergeModuleServiceSource() error = %v", err)
+	}
+	if !strings.Contains(string(got), "return b.check(ctx.s)") {
+		t.Fatalf("the receiver must take the shell's name and the field keep its own:\n%s", got)
+	}
+}
+
+// TestMergeModuleServiceSourceRefusesAReceiverNameTheBodyUses pins the
+// refusal: a source body already using the shell's receiver name for a local
+// cannot be grafted without changing what one of the two names refers to, so
+// the copy fails instead of writing it.
+func TestMergeModuleServiceSourceRefusesAReceiverNameTheBodyUses(t *testing.T) {
+	source := []byte(`package servicecopytest
+
+import (
+	"github.com/hydroan/gst"
+	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
+	"github.com/hydroan/gst/service"
+)
+
+type BindingService struct {
+	service.Base[*modelcopytest.Binding, *modelcopytest.Binding, *modelcopytest.Binding]
+}
+
+func (s *BindingService) ListAfter(ctx *gst.ServiceContext, data *[]*modelcopytest.Binding) error {
+	for _, b := range *data {
+		s.note(b)
+	}
+	return nil
+}
+`)
+	target := []byte(`package copytest
+
+import (
+	"tmpapp/model/copytest"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Binding struct {
+	service.Base[*copytest.Binding, *copytest.Binding, *copytest.Binding]
+}
+
+func (b *Binding) ListAfter(ctx *gst.ServiceContext, bindings *[]*copytest.Binding) error {
+	return nil
+}
+`)
+
+	_, err := mergeModuleServiceSource(moduleServiceMergeInput{
+		SourcePath: "binding.go",
+		Source:     source,
+		TargetPath: "service/copytest/binding.go",
+		Target:     target,
+		Rewrite: moduleCopyRewriteConfig{
+			ModuleName:        "copytest",
+			ProjectModulePath: "tmpapp",
+			ModelDir:          "model",
+			ServiceDir:        "service",
+			TargetPackage:     "copytest",
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "ListAfter") || !strings.Contains(err.Error(), `"b"`) && !strings.Contains(err.Error(), " b ") {
+		t.Fatalf("mergeModuleServiceSource() error = %v, want the refused rename of ListAfter naming b", err)
+	}
+}
+
 func TestMergeModuleServiceSourceRejectsDuplicateMethodNames(t *testing.T) {
 	source := []byte(`package servicecopytest
 

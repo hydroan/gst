@@ -28,21 +28,25 @@ import (
 //  2. Renames receiver types in all methods (e.g., func (c *Creator) → func (a *Archive))
 //  3. Renames receiver variable names and all references in method bodies
 //     (e.g., "c" → "a", c.WithContext → a.WithContext)
-func applyServiceRoleName(file *ast.File, action *dsl.Action) bool {
+//
+// It reports whether it changed anything, and the error of a rename it
+// refuses: a method body already using the new receiver name for something
+// else, see goast.RenameIdent; the method bodies are the user's code.
+func applyServiceRoleName(file *ast.File, action *dsl.Action) (bool, error) {
 	if file == nil || action == nil || action.ServiceName == "" {
-		return false
+		return false, nil
 	}
 
 	newRoleName := action.RoleName()
 	if len(newRoleName) == 0 {
-		return false
+		return false, nil
 	}
 	newRecvVar := strings.ToLower(newRoleName[:1])
 
 	// Find the current service struct name
 	oldRoleName := findServiceTypeName(file)
 	if len(oldRoleName) == 0 {
-		return false
+		return false, nil
 	}
 
 	needRenameStruct := oldRoleName != newRoleName
@@ -100,20 +104,17 @@ func applyServiceRoleName(file *ast.File, action *dsl.Action) bool {
 			changed = true
 		}
 
-		// Update receiver variable name to match the new role name
+		// Rename the receiver variable to match the new role name, the
+		// declaration and the uses of the body alike.
 		if len(recv.Names) > 0 && recv.Names[0].Name != newRecvVar {
-			oldName := recv.Names[0].Name
-			recv.Names[0] = ast.NewIdent(newRecvVar)
-			changed = true
-
-			// Update all references to the old receiver variable in the method body
-			if funcDecl.Body != nil {
-				goast.RenameIdent(funcDecl.Body, oldName, newRecvVar)
+			if err := goast.RenameIdent(funcDecl, recv.Names[0], newRecvVar); err != nil {
+				return changed, errors.Wrapf(err, "method %s", funcDecl.Name.Name)
 			}
+			changed = true
 		}
 	}
 
-	return changed
+	return changed, nil
 }
 
 // findServiceTypeName finds the name of the service struct type in the file.
@@ -154,8 +155,9 @@ func findServiceTypeName(file *ast.File) string {
 // Method bodies are left alone. The servicePkgName parameter specifies the
 // expected package name for the service file. This should match the package
 // name used in service registration to maintain consistency. It reports
-// whether it changed anything.
-func ApplyServiceFile(file *ast.File, action *dsl.Action, servicePkgName string) bool {
+// whether it changed anything, and the error of a receiver rename it
+// refuses, see applyServiceRoleName.
+func ApplyServiceFile(file *ast.File, action *dsl.Action, servicePkgName string) (bool, error) {
 	return applyServiceFile(file, action, servicePkgName, "")
 }
 
@@ -163,9 +165,9 @@ func ApplyServiceFile(file *ast.File, action *dsl.Action, servicePkgName string)
 // parameter of the service.Base embedding at correctModelName, the current
 // model, when it is not empty: service.Base[*model.Account, ...] becomes
 // service.Base[*model.User, ...] for User.
-func applyServiceFile(file *ast.File, action *dsl.Action, servicePkgName, correctModelName string) bool {
+func applyServiceFile(file *ast.File, action *dsl.Action, servicePkgName, correctModelName string) (bool, error) {
 	if file == nil || action == nil {
-		return false
+		return false, nil
 	}
 
 	var changed bool
@@ -177,7 +179,11 @@ func applyServiceFile(file *ast.File, action *dsl.Action, servicePkgName, correc
 	}
 
 	// Rename service struct type and receiver names when the action names its service
-	if applyServiceRoleName(file, action) {
+	renamed, err := applyServiceRoleName(file, action)
+	if err != nil {
+		return changed, err
+	}
+	if renamed {
 		changed = true
 	}
 
@@ -234,7 +240,7 @@ func applyServiceFile(file *ast.File, action *dsl.Action, servicePkgName, correc
 		changed = true
 	}
 
-	return changed
+	return changed, nil
 }
 
 // applyServiceMethod1 updates functions that match the ServiceMethod1 shape according to DSL.
@@ -770,7 +776,11 @@ func ApplyServiceFileWithModelSync(file *ast.File, action *dsl.Action, servicePk
 	if modelInfo != nil {
 		correctModelName = modelInfo.ModelName
 	}
-	if applyServiceFile(file, action, servicePkgName, correctModelName) {
+	applied, err := applyServiceFile(file, action, servicePkgName, correctModelName)
+	if err != nil {
+		return changed, err
+	}
+	if applied {
 		changed = true
 	}
 	if modelInfo == nil || modelInfo.ModulePath == "" || modelInfo.ModelFileDir == "" || modelInfo.ModelPkgName == "" {

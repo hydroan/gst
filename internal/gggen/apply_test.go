@@ -34,6 +34,7 @@ func TestApplyServiceFile(t *testing.T) {
 		action         *dsl.Action
 		servicePkgName string
 		want           string
+		wantErr        string
 	}{
 		{
 			// The rewrite the ApplyServiceFile doc comment shows, here on a
@@ -594,6 +595,86 @@ func (r *Patcher) validate(ctx *gst.ServiceContext, req *group.SampleRecordPatch
 }
 `,
 		},
+		{
+			// The receiver rename leaves the user's code alone: a field that
+			// shares the receiver's name is a field, not the receiver.
+			name: "keeps_a_field_named_like_the_receiver",
+			code: `package record
+
+import (
+	"helloworld/model/sample"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Archive struct {
+	service.Base[*sample.Record, *sample.RecordReq, *sample.RecordRsp]
+}
+
+func (s *Archive) Create(ctx *gst.ServiceContext, req *sample.RecordReq) (rsp *sample.RecordRsp, err error) {
+	return rsp, s.sign(req.s)
+}
+`,
+			action: &dsl.Action{
+				Payload:     "*RecordReq",
+				Result:      "*RecordRsp",
+				ServiceName: "archive",
+				Phase:       consts.Create,
+			},
+			servicePkgName: "record",
+			want: `package record
+
+import (
+	"helloworld/model/sample"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Archive struct {
+	service.Base[*sample.Record, *sample.RecordReq, *sample.RecordRsp]
+}
+
+func (a *Archive) Create(ctx *gst.ServiceContext, req *sample.RecordReq) (rsp *sample.RecordRsp, err error) {
+	return rsp, a.sign(req.s)
+}
+`,
+		},
+		{
+			// A body already using the new receiver name for something else
+			// is left as it is and reported: renaming would hand the local's
+			// uses to the receiver, or the receiver's to the local.
+			name: "refuses_a_receiver_name_the_body_uses",
+			code: `package record
+
+import (
+	"helloworld/model/sample"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Archive struct {
+	service.Base[*sample.Record, *sample.RecordReq, *sample.RecordRsp]
+}
+
+func (s *Archive) Create(ctx *gst.ServiceContext, req *sample.RecordReq) (rsp *sample.RecordRsp, err error) {
+	for _, a := range req.Names {
+		s.note(a)
+	}
+	return rsp, nil
+}
+`,
+			action: &dsl.Action{
+				Payload:     "*RecordReq",
+				Result:      "*RecordRsp",
+				ServiceName: "archive",
+				Phase:       consts.Create,
+			},
+			servicePkgName: "record",
+			wantErr:        "a",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -603,7 +684,12 @@ func (r *Patcher) validate(ctx *gst.ServiceContext, req *group.SampleRecordPatch
 				t.Error(err)
 				return
 			}
-			gggen.ApplyServiceFile(file, tt.action, tt.servicePkgName)
+			_, err = gggen.ApplyServiceFile(file, tt.action, tt.servicePkgName)
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
 			got, err := gggen.FormatNodeExtra(file)
 			if err != nil {
 				t.Error(err)
@@ -647,12 +733,16 @@ func (w *Watch) Stream(ctx *gst.ServiceContext, req *model.FeedWatchReq, stream 
 	file, err := parser.ParseFile(fset, "", code, parser.ParseComments)
 	require.NoError(t, err)
 
-	require.True(t, gggen.ApplyServiceFile(file, action, "feed"))
+	changed, err := gggen.ApplyServiceFile(file, action, "feed")
+	require.NoError(t, err)
+	require.True(t, changed)
 	got, err := gggen.FormatNodeExtraWithFileSet(file, fset)
 	require.NoError(t, err)
 	require.Contains(t, got, "service.Base[*model.Feed, *model.FeedEvent, *model.FeedEvent]")
 	require.Contains(t, got, "func (w *Watch) Stream(ctx *gst.ServiceContext, stream *grpc.BidiStream[*model.FeedEvent, *model.FeedEvent]) (err error) {\n\tlog := w.WithContext(ctx, ctx.Phase())\n\tlog.Info(\"feed: watch\")\n\n\treturn nil\n}")
-	require.False(t, gggen.ApplyServiceFile(file, action, "feed"), "a matching signature is left alone")
+	changed, err = gggen.ApplyServiceFile(file, action, "feed")
+	require.NoError(t, err)
+	require.False(t, changed, "a matching signature is left alone")
 
 	named := `package feed
 
@@ -675,7 +765,9 @@ func (u *Upload) Stream(ctx *gst.ServiceContext, events *grpc.ClientStream[*mode
 	file, err = parser.ParseFile(fset, "", named, parser.ParseComments)
 	require.NoError(t, err)
 	upload := &dsl.Action{ServiceName: "upload", Payload: "*FeedEvent", Result: "*FeedUploadRsp", StreamingPayload: true, Phase: consts.Stream}
-	require.False(t, gggen.ApplyServiceFile(file, upload, "feed"), "the same types under other names are left alone")
+	changed, err = gggen.ApplyServiceFile(file, upload, "feed")
+	require.NoError(t, err)
+	require.False(t, changed, "the same types under other names are left alone")
 }
 
 // TestApplyServiceFileKeepsTheStreamParameterNames pins that the Stream
@@ -707,7 +799,9 @@ func (w *Watch) Stream(ctx *gst.ServiceContext, r *model.FeedWatchReq, s *grpc.S
 	file, err := parser.ParseFile(fset, "", code, parser.ParseComments)
 	require.NoError(t, err)
 
-	require.True(t, gggen.ApplyServiceFile(file, action, "feed"))
+	changed, err := gggen.ApplyServiceFile(file, action, "feed")
+	require.NoError(t, err)
+	require.True(t, changed)
 	got, err := gggen.FormatNodeExtraWithFileSet(file, fset)
 	require.NoError(t, err)
 	require.Contains(t, got, "func (w *Watch) Stream(ctx *gst.ServiceContext, r *model.FeedWatchReq, s *grpc.ServerStream[*model.FeedTick]) error {\n\treturn s.Send(nil)\n}")
@@ -863,7 +957,9 @@ func (g *Lister) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *group.Gro
 				t.Fatal(err)
 			}
 
-			gggen.ApplyServiceFile(file, tt.action, tt.servicePkgName)
+			if _, err = gggen.ApplyServiceFile(file, tt.action, tt.servicePkgName); err != nil {
+				t.Fatal(err)
+			}
 
 			got, err := gggen.FormatNodeExtraWithFileSet(file, fset)
 			if err != nil {

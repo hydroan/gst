@@ -58,7 +58,10 @@ func mergeModuleServiceSource(input moduleServiceMergeInput) ([]byte, error) {
 
 	sourceQualifiers := moduleCopyPackageQualifiers(sourceFile)
 	mergeImports(targetFile, sourceFile.Imports)
-	docInserts := mergeSourceServiceDecls(targetFile, sourceFile, sourceStructs, targetStruct, sourceComments)
+	docInserts, err := mergeSourceServiceDecls(targetFile, sourceFile, sourceStructs, targetStruct, sourceComments)
+	if err != nil {
+		return nil, errors.Wrapf(err, "source action service file %s", input.SourcePath)
+	}
 	dropUnusedMergedServiceImports(targetFile, sourceQualifiers)
 	if err = requireUsedModuleCopyImports(targetFile, input.TargetPath, input.Rewrite); err != nil {
 		return nil, err
@@ -119,7 +122,7 @@ func mergeSourceServiceDecls(
 	sourceStructs []string,
 	targetStruct string,
 	sourceComments ast.CommentMap,
-) sourceDocInserts {
+) (sourceDocInserts, error) {
 	docInserts := newSourceDocInserts()
 	sourceStructSet := make(map[string]bool, len(sourceStructs))
 	for _, sourceStruct := range sourceStructs {
@@ -147,13 +150,17 @@ func mergeSourceServiceDecls(
 					sourceRecv := methodReceiverName(d)
 					targetRecv := methodReceiverName(targetMethod)
 					if sourceRecv != "" && targetRecv != "" && sourceRecv != targetRecv && d.Body != nil {
-						goast.RenameIdent(d.Body, sourceRecv, targetRecv)
+						if err := goast.RenameIdent(d.Body, d.Recv.List[0].Names[0], targetRecv); err != nil {
+							return docInserts, errors.Wrapf(err, "method %s", d.Name.Name)
+						}
 					}
 					// The generated target shell owns method signatures. When a
 					// source body is grafted onto that signature, the source
 					// parameter and result names must be retargeted to the
 					// generated ones so the copied body still compiles.
-					retargetMethodBodySignatureNames(d, targetMethod)
+					if err := retargetMethodBodySignatureNames(d, targetMethod); err != nil {
+						return docInserts, errors.Wrapf(err, "method %s", d.Name.Name)
+					}
 					docInserts.methods[methodDocKey{receiver: targetStruct, name: d.Name.Name}] = commentGroupLines(d.Doc)
 					targetMethod.Doc = nil
 					targetMethod.Body = d.Body
@@ -164,7 +171,9 @@ func mergeSourceServiceDecls(
 				// onto a generated signature, so the receiver variable must be
 				// renamed to the shell's receiver name here; otherwise the merged
 				// struct mixes receiver names and trips receiver-naming linters.
-				alignReceiverName(d, structReceiverName(targetFile, targetStruct))
+				if err := alignReceiverName(d, structReceiverName(targetFile, targetStruct)); err != nil {
+					return docInserts, errors.Wrapf(err, "method %s", d.Name.Name)
+				}
 				retargetReceiver(d, targetStruct)
 				docInserts.methods[methodDocKey{receiver: targetStruct, name: d.Name.Name}] = commentGroupLines(d.Doc)
 				d.Doc = nil
@@ -184,7 +193,7 @@ func mergeSourceServiceDecls(
 			targetFile.Decls = append(targetFile.Decls, d)
 		}
 	}
-	return docInserts
+	return docInserts, nil
 }
 
 func filterSourceSpecs(decl *ast.GenDecl, sourceStructSet map[string]bool) *ast.GenDecl {
@@ -242,58 +251,61 @@ func structReceiverName(file *ast.File, recvType string) string {
 // alignReceiverName renames a copied method's receiver variable, declaration
 // and body references alike, to name. A blank name on either side keeps the
 // source receiver untouched: an unnamed receiver has no references to rename,
-// and without a shell receiver name there is nothing to align to.
-func alignReceiverName(fn *ast.FuncDecl, name string) {
+// and without a shell receiver name there is nothing to align to. A body
+// already using name for something else is an error, see goast.RenameIdent.
+func alignReceiverName(fn *ast.FuncDecl, name string) error {
 	current := methodReceiverName(fn)
 	if current == "" || name == "" || current == name {
-		return
+		return nil
 	}
-	fn.Recv.List[0].Names[0].Name = name
-	if fn.Body != nil {
-		goast.RenameIdent(fn.Body, current, name)
-	}
+	return goast.RenameIdent(fn, fn.Recv.List[0].Names[0], name)
 }
 
-func retargetMethodBodySignatureNames(sourceMethod *ast.FuncDecl, targetMethod *ast.FuncDecl) {
+// retargetMethodBodySignatureNames renames, in the source method's body, the
+// parameters and results of the source signature to the names of the target
+// signature, position by position; a body already using a target name for
+// something else is an error, see goast.RenameIdent.
+func retargetMethodBodySignatureNames(sourceMethod *ast.FuncDecl, targetMethod *ast.FuncDecl) error {
 	if sourceMethod == nil || targetMethod == nil || sourceMethod.Body == nil || sourceMethod.Type == nil || targetMethod.Type == nil {
-		return
+		return nil
 	}
-	renameFieldListIdents(sourceMethod.Body, sourceMethod.Type.Params, targetMethod.Type.Params)
-	renameFieldListIdents(sourceMethod.Body, sourceMethod.Type.Results, targetMethod.Type.Results)
+	if err := renameFieldListIdents(sourceMethod.Body, sourceMethod.Type.Params, targetMethod.Type.Params); err != nil {
+		return err
+	}
+	return renameFieldListIdents(sourceMethod.Body, sourceMethod.Type.Results, targetMethod.Type.Results)
 }
 
-func renameFieldListIdents(body ast.Node, sourceFields *ast.FieldList, targetFields *ast.FieldList) {
-	sourceNames := fieldListNames(sourceFields)
-	targetNames := fieldListNames(targetFields)
-	for idx := 0; idx < len(sourceNames) && idx < len(targetNames); idx++ {
-		sourceName := sourceNames[idx]
-		targetName := targetNames[idx]
-		if sourceName == "" || targetName == "" || sourceName == targetName {
+func renameFieldListIdents(body ast.Node, sourceFields *ast.FieldList, targetFields *ast.FieldList) error {
+	sourceIdents := fieldListIdents(sourceFields)
+	targetIdents := fieldListIdents(targetFields)
+	for idx := 0; idx < len(sourceIdents) && idx < len(targetIdents); idx++ {
+		source, target := sourceIdents[idx], targetIdents[idx]
+		// An unnamed or blank field has no uses to rename.
+		if source == nil || target == nil || source.Name == "_" || source.Name == target.Name {
 			continue
 		}
-		goast.RenameIdent(body, sourceName, targetName)
+		if err := goast.RenameIdent(body, source, target.Name); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-func fieldListNames(fields *ast.FieldList) []string {
+// fieldListIdents returns the name of every field of fields in order, nil for
+// a field without one, so the names of two signatures pair up by position.
+func fieldListIdents(fields *ast.FieldList) []*ast.Ident {
 	if fields == nil {
 		return nil
 	}
-	names := make([]string, 0, len(fields.List))
+	idents := make([]*ast.Ident, 0, len(fields.List))
 	for _, field := range fields.List {
 		if len(field.Names) == 0 {
-			names = append(names, "")
+			idents = append(idents, nil)
 			continue
 		}
-		for _, name := range field.Names {
-			if name == nil {
-				names = append(names, "")
-				continue
-			}
-			names = append(names, name.Name)
-		}
+		idents = append(idents, field.Names...)
 	}
-	return names
+	return idents
 }
 
 func findMethod(file *ast.File, recvType string, methodName string) *ast.FuncDecl {
