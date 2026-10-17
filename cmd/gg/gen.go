@@ -52,6 +52,19 @@ type genRunOptions struct {
 	// Checks are the project checks the run makes before generating; nil
 	// runs generationChecks. Module copy passes moduleCopyChecks.
 	Checks []ggcheck.Check
+	// MergeShells names, by path, the service files this run creates as the
+	// shells module copy merges the module's source onto: the struct and the
+	// action method alone, no hook placeholders and no test scaffolds, which
+	// are for the services a project writes by hand. Module copy passes its
+	// service targets; a plain gg gen passes nothing.
+	MergeShells map[string]struct{}
+}
+
+// mergesShell reports whether the service file at path is one of the shells
+// module copy merges onto.
+func (o genRunOptions) mergesShell(path string) bool {
+	_, ok := o.MergeShells[filepath.Clean(path)]
+	return ok
 }
 
 func genRun() {
@@ -399,6 +412,9 @@ func genRunWithOptions(opts genRunOptions) error {
 			if err := os.WriteFile(safePath, []byte(code), ggconst.FileModeGenerated); err != nil {
 				return err
 			}
+			if opts.mergesShell(target.FilePath) {
+				return nil
+			}
 			if err := scaffoldServiceTests(modelInfo, target, action, route, extraDirs, opts.Quiet); err != nil {
 				return err
 			}
@@ -413,7 +429,11 @@ func genRunWithOptions(opts genRunOptions) error {
 				return
 			}
 			target := modelinfo.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
-			if file := gggen.GenerateService(m, act, act.Phase, target.PackageName); file != nil {
+			generate := gggen.GenerateService
+			if opts.mergesShell(target.FilePath) {
+				generate = gggen.GenerateServiceShell
+			}
+			if file := generate(m, act, act.Phase, target.PackageName); file != nil {
 				fset := token.NewFileSet()
 				code, err := gggen.FormatNodeExtraWithFileSet(file, fset)
 				if err != nil {

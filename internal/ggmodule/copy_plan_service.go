@@ -220,7 +220,15 @@ func (p *CopyPlan) collectStaleServiceFiles() error {
 	if err != nil {
 		return err
 	}
-	p.StaleServiceFiles = stale
+	// The test files paired with a stale service file go with it, the way
+	// they go with a service file gg prune deletes: once the service file is
+	// gone they test nothing, and the test organization check refuses a test
+	// file without a source file.
+	p.StaleServiceFiles = make([]string, 0, len(stale))
+	for _, path := range stale {
+		p.StaleServiceFiles = append(p.StaleServiceFiles, path)
+		p.StaleServiceFiles = append(p.StaleServiceFiles, gghelper.PairedTestFiles(path)...)
+	}
 	return nil
 }
 

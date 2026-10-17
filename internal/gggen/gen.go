@@ -306,11 +306,29 @@ func genServiceMethod9(info *modelinfo.Model, modelQualifier string, action *dsl
 // A List or Export action on a database model gets the Filter hook as well,
 // between ListBefore and ListAfter, the order the controllers invoke them
 // in. A model without a database table, one embedding model.Empty, gets no
-// hooks at all.
+// hooks at all. GenerateServiceShell returns the same file without the hooks.
 func GenerateService(info *modelinfo.Model, action *dsl.Action, phase consts.Phase, servicePkgName string) *ast.File {
+	return generateService(info, action, phase, servicePkgName, true)
+}
+
+// GenerateServiceShell returns the file GenerateService returns for the same
+// action without the hook placeholders: the struct and the action method,
+// the shell gg module copy merges the module's service source onto. The
+// shell owns the signatures the source's bodies are grafted onto and the
+// source owns the hooks it defines; a placeholder the source does not define
+// would stay in the copy as a hook that runs.
+func GenerateServiceShell(info *modelinfo.Model, action *dsl.Action, phase consts.Phase, servicePkgName string) *ast.File {
+	return generateService(info, action, phase, servicePkgName, false)
+}
+
+// generateService builds the service file of the action: the struct, the
+// action method and, when hooks is set and the model has a database table,
+// the hook placeholders of the phase.
+func generateService(info *modelinfo.Model, action *dsl.Action, phase consts.Phase, servicePkgName string, hooks bool) *ast.File {
 	if !action.Service {
 		return nil
 	}
+	hooks = hooks && !info.Design.IsEmpty
 
 	roleName := action.RoleName()
 
@@ -360,35 +378,35 @@ func GenerateService(info *modelinfo.Model, action *dsl.Action, phase consts.Pha
 		// 	}
 		//
 		// Only generate before/after hooks for non-empty models
-		if !info.Design.IsEmpty {
+		if hooks {
 			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.Before(), roleName)) // generate create before hook
 			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.After(), roleName))  // generate create after hook
 		}
 	case consts.Delete:
 		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
 		// Skip generating hooks for empty models
-		if !info.Design.IsEmpty {
+		if hooks {
 			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.Before(), roleName)) // generate delete before hook
 			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.After(), roleName))  // generate delete after hook
 		}
 	case consts.Update:
 		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
 		// Skip generating hooks for empty models
-		if !info.Design.IsEmpty {
+		if hooks {
 			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.Before(), roleName)) // generate update before hook
 			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.After(), roleName))  // generate update after hook
 		}
 	case consts.Patch:
 		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
 		// Skip generating hooks for empty models
-		if !info.Design.IsEmpty {
+		if hooks {
 			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.Before(), roleName)) // generate patch before hook
 			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.After(), roleName))  // generate patch after hook
 		}
 	case consts.List: // List hooks use genServiceMethod2, Filter genServiceMethod8
 		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
 		// Skip generating hooks for empty models
-		if !info.Design.IsEmpty {
+		if hooks {
 			decls = append(decls, genServiceMethod2(info, qualifier, action, phase.Before(), roleName)) // generate list before hook
 			decls = append(decls, genServiceMethod8(info, qualifier, action, phase, roleName))          // generate filter hook
 			decls = append(decls, genServiceMethod2(info, qualifier, action, phase.After(), roleName))  // generate list after hook
@@ -396,35 +414,35 @@ func GenerateService(info *modelinfo.Model, action *dsl.Action, phase consts.Pha
 	case consts.Get:
 		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
 		// Skip generating hooks for empty models
-		if !info.Design.IsEmpty {
+		if hooks {
 			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.Before(), roleName)) // generate get before hook
 			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.After(), roleName))  // generate get after hook
 		}
 	case consts.CreateMany: // XXXMany hooks use genServiceMethod3
 		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
 		// Skip generating hooks for empty models
-		if !info.Design.IsEmpty {
+		if hooks {
 			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.Before(), roleName)) // generate create many before hook
 			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.After(), roleName))  // generate create many after hook
 		}
 	case consts.DeleteMany:
 		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
 		// Skip generating hooks for empty models
-		if !info.Design.IsEmpty {
+		if hooks {
 			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.Before(), roleName)) // generate delete many before hook
 			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.After(), roleName))  // generate delete many after hook
 		}
 	case consts.UpdateMany:
 		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
 		// Skip generating hooks for empty models
-		if !info.Design.IsEmpty {
+		if hooks {
 			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.Before(), roleName)) // generate update many before hook
 			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.After(), roleName))  // generate update many after hook
 		}
 	case consts.PatchMany:
 		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
 		// Skip generating hooks for empty models
-		if !info.Design.IsEmpty {
+		if hooks {
 			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.Before(), roleName)) // generate patch many before hook
 			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.After(), roleName))  // generate patch many after hook
 		}
@@ -440,7 +458,7 @@ func GenerateService(info *modelinfo.Model, action *dsl.Action, phase consts.Pha
 		// building the query, then invokes ListAfter, so the hooks are
 		// scaffolded in that order.
 		// Skip generating hooks for empty models
-		if !info.Design.IsEmpty {
+		if hooks {
 			decls = append(decls, genServiceMethod2(info, qualifier, action, consts.ListBefore, roleName)) // generate list before hook
 			decls = append(decls, genServiceMethod8(info, qualifier, action, phase, roleName))             // generate filter hook
 			decls = append(decls, genServiceMethod2(info, qualifier, action, consts.ListAfter, roleName))  // generate list after hook

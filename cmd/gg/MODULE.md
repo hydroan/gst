@@ -127,6 +127,8 @@ partition "第 3 步：执行（出错不回滚）" {
   :删过期文件：model、service、中间件，
   以及过期中间件的注册调用;
   :运行 gg gen：不清理，
+  要合并的 service 文件只生成外壳
+  （不写钩子占位和测试骨架），
   只拦本次新增的检查违规，
   不查 Module assembly;
   :写动作 service 文件、辅助文件;
@@ -172,7 +174,7 @@ service 目录不是镜像复制，分两类文件。
 - 源文件被 `excludeSourceFiles` 排除的动作跳过。
 - 源文件必须存在，并且至少声明一个 service 结构体（嵌入 `service.Base` 的结构体）。只有钩子方法、没有动作主方法也可以。
 - 几个动作对应同一个文件名时，合并成一个目标文件。
-- 目标内容是先生成一份和 `gg gen` 一样的 service 外壳，再把框架源文件合并上去：
+- 目标内容是先生成一份 service 外壳——结构体和动作方法，不带 `gg gen` 给手写服务准备的钩子占位和测试骨架——再把框架源文件合并上去：
   - 外壳决定 `package`、import 布局、service 结构体名和生成的动作方法签名；
   - 源文件提供方法体、钩子方法、结构体上的其他方法、普通声明和注释。方法体嫁接到生成的签名上时，接收者、参数、返回值改用生成的名字；
   - 源文件里的 service 结构体全部并到外壳的那一个结构体上，两个源结构体上有同名方法时报错；
@@ -260,7 +262,7 @@ copy 不改 go.mod：复制来的 service 引用了项目还没有的依赖时�
 
 copy 让复制来的目录和模块源码保持一致：copy 写过、这一次规划不写的文件就是过期文件，执行时删除。按目录分两种判断：
 
-- **`model/<name>/`、`service/<name>/`**：这两个目录镜像模块源码，这次规划不写的 Go 文件都算过期。例外：测试文件、以 `.` 开头的文件、`vendor/` 和 `testdata/` 目录下的文件，以及生成文件，永远不算过期。项目自己的代码应放在这两个目录以外。
+- **`model/<name>/`、`service/<name>/`**：这两个目录镜像模块源码，这次规划不写的 Go 文件都算过期。例外：测试文件、以 `.` 开头的文件、`vendor/` 和 `testdata/` 目录下的文件，以及生成文件，不算过期；测试文件只有一种例外：过期 service 文件旁配对的 `_test.go` 与 `_internal_test.go` 随它一起删，和 `gg prune` 的规则相同。项目自己的代码应放在这两个目录以外。
 - **`middleware/`**：这个目录是共用的，只有带着本模块所有权标记、而 `module.json` 已经不再声明的文件才算过期；`middleware/middleware.go` 永远不算。
 - **`interceptor/`**：判断同 `middleware/`；此外项目不再有声明了 `GRPC()` 的 model 时，本模块标记的拦截器文件全部算过期；`interceptor/interceptor.go` 只在项目不再有 `GRPC()` 模型、它又什么都不再注册时随目录一起删，否则不算。
 
@@ -284,6 +286,9 @@ start
 if (在 model/<name>/ 或 service/<name>/ 下？) then (是)
   if (这次规划会写这个路径？) then (是)
     :按规划写入;
+  elseif (过期 service 文件旁
+配对的测试文件？) then (是)
+    :随 service 文件删除; <<delete>>
   elseif (测试文件、. 开头的文件、
 vendor/ 或 testdata/ 下的文件、生成文件？) then (是)
     :保留; <<keep>>

@@ -3,6 +3,9 @@ package gghelper
 import (
 	"os"
 	"path/filepath"
+	"strings"
+
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 // FileExists reports whether a file or directory exists at filename.
@@ -37,4 +40,20 @@ func RelativePath(filePath string) string {
 		return filePath
 	}
 	return relPath
+}
+
+// PairedTestFiles returns the test files on disk that pair with the service
+// file servicePath: its external form first, then its internal form, as in
+// create_test.go and create_internal_test.go for create.go. They go with the
+// service file: gg prune deletes them with a service file it deletes, and gg
+// module copy with a stale one.
+func PairedTestFiles(servicePath string) []string {
+	stem := strings.TrimSuffix(servicePath, ".go")
+	var tests []string
+	for _, path := range []string{stem + ggconst.PatternTestFile, stem + "_internal" + ggconst.PatternTestFile} {
+		if _, err := os.Stat(path); err == nil {
+			tests = append(tests, path)
+		}
+	}
+	return tests
 }

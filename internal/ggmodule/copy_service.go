@@ -508,15 +508,18 @@ func cloneImportSpec(imp *ast.ImportSpec) *ast.ImportSpec {
 	return cloned
 }
 
-// generateTargetServiceShell builds the same service file shell that gg gen will
-// create in the current project for all actions sharing one service filename.
+// generateTargetServiceShell builds the service file shell the merge grafts
+// the module's source onto, for all actions sharing one service filename: the
+// struct and the action methods, the shell the gen run of the copy creates in
+// the project as well, without the hook placeholders gg gen writes for a
+// service a project writes by hand (see gggen.GenerateServiceShell).
 func generateTargetServiceShell(actions []moduleCopyAction) ([]byte, error) {
 	if len(actions) == 0 {
 		return nil, errors.New("failed to generate service shell: no actions")
 	}
 	var file *ast.File
 	for _, action := range actions {
-		next := gggen.GenerateService(action.ModelInfo, action.Action, action.Action.Phase, moduleCopyServicePackageName(action))
+		next := gggen.GenerateServiceShell(action.ModelInfo, action.Action, action.Action.Phase, moduleCopyServicePackageName(action))
 		if next == nil {
 			return nil, errors.Newf("failed to generate service shell for %s", action.Action.ServiceFilename())
 		}

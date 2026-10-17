@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/ggmodule"
 	"github.com/spf13/cobra"
 )
@@ -232,7 +234,7 @@ func TestRunModuleCopyGenAllowsPreexistingProjectCheckViolations(t *testing.T) {
 
 	var genErr error
 	output := captureStdout(t, func() {
-		genErr = runModuleCopyGen(baseline)
+		genErr = runModuleCopyGen(baseline, nil)
 	})
 	if genErr != nil {
 		t.Fatalf("runModuleCopyGen() error = %v, want nil for pre-existing violations", genErr)
@@ -259,7 +261,7 @@ func TestRunModuleCopyGenFailsOnNewProjectCheckViolations(t *testing.T) {
 
 	var genErr error
 	output := captureStdout(t, func() {
-		genErr = runModuleCopyGen(baseline)
+		genErr = runModuleCopyGen(baseline, nil)
 	})
 	if genErr == nil || !strings.Contains(genErr.Error(), "project checks failed") {
 		t.Fatalf("runModuleCopyGen() error = %v, want project checks failed", genErr)
@@ -269,6 +271,86 @@ func TestRunModuleCopyGenFailsOnNewProjectCheckViolations(t *testing.T) {
 	}
 	if strings.Contains(output, "sessions.go") {
 		t.Fatalf("module-copy generation should not report pre-existing violations:\n%s", output)
+	}
+}
+
+// TestRunModuleCopyGenCreatesShellsForTheFilesItMerges pins the service
+// files the gen run of module copy creates for the targets the copy merges
+// the module's source onto: the struct and the action method alone, no hook
+// placeholders and no test scaffolds, which are for services a project
+// writes by hand; a service file outside those targets, one of a project
+// model's own, is created the way gg gen creates it, hooks and scaffolds
+// included.
+func TestRunModuleCopyGenCreatesShellsForTheFilesItMerges(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	for _, m := range []struct{ file, name, table, param string }{
+		{"model/record.go", "Record", "records", "rec"},
+		{"model/note.go", "Note", "notes", "note"},
+	} {
+		writeProjectFile(t, filepath.Join(projectDir, m.file), fmt.Sprintf(`package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type %[1]s struct {
+	model.Base
+}
+
+func (%[1]s) TableName() string { return %[2]q }
+
+func (%[1]s) Design() {
+	dsl.Param(%[3]q)
+	dsl.Create(func() {
+		dsl.Service()
+	})
+}
+`, m.name, m.table, m.param))
+	}
+	baseline := collectProjectCheckBaseline()
+	module = ""
+
+	var genErr error
+	captureStdout(t, func() {
+		genErr = runModuleCopyGen(baseline, []string{filepath.Join("service", "record", "create.go")})
+	})
+	if genErr != nil {
+		t.Fatalf("runModuleCopyGen() error = %v", genErr)
+	}
+
+	merged, err := os.ReadFile(filepath.Join(projectDir, "service", "record", "create.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"type Creator struct", ") Create(ctx *gst.ServiceContext"} {
+		if !strings.Contains(string(merged), want) {
+			t.Fatalf("the shell must carry %q:\n%s", want, merged)
+		}
+	}
+	for _, placeholder := range []string{"CreateBefore", "CreateAfter"} {
+		if strings.Contains(string(merged), placeholder) {
+			t.Fatalf("the shell must carry no %s placeholder:\n%s", placeholder, merged)
+		}
+	}
+	for _, scaffold := range []string{"create_test.go", "main_test.go"} {
+		if gghelper.FileExists(filepath.Join(projectDir, "service", "record", scaffold)) {
+			t.Fatalf("the gen run of module copy must not scaffold %s beside a shell", scaffold)
+		}
+	}
+
+	own, err := os.ReadFile(filepath.Join(projectDir, "service", "note", "create.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(own), "CreateBefore") {
+		t.Fatalf("a service file outside the merge targets keeps its hooks:\n%s", own)
+	}
+	if !gghelper.FileExists(filepath.Join(projectDir, "service", "note", "create_test.go")) {
+		t.Fatal("a service file outside the merge targets keeps its test scaffold")
 	}
 }
 

@@ -545,6 +545,59 @@ func (u *Creator) CreateAfter(ctx *gst.ServiceContext, user *model.User) error {
 	}
 }
 
+// TestGenerateServiceShellOmitsTheHookPlaceholders compares the whole file
+// GenerateServiceShell returns for the Create action of the model above with
+// what GenerateService returns for it: the struct and the action method, and
+// none of the hook placeholders.
+func TestGenerateServiceShellOmitsTheHookPlaceholders(t *testing.T) {
+	info := &modelinfo.Model{
+		ModulePath:   "helloworld",
+		ModelPkgName: "model",
+		ModelName:    "User",
+		ModelVarName: "u",
+		ModelFileDir: "model",
+		Design:       &dsl.Design{},
+	}
+	action := &dsl.Action{
+		Service: true,
+		Payload: "*User",
+		Result:  "*User",
+		Phase:   consts.Create,
+	}
+
+	file := GenerateServiceShell(info, action, consts.Create, "user")
+	if file == nil {
+		t.Fatal("GenerateServiceShell returned nil")
+	}
+	got, err := FormatNodeExtra(file)
+	if err != nil {
+		t.Fatalf("format generated service failed: %v", err)
+	}
+	want := `package user
+
+import (
+	"helloworld/model"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*model.User, *model.User, *model.User]
+}
+
+func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {
+	log := u.WithContext(ctx, ctx.Phase())
+	log.Info("user create")
+
+	return rsp, nil
+}
+`
+	if got != want {
+		t.Errorf("GenerateServiceShell() =\n%s\nwant\n%s", got, want)
+	}
+}
+
 // TestGenerateServiceList compares the whole service file GenerateService
 // builds for a List action on a database model: the List method, then the
 // hooks in the order the list controller invokes them, ListBefore, Filter

@@ -262,8 +262,10 @@ func (p *CopyPlan) checkSourceDirs() error {
 // discovery, and excluded sources produce no target at all.
 //
 // Two kinds of project-owned files never count as stale: test files, which
-// goFilesInDir already skips, and generated files, which belong to their
-// generator (gg gen Cols files in particular) rather than to module copy.
+// goFilesInDir already skips — the ones paired with a stale service file are
+// added by collectStaleServiceFiles — and generated files, which belong to
+// their generator (gg gen Cols files in particular) rather than to module
+// copy.
 func (p *CopyPlan) staleTargetFiles(dir string, kinds ...moduleCopyFileKind) ([]string, error) {
 	info, err := os.Stat(dir)
 	if os.IsNotExist(err) {

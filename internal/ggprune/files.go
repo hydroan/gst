@@ -28,6 +28,7 @@ import (
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen"
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/modelinfo"
 )
 
@@ -129,27 +130,13 @@ func PlanFiles(existing []string, models []*modelinfo.Model, kept map[string]boo
 	for _, oldFile := range existing {
 		if !currentFiles[oldFile] && !kept[oldFile] {
 			filesToDelete = append(filesToDelete, oldFile)
-			filesToDelete = append(filesToDelete, pairedTestFiles(oldFile)...)
+			filesToDelete = append(filesToDelete, gghelper.PairedTestFiles(oldFile)...)
 		}
 	}
 
 	// Keep the files gst.yaml prune.ignore protects
 	filesToDelete, ignoredFiles := filterIgnoredFiles(filesToDelete, protect)
 	return FilePlan{Delete: filesToDelete, Ignored: ignoredFiles}
-}
-
-// pairedTestFiles returns the test files on disk that pair with the service
-// file servicePath: its external form first, then its internal form, as in
-// create_test.go and create_internal_test.go for create.go.
-func pairedTestFiles(servicePath string) []string {
-	stem := strings.TrimSuffix(servicePath, ".go")
-	var tests []string
-	for _, path := range []string{stem + ggconst.PatternTestFile, stem + "_internal" + ggconst.PatternTestFile} {
-		if _, err := os.Stat(path); err == nil {
-			tests = append(tests, path)
-		}
-	}
-	return tests
 }
 
 // currentServiceFiles returns the service files the Service() actions of

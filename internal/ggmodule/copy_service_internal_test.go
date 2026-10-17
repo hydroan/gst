@@ -4,8 +4,13 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/dsl"
+	"github.com/hydroan/gst/internal/modelinfo"
 )
 
 func TestMergeModuleServiceSourceCopiesWholeServiceFile(t *testing.T) {
@@ -652,4 +657,40 @@ func moduleCopyTestImportPaths(file *ast.File) []string {
 		paths = append(paths, strings.Trim(imp.Path.Value, `"`))
 	}
 	return paths
+}
+
+// TestGenerateTargetServiceShellCarriesNoHookPlaceholders pins the shell the
+// merge grafts the module's source onto: the struct and the action method,
+// and no hook placeholders. The hooks are the source's to define; a
+// placeholder the source does not define would stay in the copy as a hook
+// that runs on every request.
+func TestGenerateTargetServiceShellCarriesNoHookPlaceholders(t *testing.T) {
+	modelInfo := &modelinfo.Model{
+		ModulePath:   "tmpapp",
+		ModelPkgName: "copytest",
+		ModelName:    "CopyTest",
+		ModelVarName: "c",
+		ModelFileDir: filepath.Join("model", "copytest"),
+		Design:       &dsl.Design{},
+	}
+	action := &dsl.Action{Service: true, Payload: "*CopyTest", Result: "*CopyTest", Phase: consts.Create}
+
+	shell, err := generateTargetServiceShell([]moduleCopyAction{{
+		Action:     action,
+		TargetPath: filepath.Join("service", "copytest", "create.go"),
+		ModelInfo:  modelInfo,
+	}})
+	if err != nil {
+		t.Fatalf("generateTargetServiceShell() error = %v", err)
+	}
+	for _, want := range []string{"type Creator struct", ") Create(ctx *gst.ServiceContext"} {
+		if !strings.Contains(string(shell), want) {
+			t.Fatalf("the shell must carry %q:\n%s", want, shell)
+		}
+	}
+	for _, placeholder := range []string{"CreateBefore", "CreateAfter"} {
+		if strings.Contains(string(shell), placeholder) {
+			t.Fatalf("the shell must carry no %s placeholder:\n%s", placeholder, shell)
+		}
+	}
 }

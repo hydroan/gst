@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -151,7 +152,7 @@ func runModuleCopy(name string, opts moduleCopyOptions) error {
 		Plan:    plan,
 		Options: copyOpts,
 		RunGen: func() error {
-			return runModuleCopyGen(baseline)
+			return runModuleCopyGen(baseline, plan.ServiceTargets())
 		},
 		OnSection: clioutput.Section,
 		OnFile:    printModuleCopyStatus,
@@ -186,9 +187,11 @@ func printModuleCopyStatus(status ggmodule.CopyWriteStatus, path string) {
 	}
 }
 
-// runModuleCopyGen reuses gg gen's generator path but suppresses generated-file
-// logs so module copy output stays focused on local-source files.
-func runModuleCopyGen(baseline map[string]struct{}) error {
+// runModuleCopyGen reuses gg gen's generator path for the copy: the service
+// files among targets, the ones the copy merges the module's source onto, are
+// created as shells (see genRunOptions.MergeShells), and generated-file logs
+// are suppressed so module copy output stays focused on local-source files.
+func runModuleCopyGen(baseline map[string]struct{}, targets []string) error {
 	// Module copy needs gg gen to create the target service shell, but it must not
 	// turn this copy operation into a prune/cleanup pass over user service files.
 	// Project checks stay enabled through genRunWithOptions(Quiet: true), scoped
@@ -204,7 +207,11 @@ func runModuleCopyGen(baseline map[string]struct{}) error {
 		prune = oldPrune
 	}()
 
-	return genRunWithOptions(genRunOptions{Quiet: true, BaselineViolations: baseline, Checks: moduleCopyChecks()})
+	shells := make(map[string]struct{}, len(targets))
+	for _, target := range targets {
+		shells[filepath.Clean(target)] = struct{}{}
+	}
+	return genRunWithOptions(genRunOptions{Quiet: true, BaselineViolations: baseline, Checks: moduleCopyChecks(), MergeShells: shells})
 }
 
 func confirmModuleCopy(name string) bool {

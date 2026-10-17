@@ -3,6 +3,7 @@ package gghelper_test
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/hydroan/gst/internal/gghelper"
@@ -59,5 +60,25 @@ func TestRelativePath(t *testing.T) {
 	}
 	if got := gghelper.RelativePath(rel); got != rel {
 		t.Fatalf("RelativePath(%q) = %q, want it unchanged", rel, got)
+	}
+}
+
+// TestPairedTestFilesListsTheTestsBesideAServiceFile pins the pairing rule
+// prune and module copy share: the external and the internal test file
+// beside a service file, in that order, only those on disk, and no test file
+// of another stem.
+func TestPairedTestFilesListsTheTestsBesideAServiceFile(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"create.go", "create_test.go", "create_internal_test.go", "list.go", "helper_test.go"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("package sample\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if got, want := gghelper.PairedTestFiles(filepath.Join(dir, "create.go")), []string{filepath.Join(dir, "create_test.go"), filepath.Join(dir, "create_internal_test.go")}; !slices.Equal(got, want) {
+		t.Fatalf("PairedTestFiles(create.go) = %v, want %v", got, want)
+	}
+	if got := gghelper.PairedTestFiles(filepath.Join(dir, "list.go")); len(got) != 0 {
+		t.Fatalf("PairedTestFiles(list.go) = %v, want none", got)
 	}
 }
