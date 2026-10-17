@@ -82,6 +82,32 @@ func (s *Creator) Note(names []string) {
 	require.Equal(t, "s", clashing.Recv.List[0].Names[0].Name, "a refused rename changes nothing")
 }
 
+// TestRenameIdentTellsFieldKeysFromMapKeys pins the keys of composite
+// literals: the field key of a struct literal keeps its name even when it
+// spells the receiver's, the key of a map literal that is the receiver is
+// renamed, a literal of an elided type is taken for a struct, and a key that
+// is no single identifier is an expression whatever the literal's type.
+func TestRenameIdentTellsFieldKeysFromMapKeys(t *testing.T) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "sample.go", `package sample
+
+func (s *Archive) Create() error {
+	opts := signOptions{s: true}
+	seen := map[*Archive]int{s: 1}
+	nested := []signOptions{{s: false}}
+	tagged := labels{s.name: 1}
+	return s.sign(opts, seen, nested, tagged)
+}
+`, 0)
+	require.NoError(t, err)
+	fn, ok := file.Decls[0].(*ast.FuncDecl)
+	require.True(t, ok)
+
+	require.NoError(t, goast.RenameIdent(fn, fn.Recv.List[0].Names[0], "a"))
+
+	require.Equal(t, "func (a *Archive) Create() error {\n\topts := signOptions{s: true}\n\tseen := map[*Archive]int{a: 1}\n\tnested := []signOptions{{s: false}}\n\ttagged := labels{a.name: 1}\n\treturn a.sign(opts, seen, nested, tagged)\n}", printNode(t, fset, fn))
+}
+
 // TestRemoveStructInteriorComments pins the example in the
 // RemoveStructInteriorComments documentation.
 func TestRemoveStructInteriorComments(t *testing.T) {

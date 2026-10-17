@@ -40,8 +40,9 @@ func FindStructTypeSpec(file *ast.File, name string) *ast.TypeSpec {
 // result or a local — to newName throughout node: every identifier that
 // resolves to that object, decl itself when node holds it, and no other.
 // go/parser resolves the identifiers of a file to the objects they name as
-// it parses, so a selector's field name and an identifier of another object
-// that shares the name stay as they are: with decl the receiver u,
+// it parses, so a selector's field name, a struct literal's field key and an
+// identifier of another object that shares the name stay as they are: with
+// decl the receiver u,
 //
 //	func (u *Creator) Create() error { return u.check(req.u) }
 //
@@ -54,8 +55,11 @@ func FindStructTypeSpec(file *ast.File, name string) *ast.TypeSpec {
 // package-level name — because the rename would turn one of the two into a
 // reference to the other; the caller leaves the name or fails.
 func RenameIdent(node ast.Node, decl *ast.Ident, newName string) error {
-	if decl == nil || decl.Obj == nil {
-		return errors.Newf("cannot rename %s: the identifier was parsed without object resolution", declName(decl))
+	if decl == nil {
+		return errors.New("cannot rename a nil identifier")
+	}
+	if decl.Obj == nil {
+		return errors.Newf("cannot rename %s: the identifier was parsed without object resolution", decl.Name)
 	}
 	var clash bool
 	walkScopedIdents(node, func(ident *ast.Ident) {
@@ -72,18 +76,15 @@ func RenameIdent(node ast.Node, decl *ast.Ident, newName string) error {
 	return nil
 }
 
-// declName returns the name of decl, or the name of a nil declaration.
-func declName(decl *ast.Ident) string {
-	if decl == nil {
-		return "<nil>"
-	}
-	return decl.Name
-}
-
 // walkScopedIdents calls visit on every identifier under node that the scope
-// resolves: the field name of a selector and the field key of a composite
-// literal, named by the type they belong to and not by the scope, are left
-// out.
+// resolves, leaving out the ones a type names: the field name of a selector,
+// and the keys of a composite literal unless the literal's type is written
+// as a map, an array or a slice, whose keys are expressions. The parser
+// links a struct's field key to a same-named object in scope all the same —
+// the T{K: 0} case go/ast/scope.go documents — so the literal's own type
+// decides, and only a key that is a single identifier can be a field name; a
+// literal of an elided type is taken for a struct, which leaves a map key
+// under its old name to fail the build rather than renaming a field.
 func walkScopedIdents(node ast.Node, visit func(*ast.Ident)) {
 	var walk func(n ast.Node) bool
 	walk = func(n ast.Node) bool {
@@ -91,11 +92,27 @@ func walkScopedIdents(node ast.Node, visit func(*ast.Ident)) {
 		case *ast.SelectorExpr:
 			ast.Inspect(x.X, walk)
 			return false
-		case *ast.KeyValueExpr:
-			if key, ok := x.Key.(*ast.Ident); ok && key.Obj == nil {
-				ast.Inspect(x.Value, walk)
-				return false
+		case *ast.CompositeLit:
+			if x.Type != nil {
+				ast.Inspect(x.Type, walk)
 			}
+			keysAreExpressions := false
+			switch x.Type.(type) {
+			case *ast.MapType, *ast.ArrayType:
+				keysAreExpressions = true
+			}
+			for _, elt := range x.Elts {
+				kv, ok := elt.(*ast.KeyValueExpr)
+				if !ok {
+					ast.Inspect(elt, walk)
+					continue
+				}
+				if _, isIdent := kv.Key.(*ast.Ident); keysAreExpressions || !isIdent {
+					ast.Inspect(kv.Key, walk)
+				}
+				ast.Inspect(kv.Value, walk)
+			}
+			return false
 		case *ast.Ident:
 			visit(x)
 		}
