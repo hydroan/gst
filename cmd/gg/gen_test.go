@@ -1296,6 +1296,32 @@ func (Token) Design() {
 	require.EqualError(t, err, "model/token.go: the List action of Token registers GET /api/tokens, as the List action of Token in model/api/token.go does; a path is served by one action")
 }
 
+// TestGenRunAcceptsTheModelTheCIWorkflowWrites pins the model the Go
+// workflow (.github/workflows/go.yml) writes into the project it generates,
+// to the project checks gg gen runs: a check added to gg gen holds that
+// model too, and failing here is cheaper than failing the workflow after the
+// push.
+func TestGenRunAcceptsTheModelTheCIWorkflowWrites(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	workflow, err := os.ReadFile(filepath.Join(frameworkRepoRoot(t), ".github", "workflows", "go.yml"))
+	require.NoError(t, err)
+	_, heredoc, found := strings.Cut(string(workflow), "cat > examples/demo-ci/model/user.go <<'EOF'\n")
+	require.True(t, found, "the workflow writes model/user.go through a heredoc")
+	heredoc, _, found = strings.Cut(heredoc, "\n          EOF\n")
+	require.True(t, found, "the heredoc ends with an EOF line")
+	lines := strings.Split(heredoc, "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimPrefix(line, "          ")
+	}
+	writeProjectFile(t, filepath.Join(projectDir, "model/user.go"), strings.Join(lines, "\n")+"\n")
+
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+	requireProjectCompiles(t)
+}
+
 // TestGenRunReachesAModelPackageNamedLikeABuildOutput pins that a model
 // package named build, dist, tmp, temp or generated is generated for like
 // any other under the .gitignore gg new writes: gg gen reads the project

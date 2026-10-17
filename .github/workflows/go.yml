@@ -58,8 +58,8 @@ jobs:
           )
 
           type User struct {
-            Name string
-            Age  string
+            Name string `json:"name"`
+            Age  string `json:"age"`
 
             model.Base
           }
