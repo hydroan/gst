@@ -37,13 +37,34 @@ func TestIsTestMainFunc(t *testing.T) {
 	}
 }
 
-// funcDeclOf returns the one function src declares.
-func funcDeclOf(t *testing.T, src string) *ast.FuncDecl {
+// TestDeclaresTestMain pins the examples in the DeclaresTestMain
+// documentation: a package-level TestMain counts, a method of that name and
+// a test case do not.
+func TestDeclaresTestMain(t *testing.T) {
+	require.True(t, goast.DeclaresTestMain(fileOf(t, "func TestMain(m *testing.M) {}")))
+	for _, src := range []string{
+		"type suite struct{}\n\nfunc (suite) TestMain(m *testing.M) {}",
+		"func TestMain(t *testing.T) {}",
+		"func TestCreate(t *testing.T) {}",
+	} {
+		require.False(t, goast.DeclaresTestMain(fileOf(t, src)), src)
+	}
+}
+
+// fileOf parses src as the declarations of a file of package sample.
+func fileOf(t *testing.T, src string) *ast.File {
 	t.Helper()
 
 	file, err := parser.ParseFile(token.NewFileSet(), "sample.go", "package sample\n\n"+src+"\n", 0)
 	require.NoError(t, err)
-	fn, ok := file.Decls[0].(*ast.FuncDecl)
+	return file
+}
+
+// funcDeclOf returns the one function src declares.
+func funcDeclOf(t *testing.T, src string) *ast.FuncDecl {
+	t.Helper()
+
+	fn, ok := fileOf(t, src).Decls[0].(*ast.FuncDecl)
 	require.True(t, ok)
 	return fn
 }

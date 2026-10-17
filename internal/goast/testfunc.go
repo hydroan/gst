@@ -35,6 +35,22 @@ func IsTestMainFunc(fn *ast.FuncDecl) bool {
 	return fn.Name.Name == "TestMain" && hasSingleTestingParam(fn, "M")
 }
 
+// DeclaresTestMain reports whether file declares TestMain at package level
+// (see IsTestMainFunc), as the test file starting the test server of its
+// package does: true for a file holding
+//
+//	func TestMain(m *testing.M) {}
+//
+// and false for one holding a method of that name alone.
+func DeclaresTestMain(file *ast.File) bool {
+	for _, decl := range file.Decls {
+		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil && IsTestMainFunc(fn) {
+			return true
+		}
+	}
+	return false
+}
+
 // hasSingleTestingParam reports whether fn takes exactly one *testing.<sel>
 // parameter and returns nothing.
 func hasSingleTestingParam(fn *ast.FuncDecl, sel string) bool {

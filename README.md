@@ -70,7 +70,7 @@ git init
 | --- | --- |
 | `model/**/*.go` | 声明数据结构、接口 DSL、轻量 model hook |
 | `service/**/*.go` | 实现业务逻辑、复杂 hook、查询过滤和返回补充 |
-| `service/**/*_test.go` | 与 service 文件同时由 `gg gen` 生成的测试骨架，含每个包的 `main_test.go`；生成后归项目维护，`gg gen` 不再改写 |
+| `service/**/*_test.go` | 与 service 文件同时由 `gg gen` 生成的测试骨架，含每个包的 `main_test.go`；生成后归项目维护，`gg gen` 只同步 TestMain 文件对 `pb`、`interceptor` 两个包的空白导入 |
 | `module/` | 注册内置或自定义模块，例如 IAM |
 | `configx/` | 扩展配置 |
 | `cronjob/` | 注册定时任务（每个调度时刻整个部署只领一次，被打断的一轮再跑一次） |
@@ -1228,7 +1228,8 @@ Pod 端口，Ingress 只转发写进规则的路径——**只转发 `/api` 前�
 TestMain 时，再生成一个只声明 TestMain 的 `main_test.go`，用 `testutil.Run` 起默认的测试
 服务器（sqlite，不需要容器）；需要 MySQL、Redis 或播种数据的包，在它的 `testutil.Server`
 上改一次。骨架引用 testify，新项目第一次生成骨架后先跑一次 `go mod tidy`。这些文件生成后
-归项目维护，`gg gen` 不再改写；`gg check` 要求每个由 `gg gen` 生成的 service 文件都有配对的
+归项目维护；`gg gen` 只按 main.go 的口径同步声明 TestMain 的测试文件对 `pb`、`interceptor`
+两个包的空白导入，其余不改写；`gg check` 要求每个由 `gg gen` 生成的 service 文件都有配对的
 测试文件，删掉骨架而不写测试会被它拦下。
 
 ### 为什么删除 action 后 service 文件还在？

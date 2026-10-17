@@ -17,8 +17,10 @@ import (
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
 	"github.com/hydroan/gst/internal/modelinfo"
+	"golang.org/x/tools/go/ast/astutil"
 )
 
 // The packages the test scaffolds import, by the names the scaffolds refer
@@ -609,13 +611,115 @@ func TestMainFile(dir string) (string, error) {
 		if err != nil {
 			return "", errors.Wrapf(err, "reading the test file %s", path)
 		}
-		for _, decl := range file.Decls {
-			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil && goast.IsTestMainFunc(fn) {
-				return path, nil
-			}
+		if goast.DeclaresTestMain(file) {
+			return path, nil
 		}
 	}
 	return "", nil
+}
+
+// SyncTestMainImports makes file, a TestMain file of the module modulePath
+// parsed through fset with its comments, import the optional project
+// packages the way main.go does, present being the directories the project
+// holds (see gghelper.OptionalImportDrift): a missing import is added as a
+// blank import in the group of the file's other imports of the module (see
+// insertBlankImport), and a stale blank import is dropped with its comment;
+// the rest of the file stays as it is. It reports whether file changed. The
+// file is laid out by its positions, so go/format prints it with the groups
+// it had, the added import sorted into its group. The scaffold
+// GenerateServiceTestMain writes for a project holding neither package,
+// synced for one holding interceptor and pb, is the scaffold it writes for
+// that project, its project imports reading
+//
+//	_ "helloworld/component"
+//	_ "helloworld/configx"
+//	_ "helloworld/cronjob"
+//	_ "helloworld/interceptor"
+//	_ "helloworld/leader"
+//	_ "helloworld/lock"
+//	_ "helloworld/middleware"
+//	_ "helloworld/model"
+//	_ "helloworld/module"
+//	_ "helloworld/pb"
+//	"helloworld/router"
+//	_ "helloworld/service"
+func SyncTestMainImports(fset *token.FileSet, file *ast.File, modulePath string, present []string) bool {
+	missing, stale := gghelper.OptionalImportDrift(file, modulePath, present)
+	for _, importPath := range missing {
+		insertBlankImport(fset, file, modulePath, importPath)
+	}
+	for _, importPath := range stale {
+		// astutil keeps the comments of a deleted import unless it was the
+		// last one of its declaration; they go with the import here.
+		spec := goast.FindImportSpec(file, importPath)
+		file.Comments = slices.DeleteFunc(file.Comments, func(group *ast.CommentGroup) bool { return group == spec.Doc || group == spec.Comment })
+		astutil.DeleteNamedImport(fset, file, "_", importPath)
+	}
+	return len(missing)+len(stale) > 0
+}
+
+// insertBlankImport adds the blank import of importPath to the first import
+// declaration of file, parsed through fset, at the line of the file's last
+// import of the module modulePath, so that go/format sorts it into the
+// group of the module's imports, or two lines below the last import, in a
+// group of its own, when the file imports nothing of the module: the lone
+// "testing" of
+//
+//	import "testing"
+//
+// becomes
+//
+//	import (
+//		"testing"
+//
+//		_ "helloworld/pb"
+//	)
+//
+// astutil.AddNamedImport places an import beside the one sharing the longest
+// path prefix, which is "testing" for the first import of the module, and
+// the formatters group by the dot of a domain, which a module path need not
+// have. A TestMain file imports testing, so the declaration is there; one
+// without any import gets the import declared on its own (see
+// goast.InsertImportSpec).
+func insertBlankImport(fset *token.FileSet, file *ast.File, modulePath, importPath string) {
+	var decl *ast.GenDecl
+	var last, anchor *ast.ImportSpec
+	var at int
+	for _, d := range file.Decls {
+		gen, ok := d.(*ast.GenDecl)
+		if !ok || gen.Tok != token.IMPORT || len(gen.Specs) == 0 {
+			continue
+		}
+		decl, at = gen, len(gen.Specs)
+		for i, spec := range gen.Specs {
+			imp, ok := spec.(*ast.ImportSpec)
+			if !ok {
+				continue
+			}
+			last = imp
+			if path, err := strconv.Unquote(imp.Path.Value); err == nil && (path == modulePath || strings.HasPrefix(path, modulePath+"/")) {
+				anchor, at = imp, i+1
+			}
+		}
+		break
+	}
+	if last == nil {
+		goast.InsertImportSpec(file, importSpecAt(importPath, "_", token.NoPos))
+		return
+	}
+	pos := last.Path.ValuePos
+	if anchor != nil {
+		pos = anchor.Path.ValuePos
+	} else {
+		lines := fset.File(pos)
+		pos = lines.LineStart(min(lines.Line(pos)+2, lines.LineCount()))
+	}
+	spec := importSpecAt(importPath, "_", pos)
+	decl.Specs = slices.Insert(decl.Specs, at, ast.Spec(spec))
+	if !decl.Lparen.IsValid() {
+		decl.Lparen = decl.Specs[0].Pos()
+	}
+	file.Imports = append(file.Imports, spec)
 }
 
 // The AST builders of the scaffolds.

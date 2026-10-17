@@ -208,7 +208,7 @@ cluster 是多副本示例，也是框架分布式、多副本和 gRPC 能力的
 - `main.go` 和所有 `.gen.go` 文件（`model/model.gen.go`、`model/apidoc.gen.go`、`service/service.gen.go`、`router/router.gen.go` 等）由 `gg gen` 生成，主要负责导入包和注册 model、service、router 以及 Swagger 文档使用的注释。除非明确要修改生成器，否则不要手写这些文件。`pb/` 下的一切同样由 `gg gen` 生成：字段编号来自 `pb` tag，已提交的 `.proto` 决定沿用的编号，删掉的字段会写成 `reserved`；改了模型重新 `gg gen` 即可，不要手改。
 - `model/**/*.go` 是接口和数据模型声明层。这里定义结构体字段、轻量级 model hook、`Design()` DSL、`Migrate()`、`Endpoint()`、`Param()`、`Route()`、`Payload()`、`Result()`、`Public()` 等接口行为。
 - `service/**/*.go` 是业务实现层。这里实现 `Create`、`Delete`、`Update`、`Patch`、`List`、`Get`、`DeleteMany` 等方法，以及 `CreateBefore`、`ListAfter`、`Filter` 等复杂 hook。
-- `service/**/*_test.go` 是接口测试：`gg gen` 随新 service 文件生成骨架（外部测试包，首行 `t.Fatal`，其后是用 `client` 包写好的示例请求，删掉首行即可运行），生成后归项目维护，`gg gen` 不再改写。
+- `service/**/*_test.go` 是接口测试：`gg gen` 随新 service 文件生成骨架（外部测试包，首行 `t.Fatal`，其后是用 `client` 包写好的示例请求，删掉首行即可运行），生成后归项目维护；`gg gen` 只按 main.go 的口径同步声明 TestMain 的测试文件对 `pb`、`interceptor` 两个包的空白导入，其余不改写。
 - `module/` 用来注册内置或自定义模块，例如 `iam.Register(...)`。
 - `configx/`、`cronjob/`、`middleware/` 分别用于扩展配置、定时任务和中间件，应用入口通过空导入触发它们的 `init()`；`interceptor/` 只在项目声明了 GRPC() 时存在，放 gRPC 拦截器，同样由空导入触发。
 

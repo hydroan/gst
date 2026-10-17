@@ -1,6 +1,11 @@
 package gggen_test
 
 import (
+	"bytes"
+	"go/ast"
+	"go/format"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"testing"
@@ -471,6 +476,175 @@ func TestMain(m *testing.M) {
 		require.Contains(t, got, "\t_ \"helloworld/cronjob\"\n\t_ \"helloworld/interceptor\"\n\t_ \"helloworld/leader\"\n")
 		require.Contains(t, got, "\t_ \"helloworld/module\"\n\t_ \"helloworld/pb\"\n\t\"helloworld/router\"\n")
 	})
+}
+
+// TestSyncTestMainImportsKeepsTheScaffoldImportingWhatMainGoImports pins
+// the example in the SyncTestMainImports documentation: the scaffold of a
+// project holding neither optional package, synced for one holding both and
+// printed, is the scaffold GenerateServiceTestMain writes for that project,
+// and the latter synced for a project holding neither is the former; a
+// scaffold importing what it should is left as it is.
+func TestSyncTestMainImportsKeepsTheScaffoldImportingWhatMainGoImports(t *testing.T) {
+	bare, err := gggen.GenerateServiceTestMain("helloworld", "record")
+	require.NoError(t, err)
+	full, err := gggen.GenerateServiceTestMain("helloworld", "record", "interceptor", "pb")
+	require.NoError(t, err)
+	sync := func(src string, present ...string) (bool, string) {
+		t.Helper()
+		fset := token.NewFileSet()
+		file, err := parser.ParseFile(fset, "main_test.go", src, parser.ParseComments)
+		require.NoError(t, err)
+		changed := gggen.SyncTestMainImports(fset, file, "helloworld", present)
+		return changed, formatFile(t, fset, file)
+	}
+
+	changed, got := sync(bare, "interceptor", "pb")
+	require.True(t, changed)
+	require.Equal(t, full, got)
+
+	changed, got = sync(full)
+	require.True(t, changed)
+	require.Equal(t, bare, got)
+
+	changed, got = sync(full, "interceptor", "pb")
+	require.False(t, changed)
+	require.Equal(t, full, got)
+}
+
+// TestSyncTestMainImportsEditsAHandwrittenFileInPlace pins how
+// SyncTestMainImports treats a TestMain file the project wrote itself: an
+// import is added to the group of the project's own imports, or into a
+// group of its own under a lone "testing", and a stale blank import goes
+// with its comment, the rest of the file staying as it is. Its
+// a_lone_testing_import case pins the example in the insertBlankImport
+// documentation.
+func TestSyncTestMainImportsEditsAHandwrittenFileInPlace(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		present []string
+		before  string
+		after   string
+	}{
+		{
+			name:    "the_group_of_the_project_imports",
+			present: []string{"pb"},
+			before: `package record_test
+
+import (
+	"testing"
+
+	"helloworld/internal/testsupport"
+
+	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/testutil"
+)
+
+// TestMain starts the test server with the routes testsupport registers.
+func TestMain(m *testing.M) {
+	testutil.Run(m, testutil.Server{Database: config.DBSqlite, Routes: testsupport.InitRoutes})
+}
+`,
+			after: `package record_test
+
+import (
+	"testing"
+
+	"helloworld/internal/testsupport"
+	_ "helloworld/pb"
+
+	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/testutil"
+)
+
+// TestMain starts the test server with the routes testsupport registers.
+func TestMain(m *testing.M) {
+	testutil.Run(m, testutil.Server{Database: config.DBSqlite, Routes: testsupport.InitRoutes})
+}
+`,
+		},
+		{
+			name:    "a_lone_testing_import",
+			present: []string{"pb"},
+			before:  "package record_test\n\nimport \"testing\"\n\nfunc TestMain(m *testing.M) {}\n",
+			after: `package record_test
+
+import (
+	"testing"
+
+	_ "helloworld/pb"
+)
+
+func TestMain(m *testing.M) {}
+`,
+		},
+		{
+			name: "a_stale_import_and_its_comment",
+			before: `package record_test
+
+import (
+	"testing"
+
+	_ "helloworld/model"
+	_ "helloworld/pb" // the gRPC services
+	"helloworld/router"
+
+	"github.com/hydroan/gst/testutil"
+)
+
+func TestMain(m *testing.M) {
+	testutil.Run(m, testutil.Server{Routes: router.Init})
+}
+`,
+			after: `package record_test
+
+import (
+	"testing"
+
+	_ "helloworld/model"
+	"helloworld/router"
+
+	"github.com/hydroan/gst/testutil"
+)
+
+func TestMain(m *testing.M) {
+	testutil.Run(m, testutil.Server{Routes: router.Init})
+}
+`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fset := token.NewFileSet()
+			file, err := parser.ParseFile(fset, "main_test.go", tc.before, parser.ParseComments)
+			require.NoError(t, err)
+
+			require.True(t, gggen.SyncTestMainImports(fset, file, "helloworld", tc.present))
+
+			require.Equal(t, tc.after, formatFile(t, fset, file))
+		})
+	}
+}
+
+// formatFile prints file through go/format, the way gg gen writes a synced
+// TestMain file back.
+func formatFile(t *testing.T, fset *token.FileSet, file *ast.File) string {
+	t.Helper()
+
+	var buf bytes.Buffer
+	require.NoError(t, format.Node(&buf, fset, file))
+	return buf.String()
+}
+
+// TestSyncTestMainImportsLeavesANamedImportOfAnAbsentPackage pins that a
+// package the file imports under a name is kept when the project holds it
+// no more: the file's code refers to it, and the compiler reports the
+// absence.
+func TestSyncTestMainImportsLeavesANamedImportOfAnAbsentPackage(t *testing.T) {
+	src := "package record_test\n\nimport (\n\t\"testing\"\n\n\t\"helloworld/pb\"\n)\n\nfunc TestMain(m *testing.M) { _ = pb.Register }\n"
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "main_test.go", src, parser.ParseComments)
+	require.NoError(t, err)
+
+	require.False(t, gggen.SyncTestMainImports(fset, file, "helloworld", nil))
 }
 
 // TestTestMainFileFindsTheDeclaringTestFile pins where TestMainFile looks

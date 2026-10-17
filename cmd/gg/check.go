@@ -42,6 +42,7 @@ var projectChecks = []ggcheck.Check{
 	ggcheck.ErrorDiscipline,
 	ggcheck.ServiceTestCoverage,
 	ggcheck.ServiceTestOrganization,
+	ggcheck.TestMainImports,
 	ggcheck.LogFieldBoundedness,
 	ggcheck.ModelTableNameDeclaration,
 	ggcheck.GormTagIndexBan,
@@ -54,10 +55,12 @@ var projectChecks = []ggcheck.Check{
 }
 
 // generationChecks are the project checks gg gen runs before generating:
-// every one but Protobuf definitions, whose work gg gen did itself right
-// before (see fillPBTags), deriving the definitions once instead of twice.
+// every one but the two whose work the run does itself, Protobuf
+// definitions, derived right before (see fillPBTags) once instead of twice,
+// and TestMain imports, synced once main.go is written (see
+// syncTestMainImports).
 func generationChecks() []ggcheck.Check {
-	return projectChecksWithout(ggcheck.ProtobufDefinitions.Name)
+	return projectChecksWithout(ggcheck.ProtobufDefinitions.Name, ggcheck.TestMainImports.Name)
 }
 
 // moduleCopyChecks are the project checks the gg gen run of gg module copy
@@ -67,7 +70,7 @@ func generationChecks() []ggcheck.Check {
 // assembly to the project, printing what is pending once it is done (see
 // printModuleCopyAssembly); gg gen and gg check enforce it from then on.
 func moduleCopyChecks() []ggcheck.Check {
-	return projectChecksWithout(ggcheck.ProtobufDefinitions.Name, ggcheck.ModuleAssembly.Name)
+	return projectChecksWithout(ggcheck.ProtobufDefinitions.Name, ggcheck.TestMainImports.Name, ggcheck.ModuleAssembly.Name)
 }
 
 // projectChecksWithout returns projectChecks in their order but the checks

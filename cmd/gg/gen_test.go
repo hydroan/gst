@@ -1295,16 +1295,19 @@ func (Token) Design() {
 	require.EqualError(t, err, "model/token.go: the List action of Token registers GET /api/tokens, as the List action of Token in model/api/token.go does; a path is served by one action")
 }
 
-// TestGenRunWarnsWhenTheTestMainFileImportsNoPB pins the warning gg gen
-// prints while scaffolding a service test in a project serving gRPC whose
-// package declares TestMain in a file that does not import the pb package:
-// the test server of that package would serve no gRPC.
-func TestGenRunWarnsWhenTheTestMainFileImportsNoPB(t *testing.T) {
+// TestGenRunKeepsTheTestMainFilesImportingPBWhileTheProjectServesGRPC pins
+// that gg gen imports the pb package into every TestMain file of an external
+// test package of the project exactly while a model declares GRPC(), the way
+// main.go imports it: a TestMain written before the project served gRPC,
+// under service/ or elsewhere, gets the import, and loses it with the last
+// GRPC() declaration, so the project vets either way.
+func TestGenRunKeepsTheTestMainFilesImportingPBWhileTheProjectServesGRPC(t *testing.T) {
 	projectDir, ok := newGenProject(t)
 	if !ok {
 		return
 	}
-	writeProjectFile(t, filepath.Join(projectDir, "model/feed.go"), `package model
+	feedModel := func(grpc string) string {
+		return `package model
 
 import (
 	"github.com/hydroan/gst/dsl"
@@ -1312,7 +1315,7 @@ import (
 )
 
 type Feed struct {
-	Name string `+"`"+`json:"name" pb:"11"`+"`"+`
+	Name string ` + "`" + `json:"name" pb:"11"` + "`" + `
 
 	model.Base
 }
@@ -1320,21 +1323,33 @@ type Feed struct {
 func (Feed) TableName() string { return "feeds" }
 
 func (Feed) Design() {
-	dsl.GRPC()
-	dsl.Migrate()
+` + grpc + `	dsl.Migrate()
 	dsl.Endpoint("feeds")
 	dsl.Create(func() {
 		dsl.Service()
 	})
 }
-`)
-	writeProjectFile(t, filepath.Join(projectDir, "service/feed/main_test.go"), "package feed_test\n\nimport \"testing\"\n\nfunc TestMain(m *testing.M) {}\n")
+`
+	}
+	writeProjectFile(t, filepath.Join(projectDir, "model/feed.go"), feedModel("\tdsl.GRPC()\n"))
+	testMains := []string{filepath.Join(projectDir, "service/feed/main_test.go"), filepath.Join(projectDir, "module/main_test.go")}
+	writeProjectFile(t, testMains[0], "package feed_test\n\nimport \"testing\"\n\nfunc TestMain(m *testing.M) {}\n")
+	writeProjectFile(t, testMains[1], "package module_test\n\nimport \"testing\"\n\nfunc TestMain(m *testing.M) {}\n")
 
-	var genErr error
-	stdout := captureStdout(t, func() {
-		genErr = genRunWithOptions(genRunOptions{Quiet: true})
-	})
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+	for _, path := range testMains {
+		code, err := os.ReadFile(path)
+		require.NoError(t, err)
+		require.Contains(t, string(code), `_ "tmpapp/pb"`, path)
+	}
+	requireProjectCompiles(t)
 
-	require.NoError(t, genErr)
-	require.Contains(t, stdout, `service/feed/main_test.go declares TestMain without importing tmpapp/pb: the test server of the package serves no gRPC, so a test dialing testutil.GRPCTarget finds no listener; import it the way main.go does, _ "tmpapp/pb"`)
+	writeProjectFile(t, filepath.Join(projectDir, "model/feed.go"), feedModel(""))
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+	for _, path := range testMains {
+		code, err := os.ReadFile(path)
+		require.NoError(t, err)
+		require.NotContains(t, string(code), "tmpapp/pb", path)
+	}
+	requireProjectCompiles(t)
 }

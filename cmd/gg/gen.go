@@ -1,13 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"go/ast"
+	"go/format"
 	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
-	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -332,17 +332,19 @@ func genRunWithOptions(opts genRunOptions) error {
 		}
 	}
 
-	// generate main.go, which imports the pb package for the registration
-	// of the services exactly when this run wrote it.
-	extraDirs := optionalImportDirs()
-	if len(pbFiles) > 0 {
-		extraDirs = append(extraDirs, ggconst.DirPB)
-	}
+	// generate main.go, which imports the interceptor and pb packages
+	// exactly while they hold Go sources, the pb package's written or
+	// removed just above; the test files declaring TestMain import them
+	// the same way.
+	extraDirs := gghelper.PresentOptionalImportDirs()
 	mainCode, err := gggen.BuildMainFile(module, extraDirs...)
 	if err != nil {
 		return errors.Wrap(err, "build main.go")
 	}
 	if err = writeGenFile(ggconst.FileMain, mainCode); err != nil {
+		return err
+	}
+	if err = syncTestMainImports(extraDirs, ignore, opts.Quiet); err != nil {
 		return err
 	}
 
@@ -475,10 +477,8 @@ func genRunWithOptions(opts genRunOptions) error {
 // service test coverage check requires the test file from the next run on,
 // so the run that creates the service file creates its test as well. A test
 // file the project already has, in its external or internal form, is kept
-// as it is, and so is a main_test.go that exists already; one declaring
-// TestMain without importing the pb package of a project serving gRPC,
-// written before the project did, is warned about: the test server of the
-// package serves no gRPC without that import.
+// as it is, and so is a main_test.go that exists already, its imports of the
+// optional packages following main.go's (see syncTestMainImports).
 func scaffoldServiceTests(modelInfo *modelinfo.Model, target modelinfo.ServiceTargetInfo, action *dsl.Action, route string, extraDirs []string, quiet bool) error {
 	stem := strings.TrimSuffix(target.FilePath, ".go")
 	if gghelper.FileExists(stem+ggconst.PatternTestFile) || gghelper.FileExists(stem+"_internal"+ggconst.PatternTestFile) {
@@ -499,16 +499,6 @@ func scaffoldServiceTests(modelInfo *modelinfo.Model, target modelinfo.ServiceTa
 			return err
 		}
 	}
-	if mainTestFile != "" && slices.Contains(extraDirs, ggconst.DirPB) {
-		pbImport := module + "/" + ggconst.DirPB
-		imported, importErr := importsPackage(mainTestFile, pbImport)
-		if importErr != nil {
-			return importErr
-		}
-		if !imported {
-			clioutput.Warn("", "%s declares TestMain without importing %s: the test server of the package serves no gRPC, so a test dialing testutil.GRPCTarget finds no listener; import it the way main.go does, _ %q", filepath.ToSlash(mainTestFile), pbImport, pbImport)
-		}
-	}
 
 	code, err := gggen.GenerateServiceTest(modelInfo, target, action, route)
 	if err != nil {
@@ -517,19 +507,40 @@ func scaffoldServiceTests(modelInfo *modelinfo.Model, target modelinfo.ServiceTa
 	return writeGeneratedFile(stem+ggconst.PatternTestFile, code, !quiet)
 }
 
-// importsPackage reports whether the Go file at path imports importPath,
-// under any name or none.
-func importsPackage(path, importPath string) (bool, error) {
-	file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+// syncTestMainImports makes every test file of the project declaring
+// TestMain in an external test package import the optional project packages
+// the way main.go does, extraDirs being the ones main.go imports (see
+// gggen.SyncTestMainImports), and prints the files it rewrites. A rewritten
+// file is printed by go/format, which keeps the import groups its positions
+// lay out; the gofumpt printer of the generated files (see
+// gggen.FormatNodeExtraWithFileSet) takes an unnamed import of a module
+// path without a dot for one of the standard library and moves it up.
+func syncTestMainImports(extraDirs []string, ignore gghelper.ProjectIgnore, quiet bool) error {
+	files, err := gghelper.TestMainFiles(ignore)
 	if err != nil {
-		return false, errors.Wrapf(err, "reading %s", path)
+		return err
 	}
-	for _, spec := range file.Imports {
-		if imported, err := strconv.Unquote(spec.Path.Value); err == nil && imported == importPath {
-			return true, nil
+	for _, path := range files {
+		fset := token.NewFileSet()
+		file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
+		if err != nil {
+			return errors.Wrapf(err, "reading the test file %s", path)
+		}
+		if !gggen.SyncTestMainImports(fset, file, module, extraDirs) {
+			continue
+		}
+		var code bytes.Buffer
+		if err := format.Node(&code, fset, file); err != nil {
+			return errors.Wrapf(err, "formatting %s", path)
+		}
+		if !quiet {
+			clioutput.Status(clioutput.StyleWarn, clioutput.SymbolSuccess, "UPDATE", "%s", path)
+		}
+		if err := os.WriteFile(path, code.Bytes(), ggconst.FileModeGenerated); err != nil {
+			return err
 		}
 	}
-	return false, nil
+	return nil
 }
 
 // scannedModels is the model set code generation works from.
@@ -540,22 +551,6 @@ type scannedModels struct {
 	routeIgnores modelinfo.RouteIgnoreResult
 	// pruneConfig holds the gst.yaml prune settings gg gen --prune applies.
 	pruneConfig ggconfig.PruneConfig
-}
-
-// optionalImportDirs lists the project packages main.go imports only when
-// they exist, beside the standard ones every project has: the interceptor
-// package, which a project serving gRPC holds its interceptors in. A
-// directory counts once it holds a Go source file; test files alone make no
-// package to import.
-func optionalImportDirs() []string {
-	var dirs []string
-	for _, dir := range []string{ggconst.DirInterceptor} {
-		files, _ := filepath.Glob(filepath.Join(dir, "*.go"))
-		if slices.ContainsFunc(files, func(path string) bool { return !strings.HasSuffix(path, "_test.go") }) {
-			dirs = append(dirs, dir)
-		}
-	}
-	return dirs
 }
 
 // protobufFiles renders the .proto files of the models declaring GRPC() and

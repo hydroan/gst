@@ -135,6 +135,14 @@ var ProjectImportDirs = []string{
 	DirService,
 }
 
+// OptionalImportDirs lists the project packages a generated main.go imports
+// only while they hold a Go source file, beside ProjectImportDirs, in
+// import-path order: the interceptor package, which a project serving gRPC
+// holds its interceptors in, and pb, the package gg gen writes for the
+// models declaring GRPC(). The test files declaring TestMain import them
+// the same way (see gghelper.PresentOptionalImportDirs).
+var OptionalImportDirs = []string{DirInterceptor, DirPB}
+
 // Bootstrap method names
 const (
 	BootstrapBootstrap = "Bootstrap"
