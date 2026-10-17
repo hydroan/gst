@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"net/http"
 	"strconv"
 	"time"
 
@@ -125,12 +126,16 @@ func tracing() gin.HandlerFunc {
 						attribute.Int64("http.duration_ms", time.Since(start).Milliseconds()),
 					)
 
-					// Set span status based on HTTP status code
-					if statusCode >= 400 {
+					// The status follows the OpenTelemetry HTTP semantic
+					// conventions, which otelgrpc holds the gRPC line's server
+					// spans to as well: a server error sets Error, a client
+					// error leaves the status Unset, as does success. Ok is
+					// never set, the SDK treating it as final, so a request the
+					// handler reported errors on turns Error below whatever its
+					// status code.
+					if statusCode >= http.StatusInternalServerError {
 						span.SetStatus(codes.Error, "HTTP "+strconv.Itoa(statusCode))
 						attrs = append(attrs, attribute.Bool("error", true))
-					} else {
-						span.SetStatus(codes.Ok, "")
 					}
 					span.SetAttributes(attrs...)
 

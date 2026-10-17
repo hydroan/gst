@@ -14,6 +14,7 @@ import (
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/middleware/ratelimiter"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -143,6 +144,44 @@ func TestMiddlewareWrapperKeepsMiddlewareSpanWhenSamplerDrops(t *testing.T) {
 	require.True(t, middlewareSpanContext.HasTraceID())
 	require.Equal(t, rootSpanContext.TraceID(), middlewareSpanContext.TraceID())
 	require.NotEqual(t, rootSpanContext.SpanID(), middlewareSpanContext.SpanID())
+}
+
+// TestMiddlewareWrapperLeavesARefusalUnset pins the status of a middleware
+// span to the convention of the request root span (see tracing): a
+// middleware refusing the request, 4xx, did its job and leaves the status
+// Unset, while one answering a server error sets Error.
+func TestMiddlewareWrapperLeavesARefusalUnset(t *testing.T) {
+	setupTracingTest(t)
+	recorder := oteltest.Record(t)
+
+	router := gin.New()
+	router.Use(tracing())
+	router.Use(middlewareWrapper("refusing", func(c *gin.Context) {
+		if c.Request.URL.Path == "/api/refused" {
+			response.Abort(c, types.NewError(http.StatusForbidden, "sample refusal"))
+		}
+	}))
+	router.Use(middlewareWrapper("failing", func(c *gin.Context) {
+		if c.Request.URL.Path == "/api/failed" {
+			response.Abort(c, types.NewError(http.StatusInternalServerError, "sample failure"))
+		}
+	}))
+	router.GET("/api/refused", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+	router.GET("/api/failed", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+
+	for _, tc := range []struct {
+		route, span string
+		code        codes.Code
+	}{
+		{"/api/refused", "middleware.Refusing", codes.Unset},
+		{"/api/failed", "middleware.Failing", codes.Error},
+	} {
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, tc.route, nil))
+
+		span := oteltest.EndedNamed(t, recorder, tc.span)
+		require.Equal(t, tc.code, span.Status().Code, tc.route)
+	}
 }
 
 func TestMiddlewareWrapperStartsMiddlewareSpansFromRequestRoot(t *testing.T) {

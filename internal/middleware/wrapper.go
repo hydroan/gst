@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -101,12 +102,14 @@ func middlewareWrapper(name string, middleware gin.HandlerFunc) gin.HandlerFunc 
 				attribute.Int("http.status_code", status),
 			)
 
-			// Check if middleware caused any errors (based on response status)
-			if status >= 400 {
+			// A middleware answering a server error failed; one refusing the
+			// request, 4xx, did its job and leaves the status Unset, the way
+			// the request root span and the gRPC line's spans read (see
+			// tracing), and Ok is never set.
+			if status >= http.StatusInternalServerError {
 				span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", status))
 				attrs = append(attrs, attribute.Bool("middleware.error", true))
 			} else {
-				span.SetStatus(codes.Ok, "")
 				attrs = append(attrs, attribute.Bool("middleware.error", false))
 			}
 

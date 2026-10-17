@@ -48,6 +48,40 @@ func TestRecoveryWithTracingAnswersInTheEnvelope(t *testing.T) {
 	require.NotNil(t, envelope.TraceID, "a refusal has to carry the trace that explains it")
 }
 
+// TestRecoveryLeavesAStartedResponseAlone pins what a panic does to a
+// response that has begun, a stream whose headers and first events are out:
+// nothing is appended to it, since the envelope would be read as part of the
+// stream, and the panic is reported on the context instead, for the access
+// log and the span to carry.
+func TestRecoveryLeavesAStartedResponseAlone(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	var reported []error
+	engine := gin.New()
+	engine.Use(func(c *gin.Context) {
+		c.Next()
+		for _, err := range c.Errors {
+			reported = append(reported, err.Err)
+		}
+	})
+	engine.Use(recoveryWithTracing(nil, false))
+	engine.GET("/events", func(c *gin.Context) {
+		c.Header("Content-Type", "text/event-stream")
+		c.Status(http.StatusOK)
+		_, _ = c.Writer.WriteString("data: one\n\n")
+		c.Writer.Flush()
+		panic("boom")
+	})
+
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/events", nil))
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "data: one\n\n", recorder.Body.String(), "a response that has begun must end where it is")
+	require.Len(t, reported, 1)
+	require.ErrorContains(t, reported[0], "boom")
+}
+
 // TestRecoveryLogsThePanicToTheRecoveryLogger pins where the chain's
 // recovery writes: logger.Recovery, the logger the gRPC listener's panics go
 // to as well, with the panic and its stack in the message and the trace id

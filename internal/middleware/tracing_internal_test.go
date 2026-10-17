@@ -15,6 +15,7 @@ import (
 	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -160,6 +161,44 @@ func TestTracingSkipsRecordingOnlyStateWhenSamplerDrops(t *testing.T) {
 
 	require.Equal(t, http.StatusNoContent, w.Code)
 	require.NotEmpty(t, w.Header().Get(consts.HEADER_TRACE_ID))
+}
+
+// TestTracingSetsTheSpanStatusTheWayTheGRPCLineDoes pins the status of the
+// request root span to the OpenTelemetry HTTP semantic conventions, which
+// otelgrpc holds the gRPC line's server spans to as well: a successful
+// answer and a client error leave the status Unset, a server error sets
+// Error, and so does a request the handler reported an error on, whatever
+// its status code; Ok is never set, the SDK treating it as final, so no
+// later error is masked by it.
+func TestTracingSetsTheSpanStatusTheWayTheGRPCLineDoes(t *testing.T) {
+	setupTracingTest(t)
+	recorder := oteltest.Record(t)
+
+	router := gin.New()
+	router.Use(tracing())
+	router.GET("/api/ok", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+	router.GET("/api/missing", func(c *gin.Context) { c.Status(http.StatusNotFound) })
+	router.GET("/api/failed", func(c *gin.Context) { c.Status(http.StatusInternalServerError) })
+	router.GET("/api/reported", func(c *gin.Context) {
+		_ = c.Error(errors.New("sample failure"))
+		c.Status(http.StatusOK)
+	})
+
+	for _, tc := range []struct {
+		route string
+		code  codes.Code
+	}{
+		{"/api/ok", codes.Unset},
+		{"/api/missing", codes.Unset},
+		{"/api/failed", codes.Error},
+		{"/api/reported", codes.Error},
+	} {
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, tc.route, nil))
+
+		span := oteltest.EndedNamed(t, recorder, "GET "+tc.route)
+		require.Equal(t, tc.code, span.Status().Code, tc.route)
+	}
 }
 
 func TestTracingMarksHTTPSpanAsRequestRoot(t *testing.T) {

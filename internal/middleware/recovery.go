@@ -41,10 +41,12 @@ func recovery() gin.HandlerFunc {
 // The stack info is easy to find where the error occurs but the stack info is too large.
 func recoveryWithTracing(log *zap.Logger, stack bool) gin.HandlerFunc {
 	return gin.CustomRecoveryWithWriter(nil, func(c *gin.Context, recovered any) {
+		panicErr := errors.Newf("panic recovered: %v", recovered)
+
 		// Record panic in tracing span
 		span := requestSpan(c)
 		if span != nil && span.IsRecording() {
-			gstotel.RecordError(span, errors.Newf("panic recovered: %v", recovered))
+			gstotel.RecordError(span, panicErr)
 			span.SetAttributes(
 				attribute.Bool("error.panic", true),
 				attribute.String("error.recovered", fmt.Sprintf("%v", recovered)),
@@ -93,11 +95,20 @@ func recoveryWithTracing(log *zap.Logger, stack bool) gin.HandlerFunc {
 			}
 		}
 
-		// If the connection is dead, we can't write a status to it.
-		if brokenPipe {
+		switch {
+		case brokenPipe:
+			// If the connection is dead, we can't write a status to it.
 			c.Error(recovered.(error)) //nolint: errcheck
 			c.Abort()
-		} else {
+		case c.Writer.Written():
+			// The response has begun, its headers and part of its body sent,
+			// a stream most likely: the envelope cannot follow, a client
+			// would read it as part of the stream, so the response ends where
+			// it is and the panic is reported on the context, for the access
+			// log and the root span to carry.
+			_ = c.Error(panicErr)
+			c.Abort()
+		default:
 			// What the panic was stays in the log above. The caller gets the
 			// envelope every other response carries, so one reader can parse
 			// them all and quote back the trace id that explains this one.
