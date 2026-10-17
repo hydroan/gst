@@ -1240,6 +1240,34 @@ func (Note) Design() {
 }
 `
 
+// protobufSheetModel is a second model served over gRPC, for the runs that
+// delete one model while keeping another.
+const protobufSheetModel = `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+// Sheet is a sheet kept by the sheet service.
+type Sheet struct {
+	// Name is the display name.
+	Name string 'json:"name" pb:"11"'
+
+	model.Base
+}
+
+func (Sheet) TableName() string { return "sheets" }
+
+func (Sheet) Design() {
+	dsl.GRPC()
+	dsl.Migrate()
+	dsl.Endpoint("sheets")
+	dsl.Create(func() {})
+	dsl.Get(func() {})
+}
+`
+
 // protobufPinModel refers to a type of another directory, the Link of
 // model/record/item.go: its definition imports record/item.proto by the
 // registered path and its conversions call the record package's.

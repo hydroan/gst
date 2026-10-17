@@ -36,6 +36,11 @@ type Config struct {
 	// Roots are the import paths of the packages declaring the types the API
 	// sends and receives. The project packages they reach are loaded.
 	Roots []string
+	// Overlay maps file paths, absolute or relative to Dir, to the contents
+	// the load reads in place of the files on disk, the way a go build
+	// overlay does: the generated files a run is about to rewrite, see
+	// columns.InspectionOverlay.
+	Overlay map[string][]byte
 }
 
 // Project is a loaded project: its type-checked packages, the doc comments

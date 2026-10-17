@@ -298,7 +298,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	// type-checked for it, so this runs once their registration files above
 	// are current; the whole set is built before any of it is written, so a
 	// definition the compiler refuses leaves the files on disk as they were.
-	pbFiles, err := protobufFiles(allModels, pbDerived)
+	pbFiles, err := protobufFiles(allModels, pbDerived, ignore)
 	if err != nil {
 		return err
 	}
@@ -563,11 +563,11 @@ func optionalImportDirs() []string {
 // the ones fillPBTags rendered, and compiles the Go files of the
 // definitions (see pb.Compile), the set gg gen writes, the rendered files
 // first.
-func protobufFiles(models []*modelinfo.Model, derived []pb.File) ([]pb.File, error) {
+func protobufFiles(models []*modelinfo.Model, derived []pb.File, ignore gghelper.ProjectIgnore) ([]pb.File, error) {
 	generated := derived
 	if generated == nil {
 		var err error
-		if generated, err = protobufDefinitions(models); err != nil {
+		if generated, err = protobufDefinitions(models, ignore); err != nil {
 			return nil, err
 		}
 	}
@@ -589,13 +589,35 @@ func definitionsOf(files []pb.File) []pb.File {
 	return definitions
 }
 
+// protobufConfig describes a derivation of the protobuf definitions of
+// models: the model packages are type-checked through the overlay the column
+// inspection compiles them with, the generated files of the previous run
+// stubbed out (see columns.InspectionOverlay), so a run that deletes a model,
+// and prune after one, do not fail on a registration or column file still
+// naming it.
+func protobufConfig(models []*modelinfo.Model, ignore gghelper.ProjectIgnore) (pbschema.Config, error) {
+	overlay, err := columns.InspectionOverlay(module, ggconst.DirModel, models, ignore)
+	if err != nil {
+		return pbschema.Config{}, errors.Wrap(err, "overlay the model packages")
+	}
+	contents := make(map[string][]byte, len(overlay))
+	for path, content := range overlay {
+		contents[path] = []byte(content)
+	}
+	return pbschema.Config{Dir: ".", ModulePath: module, Models: models, Overlay: contents}, nil
+}
+
 // protobufDefinitions renders the .proto files of the models declaring
 // GRPC() and the Go files serving them (see pb.Generate), the files gg gen
 // writes itself and gg prune keeps. The diagnostics of types protobuf cannot
 // describe come back as they are, one line each; any other failure is
 // wrapped.
-func protobufDefinitions(models []*modelinfo.Model) ([]pb.File, error) {
-	files, err := pb.Generate(pbschema.Config{Dir: ".", ModulePath: module, Models: models})
+func protobufDefinitions(models []*modelinfo.Model, ignore gghelper.ProjectIgnore) ([]pb.File, error) {
+	cfg, err := protobufConfig(models, ignore)
+	if err != nil {
+		return nil, err
+	}
+	files, err := pb.Generate(cfg)
 	var diagnostics *pbschema.DiagnosticsError
 	switch {
 	case errors.As(err, &diagnostics):

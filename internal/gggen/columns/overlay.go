@@ -28,16 +28,19 @@ const columnInspectionPanic = "gg gen: this function depends on generated column
 // column references gets in the inspection build.
 const columnInspectionPlaceholder = `panic("` + columnInspectionPanic + `")`
 
-// columnInspectionOverlay returns the build overlay the inspection program
-// compiles the project with.
+// InspectionOverlay returns the build overlay a program compiling the model
+// packages before this run writes its generated files uses: the column
+// inspection program (see Generate), and the type check the protobuf
+// derivation runs for gg gen and gg prune.
 //
-// The inspection compiles the model packages before the column references the
-// run writes exist. Previously generated column files are replaced by stubs
-// holding only their package clause: they may carry an API shape older than
-// the running gg, and the build must not choke on the very files the run
-// rewrites. A first run has no column files at all. Either way, handwritten
-// model code that reads the references, such as a hook updating its model
-// through the Cols var, would fail the build that produces them.
+// Previously generated files — the column files, and the registration and
+// api doc files of the model directory — are replaced by stubs holding only
+// their package clause: they may carry an API shape older than the running
+// gg or name a model deleted since, and the build must not choke on the very
+// files the run rewrites. A first run has no generated files at all. Either
+// way, handwritten model code that reads the column references, such as a
+// hook updating its model through the Cols var, would fail the build that
+// produces them.
 //
 // The overlay breaks that cycle the way a type checker skipping function
 // bodies does: every declaration that depends on a generated column
@@ -60,7 +63,7 @@ const columnInspectionPlaceholder = `panic("` + columnInspectionPanic + `")`
 // a package-level var or an init function calling a left-out method reaches
 // its placeholder. Only the model directory is rewritten, the same scope the
 // inspection cache key covers.
-func columnInspectionOverlay(module string, modelDir string, models []*modelinfo.Model, ignore gghelper.ProjectIgnore) (map[string]string, error) {
+func InspectionOverlay(module string, modelDir string, models []*modelinfo.Model, ignore gghelper.ProjectIgnore) (map[string]string, error) {
 	files, err := scanColumnInspectionFiles(module, modelDir, ignore)
 	if err != nil {
 		return nil, err
@@ -84,8 +87,8 @@ func columnInspectionOverlay(module string, modelDir string, models []*modelinfo
 type columnInspectionFiles struct {
 	fset *token.FileSet
 
-	// stubs maps every framework-owned generated column file to a stub
-	// holding only its package clause.
+	// stubs maps every framework-owned generated file to a stub holding
+	// only its package clause.
 	stubs map[string]string
 
 	// sources are the other Go files the build compiles, kept as written
@@ -135,8 +138,8 @@ func scanColumnInspectionFiles(module string, modelDir string, ignore gghelper.P
 		pkg := modelinfo.PackageImportPath(module, filepath.Dir(path))
 		// A file without the generated header is hand-written, whatever its
 		// name, and keeps participating in the build.
-		if isColumnFileCandidate(modelDir, path) && bytes.HasPrefix(content, []byte(consts.CodeGeneratedComment())) {
-			return files.addColumnFile(path, pkg, content)
+		if strings.HasSuffix(name, ggconst.SuffixGenGo) && bytes.HasPrefix(content, []byte(consts.CodeGeneratedComment())) {
+			return files.addGeneratedFile(path, pkg, content)
 		}
 		files.addSource(path, pkg, content)
 		return nil
@@ -147,9 +150,9 @@ func scanColumnInspectionFiles(module string, modelDir string, ignore gghelper.P
 	return files, nil
 }
 
-// addColumnFile stubs out a generated column file, omitting every name it
+// addGeneratedFile stubs out a generated file, omitting every name it
 // declares from the inspection build.
-func (f *columnInspectionFiles) addColumnFile(path string, pkg string, content []byte) error {
+func (f *columnInspectionFiles) addGeneratedFile(path string, pkg string, content []byte) error {
 	clause, err := parser.ParseFile(token.NewFileSet(), path, content, parser.PackageClauseOnly)
 	if err != nil {
 		return errors.Wrapf(err, "parse package clause of %s", path)

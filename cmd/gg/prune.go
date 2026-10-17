@@ -139,7 +139,7 @@ func generatedPBFiles(ignore gghelper.ProjectIgnore) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	generated, err := protobufDefinitions(scanned.models)
+	generated, err := protobufDefinitions(scanned.models, ignore)
 	if err != nil {
 		return nil, err
 	}

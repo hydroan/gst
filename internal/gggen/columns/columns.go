@@ -50,7 +50,7 @@ func Generate(module string, modelDir string, models []*modelinfo.Model, ignore 
 		// The inspection build compiles the model packages before this run
 		// writes their column references, so it stubs out the previous
 		// generation and leaves out the handwritten code that reads it.
-		return columnInspectionOverlay(module, modelDir, models, ignore)
+		return InspectionOverlay(module, modelDir, models, ignore)
 	})
 	if err != nil || !inspected {
 		return result, err

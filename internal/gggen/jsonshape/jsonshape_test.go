@@ -2,6 +2,7 @@ package jsonshape_test
 
 import (
 	"go/types"
+	"path/filepath"
 	"testing"
 
 	"github.com/hydroan/gst/internal/gggen/jsonshape"
@@ -55,4 +56,22 @@ func TestLoadReadsTheShapesOfAProject(t *testing.T) {
 	require.Equal(t, "StatusActive marks a sample in use.", enum.Values[0].Doc)
 
 	require.Empty(t, project.Diagnostics())
+}
+
+// TestLoadAppliesTheOverlay pins that the files of Config.Overlay take part
+// in the load in place of, or beside, the ones on disk, keyed by a path
+// relative to Config.Dir or an absolute one: a declaration only the overlay
+// holds is in the loaded package.
+func TestLoadAppliesTheOverlay(t *testing.T) {
+	project, err := jsonshape.Load(jsonshape.Config{
+		Dir:        ".",
+		ModulePath: fixtureModule,
+		Roots:      []string{fixtureModule + "/model/sample"},
+		Overlay:    map[string][]byte{filepath.Join("fixture", "model", "sample", "overlaid.gen.go"): []byte("package sample\n\ntype Overlaid struct{}\n")},
+	})
+	require.NoError(t, err)
+
+	pkg := project.Package(fixtureModule + "/model/sample")
+	require.NotNil(t, pkg)
+	require.NotNil(t, pkg.Types.Scope().Lookup("Overlaid"), "the overlaid file must be part of the load")
 }

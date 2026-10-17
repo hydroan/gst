@@ -49,7 +49,11 @@ func fillPBTags(quiet bool, ignore gghelper.ProjectIgnore) ([]pb.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	files, err := pb.Generate(pbschema.Config{Dir: ".", ModulePath: module, Models: scanned.models})
+	cfg, err := protobufConfig(scanned.models, ignore)
+	if err != nil {
+		return nil, err
+	}
+	files, err := pb.Generate(cfg)
 	if err == nil {
 		return files, nil
 	}
@@ -78,7 +82,7 @@ func fillPBTags(quiet bool, ignore gghelper.ProjectIgnore) ([]pb.File, error) {
 			}
 		}
 	}
-	return pb.Generate(pbschema.Config{Dir: ".", ModulePath: module, Models: scanned.models})
+	return pb.Generate(cfg)
 }
 
 // oneTagPerField returns tags with the ones numbering a field several

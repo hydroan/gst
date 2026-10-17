@@ -16,22 +16,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestColumnInspectionOverlayStubsGeneratedColumnFiles(t *testing.T) {
+func TestInspectionOverlayStubsGeneratedFiles(t *testing.T) {
 	t.Chdir(t.TempDir())
 	columns := filepath.Join("model", "sample", "record.gen.go")
+	registration := filepath.Join("model", ggconst.FileModelGen)
 	writeProjectFile(t, columns, consts.CodeGeneratedComment()+"\n// source: model/sample/record.go\n\npackage sample\n\nvar RecordCols = struct{}{}\n")
 	writeProjectFile(t, filepath.Join("model", "sample", "handwritten.gen.go"), "package sample\n")
-	writeProjectFile(t, filepath.Join("model", ggconst.FileModelGen), consts.CodeGeneratedComment()+"\n\npackage model\n")
+	writeProjectFile(t, registration, consts.CodeGeneratedComment()+"\n\npackage model\n\nfunc init() { register(&Deleted{}) }\n")
 	writeProjectFile(t, filepath.Join("model", "sample", "record.go"), "package sample\n\ntype Record struct{}\n")
 
-	overlay, err := columnInspectionOverlay("tmpapp", "model", nil, gghelper.NewProjectIgnore())
+	overlay, err := InspectionOverlay("tmpapp", "model", nil, gghelper.NewProjectIgnore())
 	require.NoError(t, err)
 
-	// Only the framework-owned column file collapses to its package clause:
-	// the inspection build must not depend on previously generated column
-	// references, while every other file, including a hand-written one that
-	// merely carries the generated suffix, keeps participating as written.
-	require.Equal(t, map[string]string{columns: "package sample\n"}, overlay)
+	// Every framework-owned generated file collapses to its package clause:
+	// the build must depend neither on previously generated column references
+	// nor on a registration naming a model deleted since, while every other
+	// file, including a hand-written one that merely carries the generated
+	// suffix, keeps participating as written.
+	require.Equal(t, map[string]string{columns: "package sample\n", registration: "package model\n"}, overlay)
 }
 
 // TestColumnInspectionOverlayLeavesOutColumnDependents builds the overlay for
@@ -135,7 +137,7 @@ func archiveID() string {
 		ModelFileDir: filepath.Join("model", "sample"), ModelFilePath: recordSource,
 	}}
 
-	overlay, err := columnInspectionOverlay("tmpapp", "model", models, gghelper.NewProjectIgnore())
+	overlay, err := InspectionOverlay("tmpapp", "model", models, gghelper.NewProjectIgnore())
 	require.NoError(t, err)
 	record := overlay[recordSource]
 
@@ -202,7 +204,7 @@ func TestColumnInspectionOverlayLeavesUnparsableFilesToTheCompiler(t *testing.T)
 		ModelFileDir: filepath.Join("model", "sample"),
 	}}
 
-	overlay, err := columnInspectionOverlay("tmpapp", "model", models, gghelper.NewProjectIgnore())
+	overlay, err := InspectionOverlay("tmpapp", "model", models, gghelper.NewProjectIgnore())
 	require.NoError(t, err)
 	require.Empty(t, overlay, "a file that does not parse is compiled as written, so the compiler reports it")
 }

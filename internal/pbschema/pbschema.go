@@ -76,6 +76,11 @@ type Config struct {
 	// Models are the models of the project, their routes resolved (see
 	// modelinfo.ResolveRoutes). The ones declaring GRPC() get definitions.
 	Models []*modelinfo.Model
+	// Overlay is the build overlay the model packages are type-checked
+	// through, see jsonshape.Config.Overlay: the generated files of the
+	// previous run stubbed out, so a registration or column file still naming
+	// a model deleted since does not fail the load.
+	Overlay map[string][]byte
 }
 
 // DiagnosticsError is the error Derive returns when any diagnostic was
@@ -144,7 +149,7 @@ func Derive(cfg Config) (*Schema, error) {
 	for _, m := range models {
 		roots = append(roots, m.ImportPath())
 	}
-	project, err := jsonshape.Load(jsonshape.Config{Dir: cfg.Dir, ModulePath: cfg.ModulePath, Roots: roots})
+	project, err := jsonshape.Load(jsonshape.Config{Dir: cfg.Dir, ModulePath: cfg.ModulePath, Roots: roots, Overlay: cfg.Overlay})
 	if err != nil {
 		return nil, err
 	}
