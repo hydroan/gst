@@ -108,10 +108,12 @@ var (
 	// says so with context.Background.
 	ErrNilContext = errors.New("context cannot be nil")
 
-	// ErrUnusableFilter reports a filter the renderer cannot apply. Client
-	// query paths fail closed to an empty result and only log it; server-built
-	// readers such as the aggregate builder surface it instead, because there
-	// an unusable predicate would disguise a bug as "no data".
+	// ErrUnusableFilter reports a filter the renderer cannot apply. On the
+	// row path a filter of an operator a client can spell in a URL query
+	// narrows the query to an empty result and only logs it; a filter of an
+	// operator only service code writes fails the chain, and the select
+	// builder surfaces every unusable filter, because there an unusable
+	// predicate would disguise a bug as "no data".
 	ErrUnusableFilter = errors.New("filter cannot be applied")
 
 	// ErrTransactionInstance is returned when the instance handed to DatabaseOn
@@ -121,9 +123,9 @@ var (
 
 	// ErrUnsupportedOnDialect is returned when an operation is invoked on a
 	// dialect that does not carry it, per the capability-miss rule: the entry
-	// fails instead of silently degrading. Today that is Upsert, Cleanup, the
-	// transaction boundary, and row locks on a ClickHouse instance; each entry
-	// point states its own reason.
+	// fails instead of silently degrading. The package documentation lists
+	// what a ClickHouse instance does not carry; each entry point states its
+	// own reason.
 	ErrUnsupportedOnDialect = errors.New("operation is not supported on this dialect")
 
 	// ErrLockOutsideTransaction is returned when WithLock is used on a chain

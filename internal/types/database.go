@@ -156,9 +156,10 @@ type QueryOptions struct {
 
 	// Filters are field-level operator filters ("field[op]=value"). They
 	// apply in every WithQuery path, including nil/empty model queries, so
-	// List and Count stay consistent. A condition with an unknown operator
-	// or empty column fails closed: query construction adds "1 = 0" instead
-	// of dropping it.
+	// List and Count stay consistent. A condition that cannot be applied is
+	// never dropped: one of a URL-exposed operator with an empty column or a
+	// mismatched value adds "1 = 0", one of a service-only operator fails
+	// the query (see FilterOp).
 	Filters []Filter
 }
 

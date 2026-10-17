@@ -2,8 +2,10 @@ package types
 
 // FilterOp is a field-level filter operator applied by WithQuery as an
 // additional AND condition. Operators never widen a query: unknown values
-// are rejected during parsing, and the database layer fails closed on
-// conditions it does not recognize.
+// are rejected during parsing, and the database layer never drops a
+// condition it cannot apply, narrowing the query to an empty result on one
+// of a URL-exposed operator and failing it on one of a service-only
+// operator, which no client can have sent.
 //
 // Operators come in two tiers, and the split is load-bearing:
 //

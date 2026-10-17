@@ -514,7 +514,7 @@ err := database.Select[*appmodel.Record, categoryTotal](ctx,
 「连接」小节，框架只放行每行最多对上一行的连接，join 到一对多子表让 `SUM` 静默翻倍的
 那条路写不出来。子表与外层的关联列对用 `子表列.EqCol(外层列)`
 作为谓词传入，复合键就多传几对，每一对都
-必须成立；没有任何关联对的子查询按 fail closed 处理。它们是普通的 `Filter` 算子，
+必须成立；没有任何关联对的子查询直接报错。它们是普通的 `Filter` 算子，
 `List`/`Count`/`Export` 同样能用。
 
 #### 窗口函数

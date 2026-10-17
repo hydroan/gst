@@ -17,7 +17,7 @@ type Subquery struct {
 	Model Model
 	// Filters narrow the related rows. They must include a FilterEqCol,
 	// directly or inside a group: without one the subquery would be a cross
-	// join, so it fails closed instead.
+	// join, so it fails the query instead.
 	Filters []Filter
 	// Negate turns the condition into NOT EXISTS.
 	Negate bool
@@ -58,8 +58,8 @@ func FilterExists[C Model](filters ...Filter) Filter {
 // filters. Note that it is not the negation of a filtered FilterExists over the
 // same rows: a row whose related rows all fail filters matches, and so does a
 // row with no related rows at all. A subquery without any FilterEqCol
-// fails closed here as well: negating "match nothing" would otherwise widen
-// into "match everything".
+// fails the query here as well, so that negating "match nothing" cannot
+// widen it into "match everything".
 func FilterNotExists[C Model](filters ...Filter) Filter {
 	return subqueryFilter[C](filters, true)
 }

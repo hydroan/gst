@@ -212,7 +212,8 @@ func (t Term) As(alias string) Term {
 //	// COUNT(CASE WHEN `status` = ? THEN 1 END) AS `failed`
 //
 // The filters are the ordinary query filters, including nested groups, so the
-// same fail-closed rules and the same renderer apply.
+// same rules and the same renderer apply, every unusable filter failing the
+// select.
 func (t Term) Where(filters ...Filter) Term {
 	t.conditions = append(append([]Filter(nil), t.conditions...), filters...)
 	return t
@@ -290,8 +291,8 @@ func (t Term) Over(window Window) Term {
 
 // NewTerm builds a term from its parts, without the checks the column
 // references and the constructors above keep. It serves the framework's own
-// tests, which exercise how the database layer fails closed on a malformed
-// term; the public gst package does not forward it.
+// tests, which exercise how the database layer treats a malformed term; the
+// public gst package does not forward it.
 func NewTerm(fn TermFn, table, column string, bucket TimeBucket, alias string) Term {
 	return Term{fn: fn, table: table, column: column, bucket: bucket, alias: alias}
 }

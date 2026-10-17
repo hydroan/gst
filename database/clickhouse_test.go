@@ -70,6 +70,12 @@ func TestClickhouse(t *testing.T) {
 		}
 		return ids
 	}
+	listErr := func(filters ...types.Filter) error {
+		records := make([]*TestAggregateRecord, 0)
+		return database.DatabaseOn[*TestAggregateRecord](ctx, ins).
+			WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: filters}).
+			List(&records)
+	}
 
 	t.Run("ListWithFiltersOrderAndPaging", func(t *testing.T) {
 		require.Equal(t, []string{"a4", "a5", "a6"}, listIDs(t, types.FilterGte("amount", 400)))
@@ -342,11 +348,12 @@ func TestClickhouse(t *testing.T) {
 		require.Equal(t, 6, count, "rejected entries and cleaned-up write tests must leave the seed untouched")
 	})
 
-	t.Run("JSONContainsFailsClosed", func(t *testing.T) {
-		// datatypes has no clickhouse arm, so the filter fails closed to an
-		// empty result instead of rendering an empty condition that would
-		// silently widen it.
-		require.Empty(t, listIDs(t, types.NewFilter("", "category", types.FilterOpJSONContains, "alpha")))
+	t.Run("JSONContainsIsRefused", func(t *testing.T) {
+		// datatypes has no clickhouse arm, so the filter is refused the way
+		// every capability the dialect lacks is, rather than rendering an
+		// empty condition that would silently widen the result or answering
+		// an empty one.
+		require.ErrorIs(t, listErr(types.NewFilter("", "category", types.FilterOpJSONContains, "alpha")), database.ErrUnsupportedOnDialect)
 	})
 
 	t.Run("RegexFilter", func(t *testing.T) {
@@ -355,10 +362,10 @@ func TestClickhouse(t *testing.T) {
 		require.Equal(t, []string{"a1", "a2", "a3"}, listIDs(t, types.FilterRegex("category", "^al.*")))
 	})
 
-	t.Run("ExistsSubqueryFailsClosed", func(t *testing.T) {
+	t.Run("ExistsSubqueryIsRefused", func(t *testing.T) {
 		// ClickHouse cannot resolve a correlated column from the enclosing
-		// query, so the semi join fails closed: even a tag row that would
-		// match on a capable dialect selects nothing here.
+		// query, so the semi join is refused: even a tag row that would match
+		// on a capable dialect gets no answer here.
 		require.NoError(t, ins.Exec(`CREATE TABLE test_record_tags (
 			id         String,
 			created_by String,
@@ -373,9 +380,9 @@ func TestClickhouse(t *testing.T) {
 		require.NoError(t, ins.Exec(`INSERT INTO test_record_tags (id, record_id, label, created_at, updated_at) VALUES
 			('t1','a1','vip','2024-01-01 00:00:00','2024-01-01 00:00:00')`).Error)
 
-		require.Empty(t, listIDs(t, types.FilterExists[*TestRecordTag](
+		require.ErrorIs(t, listErr(types.FilterExists[*TestRecordTag](
 			TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID),
-		)))
+		)), database.ErrUnsupportedOnDialect)
 	})
 
 	t.Run("UnionAllStacksRecordsAndTags", func(t *testing.T) {

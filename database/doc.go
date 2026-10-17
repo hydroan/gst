@@ -76,13 +76,14 @@
 //     mutations for low-frequency data correction (accepted, not awaited; no
 //     ErrRecordNotFound). Each entry point's doc states the details.
 //
-// Not carried by ClickHouse, failing closed to an empty result: correlated
-// EXISTS subqueries (FilterExists) and JSON containment (jsoncontains).
-// Not carried, answering ErrUnsupportedOnDialect: Upsert (no conflict
-// semantics), Cleanup (no soft-delete regime), Transaction/TransactionOn,
-// WithLock, and the model joins of Select (no unique constraint to prove a
-// join on). The instance's schema — engine, ORDER BY, partitioning —
-// is hand-written DDL owned by the application: neither bootstrap nor
+// Not carried by ClickHouse, answering ErrUnsupportedOnDialect: correlated
+// EXISTS subqueries (FilterExists) and JSON containment (jsoncontains),
+// Upsert (no conflict semantics), Cleanup (no soft-delete regime),
+// Transaction/TransactionOn, WithLock, reads under WithReplica (no replica
+// role of its own), the dry run of Create (the driver's batch insert ignores
+// DryRun), and the model joins of Select (no unique constraint to prove a
+// join on). The instance's schema — engine, ORDER BY, partitioning — is
+// hand-written DDL owned by the application: neither bootstrap nor
 // "gg migrate" creates or alters ClickHouse tables, bootstrap only verifies
 // that a registered model's table exists.
 package database

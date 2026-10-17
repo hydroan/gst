@@ -207,7 +207,7 @@ func (c Column[T]) NotRegex(expr string) Filter { return c.filter(FilterOpNotReg
 // earlier joined one inside a join; see FilterEqCol. Both must be columns of
 // the same Go type, and the predicate carries both tables, so inside a join
 // either column may be written first. A nil parent leaves the other side
-// empty, and the predicate then fails closed.
+// empty, and the predicate then fails the query.
 //
 // The Col suffix says that the argument is a column rather than a value,
 // which Eq takes; Go has no overloading to tell the two apart by type, and

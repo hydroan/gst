@@ -34,6 +34,12 @@ func TestDatabaseFilterGroups(t *testing.T) {
 		}
 		return ids
 	}
+	listErr := func(filters ...types.Filter) error {
+		users := make([]*TestUser, 0)
+		return database.Database[*TestUser](context.Background()).
+			WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: filters}).
+			List(&users)
+	}
 
 	t.Run("OrGroupMatchesAnyChild", func(t *testing.T) {
 		require.Equal(t, []string{u1.ID, u2.ID}, list(t, types.FilterOr(
@@ -128,13 +134,16 @@ func TestDatabaseFilterGroups(t *testing.T) {
 		require.Equal(t, []string{u1.ID}, grouped)
 	})
 
-	// An empty group is a caller bug. Answering it with the logical
-	// identity (TRUE for AND) would widen the result set, so both group
-	// operators fail closed instead.
-	t.Run("MalformedGroupsFailClosed", func(t *testing.T) {
-		require.Empty(t, list(t, types.FilterOr()), "empty OR group")
-		require.Empty(t, list(t, types.FilterAnd()), "empty AND group")
-		require.Empty(t, list(t, types.NewFilter("", "", types.FilterOpOr, "oops")),
+	// An empty group is a caller bug, and groups are service code: the
+	// chain fails on it rather than answering it with the logical identity
+	// (TRUE for AND), which would widen the result set, or with an empty
+	// page, which would pass the bug off as "no data". A child of a URL
+	// operator that cannot be applied narrows the group instead, like any
+	// filter a client could have sent.
+	t.Run("MalformedGroupsFailTheChain", func(t *testing.T) {
+		require.ErrorIs(t, listErr(types.FilterOr()), database.ErrUnusableFilter, "empty OR group")
+		require.ErrorIs(t, listErr(types.FilterAnd()), database.ErrUnusableFilter, "empty AND group")
+		require.ErrorIs(t, listErr(types.NewFilter("", "", types.FilterOpOr, "oops")), database.ErrUnusableFilter,
 			"a group value that is not a filter list")
 		require.Empty(t, list(t, types.FilterOr(types.FilterEq("", "x"))),
 			"a child with an empty column")
@@ -478,28 +487,31 @@ func TestDatabaseFilters(t *testing.T) {
 		List(&users))
 	require.Empty(t, users, "jsoncontains must not match absent members")
 
-	// jsoncontains on a column that stores no JSON document fails closed
-	// rather than reaching the database as a SQL error.
+	// jsoncontains is an operator only service code writes, so on a column
+	// that stores no JSON document the chain fails, instead of answering the
+	// empty page that would pass the mistake off as "no data" or reaching
+	// the database as a SQL error.
 	users = make([]*TestUser, 0)
-	require.NoError(t, database.Database[*TestUser](context.Background()).
+	require.ErrorIs(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
 			Filters: []types.Filter{types.NewFilter("", "name", types.FilterOpJSONContains, "user6")},
 		}).
-		List(&users))
-	require.Empty(t, users, "jsoncontains on a column storing no JSON document must fail closed")
+		List(&users), database.ErrUnusableFilter, "jsoncontains on a column storing no JSON document must fail the chain")
 
-	// Test fail-closed behavior: an unknown operator or an empty column adds
-	// "1 = 0" instead of being dropped, so the query returns no records.
+	// An unknown operator is no client's either: the URL decoder admits only
+	// the operators it knows, so the chain fails on it too.
 	users = make([]*TestUser, 0)
-	require.NoError(t, database.Database[*TestUser](context.Background()).
+	require.ErrorIs(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
 			Filters: []types.Filter{
 				types.NewFilter("", "age", types.FilterOp("bogus"), "1"),
 			},
 		}).
-		List(&users))
-	require.Empty(t, users, "unknown operator must fail closed")
+		List(&users), database.ErrUnusableFilter, "unknown operator must fail the chain")
 
+	// A filter of an operator a client can spell in a URL narrows the query
+	// to an empty result when it cannot be applied, whoever wrote it: an
+	// empty column adds "1 = 0" instead of failing the request.
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
@@ -1142,41 +1154,40 @@ func TestFilterExistsNested(t *testing.T) {
 	require.Equal(t, "a1", records[0].ID)
 }
 
-// TestFilterExistsFailsClosedUnderNegation pins the one place in the renderer
-// where fail-closed could invert. A predicate that cannot be applied becomes
-// "match nothing"; placing that inside NOT EXISTS would turn it into "match
-// everything", which is the only way this package could widen a result set.
-// The whole condition has to collapse instead of the inner one.
-func TestFilterExistsFailsClosedUnderNegation(t *testing.T) {
+// TestFilterExistsFailsTheChainOnAnUnusableSubquery pins what an EXISTS
+// whose subquery cannot be rendered does to the chain: it fails it, negated
+// or not. A subquery is service code, so answering "match nothing" would
+// pass the mistake off as "no data"; negating that answer would even turn it
+// into "match everything", the one way this package could widen a result
+// set.
+func TestFilterExistsFailsTheChainOnAnUnusableSubquery(t *testing.T) {
 	defer cleanupAggregateData()
 	defer cleanupTagData()
 	setupAggregateData(t)
 	setupTagData(t)
 
 	ctx := context.Background()
-	list := func(t *testing.T, f types.Filter) int {
+	list := func(t *testing.T, f types.Filter) error {
 		t.Helper()
 		records := make([]*TestAggregateRecord, 0)
-		require.NoError(t, database.Database[*TestAggregateRecord](ctx).
+		return database.Database[*TestAggregateRecord](ctx).
 			WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{f}}).
-			List(&records))
-		return len(records)
+			List(&records)
 	}
 
-	// An empty group cannot be rendered, so the subquery's filter fails closed.
+	// An empty group cannot be rendered, so the subquery's filter is unusable.
 	broken := types.FilterOr()
 
-	t.Run("ExistsMatchesNothing", func(t *testing.T) {
-		require.Equal(t, 0, list(t, types.FilterExists[*TestRecordTag](
+	t.Run("Exists", func(t *testing.T) {
+		require.ErrorIs(t, list(t, types.FilterExists[*TestRecordTag](
 			TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), broken,
-		)))
+		)), database.ErrUnusableFilter)
 	})
 
-	t.Run("NotExistsAlsoMatchesNothing", func(t *testing.T) {
-		require.Equal(t, 0, list(t, types.FilterNotExists[*TestRecordTag](
+	t.Run("NotExists", func(t *testing.T) {
+		require.ErrorIs(t, list(t, types.FilterNotExists[*TestRecordTag](
 			TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), broken,
-		)),
-			"negating a fail-closed subquery must not return the whole table")
+		)), database.ErrUnusableFilter, "negating an unusable subquery must not return the whole table")
 	})
 }
 
@@ -1309,6 +1320,13 @@ func TestFilterExistsMultipleCorrelations(t *testing.T) {
 		}
 		return got
 	}
+	listErr := func(filter types.Filter) error {
+		t.Helper()
+		records := make([]*TestAggregateRecord, 0)
+		return database.Database[*TestAggregateRecord](ctx).
+			WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{filter}}).
+			List(&records)
+	}
 
 	t.Run("RequiresEveryPair", func(t *testing.T) {
 		require.Equal(t, []string{"a3"}, ids(audited), "a2's tag fails the category pair")
@@ -1345,11 +1363,12 @@ func TestFilterExistsMultipleCorrelations(t *testing.T) {
 		require.Less(t, strings.Index(sql, first), strings.Index(sql, second), "pairs render in the order given")
 	})
 
-	t.Run("FailsClosedWithoutCorrelation", func(t *testing.T) {
-		require.Empty(t, ids(types.FilterExists[*TestRecordTag](audit)))
-		// Negation would widen "match nothing" into "match everything", so
-		// the whole condition still collapses to no rows.
-		require.Empty(t, ids(types.FilterNotExists[*TestRecordTag](audit)))
+	t.Run("FailsWithoutCorrelation", func(t *testing.T) {
+		// A subquery tied to nothing is service code gone wrong, so the chain
+		// fails rather than answering an empty page; negated as well, where
+		// "match nothing" would otherwise widen into "match everything".
+		require.ErrorIs(t, listErr(types.FilterExists[*TestRecordTag](audit)), database.ErrUnusableFilter)
+		require.ErrorIs(t, listErr(types.FilterNotExists[*TestRecordTag](audit)), database.ErrUnusableFilter)
 	})
 
 	t.Run("StringTierMatchesTypedTier", func(t *testing.T) {
@@ -1361,11 +1380,11 @@ func TestFilterExistsMultipleCorrelations(t *testing.T) {
 		require.Equal(t, []string{"a3"}, ids(byNames))
 	})
 
-	t.Run("FailsClosedOnUnknownChildColumn", func(t *testing.T) {
+	t.Run("FailsOnUnknownChildColumn", func(t *testing.T) {
 		unknown := types.FilterExists[*TestRecordTag](
 			byRecord, types.NewColumn[*TestRecordTag, string]("missing").EqCol(TestAggregateRecordCols.Category), audit,
 		)
-		require.Empty(t, ids(unknown))
+		require.ErrorIs(t, listErr(unknown), database.ErrUnusableFilter)
 	})
 
 	t.Run("ParentOfAnotherTableIsRefused", func(t *testing.T) {
@@ -1397,26 +1416,26 @@ func TestFilterExistsMultipleCorrelations(t *testing.T) {
 		require.ErrorContains(t, err, `is not the table enclosing the subquery over "test_record_tags"`)
 	})
 
-	t.Run("FailsClosedOutsideSubquery", func(t *testing.T) {
+	t.Run("FailsOutsideSubquery", func(t *testing.T) {
 		// A plain-name EqCol at the top level has no enclosing query to tie
-		// to and fails closed; the typed one names the tag table, which the
-		// chain does not read, and fails the chain like any other reference
-		// of another model.
-		require.Empty(t, ids(types.FilterEqCol("record_id", "id")))
+		// to and fails the chain; the typed one names the tag table, which
+		// the chain does not read, and fails it like any other reference of
+		// another model.
+		require.ErrorIs(t, listErr(types.FilterEqCol("record_id", "id")), database.ErrUnusableFilter)
 		records := make([]*TestAggregateRecord, 0)
 		require.ErrorIs(t, database.Database[*TestAggregateRecord](ctx).
 			WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{byRecord}}).
 			List(&records), database.ErrColumnTable)
 	})
 
-	t.Run("FailsClosedOnUnknownParentColumn", func(t *testing.T) {
+	t.Run("FailsOnUnknownParentColumn", func(t *testing.T) {
 		// The plain-name spelling cannot be checked at compile time, so the
 		// renderer checks the outer side against the enclosing model instead
 		// of letting the database answer with an unknown-column error.
 		unknown := types.FilterExists[*TestRecordTag](
 			byRecord, types.FilterEqCol("category", "missing"), audit,
 		)
-		require.Empty(t, ids(unknown))
+		require.ErrorIs(t, listErr(unknown), database.ErrUnusableFilter)
 	})
 }
 

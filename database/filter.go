@@ -42,7 +42,7 @@ type filterScope struct {
 	// the table of the query directly enclosing this subquery, under the name
 	// it is read by, which is an alias when the subquery reads the same
 	// table. It is empty at the top level, where an EqCol predicate has
-	// nothing to tie to and fails closed. outerTable is that table's own
+	// nothing to tie to and fails the query. outerTable is that table's own
 	// name, which the outer side of an EqCol must name when it carries one.
 	outer      string
 	outerTable string
@@ -76,7 +76,7 @@ type filterScope struct {
 	depth int
 	// table is the table the scope's own columns belong to, unaliased. A
 	// filter carrying another table is applied to that table when tables
-	// lists it, and fails closed otherwise.
+	// lists it, and fails the query otherwise.
 	table string
 	// tables are the other tables a predicate may name inside a join, keyed
 	// by table name, each with the columns it may name. It is nil outside a
@@ -161,27 +161,31 @@ func (db *database[M]) outerScope() filterScope {
 }
 
 // applyFilters appends field-level operator filters, each as an AND
-// condition with its value bound as a statement parameter. Every mismatch
-// fails closed with "1 = 0" instead of being dropped: silently dropping a
-// filter would widen the result set, which is dangerous when the result
-// feeds deletes or exports. That covers an empty column, an operator the
-// switch does not recognize, and a value whose type does not match the
-// operator (see the Filter type for the per-operator value contract).
+// condition with its value bound as a statement parameter. A filter that
+// cannot be applied is never dropped, since dropping it would widen the
+// result set, which is dangerous when the result feeds deletes or exports;
+// what it does instead depends on who can have written it (see narrows): a
+// filter of an operator a client can spell in a URL query narrows the query
+// with "1 = 0", for an empty column or a value whose type does not match the
+// operator (see the Filter type for the per-operator value contract), and a
+// filter only service code writes fails the chain, an operator the switch
+// does not recognize included.
 //
 // The caller must hold db.mu.
 func (db *database[M]) applyFilters(filters []types.Filter) {
 	// A filter of another model's column is not client input: only a column
 	// reference carries a table, and service code wrote it, so it fails the
-	// chain the way WithSelect refuses the same reference. Every other
-	// mismatch is left to fail closed, its reason discarded on purpose: a
-	// client filter that cannot be applied narrows the query instead of
-	// failing the request. Server-built callers such as the select builder
-	// read the reason and fail fast instead.
+	// chain the way WithSelect refuses the same reference.
 	if f, reason, foreign := db.foreignTableFilter(filters, db.outerTableName(), ""); foreign {
 		db.err = errors.Wrapf(ErrColumnTable, "filter %q on column %q %s", f.Op(), f.Column(), reason)
 		return
 	}
-	if expr, _ := db.renderFilters(filters, false, db.outerScope()); expr != nil {
+	expr, failure := db.renderFilters(filters, false, db.outerScope())
+	if failure != nil && !narrows(failure) {
+		db.err = failure
+		return
+	}
+	if expr != nil {
 		db.ins = db.ins.Where(expr)
 	}
 }
@@ -241,7 +245,7 @@ func (db *database[M]) foreignTableFilter(filters []types.Filter, own, enclosing
 // conditions around it.
 //
 // An empty list yields nil, which callers read as "no condition". An empty
-// group fails closed instead; see groupCondition.
+// group is unusable instead; see groupCondition.
 //
 // The caller must hold db.mu.
 func (db *database[M]) renderFilters(filters []types.Filter, or bool, scope filterScope) (clause.Expression, error) {
@@ -251,11 +255,14 @@ func (db *database[M]) renderFilters(filters []types.Filter, or bool, scope filt
 		// error that never means anything went wrong.
 		return nil, nil //nolint:nilnil
 	}
+	// The first failure is reported, unless a later one fails the chain
+	// while it only narrows the query (see narrows): the chain's failure is
+	// the one its caller has to see.
 	var failure error
 	exprs := make([]clause.Expression, 0, len(filters))
 	for _, f := range filters {
 		expr, err := db.renderFilter(f, scope)
-		if err != nil && failure == nil {
+		if err != nil && (failure == nil || (narrows(failure) && !narrows(err))) {
 			failure = err
 		}
 		exprs = append(exprs, expr)
@@ -353,18 +360,19 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 		// jsonb operator on Postgres, a json_each EXISTS subquery on SQLite.
 		// It covers only those three — on any other dialect its expression
 		// renders empty, which would silently WIDEN the result, so the filter
-		// fails closed there instead, as it does on a column storing no JSON
-		// document, where the expression is a SQL error on every dialect.
-		// The column is passed unquoted, under the table it was placed in,
-		// because the expression quotes it itself, every dialect's quoting
-		// spelling table.column as two identifiers.
-		if _, isJSON := info.jsonColumns[f.Column()]; !isJSON {
-			return db.failClosedFilter(f, "expects a JSON column")
-		}
+		// is refused there, per the capability-miss rule; on a column storing
+		// no JSON document, where the expression is a SQL error on every
+		// dialect, the filter is unusable. The column is passed unquoted,
+		// under the table it was placed in, because the expression quotes it
+		// itself, every dialect's quoting spelling table.column as two
+		// identifiers.
 		switch db.dialect() {
 		case dialectMySQL, dialectPostgres, dialectSQLite:
 		default:
-			return db.failClosedFilter(f, "is not supported on this dialect")
+			return falseExpr(), errors.Wrapf(ErrUnsupportedOnDialect, "operator %q on %s", f.Op(), db.dialect())
+		}
+		if _, isJSON := info.jsonColumns[f.Column()]; !isJSON {
+			return db.failClosedFilter(f, "expects a JSON column")
 		}
 		s, ok := f.Value().(string)
 		if !ok {
@@ -380,8 +388,8 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 
 // placeFilter resolves the table a filter reads: the scope's own table when
 // the filter carries none or names it, one of the tables read beside it when
-// the query joins that table, and nothing otherwise, which fails closed like
-// an unknown column would. It returns the column quoted for that table and
+// the query joins that table, and nothing otherwise, which is unusable like
+// an unknown column is. It returns the column quoted for that table and
 // what the renderer knows about the table's columns.
 //
 // Inside a subquery a name the related model does not have is not a typo the
@@ -450,12 +458,13 @@ func (db *database[M]) placedName(f types.Filter, scope filterScope, info tableI
 // eqColCondition renders an EqCol predicate. Inside a subquery it ties the
 // scope's own column, on the left, to the enclosing query's column on the
 // right; outside a subquery there is an enclosing query only when the select
-// joins, where the predicate ties two tables of the query, and it fails
-// closed everywhere else rather than comparing a table with itself. The
-// column arrives placed by the caller, so inside an aliased self join it
-// already names the alias. The other column must belong to the table it
-// names: an unchecked side would surface as a database error instead of the
-// fail-closed answer every other mistake gets.
+// joins, where the predicate ties two tables of the query, and it is
+// unusable everywhere else, failing the query rather than comparing a table
+// with itself. The column arrives placed by the caller, so inside an
+// aliased self join it already names the alias. The other column must
+// belong to the table it names: an unchecked side would surface as a
+// database error instead of the unusable-filter answer every other mistake
+// gets.
 //
 // The caller must hold db.mu.
 func (db *database[M]) eqColCondition(f types.Filter, column string, scope filterScope) (clause.Expression, error) {
@@ -569,8 +578,9 @@ func hasCorrelation(filters []types.Filter) bool {
 // a group, which is how arbitrary nesting works.
 //
 // A group whose value is not a filter list, or that carries no children at
-// all, fails closed: an empty group is a caller bug, and answering it with the
-// logical identity (TRUE for AND) would widen the result set.
+// all, is unusable: an empty group is a caller bug, and answering it with
+// the logical identity (TRUE for AND) would widen the result set. Groups are
+// service code, so the chain fails on it (see narrows).
 func (db *database[M]) groupCondition(f types.Filter, or bool, scope filterScope) (clause.Expression, error) {
 	children, ok := f.Value().([]types.Filter)
 	if !ok {
@@ -587,16 +597,49 @@ func (db *database[M]) groupCondition(f types.Filter, or bool, scope filterScope
 // Narrowing to an empty result is always safe; widening it is not.
 func falseExpr() clause.Expression { return clause.Expr{SQL: "1 = 0"} }
 
-// failClosedFilter records why a filter cannot be applied and narrows the
-// query to an empty result instead of widening it.
+// failClosedFilter records why a filter cannot be applied and answers the
+// predicate that matches nothing with the reason, an unusableFilterError:
+// whether the query narrows to that or fails is its caller's to decide (see
+// narrows), the predicate never widening it either way.
 func (db *database[M]) failClosedFilter(f types.Filter, msg string) (clause.Expression, error) {
 	logger.Database.WithContext(db.ctx, phaseWithQuery).Warnz(
-		"filter cannot be applied, adding safety condition",
+		"filter cannot be applied",
 		zap.String("op", string(f.Op())),
 		zap.String("column", f.Column()),
 		zap.String("reason", msg),
 	)
-	return falseExpr(), errors.Wrapf(ErrUnusableFilter, "operator %q on column %q %s", f.Op(), f.Column(), msg)
+	return falseExpr(), &unusableFilterError{
+		error: errors.Wrapf(ErrUnusableFilter, "operator %q on column %q %s", f.Op(), f.Column(), msg),
+		op:    f.Op(),
+	}
+}
+
+// unusableFilterError is the error failClosedFilter answers with: the
+// ErrUnusableFilter it wraps, carrying the reason, and the operator of the
+// filter, which narrows reads.
+type unusableFilterError struct {
+	error
+	op types.FilterOp
+}
+
+func (e *unusableFilterError) Unwrap() error { return e.error }
+
+// narrows reports whether a failure of the renderer narrows the query to an
+// empty result instead of failing it: that of a filter whose operator a
+// client can spell in a URL query (see types.ParseFilterOp), which the row
+// path answers with an empty page rather than a failed request. Any other
+// failure fails the query, because only service code can have written the
+// filter, and an empty result would pass its mistake off as "no data": a
+// filter of a service-only operator, one naming a column of a table the
+// query does not read (ErrColumnTable), and one the dialect does not carry
+// (ErrUnsupportedOnDialect).
+func narrows(err error) bool {
+	var unusable *unusableFilterError
+	if errors.Is(err, ErrColumnTable) || !errors.As(err, &unusable) {
+		return false
+	}
+	_, clientSpelled := types.ParseFilterOp(string(unusable.op))
+	return clientSpelled
 }
 
 // comparisonSQL renders "column op ?" for one comparison filter. A column its
@@ -708,9 +751,9 @@ func (db *database[M]) scopedColumn(column string, scope filterScope) string {
 func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, scope filterScope) (clause.Expression, error) {
 	// ClickHouse cannot resolve a correlated column from the enclosing query
 	// (only constants and CTEs cross that scope boundary), so the semi join
-	// fails closed there rather than failing the whole statement.
+	// is refused there, per the capability-miss rule.
 	if db.dialect() == dialectClickHouse {
-		return db.failClosedFilter(f, "is not supported on this dialect")
+		return falseExpr(), errors.Wrapf(ErrUnsupportedOnDialect, "operator %q on %s", f.Op(), db.dialect())
 	}
 	if sq.Model == nil {
 		return db.failClosedFilter(f, "has no related model")
@@ -790,11 +833,11 @@ func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, scope 
 	if expr != nil {
 		sub = sub.Where(expr)
 	}
-	// A predicate that could not be rendered fails closed to "match nothing".
+	// A predicate that could not be rendered answers "match nothing".
 	// Negating the subquery would turn that into "match everything", so the
-	// whole condition collapses instead of the inner one: narrowing is always
-	// safe, widening never is, and this is the only place in the renderer where
-	// the difference is a negation away.
+	// whole condition collapses instead of the inner one, the failure going
+	// up with it: narrowing is always safe, widening never is, and this is
+	// the only place in the renderer where the difference is a negation away.
 	if failure != nil {
 		return falseExpr(), failure
 	}
@@ -807,8 +850,8 @@ func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, scope 
 // outerColumnSet lists the columns of the model the current chain reads, keyed
 // by database name, for checking the outer side of a first-level correlation.
 // It resolves M through the same cached schema parse the related model goes
-// through; a model whose columns cannot be resolved yields nil, which the
-// correlation fails closed on.
+// through; a model whose columns cannot be resolved yields nil, which makes
+// the correlation unusable.
 func (db *database[M]) outerColumnSet() map[string]struct{} {
 	typ := reflect.TypeOf(*new(M))
 	if typ == nil {
@@ -829,7 +872,8 @@ func (db *database[M]) outerColumnSet() map[string]struct{} {
 // the outer side of a correlation. It reads the name from M directly instead
 // of from the prepared model, because filters are built while the chain is
 // still being assembled, before the terminal operation prepares it. A model
-// without an explicit table name yields "", which the caller fails closed.
+// without an explicit table name yields "", which the caller treats as
+// unusable.
 func (db *database[M]) outerTableName() string {
 	typ := reflect.TypeOf(*new(M))
 	if typ == nil || typ.Kind() != reflect.Pointer {

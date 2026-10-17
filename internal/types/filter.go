@@ -33,7 +33,10 @@ package types
 //   - The comparison operators take a scalar value (string, numeric,
 //     time.Time); slices, arrays, and nil are rejected.
 //
-// A value that violates these rules fails closed in the database layer.
+// A value that violates these rules makes the filter unusable in the
+// database layer, which never widens a query on it: a filter of a
+// URL-exposed operator narrows the query to an empty result, one of a
+// service-only operator fails it (see FilterOp).
 type Filter struct {
 	table  string
 	column string
@@ -63,8 +66,8 @@ func (f Filter) Value() any { return f.value }
 
 // NewFilter builds a filter from its parts, without the shape checks the
 // other constructors lock in at compile time. It serves the framework's own
-// tests, which exercise how the database layer fails closed on a malformed
-// filter; the public gst package does not forward it.
+// tests, which exercise how the database layer treats a malformed filter;
+// the public gst package does not forward it.
 func NewFilter(table, column string, op FilterOp, value any) Filter {
 	return Filter{table: table, column: column, op: op, value: value}
 }
@@ -182,7 +185,8 @@ func FilterNotRegex(column, expr string) Filter {
 }
 
 // FilterJSONContains matches rows whose JSON array column contains value as
-// a member; on a column storing no JSON document the filter fails closed.
+// a member; on a column storing no JSON document the filter is unusable and
+// the query fails.
 func FilterJSONContains(column, value string) Filter {
 	return Filter{column: column, op: FilterOpJSONContains, value: value}
 }
@@ -213,7 +217,7 @@ func FilterFalse() Filter {
 //
 // Children may themselves be groups, which is how nesting is expressed; see
 // FilterAnd for the "(a AND b) OR (c AND d)" shape. A group with no children
-// fails closed.
+// is unusable and fails the query.
 func FilterOr(filters ...Filter) Filter {
 	return Filter{op: FilterOpOr, value: append([]Filter(nil), filters...)}
 }
@@ -238,7 +242,7 @@ func FilterOr(filters ...Filter) Filter {
 //	// WHERE tenant_id = ?
 //	//   AND ((kind = ? AND status = ?) OR (kind = ? AND status = ?))
 //
-// A group with no children fails closed.
+// A group with no children is unusable and fails the query.
 func FilterAnd(filters ...Filter) Filter {
 	return Filter{op: FilterOpAnd, value: append([]Filter(nil), filters...)}
 }
@@ -248,12 +252,12 @@ func FilterAnd(filters ...Filter) Filter {
 // equals parent on the enclosing query's model, rendered as
 // `child_table.column = outer_table.parent`; inside a Join, it is the ON
 // condition. At the top level of a query without a join there is nothing to
-// tie to and it fails closed, as does an empty name on either side or a name
-// the related or the enclosing model does not have. Several of them express a
-// composite key, and one inside a FilterOr group matches on any of its pairs.
-// Inside a join only the pairs at the top level of the ON count toward the
-// key the join is proved unique on: one inside a FilterOr group narrows the
-// match but proves nothing.
+// tie to and it fails the query, as does an empty name on either side or a
+// name the related or the enclosing model does not have. Several of them
+// express a composite key, and one inside a FilterOr group matches on any of
+// its pairs. Inside a join only the pairs at the top level of the ON count
+// toward the key the join is proved unique on: one inside a FilterOr group
+// narrows the match but proves nothing.
 //
 // The string form names the columns alone, which a subquery can place because
 // both of its tables are known; a join needs the tables too, so its predicates

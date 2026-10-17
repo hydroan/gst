@@ -10,8 +10,8 @@ import "github.com/hydroan/gst/internal/types"
 // Column, Op and Value read it back; Split, Values, ExcludedValues and Bounds
 // on a column reference read one column's filters converted to the column's
 // type. A filter carrying another table is applied to that table when the
-// query joins it and fails closed otherwise, and the value is always bound as
-// a statement parameter.
+// query joins it and fails the query otherwise, and the value is always
+// bound as a statement parameter.
 type Filter = types.Filter
 
 // FilterFalse matches nothing. It is the condition a permission hook returns
@@ -41,8 +41,10 @@ func FilterAnd(filters ...Filter) Filter {
 
 // FilterOp is a field-level filter operator: the comparison a Filter applies,
 // which Filter.Op reads back. Operators never widen a query: unknown values
-// are rejected during parsing, and the database layer fails closed on
-// conditions it does not recognize.
+// are rejected during parsing, and the database layer never drops a
+// condition it cannot apply, narrowing the query to an empty result on one
+// of a URL-exposed operator and failing it on one of a service-only
+// operator, which no client can have sent.
 type FilterOp = types.FilterOp
 
 // URL-exposed operators, which a request spells as "field[op]=value".
@@ -86,8 +88,8 @@ func FilterExists[C Model](filters ...Filter) Filter {
 // filters. Note that it is not the negation of a filtered FilterExists over the
 // same rows: a row whose related rows all fail filters matches, and so does a
 // row with no related rows at all. A subquery without any EqCol predicate
-// fails closed here as well: negating "match nothing" would otherwise widen
-// into "match everything".
+// fails the query here as well, so that negating "match nothing" cannot
+// widen it into "match everything".
 func FilterNotExists[C Model](filters ...Filter) Filter {
 	return types.FilterNotExists[C](filters...)
 }
