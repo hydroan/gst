@@ -23,12 +23,12 @@ func (w *ConsumeFromWhere) UnmarshalText(text []byte) (err error) {
 }
 
 const (
-	ROCKETMQ_NAMESRV_ADDRS = "ROCKETMQ_NAMESRV_ADDRS"
-	ROCKETMQ_ACCESS_KEY    = "ROCKETMQ_ACCESS_KEY"
-	ROCKETMQ_SECRET_KEY    = "ROCKETMQ_SECRET_KEY"
-	ROCKETMQ_NAMESPACE     = "ROCKETMQ_NAMESPACE"
-	ROCKETMQ_GROUP_NAME    = "ROCKETMQ_GROUP_NAME"
-	ROCKETMQ_INSTANCE_NAME = "ROCKETMQ_INSTANCE_NAME"
+	ROCKETMQ_NAME_SERVER_ADDRS = "ROCKETMQ_NAME_SERVER_ADDRS"
+	ROCKETMQ_ACCESS_KEY        = "ROCKETMQ_ACCESS_KEY"
+	ROCKETMQ_SECRET_KEY        = "ROCKETMQ_SECRET_KEY"
+	ROCKETMQ_NAMESPACE         = "ROCKETMQ_NAMESPACE"
+	ROCKETMQ_GROUP_NAME        = "ROCKETMQ_GROUP_NAME"
+	ROCKETMQ_INSTANCE_NAME     = "ROCKETMQ_INSTANCE_NAME"
 
 	ROCKETMQ_NUM_RETRIES         = "ROCKETMQ_NUM_RETRIES"
 	ROCKETMQ_SEND_MSG_TIMEOUT    = "ROCKETMQ_SEND_MSG_TIMEOUT"
@@ -40,18 +40,10 @@ const (
 	ROCKETMQ_CONSUME_CONCURRENTLY_MAX_SPAN  = "ROCKETMQ_CONSUME_CONCURRENTLY_MAX_SPAN"
 	ROCKETMQ_CONSUME_MESSAGE_BATCH_MAX_SIZE = "ROCKETMQ_CONSUME_MESSAGE_BATCH_MAX_SIZE"
 
-	ROCKETMQ_MESSAGE_MODEL      = "ROCKETMQ_MESSAGE_MODEL"
 	ROCKETMQ_CONSUME_FROM_WHERE = "ROCKETMQ_CONSUME_FROM_WHERE"
 	ROCKETMQ_CONSUME_TIMESTAMP  = "ROCKETMQ_CONSUME_TIMESTAMP"
 
-	ROCKETMQ_TRACE_ENABLED    = "ROCKETMQ_TRACE_ENABLED"
-	ROCKETMQ_CREDENTIALS_FILE = "ROCKETMQ_CREDENTIALS_FILE"
-
-	ROCKETMQ_TLS_ENABLED          = "ROCKETMQ_TLS_ENABLED"
-	ROCKETMQ_CERT_FILE            = "ROCKETMQ_CERT_FILE"
-	ROCKETMQ_KEY_FILE             = "ROCKETMQ_KEY_FILE"
-	ROCKETMQ_CA_FILE              = "ROCKETMQ_CA_FILE"
-	ROCKETMQ_INSECURE_SKIP_VERIFY = "ROCKETMQ_INSECURE_SKIP_VERIFY"
+	ROCKETMQ_TRACE_ENABLED = "ROCKETMQ_TRACE_ENABLED"
 
 	ROCKETMQ_ENABLED = "ROCKETMQ_ENABLED"
 )
@@ -77,14 +69,7 @@ type RocketMQ struct {
 	ConsumeFromWhere ConsumeFromWhere `json:"consume_from_where" mapstructure:"consume_from_where" ini:"consume_from_where" yaml:"consume_from_where"`
 	ConsumeTimestamp string           `json:"consume_timestamp" mapstructure:"consume_timestamp" ini:"consume_timestamp" yaml:"consume_timestamp"`
 
-	TraceEnabled    bool   `json:"trace_enabled" mapstructure:"trace_enabled" ini:"trace_enabled" yaml:"trace_enabled"`
-	CredentialsFile string `json:"credentials_file" mapstructure:"credentials_file" ini:"credentials_file" yaml:"credentials_file"`
-
-	TLSEnabled         bool   `json:"tls_enabled" mapstructure:"tls_enabled" ini:"tls_enabled" yaml:"tls_enabled"`
-	CertFile           string `json:"cert_file" mapstructure:"cert_file" ini:"cert_file" yaml:"cert_file"`
-	KeyFile            string `json:"key_file" mapstructure:"key_file" ini:"key_file" yaml:"key_file"`
-	CAFile             string `json:"ca_file" mapstructure:"ca_file" ini:"ca_file" yaml:"ca_file"`
-	InsecureSkipVerify bool   `json:"insecure_skip_verify" mapstructure:"insecure_skip_verify" ini:"insecure_skip_verify" yaml:"insecure_skip_verify"`
+	TraceEnabled bool `json:"trace_enabled" mapstructure:"trace_enabled" ini:"trace_enabled" yaml:"trace_enabled"`
 
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
@@ -111,13 +96,6 @@ func (*RocketMQ) setDefaults(v *viper.Viper) {
 	v.SetDefault("rocketmq.consume_timestamp", "")
 
 	v.SetDefault("rocketmq.trace_enabled", false)
-	v.SetDefault("rocketmq.credentials_file", "")
-
-	v.SetDefault("rocketmq.tls_enabled", false)
-	v.SetDefault("rocketmq.cert_file", "")
-	v.SetDefault("rocketmq.key_file", "")
-	v.SetDefault("rocketmq.ca_file", "")
-	v.SetDefault("rocketmq.insecure_skip_verify", false)
 
 	v.SetDefault("rocketmq.enabled", false)
 }

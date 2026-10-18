@@ -35,6 +35,11 @@ type Server struct {
 	// it. Tests reach it through config.App.Kafka or the provider.
 	Kafka bool
 
+	// RocketMQ prepares a rocketmq container and points the framework
+	// provider at it. Tests reach it through config.App.RocketMQ or the
+	// provider.
+	RocketMQ bool
+
 	// Minio prepares a minio bucket and points the framework provider at
 	// it. Tests reach it through config.App.Minio or the provider.
 	Minio bool
@@ -201,6 +206,18 @@ func (s Server) prepare() (release func(), afterMigrate func(), err error) {
 		releases = append(releases, func() {
 			if releaseErr := cleanBroker(); releaseErr != nil {
 				reportReleaseFailure("kafka", releaseErr)
+			}
+		})
+	}
+
+	if s.RocketMQ {
+		cleanBroker, err := testcontainer.SetupRocketMQ()
+		if err != nil {
+			return release, afterMigrate, err
+		}
+		releases = append(releases, func() {
+			if releaseErr := cleanBroker(); releaseErr != nil {
+				reportReleaseFailure("rocketmq", releaseErr)
 			}
 		})
 	}

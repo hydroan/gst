@@ -21,14 +21,20 @@ import (
 
 var (
 	defaultProducer rocketmq.Producer
-	defaultConsumer rocketmq.PushConsumer
 	defaultAdmin    admin.Admin
 	mu              sync.RWMutex
 )
 
+// connectTimeout bounds the connectivity check start performs.
+const connectTimeout = 10 * time.Second
+
 // init registers this provider so importing the package compiles the
-// capability in and hands its lifecycle to bootstrap.
+// capability in and hands its lifecycle to bootstrap, and hands the client
+// library's log lines to the provider's logger: the library keeps one logger
+// per process and reads it from every client goroutine, so it is set before
+// any client runs.
 func init() {
+	rlog.SetLogger(&customLogger{})
 	lifecycle.Register(lifecycle.Component{
 		Name:      "rocketmq",
 		Stage:     lifecycle.StageProvider,
@@ -39,10 +45,11 @@ func init() {
 	})
 }
 
-// start initializes the global RocketMQ producer.
-// It reads RocketMQ configuration from config.App.RocketMQ.
-// The function is thread-safe and ensures the producer is initialized only once.
-func start(_ context.Context) (err error) {
+// start creates the framework's producer and admin client, confirms the name
+// servers answer by listing their topics and starts the producer, so Producer
+// hands out an instance that sends. It runs once; a later call finds the
+// producer and returns.
+func start(_ context.Context) error {
 	cfg := config.App.RocketMQ
 	mu.Lock()
 	defer mu.Unlock()
@@ -50,25 +57,35 @@ func start(_ context.Context) (err error) {
 		return nil
 	}
 
-	rlog.SetLogger(&customLogger{})
-	if defaultProducer, err = NewProducer(cfg); err != nil {
-		return errors.Wrap(err, "failed to create rocketmq producer")
+	p, err := NewProducer(cfg)
+	if err != nil {
+		return err
 	}
-	if defaultConsumer, err = NewPushConsumer(cfg, cfg.GroupName); err != nil {
-		_ = defaultProducer.Shutdown()
-		defaultProducer = nil
-		return errors.Wrap(err, "failed to create rocketmq consumer")
-	}
-	if defaultAdmin, err = NewAdmin(cfg); err != nil {
-		_ = defaultProducer.Shutdown()
-		_ = defaultConsumer.Shutdown()
-		defaultProducer = nil
-		defaultConsumer = nil
-		return errors.Wrap(err, "failed to create rocketmq admin")
+	a, err := NewAdmin(cfg)
+	if err != nil {
+		_ = p.Shutdown()
+		return err
 	}
 
-	zap.S().Infow("successfully connect to rocketmq", "nameserver", cfg.NameServerAddrs, "group", cfg.GroupName)
+	// Check connection: the client library starts a producer without
+	// contacting anything and would report an unreachable name server on
+	// the first send.
+	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
+	defer cancel()
+	if _, err = a.FetchAllTopicList(ctx); err != nil {
+		_ = a.Close()
+		_ = p.Shutdown()
+		return errors.Wrap(err, "failed to connect to rocketmq")
+	}
+	if err = p.Start(); err != nil {
+		_ = a.Close()
+		_ = p.Shutdown()
+		return errors.Wrap(err, "failed to start rocketmq producer")
+	}
 
+	zap.S().Infow("successfully connected to rocketmq", "nameserver", cfg.NameServerAddrs, "group", cfg.GroupName)
+
+	defaultProducer, defaultAdmin = p, a
 	return nil
 }
 
@@ -109,15 +126,6 @@ func NewProducer(cfg config.RocketMQ) (rocketmq.Producer, error) {
 	if cfg.TraceEnabled {
 		opts = append(opts, producer.WithTrace(&primitive.TraceConfig{}))
 	}
-
-	// if cfg.TLSEnabled {
-	// 	var tlsConfig *tls.Config
-	// 	var err error
-	// 	if tlsConfig, err = util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify); err != nil {
-	// 		return nil, errors.Wrap(err, "failed to build TLS config")
-	// 	}
-	// 	opts = append(opts, producer.WithTLS(tlsConfig))
-	// }
 
 	p, err := producer.NewDefaultProducer(opts...)
 	if err != nil {
@@ -182,15 +190,6 @@ func NewPushConsumer(cfg config.RocketMQ, consumerGroup string) (rocketmq.PushCo
 		opts = append(opts, consumer.WithTrace(&primitive.TraceConfig{}))
 	}
 
-	// if cfg.TLSEnabled {
-	// 	var tlsConfig *tls.Config
-	// 	var err error
-	// 	if tlsConfig, err = util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify); err != nil {
-	// 		return nil, errors.Wrap(err, "failed to build TLS config")
-	// 	}
-	// 	opts = append(opts, consumer.WithTLS(tlsConfig))
-	// }
-
 	c, err := consumer.NewPushConsumer(opts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create rocketmq consumer")
@@ -213,15 +212,6 @@ func NewAdmin(cfg config.RocketMQ) (admin.Admin, error) {
 		}))
 	}
 
-	// if cfg.TLSEnabled {
-	// 	var tlsConfig *tls.Config
-	// 	var err error
-	// 	if tlsConfig, err = util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify); err != nil {
-	// 		return nil, errors.Wrap(err, "failed to build TLS config")
-	// 	}
-	// 	opts = append(opts, admin.WithTLS(tlsConfig))
-	// }
-
 	c, err := admin.NewAdmin(opts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create rocketmq admin")
@@ -230,46 +220,28 @@ func NewAdmin(cfg config.RocketMQ) (admin.Admin, error) {
 	return c, nil
 }
 
-// Producer returns the default RocketMQ producer instance
+// Producer returns the framework's producer, started by the bootstrap and
+// ready to send.
 func Producer() (rocketmq.Producer, error) {
 	mu.RLock()
 	defer mu.RUnlock()
 	if defaultProducer == nil {
 		return nil, errors.New("rocketmq producer not initialized")
 	}
-	if defaultProducer == nil {
-		return nil, errors.New("rocketmq producer is nil")
-	}
 	return defaultProducer, nil
 }
 
-// Consumer returns the default RocketMQ consumer instance
-func Consumer() (rocketmq.PushConsumer, error) {
-	mu.RLock()
-	defer mu.RUnlock()
-	if defaultConsumer == nil {
-		return nil, errors.New("rocketmq consumer not initialized")
-	}
-	if defaultConsumer == nil {
-		return nil, errors.New("rocketmq consumer is nil")
-	}
-	return defaultConsumer, nil
-}
-
-// Admin returns the default RocketMQ admin instance
+// Admin returns the framework's admin client.
 func Admin() (admin.Admin, error) {
 	mu.RLock()
 	defer mu.RUnlock()
 	if defaultAdmin == nil {
 		return nil, errors.New("rocketmq admin not initialized")
 	}
-	if defaultAdmin == nil {
-		return nil, errors.New("rocketmq admin is nil")
-	}
 	return defaultAdmin, nil
 }
 
-// stop closes the RocketMQ producer connection
+// stop shuts down the framework's producer and closes its admin client.
 func stop(_ context.Context) error {
 	mu.Lock()
 	defer mu.Unlock()
@@ -282,14 +254,6 @@ func stop(_ context.Context) error {
 			zap.S().Infow("successfully shutdown rocketmq producer")
 		}
 		defaultProducer = nil
-	}
-	if defaultConsumer != nil {
-		if err := defaultConsumer.Shutdown(); err != nil {
-			errs = append(errs, errors.Wrap(err, "failed to shutdown rocketmq consumer"))
-		} else {
-			zap.S().Infow("successfully shutdown rocketmq consumer")
-		}
-		defaultConsumer = nil
 	}
 	if defaultAdmin != nil {
 		if err := defaultAdmin.Close(); err != nil {

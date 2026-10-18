@@ -75,3 +75,24 @@ func TestServerPreparesKafka(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, conn.Close())
 }
+
+func TestServerPreparesRocketMQ(t *testing.T) {
+	for _, key := range []string{config.ROCKETMQ_NAME_SERVER_ADDRS, config.ROCKETMQ_ENABLED} {
+		t.Setenv(key, "")
+		require.NoError(t, os.Unsetenv(key))
+	}
+
+	release, _, err := Server{RocketMQ: true}.prepare()
+	t.Cleanup(release)
+	require.NoError(t, err)
+
+	// The prepared name server lands in the environment the way the other
+	// services do, which is where the bootstrap config picks it up.
+	addr := os.Getenv(config.ROCKETMQ_NAME_SERVER_ADDRS)
+	require.NotEmpty(t, addr)
+	require.Equal(t, "true", os.Getenv(config.ROCKETMQ_ENABLED))
+
+	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
+	require.NoError(t, err)
+	require.NoError(t, conn.Close())
+}
