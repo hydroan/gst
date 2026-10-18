@@ -104,6 +104,8 @@ func TestContains(t *testing.T) {
 	assert.True(t, list.Contains(1))
 	assert.False(t, list.Contains(1, 4))
 	assert.False(t, list.Contains(4))
+	// All of nothing is present.
+	assert.True(t, list.Contains())
 }
 
 func TestClear(t *testing.T) {

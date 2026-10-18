@@ -202,7 +202,6 @@ func (l *List[E]) removeAt(index int) E {
 	}
 	e = l.elements[index]
 	// equivalent to
-	// l.elements = append(l.elements[:index], l.elements[index+1:]...)
 	l.elements = slices.Delete(l.elements, index, index+1)
 	l.shrink()
 	return e
@@ -215,16 +214,14 @@ func (l *List[E]) Clear() {
 		defer l.mu.Unlock()
 	}
 
-	// l.elements = l.elements[:0]
-	// l.elements = nil
 	l.elements = make([]E, 0)
 }
 
-// Contains reports whether the list contains all the given elements.
-// Returns true if all elements are present in the list, false otherwise.
+// Contains reports whether the list contains all the given elements. It
+// returns true if no element is given: all of nothing is present.
 func (l *List[E]) Contains(el ...E) bool {
 	if len(el) == 0 {
-		return false
+		return true
 	}
 
 	for _, e := range el {

@@ -102,6 +102,8 @@ func TestContains(t *testing.T) {
 	assert.True(t, s.Contains(1, 2, 3))
 	assert.False(t, s.Contains(1, 2, 3, 4))
 	assert.False(t, s.Contains(4))
+	// All of nothing is present.
+	assert.True(t, s.Contains())
 }
 
 func TestContainsOne(t *testing.T) {
@@ -120,15 +122,33 @@ func TestContainsAny(t *testing.T) {
 	assert.True(t, s.ContainsAny(1, 2))
 	assert.True(t, s.ContainsAny(1, 2, 3))
 	assert.True(t, s.ContainsAny(1, 2, 3, 4))
-	assert.False(t, s.Contains(4))
+	assert.False(t, s.ContainsAny(4))
+	// None of nothing is present.
+	assert.False(t, s.ContainsAny())
+}
+
+func TestContainsAnyElement(t *testing.T) {
+	s, _ := mapset.NewFromSlice([]int{1, 2, 3})
+	hit, _ := mapset.NewFromSlice([]int{3, 4})
+	miss, _ := mapset.NewFromSlice([]int{4, 5})
+	empty, _ := mapset.New[int]()
+	assert.True(t, s.ContainsAnyElement(hit))
+	assert.False(t, s.ContainsAnyElement(miss))
+	// A nil set counts as the empty set, none of whose elements is present.
+	assert.False(t, s.ContainsAnyElement(empty))
+	assert.False(t, s.ContainsAnyElement(nil))
 }
 
 func TestEqual(t *testing.T) {
 	s1, _ := mapset.NewFromSlice([]int{1, 2, 3})
 	s2, _ := mapset.NewFromSlice([]int{1, 2, 3})
 	s3, _ := mapset.NewFromSlice([]int{4, 5, 6})
+	empty, _ := mapset.New[int]()
 	assert.True(t, s1.Equal(s2))
 	assert.False(t, s1.Equal(s3))
+	// A nil set counts as the empty set.
+	assert.True(t, empty.Equal(nil))
+	assert.False(t, s1.Equal(nil))
 }
 
 func TestRange(t *testing.T) {
@@ -213,6 +233,10 @@ func TestIsSubset(t *testing.T) {
 	assert.True(t, s1.IsSubset(s2))
 	assert.True(t, s2.IsSubset(s3))
 	assert.False(t, s2.IsSubset(s1))
+	// A nil set counts as the empty set, of which only the empty set is a subset.
+	empty, _ := mapset.New[int]()
+	assert.True(t, empty.IsSubset(nil))
+	assert.False(t, s1.IsSubset(nil))
 }
 
 func TestIsProperSubset(t *testing.T) {
@@ -222,6 +246,10 @@ func TestIsProperSubset(t *testing.T) {
 	assert.True(t, s1.IsProperSubset(s2))
 	assert.False(t, s2.IsProperSubset(s3))
 	assert.False(t, s2.IsProperSubset(s1))
+	// Nothing is a proper subset of the empty set, which a nil set counts as.
+	empty, _ := mapset.New[int]()
+	assert.False(t, empty.IsProperSubset(nil))
+	assert.False(t, s1.IsProperSubset(nil))
 }
 
 func TestIsSuperset(t *testing.T) {
@@ -231,6 +259,10 @@ func TestIsSuperset(t *testing.T) {
 	assert.True(t, s1.IsSuperset(s2))
 	assert.True(t, s2.IsSuperset(s3))
 	assert.False(t, s2.IsSuperset(s1))
+	// Every set is a superset of the empty set, which a nil set counts as.
+	empty, _ := mapset.New[int]()
+	assert.True(t, s1.IsSuperset(nil))
+	assert.True(t, empty.IsSuperset(nil))
 }
 
 func TestIsProperSuperset(t *testing.T) {

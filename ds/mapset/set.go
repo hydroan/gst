@@ -202,11 +202,12 @@ func (s *Set[E]) ContainsOne(v E) bool {
 	return ok
 }
 
-// ContainsAny reports whether the set contains any of the given element.
-// It returns true if the provided slice is nil or empty.
+// ContainsAny reports whether the set contains any of the given elements.
+// It returns false if the provided slice is nil or empty: none of nothing is
+// present, as Contains holds that all of nothing is.
 func (s *Set[E]) ContainsAny(el ...E) bool {
 	if len(el) == 0 {
-		return true
+		return false
 	}
 	if s.safe {
 		s.mu.RLock()
@@ -278,10 +279,11 @@ func (s *Set[E]) Range(fn func(e E) bool) {
 	}
 }
 
-// Equal reports whether two sets have the same elements.
+// Equal reports whether two sets have the same elements. A nil set counts
+// as the empty set, so only the empty set equals nil.
 func (s *Set[E]) Equal(other *Set[E]) bool {
 	if other == nil {
-		return false
+		return s.IsEmpty()
 	}
 	defer s.lockBothRead(other)()
 	if len(s.set) != len(other.set) {
@@ -357,10 +359,10 @@ func (s *Set[E]) Seq() iter.Seq[E] {
 
 // IsSubset checks if the current set is a subset of the given set.
 // A subset means every element of the current set is also in the given set.
-// If the given set is nil, the function always returns false.
+// A nil set counts as the empty set, of which only the empty set is a subset.
 func (s *Set[E]) IsSubset(other *Set[E]) bool {
 	if other == nil {
-		return false
+		return s.IsEmpty()
 	}
 	defer s.lockBothRead(other)()
 
