@@ -990,6 +990,15 @@ REQ/RSP 命名、业务项目根目录结构，以及声明了 `GRPC()` 的 mode
 `gg prune` 认项目代码的方式也一样（找 model、判断 service 目录还有没有代码
 在用），但删东西时这两类规则不保护任何路径，只认 `prune.ignore`，见下文。
 
+项目放在 go.work 工作区里时，gg 和 `go build` 一样按工作区解析依赖，不用额外设置。
+但工作区里 `go build` 会报 `ambiguous import: google.golang.org/genproto/googleapis/rpc/status`：
+框架依赖的 cockroachdb/errors 还引用旧版的 genproto，和新版拆分出来的包重名。在 go.work
+里加一行，把它指到新版即可：
+
+```
+replace google.golang.org/genproto => google.golang.org/genproto v0.0.0-20261012220534-4341edf3f941
+```
+
 ### 生成 TypeScript 类型
 
 `gg gen ts` 把 model `Design()` 中各路由收发的 Go 类型（请求 Payload、响应 Result 与模型本身）
