@@ -64,18 +64,14 @@ func (tw *Wrapper[T]) Get(ctx context.Context, key string) (T, error) {
 	if recording {
 		span.SetAttributes(append(tw.attributes("get", key), attribute.Bool("cache.hit", err == nil))...)
 	}
-	if err != nil {
-		if !errors.Is(err, types.ErrEntryNotFound) {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, fmt.Sprintf("Failed to get cache key: %v", err))
-		} else {
-			span.SetStatus(codes.Ok, err.Error())
-		}
-		return value, err
+	// A miss is a normal outcome: like a hit it leaves the status unset, the
+	// way instrumentation does, and only a failure of the backend marks the
+	// span failed.
+	if err != nil && !errors.Is(err, types.ErrEntryNotFound) {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, fmt.Sprintf("Failed to get cache key: %v", err))
 	}
-
-	span.SetStatus(codes.Ok, "Cache key retrieved successfully")
-	return value, nil
+	return value, err
 }
 
 // Set stores a key-value pair with tracing.
@@ -95,8 +91,6 @@ func (tw *Wrapper[T]) Set(ctx context.Context, key string, value T, ttl time.Dur
 		span.SetStatus(codes.Error, fmt.Sprintf("Failed to set cache key: %v", err))
 		return err
 	}
-
-	span.SetStatus(codes.Ok, "Cache key set successfully")
 	return nil
 }
 
@@ -117,8 +111,6 @@ func (tw *Wrapper[T]) Delete(ctx context.Context, key string) error {
 		span.SetStatus(codes.Error, fmt.Sprintf("Failed to delete cache key: %v", err))
 		return err
 	}
-
-	span.SetStatus(codes.Ok, "Cache key deleted successfully")
 	return nil
 }
 
@@ -136,7 +128,6 @@ func (tw *Wrapper[T]) Exists(ctx context.Context, key string) bool {
 	if recording {
 		span.SetAttributes(append(tw.attributes("exists", key), attribute.Bool("cache.exists", exists))...)
 	}
-	span.SetStatus(codes.Ok, "Cache key existence checked successfully")
 	return exists
 }
 

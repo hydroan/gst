@@ -993,7 +993,8 @@ func TestRunStampsRoundIdentity(t *testing.T) {
 // TestRunOpensRoundSpanWhenTracingIsOn proves a round gets a root span of its
 // own when tracing is on: the job runs under it, and the round's trace id is
 // the span's, so the trace in the tracing backend and the id in the logs and
-// statement comments are one trail.
+// statement comments are one trail. A round that finished leaves the span's
+// status unset, the way instrumentation does.
 func TestRunOpensRoundSpanWhenTracingIsOn(t *testing.T) {
 	withCronjobLoggerConfig(t)
 	oteltest.Enable(t)
@@ -1025,6 +1026,7 @@ func TestRunOpensRoundSpanWhenTracingIsOn(t *testing.T) {
 	require.Equal(t, got.span.TraceID().String(), got.identity.TraceID)
 	span := oteltest.EndedNamed(t, recorder, "cronjob.TracedJob")
 	require.Equal(t, got.identity.TraceID, span.SpanContext().TraceID().String())
+	require.Equal(t, codes.Unset, span.Status().Code, "a round that finished leaves the status unset")
 }
 
 // TestRoundThatIgnoresTheLossFailsTheProcess proves the last line behind the

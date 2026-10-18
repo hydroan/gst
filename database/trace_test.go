@@ -34,6 +34,8 @@ func TestTraceModelHookSpansOnlyOverriddenHooks(t *testing.T) {
 		require.Contains(t, names, "database.TestUser.Create")
 		require.Contains(t, names, "model.TestUser.CreateBefore")
 		require.NotContains(t, names, "model.TestUser.CreateAfter")
+		hook := oteltest.EndedNamed(t, recorder, "model.TestUser.CreateBefore")
+		require.Equal(t, codes.Unset, hook.Status().Code, "a hook that returned leaves the status unset")
 	})
 
 	t.Run("a model without hook overrides gets no hook span", func(t *testing.T) {
@@ -52,21 +54,32 @@ func TestTraceModelHookSpansOnlyOverriddenHooks(t *testing.T) {
 }
 
 // TestTraceSpanReadsOutcomeLikeTheLog pins that the operation span reads an
-// outcome the way the log does: a missing row is a normal outcome, answered
-// by an OK span carrying database.record_not_found and no recorded error,
-// while a real failure records the error and marks the span failed.
+// outcome the way the log does: a completed operation and a missing row are
+// normal outcomes, which leave the span's status unset the way
+// instrumentation does, the missing row carrying database.record_not_found
+// and no recorded error, while a real failure records the error and marks
+// the span failed.
 func TestTraceSpanReadsOutcomeLikeTheLog(t *testing.T) {
 	oteltest.Enable(t)
 	recorder := oteltest.Record(t)
 	defer cleanupTestData()
 
-	t.Run("a missing row leaves the span ok and marks it record_not_found", func(t *testing.T) {
+	t.Run("a completed operation leaves the span's status unset", func(t *testing.T) {
+		require.NoError(t, database.Database[*TestItem](context.Background()).Create(&TestItem{Name: "trace-completed"}))
+
+		span := lastEndedNamed(t, recorder, "database.TestItem.Create")
+		require.Equal(t, codes.Unset, span.Status().Code)
+		require.Empty(t, span.Events())
+		require.NotContains(t, spanAttributes(span), "error")
+	})
+
+	t.Run("a missing row leaves the span's status unset and marks it record_not_found", func(t *testing.T) {
 		stored := new(TestItem)
 		err := database.Database[*TestItem](context.Background()).Get(stored, "no-such-item")
 		require.ErrorIs(t, err, database.ErrRecordNotFound)
 
 		span := lastEndedNamed(t, recorder, "database.TestItem.Get")
-		require.Equal(t, codes.Ok, span.Status().Code)
+		require.Equal(t, codes.Unset, span.Status().Code)
 		require.Empty(t, span.Events(), "a missing row must not be recorded as an exception")
 		attrs := spanAttributes(span)
 		notFound, ok := attrs["database.record_not_found"].(bool)

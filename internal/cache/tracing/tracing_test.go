@@ -7,7 +7,9 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/cache/tracing"
+	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/hydroan/gst/internal/types"
+	"go.opentelemetry.io/otel/codes"
 )
 
 // recordingCache captures the arguments of the last call so tests can assert
@@ -107,5 +109,55 @@ func TestWrapperNormalizesNilContext(t *testing.T) {
 	}
 	if inner.lastCtx == nil {
 		t.Fatal("want normalized non-nil ctx")
+	}
+}
+
+// TestWrapperLeavesTheStatusOfACompletedOperationUnset asserts what a cache
+// span says about its outcome, the way instrumentation does under the
+// OpenTelemetry convention: a hit, a miss, a set, a delete and an existence
+// check leave the status unset, the miss being a normal outcome rather than
+// a failure, and only an error of the backend marks the span failed.
+func TestWrapperLeavesTheStatusOfACompletedOperationUnset(t *testing.T) {
+	oteltest.Enable(t)
+	recorder := oteltest.Record(t)
+	inner := &recordingCache{value: "stored", exists: true}
+	wrapped := tracing.NewWrapper[string](inner, "sample")
+	ctx := context.Background()
+
+	if _, err := wrapped.Get(ctx, "key-hit"); err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	inner.getErr = types.ErrEntryNotFound
+	if _, err := wrapped.Get(ctx, "key-miss"); !errors.Is(err, types.ErrEntryNotFound) {
+		t.Fatalf("want ErrEntryNotFound, got %v", err)
+	}
+	if err := wrapped.Set(ctx, "key-set", "value", time.Minute); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	if err := wrapped.Delete(ctx, "key-delete"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if !wrapped.Exists(ctx, "key-exists") {
+		t.Fatal("want true from wrapped Exists")
+	}
+	inner.getErr = errors.New("backend down")
+	if _, err := wrapped.Get(ctx, "key-failed"); err == nil {
+		t.Fatal("want the backend error from Get")
+	}
+
+	ended := recorder.Ended()
+	if len(ended) != 6 {
+		t.Fatalf("want 6 spans, got %d: %v", len(ended), oteltest.EndedNames(recorder))
+	}
+	for _, span := range ended[:5] {
+		if span.Status().Code != codes.Unset {
+			t.Errorf("%s: status = %v, want Unset", span.Name(), span.Status().Code)
+		}
+		if len(span.Events()) != 0 {
+			t.Errorf("%s: a completed operation must record no event, got %d", span.Name(), len(span.Events()))
+		}
+	}
+	if failed := ended[5]; failed.Status().Code != codes.Error || len(failed.Events()) == 0 {
+		t.Errorf("the backend error must mark the span failed and be recorded: status = %v, events = %d", failed.Status().Code, len(failed.Events()))
 	}
 }

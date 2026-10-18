@@ -2,13 +2,12 @@ package otel
 
 import (
 	"context"
-
-	"go.opentelemetry.io/otel/codes"
 )
 
 // TraceFunction runs fn inside a span named functionName, ended when fn
-// returns: an error fn returns is recorded on the span and returned, and a
-// run without one leaves the span with the Ok status.
+// returns: an error fn returns is recorded on the span, which marks it
+// failed, and returned; a run without one leaves the span's status unset,
+// the way instrumentation does.
 func TraceFunction(ctx context.Context, functionName string, fn func(context.Context) error) error {
 	ctx, span := StartSpan(ctx, functionName)
 	defer span.End()
@@ -17,8 +16,6 @@ func TraceFunction(ctx context.Context, functionName string, fn func(context.Con
 		RecordError(span, err)
 		return err
 	}
-
-	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
@@ -33,7 +30,5 @@ func TraceFunctionWithResult[T any](ctx context.Context, functionName string, fn
 		RecordError(span, err)
 		return result, err
 	}
-
-	span.SetStatus(codes.Ok, "")
 	return result, nil
 }

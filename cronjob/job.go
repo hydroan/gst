@@ -414,10 +414,11 @@ func interruption(ctx context.Context, err error) string {
 // every span the job's operations open, and the trace id is that span's; with
 // tracing off the id is generated, see operation.Begin.
 //
-// The span's status says what the log entry says: a round that finished is
-// ok, one that failed is an error, and one that was interrupted is neither —
-// it carries an event naming the interruption and leaves the status unset,
-// so a trace search for failed rounds does not turn up every deployment.
+// The span's status says what the log entry says: a round that failed is an
+// error, and one that finished or was interrupted leaves the status unset,
+// the way instrumentation does, the interrupted one carrying an event naming
+// the interruption, so a trace search for failed rounds does not turn up
+// every deployment.
 func beginRound(parent context.Context, name string) (ctx context.Context, traceID string, end func(err error, interruption string)) {
 	ctx, span, traceID := operation.Begin(parent, "cronjob", name)
 	ctx = execctx.WithCronjob(ctx, name, traceID)
@@ -429,7 +430,7 @@ func beginRound(parent context.Context, name string) (ctx context.Context, trace
 		if gstotel.IsSpanRecording(span) {
 			switch {
 			case err == nil:
-				span.SetStatus(codes.Ok, "")
+				// Finished: the status stays unset.
 			case interruption != "":
 				span.AddEvent("interrupted", trace.WithAttributes(attribute.String("reason", interruption)))
 			default:

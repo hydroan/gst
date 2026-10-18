@@ -168,21 +168,20 @@ func (db *database[M]) traceAs(modelName string, phase consts.Phase, batch ...in
 		// Update span with results if available; keep this a single batched
 		// SetAttributes call (see the performance note above). The span and
 		// the log below read the outcome the same way: success and
-		// record-not-found are normal outcomes, so neither marks the span as
-		// failed — a missing row is answered by an OK span carrying
-		// database.record_not_found, the counterpart of the log's
-		// record_not_found field — an operation its context canceled carries
-		// database.canceled beside the log's canceled field, and only a real
-		// failure records the error and sets the error status.
+		// record-not-found are normal outcomes, so neither sets a status,
+		// instrumentation leaving a completed operation unset — a missing
+		// row carries database.record_not_found, the counterpart of the
+		// log's record_not_found field — an operation its context canceled
+		// carries database.canceled beside the log's canceled field, and only
+		// a real failure records the error and sets the error status.
 		if gstotel.IsSpanRecording(span) {
 			attrs := make([]attribute.KeyValue, 0, operationOutcomeAttrCap)
 			attrs = append(attrs, attribute.Int64("database.duration_ms", duration.Milliseconds()))
 
 			switch {
 			case err == nil:
-				span.SetStatus(codes.Ok, "")
+				// Completed: the status stays unset.
 			case errors.Is(err, ErrRecordNotFound):
-				span.SetStatus(codes.Ok, "")
 				attrs = append(attrs, attribute.Bool("database.record_not_found", true))
 			case errors.Is(err, context.Canceled):
 				// Left unset: the operation did not complete, and did not fail
@@ -310,8 +309,6 @@ func traceModelHook[M types.Model](ctx context.Context, phase consts.Phase, pare
 			span.SetStatus(codes.Error, err.Error())
 			gstotel.RecordError(span, err)
 			attrs = append(attrs, attribute.Bool("error", true))
-		} else {
-			span.SetStatus(codes.Ok, "")
 		}
 		span.SetAttributes(attrs...)
 	}
