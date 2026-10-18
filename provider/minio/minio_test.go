@@ -198,7 +198,7 @@ func TestPresignedURL(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, url, "presign.txt")
 
-	url, err = minio.PresignedPutURL(context.TODO(), "presign-put.txt", 10*time.Minute, &minio.GetOptions{Bucket: bucket})
+	url, err = minio.PresignedPutURL(context.TODO(), "presign-put.txt", 10*time.Minute, &minio.PutOptions{Bucket: bucket})
 	require.NoError(t, err)
 	require.Contains(t, url, "presign-put.txt")
 }
@@ -216,7 +216,8 @@ func TestListAndCopy(t *testing.T) {
 	}()
 
 	keys := make([]string, 0, 2)
-	for obj := range minio.List(context.TODO(), &minio.ListOptions{Prefix: "list/", Recursive: true, Bucket: bucket}) {
+	for obj, err := range minio.List(context.TODO(), &minio.ListOptions{Prefix: "list/", Recursive: true, Bucket: bucket}) {
+		require.NoError(t, err)
 		keys = append(keys, obj.Key)
 	}
 	require.ElementsMatch(t, []string{"list/a.txt", "list/b.txt"}, keys)
@@ -227,6 +228,28 @@ func TestListAndCopy(t *testing.T) {
 	exists, err := minio.Exists(context.TODO(), "list/copy.txt", &minio.ExistsOptions{Bucket: bucket})
 	require.NoError(t, err)
 	require.True(t, exists)
+}
+
+// TestListHandsTheListingErrorToTheCaller pins that a listing that fails
+// reaches the caller as the error of the sequence, once, after which the
+// sequence ends: listing a bucket that does not exist yields no object and
+// one error naming the bucket.
+func TestListHandsTheListingErrorToTheCaller(t *testing.T) {
+	bucket := bucketNamed("no-such-bucket")
+
+	var objects []minio.ObjectInfo
+	var errs []error
+	for obj, err := range minio.List(context.TODO(), &minio.ListOptions{Bucket: bucket}) {
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		objects = append(objects, obj)
+	}
+
+	require.Empty(t, objects)
+	require.Len(t, errs, 1)
+	require.ErrorContains(t, errs[0], bucket)
 }
 
 // TestCopyWithEmptyOptionsUsesTheDefaultBucket copies within the configured

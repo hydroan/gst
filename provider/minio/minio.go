@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"io"
+	"iter"
 	"net/http"
 	"net/url"
 	"os"
@@ -508,8 +509,9 @@ func PresignedGetURL(ctx context.Context, objectKey string, expires time.Duratio
 	return presignedURL.String(), nil
 }
 
-// PresignedPutURL generates a presigned PUT URL with expiration capped at 7 days.
-func PresignedPutURL(ctx context.Context, objectKey string, expires time.Duration, opts ...*GetOptions) (string, error) {
+// PresignedPutURL generates a presigned PUT URL with expiration capped at 7
+// days; of the upload options only the bucket applies.
+func PresignedPutURL(ctx context.Context, objectKey string, expires time.Duration, opts ...*PutOptions) (string, error) {
 	if objectKey == "" {
 		return "", errors.New("objectKey cannot be empty")
 	}
@@ -541,18 +543,20 @@ func PresignedPutURL(ctx context.Context, objectKey string, expires time.Duratio
 	return presignedURL.String(), nil
 }
 
-// List lists objects under the prefix. Errors from listing are skipped.
-func List(ctx context.Context, opts ...*ListOptions) <-chan ObjectInfo {
-	ch := make(chan ObjectInfo)
-
-	cli, err := Client()
-	if err != nil {
-		close(ch)
-		return ch
-	}
-
-	go func() {
-		defer close(ch)
+// List lists the objects under the prefix as a sequence of object and error
+// pairs: every object comes with a nil error, and a listing that fails ends
+// the sequence with one pair carrying the error, as a client not initialized
+// yet does. Of a bucket holding list/a.txt and list/b.txt, List with Prefix
+// "list/" and Recursive yields the two objects; over a bucket that does not
+// exist it yields one error naming the bucket. Stopping the iteration early
+// stops the listing.
+func List(ctx context.Context, opts ...*ListOptions) iter.Seq2[ObjectInfo, error] {
+	return func(yield func(ObjectInfo, error) bool) {
+		cli, err := Client()
+		if err != nil {
+			yield(ObjectInfo{}, err)
+			return
+		}
 
 		listOpts := minio.ListObjectsOptions{}
 		bucket := defaultBucket()
@@ -565,22 +569,28 @@ func List(ctx context.Context, opts ...*ListOptions) <-chan ObjectInfo {
 			}
 		}
 
-		for obj := range cli.ListObjects(ctx, bucket, listOpts) {
+		// The client lists in a goroutine of its own that only the context
+		// stops (see minio.Client.ListObjectsIter): canceling it on return
+		// lets the goroutine go when the caller stops iterating early.
+		listCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		for obj := range cli.ListObjectsIter(listCtx, bucket, listOpts) {
 			if obj.Err != nil {
-				logger.Minio.Error(obj.Err)
-				continue
+				yield(ObjectInfo{}, errors.Wrapf(obj.Err, "failed to list objects in bucket %s", bucket))
+				return
 			}
-			ch <- ObjectInfo{
+			info := ObjectInfo{
 				Key:          obj.Key,
 				Size:         obj.Size,
 				ContentType:  obj.ContentType,
 				ETag:         obj.ETag,
 				LastModified: obj.LastModified,
 			}
+			if !yield(info, nil) {
+				return
+			}
 		}
-	}()
-
-	return ch
+	}
 }
 
 // Copy copies an object within the same bucket.
