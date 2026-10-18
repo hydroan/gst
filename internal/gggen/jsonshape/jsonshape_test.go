@@ -2,6 +2,7 @@ package jsonshape_test
 
 import (
 	"go/types"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -74,4 +75,41 @@ func TestLoadAppliesTheOverlay(t *testing.T) {
 	pkg := project.Package(fixtureModule + "/model/sample")
 	require.NotNil(t, pkg)
 	require.NotNil(t, pkg.Types.Scope().Lookup("Overlaid"), "the overlaid file must be part of the load")
+}
+
+// TestLoadResolvesThroughTheWorkspace pins that a project in a go workspace
+// is read the way go build reads it there: a package a workspace module
+// provides, which the project's go.mod does not require, type-checks.
+func TestLoadResolvesThroughTheWorkspace(t *testing.T) {
+	dir := t.TempDir()
+	appDir := filepath.Join(dir, "app")
+	writeFile(t, filepath.Join(appDir, "go.mod"), "module example.com/app\n\ngo 1.27\n")
+	writeFile(t, filepath.Join(appDir, "model", "item.go"), "package model\n\nimport \"example.com/lib\"\n\n// Item is a sample resource.\ntype Item struct {\n\tName lib.Name `json:\"name\"`\n}\n")
+	writeFile(t, filepath.Join(dir, "lib", "go.mod"), "module example.com/lib\n\ngo 1.27\n")
+	writeFile(t, filepath.Join(dir, "lib", "lib.go"), "package lib\n\n// Name is a display name.\ntype Name string\n")
+	goWork := filepath.Join(dir, "go.work")
+	writeFile(t, goWork, "go 1.27\n\nuse (\n\t./app\n\t./lib\n)\n")
+	t.Setenv("GOWORK", goWork)
+
+	project, err := jsonshape.Load(jsonshape.Config{Dir: appDir, ModulePath: "example.com/app", Roots: []string{"example.com/app/model"}})
+	require.NoError(t, err)
+
+	pkg := project.Package("example.com/app/model")
+	require.NotNil(t, pkg)
+	item, ok := pkg.Types.Scope().Lookup("Item").(*types.TypeName)
+	require.True(t, ok)
+	st, ok := item.Type().Underlying().(*types.Struct)
+	require.True(t, ok)
+	fields := project.Fields(st, jsonshape.Site{Subject: "model.Item", Pos: item.Pos()})
+	require.Len(t, fields, 1)
+	require.Equal(t, "name", fields[0].Key)
+	require.Equal(t, "example.com/lib.Name", fields[0].Var.Type().String())
+}
+
+// writeFile writes content to path, creating its parent directories.
+func writeFile(t *testing.T, path string, content string) {
+	t.Helper()
+
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
 }

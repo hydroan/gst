@@ -91,8 +91,6 @@ func TypeCheck(dir, modulePath string, files []File) error {
 	slices.Sort(external)
 	external = slices.Compact(external)
 
-	// A go.work above the project would pull every workspace module into
-	// the load, while the files build against the project's own go.mod.
 	// The imported packages alone are read from their export data; their
 	// own dependencies are filled in as the export data refers to them,
 	// where loading every package of the closure would read the types of
@@ -100,7 +98,6 @@ func TypeCheck(dir, modulePath string, files []File) error {
 	loaded, err := packages.Load(&packages.Config{
 		Mode: packages.NeedName | packages.NeedImports | packages.NeedTypes,
 		Dir:  dir,
-		Env:  append(os.Environ(), "GOWORK=off"),
 	}, external...)
 	if err != nil {
 		return errors.Wrapf(ErrUnchecked, "list the packages the files import: %v", err)

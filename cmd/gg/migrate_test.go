@@ -115,12 +115,7 @@ func TestMigrateProgramHasNothingToMigrateOnAnInMemorySqliteDatabase(t *testing.
 	if !newMigrateSampleProject(t) {
 		return
 	}
-	for _, key := range []string{config.SQLITE_IS_MEMORY, config.SQLITE_PATH} {
-		t.Setenv(key, "")
-		if err := os.Unsetenv(key); err != nil {
-			t.Fatal(err)
-		}
-	}
+	useInMemorySqlite(t)
 	before := projectTree(t, ".")
 
 	out := runMigrateProgramForTest(t, true, false)
@@ -364,3 +359,33 @@ func init() {
 	gstmodule.Use(gstmodule.NewWrapper[*Sample, *Sample, *Sample]("samples", "id", false, &SampleService{}), gstmodule.CRUD(consts.List))
 }
 `
+
+// TestMigrateProgramRunsInsideAWorkspace pins that the migration program
+// builds in a go workspace, where the go command resolves the project's
+// dependencies through go.work rather than a module file gg names.
+func TestMigrateProgramRunsInsideAWorkspace(t *testing.T) {
+	if !newMigrateSampleProject(t) {
+		return
+	}
+	useInMemorySqlite(t)
+	initWorkspace(t, ".")
+
+	out := runMigrateProgramForTest(t, true, false)
+
+	if want := "→ Nothing to migrate:"; !strings.Contains(out, want) {
+		t.Fatalf("expected the migration output to contain %q, got:\n%s", want, out)
+	}
+}
+
+// useInMemorySqlite clears the sqlite settings of the environment for the
+// test, so the migration program targets the in-memory database.
+func useInMemorySqlite(t *testing.T) {
+	t.Helper()
+
+	for _, key := range []string{config.SQLITE_IS_MEMORY, config.SQLITE_PATH} {
+		t.Setenv(key, "")
+		if err := os.Unsetenv(key); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

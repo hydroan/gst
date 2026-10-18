@@ -14,7 +14,8 @@ import (
 )
 
 // ProjectProgram is a temporary Go program compiled against the project's own
-// module. Running inside the project module is what lets it import the
+// module, through the workspace when the project is in one (see
+// moduleFlags). Running inside the project module is what lets it import the
 // project's packages and observe what they register at runtime, which no
 // amount of static analysis in gg itself can reproduce.
 type ProjectProgram struct {
@@ -58,10 +59,10 @@ func (p ProjectProgram) Run() error {
 		return errors.Wrap(err, "failed to write temporary program")
 	}
 
-	// The program is built against a copy of the project's module files, so it
-	// resolves the same dependency versions the project does without the
-	// temporary directory becoming part of the project module.
-	modFile, err := writeTemporaryModFiles(tempDir)
+	// The program resolves the same dependency versions the project does
+	// without the temporary directory becoming part of the project module:
+	// moduleFlags points the build at them.
+	flags, err := moduleFlags(tempDir)
 	if err != nil {
 		return err
 	}
@@ -77,7 +78,8 @@ func (p ProjectProgram) Run() error {
 	// the program changes with the project, each run would leave another
 	// copy of tens of megabytes there that nothing reuses.
 	program := filepath.Join(tempDir, "program")
-	args := []string{"build", "-trimpath", "-mod=mod", "-modfile", modFile, "-o", program}
+	args := append([]string{"build", "-trimpath"}, flags...)
+	args = append(args, "-o", program)
 	if len(p.Overlay) > 0 {
 		overlayFile, overlayErr := writeOverlayFile(tempDir, p.Overlay)
 		if overlayErr != nil {
@@ -142,6 +144,28 @@ func writeOverlayFile(dir string, overlay map[string]string) (string, error) {
 	return overlayFile, nil
 }
 
+// moduleFlags returns the flags that point a go command run in the working
+// directory at the project's dependencies without touching its module files.
+// Outside a workspace they are -mod=mod with -modfile naming a copy of the
+// project's go.mod written to dir (see writeTemporaryModFiles), so that a
+// requirement the command adds lands in the copy. In workspace mode there
+// are none: the go command refuses both flags there, the workspace resolves
+// the versions itself, and it adds no requirement to any go.mod.
+func moduleFlags(dir string) ([]string, error) {
+	inWorkspace, err := InWorkspace()
+	if err != nil {
+		return nil, err
+	}
+	if inWorkspace {
+		return nil, nil
+	}
+	modFile, err := writeTemporaryModFiles(dir)
+	if err != nil {
+		return nil, err
+	}
+	return []string{"-mod=mod", "-modfile", modFile}, nil
+}
+
 // writeTemporaryModFiles copies the project's go.mod, and its go.sum when
 // present, into dir as run.mod and run.sum and returns the path of run.mod. A
 // go command pointed at it through -modfile resolves exactly the dependency
@@ -182,9 +206,9 @@ type ListedPackage struct {
 
 // ListProjectPackages reports the packages behind import paths as the
 // project's module resolves them. Like ProjectProgram, it points the go
-// command at copies of the module files, so resolving a path the project does
-// not require yet never edits the project's go.mod or go.sum. A path the go
-// command cannot load comes back without a name.
+// command at the dependencies the way moduleFlags does, so resolving a path
+// the project does not require yet never edits the project's go.mod or
+// go.sum. A path the go command cannot load comes back without a name.
 func ListProjectPackages(paths []string) (map[string]ListedPackage, error) {
 	listed := make(map[string]ListedPackage, len(paths))
 	if len(paths) == 0 {
@@ -196,11 +220,13 @@ func ListProjectPackages(paths []string) (map[string]ListedPackage, error) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	modFile, err := writeTemporaryModFiles(tempDir)
+	flags, err := moduleFlags(tempDir)
 	if err != nil {
 		return nil, err
 	}
-	args := append([]string{"list", "-mod=mod", "-modfile", modFile, "-e", "-json=ImportPath,Name,Dir,GoFiles,CgoFiles"}, paths...)
+	args := append([]string{"list"}, flags...)
+	args = append(args, "-e", "-json=ImportPath,Name,Dir,GoFiles,CgoFiles")
+	args = append(args, paths...)
 	var stdout bytes.Buffer
 	// #nosec G204 -- the flags are literals, the module file lives under the
 	// os.MkdirTemp-owned directory, and the paths are import paths read from

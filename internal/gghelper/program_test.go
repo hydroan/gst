@@ -83,3 +83,53 @@ func writeProjectFile(t *testing.T, path string, content string) {
 		t.Fatal(err)
 	}
 }
+
+func TestProjectProgramRunsInsideAWorkspace(t *testing.T) {
+	goMod := newWorkspaceProject(t)
+
+	var out bytes.Buffer
+	program := gghelper.ProjectProgram{
+		Content: "package main\n\nimport (\n\t\"fmt\"\n\n\t\"example.com/lib\"\n)\n\nfunc main() { fmt.Print(libname.Source) }\n",
+		Stdout:  &out,
+	}
+	require.NoError(t, program.Run())
+
+	// The workspace, not a requirement of tmpapp, is what resolves lib, and
+	// tmpapp's go.mod stays as it was.
+	require.Equal(t, "workspace", out.String())
+	content, err := os.ReadFile("go.mod")
+	require.NoError(t, err)
+	require.Equal(t, goMod, string(content))
+}
+
+func TestListProjectPackagesInsideAWorkspace(t *testing.T) {
+	goMod := newWorkspaceProject(t)
+
+	listed, err := gghelper.ListProjectPackages([]string{"example.com/lib", "math/rand/v2"})
+	require.NoError(t, err)
+
+	require.Equal(t, "libname", listed["example.com/lib"].Name)
+	require.Equal(t, "rand", listed["math/rand/v2"].Name)
+	content, err := os.ReadFile("go.mod")
+	require.NoError(t, err)
+	require.Equal(t, goMod, string(content))
+}
+
+// newWorkspaceProject lays out a workspace of two modules, tmpapp and
+// example.com/lib, where tmpapp requires nothing and reaches lib through
+// go.work alone, enters tmpapp and points GOWORK at the workspace file. It
+// returns tmpapp's go.mod content, which the test expects to find unchanged.
+func newWorkspaceProject(t *testing.T) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	goMod := "module tmpapp\n\ngo 1.27\n"
+	writeProjectFile(t, filepath.Join(dir, "app", "go.mod"), goMod)
+	writeProjectFile(t, filepath.Join(dir, "lib", "go.mod"), "module example.com/lib\n\ngo 1.27\n")
+	writeProjectFile(t, filepath.Join(dir, "lib", "lib.go"), "package libname\n\nconst Source = \"workspace\"\n")
+	goWork := filepath.Join(dir, "go.work")
+	writeProjectFile(t, goWork, "go 1.27\n\nuse (\n\t./app\n\t./lib\n)\n")
+	t.Chdir(filepath.Join(dir, "app"))
+	t.Setenv("GOWORK", goWork)
+	return goMod
+}

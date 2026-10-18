@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/modelinspect"
 	"github.com/stretchr/testify/require"
 )
@@ -448,11 +449,19 @@ func childOutput(output []byte) string {
 // project and proves nothing about the sources that type-checking them does
 // not. -trimpath keeps the project's temporary directory out of what the build
 // cache keys on, so a rerun reuses what the previous run compiled instead of
-// storing another copy of it.
+// storing another copy of it. -mod=mod lets the check add what the generated
+// sources require to go.mod, except in a workspace, where the go command
+// refuses the flag and resolves the requirements through the workspace.
 func requireProjectCompiles(t *testing.T) {
 	t.Helper()
 
-	output, err := exec.Command("go", "vet", "-trimpath", "-mod=mod", "./...").CombinedOutput()
+	inWorkspace, err := gghelper.InWorkspace()
+	require.NoError(t, err)
+	args := []string{"vet", "-trimpath"}
+	if !inWorkspace {
+		args = append(args, "-mod=mod")
+	}
+	output, err := exec.Command("go", append(args, "./...")...).CombinedOutput()
 	require.NoError(t, err, "go vet:\n%s", output)
 }
 
@@ -465,4 +474,27 @@ func frameworkRepoRoot(t *testing.T) string {
 		t.Fatal("runtime.Caller failed")
 	}
 	return filepath.Dir(filepath.Dir(filepath.Dir(file)))
+}
+
+// initWorkspace makes projectDir a go workspace of its own module, the way
+// go work init does, so that the go command runs in workspace mode there.
+// The workspace replaces the monolithic google.golang.org/genproto module
+// with an empty one: a dependency of the framework still requires it at a
+// version holding the packages the split genproto modules took over, and in
+// workspace mode, where the go command resolves imports against the whole
+// module graph rather than the pruned one of the project's go.mod, it would
+// find those packages in two modules. A project of the framework in a
+// workspace carries such a replace of its own.
+func initWorkspace(t *testing.T, projectDir string) {
+	t.Helper()
+
+	stub := filepath.Join(t.TempDir(), "genproto")
+	writeProjectFile(t, filepath.Join(stub, "go.mod"), "module google.golang.org/genproto\n\ngo 1.27\n")
+	for _, args := range [][]string{{"work", "init", "."}, {"work", "edit", "-replace=google.golang.org/genproto=" + stub}} {
+		cmd := exec.Command("go", args...)
+		cmd.Dir = projectDir
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("go %s: %v\n%s", strings.Join(args, " "), err, output)
+		}
+	}
 }

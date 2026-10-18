@@ -167,3 +167,47 @@ func TestRequiresFramework(t *testing.T) {
 		}
 	})
 }
+
+// TestInWorkspace pins that the answer is the go command's own: the go.work
+// file GOWORK names puts the working directory in workspace mode, GOWORK=off
+// takes it out again, and a module on its own is in no workspace.
+func TestInWorkspace(t *testing.T) {
+	t.Run("a module on its own", func(t *testing.T) {
+		t.Chdir(t.TempDir())
+		writeProjectFile(t, "go.mod", "module tmpapp\n\ngo 1.27\n")
+		t.Setenv("GOWORK", "")
+
+		inWorkspace, err := gghelper.InWorkspace()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if inWorkspace {
+			t.Fatal("InWorkspace() = true for a module on its own, want false")
+		}
+	})
+
+	t.Run("a workspace file", func(t *testing.T) {
+		newWorkspaceProject(t)
+
+		inWorkspace, err := gghelper.InWorkspace()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !inWorkspace {
+			t.Fatal("InWorkspace() = false under a go.work file, want true")
+		}
+	})
+
+	t.Run("GOWORK=off", func(t *testing.T) {
+		newWorkspaceProject(t)
+		t.Setenv("GOWORK", "off")
+
+		inWorkspace, err := gghelper.InWorkspace()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if inWorkspace {
+			t.Fatal("InWorkspace() = true with GOWORK=off, want false")
+		}
+	})
+}

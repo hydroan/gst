@@ -2,7 +2,6 @@ package jsonshape
 
 import (
 	"go/token"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -31,9 +30,8 @@ func load(cfg Config) (*token.FileSet, map[string]*packages.Package, error) {
 		return fset, pkgs, nil
 	}
 
-	// A go.work above the project would pull every workspace module into the
-	// load, while the routes build against the project's own go.mod.
-	env := append(os.Environ(), "GOWORK=off")
+	// The packages are loaded in the go command's own environment: in a
+	// workspace they resolve through it, as the project's own build does.
 	overlay := make(map[string][]byte, len(cfg.Overlay))
 	dir := absoluteDir(cfg.Dir)
 	for path, content := range cfg.Overlay {
@@ -45,7 +43,6 @@ func load(cfg Config) (*token.FileSet, map[string]*packages.Package, error) {
 	graph, err := packages.Load(&packages.Config{
 		Mode:    packages.NeedName | packages.NeedImports | packages.NeedDeps,
 		Dir:     cfg.Dir,
-		Env:     env,
 		Overlay: overlay,
 	}, roots...)
 	if err != nil {
@@ -66,7 +63,6 @@ func load(cfg Config) (*token.FileSet, map[string]*packages.Package, error) {
 		Mode: packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles | packages.NeedImports |
 			packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo,
 		Dir:     cfg.Dir,
-		Env:     env,
 		Fset:    fset,
 		Overlay: overlay,
 	}, project...)

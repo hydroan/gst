@@ -8,8 +8,10 @@ package gghelper
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/ggconst"
@@ -31,6 +33,20 @@ func ModulePath() (string, error) {
 		return "", errors.New("module name not found in go.mod")
 	}
 	return modulePath, nil
+}
+
+// InWorkspace reports whether the go command runs in workspace mode in the
+// working directory: a go.work file above it, or the one GOWORK names, puts
+// it there, and GOWORK=off takes it out. The answer is read from go env
+// GOWORK rather than by looking for the file, so it is the go command's own,
+// whichever way the workspace was named.
+func InWorkspace() (bool, error) {
+	out, err := exec.Command("go", "env", "GOWORK").Output()
+	if err != nil {
+		return false, errors.Wrap(err, "failed to read go env GOWORK")
+	}
+	workspace := strings.TrimSpace(string(out))
+	return workspace != "" && workspace != "off", nil
 }
 
 // IsFrameworkProject reports whether the go.mod in projectDir declares the gst

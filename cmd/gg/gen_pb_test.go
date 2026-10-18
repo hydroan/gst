@@ -2667,3 +2667,21 @@ func TestGenRunHoldsTheCommittedServicesAndMessages(t *testing.T) {
 		require.Contains(t, err.Error(), "pb/feed.proto: the rpc WatchFeed of service FeedService was server streaming and is now bidirectional streaming; a change of streaming breaks the wire, so keep it server streaming, or remove the rpc from pb/feed.proto to accept the break")
 	})
 }
+
+// TestGenRunWorksInsideAWorkspace pins that a project in a go workspace
+// generates like one outside it: the column inspection program and the type
+// check of the protobuf files resolve the dependencies through the
+// workspace, as go build does there.
+func TestGenRunWorksInsideAWorkspace(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	writeProtobufProject(t, projectDir, map[string]string{"model/note.go": protobufNoteModel})
+	initWorkspace(t, projectDir)
+
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+
+	require.FileExists(t, filepath.Join(projectDir, ggconst.DirPB, "note.pb.go"))
+	requireProjectCompiles(t)
+}
