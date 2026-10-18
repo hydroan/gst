@@ -44,7 +44,7 @@ partition "第 1 步：算出待删清单" {
   - prune.ignore 覆盖的;
   :过期的 protobuf 文件 =
   现有的 - 这次 gg gen 会写出的
-  - prune.ignore 覆盖的;
+  - prune.ignore 覆盖的 .proto;
   if (middleware/、interceptor/ 和项目代码的 import 都读得出来？) then (是)
     :找出孤儿中间件、拦截器文件;
     :从活代码出发顺着 import 找还有人在用的目录，
@@ -119,7 +119,7 @@ stop
 
 **过期的 protobuf 文件**：`pb/` 下现有的 `.proto`、`.gen.go`、`.pb.go`、`_grpc.pb.go` 文件里，这次 `gg gen` 不会再写出来的那些。`gg gen` 为每个声明了 `GRPC()` 的 model 文件在 `pb/` 下写一个同路径的 `.proto`（`model/archive/document.go` 对应 `pb/archive/document.proto`），旁边是它的处理器文件 `document.gen.go` 和由它编出来的 `document.pb.go`、`document_grpc.pb.go`，另有每个 pb 包一个的 `pb.gen.go` 注册本包的服务（根目录的空导入子包），所以 model 去掉 `GRPC()`、model 文件被删或改了路径，旧文件就过期了。这些文件完全由 model 推导、每次 `gg gen` 重写，里面没有项目自己写的东西，这一点和 service 文件不同。其中的 Go 文件（`.gen.go`、`.pb.go`、`_grpc.pb.go`）`gg gen` 自己就会删掉，不然项目编不过；留给 prune 的只有 `.proto`，因为它登记着删掉的字段编号和名字（`reserved`），删了它，用过它的客户端会把新字段读成旧编号的字段，所以 prune 列出要删的 `.proto` 时会提醒先把 `reserved` 搬进替代它的文件。
 
-**prune.ignore**：gst.yaml 里的保护清单。每一项是 `service/`、`middleware/`、`interceptor/` 或 `pb/` 下的一个路径，按目录层级匹配：`service/legacy` 覆盖这个目录和它下面的全部内容，但不覆盖 `service/legacyx`；写到具体文件就只覆盖这一个文件。被覆盖的路径不会被删。写法和校验规则见 README 的[项目级配置 gst.yaml](../../README.md#项目级配置-gstyaml)。
+**prune.ignore**：gst.yaml 里的保护清单。每一项是 `service/`、`middleware/`、`interceptor/` 或 `pb/` 下的一个路径，按目录层级匹配：`service/legacy` 覆盖这个目录和它下面的全部内容，但不覆盖 `service/legacyx`；写到具体文件就只覆盖这一个文件。被覆盖的路径不会被删；`pb/` 下例外，条目只保护 `.proto`，那里的 Go 文件完全由 model 推出来、每次 `gg gen` 重写，写成目录的条目不保护它们，直接指向 `pb/` 下 Go 文件的条目在读 gst.yaml 时报错。写法和校验规则见 README 的[项目级配置 gst.yaml](../../README.md#项目级配置-gstyaml)。
 
 ## 第 0 步：准备
 
@@ -231,7 +231,7 @@ stop
 ### 1.5 找出过期的 protobuf 文件
 
 1. `pb/` 下现有的 `.proto`、`.gen.go`、`.pb.go`、`_grpc.pb.go` 文件，去掉这次 `gg gen` 会写出的。
-2. 剩下的里面被 `prune.ignore` 覆盖的，移出清单，列在 `Files Ignored By Config` 下面。
+2. 剩下的里面被 `prune.ignore` 覆盖的 `.proto`，移出清单，列在 `Files Ignored By Config` 下面；被覆盖的 Go 文件照样留在清单里。
 
 ## 第 2 步：列出并确认
 
@@ -261,7 +261,7 @@ stop
 - 当前应有的 service 文件和它们的配对测试文件；`gg gen --prune` 时被路由屏蔽的 action 的 service 文件。
 - 这次 `gg gen` 会写出的 `.proto` 文件、配套的 `.gen.go` 文件和由 `.proto` 编出来的 Go 文件。
 - 属于 model 的目录、中间层目录里 gg 不认得的文件。
-- `prune.ignore` 覆盖的路径。忽略规则里只认它：被 Git 忽略的、Go 工具链内置忽略的路径没有这层保护。
+- `prune.ignore` 覆盖的路径（`pb/` 下只保护 `.proto`）。忽略规则里只认它：被 Git 忽略的、Go 工具链内置忽略的路径没有这层保护。
 - 1.2 保留的目录，连同它的子目录，以及它上面各层中间层目录里的文件。
 - 没有回答 `y` 或 `yes` 时，一切。
 

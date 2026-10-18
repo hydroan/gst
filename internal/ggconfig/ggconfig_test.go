@@ -45,12 +45,12 @@ func TestLoad(t *testing.T) {
 	})
 
 	t.Run("prune ignore entries are cleaned", func(t *testing.T) {
-		dir := writeConfig(t, "prune:\n  ignore:\n    - \" service/iam/ \"\n    - service/record/list.go\n    - middleware/sample_auth.go\n    - interceptor/sample_auth.go\n    - pb/legacy\n")
+		dir := writeConfig(t, "prune:\n  ignore:\n    - \" service/iam/ \"\n    - service/record/list.go\n    - middleware/sample_auth.go\n    - interceptor/sample_auth.go\n    - pb/legacy\n    - pb/archive/note.proto\n")
 		cfg, err := ggconfig.Load(dir)
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
-		want := []string{"service/iam", "service/record/list.go", "middleware/sample_auth.go", "interceptor/sample_auth.go", "pb/legacy"}
+		want := []string{"service/iam", "service/record/list.go", "middleware/sample_auth.go", "interceptor/sample_auth.go", "pb/legacy", "pb/archive/note.proto"}
 		if !slices.Equal(cfg.Prune.Ignore, want) {
 			t.Fatalf("Load().Prune.Ignore = %q, want %q", cfg.Prune.Ignore, want)
 		}
@@ -58,13 +58,15 @@ func TestLoad(t *testing.T) {
 
 	t.Run("invalid prune ignore entries are rejected", func(t *testing.T) {
 		for name, entries := range map[string]string{
-			"outside service":  "    - model/iam\n",
-			"not clean":        "    - service//iam\n",
-			"escaping":         "    - ../service/iam\n",
-			"empty":            "    - \"\"\n",
-			"listed twice":     "    - service/iam\n    - service/iam/\n",
-			"the service root": "    - services\n",
-			"the pb root":      "    - pbx\n",
+			"outside service":             "    - model/iam\n",
+			"not clean":                   "    - service//iam\n",
+			"escaping":                    "    - ../service/iam\n",
+			"empty":                       "    - \"\"\n",
+			"listed twice":                "    - service/iam\n    - service/iam/\n",
+			"the service root":            "    - services\n",
+			"the pb root":                 "    - pbx\n",
+			"a Go file under pb":          "    - pb/record.gen.go\n",
+			"a compiled Go file under pb": "    - pb/record/item.pb.go\n",
 		} {
 			t.Run(name, func(t *testing.T) {
 				dir := writeConfig(t, "prune:\n  ignore:\n"+entries)

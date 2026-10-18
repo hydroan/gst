@@ -112,7 +112,7 @@ func (g *generator) handlerFile(f *pbschema.ProtoFile) (File, error) {
 	for _, msg := range f.Typed {
 		w.conversionFuncs(msg)
 	}
-	name := strings.TrimSuffix(f.Name, ".proto") + ggconst.SuffixGenGo
+	name := strings.TrimSuffix(f.Name, ggconst.ExtensionProto) + ggconst.SuffixGenGo
 	source, err := w.out.source()
 	if err != nil {
 		return File{}, errors.Wrapf(err, "print %s", name)

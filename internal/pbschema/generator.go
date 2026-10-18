@@ -143,7 +143,7 @@ func (g *Schema) derive() error {
 	// pb.gen.go in every directory is the registration file's (see
 	// registrationFiles).
 	for _, name := range slices.Sorted(maps.Keys(g.Files)) {
-		if path.Base(name) == ggconst.DirPB+".proto" {
+		if path.Base(name) == ggconst.DirPB+ggconst.ExtensionProto {
 			dir := path.Dir(name)
 			g.project.Report(jsonshape.Site{Subject: ggconst.DirPB + "/" + name},
 				"the model file %s would get its handlers at %s, the registration file; rename the file",
@@ -153,7 +153,7 @@ func (g *Schema) derive() error {
 	// The plugin writes the service of x.proto to x_grpc.pb.go, where the
 	// messages of x_grpc.proto would go too.
 	for _, name := range slices.Sorted(maps.Keys(g.Files)) {
-		if stem, ok := strings.CutSuffix(name, "_grpc.proto"); ok {
+		if stem, ok := strings.CutSuffix(name, "_grpc"+ggconst.ExtensionProto); ok {
 			g.project.Report(jsonshape.Site{Subject: ggconst.DirPB + "/" + name},
 				"the model file %s/%s_grpc.go ends in _grpc, the suffix of the service file the protobuf plugin writes for %s/%s.go; rename the file", ggconst.DirModel, stem, ggconst.DirModel, stem)
 		}
@@ -215,7 +215,7 @@ func (g *Schema) messageOf(obj *types.TypeName) *Message {
 // pkg/notifier/notifier.go, keeps its path relative to the project root.
 func (g *Schema) fileOf(obj *types.TypeName) *ProtoFile {
 	goFile := g.project.RelativeFile(g.project.FileSet().Position(obj.Pos()).Filename)
-	name := filepath.ToSlash(strings.TrimSuffix(goFile, ggconst.ExtensionGo)) + ".proto"
+	name := filepath.ToSlash(strings.TrimSuffix(goFile, ggconst.ExtensionGo)) + ggconst.ExtensionProto
 	name = strings.TrimPrefix(name, ggconst.DirModel+"/")
 	return g.file(name)
 }

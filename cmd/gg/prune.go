@@ -114,12 +114,12 @@ func existingPBFiles() []string {
 // staleDerivedPBFiles lists the Go files under pb/ gg gen did not write this
 // run, generated being the paths it wrote: the handlers and the plugins'
 // files of a model deleted or no longer declaring GRPC(), which gg gen
-// deletes itself, leaving the definitions to prune (see PlanPBFiles) and
-// what a gst.yaml prune.ignore entry in protect covers alone.
+// deletes itself, leaving to prune the definitions, the only files under pb/
+// a gst.yaml prune.ignore entry in protect keeps (see PlanPBFiles).
 func staleDerivedPBFiles(generated []string, protect ggconfig.PruneConfig) []string {
 	var stale []string
 	for _, path := range ggprune.PlanPBFiles(existingPBFiles(), generated, protect).Delete {
-		if !strings.HasSuffix(path, ".proto") {
+		if !strings.HasSuffix(path, ggconst.ExtensionProto) {
 			stale = append(stale, path)
 		}
 	}
@@ -164,10 +164,10 @@ func compiledPBPaths(files []pb.File) []string {
 		if !f.Definition() {
 			continue
 		}
-		base := strings.TrimSuffix(f.Path, ".proto")
-		paths = append(paths, base+".pb.go")
+		base := strings.TrimSuffix(f.Path, ggconst.ExtensionProto)
+		paths = append(paths, base+ggconst.SuffixPBGo)
 		if f.Service {
-			paths = append(paths, base+"_grpc.pb.go")
+			paths = append(paths, base+ggconst.SuffixGRPCPBGo)
 		}
 	}
 	return paths
@@ -212,8 +212,9 @@ func remindUnreadPruneSettings() {
 // using a service directory, as it decides what gg check and gg gen read; it
 // protects nothing. The paths the gst.yaml prune.ignore entries in protect
 // cover are never deleted: not as disabled files, not as orphans, not as
-// empty directories. Of the ignore rules, only those keep a path (see package
-// ggprune).
+// empty directories; under pb/ an entry keeps the definitions alone (see
+// ggprune.PlanPBFiles). Of the ignore rules, only those keep a path (see
+// package ggprune).
 func pruneLeftovers(oldServiceFiles []string, allModels []*modelinfo.Model, keptFiles, keptDirs map[string]bool, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig, oldPBFiles, generatedPBFiles []string) {
 	clioutput.Section("Prune Leftovers")
 	warnMissingPruneIgnore(protect)
@@ -254,7 +255,7 @@ func pruneLeftovers(oldServiceFiles []string, allModels []*modelinfo.Model, kept
 		for _, file := range pbPlan.Delete {
 			clioutput.Error("", "%s", file)
 		}
-		if slices.ContainsFunc(pbPlan.Delete, func(file string) bool { return strings.HasSuffix(file, ".proto") }) {
+		if slices.ContainsFunc(pbPlan.Delete, func(file string) bool { return strings.HasSuffix(file, ggconst.ExtensionProto) }) {
 			clioutput.Warn("", "A definition goes with the numbers and names it reserves: a client built against it would read a new field under a number a removed one held, so move its reservations into the definition replacing it first")
 		}
 	}

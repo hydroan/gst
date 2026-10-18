@@ -19,9 +19,10 @@ import (
 // TestPruneLeftoversDeletesStalePBFiles pins that the files under pb/ gg gen
 // would not write now, definitions, the Go files serving them and the Go
 // files compiled from them, are listed under their own heading ahead of the
-// question, deleted on yes with the directories that leaves empty, and kept
-// when a gst.yaml prune.ignore entry covers them, listed among the files
-// ignored by config.
+// question, deleted on yes with the directories that leaves empty, and that
+// of the files a gst.yaml prune.ignore entry covers only the definitions are
+// kept, listed among the files ignored by config, the Go files below the
+// entry being deleted like any other.
 func TestPruneLeftoversDeletesStalePBFiles(t *testing.T) {
 	t.Chdir(t.TempDir())
 	current := filepath.Join(ggconst.DirPB, "record.proto")
@@ -32,6 +33,7 @@ func TestPruneLeftoversDeletesStalePBFiles(t *testing.T) {
 	staleGo := filepath.Join(ggconst.DirPB, "archive", "note_grpc.pb.go")
 	staleHandlers := filepath.Join(ggconst.DirPB, "archive", "note.gen.go")
 	kept := filepath.Join(ggconst.DirPB, "legacy", "item.proto")
+	keptGo := filepath.Join(ggconst.DirPB, "legacy", "item.pb.go")
 	for _, path := range []string{current, stale, kept} {
 		writeProjectFile(t, path, "syntax = \"proto3\";\n")
 	}
@@ -43,13 +45,14 @@ func TestPruneLeftoversDeletesStalePBFiles(t *testing.T) {
 	for _, path := range []string{staleGo, staleHandlers} {
 		writeProjectFile(t, path, "package archive\n")
 	}
+	writeProjectFile(t, keptGo, "package legacy\n")
 	protect := ggconfig.PruneConfig{Ignore: []string{"pb/legacy"}}
 
 	var stdout string
 	withStdin(t, "y\n", func() {
 		stdout = captureStdout(t, func() {
 			pruneLeftovers(nil, nil, nil, nil, gghelper.NewProjectIgnore(), protect,
-				[]string{current, currentGo, currentHandlers, registration, stale, staleGo, staleHandlers, kept},
+				[]string{current, currentGo, currentHandlers, registration, stale, staleGo, staleHandlers, kept, keptGo},
 				[]string{"pb/record.proto", "pb/record.gen.go", "pb/pb.gen.go", "pb/record.pb.go"})
 		})
 	})
@@ -59,7 +62,7 @@ func TestPruneLeftoversDeletesStalePBFiles(t *testing.T) {
 	if heading < 0 || heading > strings.Index(stdout, question) {
 		t.Fatalf("the stale files should be listed ahead of the question:\n%s", stdout)
 	}
-	for _, path := range []string{stale, staleGo, staleHandlers} {
+	for _, path := range []string{stale, staleGo, staleHandlers, keptGo} {
 		if i := strings.Index(stdout, path); i < heading || i > strings.Index(stdout, question) {
 			t.Errorf("%s should be listed under the heading:\n%s", path, stdout)
 		}

@@ -59,17 +59,20 @@ type GenModelsConfig struct {
 type PruneConfig struct {
 	// Ignore lists the paths gg prune never deletes, whatever the reason it
 	// would: a disabled action's service file, a file in an orphan service
-	// directory, a directory left empty, the middleware of a removed copied
-	// module, or a protobuf definition gg gen would not write now. Of the
-	// ignore rules it is the only one that keeps a path
-	// from gg prune: the project's Git ignore rules and the go command's
-	// ignores protect nothing, and only decide, as they do for gg check and gg
-	// gen, which code counts as still using a service directory. Each entry is
-	// a path under service/ or middleware/, relative to the project root, and
-	// matches by directory level, the way the from field of an ignore rule
-	// does: "service/iam" covers service/iam and everything below it but not
-	// service/iamx, and "service/record/list.go" covers that one file.
-	// Entries are plain paths: no wildcards, no regular expressions.
+	// directory, a directory left empty, the middleware or interceptor of a
+	// removed copied module, or a protobuf definition gg gen would not write
+	// now. Of the ignore rules it is the only one that keeps a path from gg
+	// prune: the project's Git ignore rules and the go command's ignores
+	// protect nothing, and only decide, as they do for gg check and gg gen,
+	// which code counts as still using a service directory. Each entry is a
+	// path under service/, middleware/, interceptor/ or pb/, relative to the
+	// project root, and matches by directory level, the way the from field of
+	// an ignore rule does: "service/iam" covers service/iam and everything
+	// below it but not service/iamx, and "service/record/list.go" covers that
+	// one file. Under pb/ an entry keeps the definitions alone: the Go files
+	// there are derived from the models and rewritten by every gg gen, so
+	// "pb/legacy" leaves them to be deleted and an entry naming one is
+	// rejected. Entries are plain paths: no wildcards, no regular expressions.
 	Ignore []string `yaml:"ignore"`
 }
 
@@ -114,8 +117,8 @@ func Load(dir string) (*Config, error) {
 
 // validatePruneIgnore cleans every prune.ignore entry in place and rejects an
 // entry that is not a clean relative path, lies outside service/, middleware/,
-// interceptor/ and pb/, the directories gg prune deletes from, or repeats
-// another entry.
+// interceptor/ and pb/, the directories gg prune deletes from, names a Go
+// file under pb/, which no entry keeps, or repeats another entry.
 func validatePruneIgnore(c *PruneConfig) error {
 	seen := make(map[string]bool, len(c.Ignore))
 	for i, entry := range c.Ignore {
@@ -125,6 +128,9 @@ func validatePruneIgnore(c *PruneConfig) error {
 		}
 		if !underPath(ggconst.DirService, cleaned) && !underPath(ggconst.DirMiddleware, cleaned) && !underPath(ggconst.DirInterceptor, cleaned) && !underPath(ggconst.DirPB, cleaned) {
 			return errors.Newf("entry %q is outside %s/, %s/, %s/ and %s/, the directories gg prune deletes from", entry, ggconst.DirService, ggconst.DirMiddleware, ggconst.DirInterceptor, ggconst.DirPB)
+		}
+		if underPath(ggconst.DirPB, cleaned) && strings.HasSuffix(cleaned, ggconst.ExtensionGo) {
+			return errors.Newf("entry %q names a Go file under %s/, which gg gen derives from the models and rewrites every run; there prune.ignore keeps only the %s definitions", entry, ggconst.DirPB, ggconst.ExtensionProto)
 		}
 		if seen[cleaned] {
 			return errors.Newf("entry %q is listed twice", entry)

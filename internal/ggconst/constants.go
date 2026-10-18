@@ -27,6 +27,7 @@ const (
 // File patterns and extensions
 const (
 	ExtensionGo     = ".go"
+	ExtensionProto  = ".proto"
 	PatternTestFile = "_test.go"
 )
 
@@ -47,6 +48,11 @@ const FileModeGenerated = 0o644
 // after the generator.
 const (
 	SuffixGenGo = ".gen.go"
+	// SuffixPBGo and SuffixGRPCPBGo are the suffixes protoc-gen-go and
+	// protoc-gen-go-grpc give the Go files they compile from a definition:
+	// record.proto compiles to record.pb.go and record_grpc.pb.go.
+	SuffixPBGo     = ".pb.go"
+	SuffixGRPCPBGo = "_grpc.pb.go"
 
 	FileModelGen   = "model" + SuffixGenGo
 	FileAPIDocGen  = "apidoc" + SuffixGenGo

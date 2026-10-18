@@ -50,8 +50,9 @@ func TestScanPBFilesListsTheGeneratedFilesWhole(t *testing.T) {
 
 // TestPlanPBFilesDeletesWhatGenWouldNotWrite pins that the plan deletes
 // every existing file gg gen would not write now, definitions and the Go
-// files compiled from them alike, in the order they were scanned, keeps the
-// ones a gst.yaml prune.ignore entry covers under Ignored, and reads the
+// files compiled from them alike, in the order they were scanned, keeps of
+// the files a gst.yaml prune.ignore entry covers only the definitions, under
+// Ignored, the Go files below the entry going with the rest, and reads the
 // generated paths as gg gen hands them out, slash-separated.
 func TestPlanPBFilesDeletesWhatGenWouldNotWrite(t *testing.T) {
 	current := filepath.Join(ggconst.DirPB, "record.proto")
@@ -61,12 +62,15 @@ func TestPlanPBFilesDeletesWhatGenWouldNotWrite(t *testing.T) {
 	staleGo := filepath.Join(ggconst.DirPB, "note_grpc.pb.go")
 	staleHandlers := filepath.Join(ggconst.DirPB, "note.gen.go")
 	kept := filepath.Join(ggconst.DirPB, "legacy", "item.proto")
+	keptGo := filepath.Join(ggconst.DirPB, "legacy", "item.pb.go")
+	keptHandlers := filepath.Join(ggconst.DirPB, "legacy", "item.gen.go")
 	protect := ggconfig.PruneConfig{Ignore: []string{"pb/legacy"}}
 
-	plan := ggprune.PlanPBFiles([]string{current, stale, kept, currentItem, currentGo, staleGo, staleHandlers}, []string{"pb/record.proto", "pb/record/item.proto", "pb/record.pb.go"}, protect)
+	plan := ggprune.PlanPBFiles([]string{current, stale, kept, keptGo, currentItem, currentGo, staleGo, staleHandlers, keptHandlers}, []string{"pb/record.proto", "pb/record/item.proto", "pb/record.pb.go"}, protect)
 
-	if !slices.Equal(plan.Delete, []string{stale, staleGo, staleHandlers}) {
-		t.Errorf("Delete = %v, want %v", plan.Delete, []string{stale, staleGo, staleHandlers})
+	wantDelete := []string{stale, keptGo, staleGo, staleHandlers, keptHandlers}
+	if !slices.Equal(plan.Delete, wantDelete) {
+		t.Errorf("Delete = %v, want %v", plan.Delete, wantDelete)
 	}
 	if !slices.Equal(plan.Ignored, []string{kept}) {
 		t.Errorf("Ignored = %v, want %v", plan.Ignored, []string{kept})

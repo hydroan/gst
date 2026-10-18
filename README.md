@@ -1081,13 +1081,15 @@ prune:
   写到具体文件就只保护这一个文件。它不是通配符，也不是正则。
 - 列出的路径在任何情况下都不会被删：停用 action 的 service 文件及其配对测试文件、
   孤儿目录里的文件、清理后变空的目录、被删掉的复制模块留下的中间件和拦截器文件、
-  过期的 protobuf 文件都算。
+  过期的 `.proto` 文件都算。`pb/` 下的条目只保护 `.proto`：那里的 `.gen.go`、`.pb.go`、
+  `_grpc.pb.go` 完全由 model 推出来、每次 `gg gen` 重写，写成目录的条目（如 `pb/legacy`）
+  不保护它们，直接指向它们的条目报错。
 - 要保留的路径只能写进 `prune.ignore`：`service/` 和 `pb/` 归 gg 管，要保持干净，项目
   的 Git 忽略规则和 Go 工具链的内置忽略不保护任何路径。被 Git 忽略的文件、
   `testdata`、以 `_` 开头的目录等和其他路径一样按规则清理；这些位置里的代码
   也不算在用 service 目录，不会让它们留下来。
-- 不在 `service/`、`middleware/`、`interceptor/` 或 `pb/` 下、写法不规整或重复的条目直接报错；指向不存在路径的条目
-  在 prune 时输出 warning。
+- 不在 `service/`、`middleware/`、`interceptor/` 或 `pb/` 下、指向 `pb/` 下 Go 文件、写法不规整或重复的条目
+  直接报错；指向不存在路径的条目在 prune 时输出 warning。
 - `gg` 只读取 `gst.yaml`，项目里如果还有 `.gg.yaml`、`gst.yml` 这类同类
   文件，会输出 warning 提示它们不会被读取。
 

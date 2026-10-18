@@ -24,6 +24,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/pbschema"
 )
 
@@ -53,7 +54,7 @@ type File struct {
 
 // Definition reports whether the file is a .proto definition, the kind
 // Compile compiles, rather than a Go file.
-func (f File) Definition() bool { return strings.HasSuffix(f.Path, ".proto") }
+func (f File) Definition() bool { return strings.HasSuffix(f.Path, ggconst.ExtensionProto) }
 
 // Generate derives the protobuf definitions of the models declaring GRPC()
 // (see pbschema.Derive) and renders them: one .proto file per Go file the

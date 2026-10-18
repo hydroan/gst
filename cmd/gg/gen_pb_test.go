@@ -240,8 +240,9 @@ func TestGenRunImportsThePBPackageWhileServingGRPC(t *testing.T) {
 // deletes the Go files under pb/ it did not write this run, the handlers
 // and the plugins' files of a model deleted or no longer declaring GRPC(),
 // so that the project builds without a prune, while the definition stays,
-// with the numbers it reserves, for prune to delete; a file a gst.yaml
-// prune.ignore entry covers stays as well.
+// with the numbers it reserves, for prune to delete. A gst.yaml prune.ignore
+// entry covering pb/ keeps the definitions there and nothing else, and one
+// naming a Go file under pb/ is refused.
 func TestGenRunRemovesTheGoFilesOfAModelNoLongerServedOverGRPC(t *testing.T) {
 	projectDir, ok := newGenProject(t)
 	if !ok {
@@ -270,17 +271,27 @@ func TestGenRunRemovesTheGoFilesOfAModelNoLongerServedOverGRPC(t *testing.T) {
 	output, err := build.CombinedOutput()
 	require.NoError(t, err, "the project builds without the stale files: %s", output)
 
-	t.Run("a file prune.ignore covers stays", func(t *testing.T) {
+	t.Run("a directory entry keeps the definitions, not the Go files", func(t *testing.T) {
 		writeProtobufProject(t, projectDir, map[string]string{"model/feed.go": protobufFeedModel})
 		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
-		writeProjectFile(t, filepath.Join(projectDir, "gst.yaml"), "prune:\n  ignore:\n    - pb/feed.gen.go\n")
+		writeProjectFile(t, filepath.Join(projectDir, "gst.yaml"), "prune:\n  ignore:\n    - pb\n")
 		require.NoError(t, os.Remove(filepath.Join(projectDir, "model", "feed.go")))
 		require.NoError(t, os.RemoveAll(filepath.Join(projectDir, ggconst.DirService, "feed")))
 
 		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
 
-		require.FileExists(t, filepath.Join(projectDir, ggconst.DirPB, "feed.gen.go"))
-		require.NoFileExists(t, filepath.Join(projectDir, ggconst.DirPB, "feed.pb.go"))
+		for _, name := range derived {
+			require.NoFileExists(t, filepath.Join(projectDir, ggconst.DirPB, name))
+		}
+		require.FileExists(t, filepath.Join(projectDir, ggconst.DirPB, "feed.proto"))
+	})
+
+	t.Run("an entry naming a Go file under pb is refused", func(t *testing.T) {
+		writeProjectFile(t, filepath.Join(projectDir, "gst.yaml"), "prune:\n  ignore:\n    - pb/feed.gen.go\n")
+
+		err := genRunWithOptions(genRunOptions{Quiet: true})
+
+		require.ErrorContains(t, err, "pb/feed.gen.go")
 	})
 }
 

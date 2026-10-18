@@ -29,7 +29,7 @@ func ScanPBFiles(pbDir string) ([]string, error) {
 		if err != nil {
 			return err
 		}
-		if !info.IsDir() && (strings.HasSuffix(info.Name(), ".proto") || strings.HasSuffix(info.Name(), ggconst.SuffixGenGo) || strings.HasSuffix(info.Name(), ".pb.go")) {
+		if !info.IsDir() && (strings.HasSuffix(info.Name(), ggconst.ExtensionProto) || strings.HasSuffix(info.Name(), ggconst.SuffixGenGo) || strings.HasSuffix(info.Name(), ggconst.SuffixPBGo)) {
 			files = append(files, path)
 		}
 		return nil
@@ -40,14 +40,16 @@ func ScanPBFiles(pbDir string) ([]string, error) {
 // PlanPBFiles works out which of the existing files under pb/ prune deletes:
 // the ones gg gen would not write now, generated being the paths it writes,
 // slash-separated as pb.Generate and pb.Compile hand them out. Of existing
-// [pb/record.proto pb/record.pb.go pb/note.proto pb/legacy/item.proto] and
-// generated [pb/record.proto pb/record.pb.go], the plan deletes pb/note.proto
-// and, with a gst.yaml prune.ignore entry pb/legacy in protect, keeps
-// pb/legacy/item.proto under Ignored. The files are the models' mirror,
-// rewritten by every gg gen, so unlike a service file nothing in them is the
-// project's to keep, but for the numbers and names a definition reserves:
-// gg gen deletes the stale Go files itself, as it writes, and leaves the
-// definitions to prune, which warns of the reservations going with them.
+// [pb/record.proto pb/record.pb.go pb/note.proto pb/legacy/item.proto
+// pb/legacy/item.pb.go] and generated [pb/record.proto pb/record.pb.go], the
+// plan deletes pb/note.proto and pb/legacy/item.pb.go and, with a gst.yaml
+// prune.ignore entry pb/legacy in protect, keeps pb/legacy/item.proto under
+// Ignored: an entry keeps the definitions alone. The files are the models'
+// mirror, rewritten by every gg gen, so unlike a service file nothing in them
+// is the project's to keep, but for the numbers and names a definition
+// reserves: gg gen deletes the stale Go files itself, as it writes, and
+// leaves the definitions to prune, which warns of the reservations going with
+// them.
 func PlanPBFiles(existing, generated []string, protect ggconfig.PruneConfig) FilePlan {
 	current := make([]string, 0, len(generated))
 	for _, path := range generated {
@@ -58,7 +60,7 @@ func PlanPBFiles(existing, generated []string, protect ggconfig.PruneConfig) Fil
 		if slices.Contains(current, filepath.Clean(path)) {
 			continue
 		}
-		if protect.Ignores(path) {
+		if strings.HasSuffix(path, ggconst.ExtensionProto) && protect.Ignores(path) {
 			plan.Ignored = append(plan.Ignored, path)
 			continue
 		}
