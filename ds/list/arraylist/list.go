@@ -201,7 +201,6 @@ func (l *List[E]) removeAt(index int) E {
 		return e
 	}
 	e = l.elements[index]
-	// equivalent to
 	l.elements = slices.Delete(l.elements, index, index+1)
 	l.shrink()
 	return e
