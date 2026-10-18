@@ -3,6 +3,7 @@ package testutil
 import (
 	"net"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -93,6 +94,27 @@ func TestServerPreparesRocketMQ(t *testing.T) {
 	require.Equal(t, "true", os.Getenv(config.ROCKETMQ_ENABLED))
 
 	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
+	require.NoError(t, err)
+	require.NoError(t, conn.Close())
+}
+
+func TestServerPreparesElasticsearch(t *testing.T) {
+	for _, key := range []string{config.ELASTICSEARCH_ADDRS, config.ELASTICSEARCH_ENABLED} {
+		t.Setenv(key, "")
+		require.NoError(t, os.Unsetenv(key))
+	}
+
+	release, _, err := Server{Elasticsearch: true}.prepare()
+	t.Cleanup(release)
+	require.NoError(t, err)
+
+	// The prepared cluster lands in the environment the way the other
+	// services do, which is where the bootstrap config picks it up.
+	addr := os.Getenv(config.ELASTICSEARCH_ADDRS)
+	require.NotEmpty(t, addr)
+	require.Equal(t, "true", os.Getenv(config.ELASTICSEARCH_ENABLED))
+
+	conn, err := net.DialTimeout("tcp", strings.TrimPrefix(addr, "http://"), 5*time.Second)
 	require.NoError(t, err)
 	require.NoError(t, conn.Close())
 }

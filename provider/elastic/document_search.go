@@ -15,26 +15,69 @@ import (
 	"go.uber.org/zap"
 )
 
-// SearchRequest represents an Elasticsearch search query.
-// It includes query conditions, pagination, sorting, field filtering and search_after for deep pagination.
-// You can use QueryBuilder to create a SearchRequest.
+// SearchRequest is an Elasticsearch search body: the query, the page, the
+// sort, the fields to return, search_after for deep pagination and the
+// aggregations. QueryBuilder composes one. What a request leaves unset is
+// left to the cluster, which ranks unsorted hits by relevance and answers ten
+// of them.
 type SearchRequest struct {
-	Query       map[string]any   `json:"query,omitempty"`
-	From        int              `json:"from,omitempty"`
-	Size        int              `json:"size,omitempty"`
+	Query map[string]any `json:"query,omitempty"`
+	From  int            `json:"from,omitempty"`
+	// Size is the number of hits to return. Zero asks for none, the shape of
+	// a request that wants aggregations alone; nil leaves the cluster's
+	// default of ten.
+	Size        *int             `json:"size,omitempty"`
 	Sort        []map[string]any `json:"sort,omitempty"`
 	Source      []string         `json:"_source,omitempty"`
 	SearchAfter []any            `json:"search_after,omitempty"`
 	Aggs        map[string]any   `json:"aggs,omitempty"`
+	// TrackTotalHits asks the cluster to count every hit. Without it the
+	// cluster stops counting at ten thousand, and SearchResult.TotalRelation
+	// says whether it did.
+	TrackTotalHits bool `json:"track_total_hits,omitempty"`
 }
 
-// SearchResult represents an Elasticsearch search response.
-// It contains total hits count, max score, hits array and aggregations.
+// validate reports a request the cluster would refuse or answer with
+// something other than what was asked: a negative size or from, and
+// search_after without the sort whose values it continues from.
+func (r *SearchRequest) validate() error {
+	if r.Size != nil && *r.Size < 0 {
+		return errors.New("size cannot be negative")
+	}
+	if r.From < 0 {
+		return errors.New("from cannot be negative")
+	}
+	if len(r.SearchAfter) > 0 {
+		if len(r.Sort) == 0 {
+			return errors.New("search_after requires sort")
+		}
+		if r.From != 0 {
+			return errors.New("from must be 0 when using search_after")
+		}
+	}
+	return nil
+}
+
+// TotalRelation says how SearchResult.Total relates to the number of hits.
+type TotalRelation string
+
+const (
+	// TotalRelationEq means Total is the number of hits.
+	TotalRelationEq TotalRelation = "eq"
+	// TotalRelationGte means at least Total hits matched: the cluster
+	// stopped counting at its threshold of ten thousand. A request with
+	// TrackTotalHits gets the exact count.
+	TotalRelationGte TotalRelation = "gte"
+)
+
+// SearchResult is an Elasticsearch search response: the total with how exact
+// it is, the top score, the hits and the aggregations.
 type SearchResult struct {
-	Total        int64                         `json:"total"`
-	MaxScore     *float64                      `json:"max_score,omitempty"`
-	Hits         []SearchHit                   `json:"hits"`
-	Aggregations map[string]*AggregationResult `json:"aggregations,omitempty"`
+	Total         int64                         `json:"total"`
+	TotalRelation TotalRelation                 `json:"total_relation"`
+	MaxScore      *float64                      `json:"max_score,omitempty"`
+	Hits          []SearchHit                   `json:"hits"`
+	Aggregations  map[string]*AggregationResult `json:"aggregations,omitempty"`
 }
 
 // SearchHit represents a single document in search results.
@@ -83,7 +126,7 @@ func (d *document) SearchPrev(ctx context.Context, indexName string, req *Search
 	}
 	// Set pagination parameters
 	req.From = 0
-	req.Size = size
+	req.Size = &size
 	result, err := d.Search(ctx, indexName, req)
 	if err != nil {
 		return nil, err
@@ -100,13 +143,16 @@ func (d *document) SearchPrev(ctx context.Context, indexName string, req *Search
 // It performs a forward search using the current sort orders.
 // Note: This will override the size parameter in QueryBuilder.
 func (d *document) SearchNext(ctx context.Context, indexName string, req *SearchRequest, size int) (*SearchResult, error) {
-	req.Size = size
+	req.Size = &size
 	req.From = 0
 	return d.Search(ctx, indexName, req)
 }
 
-// Search performs a search operation on the specified index
-// default size is 10
+// Search runs req against indexName. The request goes to the cluster as it
+// is: no sort means relevance order, no size means the cluster's default
+// page, and the total is counted up to the cluster's threshold unless
+// TrackTotalHits asks for all of it, see SearchResult.TotalRelation. A
+// request the cluster would refuse, see validate, fails before it is sent.
 func (*document) Search(ctx context.Context, indexName string, req *SearchRequest) (*SearchResult, error) {
 	if err := _check(); err != nil {
 		return nil, errors.Wrap(err, "elasticsearch client check")
@@ -114,33 +160,22 @@ func (*document) Search(ctx context.Context, indexName string, req *SearchReques
 	if indexName == "" {
 		return nil, errors.New("index name cannot be empty")
 	}
+	if err := req.validate(); err != nil {
+		return nil, err
+	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	// Set default values if not provided
-	// NOTE: size will be 0 if `aggs` is set
-	if req.Size < 0 {
-		req.Size = 10
-	}
-	if req.From < 0 {
-		req.From = 0
-	}
-	// SearchAfter require Sort to be set.
-	if len(req.Sort) == 0 {
-		req.Sort = []map[string]any{
-			{
-				"_doc": map[string]any{ // fall back to _doc as the sort field
-					"order": "asc",
-				},
-			},
-		}
-	}
 
+	size := "default"
+	if req.Size != nil {
+		size = strconv.Itoa(*req.Size)
+	}
 	begin := time.Now()
 	logger := logger.Elastic.With(
 		"index", indexName,
 		"from", strconv.Itoa(req.From),
-		"size", strconv.Itoa(req.Size),
+		"size", size,
 	)
 	defer func() {
 		logger.Infow("search completed", util.LogDuration(time.Since(begin)))
@@ -183,7 +218,7 @@ func (*document) Search(ctx context.Context, indexName string, req *SearchReques
 
 // parseSearchResult parses Elasticsearch response into SearchResult.
 // It safely extracts and validates:
-// - total hits count
+// - total hits count and how exact it is
 // - max score
 // - hits array with their IDs, sources and scores
 // - aggregation results
@@ -193,6 +228,7 @@ func parseSearchResult(esRes map[string]any) (*SearchResult, error) {
 		id       string
 		err      error
 		total    int64
+		relation TotalRelation
 		maxScore float64
 		hits     map[string]any
 		hitMap   map[string]any
@@ -205,10 +241,10 @@ func parseSearchResult(esRes map[string]any) (*SearchResult, error) {
 		return nil, errors.New("invalid response format: hits not found or invalid type")
 	}
 	// Process search result with safe type assertions
-	if total, err = extractTotal(hits); err != nil {
+	if total, relation, err = extractTotal(hits); err != nil {
 		return nil, errors.Wrap(err, "failed to extract total")
 	}
-	result := &SearchResult{Total: total}
+	result := &SearchResult{Total: total, TotalRelation: relation}
 	// Safely extract max_score
 	if maxScore, ok = hits["max_score"].(float64); ok {
 		result.MaxScore = &maxScore
@@ -276,16 +312,20 @@ func parseSearchResult(esRes map[string]any) (*SearchResult, error) {
 	return result, nil
 }
 
-// extractTotal safely extracts the total hits count from Elasticsearch response.
-// It handles the nested structure: hits.total.value
-func extractTotal(hits map[string]any) (int64, error) {
+// extractTotal reads hits.total, which the cluster answers as a value and
+// the relation of the value to the number of hits, see TotalRelation.
+func extractTotal(hits map[string]any) (int64, TotalRelation, error) {
 	total, ok := hits["total"].(map[string]any)
 	if !ok {
-		return 0, errors.New("invalid total format")
+		return 0, "", errors.New("invalid total format")
 	}
 	value, ok := total["value"].(float64)
 	if !ok {
-		return 0, errors.New("invalid total value format")
+		return 0, "", errors.New("invalid total value format")
 	}
-	return int64(value), nil
+	relation, ok := total["relation"].(string)
+	if !ok {
+		return 0, "", errors.New("invalid total relation format")
+	}
+	return int64(value), TotalRelation(relation), nil
 }

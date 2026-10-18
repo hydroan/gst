@@ -3,568 +3,294 @@ package elastic_test
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"os"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/araddon/dateparse"
-	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/lifecycle"
-	"github.com/hydroan/gst/logger"
+	"github.com/hydroan/gst/internal/testutil"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/provider/elastic"
 	"github.com/hydroan/gst/util"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-const Index = "test"
+func TestMain(m *testing.M) {
+	testutil.Run(m, testutil.Server{Elasticsearch: true})
+}
 
-// setupElastic prepares the provider for tests that query a live Elasticsearch
-// cluster. The integration is temporarily disabled, so it skips the caller
-// before connecting; restoring it means removing the t.Skip below. This setup
-// cannot live in init(), which runs before any test and would fail the whole
-// package no matter what the tests themselves do.
-func setupElastic(t *testing.T) {
-	t.Helper()
-	t.Skip("Elasticsearch provider integration is temporarily disabled: it needs a live cluster.")
+func TestIndexLifecycle(t *testing.T) {
+	name := "sample-lifecycle"
+	require.NoError(t, elastic.Index.Create(name, &elastic.IndexOption{
+		Settings: map[string]any{"number_of_shards": 1, "number_of_replicas": 0},
+		Mappings: map[string]any{"properties": map[string]any{"title": map[string]any{"type": "text"}}},
+	}))
+	exists, err := elastic.Index.Exists(name)
+	require.NoError(t, err)
+	require.True(t, exists)
 
-	config.SetConfigFile("../../examples/demo/config.ini")
-	if err := config.Init(); err != nil {
-		t.Fatalf("init config: %v", err)
+	require.NoError(t, elastic.Index.Delete(name))
+	exists, err = elastic.Index.Exists(name)
+	require.NoError(t, err)
+	require.False(t, exists)
+}
+
+func TestDocumentGetReadsAnIndexedDocument(t *testing.T) {
+	index := newSampleIndex(t, sampleDocument{id: "one", fields: map[string]any{"title": "sample"}})
+
+	got, err := elastic.Document.Get(context.Background(), index, "one", nil)
+	require.NoError(t, err)
+	require.True(t, got.Found)
+	require.Equal(t, "sample", got.Source["title"])
+
+	missing, err := elastic.Document.Get(context.Background(), index, "two", nil)
+	require.NoError(t, err)
+	require.False(t, missing.Found)
+}
+
+// TestSearchRanksByRelevanceWhenNoSortIsGiven pins that a request without a
+// sort of its own leaves the order to the cluster, which ranks by relevance:
+// the document saying hello three times comes first, although it was indexed
+// second, and every hit carries its score.
+func TestSearchRanksByRelevanceWhenNoSortIsGiven(t *testing.T) {
+	index := newSampleIndex(t,
+		sampleDocument{id: "faint", fields: map[string]any{"title": "hello world"}},
+		sampleDocument{id: "loud", fields: map[string]any{"title": "hello there, hello again, hello friend"}},
+	)
+	req, err := elastic.NewQueryBuilder().Match("title", "hello").Build()
+	require.NoError(t, err)
+
+	res, err := elastic.Document.Search(context.Background(), index, req)
+	require.NoError(t, err)
+	require.Equal(t, []string{"loud", "faint"}, ids(res))
+	require.NotNil(t, res.MaxScore)
+	for _, hit := range res.Hits {
+		require.NotNil(t, hit.Score, "hit %s carries no score", hit.ID)
 	}
-	if err := logger.Init(); err != nil {
-		t.Fatalf("init logger: %v", err)
-	}
-	// Bring the compiled-in providers up through the registry — the same
-	// entry the provider stage takes at bootstrap — instead of a test-only
-	// export of the unexported lifecycle.
-	for _, p := range lifecycle.Components(lifecycle.StageProvider) {
-		if err := p.Start(context.Background()); err != nil {
-			t.Fatalf("init elastic: %v", err)
+}
+
+// TestSearchAfterRequiresSort pins that search_after without a sort is
+// refused before any request is sent, by the builder and by Search alike.
+func TestSearchAfterRequiresSort(t *testing.T) {
+	_, err := elastic.NewQueryBuilder().SearchAfter(1).Build()
+	require.ErrorContains(t, err, "search_after requires sort")
+
+	_, err = elastic.Document.Search(context.Background(), "sample", &elastic.SearchRequest{SearchAfter: []any{1}})
+	require.ErrorContains(t, err, "search_after requires sort")
+}
+
+// TestSearchWithSizeZeroAnswersAggregationsAlone pins the aggregation shape:
+// a size of zero reaches the cluster, so the answer carries the buckets and
+// no hits.
+func TestSearchWithSizeZeroAnswersAggregationsAlone(t *testing.T) {
+	docs := make([]types.ESDocumenter, 0, 12)
+	for i := range 12 {
+		kind := "even"
+		if i%2 == 1 {
+			kind = "odd"
 		}
+		docs = append(docs, sampleDocument{id: strconv.Itoa(i), fields: map[string]any{"kind": kind}})
 	}
+	index := newSampleIndex(t, docs...)
+	req, err := elastic.NewQueryBuilder().Size(0).AggsTerm("kinds", "kind.keyword", 10).Build()
+	require.NoError(t, err)
+
+	res, err := elastic.Document.Search(context.Background(), index, req)
+	require.NoError(t, err)
+	require.Empty(t, res.Hits)
+	require.Len(t, res.Aggregations["kinds"].Buckets, 2)
 }
 
-func TestIndex(t *testing.T) {
-	setupElastic(t)
-
-	settings := map[string]any{
-		"number_of_shards":   3,
-		"number_of_replicas": 2,
+func TestSearchNextAndPrevPageAlongTheSort(t *testing.T) {
+	docs := make([]types.ESDocumenter, 0, 5)
+	for seq := 1; seq <= 5; seq++ {
+		docs = append(docs, sampleDocument{id: strconv.Itoa(seq), fields: map[string]any{"seq": seq}})
 	}
+	index := newSampleIndex(t, docs...)
 
-	mappings := map[string]any{
-		"properties": map[string]any{
-			"title": map[string]any{
-				"type": "text",
-			},
-			"content": map[string]any{
-				"type": "text",
-			},
-			"date": map[string]any{
-				"type": "date",
-			},
-		},
-	}
-	idx1 := "my_index"
-	idx2 := "my_index2"
-
-	require.NoError(t, elastic.Index.Create(idx1, &elastic.IndexOption{settings, mappings}))
-	require.NoError(t, elastic.Index.Create(idx2))
-	exists, err := elastic.Index.Exists(idx1)
-	assert.True(t, exists)
+	first, err := elastic.NewQueryBuilder().Sort("seq", elastic.Asc).Size(2).Build()
 	require.NoError(t, err)
-
-	exists, err = elastic.Index.Exists(idx2)
-	assert.True(t, exists)
+	res, err := elastic.Document.Search(context.Background(), index, first)
 	require.NoError(t, err)
+	require.Equal(t, []string{"1", "2"}, ids(res))
 
-	require.NoError(t, elastic.Index.Delete(idx1))
-	require.NoError(t, elastic.Index.Delete(idx2))
+	next, err := elastic.NewQueryBuilder().Sort("seq", elastic.Asc).SearchAfter(2).Build()
+	require.NoError(t, err)
+	res, err = elastic.Document.SearchNext(context.Background(), index, next, 2)
+	require.NoError(t, err)
+	require.Equal(t, []string{"3", "4"}, ids(res))
+
+	prev, err := elastic.NewQueryBuilder().Sort("seq", elastic.Asc).SearchAfter(3).Build()
+	require.NoError(t, err)
+	res, err = elastic.Document.SearchPrev(context.Background(), index, prev, 2)
+	require.NoError(t, err)
+	require.Equal(t, []string{"1", "2"}, ids(res))
 }
 
-func TestDocumentGet(t *testing.T) {
-	setupElastic(t)
-
-	doc, err := elastic.Document.Get(context.TODO(), Index, "message_recv_7143038995084115996_7274598307442327556_7424788642731753476", nil)
+func TestQueryBuilderTimeRangeKeepsTheDocumentsInside(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	index := newSampleIndex(t,
+		sampleDocument{id: "early", fields: map[string]any{"created_at": base.Add(-48 * time.Hour).Format(time.RFC3339)}},
+		sampleDocument{id: "inside", fields: map[string]any{"created_at": base.Add(time.Hour).Format(time.RFC3339)}},
+		sampleDocument{id: "late", fields: map[string]any{"created_at": base.Add(72 * time.Hour).Format(time.RFC3339)}},
+	)
+	req, err := elastic.NewQueryBuilder().TimeRange("created_at", base, base.Add(24*time.Hour)).Build()
 	require.NoError(t, err)
-	fmt.Println(doc)
+
+	res, err := elastic.Document.Search(context.Background(), index, req)
+	require.NoError(t, err)
+	require.Equal(t, []string{"inside"}, ids(res))
 }
 
-func TestDocumentSearch(t *testing.T) {
-	setupElastic(t)
-
-	// The first two requests are kept as query DSL examples; they are
-	// intentionally overwritten below.
-	//nolint:ineffassign,wastedassign
-	req := &elastic.SearchRequest{
-		Query: map[string]any{
-			"bool": map[string]any{
-				"must": []map[string]any{
-					{
-						"match": map[string]any{
-							"message_text": "hello",
-						},
-					},
-					{
-						"term": map[string]any{
-							"type": "message_send",
-						},
-					},
-				},
-			},
-		},
-		Size: 10,
-	}
-
-	// (type.keyword : "message_send" or type.keyword : "message_recv" or type.keyword : "message_ack" ) and message_user_id.keyword : "7143038995084115996" and message_text: hello
-	//nolint:ineffassign,wastedassign
-	req = &elastic.SearchRequest{
-		Query: map[string]any{
-			"bool": map[string]any{
-				"must": []map[string]any{
-					{
-						"bool": map[string]any{
-							"should": []map[string]any{
-								{
-									"term": map[string]any{
-										"type.keyword": "message_send",
-									},
-								},
-								{
-									"term": map[string]any{
-										"type.keyword": "message_recv",
-									},
-								},
-								{
-									"term": map[string]any{
-										"type.keyword": "message_ack",
-									},
-								},
-							},
-							"minimum_should_match": 1,
-						},
-					},
-					{
-						"term": map[string]any{
-							"message_user_id.keyword": "7143038995084115996",
-						},
-					},
-					{
-						"match": map[string]any{
-							"message_text": "hello",
-						},
-					},
-				},
-			},
-		},
-		Sort: []map[string]any{
-			{
-				"created_at": map[string]any{
-					"order": "desc",
-				},
-			},
-		},
-	}
-	req = &elastic.SearchRequest{
-		Size: 1,
-		Sort: []map[string]any{
-			{
-				"created_at": map[string]any{
-					"order": "desc",
-				},
-			},
-		},
-	}
-
-	resp, err := elastic.Document.Search(context.Background(), Index, req)
+func TestQueryBuilderMatchPhraseOptionsAllowsASlop(t *testing.T) {
+	index := newSampleIndex(t,
+		sampleDocument{id: "exact", fields: map[string]any{"title": "hello world"}},
+		sampleDocument{id: "gapped", fields: map[string]any{"title": "hello big world"}},
+		sampleDocument{id: "far", fields: map[string]any{"title": "hello big wide world"}},
+	)
+	req, err := elastic.NewQueryBuilder().
+		MatchPhraseOptions("title", elastic.MatchPhraseOptions{Query: "hello world", Slop: util.Pointer(1)}).
+		Build()
 	require.NoError(t, err)
-	fmt.Println(resp.Total, len(resp.Hits))
 
-	formatHit := func(hit elastic.SearchHit) {
-		for k, v := range hit.Source {
-			if k == "message_text" {
-				fmt.Println("message_text:", v)
-			}
-		}
-	}
-	for _, hit := range resp.Hits {
-		formatHit(hit)
-	}
-	for len(resp.Hits) > 0 {
-		{
-			lastHit := resp.Hits[len(resp.Hits)-1]
-			req.SearchAfter = []any{lastHit.Source["created_at"]}
-			// when sorting by ID, pass the ID value
-			// when sorting by created_at, pass the created_at value
-
-			resp, err = elastic.Document.Search(context.Background(), Index, req)
-			require.NoError(t, err)
-			for i := range resp.Hits {
-				formatHit(resp.Hits[i])
-			}
-			time.Sleep(1 * time.Second)
-		}
-	}
+	res, err := elastic.Document.Search(context.Background(), index, req)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"exact", "gapped"}, ids(res))
 }
 
-func TestDocumentSearchNormal(t *testing.T) {
-	setupElastic(t)
+func TestQueryBuilderRejectsANegativeSizeOrFrom(t *testing.T) {
+	_, err := elastic.NewQueryBuilder().Size(-1).Build()
+	require.ErrorContains(t, err, "size cannot be negative")
 
-	keyword := "hello"
-	size := 2
-	// plain search
-	req := &elastic.SearchRequest{
-		Query: map[string]any{
-			"bool": map[string]any{
-				"must": []map[string]any{
-					{
-						"match": map[string]any{
-							"message_text": keyword,
-						},
-					},
-				},
-			},
-		},
-		Size: size,
-	}
-
-	// run the search
-
-	result, err := elastic.Document.Search(context.TODO(), Index, req)
-	require.NoError(t, err)
-	// print the search results
-	for _, hit := range result.Hits {
-		fmt.Println(hit.ID)
-	}
+	_, err = elastic.NewQueryBuilder().From(-1).Build()
+	require.ErrorContains(t, err, "from cannot be negative")
 }
 
-func TestDocumentSearchTimeRange(t *testing.T) {
-	setupElastic(t)
-
-	size := 2
-	startTime := time.Now().Add(-24 * 30 * time.Hour)
-	endTime := time.Now()
-
-	req := &elastic.SearchRequest{
-		Query: map[string]any{
-			"bool": map[string]any{
-				"filter": []map[string]any{
-					{
-						"range": map[string]any{
-							"created_at": map[string]any{
-								"gte":    startTime.Format(time.RFC3339),
-								"lte":    endTime.Format(time.RFC3339),
-								"format": "strict_date_optional_time||epoch_millis",
-							},
-						},
-					},
-				},
-			},
-		},
-		Size: size,
-		Sort: []map[string]any{
-			{
-				"created_at": map[string]any{
-					"order": "desc",
-				},
-			},
-		},
-	}
-
-	result, err := elastic.Document.Search(context.TODO(), Index, req)
+// TestQueryBuilderMarshalsWhatWasSet pins the request body: a size of zero
+// is written out, and a request that sets no size and no sort names neither,
+// leaving both to the cluster's defaults.
+func TestQueryBuilderMarshalsWhatWasSet(t *testing.T) {
+	req, err := elastic.NewQueryBuilder().Size(0).Build()
 	require.NoError(t, err)
-	for _, hit := range result.Hits {
-		fmt.Println(hit.ID)
-	}
-
-	query := elastic.NewQueryBuilder().
-		TimeRange("created_at", startTime, endTime).
-		Size(size).
-		Sort("created_at", elastic.Desc)
-	req2, err := query.Build()
+	body, err := json.Marshal(req)
 	require.NoError(t, err)
+	require.JSONEq(t, `{"query":{"match_all":{}},"size":0}`, string(body))
 
-	result2, err := elastic.Document.Search(context.TODO(), Index, req2)
+	req, err = elastic.NewQueryBuilder().Build()
 	require.NoError(t, err)
-	for _, hit := range result2.Hits {
-		fmt.Println(hit.ID)
-	}
+	body, err = json.Marshal(req)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"query":{"match_all":{}}}`, string(body))
+
+	req, err = elastic.NewQueryBuilder().TrackTotalHits().Build()
+	require.NoError(t, err)
+	body, err = json.Marshal(req)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"query":{"match_all":{}},"track_total_hits":true}`, string(body))
 }
 
-func TestDocumentSearchAfter(t *testing.T) {
-	setupElastic(t)
-
-	keyword := "hello"
-	size := 2
-	dateStr := "2024-10-29T10:38:06.085+08:00"
-	date, _ := dateparse.ParseLocal(dateStr)
-	// search_after pagination
-	req := &elastic.SearchRequest{
-		Query: map[string]any{
-			"bool": map[string]any{
-				"must": []map[string]any{
-					{
-						"match": map[string]any{
-							"message_text": keyword,
-						},
-					},
-				},
-			},
-		},
-		Size: size,
-		Sort: []map[string]any{
-			{
-				"created_at": map[string]any{
-					"order": "desc",
-				},
-			},
-		},
-		SearchAfter: []any{date},
+// TestSearchReportsWhetherTheTotalIsExact pins how the total reads past the
+// cluster's counting threshold of ten thousand hits: by default the total is
+// the threshold and the relation says at least, and a request asking for the
+// exact count gets it with the relation saying equal.
+func TestSearchReportsWhetherTheTotalIsExact(t *testing.T) {
+	docs := make([]types.ESDocumenter, 0, 10001)
+	for i := range 10001 {
+		docs = append(docs, sampleDocument{id: strconv.Itoa(i), fields: map[string]any{"seq": i}})
 	}
+	index := newSampleIndex(t, docs...)
 
-	// run the search
-
-	result, err := elastic.Document.Search(context.TODO(), Index, req)
+	req, err := elastic.NewQueryBuilder().Size(0).Build()
 	require.NoError(t, err)
-	for _, hit := range result.Hits {
-		fmt.Println(hit.ID)
-	}
-
-	query := elastic.NewQueryBuilder().
-		Match("message_text", keyword).
-		Sort("created_at", elastic.Desc).
-		SearchAfter(date).
-		Size(size).
-		Source("created_at", "type", "chat_type")
-	req2, err := query.Build()
+	res, err := elastic.Document.Search(context.Background(), index, req)
 	require.NoError(t, err)
+	require.Equal(t, int64(10000), res.Total)
+	require.Equal(t, elastic.TotalRelationGte, res.TotalRelation)
 
-	result2, err := elastic.Document.Search(context.TODO(), Index, req2)
+	req, err = elastic.NewQueryBuilder().Size(0).TrackTotalHits().Build()
 	require.NoError(t, err)
-	for _, hit := range result2.Hits {
-		fmt.Println(hit)
-	}
+	res, err = elastic.Document.Search(context.Background(), index, req)
+	require.NoError(t, err)
+	require.Equal(t, int64(10001), res.Total)
+	require.Equal(t, elastic.TotalRelationEq, res.TotalRelation)
 }
 
-func TestDocumentBoolQueryBuilder(t *testing.T) {
-	userID := "7336820045630406684"
-	peerUserID := "7156029937089069057"
-	{
+// TestQueryBuilderCloneIsIndependent pins that a clone starts with the
+// original's clauses and that clauses added to it leave the original alone.
+func TestQueryBuilderCloneIsIndependent(t *testing.T) {
+	original := elastic.NewQueryBuilder().Term("kind.keyword", "note").Sort("seq", elastic.Asc).Size(5)
+	clone := original.Clone().Term("author.keyword", "a")
 
-		query := elastic.NewQueryBuilder().
-			// base conditions (the and part)
-			Term("chat_type.keyword", "direct").
-			Term("type.keyword", "message_send").
-			// nested or conditions
-			Bool(func(bq *elastic.QueryBuilder) {
-				// first group (message_user_id: A and message_peer_user_id: B)
-				bq.Should(elastic.NewQueryBuilder().Term("message_user_id.keyword", userID).Term("message_peer_user_id.keyword", peerUserID).BuildQuery())
-				// second group (message_user_id: B and message_peer_user_id: A)
-				bq.Should(elastic.NewQueryBuilder().Term("message_user_id.keyword", peerUserID).Term("message_peer_user_id.keyword", userID).BuildQuery())
-				// require at least one of the should conditions to match
-				bq.MinimumShouldMatch(1)
-			}).Size(1000)
-
-		if _, err := query.Build(); err != nil {
-			t.Fatal(err)
-		}
-		fmt.Println(query.String())
-	}
-
-	{
-
-		query := elastic.NewQueryBuilder().
-			Term("chat_type.keyword", "direct").
-			Bool(func(bq *elastic.QueryBuilder) {
-				bq.Should(elastic.NewQueryBuilder().Term("type.keyword", "message_send").BuildQuery())
-				bq.Should(elastic.NewQueryBuilder().Term("type.keyword", "message_recv").BuildQuery())
-				bq.MinimumShouldMatch(1)
-			}).
-			Bool(func(bq *elastic.QueryBuilder) {
-				bq.Should(elastic.NewQueryBuilder().Term("message_user_id.keyword", userID).Term("message_peer_user_id.keyword", peerUserID).BuildQuery())
-				bq.Should(elastic.NewQueryBuilder().Term("message_user_id.keyword", peerUserID).Term("message_peer_user_id.keyword", userID).BuildQuery())
-				bq.MinimumShouldMatch(1)
-			})
-
-		if _, err := query.Build(); err != nil {
-			t.Fatal(err)
-		}
-		fmt.Println(query.String())
-	}
-
-	{
-		query := elastic.NewQueryBuilder().
-			Term("chat_type.keyword", "direct").
-			Bool(func(bq *elastic.QueryBuilder) {
-				bq.Should(elastic.NewQueryBuilder().Term("type.keyword", "message_send").Term("message_user_id.keyword", userID).Term("message_peer_user_id.keyword", peerUserID).BuildQuery())
-				bq.Should(elastic.NewQueryBuilder().Term("type.keyword", "message_recv").Term("message_user_id.keyword", userID).Term("message_peer_user_id.keyword", peerUserID).BuildQuery())
-				bq.MinimumShouldMatch(1)
-			})
-		if _, err := query.Build(); err != nil {
-			t.Fatal(err)
-		}
-		fmt.Println(query.String())
-	}
-}
-
-func TestDocumentSearchAsc(t *testing.T) {
-	setupElastic(t)
-
-	dateStr := "2024-10-29T10:34:35.991+08:00" // message_text: "abcdefg"
-	date, _ := dateparse.ParseAny(dateStr)
-	fmt.Println("date:", date)
-
-	query := elastic.NewQueryBuilder().
-		Size(2).
-		Source("message_text", "created_at").
-		Sort("created_at", elastic.Asc).
-		TermNot("message_text.keyword", "").
-		Term("type.keyword", "message_send").
-		SearchAfter(date)
-
-	res, err := elastic.Document.Search(context.Background(), Index, query.BuildForce())
+	originalReq, err := original.Build()
 	require.NoError(t, err)
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	require.NoError(t, enc.Encode(res))
-}
-
-func TestDocumentSearchDesc(t *testing.T) {
-	setupElastic(t)
-
-	dateStr := "2024-10-29T10:34:35.991+08:00" // message_text: "abcdefg"
-	date, _ := dateparse.ParseAny(dateStr)
-	fmt.Println("date:", date)
-
-	query := elastic.NewQueryBuilder().
-		Size(2).
-		Source("message_text", "created_at").
-		Sort("created_at", elastic.Desc).
-		TermNot("message_text.keyword", "").
-		Term("type.keyword", "message_send").
-		SearchAfter(date)
-
-	res, err := elastic.Document.Search(context.Background(), Index, query.BuildForce())
+	cloneReq, err := clone.Build()
 	require.NoError(t, err)
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	require.NoError(t, enc.Encode(res))
-}
-
-func TestDocumentSearchNext(t *testing.T) {
-	setupElastic(t)
-
-	dateStr := "2024-10-29T10:34:35.991+08:00"
-	date, _ := dateparse.ParseAny(dateStr)
-	fmt.Println("date:", date)
-
-	query := elastic.NewQueryBuilder().
-		Size(2).
-		Source("message_text", "created_at").
-		Sort("created_at", elastic.Desc).
-		TermNot("message_text.keyword", "").
-		Term("type.keyword", "message_send").
-		SearchAfter(date)
-
-	// fmt.Println(query)
-	res, err := elastic.Document.SearchNext(context.Background(), Index, query.BuildForce(), 3)
+	originalBody, err := json.Marshal(originalReq)
 	require.NoError(t, err)
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	require.NoError(t, enc.Encode(res))
-}
-
-func TestDocumentSearchPrev(t *testing.T) {
-	setupElastic(t)
-
-	dateStr := "2024-10-29T10:34:35.991+08:00"
-	date, _ := dateparse.ParseAny(dateStr)
-	fmt.Println("date:", date)
-
-	query := elastic.NewQueryBuilder().
-		Size(2).
-		Source("message_text", "created_at").
-		Sort("created_at", elastic.Desc).
-		TermNot("message_text.keyword", "").
-		Term("type.keyword", "message_send").
-		SearchAfter(date)
-
-	fmt.Println(query)
-	res, err := elastic.Document.SearchPrev(context.Background(), Index, query.BuildForce(), 4)
+	cloneBody, err := json.Marshal(cloneReq)
 	require.NoError(t, err)
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	require.NoError(t, enc.Encode(res))
+	require.JSONEq(t, `{"query":{"bool":{"must":[{"term":{"kind.keyword":"note"}}]}},"sort":[{"seq":{"order":"asc"}}],"size":5}`, string(originalBody))
+	require.JSONEq(t, `{"query":{"bool":{"must":[{"term":{"kind.keyword":"note"}},{"term":{"author.keyword":"a"}}]}},"sort":[{"seq":{"order":"asc"}}],"size":5}`, string(cloneBody))
 }
 
-func TestDocumentQueryBuilderMatchPharseOptions(t *testing.T) {
-	setupElastic(t)
-
-	query := elastic.NewQueryBuilder().
-		Size(2).
-		Source("message_text", "created_at").
-		Sort("created_at", elastic.Desc).
-		TermNot("message_text.keyword", "").
-		Bool(func(qb *elastic.QueryBuilder) {
-			qb.Should(elastic.NewQueryBuilder().Term("type.keyword", "message_send").BuildQuery())
-			qb.Should(elastic.NewQueryBuilder().Term("type.keyword", "message_recv").BuildQuery())
-			qb.MinimumShouldMatch(1)
+func TestQueryBuilderNestsABoolOfShouldClauses(t *testing.T) {
+	req, err := elastic.NewQueryBuilder().
+		Term("kind.keyword", "note").
+		Bool(func(b *elastic.QueryBuilder) {
+			b.Should(elastic.NewQueryBuilder().Term("author.keyword", "a").BuildQuery())
+			b.Should(elastic.NewQueryBuilder().Term("author.keyword", "b").BuildQuery())
+			b.MinimumShouldMatch(1)
 		}).
-		MatchPhraseOptions("message_text", elastic.MatchPhraseOptions{
-			Query: "hello",
-			Slop:  util.Pointer(1),
-		})
-	fmt.Println(query.String())
-	res, err := elastic.Document.Search(context.Background(), Index, query.BuildForce())
+		Build()
 	require.NoError(t, err)
-	_ = res
-	// enc := json.NewEncoder(os.Stdout)
-	// enc.SetIndent("", "  ")
-	// enc.Encode(res)
+	body, err := json.Marshal(req.Query)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"bool":{"must":[
+		{"term":{"kind.keyword":"note"}},
+		{"bool":{"should":[
+			{"bool":{"must":[{"term":{"author.keyword":"a"}}]}},
+			{"bool":{"must":[{"term":{"author.keyword":"b"}}]}}
+		],"minimum_should_match":1}}
+	]}}`, string(body))
 }
 
-func TestDocumentQueryBuilderAggs(t *testing.T) {
-	setupElastic(t)
+// sampleDocument is a document the tests index: its id and its fields.
+type sampleDocument struct {
+	id     string
+	fields map[string]any
+}
 
-	now := time.Now()
-	query := elastic.NewQueryBuilder().
-		Size(0).
-		TimeRange("created_at", now.Add(-24*time.Hour*365), now).
-		TermNot("message_chat_name.keyword", "").
-		AggsTerm("unique_message_chat_name", "message_chat_name.keyword", 1000)
-	query2 := elastic.NewQueryBuilder().
-		Size(0).
-		TimeRange("created_at", now.Add(-24*time.Hour*365), now).
-		TermNot("message_chat_name.keyword", "").
-		AggsTerm("unique_message_chat_name", "message_chat_name.keyword", 1000, "_count", "asc")
-	query3 := elastic.NewQueryBuilder().
-		Size(0).
-		TimeRange("created_at", now.Add(-24*time.Hour*365), now).
-		TermNot("message_user_name.keyword", "").
-		AggsTerm("unique_message_user_name", "message_user_name.keyword", 1000, "_count", "asc")
-	query4 := elastic.NewQueryBuilder().
-		Size(0).
-		TimeRange("created_at", now.Add(-24*time.Hour*365), now).
-		TermNot("message_peer_user_name.keyword", "").
-		AggsTerm("unique_message_peer_user_name", "message_peer_user_name.keyword", 1000, "_count", "asc")
-	query5 := elastic.NewQueryBuilder().
-		Size(0).
-		TermNot("message_chat_name.keyword", "").
-		TermNot("message_user_name.keyword", "").
-		TermNot("message_peer_user_name.keyword", "").
-		AggsTerm("unique_user_name", "message_user_name.keyword", 10000).
-		AggsTerm("unique_peer_user_name", "message_peer_user_name.keyword", 10000)
+func (d sampleDocument) GetID() string            { return d.id }
+func (d sampleDocument) Document() map[string]any { return d.fields }
 
-	fmt.Println(query.String())
-	fmt.Println(query2.String())
-	fmt.Println(query3.String())
-	fmt.Println(query4.String())
-	fmt.Println(query5.String())
-	res, err := elastic.Document.Search(context.Background(), Index, query5.BuildForce())
+// newSampleIndex creates an index named after the test, indexes docs into
+// it, refreshes it so a search sees them at once, and deletes it when the
+// test ends.
+func newSampleIndex(t *testing.T, docs ...types.ESDocumenter) string {
+	t.Helper()
+	name := "sample-" + strings.ToLower(strings.ReplaceAll(t.Name(), "/", "-"))
+	require.NoError(t, elastic.Index.Create(name, &elastic.IndexOption{
+		Settings: map[string]any{"number_of_shards": 1, "number_of_replicas": 0},
+	}))
+	t.Cleanup(func() { require.NoError(t, elastic.Index.Delete(name)) })
+	if len(docs) > 0 {
+		require.NoError(t, elastic.Document.BulkIndex(context.Background(), name, docs...))
+	}
+
+	client, err := elastic.Client()
 	require.NoError(t, err)
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	require.NoError(t, enc.Encode(res))
+	res, err := client.Indices.Refresh(client.Indices.Refresh.WithIndex(name))
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.False(t, res.IsError(), res.String())
+	return name
+}
+
+// ids returns the ids of the hits in their order.
+func ids(res *elastic.SearchResult) []string {
+	out := make([]string, len(res.Hits))
+	for i, hit := range res.Hits {
+		out[i] = hit.ID
+	}
+	return out
 }

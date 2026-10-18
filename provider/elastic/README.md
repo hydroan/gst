@@ -159,11 +159,11 @@ req := &SearchRequest{
 
 ```go
 req := &SearchRequest{
-    Size: 0, // 不需要搜索结果时设为0
+    Size: util.Pointer(0), // 只要聚合、不要命中时设为 0；不设 Size 就按集群默认返回 10 条
     Query: map[string]any{
         "match_all": map[string]any{},
     },
-    "aggs": map[string]any{
+    Aggs: map[string]any{
         "status_count": map[string]any{
             "terms": map[string]any{
                 "field": "status",
@@ -179,6 +179,8 @@ req := &SearchRequest{
 ```
 
 ### 排序：
+
+不设 `Sort` 时按相关度（`_score`）排序，每条命中带 `Score`；只有 `search_after` 必须配 `Sort`，缺了在发请求前就报错。
 
 ```go
 req := &SearchRequest{
@@ -207,8 +209,21 @@ req := &SearchRequest{
     Query: map[string]any{
         "match_all": map[string]any{},
     },
-    From: 0,   // 起始位置
-    Size: 10,  // 每页大小
+    From: 0,                // 起始位置
+    Size: util.Pointer(10), // 每页大小
+}
+```
+
+### 总数：
+
+结果的 `Total` 要和 `TotalRelation` 一起读：`TotalRelationEq` 是准确值；`TotalRelationGte` 表示集群数到一万就停了，实际至少这么多。要准确总数时在请求里打开 `TrackTotalHits`：
+
+```go
+req := &SearchRequest{
+    Query: map[string]any{
+        "match_all": map[string]any{},
+    },
+    TrackTotalHits: true,
 }
 ```
 
@@ -261,7 +276,7 @@ req := &SearchRequest{
         },
     },
     From: 0,
-    Size: 20,
+    Size: util.Pointer(20),
 }
 ```
 

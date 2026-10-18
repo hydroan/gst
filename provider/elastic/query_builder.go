@@ -5,13 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/errors"
 	"github.com/jinzhu/copier"
 )
 
 const (
-	defaultSize       = 10
-	defaultFrom       = 0
 	defaultTimeFormat = "strict_date_optional_time||epoch_millis"
 
 	Asc  Order = "asc"
@@ -22,18 +19,19 @@ type Order string
 
 // QueryBuilder helps build Elasticsearch queries.
 // It supports must, must_not, should, filter clauses,
-// pagination, sorting, field filtering and search_after.
+// pagination, sorting, field filtering, search_after and the total count.
 type QueryBuilder struct {
 	must               []map[string]any
 	mustNot            []map[string]any
 	should             []map[string]any
 	filter             []map[string]any
-	size               int
+	size               *int
 	from               int
 	sort               []map[string]any
 	source             []string
 	searchAfter        []any
 	minimumShouldMatch any
+	trackTotalHits     bool
 
 	aggs map[string]any
 }
@@ -55,12 +53,10 @@ type AggregationOptions struct {
 	Order map[string]string `json:"order,omitempty"`
 }
 
-// NewQueryBuilder creates a new query builder with default size=10 and from=0
+// NewQueryBuilder creates a query builder. Until set, the size, the from and
+// the sort are left to the cluster, see SearchRequest.
 func NewQueryBuilder() *QueryBuilder {
-	return &QueryBuilder{
-		size: defaultSize,
-		from: defaultFrom,
-	}
+	return &QueryBuilder{}
 }
 
 // Bool adds a nested bool query
@@ -262,19 +258,23 @@ func (qb *QueryBuilder) TimeRangeLte(field string, tm time.Time) *QueryBuilder {
 	})
 }
 
-// Size sets the size parameter, must be non-negative
+// Size sets the number of hits to return; zero asks for none, the shape of
+// a request that wants aggregations alone. A negative size fails Build.
 func (qb *QueryBuilder) Size(size int) *QueryBuilder {
-	if size >= 0 {
-		qb.size = size
-	}
+	qb.size = &size
 	return qb
 }
 
-// From sets the from parameter, must be non-negative
+// From sets the offset of the first hit. A negative from fails Build.
 func (qb *QueryBuilder) From(from int) *QueryBuilder {
-	if from >= 0 {
-		qb.from = from
-	}
+	qb.from = from
+	return qb
+}
+
+// TrackTotalHits asks the cluster to count every hit instead of stopping at
+// ten thousand, see SearchResult.TotalRelation.
+func (qb *QueryBuilder) TrackTotalHits() *QueryBuilder {
+	qb.trackTotalHits = true
 	return qb
 }
 
@@ -392,70 +392,56 @@ func (qb *QueryBuilder) AggsSum(name string, field string) *QueryBuilder {
 	})
 }
 
-// Validate checks if the query parameters are valid
+// Validate reports what Build would refuse: a negative size or from, and
+// search_after without a sort or with a from.
 func (qb *QueryBuilder) Validate() error {
-	if qb.size < 0 {
-		return errors.New("size cannot be negative")
-	}
-	if qb.from < 0 {
-		return errors.New("from cannot be negative")
-	}
-
-	// from must be 0 when search_after is used
-	if len(qb.searchAfter) > 0 && qb.from != 0 {
-		return errors.New("from must be 0 when using search_after")
-	}
-
-	return nil
+	return qb.request().validate()
 }
 
-// Build creates a SearchRequest with validation
+// Build creates the SearchRequest, refusing one the cluster would, see
+// Validate.
 func (qb *QueryBuilder) Build() (*SearchRequest, error) {
-	if err := qb.Validate(); err != nil {
+	req := qb.request()
+	if err := req.validate(); err != nil {
 		return nil, err
 	}
+	return req, nil
+}
 
-	if len(qb.must) == 0 && len(qb.mustNot) == 0 &&
-		len(qb.should) == 0 && len(qb.filter) == 0 {
-		return &SearchRequest{
-			Query: map[string]any{
-				"match_all": map[string]any{},
-			},
-			From:        qb.from,
-			Size:        qb.size,
-			Sort:        qb.sort,
-			Source:      qb.source,
-			SearchAfter: qb.searchAfter,
-			Aggs:        qb.aggs,
-		}, nil
-	}
-
-	boolQuery := make(map[string]any)
-	if len(qb.must) > 0 {
-		boolQuery["must"] = qb.must
-	}
-	if len(qb.mustNot) > 0 {
-		boolQuery["must_not"] = qb.mustNot
-	}
-	if len(qb.should) > 0 {
-		boolQuery["should"] = qb.should
-	}
-	if len(qb.should) > 0 && qb.minimumShouldMatch != nil {
-		boolQuery["minimum_should_match"] = qb.minimumShouldMatch
-	}
-	if len(qb.filter) > 0 {
-		boolQuery["filter"] = qb.filter
+// request assembles the search body: a bool query of the clauses added, or
+// match_all when there are none, with the rest of the parameters as set.
+func (qb *QueryBuilder) request() *SearchRequest {
+	query := map[string]any{"match_all": map[string]any{}}
+	if len(qb.must) > 0 || len(qb.mustNot) > 0 || len(qb.should) > 0 || len(qb.filter) > 0 {
+		boolQuery := make(map[string]any)
+		if len(qb.must) > 0 {
+			boolQuery["must"] = qb.must
+		}
+		if len(qb.mustNot) > 0 {
+			boolQuery["must_not"] = qb.mustNot
+		}
+		if len(qb.should) > 0 {
+			boolQuery["should"] = qb.should
+		}
+		if len(qb.should) > 0 && qb.minimumShouldMatch != nil {
+			boolQuery["minimum_should_match"] = qb.minimumShouldMatch
+		}
+		if len(qb.filter) > 0 {
+			boolQuery["filter"] = qb.filter
+		}
+		query = map[string]any{"bool": boolQuery}
 	}
 
 	return &SearchRequest{
-		Query:       map[string]any{"bool": boolQuery},
-		From:        qb.from,
-		Size:        qb.size,
-		Sort:        qb.sort,
-		Source:      qb.source,
-		SearchAfter: qb.searchAfter,
-		Aggs:        qb.aggs,
-	}, nil
+		Query:          query,
+		From:           qb.from,
+		Size:           qb.size,
+		Sort:           qb.sort,
+		Source:         qb.source,
+		SearchAfter:    qb.searchAfter,
+		Aggs:           qb.aggs,
+		TrackTotalHits: qb.trackTotalHits,
+	}
 }
 
 // BuildForce creates a SearchRequest without validation
@@ -473,7 +459,8 @@ func (qb *QueryBuilder) BuildQuery() map[string]any {
 	return req.Query
 }
 
-// Clone creates a deep copy of the QueryBuilder
+// Clone returns a builder with the same clauses; clauses added to it leave
+// the original alone.
 func (qb *QueryBuilder) Clone() *QueryBuilder {
 	clone := new(QueryBuilder)
 	_ = copier.Copy(clone, qb)

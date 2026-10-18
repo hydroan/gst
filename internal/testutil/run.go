@@ -40,6 +40,11 @@ type Server struct {
 	// provider.
 	RocketMQ bool
 
+	// Elasticsearch prepares an elasticsearch container and points the
+	// framework provider at it. Tests reach it through
+	// config.App.Elasticsearch or the provider.
+	Elasticsearch bool
+
 	// Minio prepares a minio bucket and points the framework provider at
 	// it. Tests reach it through config.App.Minio or the provider.
 	Minio bool
@@ -218,6 +223,18 @@ func (s Server) prepare() (release func(), afterMigrate func(), err error) {
 		releases = append(releases, func() {
 			if releaseErr := cleanBroker(); releaseErr != nil {
 				reportReleaseFailure("rocketmq", releaseErr)
+			}
+		})
+	}
+
+	if s.Elasticsearch {
+		cleanCluster, err := testcontainer.SetupElasticsearch()
+		if err != nil {
+			return release, afterMigrate, err
+		}
+		releases = append(releases, func() {
+			if releaseErr := cleanCluster(); releaseErr != nil {
+				reportReleaseFailure("elasticsearch", releaseErr)
 			}
 		})
 	}

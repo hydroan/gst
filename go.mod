@@ -22,7 +22,6 @@ require (
 	github.com/VictoriaMetrics/fastcache v1.13.3
 	github.com/allegro/bigcache/v3 v3.2.0
 	github.com/apache/rocketmq-client-go/v2 v2.1.2
-	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de
 	github.com/arl/statsviz v0.8.1
 	github.com/bufbuild/protocompile v0.14.1
 	github.com/casbin/casbin/v3 v3.11.0
@@ -101,6 +100,7 @@ require (
 	github.com/swaggo/gin-swagger v1.6.1
 	github.com/testcontainers/testcontainers-go v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/clickhouse v0.44.0
+	github.com/testcontainers/testcontainers-go/modules/elasticsearch v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/kafka v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/minio v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/mysql v0.44.0
