@@ -54,7 +54,11 @@ type RocketMQ struct {
 	SecretKey       string   `json:"secret_key" mapstructure:"secret_key" ini:"secret_key" yaml:"secret_key"`
 	Namespace       string   `json:"namespace" mapstructure:"namespace" ini:"namespace" yaml:"namespace"`
 	GroupName       string   `json:"group_name" mapstructure:"group_name" ini:"group_name" yaml:"group_name"`
-	InstanceName    string   `json:"instance_name" mapstructure:"instance_name" ini:"instance_name" yaml:"instance_name"`
+	// InstanceName names the process's clients to the broker. Empty leaves it
+	// to the client library, which names every process apart; a name set here
+	// has to differ between processes consuming in one group on one machine,
+	// or the broker counts them as one consumer.
+	InstanceName string `json:"instance_name" mapstructure:"instance_name" ini:"instance_name" yaml:"instance_name"`
 
 	NumRetries        int           `json:"num_retries" mapstructure:"num_retries" ini:"num_retries" yaml:"num_retries"`
 	SendMsgTimeout    time.Duration `json:"send_msg_timeout" mapstructure:"send_msg_timeout" ini:"send_msg_timeout" yaml:"send_msg_timeout"`
@@ -80,7 +84,7 @@ func (*RocketMQ) setDefaults(v *viper.Viper) {
 	v.SetDefault("rocketmq.secret_key", "")
 	v.SetDefault("rocketmq.namespace", "")
 	v.SetDefault("rocketmq.group_name", "DEFAULT_PRODUCER")
-	v.SetDefault("rocketmq.instance_name", "DEFAULT_INSTANCE")
+	v.SetDefault("rocketmq.instance_name", "")
 
 	v.SetDefault("rocketmq.num_retries", 2)
 	v.SetDefault("rocketmq.send_msg_timeout", 3*time.Second)
