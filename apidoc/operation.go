@@ -10,7 +10,7 @@ import (
 )
 
 // Operation describes one API operation when the OpenAPI document is built.
-// It is the input of the summary and description generators.
+// It is the input of DefaultSummary and DefaultDescription.
 type Operation struct {
 	// Method is the HTTP request method, eg. "POST".
 	Method string
@@ -29,24 +29,15 @@ type Operation struct {
 }
 
 // OperationDoc holds an explicit summary and description for one operation.
-// Registered entries take precedence over the generators, mirroring how an
-// explicitly filled huma.Operation beats huma's generated defaults.
+// Registered entries take precedence over DefaultSummary and
+// DefaultDescription, mirroring how an explicitly filled huma.Operation beats
+// huma's generated defaults.
 type OperationDoc struct {
 	// Summary overrides the operation summary when non-empty.
 	Summary string
 	// Description overrides the operation description when non-empty.
 	Description string
 }
-
-// GenerateSummary and GenerateDescription build the operation summary and
-// description when no explicit OperationDoc is registered. They default to
-// DefaultSummary and DefaultDescription; applications may assign their own
-// implementation during program initialization (before routes are
-// registered), eg. to compose summaries in another language.
-var (
-	GenerateSummary     = DefaultSummary
-	GenerateDescription = DefaultDescription
-)
 
 var (
 	operationMu       sync.RWMutex

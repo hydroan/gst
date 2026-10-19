@@ -50,9 +50,9 @@ func tags(path string, _ consts.Phase, typ reflect.Type) []string {
 }
 
 // operationDocInput assembles the apidoc.Operation describing one route
-// operation for the summary/description generators. customTypes reports
-// whether the operation declares its own request/response types instead of
-// reusing the model (see apidoc.Operation.CustomTypes).
+// operation for apidoc.DefaultSummary and apidoc.DefaultDescription.
+// customTypes reports whether the operation declares its own request/response
+// types instead of reusing the model (see apidoc.Operation.CustomTypes).
 func operationDocInput(path string, phase consts.Phase, typ reflect.Type, customTypes bool) apidoc.Operation {
 	elem := typ
 	for elem.Kind() == reflect.Pointer || elem.Kind() == reflect.Slice {
@@ -69,29 +69,23 @@ func operationDocInput(path string, phase consts.Phase, typ reflect.Type, custom
 }
 
 // summary returns the operation summary: an explicitly registered
-// apidoc.OperationDoc wins, otherwise the (replaceable) apidoc.GenerateSummary
-// builds it from the phase, path and model doc comment.
+// apidoc.OperationDoc wins, otherwise apidoc.DefaultSummary builds it from the
+// phase, path and model doc comment.
 func summary(path string, phase consts.Phase, typ reflect.Type, customTypes bool) string {
 	op := operationDocInput(path, phase, typ, customTypes)
 	if doc, ok := apidoc.LookupOperation(op.Method, op.Path); ok && doc.Summary != "" {
 		return doc.Summary
 	}
-	if generate := apidoc.GenerateSummary; generate != nil {
-		return generate(op)
-	}
 	return apidoc.DefaultSummary(op)
 }
 
 // description returns the operation description: an explicitly registered
-// apidoc.OperationDoc wins, otherwise the (replaceable)
-// apidoc.GenerateDescription builds it from the model doc comment.
+// apidoc.OperationDoc wins, otherwise apidoc.DefaultDescription builds it from
+// the model doc comment.
 func description(path string, phase consts.Phase, typ reflect.Type, customTypes bool) string {
 	op := operationDocInput(path, phase, typ, customTypes)
 	if doc, ok := apidoc.LookupOperation(op.Method, op.Path); ok && doc.Description != "" {
 		return doc.Description
-	}
-	if generate := apidoc.GenerateDescription; generate != nil {
-		return generate(op)
 	}
 	return apidoc.DefaultDescription(op)
 }
