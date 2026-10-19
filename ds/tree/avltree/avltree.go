@@ -12,7 +12,7 @@ import (
 // It supports keys of any comparable type and values of any type.
 // The tree uses a custom comparison function to maintain order.
 type Tree[K comparable, V any] struct {
-	root *Node[K, V]
+	root *node[K, V]
 	cmp  func(K, K) int
 	size int
 
@@ -104,11 +104,11 @@ func (t *Tree[K, V]) Put(key K, val V) {
 // height changed.
 //
 // references: https://github.com/emirpasic/gods/blob/8323d02ee3ca1499478f9ccd7a299fb1c5005780/trees/avltree/avltree.go#L225
-func (t *Tree[K, V]) put(key K, value V, p *Node[K, V], qp **Node[K, V]) bool {
+func (t *Tree[K, V]) put(key K, value V, p *node[K, V], qp **node[K, V]) bool {
 	q := *qp
 	if q == nil {
 		t.size++
-		*qp = &Node[K, V]{Key: key, Value: value, Parent: p}
+		*qp = &node[K, V]{Key: key, Value: value, Parent: p}
 		return true
 	}
 
@@ -135,7 +135,7 @@ func (t *Tree[K, V]) put(key K, value V, p *Node[K, V], qp **Node[K, V]) bool {
 // rebalancePut will rebalance after "Put".
 //
 // references: https://github.com/emirpasic/gods/blob/8323d02ee3ca1499478f9ccd7a299fb1c5005780/trees/avltree/avltree.go#L308
-func rebalancePut[K comparable, V any](c int, t **Node[K, V]) bool {
+func rebalancePut[K comparable, V any](c int, t **node[K, V]) bool {
 	s := *t
 	if s.b == 0 {
 		s.b = c
@@ -170,7 +170,7 @@ func (t *Tree[K, V]) Get(key K) (v V, found bool) {
 	return v, false
 }
 
-func (t *Tree[K, V]) lookup(key K) (*Node[K, V], bool) {
+func (t *Tree[K, V]) lookup(key K) (*node[K, V], bool) {
 	n := t.root
 	for n != nil {
 		res := t.cmp(n.Key, key)
@@ -207,7 +207,7 @@ func (t *Tree[K, V]) Delete(key K) (V, bool) {
 // changed.
 //
 // references: https://github.com/emirpasic/gods/blob/8323d02ee3ca1499478f9ccd7a299fb1c5005780/trees/avltree/avltree.go#L254
-func (t *Tree[K, V]) delete(key K, qp **Node[K, V], removed *V, found *bool) bool {
+func (t *Tree[K, V]) delete(key K, qp **node[K, V], removed *V, found *bool) bool {
 	q := *qp
 	if q == nil {
 		return false
@@ -247,7 +247,7 @@ func (t *Tree[K, V]) delete(key K, qp **Node[K, V], removed *V, found *bool) boo
 // removeMin will remove the minimum node.
 //
 // references: https://github.com/emirpasic/gods/blob/8323d02ee3ca1499478f9ccd7a299fb1c5005780/trees/avltree/avltree.go#L290
-func removeMin[K comparable, V any](qp **Node[K, V], minKey *K, minVal *V) bool {
+func removeMin[K comparable, V any](qp **node[K, V], minKey *K, minVal *V) bool {
 	q := *qp
 	if q.Children[0] == nil {
 		*minKey = q.Key
@@ -268,7 +268,7 @@ func removeMin[K comparable, V any](qp **Node[K, V], minKey *K, minVal *V) bool 
 // rebalanceDelete will rebalance after "Delete".
 //
 // references: https://github.com/emirpasic/gods/blob/8323d02ee3ca1499478f9ccd7a299fb1c5005780/trees/avltree/avltree.go#L329
-func rebalanceDelete[K comparable, V any](c int, t **Node[K, V]) bool {
+func rebalanceDelete[K comparable, V any](c int, t **node[K, V]) bool {
 	s := *t
 	if s.b == 0 {
 		s.b = c
@@ -328,7 +328,7 @@ func (t *Tree[K, V]) Height() int {
 	return height(t.root)
 }
 
-func height[K comparable, V any](n *Node[K, V]) int {
+func height[K comparable, V any](n *node[K, V]) int {
 	if n == nil {
 		return 0
 	}
@@ -359,8 +359,8 @@ func (t *Tree[K, V]) Keys() []K {
 	}
 
 	keys := make([]K, 0, t.size)
-	var inorder func(n *Node[K, V])
-	inorder = func(n *Node[K, V]) {
+	var inorder func(n *node[K, V])
+	inorder = func(n *node[K, V]) {
 		if n == nil {
 			return
 		}
@@ -380,8 +380,8 @@ func (t *Tree[K, V]) Values() []V {
 	}
 
 	values := make([]V, 0, t.size)
-	var inorder func(n *Node[K, V])
-	inorder = func(n *Node[K, V]) {
+	var inorder func(n *node[K, V])
+	inorder = func(n *node[K, V]) {
 		if n == nil {
 			return
 		}
@@ -444,7 +444,7 @@ func (t *Tree[K, V]) Floor(key K) (K, V, bool) {
 		return k, v, false
 	}
 
-	var lastLE *Node[K, V] // last less or equal node
+	var lastLE *node[K, V] // last less or equal node
 	node := t.root
 
 	for node != nil {
@@ -483,7 +483,7 @@ func (t *Tree[K, V]) Ceiling(key K) (K, V, bool) {
 		return k, v, false
 	}
 
-	var firstGE *Node[K, V] // first greater or equal node
+	var firstGE *node[K, V] // first greater or equal node
 	node := t.root
 
 	for node != nil {
@@ -509,17 +509,17 @@ func (t *Tree[K, V]) Ceiling(key K) (K, V, bool) {
 
 // // PreorderChan returns a channel that emits tree nodes in preorder traversal order.
 // // The traversal starts from the root and follows: node → left subtree → right subtree
-// func (t *Tree[K, V]) PreorderChan() <-chan *Node[K, V] {
+// func (t *Tree[K, V]) PreorderChan() <-chan *node[K, V] {
 // 	if t.safe {
 // 		t.mu.RLock()
 // 		defer t.mu.RUnlock()
 // 	}
 //
-// 	ch := make(chan *Node[K, V])
+// 	ch := make(chan *node[K, V])
 // 	go func() {
 // 		defer close(ch)
-// 		var traverse func(*Node[K, V])
-// 		traverse = func(n *Node[K, V]) {
+// 		var traverse func(*node[K, V])
+// 		traverse = func(n *node[K, V]) {
 // 			if n == nil {
 // 				return
 // 			}
@@ -546,8 +546,8 @@ func (t *Tree[K, V]) PreOrder(fn func(key K, value V) bool) {
 		return
 	}
 
-	var preorder func(n *Node[K, V]) bool
-	preorder = func(n *Node[K, V]) bool {
+	var preorder func(n *node[K, V]) bool
+	preorder = func(n *node[K, V]) bool {
 		if n == nil {
 			return true
 		}
@@ -564,17 +564,17 @@ func (t *Tree[K, V]) PreOrder(fn func(key K, value V) bool) {
 
 // // InorderChan returns a channel that emits tree nodes in inorder traversal order.
 // // The traversal starts from the root and follows: left subtree → node → right subtree
-// func (t *Tree[K, V]) InorderChan() <-chan *Node[K, V] {
+// func (t *Tree[K, V]) InorderChan() <-chan *node[K, V] {
 // 	if t.safe {
 // 		t.mu.RLock()
 // 		defer t.mu.RUnlock()
 // 	}
 //
-// 	ch := make(chan *Node[K, V])
+// 	ch := make(chan *node[K, V])
 // 	go func() {
 // 		defer close(ch)
-// 		var traverse func(*Node[K, V])
-// 		traverse = func(n *Node[K, V]) {
+// 		var traverse func(*node[K, V])
+// 		traverse = func(n *node[K, V]) {
 // 			if n == nil {
 // 				return
 // 			}
@@ -601,8 +601,8 @@ func (t *Tree[K, V]) InOrder(fn func(key K, value V) bool) {
 		return
 	}
 
-	var inorder func(n *Node[K, V]) bool
-	inorder = func(n *Node[K, V]) bool {
+	var inorder func(n *node[K, V]) bool
+	inorder = func(n *node[K, V]) bool {
 		if n == nil {
 			return true
 		}
@@ -619,17 +619,17 @@ func (t *Tree[K, V]) InOrder(fn func(key K, value V) bool) {
 
 // // PostorderChan returns a channel that emits tree nodes in postorder traversal order.
 // // The traversal starts from the root and follows: left subtree → right subtree → node
-// func (t *Tree[K, V]) PostorderChan() <-chan *Node[K, V] {
+// func (t *Tree[K, V]) PostorderChan() <-chan *node[K, V] {
 // 	if t.safe {
 // 		t.mu.RLock()
 // 		defer t.mu.RUnlock()
 // 	}
 //
-// 	ch := make(chan *Node[K, V])
+// 	ch := make(chan *node[K, V])
 // 	go func() {
 // 		defer close(ch)
-// 		var traverse func(*Node[K, V])
-// 		traverse = func(n *Node[K, V]) {
+// 		var traverse func(*node[K, V])
+// 		traverse = func(n *node[K, V]) {
 // 			if n == nil {
 // 				return
 // 			}
@@ -656,8 +656,8 @@ func (t *Tree[K, V]) PostOrder(fn func(key K, value V) bool) {
 		return
 	}
 
-	var postorder func(n *Node[K, V]) bool
-	postorder = func(n *Node[K, V]) bool {
+	var postorder func(n *node[K, V]) bool
+	postorder = func(n *node[K, V]) bool {
 		if n == nil {
 			return true
 		}
@@ -673,20 +673,20 @@ func (t *Tree[K, V]) PostOrder(fn func(key K, value V) bool) {
 }
 
 // // LevelOrderChan returns a channel that emits tree nodes in levelorder traversal order.
-// func (t *Tree[K, V]) LevelOrderChan() <-chan *Node[K, V] {
+// func (t *Tree[K, V]) LevelOrderChan() <-chan *node[K, V] {
 // 	if t.safe {
 // 		t.mu.RLock()
 // 		defer t.mu.RUnlock()
 // 	}
 //
-// 	ch := make(chan *Node[K, V])
+// 	ch := make(chan *node[K, V])
 // 	go func() {
 // 		defer close(ch)
 //
 // 		if t.root == nil {
 // 			return
 // 		}
-// 		queue := []*Node[K, V]{t.root}
+// 		queue := []*node[K, V]{t.root}
 // 		for len(queue) > 0 {
 // 			node := queue[0]
 // 			queue = queue[1:]
@@ -716,7 +716,7 @@ func (t *Tree[K, V]) LevelOrder(fn func(key K, value V) bool) {
 		return
 	}
 
-	queue := []*Node[K, V]{t.root}
+	queue := []*node[K, V]{t.root}
 	for len(queue) > 0 {
 		node := queue[0]
 		queue = queue[1:]
@@ -752,7 +752,7 @@ func (t *Tree[K, V]) String() string {
 	return sb.String()
 }
 
-func (t *Tree[K, V]) output(node *Node[K, V], prefix string, isTail bool, sb *strings.Builder, nodeFormatter func(K, V) string) {
+func (t *Tree[K, V]) output(node *node[K, V], prefix string, isTail bool, sb *strings.Builder, nodeFormatter func(K, V) string) {
 	if node.Children[1] != nil {
 		newPrefix := prefix
 		if isTail {
@@ -784,7 +784,7 @@ func (t *Tree[K, V]) output(node *Node[K, V], prefix string, isTail bool, sb *st
 	}
 }
 
-func (t *Tree[K, V]) bottom(pos int) *Node[K, V] {
+func (t *Tree[K, V]) bottom(pos int) *node[K, V] {
 	if t.root == nil {
 		return nil
 	}
@@ -798,7 +798,7 @@ func (t *Tree[K, V]) bottom(pos int) *Node[K, V] {
 // singleRotate for LL or RR.
 //
 // references: https://github.com/emirpasic/gods/blob/8323d02ee3ca1499478f9ccd7a299fb1c5005780/trees/avltree/avltree.go#L358
-func singleRotate[K comparable, V any](c int, s *Node[K, V]) *Node[K, V] {
+func singleRotate[K comparable, V any](c int, s *node[K, V]) *node[K, V] {
 	s.b = 0
 	s = rotate(c, s)
 	s.b = 0
@@ -808,7 +808,7 @@ func singleRotate[K comparable, V any](c int, s *Node[K, V]) *Node[K, V] {
 // doubleRotate for LR or RL.
 //
 // references: https://github.com/emirpasic/gods/blob/8323d02ee3ca1499478f9ccd7a299fb1c5005780/trees/avltree/avltree.go#L365
-func doubleRotate[K comparable, V any](c int, s *Node[K, V]) *Node[K, V] {
+func doubleRotate[K comparable, V any](c int, s *node[K, V]) *node[K, V] {
 	a := (c + 1) / 2
 	r := s.Children[a]
 	s.Children[a] = rotate(-c, s.Children[a])
@@ -842,7 +842,7 @@ func doubleRotate[K comparable, V any](c int, s *Node[K, V]) *Node[K, V] {
 //	c = 1  -> a = 1, a^1 = 0: the right child rises and s becomes its left child
 //
 // references: https://github.com/emirpasic/gods/blob/8323d02ee3ca1499478f9ccd7a299fb1c5005780/trees/avltree/avltree.go#L387
-func rotate[K comparable, V any](c int, s *Node[K, V]) *Node[K, V] {
+func rotate[K comparable, V any](c int, s *node[K, V]) *node[K, V] {
 	a := (c + 1) / 2
 	r := s.Children[a]
 	s.Children[a] = r.Children[a^1]

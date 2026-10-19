@@ -15,14 +15,14 @@ const (
 	headMark = "╭── "
 )
 
-type Node[K comparable, V any] struct {
+type node[K comparable, V any] struct {
 	Key      K
 	Value    V
-	Parent   *Node[K, V]
-	Children [2]*Node[K, V]
+	Parent   *node[K, V]
+	Children [2]*node[K, V]
 }
 
-func (n *Node[K, V]) String() string {
+func (n *node[K, V]) String() string {
 	return fmt.Sprintf("%v", n.Key)
 }
 
@@ -30,7 +30,7 @@ func (n *Node[K, V]) String() string {
 // It supports keys of any comparable type and values of any type.
 // The tree uses a custom comparison function to maintain order.
 type Tree[K comparable, V any] struct {
-	root *Node[K, V]
+	root *node[K, V]
 	cmp  func(K, K) int
 	size int
 
@@ -118,12 +118,12 @@ func (t *Tree[K, V]) Put(key K, val V) {
 
 func (t *Tree[K, V]) put(key K, val V) {
 	if t.root == nil {
-		t.root = &Node[K, V]{Key: key, Value: val, Children: [2]*Node[K, V]{}}
+		t.root = &node[K, V]{Key: key, Value: val, Children: [2]*node[K, V]{}}
 		t.size++
 		return
 	}
 	curr := t.root
-	var parent *Node[K, V]
+	var parent *node[K, V]
 	var isRight bool
 	for curr != nil {
 		parent = curr
@@ -141,7 +141,7 @@ func (t *Tree[K, V]) put(key K, val V) {
 			curr = curr.Children[1]
 		}
 	}
-	newNode := &Node[K, V]{Key: key, Value: val, Parent: parent, Children: [2]*Node[K, V]{}}
+	newNode := &node[K, V]{Key: key, Value: val, Parent: parent, Children: [2]*node[K, V]{}}
 	if isRight {
 		parent.Children[1] = newNode
 	} else {
@@ -296,8 +296,8 @@ func (t *Tree[K, V]) Keys() []K {
 	}
 
 	keys := make([]K, 0, t.size)
-	var inorder func(n *Node[K, V])
-	inorder = func(n *Node[K, V]) {
+	var inorder func(n *node[K, V])
+	inorder = func(n *node[K, V]) {
 		if n == nil {
 			return
 		}
@@ -319,8 +319,8 @@ func (t *Tree[K, V]) Values() []V {
 	}
 
 	values := make([]V, 0, t.size)
-	var inorder func(n *Node[K, V])
-	inorder = func(n *Node[K, V]) {
+	var inorder func(n *node[K, V])
+	inorder = func(n *node[K, V]) {
 		if n == nil {
 			return
 		}
@@ -399,7 +399,7 @@ func (t *Tree[K, V]) Floor(key K) (K, V, bool) {
 		return k, v, false
 	}
 
-	var lastLE *Node[K, V] // last less or equal node
+	var lastLE *node[K, V] // last less or equal node
 	node := t.root
 
 	for node != nil {
@@ -442,7 +442,7 @@ func (t *Tree[K, V]) Ceiling(key K) (K, V, bool) {
 		return k, v, false
 	}
 
-	var firstGE *Node[K, V] // first greater or equal node
+	var firstGE *node[K, V] // first greater or equal node
 	node := t.root
 
 	for node != nil {
@@ -485,8 +485,8 @@ func (t *Tree[K, V]) PreOrder(fn func(key K, value V) bool) {
 		return
 	}
 
-	var preorder func(n *Node[K, V]) bool
-	preorder = func(n *Node[K, V]) bool {
+	var preorder func(n *node[K, V]) bool
+	preorder = func(n *node[K, V]) bool {
 		if n == nil {
 			return true
 		}
@@ -523,8 +523,8 @@ func (t *Tree[K, V]) InOrder(fn func(key K, value V) bool) {
 		return
 	}
 
-	var inorder func(n *Node[K, V]) bool
-	inorder = func(n *Node[K, V]) bool {
+	var inorder func(n *node[K, V]) bool
+	inorder = func(n *node[K, V]) bool {
 		if n == nil {
 			return true
 		}
@@ -559,8 +559,8 @@ func (t *Tree[K, V]) PostOrder(fn func(key K, value V) bool) {
 		return
 	}
 
-	var postorder func(n *Node[K, V]) bool
-	postorder = func(n *Node[K, V]) bool {
+	var postorder func(n *node[K, V]) bool
+	postorder = func(n *node[K, V]) bool {
 		if n == nil {
 			return true
 		}
@@ -596,7 +596,7 @@ func (t *Tree[K, V]) LevelOrder(fn func(key K, value V) bool) {
 		return
 	}
 
-	queue := []*Node[K, V]{t.root}
+	queue := []*node[K, V]{t.root}
 	for len(queue) > 0 {
 		node := queue[0]
 		queue = queue[1:]
@@ -632,7 +632,7 @@ func (t *Tree[K, V]) String() string {
 	return sb.String()
 }
 
-func output[K comparable, V any](node *Node[K, V], prefix string, isTail bool, sb *strings.Builder, nodeFormatter func(K, V) string) {
+func output[K comparable, V any](node *node[K, V], prefix string, isTail bool, sb *strings.Builder, nodeFormatter func(K, V) string) {
 	if node.Children[1] != nil {
 		newPrefix := prefix
 		if isTail {
@@ -664,7 +664,7 @@ func output[K comparable, V any](node *Node[K, V], prefix string, isTail bool, s
 	}
 }
 
-func (t *Tree[K, V]) splay(x *Node[K, V]) {
+func (t *Tree[K, V]) splay(x *node[K, V]) {
 	for x.Parent != nil {
 		p := x.Parent
 		g := p.Parent

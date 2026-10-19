@@ -8,24 +8,6 @@ import (
 	"github.com/hydroan/gst/ds/util"
 )
 
-func ExampleMax() {
-	fmt.Println(util.Max(7, 3))
-	fmt.Println(util.Max(2*time.Second, 3*time.Second).Milliseconds())
-
-	// Output:
-	// 7
-	// 3000
-}
-
-func ExampleMin() {
-	fmt.Println(util.Min(7, 3))
-	fmt.Println(util.Min(2*time.Second, 3*time.Second).Milliseconds())
-
-	// Output:
-	// 3
-	// 2000
-}
-
 func ExampleClamp() {
 	fmt.Println(util.Clamp(500, 400, 600))
 	fmt.Println(util.Clamp(200, 400, 600))

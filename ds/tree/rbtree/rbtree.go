@@ -12,7 +12,7 @@ import (
 // It supports keys of any comparable type and values of any type.
 // The tree uses a custom comparison function to maintain order.
 type Tree[K comparable, V any] struct {
-	root *Node[K, V]
+	root *node[K, V]
 	size int
 	cmp  func(K, K) int
 
@@ -102,13 +102,13 @@ func (t *Tree[K, V]) Put(key K, val V) {
 
 func (t *Tree[K, V]) put(key K, val V) {
 	if t.root == nil {
-		t.root = &Node[K, V]{Key: key, Value: val, color: black}
+		t.root = &node[K, V]{Key: key, Value: val, color: black}
 		t.size++
 		return
 	}
 
 	curr := t.root
-	var newNode *Node[K, V]
+	var newNode *node[K, V]
 	for {
 		res := t.cmp(curr.Key, key)
 		switch {
@@ -117,7 +117,7 @@ func (t *Tree[K, V]) put(key K, val V) {
 			return
 		case res > 0:
 			if curr.Left == nil {
-				newNode = &Node[K, V]{Key: key, Value: val, Parent: curr, color: red}
+				newNode = &node[K, V]{Key: key, Value: val, Parent: curr, color: red}
 				curr.Left = newNode
 				t.size++
 				t.insertCase1(newNode)
@@ -126,7 +126,7 @@ func (t *Tree[K, V]) put(key K, val V) {
 			curr = curr.Left
 		case res < 0:
 			if curr.Right == nil {
-				newNode = &Node[K, V]{Key: key, Value: val, Parent: curr, color: red}
+				newNode = &node[K, V]{Key: key, Value: val, Parent: curr, color: red}
 				curr.Right = newNode
 				t.size++
 				t.insertCase1(newNode)
@@ -158,7 +158,7 @@ func (t *Tree[K, V]) Delete(key K) (V, bool) {
 		defer t.mu.Unlock()
 	}
 
-	var child *Node[K, V]
+	var child *node[K, V]
 	n := t.lookup(key)
 	if n == nil {
 		var v V
@@ -229,8 +229,8 @@ func (t *Tree[K, V]) Keys() []K {
 	}
 
 	keys := make([]K, 0, t.size)
-	var inorder func(n *Node[K, V])
-	inorder = func(n *Node[K, V]) {
+	var inorder func(n *node[K, V])
+	inorder = func(n *node[K, V]) {
 		if n == nil {
 			return
 		}
@@ -250,8 +250,8 @@ func (t *Tree[K, V]) Values() []V {
 	}
 
 	values := make([]V, 0, t.size)
-	var inorder func(n *Node[K, V])
-	inorder = func(n *Node[K, V]) {
+	var inorder func(n *node[K, V])
+	inorder = func(n *node[K, V]) {
 		if n == nil {
 			return
 		}
@@ -317,7 +317,7 @@ func (t *Tree[K, V]) Floor(key K) (K, V, bool) {
 		return k, v, false
 	}
 	n := t.root
-	var floor *Node[K, V]
+	var floor *node[K, V]
 	for n != nil {
 		res := t.cmp(n.Key, key)
 		switch {
@@ -354,7 +354,7 @@ func (t *Tree[K, V]) Ceiling(key K) (K, V, bool) {
 		return k, v, false
 	}
 	n := t.root
-	var ceiling *Node[K, V]
+	var ceiling *node[K, V]
 	for n != nil {
 		res := t.cmp(n.Key, key)
 		switch {
@@ -379,20 +379,20 @@ func (t *Tree[K, V]) Ceiling(key K) (K, V, bool) {
 
 // // PreorderChan returns a channel that emits tree nodes in preorder traversal order.
 // // The traversal starts from the root and follows: node → left subtree → right subtree.
-// func (t *Tree[K, V]) PreorderChan() <-chan *Node[K, V] {
+// func (t *Tree[K, V]) PreorderChan() <-chan *node[K, V] {
 // 	if t.safe {
 // 		t.mu.RLock()
 // 		defer t.mu.RUnlock()
 // 	}
 //
-// 	ch := make(chan *Node[K, V])
+// 	ch := make(chan *node[K, V])
 // 	go func() {
 // 		defer close(ch)
 // 		if t.root == nil {
 // 			return
 // 		}
-// 		var traverse func(*Node[K, V])
-// 		traverse = func(n *Node[K, V]) {
+// 		var traverse func(*node[K, V])
+// 		traverse = func(n *node[K, V]) {
 // 			if n == nil {
 // 				return
 // 			}
@@ -419,8 +419,8 @@ func (t *Tree[K, V]) PreOrder(fn func(K, V) bool) {
 		return
 	}
 
-	var preorder func(n *Node[K, V]) bool
-	preorder = func(n *Node[K, V]) bool {
+	var preorder func(n *node[K, V]) bool
+	preorder = func(n *node[K, V]) bool {
 		if n == nil {
 			return true
 		}
@@ -438,20 +438,20 @@ func (t *Tree[K, V]) PreOrder(fn func(K, V) bool) {
 // // InorderChan returns a channel that emits tree nodes in inorder traversal order.
 // // The traversal follows: left subtree → node → right subtree,
 // // producing nodes in sorted order for a binary search tree.
-// func (t *Tree[K, V]) InorderChan() <-chan *Node[K, V] {
+// func (t *Tree[K, V]) InorderChan() <-chan *node[K, V] {
 // 	if t.safe {
 // 		t.mu.RLock()
 // 		defer t.mu.RUnlock()
 // 	}
 //
-// 	ch := make(chan *Node[K, V])
+// 	ch := make(chan *node[K, V])
 // 	go func() {
 // 		defer close(ch)
 // 		if t.root == nil {
 // 			return
 // 		}
-// 		var traverse func(*Node[K, V])
-// 		traverse = func(n *Node[K, V]) {
+// 		var traverse func(*node[K, V])
+// 		traverse = func(n *node[K, V]) {
 // 			if n == nil {
 // 				return
 // 			}
@@ -478,8 +478,8 @@ func (t *Tree[K, V]) InOrder(fn func(K, V) bool) {
 		return
 	}
 
-	var inorder func(n *Node[K, V]) bool
-	inorder = func(n *Node[K, V]) bool {
+	var inorder func(n *node[K, V]) bool
+	inorder = func(n *node[K, V]) bool {
 		if n == nil {
 			return true
 		}
@@ -496,20 +496,20 @@ func (t *Tree[K, V]) InOrder(fn func(K, V) bool) {
 
 // // PostorderChan returns a channel that emits tree nodes in postorder traversal order.
 // // The traversal follows: left subtree → right subtree → node,
-// func (t *Tree[K, V]) PostorderChan() <-chan *Node[K, V] {
+// func (t *Tree[K, V]) PostorderChan() <-chan *node[K, V] {
 // 	if t.safe {
 // 		t.mu.RLock()
 // 		defer t.mu.RUnlock()
 // 	}
 //
-// 	ch := make(chan *Node[K, V])
+// 	ch := make(chan *node[K, V])
 // 	go func() {
 // 		defer close(ch)
 // 		if t.root == nil {
 // 			return
 // 		}
-// 		var traverse func(*Node[K, V])
-// 		traverse = func(n *Node[K, V]) {
+// 		var traverse func(*node[K, V])
+// 		traverse = func(n *node[K, V]) {
 // 			if n == nil {
 // 				return
 // 			}
@@ -536,8 +536,8 @@ func (t *Tree[K, V]) PostOrder(fn func(K, V) bool) {
 		return
 	}
 
-	var postorder func(n *Node[K, V]) bool
-	postorder = func(n *Node[K, V]) bool {
+	var postorder func(n *node[K, V]) bool
+	postorder = func(n *node[K, V]) bool {
 		if n == nil {
 			return true
 		}
@@ -554,19 +554,19 @@ func (t *Tree[K, V]) PostOrder(fn func(K, V) bool) {
 
 // // LevelOrderChan returns a channel that emits tree nodes in level-order traversal order.
 // // The traversal visits nodes level by level from left to right, starting from the root.
-// func (t *Tree[K, V]) LevelOrderChan() <-chan *Node[K, V] {
+// func (t *Tree[K, V]) LevelOrderChan() <-chan *node[K, V] {
 // 	if t.safe {
 // 		t.mu.RLock()
 // 		defer t.mu.RUnlock()
 // 	}
 //
-// 	ch := make(chan *Node[K, V])
+// 	ch := make(chan *node[K, V])
 // 	go func() {
 // 		defer close(ch)
 // 		if t.root == nil {
 // 			return
 // 		}
-// 		queue := []*Node[K, V]{t.root}
+// 		queue := []*node[K, V]{t.root}
 // 		for len(queue) > 0 {
 // 			n := queue[0]
 // 			queue = queue[1:]
@@ -595,7 +595,7 @@ func (t *Tree[K, V]) LevelOrder(fn func(K, V) bool) {
 		return
 	}
 
-	queue := []*Node[K, V]{t.root}
+	queue := []*node[K, V]{t.root}
 	for len(queue) > 0 {
 		node := queue[0]
 		queue = queue[1:]
@@ -620,7 +620,7 @@ func (t *Tree[K, V]) BlackCount() int {
 	return blackCount(t.root)
 }
 
-func blackCount[K comparable, V any](n *Node[K, V]) int {
+func blackCount[K comparable, V any](n *node[K, V]) int {
 	if n == nil {
 		return 0
 	}
@@ -640,7 +640,7 @@ func (t *Tree[K, V]) RedCount() int {
 	return redCount(t.root)
 }
 
-func redCount[K comparable, V any](n *Node[K, V]) int {
+func redCount[K comparable, V any](n *node[K, V]) int {
 	if n == nil {
 		return 0
 	}
@@ -660,7 +660,7 @@ func (t *Tree[K, V]) LeafCount() int {
 	return leafCount(t.root)
 }
 
-func leafCount[K comparable, V any](n *Node[K, V]) int {
+func leafCount[K comparable, V any](n *node[K, V]) int {
 	if n == nil {
 		return 0
 	}
@@ -682,7 +682,7 @@ func (t *Tree[K, V]) MaxDepth() int {
 	return maxDepth(t.root)
 }
 
-func maxDepth[K comparable, V any](n *Node[K, V]) int {
+func maxDepth[K comparable, V any](n *node[K, V]) int {
 	if n == nil {
 		return 0
 	}
@@ -701,7 +701,7 @@ func (t *Tree[K, V]) MinDepth() int {
 	return minDepth(t.root)
 }
 
-func minDepth[K comparable, V any](n *Node[K, V]) int {
+func minDepth[K comparable, V any](n *node[K, V]) int {
 	if n == nil {
 		return 0
 	}
@@ -739,7 +739,7 @@ func (t *Tree[K, V]) String() string {
 }
 
 // output recursively builds the tree structure as a string.
-func (t *Tree[K, V]) output(node *Node[K, V], prefix string, isTail bool, sb *strings.Builder, nodeFormatter func(K, V) string) {
+func (t *Tree[K, V]) output(node *node[K, V], prefix string, isTail bool, sb *strings.Builder, nodeFormatter func(K, V) string) {
 	if node == nil {
 		return
 	}
@@ -766,14 +766,12 @@ func (t *Tree[K, V]) output(node *Node[K, V], prefix string, isTail bool, sb *st
 	colorCode := ""
 	if t.color {
 		if colorOf(node) == red {
-			// colorCode = RedTxt
-			colorCode = RedBg
+			colorCode = redBg
 		} else {
-			// colorCode = BlkTxt
-			colorCode = BlackBg
+			colorCode = blackBg
 		}
 	}
-	fmt.Fprintf(sb, "%s%v(%s)%s\n", colorCode, nodeFormatter(node.Key, node.Value), node.color.symbol(), Reset)
+	fmt.Fprintf(sb, "%s%v(%s)%s\n", colorCode, nodeFormatter(node.Key, node.Value), node.color.symbol(), reset)
 
 	// left node
 	if node.Left != nil {
@@ -787,7 +785,7 @@ func (t *Tree[K, V]) output(node *Node[K, V], prefix string, isTail bool, sb *st
 	}
 }
 
-func (t *Tree[K, V]) rotateLeft(n *Node[K, V]) {
+func (t *Tree[K, V]) rotateLeft(n *node[K, V]) {
 	r := n.Right
 	t.replace(n, r)
 	n.Right = r.Left
@@ -798,7 +796,7 @@ func (t *Tree[K, V]) rotateLeft(n *Node[K, V]) {
 	n.Parent = r
 }
 
-func (t *Tree[K, V]) rotateRight(n *Node[K, V]) {
+func (t *Tree[K, V]) rotateRight(n *node[K, V]) {
 	l := n.Left
 	t.replace(n, l)
 	n.Left = l.Right
@@ -809,7 +807,7 @@ func (t *Tree[K, V]) rotateRight(n *Node[K, V]) {
 	n.Parent = l
 }
 
-func (t *Tree[K, V]) insertCase1(n *Node[K, V]) {
+func (t *Tree[K, V]) insertCase1(n *node[K, V]) {
 	if n.Parent == nil {
 		n.color = black
 	} else {
@@ -817,14 +815,14 @@ func (t *Tree[K, V]) insertCase1(n *Node[K, V]) {
 	}
 }
 
-func (t *Tree[K, V]) insertCase2(n *Node[K, V]) {
+func (t *Tree[K, V]) insertCase2(n *node[K, V]) {
 	if colorOf(n.Parent) == black {
 		return
 	}
 	t.insertCase3(n)
 }
 
-func (t *Tree[K, V]) insertCase3(n *Node[K, V]) {
+func (t *Tree[K, V]) insertCase3(n *node[K, V]) {
 	g := n.grandparent()
 	p := n.Parent
 	u := n.uncle()
@@ -839,7 +837,7 @@ func (t *Tree[K, V]) insertCase3(n *Node[K, V]) {
 	}
 }
 
-func (t *Tree[K, V]) insertCase4(n *Node[K, V]) {
+func (t *Tree[K, V]) insertCase4(n *node[K, V]) {
 	g := n.grandparent()
 	p := n.Parent
 
@@ -853,7 +851,7 @@ func (t *Tree[K, V]) insertCase4(n *Node[K, V]) {
 	t.insertCase5(n)
 }
 
-func (t *Tree[K, V]) insertCase5(n *Node[K, V]) {
+func (t *Tree[K, V]) insertCase5(n *node[K, V]) {
 	g := n.grandparent()
 	p := n.Parent
 
@@ -866,14 +864,14 @@ func (t *Tree[K, V]) insertCase5(n *Node[K, V]) {
 	}
 }
 
-func (t *Tree[K, V]) deleteCase1(n *Node[K, V]) {
+func (t *Tree[K, V]) deleteCase1(n *node[K, V]) {
 	if n.Parent == nil {
 		return
 	}
 	t.deleteCase2(n)
 }
 
-func (t *Tree[K, V]) deleteCase2(n *Node[K, V]) {
+func (t *Tree[K, V]) deleteCase2(n *node[K, V]) {
 	p := n.Parent
 	s := n.sibling()
 
@@ -889,7 +887,7 @@ func (t *Tree[K, V]) deleteCase2(n *Node[K, V]) {
 	t.deleteCase3(n)
 }
 
-func (t *Tree[K, V]) deleteCase3(n *Node[K, V]) {
+func (t *Tree[K, V]) deleteCase3(n *node[K, V]) {
 	p := n.Parent
 	s := n.sibling()
 
@@ -904,7 +902,7 @@ func (t *Tree[K, V]) deleteCase3(n *Node[K, V]) {
 	}
 }
 
-func (t *Tree[K, V]) deleteCase4(n *Node[K, V]) {
+func (t *Tree[K, V]) deleteCase4(n *node[K, V]) {
 	p := n.Parent
 	s := n.sibling()
 
@@ -919,7 +917,7 @@ func (t *Tree[K, V]) deleteCase4(n *Node[K, V]) {
 	}
 }
 
-func (t *Tree[K, V]) deleteCase5(node *Node[K, V]) {
+func (t *Tree[K, V]) deleteCase5(node *node[K, V]) {
 	p := node.Parent
 	s := node.sibling()
 
@@ -941,7 +939,7 @@ func (t *Tree[K, V]) deleteCase5(node *Node[K, V]) {
 	t.deleteCase6(node)
 }
 
-func (t *Tree[K, V]) deleteCase6(node *Node[K, V]) {
+func (t *Tree[K, V]) deleteCase6(node *node[K, V]) {
 	p := node.Parent
 	s := node.sibling()
 
@@ -956,7 +954,7 @@ func (t *Tree[K, V]) deleteCase6(node *Node[K, V]) {
 	}
 }
 
-func (t *Tree[K, V]) lookup(key K) *Node[K, V] {
+func (t *Tree[K, V]) lookup(key K) *node[K, V] {
 	n := t.root
 	for n != nil {
 		res := t.cmp(n.Key, key)
@@ -972,7 +970,7 @@ func (t *Tree[K, V]) lookup(key K) *Node[K, V] {
 	return nil
 }
 
-func (t *Tree[K, V]) replace(old *Node[K, V], new_ *Node[K, V]) {
+func (t *Tree[K, V]) replace(old *node[K, V], new_ *node[K, V]) {
 	switch {
 	case old.Parent == nil:
 		t.root = new_
@@ -986,7 +984,7 @@ func (t *Tree[K, V]) replace(old *Node[K, V], new_ *Node[K, V]) {
 	}
 }
 
-func colorOf[K comparable, V any](n *Node[K, V]) color {
+func colorOf[K comparable, V any](n *node[K, V]) color {
 	if n == nil {
 		return black
 	}

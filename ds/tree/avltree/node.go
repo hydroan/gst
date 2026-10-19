@@ -2,16 +2,16 @@ package avltree
 
 import "fmt"
 
-type Node[K comparable, V any] struct {
+type node[K comparable, V any] struct {
 	Key      K
 	Value    V
-	Parent   *Node[K, V]
-	Children [2]*Node[K, V]
+	Parent   *node[K, V]
+	Children [2]*node[K, V]
 	b        int
 }
 
 // Size returns the number of nodes in the subtree rooted at current node.
-func (n *Node[K, V]) Size() int {
+func (n *node[K, V]) Size() int {
 	if n == nil {
 		return 0
 	}
@@ -26,21 +26,21 @@ func (n *Node[K, V]) Size() int {
 }
 
 // Prev returns the previous node in an inorder traversal.
-func (n *Node[K, V]) Prev() *Node[K, V] {
+func (n *node[K, V]) Prev() *node[K, V] {
 	return n.walk(0)
 }
 
 // Next returns the next node in an inorder traversal.
-func (n *Node[K, V]) Next() *Node[K, V] {
+func (n *node[K, V]) Next() *node[K, V] {
 	return n.walk(1)
 }
 
 // String returns a string representation of the node's key.
-func (n *Node[K, V]) String() string {
+func (n *node[K, V]) String() string {
 	return fmt.Sprintf("%v", n.Key)
 }
 
-func (n *Node[K, V]) walk(a int) *Node[K, V] {
+func (n *node[K, V]) walk(a int) *node[K, V] {
 	if n == nil {
 		return nil
 	}

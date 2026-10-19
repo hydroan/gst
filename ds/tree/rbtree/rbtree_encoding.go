@@ -10,8 +10,8 @@ func (t *Tree[K, V]) MarshalJSON() ([]byte, error) {
 	}
 
 	m := make(map[K]V)
-	var fn func(n *Node[K, V])
-	fn = func(n *Node[K, V]) {
+	var fn func(n *node[K, V])
+	fn = func(n *node[K, V]) {
 		if n == nil {
 			return
 		}

@@ -1,10 +1,6 @@
 package util
 
-import (
-	"cmp"
-
-	"github.com/segmentio/fasthash/fnv1a"
-)
+import "cmp"
 
 type Comparator[T any] func(x, y T) int
 
@@ -41,28 +37,12 @@ func Compare[T any](a, b T, less LessFn[T]) int {
 	return 0
 }
 
-// Max returns the max of a and b.
-func Max[T cmp.Ordered](a, b T) T {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-// Min returns the min of a and b.
-func Min[T cmp.Ordered](a, b T) T {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // Clamp returns x constrained within [lo:hi] range.
 // If x compares less than lo, returns lo;
-// otherwise if hi compares less that x, returns hi;
-// otherwise returns v.
+// otherwise if hi compares less than x, returns hi;
+// otherwise returns x.
 func Clamp[T cmp.Ordered](x, lo, hi T) T {
-	return Max(lo, Min(hi, x))
+	return max(lo, min(hi, x))
 }
 
 // MaxFunc returns the max of a and b using the less func.
@@ -83,30 +63,8 @@ func MinFunc[T any](a, b T, less LessFn[T]) T {
 
 // ClampFunc returns x constrained within [lo:hi] range using the less func.
 // If x compares less than lo, returns lo;
-// otherwise if hi compares less that x, returns hi;
-// otherwise returns v.
+// otherwise if hi compares less than x, returns hi;
+// otherwise returns x.
 func ClampFunc[T any](x, lo, hi T, less LessFn[T]) T {
 	return MaxFunc(lo, MinFunc(hi, x, less), less)
-}
-
-func HashUint64(u uint64) uint64 { return hash(u) }
-func HashUint32(u uint32) uint64 { return hash(uint64(u)) }
-func HashUint16(u uint16) uint64 { return hash(uint64(u)) }
-func HashUint8(u uint8) uint64   { return hash(uint64(u)) }
-func HashInt64(i int64) uint64   { return hash(uint64(i)) } //nolint:gosec
-func HashInt32(i int32) uint64   { return hash(uint64(i)) } //nolint:gosec
-func HashInt16(i int16) uint64   { return hash(uint64(i)) } //nolint:gosec
-func HashInt8(i int8) uint64     { return hash(uint64(i)) } //nolint:gosec
-func HashInt(i int) uint64       { return hash(uint64(i)) } //nolint:gosec
-func HashUint(i uint) uint64     { return hash(uint64(i)) }
-func HashString(s string) uint64 { return fnv1a.HashString64(s) }
-func HashBytes(b []byte) uint64  { return fnv1a.HashBytes64(b) }
-
-func hash(u uint64) uint64 {
-	u ^= u >> 33
-	u *= 0xff51afd7ed558ccd
-	u ^= u >> 33
-	u *= 0xc4ceb9fe1a85ec53
-	u ^= u >> 33
-	return u
 }

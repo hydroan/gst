@@ -8,12 +8,11 @@ const (
 	black, red color = true, false
 )
 
+// The terminal escape codes String colors the nodes with.
 const (
-	Reset   = "\033[0m"
-	RedTxt  = "\033[31m"
-	BlkTxt  = "\033[30m"
-	RedBg   = "\033[41;37m"
-	BlackBg = "\033[40;37m"
+	reset   = "\033[0m"
+	redBg   = "\033[41;37m"
+	blackBg = "\033[40;37m"
 )
 
 func (c color) String() string {
@@ -38,22 +37,22 @@ func (c color) symbol() string {
 	}
 }
 
-// Node represents a node in red-black tree.
-type Node[K comparable, V any] struct {
+// node represents a node in red-black tree.
+type node[K comparable, V any] struct {
 	Key   K
 	Value V
 	color color
 
-	Left   *Node[K, V]
-	Right  *Node[K, V]
-	Parent *Node[K, V]
+	Left   *node[K, V]
+	Right  *node[K, V]
+	Parent *node[K, V]
 }
 
 // Color returns a string representation of the node's color.
-func (n *Node[K, V]) Color() string { return n.color.String() }
+func (n *node[K, V]) Color() string { return n.color.String() }
 
 // Size returns the number of elements in the subtree rooted at n.
-func (n *Node[K, V]) Size() int {
+func (n *node[K, V]) Size() int {
 	if n == nil {
 		return 0
 	}
@@ -68,12 +67,12 @@ func (n *Node[K, V]) Size() int {
 }
 
 // String returns a string representation of the node's key.
-func (n *Node[K, V]) String() string {
+func (n *node[K, V]) String() string {
 	return fmt.Sprintf("%v", n.Key)
 }
 
 // grandparent returns the grandparent node of n.
-func (n *Node[K, V]) grandparent() *Node[K, V] {
+func (n *node[K, V]) grandparent() *node[K, V] {
 	if n != nil && n.Parent != nil {
 		return n.Parent.Parent
 	}
@@ -81,7 +80,7 @@ func (n *Node[K, V]) grandparent() *Node[K, V] {
 }
 
 // sibling returns the sibling node of n.
-func (n *Node[K, V]) sibling() *Node[K, V] {
+func (n *node[K, V]) sibling() *node[K, V] {
 	if n == nil || n.Parent == nil {
 		return nil
 	}
@@ -92,7 +91,7 @@ func (n *Node[K, V]) sibling() *Node[K, V] {
 }
 
 // uncle returns the uncle node of n.
-func (n *Node[K, V]) uncle() *Node[K, V] {
+func (n *node[K, V]) uncle() *node[K, V] {
 	if n == nil || n.Parent == nil || n.Parent.Parent == nil {
 		return nil
 	}
@@ -100,7 +99,7 @@ func (n *Node[K, V]) uncle() *Node[K, V] {
 }
 
 // maximum returns the maximum node in the subtree rooted at n.
-func (n *Node[K, V]) maximum() *Node[K, V] {
+func (n *node[K, V]) maximum() *node[K, V] {
 	if n == nil {
 		return nil
 	}

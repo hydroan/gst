@@ -15,7 +15,7 @@ package splaytree
 //	   A   g
 //	      / \
 //	     B   C
-func rotateZigRight[K comparable, V any](g *Node[K, V]) *Node[K, V] {
+func rotateZigRight[K comparable, V any](g *node[K, V]) *node[K, V] {
 	if g == nil || g.Children[0] == nil {
 		return g
 	}
@@ -55,7 +55,7 @@ func rotateZigRight[K comparable, V any](g *Node[K, V]) *Node[K, V] {
 //	   g   C
 //	  / \
 //	 A   B
-func rotateZigLeft[K comparable, V any](g *Node[K, V]) *Node[K, V] {
+func rotateZigLeft[K comparable, V any](g *node[K, V]) *node[K, V] {
 	if g == nil || g.Children[1] == nil {
 		return g
 	}
@@ -108,7 +108,7 @@ func rotateZigLeft[K comparable, V any](g *Node[K, V]) *Node[K, V] {
 //	  B   g
 //	     / \
 //	    C   D
-func rotateZigZigRight[K comparable, V any](g *Node[K, V]) *Node[K, V] {
+func rotateZigZigRight[K comparable, V any](g *node[K, V]) *node[K, V] {
 	if g == nil || g.Children[0] == nil || g.Children[0].Children[0] == nil {
 		return g
 	}
@@ -179,7 +179,7 @@ func rotateZigZigRight[K comparable, V any](g *Node[K, V]) *Node[K, V] {
 //	  g   C
 //	 / \
 //	A   B
-func rotateZigZigLeft[K comparable, V any](g *Node[K, V]) *Node[K, V] {
+func rotateZigZigLeft[K comparable, V any](g *node[K, V]) *node[K, V] {
 	if g == nil || g.Children[1] == nil || g.Children[1].Children[1] == nil {
 		return g
 	}
@@ -250,7 +250,7 @@ func rotateZigZigLeft[K comparable, V any](g *Node[K, V]) *Node[K, V] {
 //	  g   p
 //	 /   / \
 //	D   B   C
-func rotateZigZagRightLeft[K comparable, V any](g *Node[K, V]) *Node[K, V] {
+func rotateZigZagRightLeft[K comparable, V any](g *node[K, V]) *node[K, V] {
 	if g == nil || g.Children[1] == nil || g.Children[1].Children[0] == nil {
 		return g
 	}
@@ -320,7 +320,7 @@ func rotateZigZagRightLeft[K comparable, V any](g *Node[K, V]) *Node[K, V] {
 //	  p   g
 //	 /   / \
 //	A   B   C
-func rotateZigZagLeftRight[K comparable, V any](g *Node[K, V]) *Node[K, V] {
+func rotateZigZagLeftRight[K comparable, V any](g *node[K, V]) *node[K, V] {
 	if g == nil || g.Children[0] == nil || g.Children[0].Children[1] == nil {
 		return g
 	}
