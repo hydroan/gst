@@ -168,3 +168,14 @@ func TestQueueTakesElementsWithoutAnOrder(t *testing.T) {
 	assert.Equal(t, []int{1}, e)
 	assert.Equal(t, [][]int{{2, 3}}, q.Values())
 }
+
+// TestUnmarshalJSONNullLeavesAnEmptyQueue pins that a JSON null empties the
+// queue, and that Values then answers an empty, non-nil slice.
+func TestUnmarshalJSONNullLeavesAnEmptyQueue(t *testing.T) {
+	q, err := arrayqueue.NewFromSlice([]int{1, 2})
+	require.NoError(t, err)
+	require.NoError(t, q.UnmarshalJSON([]byte("null")))
+	assert.True(t, q.IsEmpty())
+	assert.NotNil(t, q.Values())
+	assert.Empty(t, q.Values())
+}

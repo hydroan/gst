@@ -2,7 +2,6 @@ package arrayqueue
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/hydroan/gst/ds/types"
@@ -133,13 +132,16 @@ func (q *Queue[E]) Len() int {
 }
 
 // Values returns all elements in the queue in FIFO(first-in, first-out) order.
+// If the queue is empty, it returns an empty slice (not nil).
 func (q *Queue[E]) Values() []E {
 	if q.safe {
 		q.mu.RLock()
 		defer q.mu.RUnlock()
 	}
 
-	return slices.Clone(q.elements)
+	el := make([]E, len(q.elements))
+	copy(el, q.elements)
+	return el
 }
 
 // Clear removes all elements from the queue.
