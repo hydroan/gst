@@ -65,6 +65,8 @@ func ParseFileDocs(filename string) (Docs, error) {
 // exported struct declared in it, keyed by struct type name. Structs without
 // any struct or field comment are omitted. The filename is only used for
 // error positions.
+//
+//gst:api the counterpart of ParseFile for source held in memory
 func ParseSource(filename string, src []byte) (map[string]apidoc.StructDoc, error) {
 	docs, err := ParseSourceDocs(filename, src)
 	if err != nil {

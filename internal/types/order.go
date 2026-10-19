@@ -79,6 +79,8 @@ func (o Order) Descending() bool { return o.direction == OrderDesc }
 func Asc(column string) Order { return Order{column: column, direction: OrderAsc} }
 
 // Desc builds a descending order term for column.
+//
+//gst:api the counterpart of Asc
 func Desc(column string) Order { return Order{column: column, direction: OrderDesc} }
 
 // NewOrder builds an order from its parts. It serves the framework's own code

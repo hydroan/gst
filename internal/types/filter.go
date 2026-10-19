@@ -96,37 +96,51 @@ const FilterTimeLayout = "2006-01-02 15:04:05.999999999"
 // model's queryable columns remains the caller's responsibility.
 
 // FilterEq matches rows where column equals value.
+//
+//gst:api string-form constructor of the Filter family, the counterpart of Column.Eq
 func FilterEq(column string, value any) Filter {
 	return Filter{column: column, op: FilterOpEq, value: value}
 }
 
 // FilterNe matches rows where column does not equal value.
+//
+//gst:api string-form constructor of the Filter family, the counterpart of Column.Ne
 func FilterNe(column string, value any) Filter {
 	return Filter{column: column, op: FilterOpNe, value: value}
 }
 
 // FilterGt matches rows where column is greater than value.
+//
+//gst:api string-form constructor of the Filter family, the counterpart of Column.Gt
 func FilterGt(column string, value any) Filter {
 	return Filter{column: column, op: FilterOpGt, value: value}
 }
 
 // FilterGte matches rows where column is greater than or equal to value.
+//
+//gst:api string-form constructor of the Filter family, the counterpart of Column.Gte
 func FilterGte(column string, value any) Filter {
 	return Filter{column: column, op: FilterOpGte, value: value}
 }
 
 // FilterLt matches rows where column is less than value.
+//
+//gst:api string-form constructor of the Filter family, the counterpart of Column.Lt
 func FilterLt(column string, value any) Filter {
 	return Filter{column: column, op: FilterOpLt, value: value}
 }
 
 // FilterLte matches rows where column is less than or equal to value.
+//
+//gst:api string-form constructor of the Filter family, the counterpart of Column.Lte
 func FilterLte(column string, value any) Filter {
 	return Filter{column: column, op: FilterOpLte, value: value}
 }
 
 // FilterIn matches rows where column is one of values. The slice is bound as
 // a whole; an empty slice matches nothing.
+//
+//gst:api string-form constructor of the Filter family, the counterpart of Column.In
 func FilterIn[T any](column string, values []T) Filter {
 	return Filter{column: column, op: FilterOpIn, value: append([]T(nil), values...)}
 }
@@ -134,52 +148,70 @@ func FilterIn[T any](column string, values []T) Filter {
 // FilterNotIn matches rows where column is none of values. The slice is
 // bound as a whole; an empty slice matches nothing (SQL NOT IN over an empty
 // list never holds), it does not mean "exclude nothing".
+//
+//gst:api string-form constructor of the Filter family, the counterpart of Column.NotIn
 func FilterNotIn[T any](column string, values []T) Filter {
 	return Filter{column: column, op: FilterOpNotIn, value: append([]T(nil), values...)}
 }
 
 // FilterLike matches rows where column contains value as a substring; value
 // is escaped and matches literally.
+//
+//gst:api string-form constructor of the Filter family, the counterpart of Column.Like
 func FilterLike(column, value string) Filter {
 	return Filter{column: column, op: FilterOpLike, value: value}
 }
 
 // FilterNotLike matches rows where column does not contain value as a
 // substring; value is escaped and matches literally.
+//
+//gst:api string-form constructor of the Filter family, the counterpart of Column.NotLike
 func FilterNotLike(column, value string) Filter {
 	return Filter{column: column, op: FilterOpNotLike, value: value}
 }
 
 // FilterStartsWith matches rows where column starts with value; value is
 // escaped and matches literally, and the prefix form can use an index.
+//
+//gst:api string-form constructor of the Filter family, the counterpart of Column.StartsWith
 func FilterStartsWith(column, value string) Filter {
 	return Filter{column: column, op: FilterOpStartsWith, value: value}
 }
 
 // FilterEndsWith matches rows where column ends with value; value is escaped
 // and matches literally.
+//
+//gst:api string-form constructor of the Filter family, the counterpart of Column.EndsWith
 func FilterEndsWith(column, value string) Filter {
 	return Filter{column: column, op: FilterOpEndsWith, value: value}
 }
 
 // FilterIsNull matches rows whose column is NULL.
+//
+//gst:api string-form constructor of the Filter family, the counterpart of Column.IsNull
 func FilterIsNull(column string) Filter {
 	return Filter{column: column, op: FilterOpIsNull, value: true}
 }
 
 // FilterIsNotNull matches rows whose column is not NULL.
+//
+//gst:api string-form constructor of the Filter family, the counterpart of Column.IsNotNull
 func FilterIsNotNull(column string) Filter {
 	return Filter{column: column, op: FilterOpIsNull, value: false}
 }
 
 // FilterRegex matches rows where column matches the regular expression expr
 // (dialect-aware REGEXP).
+//
+//gst:api string-form constructor of the Filter family, the counterpart of Column.Regex
 func FilterRegex(column, expr string) Filter {
 	return Filter{column: column, op: FilterOpRegex, value: expr}
 }
 
 // FilterNotRegex matches rows where column does not match the regular
 // expression expr.
+//
+//gst:api string-form constructor of the Filter family, the counterpart of Column.NotRegex
 func FilterNotRegex(column, expr string) Filter {
 	return Filter{column: column, op: FilterOpNotRegex, value: expr}
 }
@@ -187,6 +219,8 @@ func FilterNotRegex(column, expr string) Filter {
 // FilterJSONContains matches rows whose JSON array column contains value as
 // a member; on a column storing no JSON document the filter is unusable and
 // the query fails.
+//
+//gst:api string-form constructor of the Filter family, the counterpart of the JSON column's Contains
 func FilterJSONContains(column, value string) Filter {
 	return Filter{column: column, op: FilterOpJSONContains, value: value}
 }
@@ -263,6 +297,8 @@ func FilterAnd(filters ...Filter) Filter {
 // both of its tables are known; a join needs the tables too, so its predicates
 // are written with Column.EqCol, the typed front end that keeps the two
 // columns of the same Go type and carries both tables.
+//
+//gst:api string-form constructor of the Filter family, the counterpart of Column.EqCol
 func FilterEqCol(column, parent string) Filter {
 	return Filter{column: column, op: FilterOpEqCol, value: parent}
 }

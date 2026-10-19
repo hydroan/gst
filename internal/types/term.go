@@ -291,6 +291,8 @@ func (t Term) Over(window Window) Term {
 // references and the constructors above keep. It serves the framework's own
 // tests, which exercise how the database layer treats a malformed term; the
 // public gst package does not forward it.
+//
+//gst:api string-form constructor of Term, the counterpart of the Column term methods
 func NewTerm(fn TermFn, table, column string, bucket TimeBucket, alias string) Term {
 	return Term{fn: fn, table: table, column: column, bucket: bucket, alias: alias}
 }

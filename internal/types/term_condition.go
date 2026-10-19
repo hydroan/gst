@@ -70,6 +70,8 @@ func TermConditionValueOf(c TermCondition) any { return c.value }
 // NewTermCondition builds a condition from its parts, without the checks the
 // comparison methods keep. It serves the framework's own tests; the public
 // gst package does not forward it.
+//
+//gst:api the counterpart of the Term comparison methods
 func NewTermCondition(term Term, op CompareOp, value any) TermCondition {
 	return TermCondition{term: term, op: op, value: value}
 }

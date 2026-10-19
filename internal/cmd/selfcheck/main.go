@@ -74,6 +74,28 @@
 // for their shape alone, and no linter compares the type a key is given
 // across the tree.
 //
+// # Test seams
+//
+// A seam that exists for tests alone stays out of the implementation files:
+// one its own package's tests use is an unexported variable beside the code
+// it replaces, and one the tests of other packages use, which Go lets no
+// package import from a test file, is exported from an internal package's
+// testhooks.go alone, the file whose header says why no path the framework
+// runs calls what it declares. checkTestSeams reports an exported function or
+// variable of an internal package that only test files use anywhere in the
+// module while being declared in another file, and one declared in
+// testhooks.go that a non-test file uses. An export that is an API by design
+// although only tests reach for it yet, the counterpart of one production
+// does use or the constructor of a type it uses, says so in its doc comment,
+// //gst:api <reason>, and the check holds the directive to its word: one
+// without a reason, or on an export non-test code uses, is reported. Judged
+// are the packages a non-test file imports: in a package kept for later, or a
+// cache backend the framework keeps as an alternative, every export is used
+// by tests alone without being a seam. A test support package, one with a
+// non-test file importing testing, exports for tests by design and is left
+// alone too, as are the module sources and the test support written as
+// project code.
+//
 // # Layout
 //
 // Each check lives in the file named after it, testplacement.go for the
@@ -116,6 +138,7 @@ var checks = []check{
 	{name: "importalias", run: checkImportAlias},
 	{name: "testdoc", run: checkTestDoc},
 	{name: "logfields", run: checkLogFields},
+	{name: "testseams", run: checkTestSeams},
 }
 
 func main() {

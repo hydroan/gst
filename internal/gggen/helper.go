@@ -25,6 +25,8 @@ var formatOnlyImports = &imports.Options{Comments: true, TabIndent: true, TabWid
 // FormatNode prints node as Go source in the go/format style. With
 // processImport set, goimports then regroups and sorts the imports, adding or
 // removing none (see formatOnlyImports).
+//
+//gst:api the counterpart of FormatNodeExtra in the plain go/format style
 func FormatNode(node ast.Node, processImport ...bool) (string, error) {
 	var buf bytes.Buffer
 	fset := token.NewFileSet()

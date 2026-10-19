@@ -27,6 +27,8 @@ func TermOrderDirectionOf(o TermOrder) OrderDirection { return o.direction }
 // NewTermOrder builds an order on a term from its parts, without the checks
 // Asc and Desc keep. It serves the framework's own tests; the public gst
 // package does not forward it.
+//
+//gst:api the counterpart of Term.Asc and Term.Desc
 func NewTermOrder(term Term, direction OrderDirection) TermOrder {
 	return TermOrder{term: term, direction: direction}
 }

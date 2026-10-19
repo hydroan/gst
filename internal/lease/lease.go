@@ -502,6 +502,8 @@ func FromContext(ctx context.Context) (*Handle, bool) {
 
 // TermFromContext returns the term of the lease ctx carries, and whether it
 // carries one.
+//
+//gst:api the counterpart of FromContext for the term
 func TermFromContext(ctx context.Context) (uint64, bool) {
 	h, ok := FromContext(ctx)
 	if !ok {

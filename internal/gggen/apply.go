@@ -157,6 +157,8 @@ func findServiceTypeName(file *ast.File) string {
 // name used in service registration to maintain consistency. It reports
 // whether it changed anything, and the error of a receiver rename it
 // refuses, see applyServiceRoleName.
+//
+//gst:api the counterpart of ApplyServiceFileWithModelSync without the model sync
 func ApplyServiceFile(file *ast.File, action *dsl.Action, servicePkgName string) (bool, error) {
 	return applyServiceFile(file, action, servicePkgName, "")
 }

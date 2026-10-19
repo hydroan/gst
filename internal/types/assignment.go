@@ -35,6 +35,8 @@ func (a Assignment) Value() any { return a.value }
 // an empty table names the chain's own model. It serves framework code that
 // learns the column only at run time and the framework's own tests; the public
 // gst package does not forward it.
+//
+//gst:api string-form constructor of Assignment, the counterpart of the Column assignment methods
 func NewAssignment(table, column string, value any) Assignment {
 	return Assignment{table: table, column: column, value: value}
 }
