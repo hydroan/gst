@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,4 +30,19 @@ func TestStartReportsAnUnreachableNameServer(t *testing.T) {
 	defer mu.RUnlock()
 	require.Nil(t, defaultProducer)
 	require.Nil(t, defaultAdmin)
+}
+
+// TestLibraryLinesWithoutTheLoggingSetupAreDropped pins that the adapter the
+// package hands the client library at load time drops a line while the
+// provider's logger is unset, in a process that never ran the logging setup,
+// instead of failing on it.
+func TestLibraryLinesWithoutTheLoggingSetupAreDropped(t *testing.T) {
+	adapter := &customLogger{l: new(types.Logger)}
+
+	require.NotPanics(t, func() {
+		adapter.Debug("sample", nil)
+		adapter.Info("sample", nil)
+		adapter.Warning("sample", nil)
+		adapter.Error("sample", nil)
+	})
 }

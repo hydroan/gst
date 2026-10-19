@@ -34,7 +34,7 @@ const connectTimeout = 10 * time.Second
 // per process and reads it from every client goroutine, so it is set before
 // any client runs.
 func init() {
-	rlog.SetLogger(&customLogger{})
+	rlog.SetLogger(&customLogger{l: &logger.RocketMQ})
 	lifecycle.Register(lifecycle.Component{
 		Name:      "rocketmq",
 		Stage:     lifecycle.StageProvider,
@@ -266,16 +266,44 @@ func stop(_ context.Context) error {
 	return errors.Join(errs...)
 }
 
-type customLogger struct{}
+// customLogger adapts the provider's logger to the client library's logger
+// interface. It dereferences l on every line, so the logger the bootstrap
+// installs after the package has loaded receives the lines, and a process
+// that never ran the logging setup, which leaves the logger nil, drops them,
+// the way the kafka provider's logger does.
+type customLogger struct {
+	l *types.Logger
+}
 
-func (l *customLogger) Debug(msg string, fields map[string]any) { logger.RocketMQ.Debug(msg, fields) }
+func (c *customLogger) Debug(msg string, fields map[string]any) {
+	if l := *c.l; l != nil {
+		l.Debug(msg, fields)
+	}
+}
 
-func (l *customLogger) Info(msg string, fields map[string]any) { logger.RocketMQ.Info(msg, fields) }
+func (c *customLogger) Info(msg string, fields map[string]any) {
+	if l := *c.l; l != nil {
+		l.Info(msg, fields)
+	}
+}
 
-func (l *customLogger) Warning(msg string, fields map[string]any) { logger.RocketMQ.Warn(msg, fields) }
+func (c *customLogger) Warning(msg string, fields map[string]any) {
+	if l := *c.l; l != nil {
+		l.Warn(msg, fields)
+	}
+}
 
-func (l *customLogger) Error(msg string, fields map[string]any) { logger.RocketMQ.Error(msg, fields) }
+func (c *customLogger) Error(msg string, fields map[string]any) {
+	if l := *c.l; l != nil {
+		l.Error(msg, fields)
+	}
+}
 
-func (l *customLogger) Fatal(msg string, fields map[string]any) { logger.RocketMQ.Fatal(msg, fields) }
-func (l *customLogger) Level(string)                            {}
-func (l *customLogger) OutputPath(string) error                 { return nil }
+func (c *customLogger) Fatal(msg string, fields map[string]any) {
+	if l := *c.l; l != nil {
+		l.Fatal(msg, fields)
+	}
+}
+
+func (*customLogger) Level(string)            {}
+func (*customLogger) OutputPath(string) error { return nil }
