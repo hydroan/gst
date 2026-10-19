@@ -53,25 +53,28 @@ func Inspect(module string, modelDir string, models []*modelinfo.Model, ignore g
 		return nil, false, err
 	}
 
-	program := buildProgram(module, models)
+	files := gghelper.InspectProgram()
+	if files[projectFileName], err = buildProjectFile(module, models); err != nil {
+		return nil, false, err
+	}
 
 	// Compiling and running the inspection program costs seconds, which would
 	// otherwise be paid on every run even when nothing that affects the
 	// result changed. The cache key covers every such input, so a hit skips
 	// the build entirely and a miss is unavoidable work.
-	cacheKey, err := inspectionCacheKey(program, modelDir, ignore)
+	cacheKey, err := inspectionCacheKey(files, modelDir, ignore)
 	if err != nil {
 		return nil, false, err
 	}
 	resolved, cached := readInspectionCache(cacheKey)
 	if !cached {
-		var files map[string]string
+		var replacements map[string]string
 		if overlay != nil {
-			if files, err = overlay(); err != nil {
+			if replacements, err = overlay(); err != nil {
 				return nil, false, err
 			}
 		}
-		if resolved, err = runProgram(program, files); err != nil {
+		if resolved, err = runProgram(files, replacements); err != nil {
 			return nil, false, err
 		}
 		if err = writeInspectionCache(cacheKey, resolved); err != nil {

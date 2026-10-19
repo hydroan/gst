@@ -20,7 +20,8 @@ import (
 //   - the gg binary itself, which changes whenever the framework changes how
 //     columns are resolved (a local framework checkout does not show up in
 //     go.mod, but reinstalling gg is what makes such a change take effect);
-//   - the inspection program, including the module it targets;
+//   - the inspection program's files, the one generated for the project
+//     among them, which names the module it targets;
 //   - the module requirements, which pin the framework and gorm versions;
 //   - the content of every model source file, since the models are what carry
 //     the columns: the Go files under the model directory but for tests and
@@ -39,9 +40,16 @@ import (
 // Model files are the project's declared home for those types; if a stale
 // result is ever suspected, deleting the cache directory forces a fresh
 // inspection.
-func inspectionCacheKey(program string, modelDir string, ignore gghelper.ProjectIgnore) (string, error) {
+func inspectionCacheKey(files map[string]string, modelDir string, ignore gghelper.ProjectIgnore) (string, error) {
 	digest := sha256.New()
-	digest.Write([]byte(program))
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		fmt.Fprintf(digest, "%s\n%s\n", name, files[name])
+	}
 
 	if executable, err := os.Executable(); err == nil {
 		if info, statErr := os.Stat(executable); statErr == nil {

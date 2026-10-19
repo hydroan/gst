@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/goast"
 )
@@ -85,22 +84,6 @@ func importSpecs(frameworkImports []string, aliases map[string]string) []ast.Spe
 	return specs
 }
 
-// GeneratedHeader puts the generated-code header above the package clause of
-// f, a blank line between the two, and returns the FileSet f is printed
-// through: the header comment takes the first line of a fabricated file and
-// the package clause the third, so go/printer lays them out that way. A
-// comment right above the clause would be the package's doc, and a project's
-// own package doc beside it a second one.
-func GeneratedHeader(f *ast.File) *token.FileSet {
-	fset := token.NewFileSet()
-	lines := goast.NewLineSet(fset)
-	f.Comments = []*ast.CommentGroup{{List: []*ast.Comment{{Slash: lines.Next(), Text: consts.CodeGeneratedComment()}}}}
-	lines.Next()
-	f.Package = lines.Next()
-	f.Name.NamePos = f.Package
-	return fset
-}
-
 // BuildModelFile generates the model registration file, model.gen.go, in
 // package pkgName with stmts as the body of its init function; aliases maps
 // each model package it imports to the alias ModelFileAliases picked for it.
@@ -152,7 +135,7 @@ func BuildModelFile(pkgName string, aliases map[string]string, stmts ...ast.Stmt
 		},
 	}
 
-	fset := GeneratedHeader(f)
+	fset := goast.GeneratedHeader(f)
 
 	// Without stmts the init function body is empty, so the file imports no
 	// package.
@@ -216,7 +199,7 @@ func BuildServiceFile(pkgName string, aliases map[string]string, stmts ...ast.St
 		},
 	}
 
-	fset := GeneratedHeader(f)
+	fset := goast.GeneratedHeader(f)
 
 	// Without stmts the init function body is empty, so the file imports no
 	// package.
@@ -313,7 +296,7 @@ func BuildRouterFile(pkgName, gstModelPkg string, aliases map[string]string, stm
 		},
 	}
 
-	fset := GeneratedHeader(f)
+	fset := goast.GeneratedHeader(f)
 
 	// Without stmts the Init function only returns nil, so the file imports
 	// no package.
@@ -434,7 +417,7 @@ func BuildMainFile(projectName string, extraDirs ...string) (string, error) {
 		},
 	}
 
-	fset := GeneratedHeader(f)
+	fset := goast.GeneratedHeader(f)
 
 	return FormatNodeExtraWithFileSet(f, fset, false)
 }

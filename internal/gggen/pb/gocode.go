@@ -220,7 +220,7 @@ func (f *goFile) add(doc string, decl ast.Decl, layout func(lines *goast.LineSet
 // never reaches the next comment inside a declaration.
 func (f *goFile) source() (string, error) {
 	file := &ast.File{Name: ast.NewIdent(f.pkgName)}
-	fset := gggen.GeneratedHeader(file)
+	fset := goast.GeneratedHeader(file)
 	// The header and the package clause hold the first lines of the file
 	// the header started; the lines of the declarations are a file of
 	// their own, kept clear of those.

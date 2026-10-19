@@ -24,7 +24,7 @@ func TestInspectionCacheKeyCoversTheModelCode(t *testing.T) {
 	writeProjectFile(t, fixture, "package fixture\n")
 	key := func() string {
 		t.Helper()
-		k, err := inspectionCacheKey("program", ggconst.DirModel, gghelper.NewProjectIgnore())
+		k, err := inspectionCacheKey(map[string]string{"main.go": "program"}, ggconst.DirModel, gghelper.NewProjectIgnore())
 		require.NoError(t, err)
 		return k
 	}

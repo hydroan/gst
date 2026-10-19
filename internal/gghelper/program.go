@@ -2,16 +2,55 @@ package gghelper
 
 import (
 	"bytes"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"sort"
 
 	"github.com/cockroachdb/errors"
 )
+
+// The programs gg builds inside a project are embedded from their packages
+// under program/, main packages the framework's own build compiles, so a
+// change to the framework API they use fails at build time rather than in a
+// project: migrate for gg migrate, inspect for the model inspection behind
+// gg gen and gg check. Each is written as project code, importing the
+// framework's public packages only, and is completed by a project.go the
+// caller generates for the project and adds to the files.
+//
+//go:embed program/migrate/*.go program/inspect/*.go
+var programs embed.FS
+
+// MigrateProgram returns the source files of the migration program by name.
+func MigrateProgram() map[string]string { return programFiles("program/migrate") }
+
+// InspectProgram returns the source files of the model inspection program by
+// name.
+func InspectProgram() map[string]string { return programFiles("program/inspect") }
+
+// programFiles reads the embedded files of dir. They are the framework's own,
+// so a failure to read one is a broken build, not a condition to handle.
+func programFiles(dir string) map[string]string {
+	entries, err := fs.ReadDir(programs, dir)
+	if err != nil {
+		panic(err)
+	}
+	files := make(map[string]string, len(entries))
+	for _, entry := range entries {
+		content, err := programs.ReadFile(path.Join(dir, entry.Name()))
+		if err != nil {
+			panic(err)
+		}
+		files[entry.Name()] = string(content)
+	}
+	return files
+}
 
 // ProjectProgram is a temporary Go program compiled against the project's own
 // module, through the workspace when the project is in one (see
@@ -19,8 +58,11 @@ import (
 // project's packages and observe what they register at runtime, which no
 // amount of static analysis in gg itself can reproduce.
 type ProjectProgram struct {
-	// Content is the program source.
-	Content string
+	// Files are the program's source files by name, written next to each
+	// other and built together: the embedded files of a program gg ships
+	// (see MigrateProgram and InspectProgram) and the file generated for
+	// the project.
+	Files map[string]string
 
 	// Args are the program's command-line arguments. A value that differs from
 	// run to run, such as the path of a temporary file, belongs here rather
@@ -54,9 +96,18 @@ func (p ProjectProgram) Run() error {
 	}
 	defer os.RemoveAll(tempDir)
 
-	runnerFile := filepath.Join(tempDir, "main.go")
-	if err = os.WriteFile(runnerFile, []byte(p.Content), 0o600); err != nil {
-		return errors.Wrap(err, "failed to write temporary program")
+	names := make([]string, 0, len(p.Files))
+	for name := range p.Files {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	sources := make([]string, 0, len(names))
+	for _, name := range names {
+		source := filepath.Join(tempDir, name)
+		if err = os.WriteFile(source, []byte(p.Files[name]), 0o600); err != nil {
+			return errors.Wrapf(err, "failed to write temporary program file %s", name)
+		}
+		sources = append(sources, source)
 	}
 
 	// The program resolves the same dependency versions the project does
@@ -89,7 +140,7 @@ func (p ProjectProgram) Run() error {
 	}
 	// #nosec G204 -- every argument is either a literal flag or a path gg
 	// itself created under the os.MkdirTemp-owned directory.
-	buildCmd := exec.Command("go", append(args, runnerFile)...)
+	buildCmd := exec.Command("go", append(args, sources...)...)
 	buildCmd.Stderr = os.Stderr
 	if err = buildCmd.Run(); err != nil {
 		return errors.Wrap(err, "failed to build generated program")

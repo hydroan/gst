@@ -2,6 +2,8 @@ package gghelper_test
 
 import (
 	"bytes"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,6 +11,26 @@ import (
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/stretchr/testify/require"
 )
+
+// TestEmbeddedProgramsAreMainPackages pins where the programs gg builds
+// inside a project come from: each is embedded from its own package under
+// program/, a main package the framework's build compiles, with no template
+// placeholder left for gg to fill.
+func TestEmbeddedProgramsAreMainPackages(t *testing.T) {
+	programs := map[string]map[string]string{
+		"migrate": gghelper.MigrateProgram(),
+		"inspect": gghelper.InspectProgram(),
+	}
+	for name, files := range programs {
+		require.Contains(t, files, "main.go", name)
+		for file, source := range files {
+			parsed, err := parser.ParseFile(token.NewFileSet(), file, source, parser.PackageClauseOnly)
+			require.NoError(t, err, "%s/%s", name, file)
+			require.Equal(t, "main", parsed.Name.Name, "%s/%s", name, file)
+			require.NotContains(t, source, "{{", "%s/%s", name, file)
+		}
+	}
+}
 
 func TestProjectProgramRunsAgainstTheProjectModuleWithOverlay(t *testing.T) {
 	t.Chdir(t.TempDir())
@@ -19,7 +41,7 @@ func TestProjectProgramRunsAgainstTheProjectModuleWithOverlay(t *testing.T) {
 
 	var out bytes.Buffer
 	program := gghelper.ProjectProgram{
-		Content: "package main\n\nimport (\n\t\"fmt\"\n\n\t\"tmpapp/sample\"\n)\n\nfunc main() { fmt.Print(sample.Source) }\n",
+		Files:   map[string]string{"main.go": "package main\n\nimport (\n\t\"fmt\"\n\n\t\"tmpapp/sample\"\n)\n\nfunc main() { fmt.Print(sample.Source) }\n"},
 		Stdout:  &out,
 		Overlay: map[string]string{filepath.Join("sample", "sample.go"): "package sample\n\nconst Source = \"overlay\"\n"},
 	}
@@ -42,9 +64,9 @@ func TestProjectProgramPassesItsArguments(t *testing.T) {
 
 	var out bytes.Buffer
 	program := gghelper.ProjectProgram{
-		Content: "package main\n\nimport (\n\t\"fmt\"\n\t\"os\"\n\t\"strings\"\n)\n\nfunc main() { fmt.Print(strings.Join(os.Args[1:], \",\")) }\n",
-		Stdout:  &out,
-		Args:    []string{"sample", "with space"},
+		Files:  map[string]string{"main.go": "package main\n\nimport (\n\t\"fmt\"\n\t\"os\"\n\t\"strings\"\n)\n\nfunc main() { fmt.Print(strings.Join(os.Args[1:], \",\")) }\n"},
+		Stdout: &out,
+		Args:   []string{"sample", "with space"},
 	}
 	require.NoError(t, program.Run())
 
@@ -89,8 +111,8 @@ func TestProjectProgramRunsInsideAWorkspace(t *testing.T) {
 
 	var out bytes.Buffer
 	program := gghelper.ProjectProgram{
-		Content: "package main\n\nimport (\n\t\"fmt\"\n\n\t\"example.com/lib\"\n)\n\nfunc main() { fmt.Print(libname.Source) }\n",
-		Stdout:  &out,
+		Files:  map[string]string{"main.go": "package main\n\nimport (\n\t\"fmt\"\n\n\t\"example.com/lib\"\n)\n\nfunc main() { fmt.Print(libname.Source) }\n"},
+		Stdout: &out,
 	}
 	require.NoError(t, program.Run())
 

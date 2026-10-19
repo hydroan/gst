@@ -2,7 +2,10 @@ package goast
 
 import (
 	"fmt"
+	"go/ast"
 	"go/token"
+
+	"github.com/hydroan/gst/internal/consts"
 )
 
 // LineSet hands out positions on successive lines of a fabricated file, for
@@ -44,4 +47,20 @@ func (l *LineSet) Next() token.Pos {
 	}
 	l.line++
 	return l.file.Pos(offset)
+}
+
+// GeneratedHeader puts the generated-code header above the package clause of
+// f, a blank line between the two, and returns the FileSet f is printed
+// through: the header comment takes the first line of a fabricated file and
+// the package clause the third, so go/printer lays them out that way. A
+// comment right above the clause would be the package's doc, and a project's
+// own package doc beside it a second one.
+func GeneratedHeader(f *ast.File) *token.FileSet {
+	fset := token.NewFileSet()
+	lines := NewLineSet(fset)
+	f.Comments = []*ast.CommentGroup{{List: []*ast.Comment{{Slash: lines.Next(), Text: consts.CodeGeneratedComment()}}}}
+	lines.Next()
+	f.Package = lines.Next()
+	f.Name.NamePos = f.Package
+	return fset
 }

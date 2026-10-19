@@ -1,228 +1,31 @@
 package modelinspect
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"go/ast"
+	"go/format"
+	"go/token"
 	"os"
 	"sort"
-	"strings"
+	"strconv"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
+	"github.com/hydroan/gst/internal/goast"
 	"github.com/hydroan/gst/internal/modelinfo"
 )
 
-// inspectionProgram is the template of the inspection program that reports the
-// project models' columns, and what their index declarations violate on MySQL,
-// as JSON. It runs inside the project module, so it
-// resolves exactly the columns the framework resolves at runtime.
-// buildProgram fills {{MODULE}} and the unregistered-model
-// placeholders. The result path, which differs on every run, reaches the
-// program as its argument, so the source stays the same between runs.
-const inspectionProgram = `package main
+// projectFileName is the file generated for the project next to the
+// embedded inspection program (gghelper.InspectProgram), see buildProjectFile.
+const projectFileName = "project.go"
 
-import (
-	"encoding/json"
-	"fmt"
-	"os"
-	"reflect"
-	"strconv"
-	"strings"
-
-	"github.com/hydroan/gst/config"
-	gstmysql "github.com/hydroan/gst/database/mysql"
-	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/modelschema"
-
-	_ "{{MODULE}}/model"
-{{UNREGISTERED_IMPORTS}})
-
-type columnInfo struct {
-	GoName      string            ` + "`json:\"go_name\"`" + `
-	DBName      string            ` + "`json:\"db_name\"`" + `
-	TypeExpr    string            ` + "`json:\"type_expr\"`" + `
-	TypeImports map[string]string ` + "`json:\"type_imports\"`" + `
-	TypeName    string            ` + "`json:\"type_name\"`" + `
-	Numeric     bool              ` + "`json:\"numeric\"`" + `
-	Time        bool              ` + "`json:\"time\"`" + `
-	JSONStrings bool              ` + "`json:\"json_strings\"`" + `
-}
-
-type modelColumns struct {
-	PkgPath        string       ` + "`json:\"pkg_path\"`" + `
-	PkgName        string       ` + "`json:\"pkg_name\"`" + `
-	Name           string       ` + "`json:\"name\"`" + `
-	Columns        []columnInfo ` + "`json:\"columns\"`" + `
-	IndexViolation string       ` + "`json:\"index_violation\"`" + `
-}
-
-func main() {
-	// Only the configuration is loaded, the way the service loads it: gorm's
-	// parser calls methods on the models and their field types, and project
-	// code in them may read it. The models come from the model packages
-	// imported above; resolving their columns never touches the database.
-	if err := config.Init(); err != nil {
-		fail(err)
-	}
-	defer config.Clean()
-
-	// The index declarations are validated against the MySQL dialect whatever
-	// database the configuration names: the handle never connects, and gg
-	// check decides from the configuration whether what it finds is reported.
-	schemaDB, err := gstmysql.DryRun()
-	if err != nil {
-		fail(err)
-	}
-
-	seen := make(map[string]struct{})
-	out := make([]modelColumns, 0)
-	models := model.RegisteredModels()
-{{UNREGISTERED_MODELS}}	for _, m := range models {
-		typ := reflect.TypeOf(m)
-		for typ != nil && typ.Kind() == reflect.Pointer {
-			typ = typ.Elem()
-		}
-		if typ == nil || typ.PkgPath() == "" || typ.Name() == "" {
-			continue
-		}
-		key := typ.PkgPath() + "." + typ.Name()
-		if _, dup := seen[key]; dup {
-			continue
-		}
-		seen[key] = struct{}{}
-
-		cols, err := modelschema.Columns(typ)
-		if err != nil {
-			fail(fmt.Errorf("resolve columns of %s: %w", key, err))
-		}
-		entry := modelColumns{PkgPath: typ.PkgPath(), PkgName: packageName(typ), Name: typ.Name()}
-		if validateErr := model.ValidateIndexes(schemaDB, m); validateErr != nil {
-			entry.IndexViolation = validateErr.Error()
-		}
-		for _, col := range cols {
-			expr, imports := describeType(col.Type, typ.PkgPath())
-			class := modelschema.ClassifyColumn(col.Type)
-			entry.Columns = append(entry.Columns, columnInfo{
-				GoName:      col.GoName,
-				DBName:      col.DBName,
-				TypeExpr:    expr,
-				TypeImports: imports,
-				TypeName:    col.Type.String(),
-				Numeric:     class == modelschema.ColumnClassNumeric,
-				Time:        class == modelschema.ColumnClassTime,
-				JSONStrings: modelschema.IsJSONStringsType(col.Type),
-			})
-		}
-		out = append(out, entry)
-	}
-	encoded, err := json.Marshal(out)
-	if err != nil {
-		fail(err)
-	}
-	// The result travels through a file: initialization writes to stdout, so
-	// stdout is not a reliable data channel.
-	if err = os.WriteFile(os.Args[1], encoded, 0o600); err != nil {
-		fail(err)
-	}
-}
-
-// packageName returns the package name the compiler recorded for the type,
-// which can differ from the last path segment.
-func packageName(typ reflect.Type) string {
-	full := typ.String()
-	if idx := strings.LastIndex(full, "."); idx >= 0 {
-		return full[:idx]
-	}
-	return ""
-}
-
-// describeType renders a column type as a source-level expression relative
-// to the model's package, modelPkg, plus the imports the expression needs by
-// path, each under the package name the compiler recorded, which is how the
-// expression qualifies the type: a type of the model's own package is
-// written bare, one of another package qualified, the way go/types prints a
-// type relative to a package, and a composite type, a slice, an array, a map
-// or a pointer, is written from its elements, each qualified and imported
-// on its own. The pointer of a pointer column is dereferenced first, since a
-// filter compares the pointed-to value. A type that cannot be written back
-// as source, a generic instantiation, or an anonymous struct, interface,
-// channel or function naming a type of some package, yields an empty
-// expression and is generated as Column[any]: the column name stays exact
-// and the JSON operators, which take a string, keep working.
-func describeType(typ reflect.Type, modelPkg string) (expr string, imports map[string]string) {
-	for typ.Kind() == reflect.Pointer {
-		typ = typ.Elem()
-	}
-	imports = make(map[string]string)
-	expr, ok := typeExpr(typ, modelPkg, imports)
-	if !ok {
-		return "", nil
-	}
-	return expr, imports
-}
-
-// typeExpr writes typ the way describeType does, adding the imports it needs
-// to imports; false for a type that cannot be written back as source.
-// Framework-internal types reach business models only through the public
-// packages that alias them. Reflection sees the defined type's internal
-// path, which a business project cannot import, so the reference is
-// rewritten to the alias the model source actually wrote: model.Base and
-// its siblings for internal/modelregistry, model.Version for
-// internal/modelschema, and the root gst package, which forwards everything
-// internal/types defines under the same name.
-func typeExpr(typ reflect.Type, modelPkg string, imports map[string]string) (string, bool) {
-	if name := typ.Name(); name != "" {
-		if strings.ContainsAny(name, "[]*") {
-			return "", false
-		}
-		switch pkg := typ.PkgPath(); pkg {
-		case "", modelPkg:
-			return name, true
-		case "github.com/hydroan/gst/internal/modelregistry", "github.com/hydroan/gst/internal/modelschema":
-			imports["github.com/hydroan/gst/model"] = "model"
-			return "model." + name, true
-		case "github.com/hydroan/gst/internal/types":
-			imports["github.com/hydroan/gst"] = "gst"
-			return "gst." + name, true
-		default:
-			alias := packageName(typ)
-			imports[pkg] = alias
-			return alias + "." + name, true
-		}
-	}
-	switch typ.Kind() {
-	case reflect.Pointer:
-		elem, ok := typeExpr(typ.Elem(), modelPkg, imports)
-		return "*" + elem, ok
-	case reflect.Slice:
-		elem, ok := typeExpr(typ.Elem(), modelPkg, imports)
-		return "[]" + elem, ok
-	case reflect.Array:
-		elem, ok := typeExpr(typ.Elem(), modelPkg, imports)
-		return "[" + strconv.Itoa(typ.Len()) + "]" + elem, ok
-	case reflect.Map:
-		key, ok := typeExpr(typ.Key(), modelPkg, imports)
-		elem, elemOK := typeExpr(typ.Elem(), modelPkg, imports)
-		return "map[" + key + "]" + elem, ok && elemOK
-	}
-	// An anonymous struct, interface, channel or function is written as the
-	// compiler prints it, struct { X int } or interface {}, as long as it
-	// names no type of any package, which the compiler would qualify by a
-	// package name the file does not import.
-	if text := typ.String(); !strings.Contains(text, ".") {
-		return text, true
-	}
-	return "", false
-}
-
-func fail(err error) {
-	fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-	os.Exit(1)
-}
-`
-
-// buildProgram renders the inspection program for the project.
-// Registered models are enumerated at run time through
+// buildProjectFile renders the file that completes the embedded inspection
+// program for the project: the import that registers the project's models
+// and the models beyond the registry, which the program's main.go declares
+// and this file sets. Registered models are enumerated at run time through
 // model.RegisteredModels; a model that declares a Design but no Migrate never
 // reaches the registry, so it is compiled into the program as an explicit
 // entry instead and kept at run time only when it opted in to framework query
@@ -241,44 +44,25 @@ func fail(err error) {
 // For the model Summary of model/report, which declares a Design but no
 // Migrate, the model User of model/iam/user, whose registration
 // gen.models.ignore drops, and the model Record of model/sample, which
-// declares Migrate, it imports their packages in module tmpapp next to the
-// registration import,
+// declares Migrate, in module tmpapp it writes
 //
-//	_ "tmpapp/model"
-//	vm0 "tmpapp/model/iam/user"
-//	vm1 "tmpapp/model/report"
-//	vm2 "tmpapp/model/sample"
+//	// Code generated by gst; DO NOT EDIT.
 //
-// and adds them to the models the registry returns:
+//	package main
 //
-//	models := model.RegisteredModels()
-//	// Models that declare a Design but no Migrate never reach the registry.
-//	// Their query columns resolve the same way, so those that opted in to
-//	// framework query parameters are inspected alongside the registered ones.
-//	for _, m := range []any{
-//		&vm1.Summary{},
-//	} {
-//		if !modelschema.IsQueryable(m) {
-//			continue
-//		}
-//		models = append(models, m)
+//	import (
+//		_ "tmpapp/model"
+//		vm0 "tmpapp/model/iam/user"
+//		vm1 "tmpapp/model/report"
+//		vm2 "tmpapp/model/sample"
+//	)
+//
+//	func init() {
+//		unregisteredModels = []any{&vm1.Summary{}}
+//		ignoredModels = []any{&vm0.User{}}
+//		tableBackedModels = []any{&vm2.Record{}}
 //	}
-//	// Models whose registration is ignored by gst.yaml gen.models.ignore
-//	// stay table-backed: their column files must keep matching the
-//	// module-copied model sources, so they are inspected unconditionally.
-//	models = append(models,
-//		&vm0.User{},
-//	)
-//	// Table-backed models are compiled in by name as well: the registry
-//	// lists them once gg gen wrote model.gen.go, and gg check validates their
-//	// index declarations before that too. One the registry already lists is
-//	// inspected once (see seen).
-//	models = append(models,
-//		&vm2.Record{},
-//	)
-func buildProgram(module string, models []*modelinfo.Model) string {
-	program := strings.ReplaceAll(inspectionProgram, "{{MODULE}}", module)
-
+func buildProjectFile(module string, models []*modelinfo.Model) (string, error) {
 	unregistered := make([]*modelinfo.Model, 0, len(models))
 	ignored := make([]*modelinfo.Model, 0, len(models))
 	tableBacked := make([]*modelinfo.Model, 0, len(models))
@@ -294,8 +78,8 @@ func buildProgram(module string, models []*modelinfo.Model) string {
 	}
 
 	// One deterministic alias per package: the fixed prefix cannot collide
-	// with the template's own imports, and sorting keeps the program text,
-	// and with it the inspection cache key, stable across runs.
+	// with the program's own imports, and sorting keeps the file's text, and
+	// with it the inspection cache key, stable across runs.
 	extra := make([]*modelinfo.Model, 0, len(unregistered)+len(ignored)+len(tableBacked))
 	extra = append(extra, unregistered...)
 	extra = append(extra, ignored...)
@@ -325,63 +109,69 @@ func buildProgram(module string, models []*modelinfo.Model) string {
 	sortByPackageAndName(ignored)
 	sortByPackageAndName(tableBacked)
 
-	var imports strings.Builder
-	for _, path := range paths {
-		fmt.Fprintf(&imports, "\t%s %q\n", aliases[path], path)
+	specs := []ast.Spec{importSpec("_", module+"/model")}
+	for _, importPath := range paths {
+		specs = append(specs, importSpec(aliases[importPath], importPath))
+	}
+	f := &ast.File{
+		Name:  ast.NewIdent("main"),
+		Decls: []ast.Decl{&ast.GenDecl{Tok: token.IMPORT, Specs: specs}},
 	}
 
-	var entries strings.Builder
-	if len(unregistered) > 0 {
-		entries.WriteString(`	// Models that declare a Design but no Migrate never reach the registry.
-	// Their query columns resolve the same way, so those that opted in to
-	// framework query parameters are inspected alongside the registered ones.
-	for _, m := range []any{
-`)
-		for _, m := range unregistered {
-			fmt.Fprintf(&entries, "\t\t&%s.%s{},\n", aliases[m.ImportPath()], m.ModelName)
-		}
-		entries.WriteString(`	} {
-		if !modelschema.IsQueryable(m) {
+	var stmts []ast.Stmt
+	for _, group := range []struct {
+		name   string
+		models []*modelinfo.Model
+	}{
+		{"unregisteredModels", unregistered},
+		{"ignoredModels", ignored},
+		{"tableBackedModels", tableBacked},
+	} {
+		if len(group.models) == 0 {
 			continue
 		}
-		models = append(models, m)
-	}
-`)
-	}
-	if len(ignored) > 0 {
-		entries.WriteString(`	// Models whose registration is ignored by gst.yaml gen.models.ignore
-	// stay table-backed: their column files must keep matching the
-	// module-copied model sources, so they are inspected unconditionally.
-	models = append(models,
-`)
-		for _, m := range ignored {
-			fmt.Fprintf(&entries, "\t\t&%s.%s{},\n", aliases[m.ImportPath()], m.ModelName)
+		elts := make([]ast.Expr, 0, len(group.models))
+		for _, m := range group.models {
+			elts = append(elts, &ast.UnaryExpr{Op: token.AND, X: &ast.CompositeLit{
+				Type: &ast.SelectorExpr{X: ast.NewIdent(aliases[m.ImportPath()]), Sel: ast.NewIdent(m.ModelName)},
+			}})
 		}
-		entries.WriteString("\t)\n")
+		stmts = append(stmts, &ast.AssignStmt{
+			Lhs: []ast.Expr{ast.NewIdent(group.name)},
+			Tok: token.ASSIGN,
+			Rhs: []ast.Expr{&ast.CompositeLit{Type: &ast.ArrayType{Elt: ast.NewIdent("any")}, Elts: elts}},
+		})
 	}
-	if len(tableBacked) > 0 {
-		entries.WriteString(`	// Table-backed models are compiled in by name as well: the registry
-	// lists them once gg gen wrote model.gen.go, and gg check validates their
-	// index declarations before that too. One the registry already lists is
-	// inspected once (see seen).
-	models = append(models,
-`)
-		for _, m := range tableBacked {
-			fmt.Fprintf(&entries, "\t\t&%s.%s{},\n", aliases[m.ImportPath()], m.ModelName)
-		}
-		entries.WriteString("\t)\n")
+	if len(stmts) > 0 {
+		f.Decls = append(f.Decls, &ast.FuncDecl{
+			Name: ast.NewIdent(ggconst.FuncInit),
+			Type: &ast.FuncType{},
+			Body: &ast.BlockStmt{List: stmts},
+		})
 	}
 
-	program = strings.ReplaceAll(program, "{{UNREGISTERED_IMPORTS}}", imports.String())
-	return strings.ReplaceAll(program, "{{UNREGISTERED_MODELS}}", entries.String())
+	fset := goast.GeneratedHeader(f)
+	var buf bytes.Buffer
+	if err := format.Node(&buf, fset, f); err != nil {
+		return "", errors.Wrap(err, "format the inspection program's project file")
+	}
+	return buf.String(), nil
 }
 
-// runProgram compiles and runs the inspection program and decodes what it
-// reports. The result travels through a file rather than stdout, because
-// framework initialization writes progress lines to stdout. The build takes
-// the files overlay maps in place of the project's own, none for the project
-// as it is (see Inspect).
-func runProgram(program string, overlay map[string]string) ([]ModelColumns, error) {
+// importSpec is the import of importPath under name, "_" for a blank one.
+func importSpec(name string, importPath string) *ast.ImportSpec {
+	return &ast.ImportSpec{
+		Name: ast.NewIdent(name),
+		Path: &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(importPath)},
+	}
+}
+
+// runProgram compiles and runs the inspection program, its files given by
+// name, and decodes what it reports. The result travels through a file rather
+// than stdout, because framework initialization writes progress lines to
+// stdout. The build takes the files overlay maps in place of the project's
+// own, none for the project as it is (see Inspect).
+func runProgram(files map[string]string, overlay map[string]string) ([]ModelColumns, error) {
 	resultFile, err := os.CreateTemp("", "gg-columns-*.json")
 	if err != nil {
 		return nil, errors.Wrap(err, "create column result file")
@@ -392,7 +182,7 @@ func runProgram(program string, overlay map[string]string) ([]ModelColumns, erro
 	}
 	defer os.Remove(resultPath)
 
-	inspector := gghelper.ProjectProgram{Content: program, Args: []string{resultPath}, Overlay: overlay}
+	inspector := gghelper.ProjectProgram{Files: files, Args: []string{resultPath}, Overlay: overlay}
 	if err = inspector.Run(); err != nil {
 		return nil, errors.Wrap(err, "inspect model columns")
 	}
