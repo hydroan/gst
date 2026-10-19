@@ -29,8 +29,8 @@ import (
 var genCmd = &cobra.Command{
 	Use:   "gen",
 	Short: "generate service code",
-	Run: func(cmd *cobra.Command, args []string) {
-		genRun()
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return genRun()
 	},
 }
 
@@ -67,11 +67,19 @@ func (o genRunOptions) mergesShell(path string) bool {
 	return ok
 }
 
-func genRun() {
+// genRun generates the code and then tidies the module, so that go.mod and
+// go.sum hold what the written files import.
+func genRun() error {
 	if err := genRunWithOptions(genRunOptions{}); err != nil {
-		clioutput.Error("", "%v", err)
-		os.Exit(1)
+		return err
 	}
+	clioutput.Section("Run Go Mod Tidy")
+	if err := goModTidy(); err != nil {
+		clioutput.Error("", "go mod tidy failed")
+		return err
+	}
+	clioutput.Success("", "Dependencies tidied")
+	return nil
 }
 
 func genRunWithOptions(opts genRunOptions) error {

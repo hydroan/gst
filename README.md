@@ -94,7 +94,8 @@ git init
 日常开发按这个顺序走：
 
 1. 在 `model/**/*.go` 中声明资源模型或动作模型。
-2. 每次修改 DSL 后运行 `gg gen`。
+2. 每次修改 DSL 后运行 `gg gen`；生成完它会执行 `go mod tidy`，把生成代码引用的依赖收进
+   `go.mod` 和 `go.sum`。
 3. 在生成的 `service/**` 文件中实现业务逻辑或 hook，并把同名 `_test.go` 里的骨架换成接口测试
    （骨架被换掉之前 `go test` 会失败）。
 4. 使用 `gg check` 检查项目结构和依赖边界。
@@ -1238,10 +1239,9 @@ Pod 端口，Ingress 只转发写进规则的路径——**只转发 `/api` 前�
 示例就是一个能跑的测试，再按业务补断言。包里还没有
 TestMain 时，再生成一个只声明 TestMain 的 `main_test.go`，用 `testutil.Run` 起默认的测试
 服务器（sqlite，不需要容器）；需要 MySQL、Redis 或播种数据的包，在它的 `testutil.Server`
-上改一次。骨架引用 testify，新项目第一次生成骨架后先跑一次 `go mod tidy`。这些文件生成后
-归项目维护；`gg gen` 只按 main.go 的口径同步声明 TestMain 的测试文件对 `pb`、`interceptor`
-两个包的空白导入，其余不改写；`gg check` 要求每个由 `gg gen` 生成的 service 文件都有配对的
-测试文件，删掉骨架而不写测试会被它拦下。
+上改一次。这些文件生成后归项目维护；`gg gen` 只按 main.go 的口径同步声明 TestMain 的
+测试文件对 `pb`、`interceptor` 两个包的空白导入，其余不改写；`gg check` 要求每个由 `gg gen`
+生成的 service 文件都有配对的测试文件，删掉骨架而不写测试会被它拦下。
 
 ### 为什么删除 action 后 service 文件还在？
 

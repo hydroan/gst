@@ -229,7 +229,7 @@ service 目录不是镜像复制，分两类文件。
 
 1. **写 model 文件**（`Copy Model Files`）。
 2. **删过期文件**（`Prune Stale Files`，有过期文件时才有这一段）：删过期的 model、service 文件；删过期的中间件文件，同时从 `middleware/middleware.go` 删掉调用这些文件里函数的 `Register`、`RegisterAuth` 语句，框架 middleware 包的导入没人用了也一并删掉；过期的拦截器文件同理，注册调用从 `interceptor/interceptor.go` 删。已经不在的文件算删过。这一步放在 `gg gen` 之前，因为过期的 model 文件还带着 DSL，`gg gen` 会照样为它生成注册代码。
-3. **运行 gg gen**：和 `gg gen` 同一套生成流程，但不打印生成文件的日志，不做 prune；生成前的项目检查只拦本次 copy 新引入的违规，基线里已有的不拦。
+3. **运行 gg gen**：和 `gg gen` 同一套生成流程，但不打印生成文件的日志，不做 prune，也不整理依赖（第 10 步统一做）；生成前的项目检查只拦本次 copy 新引入的违规，基线里已有的不拦。
 4. **写动作 service 文件**（`Copy Service Files`）。
 5. **写辅助文件**（`Copy Helper Files`，有辅助文件时才有）。
 6. **写中间件文件**（`Copy Middleware Files`，模块声明了中间件时才有）。

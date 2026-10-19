@@ -4,10 +4,12 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/ggnew"
 	"github.com/stretchr/testify/require"
@@ -1261,6 +1263,76 @@ func TestCreate(t *testing.T) {}
 	require.NoFileExists(t, "service/record/main_test.go")
 
 	requireProjectCompiles(t)
+}
+
+// TestGenRunTidiesTheProjectAfterWritingItsFiles pins the last step of gg
+// gen: once the code is generated it runs go mod tidy, so the requirements
+// the written files add, here the assertion library the test scaffold of a
+// new service file imports, reach go.mod and go.sum and the project's tests
+// build with no step of its own; a failed tidy fails the command.
+func TestGenRunTidiesTheProjectAfterWritingItsFiles(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	files, err := ggnew.ProjectFiles("tmpapp")
+	require.NoError(t, err)
+	for _, file := range files {
+		writeProjectFile(t, filepath.Join(projectDir, file.Path), file.Content)
+	}
+	// The project as gg new leaves it requires what its own sources import,
+	// not what the scaffolds gg gen writes will; the framework go.mod the
+	// fixture starts from also declares tools whose graph requires testify,
+	// and a project declares none.
+	goMod := readProjectFile(t, "go.mod")
+	tools := strings.Index(goMod, "\ntool (\n")
+	require.NotEqual(t, -1, tools, "the fixture go.mod declares no tools")
+	toolsEnd := tools + strings.Index(goMod[tools:], "\n)\n") + len("\n)\n")
+	writeProjectFile(t, filepath.Join(projectDir, "go.mod"), goMod[:tools]+goMod[toolsEnd:])
+	require.NoError(t, goModTidy())
+	const testifyModule = "github.com/stretchr/testify"
+	require.NotContains(t, readProjectFile(t, "go.mod"), testifyModule, "go.mod requires it before gg gen; the fixture proves nothing")
+	writeProjectFile(t, filepath.Join(projectDir, "model", "sample", "item.go"), `package sample
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Item struct {
+	model.Empty
+}
+
+func (Item) Design() {
+	dsl.Endpoint("items")
+	dsl.Create(func() {
+		dsl.Service()
+	})
+}
+`)
+
+	tidy := goModTidy
+	goModTidy = func() error {
+		if scaffolds, _ := filepath.Glob(filepath.Join("service", "sample", "item", "*_test.go")); len(scaffolds) == 0 {
+			t.Error("go mod tidy ran before the test scaffolds were written")
+		}
+		return tidy()
+	}
+	t.Cleanup(func() { goModTidy = tidy })
+
+	var genErr error
+	output := captureStdout(t, func() { genErr = genRun() })
+	require.NoError(t, genErr, output)
+	require.Contains(t, output, "Dependencies tidied")
+	for _, file := range []string{"go.mod", "go.sum"} {
+		require.Contains(t, readProjectFile(t, file), testifyModule, "%s after gg gen", file)
+	}
+	out, err := exec.Command("go", "vet", "./...").CombinedOutput()
+	require.NoError(t, err, "go vet after gg gen:\n%s", out)
+
+	goModTidy = func() error { return errors.New("tidy failed") }
+	captureStdout(t, func() { genErr = genRun() })
+	require.EqualError(t, genErr, "tidy failed")
 }
 
 // TestGenRunRefusesTheRoutesTwoActionsRegisterAlike pins that gg gen stops
