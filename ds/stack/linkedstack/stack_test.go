@@ -42,14 +42,7 @@ func TestNewFromMapKeys(t *testing.T) {
 func TestNewFromMapValues(t *testing.T) {
 	m := map[int]string{1: "a", 2: "b", 3: "c"}
 
-	stack, err := linkedstack.NewFromMapValues(func(a, b string) int {
-		if a < b {
-			return -1
-		} else if a > b {
-			return 1
-		}
-		return 0
-	}, m)
+	stack, err := linkedstack.NewFromMapValues(m)
 
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"a", "b", "c"}, stack.Values())
@@ -162,8 +155,7 @@ func TestClone(t *testing.T) {
 	// Clone the stack
 	clone := stack.Clone()
 
-	// FIXME: why stack is equal clone?
-	// assert.NotEqual(t, stack, clone)
+	assert.NotSame(t, stack, clone)
 	assert.Equal(t, stack.Values(), clone.Values())
 
 	// Modify the original stack

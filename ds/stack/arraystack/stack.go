@@ -5,67 +5,54 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/hydroan/gst/ds/list/arraylist"
 	"github.com/hydroan/gst/ds/types"
 )
 
-// Stack represents a stack based on array-backed list.
+// Stack represents a stack backed by a slice.
 // The stack provides typical LIFO(last-in, first-out) behavior.
 type Stack[E any] struct {
-	list *arraylist.List[E]
-	cmp  func(E, E) int
-	safe bool
-	mu   types.Locker
+	elements []E
+	safe     bool
+	mu       types.Locker
 }
 
 // New creates and initializes a empty stack.
-// The "cmp" function is used to compare elements for equality.
 // Options can be provided to customize the stack's properties (e.g., thread safety).
-func New[E any](cmp func(E, E) int, ops ...Option[E]) (s *Stack[E], err error) {
-	s = &Stack[E]{mu: types.FakeLocker{}, cmp: cmp}
+func New[E any](ops ...Option[E]) (*Stack[E], error) {
+	s := &Stack[E]{elements: make([]E, 0), mu: types.FakeLocker{}}
 	for _, op := range ops {
 		if op == nil {
 			continue
 		}
-		if err = op(s); err != nil {
+		if err := op(s); err != nil {
 			return nil, err
 		}
-	}
-	// The internal list is always concurrency-unsafe.
-	s.list, err = arraylist.New(cmp)
-	if err != nil {
-		return nil, err
 	}
 	return s, nil
 }
 
-// NewFromSlice creates and initializes a stack from the provided slice.
-// The "cmp" function is used to compare elements for equality.
+// NewFromSlice creates and initializes a stack from the provided slice, the
+// last element of the slice on top.
 // Options can be provided to customize the stack's properties (e.g., thread safety).
-func NewFromSlice[E any](cmp func(E, E) int, slice []E, ops ...Option[E]) (*Stack[E], error) {
-	s, err := New(cmp, ops...)
+func NewFromSlice[E any](slice []E, ops ...Option[E]) (*Stack[E], error) {
+	s, err := New(ops...)
 	if err != nil {
 		return nil, err
 	}
-	if len(slice) > 0 {
-		s.list.Append(slice...)
-	}
+	s.elements = append(s.elements, slice...)
 	return s, nil
 }
 
 // NewFromMapKeys creates and initializes a stack from the provided map keys.
-// The "cmp" function is used to compare elements for equality.
 // Options can be provided to customize the stack's properties (e.g., thread safety).
 // Returns an empty stack if the provided map is nil or empty.
-func NewFromMapKeys[K comparable, V any](cmp func(K, K) int, m map[K]V, ops ...Option[K]) (*Stack[K], error) {
-	s, err := New(cmp, ops...)
+func NewFromMapKeys[K comparable, V any](m map[K]V, ops ...Option[K]) (*Stack[K], error) {
+	s, err := New(ops...)
 	if err != nil {
 		return nil, err
 	}
-	if len(m) > 0 {
-		for k := range m {
-			s.list.Append(k)
-		}
+	for k := range m {
+		s.elements = append(s.elements, k)
 	}
 	return s, nil
 }
@@ -73,15 +60,13 @@ func NewFromMapKeys[K comparable, V any](cmp func(K, K) int, m map[K]V, ops ...O
 // NewFromMapValues creates a stack from the provided map values.
 // Options can be provided to customize the stack's properties (e.g., thread safety).
 // Returns an empty stack if the provided map is nil or empty.
-func NewFromMapValues[K comparable, V any](cmp func(V, V) int, m map[K]V, ops ...Option[V]) (*Stack[V], error) {
-	s, err := New(cmp, ops...)
+func NewFromMapValues[K comparable, V any](m map[K]V, ops ...Option[V]) (*Stack[V], error) {
+	s, err := New(ops...)
 	if err != nil {
 		return nil, err
 	}
-	if len(m) > 0 {
-		for _, v := range m {
-			s.list.Append(v)
-		}
+	for _, v := range m {
+		s.elements = append(s.elements, v)
 	}
 	return s, nil
 }
@@ -94,7 +79,7 @@ func (s *Stack[E]) Push(e E) {
 		defer s.mu.Unlock()
 	}
 
-	s.list.Append(e)
+	s.elements = append(s.elements, e)
 }
 
 // Pop removes and returns the top element of the stack.
@@ -105,11 +90,15 @@ func (s *Stack[E]) Pop() (E, bool) {
 		defer s.mu.Unlock()
 	}
 
-	var e E
-	if s.list.IsEmpty() {
-		return e, false
+	var zero E
+	last := len(s.elements) - 1
+	if last < 0 {
+		return zero, false
 	}
-	e = s.list.RemoveAt(s.list.Len() - 1)
+	e := s.elements[last]
+	// Clearing the slot lets the backing array drop its reference to e.
+	s.elements[last] = zero
+	s.elements = s.elements[:last]
 	return e, true
 }
 
@@ -121,7 +110,11 @@ func (s *Stack[E]) Peek() (E, bool) {
 		defer s.mu.RUnlock()
 	}
 
-	return s.list.Get(s.list.Len() - 1)
+	if len(s.elements) == 0 {
+		var zero E
+		return zero, false
+	}
+	return s.elements[len(s.elements)-1], true
 }
 
 // IsEmpty reports whether the stack has no elements.
@@ -131,7 +124,7 @@ func (s *Stack[E]) IsEmpty() bool {
 		defer s.mu.RUnlock()
 	}
 
-	return s.list.IsEmpty()
+	return len(s.elements) == 0
 }
 
 // Len returns the number of elements currently in the stack.
@@ -141,7 +134,7 @@ func (s *Stack[E]) Len() int {
 		defer s.mu.RUnlock()
 	}
 
-	return s.list.Len()
+	return len(s.elements)
 }
 
 // Values returns all elements in the stack in LIFO(last-in, first-out) order.
@@ -152,7 +145,7 @@ func (s *Stack[E]) Values() []E {
 		defer s.mu.RUnlock()
 	}
 
-	el := s.list.Values()
+	el := slices.Clone(s.elements)
 	slices.Reverse(el)
 	return el
 }
@@ -164,7 +157,7 @@ func (s *Stack[E]) Clear() {
 		defer s.mu.Unlock()
 	}
 
-	s.list.Clear()
+	s.elements = make([]E, 0)
 }
 
 // Clone returns a deep copy of the stack.
@@ -174,7 +167,7 @@ func (s *Stack[E]) Clone() *Stack[E] {
 		defer s.mu.RUnlock()
 	}
 
-	clone, _ := NewFromSlice(s.cmp, s.list.Values(), s.options()...)
+	clone, _ := NewFromSlice(s.elements, s.options()...)
 	return clone
 }
 
@@ -193,10 +186,8 @@ func (s *Stack[E]) String() string {
 		defer s.mu.RUnlock()
 	}
 
-	el := s.list.Values()
-	slices.Reverse(el)
-	items := make([]string, 0, s.list.Len())
-	for _, e := range el {
+	items := make([]string, 0, len(s.elements))
+	for _, e := range slices.Backward(s.elements) {
 		items = append(items, fmt.Sprintf("%v", e))
 	}
 	return fmt.Sprintf("stack:{%s}", strings.Join(items, ", "))

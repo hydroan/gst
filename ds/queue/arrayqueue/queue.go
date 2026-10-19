@@ -2,85 +2,68 @@ package arrayqueue
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
-	"github.com/hydroan/gst/ds/list/arraylist"
 	"github.com/hydroan/gst/ds/types"
 )
 
-// Queue represents a queue based on an array-backed list.
+// Queue represents a queue backed by a slice.
 // This queue implements the FIFO (first-in, first-out) behavior.
 type Queue[E any] struct {
-	list *arraylist.List[E]
-	cmp  func(E, E) int
-	mu   types.Locker
-	safe bool
+	elements []E
+	mu       types.Locker
+	safe     bool
 }
 
 // New creates and initializes a empty queue.
-// The "cmp" function is used to compare elements for equality.
 // Options can be provided to customize the queue's properties (e.g., thread safety).
-func New[E any](cmp func(E, E) int, ops ...Option[E]) (*Queue[E], error) {
-	q := &Queue[E]{mu: types.FakeLocker{}, cmp: cmp}
-	var err error
+func New[E any](ops ...Option[E]) (*Queue[E], error) {
+	q := &Queue[E]{elements: make([]E, 0), mu: types.FakeLocker{}}
 	for _, op := range ops {
 		if op == nil {
 			continue
 		}
-		if err = op(q); err != nil {
+		if err := op(q); err != nil {
 			return nil, err
 		}
-	}
-	// The internal list is always concurrency-unsafe.
-	q.list, err = arraylist.New(cmp)
-	if err != nil {
-		return nil, err
 	}
 	return q, nil
 }
 
 // NewFromSlice creates and initializes a queue from the provided slice.
-// The "cmp" function is used to compare elements for equality.
 // Options can be provided to customize the queue's properties (e.g., thread safety).
-func NewFromSlice[E any](cmp func(E, E) int, slice []E, ops ...Option[E]) (*Queue[E], error) {
-	q, err := New(cmp, ops...)
+func NewFromSlice[E any](slice []E, ops ...Option[E]) (*Queue[E], error) {
+	q, err := New(ops...)
 	if err != nil {
 		return nil, err
 	}
-	if len(slice) > 0 {
-		q.list.Append(slice...)
-	}
+	q.elements = append(q.elements, slice...)
 	return q, nil
 }
 
 // NewFromMapKeys creates and initializes a queue from the provided map keys.
-// The "cmp" function is used to compare elements for equality.
 // Options can be provided to customize the queue's properties (e.g., thread safety).
-func NewFromMapKeys[K comparable, V any](cmp func(K, K) int, m map[K]V, ops ...Option[K]) (*Queue[K], error) {
-	q, err := New(cmp, ops...)
+func NewFromMapKeys[K comparable, V any](m map[K]V, ops ...Option[K]) (*Queue[K], error) {
+	q, err := New(ops...)
 	if err != nil {
 		return nil, err
 	}
-	if len(m) > 0 {
-		for k := range m {
-			q.list.Append(k)
-		}
+	for k := range m {
+		q.elements = append(q.elements, k)
 	}
 	return q, nil
 }
 
 // NewFromMapValues creates and initializes a queue from the provided map values.
-// The "cmp" function is used to compare elements for equality.
 // Options can be provided to customize the queue's properties (e.g., thread safety).
-func NewFromMapValues[K comparable, V any](cmp func(V, V) int, m map[K]V, ops ...Option[V]) (*Queue[V], error) {
-	q, err := New(cmp, ops...)
+func NewFromMapValues[K comparable, V any](m map[K]V, ops ...Option[V]) (*Queue[V], error) {
+	q, err := New(ops...)
 	if err != nil {
 		return nil, err
 	}
-	if len(m) > 0 {
-		for _, v := range m {
-			q.list.Append(v)
-		}
+	for _, v := range m {
+		q.elements = append(q.elements, v)
 	}
 	return q, nil
 }
@@ -92,7 +75,7 @@ func (q *Queue[E]) Enqueue(e E) {
 		defer q.mu.Unlock()
 	}
 
-	q.list.Append(e)
+	q.elements = append(q.elements, e)
 }
 
 // Dequeue removes first element of the queue.
@@ -103,11 +86,15 @@ func (q *Queue[E]) Dequeue() (E, bool) {
 		defer q.mu.Unlock()
 	}
 
-	e, ok := q.list.Get(0)
-	if ok {
-		q.list.RemoveAt(0)
+	var zero E
+	if len(q.elements) == 0 {
+		return zero, false
 	}
-	return e, ok
+	e := q.elements[0]
+	// Clearing the slot lets the backing array drop its reference to e.
+	q.elements[0] = zero
+	q.elements = q.elements[1:]
+	return e, true
 }
 
 // Peek returns first element of the queue without remove it.
@@ -118,7 +105,11 @@ func (q *Queue[E]) Peek() (E, bool) {
 		defer q.mu.RUnlock()
 	}
 
-	return q.list.Get(0)
+	if len(q.elements) == 0 {
+		var zero E
+		return zero, false
+	}
+	return q.elements[0], true
 }
 
 // IsEmpty reports whether the queue has no element.
@@ -128,7 +119,7 @@ func (q *Queue[E]) IsEmpty() bool {
 		defer q.mu.RUnlock()
 	}
 
-	return q.list.IsEmpty()
+	return len(q.elements) == 0
 }
 
 // Len returns the number of elements currently in the queue.
@@ -138,7 +129,7 @@ func (q *Queue[E]) Len() int {
 		defer q.mu.RUnlock()
 	}
 
-	return q.list.Len()
+	return len(q.elements)
 }
 
 // Values returns all elements in the queue in FIFO(first-in, first-out) order.
@@ -148,7 +139,7 @@ func (q *Queue[E]) Values() []E {
 		defer q.mu.RUnlock()
 	}
 
-	return q.list.Values()
+	return slices.Clone(q.elements)
 }
 
 // Clear removes all elements from the queue.
@@ -158,7 +149,7 @@ func (q *Queue[E]) Clear() {
 		defer q.mu.Unlock()
 	}
 
-	q.list.Clear()
+	q.elements = make([]E, 0)
 }
 
 // Clone returns a deep copy of the queue.
@@ -168,7 +159,7 @@ func (q *Queue[E]) Clone() *Queue[E] {
 		defer q.mu.RUnlock()
 	}
 
-	clone, _ := NewFromSlice(q.cmp, q.list.Values(), q.options()...)
+	clone, _ := NewFromSlice(q.elements, q.options()...)
 	return clone
 }
 
@@ -187,10 +178,9 @@ func (q *Queue[E]) String() string {
 		defer q.mu.RUnlock()
 	}
 
-	items := make([]string, 0, q.list.Len())
-	q.list.Range(func(e E) bool {
+	items := make([]string, 0, len(q.elements))
+	for _, e := range q.elements {
 		items = append(items, fmt.Sprintf("%v", e))
-		return true
-	})
+	}
 	return fmt.Sprintf("queue:{%s}", strings.Join(items, ", "))
 }

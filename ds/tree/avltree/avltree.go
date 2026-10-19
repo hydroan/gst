@@ -186,21 +186,28 @@ func (t *Tree[K, V]) lookup(key K) (*Node[K, V], bool) {
 	return nil, false
 }
 
-// Delete delete the node from the tree by key.
-func (t *Tree[K, V]) Delete(key K) {
+// Delete removes the node with the given key from the tree and returns its
+// value. It returns the zero value and false when no node has the key.
+func (t *Tree[K, V]) Delete(key K) (V, bool) {
 	if t.safe {
 		t.mu.Lock()
 		defer t.mu.Unlock()
 	}
 
-	t.delete(key, &t.root)
+	var (
+		removed V
+		found   bool
+	)
+	t.delete(key, &t.root, &removed, &found)
+	return removed, found
 }
 
-// delete removes key from the subtree *qp and reports whether the subtree's
-// height changed.
+// delete removes key from the subtree *qp, storing the value it held in
+// *removed and setting *found, and reports whether the subtree's height
+// changed.
 //
 // references: https://github.com/emirpasic/gods/blob/8323d02ee3ca1499478f9ccd7a299fb1c5005780/trees/avltree/avltree.go#L254
-func (t *Tree[K, V]) delete(key K, qp **Node[K, V]) bool {
+func (t *Tree[K, V]) delete(key K, qp **Node[K, V], removed *V, found *bool) bool {
 	q := *qp
 	if q == nil {
 		return false
@@ -208,6 +215,7 @@ func (t *Tree[K, V]) delete(key K, qp **Node[K, V]) bool {
 
 	res := t.cmp(key, q.Key)
 	if res == 0 {
+		*removed, *found = q.Value, true
 		t.size--
 		if q.Children[1] == nil {
 			if q.Children[0] != nil {
@@ -229,7 +237,7 @@ func (t *Tree[K, V]) delete(key K, qp **Node[K, V]) bool {
 		res = 1
 	}
 	a := (res + 1) / 2
-	fix := t.delete(key, &q.Children[a])
+	fix := t.delete(key, &q.Children[a], removed, found)
 	if fix {
 		return rebalanceDelete(-res, qp)
 	}

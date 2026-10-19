@@ -10,16 +10,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func intCmp(a, b int) int {
-	return a - b
-}
-
 func newIntStack() (*arraystack.Stack[int], error) {
-	return arraystack.New(intCmp)
+	return arraystack.New[int]()
 }
 
 func TestNew(t *testing.T) {
-	s, err := arraystack.New(intCmp)
+	s, err := arraystack.New[int]()
 	require.NoError(t, err)
 	assert.NotNil(t, s)
 	assert.Equal(t, 0, s.Len())
@@ -27,7 +23,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestNewFromSlice(t *testing.T) {
-	s, err := arraystack.NewFromSlice(intCmp, []int{1, 2, 3}, arraystack.WithSafe[int]())
+	s, err := arraystack.NewFromSlice([]int{1, 2, 3}, arraystack.WithSafe[int]())
 	require.NoError(t, err)
 	assert.NotNil(t, s)
 	assert.Equal(t, 3, s.Len())
@@ -39,14 +35,7 @@ func TestNewFromSlice(t *testing.T) {
 func TestNewFromMapKeys(t *testing.T) {
 	m := map[int]string{1: "a", 2: "b", 3: "c"}
 
-	stack, err := arraystack.NewFromMapKeys(func(a, b int) int {
-		if a < b {
-			return -1
-		} else if a > b {
-			return 1
-		}
-		return 0
-	}, m)
+	stack, err := arraystack.NewFromMapKeys(m)
 
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []int{1, 2, 3}, stack.Values())
@@ -55,14 +44,7 @@ func TestNewFromMapKeys(t *testing.T) {
 func TestNewFromMapValues(t *testing.T) {
 	m := map[int]string{1: "a", 2: "b", 3: "c"}
 
-	stack, err := arraystack.NewFromMapValues(func(a, b string) int {
-		if a < b {
-			return -1
-		} else if a > b {
-			return 1
-		}
-		return 0
-	}, m)
+	stack, err := arraystack.NewFromMapValues(m)
 
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"a", "b", "c"}, stack.Values())
@@ -118,7 +100,7 @@ func TestPeek(t *testing.T) {
 // by one goroutine: a writer queued between the two acquisitions blocks the
 // second one, while the writer itself waits for the first to be released.
 func TestPeekDoesNotDeadlockAgainstWriters(t *testing.T) {
-	stack, err := arraystack.New(intCmp, arraystack.WithSafe[int]())
+	stack, err := arraystack.New(arraystack.WithSafe[int]())
 	require.NoError(t, err)
 	stack.Push(1)
 
@@ -204,7 +186,7 @@ func TestClone(t *testing.T) {
 	clone := stack.Clone()
 
 	// Ensure the clone is independent
-	assert.NotEqual(t, stack, clone)
+	assert.NotSame(t, stack, clone)
 	assert.Equal(t, stack.Values(), clone.Values())
 
 	// Modify the original stack
@@ -228,7 +210,7 @@ func TestMarshalJSON(t *testing.T) {
 
 func TestUnmarshalJSON(t *testing.T) {
 	data := []byte("[1,2,3]")
-	stack, err := arraystack.New(intCmp)
+	stack, err := arraystack.New[int]()
 	require.NoError(t, err)
 	require.NoError(t, stack.UnmarshalJSON(data))
 	assert.Equal(t, []int{3, 2, 1}, stack.Values())
@@ -250,4 +232,18 @@ func requireFinishes(t *testing.T, fn func()) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("the goroutines did not finish: they deadlocked")
 	}
+}
+
+// TestStackTakesElementsWithoutAnOrder pins that the stack needs no way to
+// compare its elements: it holds a type that has none.
+func TestStackTakesElementsWithoutAnOrder(t *testing.T) {
+	s, err := arraystack.New[[]int]()
+	require.NoError(t, err)
+	s.Push([]int{1})
+	s.Push([]int{2, 3})
+
+	e, ok := s.Pop()
+	require.True(t, ok)
+	assert.Equal(t, []int{2, 3}, e)
+	assert.Equal(t, [][]int{{1}}, s.Values())
 }

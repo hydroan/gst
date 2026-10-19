@@ -382,3 +382,20 @@ func TestSplayTree_MarshalJSON(t *testing.T) {
 // 		fmt.Println(tree)
 // 	}
 // }
+
+// TestSplayTree_StringUsesTheNodeFormatter pins how String prints a node: by
+// its key alone unless a formatter is given, and as the formatter renders the
+// key and the value when one is.
+func TestSplayTree_StringUsesTheNodeFormatter(t *testing.T) {
+	plain, err := splaytree.NewOrderedKeys[int, string]()
+	require.NoError(t, err)
+	plain.Put(1, "one")
+	assert.Equal(t, "SplayTree\n╰── 1\n", plain.String())
+
+	formatted, err := splaytree.NewOrderedKeys(splaytree.WithNodeFormatter(func(k int, v string) string {
+		return strconv.Itoa(k) + ":" + v
+	}))
+	require.NoError(t, err)
+	formatted.Put(1, "one")
+	assert.Equal(t, "SplayTree\n╰── 1:one\n", formatted.String())
+}

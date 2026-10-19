@@ -12,17 +12,14 @@ import (
 // This queue implements the FIFO (first-in, first-out) behavior.
 type Queue[E any] struct {
 	list *linkedlist.List[E]
-	cmp  func(E, E) int
 	mu   types.Locker
 	safe bool
 }
 
 // New creates and initializes a empty queue.
-// The "cmp" function is used to compare elements for equality.
 // Options can be provided to customize the queue's properties (e.g., thread safety).
-func New[E any](cmp func(E, E) int, ops ...Option[E]) (*Queue[E], error) {
+func New[E any](ops ...Option[E]) (*Queue[E], error) {
 	q := &Queue[E]{mu: types.FakeLocker{}}
-	q.cmp = cmp
 	var err error
 	for _, op := range ops {
 		if op == nil {
@@ -41,10 +38,9 @@ func New[E any](cmp func(E, E) int, ops ...Option[E]) (*Queue[E], error) {
 }
 
 // NewFromSlice creates and initializes a queue from the provided slice.
-// The "cmp" function is used to compare elements for equality.
 // Options can be provided to customize the queue's properties (e.g., thread safety).
-func NewFromSlice[E any](cmp func(E, E) int, slice []E, ops ...Option[E]) (*Queue[E], error) {
-	q, err := New(cmp, ops...)
+func NewFromSlice[E any](slice []E, ops ...Option[E]) (*Queue[E], error) {
+	q, err := New(ops...)
 	if err != nil {
 		return nil, err
 	}
@@ -57,10 +53,9 @@ func NewFromSlice[E any](cmp func(E, E) int, slice []E, ops ...Option[E]) (*Queu
 }
 
 // NewFromMapKeys creates and initializes a queue from the provided map keys.
-// The "cmp" function is used to compare elements for equality.
 // Options can be provided to customize the queue's properties (e.g., thread safety).
-func NewFromMapKeys[K comparable, V any](cmp func(K, K) int, m map[K]V, ops ...Option[K]) (*Queue[K], error) {
-	q, err := New(cmp, ops...)
+func NewFromMapKeys[K comparable, V any](m map[K]V, ops ...Option[K]) (*Queue[K], error) {
+	q, err := New(ops...)
 	if err != nil {
 		return nil, err
 	}
@@ -73,10 +68,9 @@ func NewFromMapKeys[K comparable, V any](cmp func(K, K) int, m map[K]V, ops ...O
 }
 
 // NewFromMapValues creates and initializes a queue from the provided map values.
-// The "cmp" function is used to compare elements for equality.
 // Options can be provided to customize the queue's properties (e.g., thread safety).
-func NewFromMapValues[K comparable, V any](cmp func(V, V) int, m map[K]V, ops ...Option[V]) (*Queue[V], error) {
-	q, err := New(cmp, ops...)
+func NewFromMapValues[K comparable, V any](m map[K]V, ops ...Option[V]) (*Queue[V], error) {
+	q, err := New(ops...)
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +169,7 @@ func (q *Queue[E]) Clone() *Queue[E] {
 		defer q.mu.RUnlock()
 	}
 
-	clone, _ := NewFromSlice(q.cmp, q.list.Slice(), q.options()...)
+	clone, _ := NewFromSlice(q.list.Slice(), q.options()...)
 	return clone
 }
 

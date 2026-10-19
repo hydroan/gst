@@ -8,47 +8,32 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func intCmp(a, b int) int {
-	return a - b
-}
-
-func stringCmp(a, b string) int {
-	switch {
-	case a < b:
-		return -1
-	case a > b:
-		return 1
-	default:
-		return 0
-	}
-}
-
 func TestQueue(t *testing.T) {
 	t.Run("New", func(t *testing.T) {
 		m := map[int]string{1: "a", 2: "b", 3: "c"}
 
-		q, err := arrayqueue.New(intCmp, arrayqueue.WithSafe[int]())
+		q, err := arrayqueue.New(arrayqueue.WithSafe[int]())
 		require.NoError(t, err)
 		assert.Equal(t, 0, q.Len())
 		assert.True(t, q.IsEmpty())
 		assert.Empty(t, q.Values())
 		assert.Equal(t, "queue:{}", q.String())
 
-		q, err = arrayqueue.NewFromSlice(intCmp, []int{1, 2, 3}, arrayqueue.WithSafe[int]())
+		q, err = arrayqueue.NewFromSlice([]int{1, 2, 3}, arrayqueue.WithSafe[int]())
 		require.NoError(t, err)
 		assert.Equal(t, 3, q.Len())
 		assert.False(t, q.IsEmpty())
 		assert.Equal(t, []int{1, 2, 3}, q.Values())
 		assert.Equal(t, "queue:{1, 2, 3}", q.String())
 
-		q, err = arrayqueue.NewFromMapKeys(intCmp, m, arrayqueue.WithSafe[int]())
+		q, err = arrayqueue.NewFromMapKeys(m, arrayqueue.WithSafe[int]())
 		require.NoError(t, err)
 		assert.NotNil(t, q)
 		assert.False(t, q.IsEmpty())
 		assert.Equal(t, 3, q.Len())
 		assert.ElementsMatch(t, []int{1, 2, 3}, q.Values())
 
-		q2, err := arrayqueue.NewFromMapValues(stringCmp, m, arrayqueue.WithSafe[string]())
+		q2, err := arrayqueue.NewFromMapValues(m, arrayqueue.WithSafe[string]())
 		require.NoError(t, err)
 		assert.NotNil(t, q2)
 		assert.False(t, q2.IsEmpty())
@@ -57,7 +42,7 @@ func TestQueue(t *testing.T) {
 	})
 
 	t.Run("Enqueue and Dequeue", func(t *testing.T) {
-		q, err := arrayqueue.New(intCmp)
+		q, err := arrayqueue.New[int]()
 		require.NoError(t, err)
 		assert.True(t, q.IsEmpty())
 
@@ -87,7 +72,7 @@ func TestQueue(t *testing.T) {
 	})
 
 	t.Run("Peek", func(t *testing.T) {
-		q, err := arrayqueue.New(intCmp)
+		q, err := arrayqueue.New[int]()
 		require.NoError(t, err)
 
 		_, ok := q.Peek()
@@ -101,7 +86,7 @@ func TestQueue(t *testing.T) {
 	})
 
 	t.Run("Values", func(t *testing.T) {
-		q, err := arrayqueue.New(intCmp)
+		q, err := arrayqueue.New[int]()
 		require.NoError(t, err)
 
 		q.Enqueue(1)
@@ -112,7 +97,7 @@ func TestQueue(t *testing.T) {
 	})
 
 	t.Run("Clear", func(t *testing.T) {
-		q, err := arrayqueue.New(intCmp)
+		q, err := arrayqueue.New[int]()
 		require.NoError(t, err)
 
 		q.Enqueue(1)
@@ -125,7 +110,7 @@ func TestQueue(t *testing.T) {
 	})
 
 	t.Run("Clone", func(t *testing.T) {
-		q, err := arrayqueue.New(intCmp)
+		q, err := arrayqueue.New[int]()
 		require.NoError(t, err)
 
 		q.Enqueue(1)
@@ -140,7 +125,7 @@ func TestQueue(t *testing.T) {
 
 func TestQueueBoundaryCases(t *testing.T) {
 	t.Run("Empty Queue Dequeue and Peek", func(t *testing.T) {
-		q, err := arrayqueue.New(intCmp)
+		q, err := arrayqueue.New[int]()
 		require.NoError(t, err)
 
 		value, ok := q.Dequeue()
@@ -153,7 +138,7 @@ func TestQueueBoundaryCases(t *testing.T) {
 	})
 
 	t.Run("Queue With One Element", func(t *testing.T) {
-		q, err := arrayqueue.New(intCmp)
+		q, err := arrayqueue.New[int]()
 		require.NoError(t, err)
 
 		q.Enqueue(42)
@@ -168,4 +153,18 @@ func TestQueueBoundaryCases(t *testing.T) {
 		assert.Equal(t, 42, value)
 		assert.True(t, q.IsEmpty())
 	})
+}
+
+// TestQueueTakesElementsWithoutAnOrder pins that the queue needs no way to
+// compare its elements: it holds a type that has none.
+func TestQueueTakesElementsWithoutAnOrder(t *testing.T) {
+	q, err := arrayqueue.New[[]int]()
+	require.NoError(t, err)
+	q.Enqueue([]int{1})
+	q.Enqueue([]int{2, 3})
+
+	e, ok := q.Dequeue()
+	require.True(t, ok)
+	assert.Equal(t, []int{1}, e)
+	assert.Equal(t, [][]int{{2, 3}}, q.Values())
 }

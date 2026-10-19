@@ -142,7 +142,15 @@ func TestAVLTree_Delete(t *testing.T) {
 	assert.Equal(t, 7, tree.Size())
 
 	// Test delete leaf node
-	tree.Delete(7)
+	v, ok := tree.Delete(7)
+	assert.True(t, ok)
+	assert.Equal(t, "seven", v)
+	assert.Equal(t, 6, tree.Size())
+
+	// Test delete a key that is not there
+	v, ok = tree.Delete(42)
+	assert.False(t, ok)
+	assert.Empty(t, v)
 	assert.Equal(t, 6, tree.Size())
 
 	// Test delete node with one child

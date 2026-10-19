@@ -12,9 +12,9 @@ func createQueue(b *testing.B, size int, safe bool) *arrayqueue.Queue[int] {
 	var q *arrayqueue.Queue[int]
 	var err error
 	if safe {
-		q, err = arrayqueue.New(intCmp, arrayqueue.WithSafe[int]())
+		q, err = arrayqueue.New(arrayqueue.WithSafe[int]())
 	} else {
-		q, err = arrayqueue.New(intCmp)
+		q, err = arrayqueue.New[int]()
 	}
 	for i := range size {
 		q.Enqueue(i)

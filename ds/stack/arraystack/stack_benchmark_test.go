@@ -9,13 +9,12 @@ import (
 
 func createStack(b *testing.B, size int, safe bool) *arraystack.Stack[int] {
 	b.Helper()
-	cmp := func(a, b int) int { return a - b }
 	var s *arraystack.Stack[int]
 	var err error
 	if safe {
-		s, err = arraystack.New(cmp, arraystack.WithSafe[int]())
+		s, err = arraystack.New(arraystack.WithSafe[int]())
 	} else {
-		s, err = arraystack.New(cmp)
+		s, err = arraystack.New[int]()
 	}
 	if err != nil {
 		b.Fatal(err)

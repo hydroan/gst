@@ -14,10 +14,8 @@ func (s *Stack[E]) MarshalJSON() ([]byte, error) {
 		defer s.mu.RUnlock()
 	}
 
-	el := s.list.Values()
-	slices.Reverse(el)
-	items := make([]string, 0, s.list.Len())
-	for _, e := range el {
+	items := make([]string, 0, len(s.elements))
+	for _, e := range slices.Backward(s.elements) {
 		b, err := json.Marshal(e)
 		if err != nil {
 			return nil, err
@@ -38,9 +36,6 @@ func (s *Stack[E]) UnmarshalJSON(data []byte) (err error) {
 	if err = json.Unmarshal(data, &el); err != nil {
 		return err
 	}
-	s.list.Clear()
-	for _, e := range el {
-		s.list.Append(e)
-	}
+	s.elements = el
 	return nil
 }

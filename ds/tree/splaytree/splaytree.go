@@ -34,9 +34,9 @@ type Tree[K comparable, V any] struct {
 	cmp  func(K, K) int
 	size int
 
-	safe       bool
-	mu         types.Locker
-	nodeFormat string
+	safe          bool
+	mu            types.Locker
+	nodeFormatter func(K, V) string
 }
 
 // New creates and returns a splay tree.
@@ -622,16 +622,17 @@ func (t *Tree[K, V]) String() string {
 	if t.root == nil {
 		return "SplayTree (empty)"
 	}
-	// str := "SplayTree\n"
-	// output(t.root, "", true, &str, t.nodeFormat)
-	// return str
+	nodeFormatter := t.nodeFormatter
+	if nodeFormatter == nil {
+		nodeFormatter = func(k K, _ V) string { return fmt.Sprintf("%v", k) }
+	}
 	var sb strings.Builder
 	sb.WriteString("SplayTree\n")
-	output2(t.root, "", true, &sb, t.nodeFormat)
+	output(t.root, "", true, &sb, nodeFormatter)
 	return sb.String()
 }
 
-func output2[K comparable, V any](node *Node[K, V], prefix string, isTail bool, sb *strings.Builder, format string) {
+func output[K comparable, V any](node *Node[K, V], prefix string, isTail bool, sb *strings.Builder, nodeFormatter func(K, V) string) {
 	if node.Children[1] != nil {
 		newPrefix := prefix
 		if isTail {
@@ -639,7 +640,7 @@ func output2[K comparable, V any](node *Node[K, V], prefix string, isTail bool, 
 		} else {
 			newPrefix += space
 		}
-		output2(node.Children[1], newPrefix, false, sb, format)
+		output(node.Children[1], newPrefix, false, sb, nodeFormatter)
 	}
 
 	sb.WriteString(prefix)
@@ -649,11 +650,8 @@ func output2[K comparable, V any](node *Node[K, V], prefix string, isTail bool, 
 		sb.WriteString(headMark)
 	}
 
-	if len(format) > 0 {
-		fmt.Fprintf(sb, format, node.Key, node.Value)
-	} else {
-		fmt.Fprintf(sb, "%v\n", node.String())
-	}
+	sb.WriteString(nodeFormatter(node.Key, node.Value))
+	sb.WriteString("\n")
 
 	if node.Children[0] != nil {
 		newPrefix := prefix
@@ -662,7 +660,7 @@ func output2[K comparable, V any](node *Node[K, V], prefix string, isTail bool, 
 		} else {
 			newPrefix += vertical
 		}
-		output2(node.Children[0], newPrefix, true, sb, format)
+		output(node.Children[0], newPrefix, true, sb, nodeFormatter)
 	}
 }
 

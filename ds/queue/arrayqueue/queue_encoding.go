@@ -13,18 +13,13 @@ func (q *Queue[E]) MarshalJSON() ([]byte, error) {
 		defer q.mu.RUnlock()
 	}
 
-	items := make([]string, 0, q.list.Len())
-	var b []byte
-	var err error
-	q.list.Range(func(e E) bool {
-		if b, err = json.Marshal(e); err == nil {
-			items = append(items, string(b))
-			return true
+	items := make([]string, 0, len(q.elements))
+	for _, e := range q.elements {
+		b, err := json.Marshal(e)
+		if err != nil {
+			return nil, err
 		}
-		return false
-	})
-	if err != nil {
-		return nil, err
+		items = append(items, string(b))
 	}
 	return fmt.Appendf(nil, "[%s]", strings.Join(items, ",")), nil
 }
@@ -40,9 +35,6 @@ func (q *Queue[E]) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &el); err != nil {
 		return err
 	}
-	q.list.Clear()
-	for _, e := range el {
-		q.list.Append(e)
-	}
+	q.elements = el
 	return nil
 }
