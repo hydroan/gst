@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/hydroan/gst/ds/list/linkedlist"
-	"github.com/hydroan/gst/ds/util"
 )
 
 func ExampleList_add() {
@@ -16,7 +15,7 @@ func ExampleList_add() {
 	l.PushBack(2)
 	l.PushBack(3)
 
-	n := l.Find(3, util.Equal)
+	n := l.Find(3, func(a, b int) bool { return a == b })
 	n = l.InsertAfter(n, 5)
 	l.InsertBefore(n, 4)
 
@@ -29,7 +28,7 @@ func ExampleList_remove() {
 	l, _ := linkedlist.NewFromSlice([]int{1, 2, 3, 4, 5})
 	l.PopBack()
 	l.PopFront()
-	l.Remove(l.Find(3, util.Equal))
+	l.Remove(l.Find(3, func(a, b int) bool { return a == b }))
 	fmt.Println(l.Slice())
 	// Output: [2 4]
 }
@@ -74,7 +73,7 @@ func ExampleList_merge_sorted() {
 func ExampleList_find() {
 	l, _ := linkedlist.NewFromSlice([]int{1, 2, 3, 4, 5})
 
-	node := l.Find(3, util.Equal)
+	node := l.Find(3, func(a, b int) bool { return a == b })
 
 	if node != nil {
 		fmt.Printf("Found value: %d\n", node.Value)
