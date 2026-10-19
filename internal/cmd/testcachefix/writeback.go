@@ -28,7 +28,8 @@ import (
 //   - a test result ID is the hash of "test binary <id> args <test args>
 //     execcmd []", where id is the link action ID of the test binary for the
 //     first level and its content ID for the second, both as `go tool
-//     buildid` prints them; the test args are the -test.* flags go passes
+//     buildid` prints them (the wrapper computes the content ID itself, see
+//     contentID); the test args are the -test.* flags go passes
 //     the binary and keeps in the key, -test.v=test2json under -json and
 //     -test.timeout;
 //   - the result ID keys the test's input list, and the subkey
@@ -106,11 +107,7 @@ func writeback(args []string) error {
 			skipped++
 			continue
 		}
-		buildID, err := binaryBuildID(r.binary)
-		if err != nil {
-			return errors.Wrapf(err, "%s", r.importPath)
-		}
-		done, err := writeBackOne(cacheDir, buildID, dir, testArgs)
+		done, err := writeBackOne(cacheDir, r.buildID, dir, testArgs)
 		var skip skipError
 		switch {
 		case errors.As(err, &skip):
@@ -128,11 +125,11 @@ func writeback(args []string) error {
 	return nil
 }
 
-// linkRecord is one line of the record: the package tested and the test
-// binary kept for it.
+// linkRecord is one line of the record: the package tested and the build ID
+// of its test binary, as go prints it.
 type linkRecord struct {
 	importPath string
-	binary     string
+	buildID    string
 }
 
 // readRecords reads the record in the record directory; a missing record
@@ -150,24 +147,13 @@ func readRecords(dir string) ([]linkRecord, error) {
 	var records []linkRecord
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
-		importPath, name, ok := strings.Cut(scanner.Text(), "\t")
+		importPath, buildID, ok := strings.Cut(scanner.Text(), "\t")
 		if !ok {
 			return nil, errors.Newf("%s: malformed line %q", f.Name(), scanner.Text())
 		}
-		records = append(records, linkRecord{importPath: importPath, binary: filepath.Join(dir, name)})
+		records = append(records, linkRecord{importPath: importPath, buildID: buildID})
 	}
 	return records, errors.WithStack(scanner.Err())
-}
-
-// binaryBuildID reads the build ID go finalized in a test binary, as go
-// itself prints it.
-func binaryBuildID(binary string) (string, error) {
-	// #nosec G702 -- binary is a test binary kept under the record directory.
-	out, err := exec.Command("go", "tool", "buildid", binary).Output()
-	if err != nil {
-		return "", errors.Wrapf(err, "go tool buildid %s", binary)
-	}
-	return strings.TrimSpace(string(out)), nil
 }
 
 // skipError says why a binary's result was left as it was; writeback

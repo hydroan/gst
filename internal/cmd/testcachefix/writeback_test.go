@@ -36,6 +36,7 @@ func TestWritebackFilesTheResultUnderTheLinkKey(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, records, 1, "the test binary was linked once")
 	require.Equal(t, "example.com/orphan/pkg", records[0].importPath)
+	require.Equal(t, []string{recordFile}, entryNames(t, record), "the record holds no binary, only their build IDs")
 
 	// A second run finds the result by the link key and links nothing.
 	record = t.TempDir()
@@ -120,6 +121,18 @@ func TestUsed(t *testing.T) {
 }
 `)
 	return module
+}
+
+// entryNames returns the names of the entries of the directory dir.
+func entryNames(t *testing.T, dir string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	return names
 }
 
 func writeFile(t *testing.T, path, content string) {

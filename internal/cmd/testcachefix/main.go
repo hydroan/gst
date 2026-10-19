@@ -18,15 +18,16 @@
 //
 // make test runs go test with -toolexec pointing at `testcachefix
 // record-link`, which runs every tool unchanged and, after a test binary is
-// linked, keeps the binary and the package it tests in a record directory.
-// After the run, `testcachefix writeback` reads each kept binary's build ID
-// the way go prints it, its link action ID and content ID: for a binary whose
-// first-level entries are missing while its second-level entries exist, it
-// files the second-level entries — the test's input list and its result for
-// the current inputs — under the first-level keys as well. The keys are
-// computed the way go computes them (see writeback.go), and the copy is
-// refused when the computed second-level key finds no entry, so a mismatch
-// with the toolchain leaves the cache as it was.
+// linked, records the package it tests with the binary's build ID, computed
+// the way go computes it, in a record directory. After the run,
+// `testcachefix writeback` reads each build ID, its link action ID and
+// content ID: for a binary whose first-level entries are missing while its
+// second-level entries exist, it files the second-level entries — the test's
+// input list and its result for the current inputs — under the first-level
+// keys as well. The keys are computed the way go computes them (see
+// writeback.go), and the copy is refused when the computed second-level key
+// finds no entry, so a mismatch with the toolchain leaves the cache as it
+// was.
 //
 // -toolexec is not part of any build ID: go identifies its tools by running
 // them through the wrapper, so make test shares every cache entry with a

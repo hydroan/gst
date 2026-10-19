@@ -28,12 +28,14 @@ packagefile example.com/m/pkg.test=/work/b001/_pkg_.a
 	require.ErrorContains(t, err, "names no test main package")
 }
 
-// TestFlagValueReadsTheLinkerFlags pins that a linker flag and its value
-// arrive as two arguments, the way go passes them.
+// TestFlagValueReadsTheLinkerFlags pins the two ways go passes the linker a
+// flag: the value as the next argument, or joined to the flag with "=".
 func TestFlagValueReadsTheLinkerFlags(t *testing.T) {
-	args := []string{"-o", "/work/b001/pkg.test", "-importcfg", "/work/b001/importcfg.link", "-buildmode=exe", "/work/b001/_pkg_.a"}
+	args := []string{"-o", "/work/b001/pkg.test", "-importcfg", "/work/b001/importcfg.link", "-buildmode=exe", "-buildid=abc/def/ghi/abc", "/work/b001/_pkg_.a"}
 	require.Equal(t, "/work/b001/pkg.test", flagValue(args, "-o"))
 	require.Equal(t, "/work/b001/importcfg.link", flagValue(args, "-importcfg"))
-	require.Empty(t, flagValue(args, "-buildmode"))
+	require.Equal(t, "exe", flagValue(args, "-buildmode"))
+	require.Equal(t, "abc/def/ghi/abc", flagValue(args, "-buildid"))
+	require.Empty(t, flagValue(args, "-extld"))
 	require.Empty(t, flagValue([]string{"-o"}, "-o"))
 }
