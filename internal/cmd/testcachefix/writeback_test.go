@@ -17,8 +17,14 @@ import (
 // under the binary's content; after the write-back the run links nothing.
 // The steps that assert go's own behavior are what tells a toolchain that
 // writes the result back itself: the tool is then done for.
+//
+// The test reads two environment variables go computes, one go sets in its
+// own process and one it does not, so the write-back has to hash them the
+// way go did. It runs against a cache of its own: the machine's is left as
+// it is.
 func TestWritebackFilesTheResultUnderTheLinkKey(t *testing.T) {
 	tool := buildTool(t)
+	t.Setenv("GOCACHE", t.TempDir())
 	module := writeOrphanModule(t)
 	t.Chdir(module)
 
@@ -50,11 +56,29 @@ func TestWritebackFilesTheResultUnderTheLinkKey(t *testing.T) {
 	require.Len(t, records, 1, "the orphaned binary was linked again")
 	require.Equal(t, 1, linksIn(goTest(t, module, "-x", "./pkg/")), "and is linked on every run until the result is filed under the link key")
 
-	require.NoError(t, writeback([]string{record}))
+	cmd := exec.Command(tool, "writeback", record)
+	cmd.Dir = module
+	out2, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%s", out2)
 
 	out = goTest(t, module, "-x", "./pkg/")
 	require.Contains(t, out, "(cached)")
 	require.Equal(t, 0, linksIn(out), "the written-back result is found by the link key")
+}
+
+// TestGoEnvLeavesOutWhatGoReportsWithoutSetting pins the environment the
+// write-back aligns with go's: what go computes and sets in its process is
+// in, what it computes for the report alone is out.
+func TestGoEnvLeavesOutWhatGoReportsWithoutSetting(t *testing.T) {
+	env, err := goEnv()
+	require.NoError(t, err)
+
+	for _, name := range []string{"GOARCH", "GOCACHE", "GOPROXY", "GOROOT"} {
+		require.Contains(t, env, name)
+	}
+	for _, name := range []string{"GOMOD", "GOWORK", "GOBIN", "CGO_CFLAGS", "GOGCCFLAGS"} {
+		require.NotContains(t, env, name)
+	}
 }
 
 // buildTool builds the command under test into a temporary directory.
@@ -79,12 +103,17 @@ func writeOrphanModule(t *testing.T) string {
 	writeFile(t, filepath.Join(module, "pkg", "pkg_test.go"), `package pkg
 
 import (
+	"os"
 	"testing"
 
 	"example.com/orphan/dep"
 )
 
 func TestUsed(t *testing.T) {
+	// GOPROXY is computed by go and set in its own process, GOMOD computed
+	// and reported only; a test that reads either puts it in its input list.
+	t.Setenv("GOPROXY", "off")
+	_ = os.Getenv("GOMOD")
 	if dep.Used() != 1 {
 		t.Fatal("dep.Used() != 1")
 	}

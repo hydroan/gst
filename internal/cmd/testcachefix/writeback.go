@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"hash"
@@ -34,10 +35,14 @@ import (
 //     "inputs:<input ID>" of it keys the result for those inputs, where the
 //     input ID hashes the list's environment variables, directory changes
 //     and file stats the way computeTestInputsID does;
+//   - the environment variables are hashed as go's own process saw them:
+//     go sets the environment it computes, GOARCH or GOPROXY say, in its
+//     process before it runs a command, and so does the write-back, see
+//     setGoEnv;
 //   - every hash but the subkey is salted with the toolchain version.
 //
 // Any drift is caught, not guessed around: the second-level key computed
-// here has to find the entry go wrote, or the package is skipped.
+// here has to find the entry go wrote, or nothing is filed.
 
 // cacheID is a cache key or output ID, 32 bytes as cmd/go's ActionID.
 type cacheID [sha256.Size]byte
@@ -74,8 +79,15 @@ func writeback(args []string) error {
 	if err != nil || len(records) == 0 {
 		return err
 	}
-	cacheDir, err := goEnv("GOCACHE")
+	env, err := goEnv()
 	if err != nil {
+		return err
+	}
+	cacheDir := env["GOCACHE"]
+	if cacheDir == "" {
+		return errors.New("go env reports no GOCACHE")
+	}
+	if err = setGoEnv(env); err != nil {
 		return err
 	}
 	dirs, err := packageDirs(records)
@@ -194,13 +206,46 @@ func packageDirs(records []linkRecord) (map[string]packageDir, error) {
 	return dirs, nil
 }
 
-// goEnv returns the value of one go environment variable.
-func goEnv(name string) (string, error) {
-	out, err := exec.Command("go", "env", name).Output()
+// goEnv returns the environment go computes, as go env prints it, less the
+// variables go reports without setting them in its own process.
+func goEnv() (map[string]string, error) {
+	out, err := exec.Command("go", "env", "-json").Output()
 	if err != nil {
-		return "", errors.Wrapf(err, "go env %s", name)
+		return nil, errors.Wrap(err, "go env -json")
 	}
-	return strings.TrimSpace(string(out)), nil
+	env := make(map[string]string)
+	if err = json.Unmarshal(out, &env); err != nil {
+		return nil, errors.Wrap(err, "go env -json")
+	}
+	for _, name := range goEnvReportedOnly {
+		delete(env, name)
+	}
+	return env, nil
+}
+
+// goEnvReportedOnly are the variables go env prints that go computes for the
+// report alone and leaves unset in its own process: ExtraEnvVars and
+// ExtraEnvVarsCostly in cmd/go/internal/envcmd of Go 1.27.
+var goEnvReportedOnly = []string{
+	"GOMOD", "GOWORK", "GOBIN",
+	"CGO_CFLAGS", "CGO_CPPFLAGS", "CGO_CXXFLAGS", "CGO_FFLAGS", "CGO_LDFLAGS", "PKG_CONFIG", "GOGCCFLAGS",
+}
+
+// setGoEnv sets the environment go computes in this process the way go sets
+// it in its own before it runs a command ("Set environment (GOOS, GOARCH,
+// etc) explicitly" in cmd/go/main.go of Go 1.27): every variable whose value
+// differs. A test's
+// input list is hashed against that environment, so a variable the test read
+// hashes to the value go saw, not to the one the shell gave the write-back.
+func setGoEnv(env map[string]string) error {
+	for name, value := range env {
+		if os.Getenv(name) != value {
+			if err := os.Setenv(name, value); err != nil {
+				return errors.WithStack(err)
+			}
+		}
+	}
+	return nil
 }
 
 // writeBackOne files the second-level result of the test binary with
