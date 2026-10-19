@@ -9,34 +9,39 @@ import (
 	"uuid"
 
 	"github.com/cockroachdb/errors"
-	"github.com/gorilla/websocket"
-	"github.com/hydroan/gst/internal/consts"
-	"github.com/hydroan/gst/util"
 	"github.com/vmihailenco/msgpack/v5"
 	"go.uber.org/zap"
 )
 
-// connMap is concurrency secure map.
-// connMap key is net.Conn's file descriptor(int)
-// connMap value is *connMapVal
+// AppSide tells NewSession which end of a connection the caller is.
+type AppSide string
+
+const (
+	Server AppSide = "server"
+	Client AppSide = "client"
+)
+
+// maxFrameSize bounds the encoded event a frame carries, the size its header
+// announces: 4 MiB, grpc-go's default limit on a received message.
+const maxFrameSize = 4 << 20
+
+// connMap registers the connection of every session under the key NewSession
+// gives it; the values are *connMapVal.
 var connMap sync.Map
 
-// connMapVal to ensure a net.Conn has only one corresponding locker.
+// connMapVal is a registered connection, shared by every session on it.
 type connMapVal struct {
-	key any
+	key  any
+	conn net.Conn
 
-	// rmu used by Read function to ensure read binary data and data size
-	// is an atomic operation, otherwise dirty data will be generated.
-	rmu sync.Mutex //nolint:unused
-	// wmu used by Write function to write binary data and data size
-	// is an atomic operation, otherwise dirty data will be generated.
+	// rmu makes reading a frame's header and its body one step, and wmu
+	// writing them; without them, concurrent reads or writes on the
+	// connection interleave frames.
+	rmu sync.Mutex
 	wmu sync.Mutex
-
-	// connection contains the connection of remote/local ip and remote/local port.
-	connection util.Connection
 }
 
-// List will list all tunnel session connection.
+// List returns the registered connections by their keys, see NewSession.
 func List() map[any]any {
 	kv := make(map[any]any)
 	connMap.Range(func(key, val any) bool {
@@ -48,7 +53,6 @@ func List() map[any]any {
 
 type Session struct {
 	tcpconn net.Conn
-	wsconn  *websocket.Conn //nolint:unused
 
 	locker *connMapVal
 }
@@ -58,37 +62,39 @@ type Session struct {
 //  1. First 4 bytes: data size in BigEndian uint32
 //  2. Remaining bytes: msgpack encoded Event data
 //
+// Concurrent reads take whole frames in turn.
+//
 // Returns an error if:
 //   - Failed to read the data size
-//   - Data size is 0
+//   - Data size is 0 or over 4 MiB, which no Write produces; the session is
+//     closed as well, since the peer is out of step with the protocol and,
+//     past an oversize header, the stream holds no header to read next
 //   - Failed to read the event data
 //   - Failed to unmarshal the data into Event
 func (s *Session) Read() (*Event, error) {
-	// s.locker.rmu.Lock()
-	// defer s.locker.rmu.Unlock()
-
-	// cmdBuf, err := internal.ReadBinary(s.tcpconn)
-	// if err != nil {
-	// 	return nil, err
-	// }
 	if s.tcpconn == nil {
 		return nil, errors.New("connection is nil")
 	}
+	s.locker.rmu.Lock()
+	defer s.locker.rmu.Unlock()
 
 	// 1.read data size
 	var size uint32
 	if err := binary.Read(s.tcpconn, binary.BigEndian, &size); err != nil {
 		return nil, err
 	}
-	if size == 0 {
-		return nil, errors.New("invalid data size: received zero")
+	if size == 0 || size > maxFrameSize {
+		return nil, errors.CombineErrors(
+			errors.Newf("invalid data size: received %d, want 1 to %d", size, maxFrameSize),
+			s.Close(),
+		)
 	}
 	// 2.read data
 	cmdBuf := make([]byte, size)
 	if _, err := io.ReadFull(s.tcpconn, cmdBuf); err != nil {
 		return nil, err
 	}
-	binaryLog().Infoz("Read", zap.Uint32("size", size), zap.ByteString("data", cmdBuf), zap.Binary("binary", cmdBuf))
+	binaryLog().Infoz("Read", zap.Uint32("size", size), zap.Binary("binary", cmdBuf))
 	// 3.unmarshal data.
 	event := &Event{}
 	if err := msgpack.Unmarshal(cmdBuf, event); err != nil {
@@ -108,6 +114,7 @@ func (s *Session) Read() (*Event, error) {
 // The write operation is synchronized using a mutex to ensure atomic writes.
 // Returns an error if:
 //   - Failed to marshal the event
+//   - The encoded event is over 4 MiB, in which case nothing is written
 //   - Failed to write the data size
 //   - Failed to write the event data
 func (s *Session) Write(event *Event) error {
@@ -132,12 +139,15 @@ func (s *Session) Write(event *Event) error {
 	if err != nil {
 		return err
 	}
+	if len(buf) > maxFrameSize {
+		return errors.Newf("invalid data size: encoded %d, want at most %d", len(buf), maxFrameSize)
+	}
 
 	// 2.write data size
 	if err := binary.Write(s.tcpconn, binary.BigEndian, uint32(len(buf))); err != nil { //nolint:gosec
 		return err
 	}
-	binaryLog().Infoz("Write", zap.Int("size", len(buf)), zap.ByteString("data", buf), zap.Binary("binary", buf))
+	binaryLog().Infoz("Write", zap.Int("size", len(buf)), zap.Binary("binary", buf))
 	// 3.write data
 	if err := binary.Write(s.tcpconn, binary.BigEndian, buf); err != nil {
 		return err
@@ -145,71 +155,74 @@ func (s *Session) Write(event *Event) error {
 	return nil
 }
 
+// Close closes the session's connection, which ends every session on it, and
+// takes the connection out of the registration List reads, unless another
+// connection has taken its key over since.
+func (s *Session) Close() error {
+	if s.tcpconn == nil {
+		return errors.New("connection is nil")
+	}
+	connMap.CompareAndDelete(s.locker.key, s.locker)
+	return s.tcpconn.Close()
+}
+
 // NewSession creates a new tunnel session from a connection.
 // Currently only supports TCP connections (*net.TCPConn).
 //
 // Parameters:
 //   - _conn: The connection to create session from, must be *net.TCPConn
-//   - appSide: Indicates whether this is server or client side (consts.Server/consts.Client)
+//   - appSide: Indicates whether this is server or client side (Server/Client)
 //   - cid: Optional client ID, only used on server side. If provided, will be used as the connection key
 //
-// The session tracking differs between server and client:
-//   - Server side: Uses remote IP or client ID(if provided) as the connection key
-//   - Client side: Uses local port as the connection key
+// The connection key is the client ID on the server side when one is given,
+// and otherwise the connection's local and remote addresses, such as
+// "127.0.0.1:9000->127.0.0.1:52144": the pair names one end of one connection
+// on the host, where the remote address alone does not, since every
+// connection a client opens to one server has the same remote address, and
+// two listeners may see the same remote address too.
 //
-// Each connection is associated with a locker to ensure thread-safe reads/writes.
-// If a connection with the same key already exists, the existing locker will be reused.
+// Every session on one connection shares the connection's registration, and
+// with it the locks that keep reads and writes whole. A key another connection
+// holds is taken over: the newer connection replaces the older one, which is
+// closed, the way MQTT treats a client ID that connects again; a client often
+// reconnects before the server has noticed its older connection is gone.
 //
 // Returns:
 //   - *Session and nil if successful
-//   - nil and error if connection type not supported or other errors occur
-func NewSession(_conn any, appSide consts.AppSide, cid ...string) (*Session, error) {
-	switch conn := _conn.(type) {
-	case *net.TCPConn:
-		var key any
-		var nd util.Connection
-		switch appSide {
-		case consts.Server:
-			// // NOTE:file descriptor is the key in server-side app.
-			// // remote port could be same when too many clients.
-			// file, err := conn.File()
-			// if err != nil {
-			// 	panic(err)
-			// }
-			// file.Close()
-			// key = int(file.Fd())
-
-			nd = util.GetConnection(conn)
-			key = nd.RemoteIP
-			if len(cid) > 0 {
-				if len(cid[0]) > 0 {
-					key = cid[0]
-				}
-			}
-			// protocolLog().Infow(key.(string), "rip", nd.Rip, "rport", nd.Rport, "lip", nd.Lip, "lport", nd.Lport)
-		case consts.Client:
-			// NOTE:local port is the key in client-side app.
-			// local port always is server listen port in server-side.
-			nd = util.GetConnection(conn)
-			key = nd.LocalPort
-			// protocolLog().Infow(strconv.Itoa(key.(int)), "rip", nd.Rip, "rport", nd.Rport, "lip", nd.Lip, "lport", nd.Lport)
-		default:
-			panic("unknow app side: " + appSide)
-		}
-		locker := new(connMapVal)
-		locker.connection = nd
-		locker.key = key
-		if val, ok := connMap.LoadOrStore(key, locker); ok {
-			locker = val.(*connMapVal) //nolint:errcheck
-		}
-		return &Session{tcpconn: conn, locker: locker}, nil
-	case *websocket.Conn:
-		// return &Session{wsconn: conn}, nil
-		return nil, errors.New("only support tcp.Conn")
-	case websocket.Conn:
-		// return &Session{wsconn: &conn}, nil
-		return nil, errors.New("only support tcp.Conn")
-	default:
+//   - nil and error if the connection is not a *net.TCPConn or appSide is neither Server nor Client
+func NewSession(_conn any, appSide AppSide, cid ...string) (*Session, error) {
+	conn, ok := _conn.(*net.TCPConn)
+	if !ok {
 		return nil, errors.New("only support tcp.Conn")
 	}
+	var key any = conn.LocalAddr().String() + "->" + conn.RemoteAddr().String()
+	switch appSide {
+	case Server:
+		if len(cid) > 0 && len(cid[0]) > 0 {
+			key = cid[0]
+		}
+	case Client:
+	default:
+		return nil, errors.Newf("unknown app side %q, want %q or %q", appSide, Server, Client)
+	}
+
+	locker := &connMapVal{key: key, conn: conn}
+	for {
+		val, loaded := connMap.LoadOrStore(key, locker)
+		if !loaded {
+			break
+		}
+		registered := val.(*connMapVal) //nolint:errcheck
+		if registered.conn == conn {
+			locker = registered
+			break
+		}
+		if connMap.CompareAndSwap(key, registered, locker) {
+			if err := registered.conn.Close(); err != nil {
+				protocolLog().Warnw("NewSession: failed to close the connection taken over", "key", fmt.Sprint(key), "err", err)
+			}
+			break
+		}
+	}
+	return &Session{tcpconn: conn, locker: locker}, nil
 }
