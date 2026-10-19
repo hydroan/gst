@@ -46,14 +46,26 @@ const (
 // SetupRocketMQ; the name server runs in the same container. Topics are
 // created on first use, which a client relies on when it sends to a topic no
 // test created.
+//
+// The HA port, where slaves would replicate from, is pinned to the broker's
+// default: left unset, the broker derives it as the listen port plus one, and
+// a listen port of 65535, which the host may pick, derives 65536 and makes
+// the broker exit while starting. No slave runs, so the port is never
+// published.
 const rocketmqBrokerConf = `brokerClusterName=DefaultCluster
 brokerName=broker-a
 brokerId=0
 namesrvAddr=127.0.0.1:9876
 brokerIP1=%s
 listenPort=%s
+haListenPort=10912
 autoCreateTopicEnable=true
 `
+
+// rocketmqBrokerListenAddress is the address SetupRocketMQ listens on to have
+// the host pick the broker's port; the package's tests point it at a fixed
+// port.
+var rocketmqBrokerListenAddress = "127.0.0.1:0"
 
 // SetupRocketMQ starts a RocketMQ name server and broker in a container of
 // their own and points the framework at them, returning the function that
@@ -90,7 +102,7 @@ func SetupRocketMQ() (func() error, error) {
 	if host == "localhost" {
 		host = "127.0.0.1"
 	}
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	listener, err := net.Listen("tcp", rocketmqBrokerListenAddress)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to pick a port for the rocketmq broker")
 	}
