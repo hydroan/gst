@@ -125,7 +125,7 @@ func (q *Queue[E]) Peek() (E, bool) {
 	if q.list.IsEmpty() {
 		return e, false
 	}
-	return q.list.Head.Value, true
+	return q.list.Front().Value, true
 }
 
 // IsEmpty reports whether the queue has no element.

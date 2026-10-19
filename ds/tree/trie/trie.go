@@ -19,7 +19,13 @@ type Node[K comparable, V any] struct {
 	count    int  // count is the number of keys that start with this node.
 }
 
-func (n *Node[K, V]) Value() V                    { return n.value }
+// Value returns the value stored at the node, the zero value when no key
+// ends here.
+func (n *Node[K, V]) Value() V { return n.value }
+
+// Children returns the children of the node, keyed by the next key element.
+// The nodes Root hands out are a copy, so the map is the caller's to read and
+// to change.
 func (n *Node[K, V]) Children() map[K]*Node[K, V] { return n.children }
 
 func (n *Node[K, V]) clone() *Node[K, V] {
@@ -67,7 +73,17 @@ func New[K comparable, V any](ops ...Option[K, V]) (*Trie[K, V], error) {
 	return t, nil
 }
 
-func (t *Trie[K, V]) Root() *Node[K, V] { return t.root }
+// Root returns a copy of the trie's nodes as they are at the call, rooted at
+// an empty node, or nil for an empty trie: later changes to the trie do not
+// reach the copy, and changing the copy leaves the trie alone, so walking it
+// needs no lock. Making the copy walks every node.
+func (t *Trie[K, V]) Root() *Node[K, V] {
+	if t.safe {
+		t.mu.RLock()
+		defer t.mu.RUnlock()
+	}
+	return t.root.clone()
+}
 
 // Put inserts or updates a keys-value pair into the trie.
 // Returns true if the key was inserted,
@@ -111,8 +127,8 @@ func (t *Trie[K, V]) put(keys []K, val V) bool {
 	return isNewKey
 }
 
-// Get retrives the value associated with the given keys.
-// Returns the value and true if found, zero value and false if not foud.
+// Get retrieves the value associated with the given keys.
+// Returns the value and true if found, zero value and false if not found.
 func (t *Trie[K, V]) Get(keys []K) (v V, ok bool) {
 	if t.safe {
 		t.mu.RLock()

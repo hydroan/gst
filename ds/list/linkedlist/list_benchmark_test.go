@@ -146,7 +146,7 @@ func benchmarkInsertAfter(b *testing.B, _ int) {
 		l.PushBack(0)
 		l.PushBack(1)
 		l.PushBack(2)
-		n := l.Head.Next
+		n := l.Front().Next()
 		b.ResetTimer()
 		for range b.N {
 			_ = l.InsertAfter(n, 0)
@@ -169,7 +169,7 @@ func benchmarkInsertAfter(b *testing.B, _ int) {
 		l.PushBack(0)
 		l.PushBack(1)
 		l.PushBack(2)
-		n := l.Head.Next
+		n := l.Front().Next()
 		b.ResetTimer()
 		for range b.N {
 			_ = l.InsertAfter(n, 0)
@@ -194,7 +194,7 @@ func benchmarkInsertAfter(b *testing.B, _ int) {
 		l.PushBack(0)
 		l.PushBack(1)
 		l.PushBack(2)
-		n := l.Head.Next
+		n := l.Front().Next()
 		b.ResetTimer()
 		b.RunParallel(func(p *testing.PB) {
 			for p.Next() {
@@ -236,7 +236,7 @@ func benchmarkInsertBefore(b *testing.B, _ int) {
 		l.PushBack(0)
 		l.PushBack(1)
 		l.PushBack(2)
-		n := l.Head.Next
+		n := l.Front().Next()
 		b.ResetTimer()
 		for range b.N {
 			_ = l.InsertBefore(n, 0)
@@ -259,7 +259,7 @@ func benchmarkInsertBefore(b *testing.B, _ int) {
 		l.PushBack(0)
 		l.PushBack(1)
 		l.PushBack(2)
-		n := l.Head.Next
+		n := l.Front().Next()
 		b.ResetTimer()
 		for range b.N {
 			_ = l.InsertBefore(n, 0)
@@ -284,7 +284,7 @@ func benchmarkInsertBefore(b *testing.B, _ int) {
 		l.PushBack(0)
 		l.PushBack(1)
 		l.PushBack(2)
-		n := l.Head.Next
+		n := l.Front().Next()
 		b.ResetTimer()
 		b.RunParallel(func(p *testing.PB) {
 			for p.Next() {

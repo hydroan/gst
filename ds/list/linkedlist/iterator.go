@@ -5,13 +5,20 @@ import "github.com/hydroan/gst/ds/types"
 var _ types.MutableBidIterator[any] = (*iterator[any])(nil)
 
 // iterator represents a list iterator.
-// It immplements MutableBidIterator.
+// It implements MutableBidIterator.
 type iterator[V any] struct {
 	node *Node[V]
 }
 
-// NewIterator returns an iterator for the list.
+// NewIterator returns an iterator positioned at the node n. A node not on
+// this list gives an iterator that is not valid.
 func (l *List[V]) NewIterator(n *Node[V]) types.MutableBidIterator[V] {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
+	if n != nil && n.list != l {
+		n = nil
+	}
 	return &iterator[V]{n}
 }
 
@@ -21,14 +28,14 @@ func (i *iterator[V]) IsValid() bool {
 
 func (i *iterator[V]) Next() types.Iterator[V] {
 	if i.node != nil {
-		i.node = i.node.Next
+		i.node = i.node.next
 	}
 	return i
 }
 
 func (i *iterator[V]) Prev() types.BidIterator[V] {
 	if i.node != nil {
-		i.node = i.node.Prev
+		i.node = i.node.prev
 	}
 	return i
 }

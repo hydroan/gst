@@ -1,12 +1,13 @@
-// Package linkedlist provides an implementation of a doubly-linked list with a front
-// and back. The individual node of the list are publicly exposed so that the
-// user can have fine-grained control over the list.
+// Package linkedlist provides a doubly-linked list with a front and a back.
+// Its nodes are handles: they carry the values, can be walked from one to the
+// next, and are what the list's methods take to insert next to a node or to
+// remove one, while the links between them stay the list's own, see Node.
 //
 // Invariants:
-// - Head.Prev must be nil
-// - Tail.Next must be nil
-// - All internal nodes must have non-nil Prev and Next
-// - An empty list has both Head and Tail as ni
+// - the front node has no previous node and the back node no next one
+// - every node between them has both
+// - an empty list has neither a front nor a back node
+// - every node reachable from the front is on this list, and Len counts them
 package linkedlist
 
 import (
@@ -24,7 +25,7 @@ var ErrMergeWithSelf = errors.New("cannot merge a list with itself")
 
 // List represents a doubly-linked list.
 type List[V any] struct {
-	Head, Tail *Node[V]
+	head, tail *Node[V]
 	count      int
 	mu         types.Locker
 	safe       bool
@@ -66,29 +67,19 @@ func (l *List[V]) PushBack(v V) *Node[V] {
 	return l.pushBackNode(&Node[V]{Value: v})
 }
 
-// PushBackNode adds the given node to the end of the list.
-// The node should not be part of another list.
-func (l *List[V]) PushBackNode(n *Node[V]) *Node[V] {
-	if n == nil {
-		return nil
-	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	return l.pushBackNode(n)
-}
-
+// pushBackNode links n in at the back of the list and puts it on the list.
 func (l *List[V]) pushBackNode(n *Node[V]) *Node[V] {
-	n.Prev = l.Tail
-	n.Next = nil
-	// If l.Tail is nil, the list is empty, and 'n' becomes the first node.
-	// Both l.Head and l.Tail will point to 'n'.
-	if l.Tail != nil {
-		l.Tail.Next = n
+	n.prev = l.tail
+	n.next = nil
+	n.list = l
+	// If l.tail is nil, the list is empty, and 'n' becomes the first node.
+	// Both l.head and l.tail will point to 'n'.
+	if l.tail != nil {
+		l.tail.next = n
 	} else {
-		l.Head = n
+		l.head = n
 	}
-	l.Tail = n
+	l.tail = n
 	l.count++
 
 	return n
@@ -102,37 +93,26 @@ func (l *List[V]) PushFront(v V) *Node[V] {
 	return l.pushFrontNode(&Node[V]{Value: v})
 }
 
-// PushFrontNode adds the given node to the beginning of the list.
-// The node should not be part of another list.
-func (l *List[V]) PushFrontNode(n *Node[V]) *Node[V] {
-	if n == nil {
-		return nil
-	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	return l.pushFrontNode(n)
-}
-
+// pushFrontNode links n in at the front of the list and puts it on the list.
 func (l *List[V]) pushFrontNode(n *Node[V]) *Node[V] {
-	n.Prev = nil
-	n.Next = l.Head
-	// l.Head is nil means the list is empty, node 'n' is the first node.
-	// so l.Head and l.Tail will pointer to 'n'.
-	if l.Head != nil {
-		l.Head.Prev = n
+	n.prev = nil
+	n.next = l.head
+	n.list = l
+	// l.head is nil means the list is empty, node 'n' is the first node,
+	// so l.head and l.tail will point to 'n'.
+	if l.head != nil {
+		l.head.prev = n
 	} else {
-		l.Tail = n
+		l.tail = n
 	}
-	l.Head = n
+	l.head = n
 	l.count++
 
 	return n
 }
 
-// InsertAfter inserts value v after the given node.
-// If the node is nil, the operation is a no-op.
-// Returns the inserted node.
+// InsertAfter inserts value v after the node n and returns the new node. It
+// returns nil, changing nothing, when n is nil or not on this list.
 func (l *List[V]) InsertAfter(n *Node[V], v V) *Node[V] {
 	if n == nil {
 		return nil
@@ -140,39 +120,24 @@ func (l *List[V]) InsertAfter(n *Node[V], v V) *Node[V] {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	return l.insertAfterNode(n, &Node[V]{Value: v})
-}
-
-// InsertAfterNode inserts node 'next' after the given node.
-func (l *List[V]) InsertAfterNode(n *Node[V], next *Node[V]) *Node[V] {
-	if n == nil || next == nil {
+	if n.list != l {
 		return nil
 	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	return l.insertAfterNode(n, next)
-}
-
-func (l *List[V]) insertAfterNode(n *Node[V], next *Node[V]) *Node[V] {
-	next.Prev = n
-	next.Next = n.Next
-	// if n.Next is nil, means 'n' is the list Tail Node.
-	if n.Next != nil {
-		n.Next.Prev = next
+	next := &Node[V]{Value: v, prev: n, next: n.next, list: l}
+	// if n.next is nil, means 'n' is the list tail node.
+	if n.next != nil {
+		n.next.prev = next
 	} else {
-		l.Tail = next
+		l.tail = next
 	}
-	n.Next = next
-
+	n.next = next
 	l.count++
 
 	return next
 }
 
-// InsertBefore inserts value v before the given node.
-// If the node is nil, the operation is a no-op.
-// Returns the inserted node.
+// InsertBefore inserts value v before the node n and returns the new node.
+// It returns nil, changing nothing, when n is nil or not on this list.
 func (l *List[V]) InsertBefore(n *Node[V], v V) *Node[V] {
 	if n == nil {
 		return nil
@@ -180,38 +145,25 @@ func (l *List[V]) InsertBefore(n *Node[V], v V) *Node[V] {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	return l.insertBeforeNode(n, &Node[V]{Value: v})
-}
-
-// InsertBeforeNode inserts node 'prev' before the given node.
-func (l *List[V]) InsertBeforeNode(n *Node[V], prev *Node[V]) *Node[V] {
-	if n == nil || prev == nil {
+	if n.list != l {
 		return nil
 	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	return l.insertBeforeNode(n, prev)
-}
-
-func (l *List[V]) insertBeforeNode(n *Node[V], prev *Node[V]) *Node[V] {
-	prev.Prev = n.Prev
-	prev.Next = n
-	// if n.Prev is nil, means 'n' is the list Head Node.
-	if n.Prev != nil {
-		n.Prev.Next = prev
+	prev := &Node[V]{Value: v, prev: n.prev, next: n, list: l}
+	// if n.prev is nil, means 'n' is the list head node.
+	if n.prev != nil {
+		n.prev.next = prev
 	} else {
-		l.Head = prev
+		l.head = prev
 	}
-	n.Prev = prev
-
+	n.prev = prev
 	l.count++
 
 	return prev
 }
 
-// Remove removes the given node from the list.
-// If the node is nil, it does nothing and returns the zero value.
+// Remove removes the node n from the list when n is on it, and returns the
+// value of n either way, the zero value for a nil n. A node off its list,
+// removed already or on another list, leaves this list unchanged.
 func (l *List[V]) Remove(n *Node[V]) V {
 	var v V
 	if n == nil {
@@ -220,23 +172,28 @@ func (l *List[V]) Remove(n *Node[V]) V {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	if n.list != l {
+		return n.Value
+	}
 	return l.remove(n)
 }
 
+// remove unlinks n, a node on the list, and takes it off the list: its links
+// are cleared so it holds on to no other node and no list.
 func (l *List[V]) remove(n *Node[V]) V {
-	// n.Next is nil means 'n' is the list Tail Node.
-	if n.Next != nil {
-		n.Next.Prev = n.Prev
+	// n.next is nil means 'n' is the list tail node.
+	if n.next != nil {
+		n.next.prev = n.prev
 	} else {
-		l.Tail = n.Prev
+		l.tail = n.prev
 	}
-	// n.Prev is nil means 'n' is the list Head Node.
-	if n.Prev != nil {
-		n.Prev.Next = n.Next
+	// n.prev is nil means 'n' is the list head node.
+	if n.prev != nil {
+		n.prev.next = n.next
 	} else {
-		l.Head = n.Next
+		l.head = n.next
 	}
-
+	n.prev, n.next, n.list = nil, nil, nil
 	l.count--
 
 	return n.Value
@@ -252,8 +209,7 @@ func (l *List[V]) PopFront() V {
 	if l.isEmpty() {
 		return v
 	}
-	n := l.Head
-	return l.remove(n)
+	return l.remove(l.head)
 }
 
 // PopBack removes and returns the last node of the list.
@@ -266,8 +222,7 @@ func (l *List[V]) PopBack() V {
 	if l.isEmpty() {
 		return v
 	}
-	n := l.Tail
-	return l.remove(n)
+	return l.remove(l.tail)
 }
 
 // Slice returns a slice containing all values in the list,
@@ -277,7 +232,7 @@ func (l *List[V]) Slice() []V {
 	defer l.mu.RUnlock()
 
 	s := make([]V, 0, l.count)
-	for n := l.Head; n != nil; n = n.Next {
+	for n := l.head; n != nil; n = n.next {
 		s = append(s, n.Value)
 	}
 	return s
@@ -289,7 +244,7 @@ func (l *List[V]) Range(fn func(v V) bool) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
-	for n := l.Head; n != nil; n = n.Next {
+	for n := l.head; n != nil; n = n.next {
 		if !fn(n.Value) {
 			return
 		}
@@ -305,7 +260,7 @@ func (l *List[V]) Find(v V, equal func(V, V) bool) *Node[V] {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
-	for n := l.Head; n != nil; n = n.Next {
+	for n := l.head; n != nil; n = n.next {
 		if equal(n.Value, v) {
 			return n
 		}
@@ -322,17 +277,18 @@ func (l *List[V]) Reverse() {
 	if l.count <= 1 {
 		return
 	}
-	curr := l.Head
-	l.Head, l.Tail = l.Tail, l.Head
+	curr := l.head
+	l.head, l.tail = l.tail, l.head
 	for curr != nil {
-		next := curr.Next
-		curr.Next, curr.Prev = curr.Prev, curr.Next
+		next := curr.next
+		curr.next, curr.prev = curr.prev, curr.next
 		curr = next
 	}
 }
 
-// Merge appends all elements from other list to the end of current list.
-// The other list is emptied after the merge; a nil other merges nothing. It
+// Merge appends all elements from other list to the end of current list:
+// the nodes of other move onto l, the handles to them stay valid there. The
+// other list is emptied after the merge; a nil other merges nothing. It
 // fails with ErrMergeWithSelf, changing nothing, when other is l itself.
 func (l *List[V]) Merge(other *List[V]) error {
 	if other == l {
@@ -348,19 +304,22 @@ func (l *List[V]) Merge(other *List[V]) error {
 	if other.isEmpty() {
 		return nil
 	}
+	for n := other.head; n != nil; n = n.next {
+		n.list = l
+	}
 	if l.isEmpty() {
-		l.Head = other.Head
-		l.Tail = other.Tail
+		l.head = other.head
+		l.tail = other.tail
 		l.count = other.count
 	} else {
-		l.Tail.Next = other.Head
-		other.Head.Prev = l.Tail
-		l.Tail = other.Tail
+		l.tail.next = other.head
+		other.head.prev = l.tail
+		l.tail = other.tail
 		l.count += other.count
 	}
 
-	other.Head = nil
-	other.Tail = nil
+	other.head = nil
+	other.tail = nil
 	other.count = 0
 	return nil
 }
@@ -372,9 +331,11 @@ func (l *List[V]) Merge(other *List[V]) error {
 //   - positive value if a > b.
 //
 // Both input list can be unsorted, the resulting list will be sorted, also
-// when other is empty or nil. The other list is emptied after the merge. It
-// fails, changing neither list, with types.ErrComparisonNil when cmp is nil
-// and with ErrMergeWithSelf when other is l itself.
+// when other is empty or nil; equal values keep their order, those of l
+// first. The nodes of both lists end up on l, so the handles to them stay
+// valid there, and the other list is emptied. It fails, changing neither
+// list, with types.ErrComparisonNil when cmp is nil and with ErrMergeWithSelf
+// when other is l itself.
 func (l *List[V]) MergeSorted(other *List[V], cmp func(V, V) int) error {
 	if cmp == nil {
 		return types.ErrComparisonNil
@@ -396,24 +357,24 @@ func (l *List[V]) MergeSorted(other *List[V], cmp func(V, V) int) error {
 	if other != nil {
 		size += other.count
 	}
-	merged := make([]V, 0, size)
-	for curr := l.Head; curr != nil; curr = curr.Next {
-		merged = append(merged, curr.Value)
+	nodes := make([]*Node[V], 0, size)
+	for curr := l.head; curr != nil; curr = curr.next {
+		nodes = append(nodes, curr)
 	}
 	if other != nil {
-		for curr := other.Head; curr != nil; curr = curr.Next {
-			merged = append(merged, curr.Value)
+		for curr := other.head; curr != nil; curr = curr.next {
+			nodes = append(nodes, curr)
 		}
-		other.Head = nil
-		other.Tail = nil
+		other.head = nil
+		other.tail = nil
 		other.count = 0
 	}
-	slices.SortFunc(merged, cmp)
-	l.Head = nil
-	l.Tail = nil
+	slices.SortStableFunc(nodes, func(a, b *Node[V]) int { return cmp(a.Value, b.Value) })
+	l.head = nil
+	l.tail = nil
 	l.count = 0
-	for _, v := range merged {
-		l.pushBackNode(&Node[V]{Value: v})
+	for _, n := range nodes {
+		l.pushBackNode(n)
 	}
 	return nil
 }
@@ -445,10 +406,26 @@ func (l *List[V]) Clone() (*List[V], error) {
 	if err != nil {
 		return nil, err
 	}
-	for n := l.Head; n != nil; n = n.Next {
+	for n := l.head; n != nil; n = n.next {
 		newList.pushBackNode(&Node[V]{Value: n.Value})
 	}
 	return newList, nil
+}
+
+// Front returns the first node of the list, or nil when the list is empty.
+func (l *List[V]) Front() *Node[V] {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
+	return l.head
+}
+
+// Back returns the last node of the list, or nil when the list is empty.
+func (l *List[V]) Back() *Node[V] {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
+	return l.tail
 }
 
 // Len returns the number of nodes in the list.
@@ -471,20 +448,19 @@ func (l *List[V]) isEmpty() bool {
 	return l.count == 0
 }
 
-// Clear removes all nodes from the list.
+// Clear removes all nodes from the list; each is then on no list.
 func (l *List[V]) Clear() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	curr := l.Head
+	curr := l.head
 	for curr != nil {
-		next := curr.Next
-		curr.Next = nil
-		curr.Prev = nil
+		next := curr.next
+		curr.prev, curr.next, curr.list = nil, nil, nil
 		curr = next
 	}
 
-	l.Head = nil
-	l.Tail = nil
+	l.head = nil
+	l.tail = nil
 	l.count = 0
 }

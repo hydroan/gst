@@ -7,6 +7,7 @@ import (
 
 	"github.com/hydroan/gst/ds/tree/trie"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -427,4 +428,50 @@ func TestTrie_PathAncestors(t *testing.T) {
 		assert.Equal(t, []rune("a"), ancestors[1].Keys)
 		assert.Equal(t, "A", ancestors[1].Value)
 	}
+}
+
+// TestTrie_RootIsASnapshot pins that Root hands out a copy: changing what it
+// returns leaves the trie alone, and later puts do not reach it.
+func TestTrie_RootIsASnapshot(t *testing.T) {
+	tr, err := trie.New[rune, int]()
+	require.NoError(t, err)
+	tr.Put([]rune("ab"), 1)
+
+	root := tr.Root()
+	delete(root.Children(), 'a')
+	tr.Put([]rune("c"), 2)
+
+	v, ok := tr.Get([]rune("ab"))
+	assert.True(t, ok)
+	assert.Equal(t, 1, v)
+	assert.NotContains(t, root.Children(), 'c')
+}
+
+// TestTrie_RootIsSafeAlongsidePut pins that walking what Root returns races
+// with nothing while another goroutine puts into a trie made safe for
+// concurrent use; the race detector is what fails it.
+func TestTrie_RootIsSafeAlongsidePut(t *testing.T) {
+	tr, err := trie.New[rune, int](trie.WithSafe[rune, int]())
+	require.NoError(t, err)
+	tr.Put([]rune("a"), 0)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := range 200 {
+			tr.Put([]rune(fmt.Sprintf("k%d", i)), i)
+		}
+	}()
+	var walk func(n *trie.Node[rune, int]) int
+	walk = func(n *trie.Node[rune, int]) int {
+		count := 1
+		for _, child := range n.Children() {
+			count += walk(child)
+		}
+		return count
+	}
+	for range 200 {
+		assert.Positive(t, walk(tr.Root()))
+	}
+	<-done
 }

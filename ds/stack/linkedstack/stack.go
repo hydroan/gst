@@ -122,7 +122,7 @@ func (s *Stack[E]) Peek() (E, bool) {
 	if s.list.IsEmpty() {
 		return e, false
 	}
-	return s.list.Tail.Value, true
+	return s.list.Back().Value, true
 }
 
 // IsEmpty reports whether the stack has no elements.

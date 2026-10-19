@@ -443,3 +443,97 @@ func TestList_Range(t *testing.T) {
 	})
 	assert.Equal(t, []int{1}, values)
 }
+
+// TestList_NodeHandles pins that a node is a handle to its own list: an
+// operation through it changes that list only, and once off the list it
+// changes nothing.
+func TestList_NodeHandles(t *testing.T) {
+	equal := func(a, b int) bool { return a == b }
+
+	t.Run("removing a node twice removes it once", func(t *testing.T) {
+		l, err := linkedlist.NewFromSlice([]int{1})
+		require.NoError(t, err)
+		n := l.Find(1, equal)
+
+		l.Remove(n)
+		l.Remove(n)
+		assert.Zero(t, l.Len())
+		assert.NotPanics(t, func() { l.PopFront() })
+		assert.Zero(t, l.Len())
+	})
+
+	t.Run("a node of another list changes neither list", func(t *testing.T) {
+		l, err := linkedlist.NewFromSlice([]int{1})
+		require.NoError(t, err)
+		other, err := linkedlist.NewFromSlice([]int{2})
+		require.NoError(t, err)
+		foreign := other.Find(2, equal)
+
+		assert.Nil(t, l.InsertAfter(foreign, 3))
+		assert.Nil(t, l.InsertBefore(foreign, 3))
+		l.Remove(foreign)
+		assert.False(t, l.NewIterator(foreign).IsValid())
+		assert.Equal(t, []int{1}, l.Slice())
+		assert.Equal(t, 1, l.Len())
+		assert.Equal(t, []int{2}, other.Slice())
+		assert.Equal(t, 1, other.Len())
+	})
+
+	t.Run("a removed node is off the list", func(t *testing.T) {
+		l, err := linkedlist.NewFromSlice([]int{1, 2, 3})
+		require.NoError(t, err)
+		n := l.Find(2, equal)
+
+		l.Remove(n)
+		assert.Nil(t, n.Next())
+		assert.Nil(t, n.Prev())
+		assert.Nil(t, l.InsertAfter(n, 4))
+		assert.Equal(t, []int{1, 3}, l.Slice())
+	})
+
+	t.Run("merged nodes belong to the list they joined", func(t *testing.T) {
+		l, err := linkedlist.NewFromSlice([]int{1})
+		require.NoError(t, err)
+		other, err := linkedlist.NewFromSlice([]int{2, 3})
+		require.NoError(t, err)
+		moved := other.Find(2, equal)
+		require.NoError(t, l.Merge(other))
+
+		other.Remove(moved)
+		assert.Equal(t, []int{1, 2, 3}, l.Slice())
+		assert.Zero(t, other.Len())
+
+		l.Remove(moved)
+		assert.Equal(t, []int{1, 3}, l.Slice())
+		assert.Equal(t, 2, l.Len())
+	})
+
+	t.Run("nodes keep working after a sorted merge", func(t *testing.T) {
+		cmp := func(a, b int) int { return a - b }
+		l, err := linkedlist.NewFromSlice([]int{3, 1})
+		require.NoError(t, err)
+		other, err := linkedlist.NewFromSlice([]int{2})
+		require.NoError(t, err)
+		kept := l.Find(3, equal)
+		joined := other.Find(2, equal)
+		require.NoError(t, l.MergeSorted(other, cmp))
+		require.Equal(t, []int{1, 2, 3}, l.Slice())
+
+		l.Remove(kept)
+		l.Remove(joined)
+		assert.Equal(t, []int{1}, l.Slice())
+		assert.Equal(t, 1, l.Len())
+	})
+
+	t.Run("cleared nodes are off the list", func(t *testing.T) {
+		l, err := linkedlist.NewFromSlice([]int{1, 2})
+		require.NoError(t, err)
+		n := l.Find(1, equal)
+		l.Clear()
+
+		l.Remove(n)
+		l.PushBack(3)
+		assert.Equal(t, []int{3}, l.Slice())
+		assert.Equal(t, 1, l.Len())
+	})
+}
