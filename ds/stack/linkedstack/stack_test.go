@@ -177,11 +177,36 @@ func TestMarshalJSON(t *testing.T) {
 	assert.JSONEq(t, "[1,2,3]", string(b))
 }
 
+// TestUnmarshalJSON pins the order UnmarshalJSON reads, the one MarshalJSON
+// writes: the top of the stack first.
 func TestUnmarshalJSON(t *testing.T) {
 	data := []byte("[1,2,3]")
 	stack, err := linkedstack.New[int]()
 	require.NoError(t, err)
 	require.NoError(t, stack.UnmarshalJSON(data))
-	assert.Equal(t, []int{3, 2, 1}, stack.Values())
-	assert.Equal(t, "stack:{3, 2, 1}", stack.String())
+	assert.Equal(t, []int{1, 2, 3}, stack.Values())
+	assert.Equal(t, "stack:{1, 2, 3}", stack.String())
+	top, ok := stack.Peek()
+	require.True(t, ok)
+	assert.Equal(t, 1, top)
+}
+
+// TestJSONRoundTripKeepsTheStack pins that a stack read back from what it
+// marshals to is the same stack, its top on top.
+func TestJSONRoundTripKeepsTheStack(t *testing.T) {
+	stack, err := linkedstack.New[int]()
+	require.NoError(t, err)
+	stack.Push(1)
+	stack.Push(2)
+	stack.Push(3)
+	data, err := stack.MarshalJSON()
+	require.NoError(t, err)
+
+	restored, err := linkedstack.New[int]()
+	require.NoError(t, err)
+	require.NoError(t, restored.UnmarshalJSON(data))
+	assert.Equal(t, stack.Values(), restored.Values())
+	top, ok := restored.Pop()
+	require.True(t, ok)
+	assert.Equal(t, 3, top)
 }

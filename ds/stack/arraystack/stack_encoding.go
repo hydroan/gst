@@ -7,7 +7,8 @@ import (
 	"strings"
 )
 
-// MarshalJSON will marshal the stack into a JSON-based representation.
+// MarshalJSON marshals the stack into a JSON array, the top of the stack
+// first, the order Values lists it in.
 func (s *Stack[E]) MarshalJSON() ([]byte, error) {
 	if s.safe {
 		s.mu.RLock()
@@ -25,7 +26,8 @@ func (s *Stack[E]) MarshalJSON() ([]byte, error) {
 	return fmt.Appendf(nil, "[%s]", strings.Join(items, ",")), nil
 }
 
-// UnmarshalJSON will unmarshal a JSON-based representation byte slice into the stack.
+// UnmarshalJSON replaces the stack with the elements of a JSON array read in
+// the order MarshalJSON writes: the first element ends up on top.
 func (s *Stack[E]) UnmarshalJSON(data []byte) (err error) {
 	if s.safe {
 		s.mu.Lock()
@@ -36,6 +38,7 @@ func (s *Stack[E]) UnmarshalJSON(data []byte) (err error) {
 	if err = json.Unmarshal(data, &el); err != nil {
 		return err
 	}
+	slices.Reverse(el)
 	s.elements = el
 	return nil
 }

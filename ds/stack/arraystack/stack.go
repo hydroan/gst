@@ -145,7 +145,8 @@ func (s *Stack[E]) Values() []E {
 		defer s.mu.RUnlock()
 	}
 
-	el := slices.Clone(s.elements)
+	el := make([]E, len(s.elements))
+	copy(el, s.elements)
 	slices.Reverse(el)
 	return el
 }
