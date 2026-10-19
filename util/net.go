@@ -4,49 +4,10 @@ import (
 	"io"
 	"net"
 	"reflect"
-	"strconv"
-	"strings"
 	"syscall"
 
 	"github.com/cockroachdb/errors"
 )
-
-func GetConnection(conn net.Conn) Connection {
-	if conn == nil {
-		return Connection{}
-	}
-	var (
-		rip, lip     string
-		rport, lport int
-	)
-	laddr := strings.Split(conn.LocalAddr().String(), ":")
-	if len(laddr) == 2 {
-		lip = laddr[0]
-		if port, err := strconv.Atoi(laddr[1]); err == nil {
-			lport = port
-		}
-	}
-	raddr := strings.Split(conn.RemoteAddr().String(), ":")
-	if len(raddr) == 2 {
-		rip = raddr[0]
-		if port, err := strconv.Atoi(raddr[1]); err == nil {
-			rport = port
-		}
-	}
-	return Connection{
-		RemoteIP:   rip,
-		LocalIP:    lip,
-		RemotePort: rport,
-		LocalPort:  lport,
-	}
-}
-
-type Connection struct {
-	RemoteIP   string
-	LocalIP    string
-	RemotePort int
-	LocalPort  int
-}
 
 // GetFdFromConn get net.Conn's file descriptor.
 func GetFdFromConn(c net.Conn) int {

@@ -9,21 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestConnection(t *testing.T) {
-	conn, l := dialLocal(t)
-	remote, ok := l.Addr().(*net.TCPAddr)
-	require.True(t, ok)
-	local, ok := conn.LocalAddr().(*net.TCPAddr)
-	require.True(t, ok)
-
-	require.Equal(t, util.Connection{
-		RemoteIP:   "127.0.0.1",
-		LocalIP:    "127.0.0.1",
-		RemotePort: remote.Port,
-		LocalPort:  local.Port,
-	}, util.GetConnection(conn))
-}
-
 func TestGetFdFromConn(t *testing.T) {
 	conn, _ := dialLocal(t)
 	tcp, ok := conn.(*net.TCPConn)
