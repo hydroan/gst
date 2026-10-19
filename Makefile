@@ -70,7 +70,7 @@ help:
 	@echo "  vet            - Run go vet"
 	@echo "  lint           - Run golangci-lint (includes modernize, nilness and shadow)"
 	@echo "  selfcheck      - Check the framework's source against the rules golangci-lint cannot express"
-	@echo "  ggcheck        - Run gg check on the example projects with the gg built from the tree"
+	@echo "  ggcheck        - Run gg gen and gg check on the example projects with the gg built from the tree"
 	@echo "  test           - Run unit tests, a line per package"
 	@echo "  test-short     - Run the main module's unit tests alone, the gg end-to-end cases skipped"
 	@echo "  testv          - Run unit tests, a line per test"
@@ -137,18 +137,20 @@ selfcheck:
 	@echo "Running the framework's self check..."
 	go run ./internal/cmd/selfcheck
 
-# The example projects are held to gg check with the gg built from the
-# tree: a project check or a DSL rule an example breaks fails here, the way
-# a project's own gg check would, not first on a developer's gg gen. The gg
-# is built where make install puts it, so the installed one is the tree's.
+# The example projects are generated and checked with the gg built from the
+# tree, the way a project runs gg gen and gg check: a generator that fails on
+# an example's models, or a project check or a DSL rule an example breaks,
+# fails here, not first on a developer's gg gen. What gen rewrites stays in
+# the tree, as gofumpt's rewrites do, for the developer to commit. The gg is
+# built where make install puts it, so the installed one is the tree's.
 GG := $(GO_BIN_DIR)/gg
 ggcheck:
-	@echo "Running gg check on the examples..."
+	@echo "Running gg gen and gg check on the examples..."
 	@mkdir -p "$(GO_BIN_DIR)"
 	@go build -o "$(GG)" ./cmd/gg
-	cd examples/demo && "$(GG)" check
-	cd examples/cluster && "$(GG)" check
-	cd examples/bench && "$(GG)" check
+	cd examples/demo && "$(GG)" gen && "$(GG)" check
+	cd examples/cluster && "$(GG)" gen && "$(GG)" check
+	cd examples/bench && "$(GG)" gen && "$(GG)" check
 
 # Run unit tests
 # Every package is tested, so a newly added package is covered without editing
