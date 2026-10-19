@@ -5,13 +5,16 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime/debug"
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/ggmodule"
+	"github.com/hydroan/gst/internal/ggnew"
 	"github.com/spf13/cobra"
 )
 
@@ -352,6 +355,89 @@ func (%[1]s) Design() {
 	if !gghelper.FileExists(filepath.Join(projectDir, "service", "note", "create_test.go")) {
 		t.Fatal("a service file outside the merge targets keeps its test scaffold")
 	}
+}
+
+// TestRunModuleCopyTidiesTheProjectAfterWritingItsFiles pins the last step
+// of module copy: once every file is written it runs go mod tidy, so the
+// requirements the copied sources add, here the module providing the
+// one-time password package the mfa services import, reach go.mod and go.sum
+// and the project builds with no step of its own; a tidy that fails is
+// reported after the files are written, with the hint for removing them.
+func TestRunModuleCopyTidiesTheProjectAfterWritingItsFiles(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	files, err := ggnew.ProjectFiles("tmpapp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range files {
+		writeProjectFile(t, filepath.Join(projectDir, file.Path), file.Content)
+	}
+	// The project as gg new leaves it requires what its own sources import,
+	// not what the module's sources will.
+	if err := goModTidy(); err != nil {
+		t.Fatal(err)
+	}
+	const otpModule = "github.com/pquerna/otp"
+	if strings.Contains(readProjectFile(t, "go.mod"), otpModule) {
+		t.Fatalf("go.mod requires %s before the copy; the fixture proves nothing", otpModule)
+	}
+
+	tidy := goModTidy
+	goModTidy = func() error {
+		if sources, _ := filepath.Glob(filepath.Join("service", "mfa", "*.go")); len(sources) == 0 {
+			t.Error("go mod tidy ran before the service files were written")
+		}
+		return tidy()
+	}
+	t.Cleanup(func() { goModTidy = tidy })
+
+	var copyErr error
+	output := captureStdout(t, func() {
+		copyErr = runModuleCopy("mfa", moduleCopyOptions{Yes: true})
+	})
+	if copyErr != nil {
+		t.Fatalf("runModuleCopy() error = %v:\n%s", copyErr, output)
+	}
+	if !strings.Contains(output, "Dependencies tidied") {
+		t.Fatalf("module copy should report the tidy it ran:\n%s", output)
+	}
+	for _, file := range []string{"go.mod", "go.sum"} {
+		if !strings.Contains(readProjectFile(t, file), otpModule) {
+			t.Errorf("%s lacks %s after the copy", file, otpModule)
+		}
+	}
+	if out, err := exec.Command("go", "build", "./...").CombinedOutput(); err != nil {
+		t.Fatalf("go build after the copy: %v\n%s", err, out)
+	}
+
+	goModTidy = func() error { return errors.New("tidy failed") }
+	output = captureStdout(t, func() {
+		copyErr = runModuleCopy("mfa", moduleCopyOptions{Force: true, Yes: true})
+	})
+	if copyErr == nil || copyErr.Error() != "tidy failed" {
+		t.Fatalf("runModuleCopy() error = %v, want the tidy failure", copyErr)
+	}
+	if strings.Contains(output, "Module copied successfully") {
+		t.Fatalf("a failed tidy must not report success:\n%s", output)
+	}
+	if !strings.Contains(output, "To remove copied module code, delete model/mfa") {
+		t.Fatalf("a failed tidy should print the hint for removing the written files:\n%s", output)
+	}
+}
+
+// readProjectFile returns the content of the file at path under the working
+// directory, the project of the test.
+func readProjectFile(t *testing.T, path string) string {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
 }
 
 // TestPrintModuleCopyAssemblyNamesThePendingCalls pins what the copy prints

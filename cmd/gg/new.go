@@ -151,16 +151,6 @@ func newProject(projectName string, inPlace bool) error {
 	return nil
 }
 
-// goModTidy tidies the module in the working directory, printing only its
-// errors. Tidying resolves the framework over the network, so the tests of gg
-// new replace it.
-var goModTidy = func() error {
-	cmd := exec.Command("go", "mod", "tidy")
-	cmd.Stdout = io.Discard
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
-
 // existingProjectEntries returns, sorted, the entries of dir that a new
 // project gets and that already exist: go.mod, go.sum and the top-level entry
 // of every file in files. For files holding main.go and model/model.gen.go, a

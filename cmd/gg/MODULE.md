@@ -136,6 +136,8 @@ partition "第 3 步：执行（出错不回滚）" {
   核对 middleware/middleware.go 的注册调用;
   :项目用 gRPC 时写拦截器文件，
   核对 interceptor/interceptor.go 的注册调用;
+  :运行 go mod tidy，让 go.mod 和 go.sum
+  收下复制来的源码引用的依赖;
 }
 :打印还没做的装配调用，
 再打印 module.json 的 postNotes;
@@ -238,10 +240,9 @@ service 目录不是镜像复制，分两类文件。
    - 文件不存在时新建一个只有 `package middleware` 的文件；文件里已经导入了框架 middleware 包时沿用它的别名；没有任何变化时不写文件。
 8. **写拦截器文件**（`Copy Interceptor Files`，模块声明了拦截器且项目用 gRPC 时才有）。
 9. **核对拦截器注册**（`Register Interceptors`），规则同第 7 步，文件是 `interceptor/interceptor.go`，注册走框架 interceptor 包。
+10. **整理依赖**（`Run Go Mod Tidy`）：运行 `go mod tidy`，让 `go.mod` 和 `go.sum` 收下复制来的源码引用、项目还没有的依赖；失败就打印删除模块的提示后报错退出。
 
 全部成功后打印 `Done`、`Module copied successfully`、删除模块的提示（见「删除复制来的模块」），接着逐条打印复制进项目的模块声明了、项目还没做的装配调用（`ASSEMBLY`，措辞同 gg check 的「Module assembly」检查项；copy 内嵌的 gg gen 不查这一项，因为消除它要引用 copy 这一步才写进来的 service 代码），最后逐行打印 `module.json` 的 `postNotes`。
-
-copy 不改 go.mod：复制来的 service 引用了项目还没有的依赖时，先 `go mod tidy` 再编译。
 
 执行不回滚：已经写入或删除文件之后出错，写了、删了的保持原样，命令打印删除模块的提示后报错退出。
 

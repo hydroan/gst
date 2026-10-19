@@ -1,7 +1,9 @@
 package main
 
 import (
+	"io"
 	"os"
+	"os/exec"
 
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/ggconfig"
@@ -57,4 +59,16 @@ func writeGeneratedFile(filename string, content string, log bool) error {
 		}
 	}
 	return nil
+}
+
+// goModTidy tidies the module in the working directory once gg new or gg
+// module copy has written its files, so that go.mod and go.sum hold what the
+// written sources import; it prints only its errors. Tests replace it: those
+// of gg new because tidying resolves the framework over the network, those
+// of gg module copy to see when it runs and to make it fail.
+var goModTidy = func() error {
+	cmd := exec.Command("go", "mod", "tidy")
+	cmd.Stdout = io.Discard
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }

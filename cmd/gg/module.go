@@ -130,8 +130,9 @@ func runModuleRemove(name string) error {
 }
 
 // runModuleCopy owns the command-level workflow only: build a checked plan,
-// show the current-project files that will be touched, confirm, then execute.
-// Source analysis and AST rewriting live in internal/ggmodule.
+// show the current-project files that will be touched, confirm, execute, then
+// tidy the module so that go.mod and go.sum hold what the copied sources
+// import. Source analysis and AST rewriting live in internal/ggmodule.
 func runModuleCopy(name string, opts moduleCopyOptions) error {
 	copyOpts := ggmodule.CopyOptions{Force: opts.Force}
 	plan, err := ggmodule.BuildCopyPlan(name, copyOpts)
@@ -163,6 +164,14 @@ func runModuleCopy(name string, opts moduleCopyOptions) error {
 		}
 		return err
 	}
+
+	clioutput.Section("Run Go Mod Tidy")
+	if err := goModTidy(); err != nil {
+		clioutput.Error("", "go mod tidy failed")
+		printModuleCopyCleanup(name)
+		return err
+	}
+	clioutput.Success("", "Dependencies tidied")
 
 	clioutput.Section("Done")
 	clioutput.Done("Module copied successfully")
