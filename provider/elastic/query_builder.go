@@ -293,15 +293,10 @@ func (qb *QueryBuilder) SearchAfter(value ...any) *QueryBuilder {
 	return qb
 }
 
-// Sort adds a sort condition
-// SearchAfter requires at least one sort condition.
+// Sort adds a sort on field in order, after the sorts added before it.
+// SearchAfter requires at least one. Build refuses an empty field or an
+// order other than Asc or Desc, in any letter case.
 func (qb *QueryBuilder) Sort(field string, order Order) *QueryBuilder {
-	if field == "" {
-		return qb
-	}
-	if order != Asc && order != Desc {
-		order = Desc
-	}
 	qb.sort = append(qb.sort, map[string]any{
 		field: map[string]any{
 			"order": order,
@@ -392,8 +387,9 @@ func (qb *QueryBuilder) AggsSum(name string, field string) *QueryBuilder {
 	})
 }
 
-// Validate reports what Build would refuse: a negative size or from, and
-// search_after without a sort or with a from.
+// Validate reports what Build would refuse: a negative size or from, a sort
+// on an empty field or in an order other than asc or desc, and search_after
+// without a sort or with a from.
 func (qb *QueryBuilder) Validate() error {
 	return qb.request().validate()
 }

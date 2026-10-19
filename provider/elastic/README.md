@@ -180,7 +180,7 @@ req := &SearchRequest{
 
 ### 排序：
 
-不设 `Sort` 时按相关度（`_score`）排序，每条命中带 `Score`；只有 `search_after` 必须配 `Sort`，缺了在发请求前就报错。
+不设 `Sort` 时按相关度（`_score`）排序，每条命中带 `Score`；只有 `search_after` 必须配 `Sort`，缺了在发请求前就报错。排序方向只认 `asc`、`desc`（大小写都行），字段名不能为空，写错了同样在发请求前报错。
 
 ```go
 req := &SearchRequest{

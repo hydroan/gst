@@ -41,14 +41,25 @@ type SearchRequest struct {
 }
 
 // validate reports a request the cluster would refuse or answer with
-// something other than what was asked: a negative size or from, and
-// search_after without the sort whose values it continues from.
+// something other than what was asked: a negative size or from, a sort on an
+// empty field or in an order other than asc or desc, and search_after
+// without the sort whose values it continues from.
 func (r *SearchRequest) validate() error {
 	if r.Size != nil && *r.Size < 0 {
 		return errors.New("size cannot be negative")
 	}
 	if r.From < 0 {
 		return errors.New("from cannot be negative")
+	}
+	for _, entry := range r.Sort {
+		for field, spec := range entry {
+			if field == "" {
+				return errors.New("sort field cannot be empty")
+			}
+			if _, _, err := sortOrder(field, spec); err != nil {
+				return err
+			}
+		}
 	}
 	if len(r.SearchAfter) > 0 {
 		if len(r.Sort) == 0 {
@@ -143,23 +154,23 @@ func reverseSort(sort []map[string]any) ([]map[string]any, error) {
 	for i, entry := range sort {
 		flipped := make(map[string]any, len(entry))
 		for field, spec := range entry {
-			switch spec := spec.(type) {
-			case string, Order:
-				order, err := reverseOrder(field, spec)
-				if err != nil {
-					return nil, err
-				}
-				flipped[field] = order
-			case map[string]any:
-				order, err := reverseOrder(field, spec["order"])
-				if err != nil {
-					return nil, err
-				}
-				options := maps.Clone(spec)
-				options["order"] = order
-				flipped[field] = options
-			default:
+			order, given, err := sortOrder(field, spec)
+			if err != nil {
+				return nil, err
+			}
+			if !given {
 				return nil, errors.Newf("sort on %s names no order to reverse", field)
+			}
+			opposite := Asc
+			if order == Asc {
+				opposite = Desc
+			}
+			if options, ok := spec.(map[string]any); ok {
+				options = maps.Clone(options)
+				options["order"] = opposite
+				flipped[field] = options
+			} else {
+				flipped[field] = opposite
 			}
 		}
 		reversed[i] = flipped
@@ -167,23 +178,38 @@ func reverseSort(sort []map[string]any) ([]map[string]any, error) {
 	return reversed, nil
 }
 
-// reverseOrder returns the order opposite to order, given as a string or an
-// Order in any letter case, the way the cluster reads it.
-func reverseOrder(field string, order any) (Order, error) {
+// sortOrder reads the order a sort entry gives field: spec is either the
+// order itself, {"seq": "asc"}, or the field's options holding it, {"seq":
+// {"order": "asc"}}. It reports whether an order is given at all, and fails
+// when the one given is neither asc nor desc. The letter case does not
+// matter, the cluster reads an order in any case.
+func sortOrder(field string, spec any) (order Order, given bool, err error) {
+	var value any
+	switch spec := spec.(type) {
+	case string, Order:
+		value = spec
+	case map[string]any:
+		if value, given = spec["order"]; !given {
+			return "", false, nil
+		}
+	default:
+		return "", false, nil
+	}
+
 	var name string
-	switch order := order.(type) {
+	switch value := value.(type) {
 	case string:
-		name = order
+		name = value
 	case Order:
-		name = string(order)
+		name = string(value)
 	}
 	switch {
 	case strings.EqualFold(name, string(Asc)):
-		return Desc, nil
+		return Asc, true, nil
 	case strings.EqualFold(name, string(Desc)):
-		return Asc, nil
+		return Desc, true, nil
 	default:
-		return "", errors.Newf("sort on %s names no order to reverse", field)
+		return "", true, errors.Newf("sort on %s has order %v, want asc or desc", field, value)
 	}
 }
 

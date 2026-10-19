@@ -348,6 +348,46 @@ func TestBulkIndexWithNoDocumentsIndexesNothing(t *testing.T) {
 	require.NoError(t, elastic.Document.BulkIndex(context.Background(), "sample-nothing"))
 }
 
+// TestQueryBuilderSortRefusesWhatTheClusterCannotRead pins that Sort records
+// what it is given and Build refuses a sort the cluster could not read: an
+// empty field, or an order other than asc or desc.
+func TestQueryBuilderSortRefusesWhatTheClusterCannotRead(t *testing.T) {
+	_, err := elastic.NewQueryBuilder().Sort("seq", "ascending").Build()
+	require.ErrorContains(t, err, "sort on seq has order ascending, want asc or desc")
+
+	_, err = elastic.NewQueryBuilder().Sort("", elastic.Asc).Build()
+	require.ErrorContains(t, err, "sort field cannot be empty")
+}
+
+// TestSearchRefusesASortTheClusterCannotRead pins the same check on a request
+// written by hand, made before the request is sent, for both ways a sort
+// entry gives its order.
+func TestSearchRefusesASortTheClusterCannotRead(t *testing.T) {
+	index := newSampleIndex(t, seqDocuments(2)...)
+
+	_, err := elastic.Document.Search(context.Background(), index, &elastic.SearchRequest{
+		Sort: []map[string]any{{"seq": map[string]any{"order": "up"}}},
+	})
+	require.ErrorContains(t, err, "sort on seq has order up, want asc or desc")
+
+	_, err = elastic.Document.Search(context.Background(), index, &elastic.SearchRequest{
+		Sort: []map[string]any{{"seq": "sideways"}},
+	})
+	require.ErrorContains(t, err, "sort on seq has order sideways, want asc or desc")
+}
+
+// TestSearchSortsInTheOrderGivenInAnyLetterCase pins that an order written in
+// upper case sorts the way it says, the way the cluster reads it.
+func TestSearchSortsInTheOrderGivenInAnyLetterCase(t *testing.T) {
+	index := newSampleIndex(t, seqDocuments(3)...)
+	req, err := elastic.NewQueryBuilder().Sort("seq", "ASC").Build()
+	require.NoError(t, err)
+
+	res, err := elastic.Document.Search(context.Background(), index, req)
+	require.NoError(t, err)
+	require.Equal(t, []string{"1", "2", "3"}, ids(res))
+}
+
 // sampleDocument is a document the tests index: its id and its fields.
 type sampleDocument struct {
 	id     string
