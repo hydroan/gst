@@ -8,6 +8,7 @@ type Option[K comparable, V any] func(*MultiMap[K, V]) error
 func WithSafe[K comparable, V any]() Option[K, V] {
 	return func(m *MultiMap[K, V]) error {
 		m.mu = new(sync.RWMutex)
+		m.safe = true
 		return nil
 	}
 }

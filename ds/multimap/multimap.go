@@ -12,6 +12,7 @@ type MultiMap[K comparable, V any] struct {
 	data map[K][]V
 	cmp  func(V, V) int
 	mu   types.Locker
+	safe bool
 }
 
 // New creates an empty MultiMap. cmp compares values: two values are equal
@@ -36,15 +37,16 @@ func New[K comparable, V any](cmp func(V, V) int, ops ...Option[K, V]) (*MultiMa
 	return m, nil
 }
 
-// NewFromMap creates a MultiMap from an existing map,
-// performing a deep copy of the input map's values.
+// NewFromMap creates a MultiMap from an existing map, performing a deep copy
+// of the input map's values. A key with no values is left out, as Set leaves
+// it out.
 func NewFromMap[K comparable, V any](m map[K][]V, cmp func(V, V) int, ops ...Option[K, V]) (*MultiMap[K, V], error) {
 	mm, err := New[K, V](cmp, ops...)
 	if err != nil {
 		return nil, err
 	}
 	for k, values := range m {
-		mm.SetAll(k, values)
+		mm.Set(k, values...)
 	}
 	return mm, nil
 }
@@ -63,36 +65,37 @@ func (m *MultiMap[K, V]) Get(key K) ([]V, bool) {
 }
 
 // GetOne returns the first value associated with the key and whether it exists.
-// If the key doesn't exist or has no values, it returns the zero value and false.
+// If the key doesn't exist, it returns the zero value and false.
 func (m *MultiMap[K, V]) GetOne(key K) (V, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	var zero V
 	values, exists := m.data[key]
-	if !exists || len(values) == 0 {
+	if !exists {
+		var zero V
 		return zero, false
 	}
 	return values[0], true
 }
 
-// Set appends a value to the values associated with the key.
-func (m *MultiMap[K, V]) Set(key K, val V) {
+// Add appends val to the values associated with the key.
+func (m *MultiMap[K, V]) Add(key K, val V) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if m.data[key] == nil {
-		m.data[key] = make([]V, 0, 4)
-	}
 	m.data[key] = append(m.data[key], val)
 }
 
-// SetAll replaces the values associated with the given key with a deep copy
-// of the input slice.
-func (m *MultiMap[K, V]) SetAll(key K, values []V) {
+// Set replaces the values associated with the key with a copy of values.
+// Setting no values removes the key, the way removing its last value does.
+func (m *MultiMap[K, V]) Set(key K, values ...V) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	if len(values) == 0 {
+		delete(m.data, key)
+		return
+	}
 	m.data[key] = slices.Clone(values)
 }
 
@@ -254,22 +257,25 @@ func (m *MultiMap[K, V]) Range(fn func(key K, values []V) bool) {
 	}
 }
 
-// Clone returns a deep copy of the MultiMap.
+// Clone returns a deep copy of the MultiMap, made with the same options and
+// so with a lock of its own when the MultiMap is safe for concurrent use.
 func (m *MultiMap[K, V]) Clone() *MultiMap[K, V] {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	cloned := &MultiMap[K, V]{
-		data: make(map[K][]V, len(m.data)),
-		cmp:  m.cmp,
-		mu:   m.mu,
-	}
+	cloned, _ := New(m.cmp, m.options()...)
 	for k, values := range m.data {
-		newValues := make([]V, len(values))
-		copy(newValues, values)
-		cloned.data[k] = newValues
+		cloned.data[k] = slices.Clone(values)
 	}
 	return cloned
+}
+
+func (m *MultiMap[K, V]) options() []Option[K, V] {
+	ops := make([]Option[K, V], 0)
+	if m.safe {
+		ops = append(ops, WithSafe[K, V]())
+	}
+	return ops
 }
 
 // Map returns a deep copy of the internal map.

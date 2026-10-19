@@ -2,6 +2,7 @@ package multimap_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/hydroan/gst/ds/multimap"
 	"github.com/hydroan/gst/ds/types"
@@ -89,8 +90,8 @@ func TestMultiMap_Creation(t *testing.T) {
 
 func TestMultiMap_GetOperations(t *testing.T) {
 	mm, _ := multimap.New[string, int](intCmp)
-	mm.Set("a", 1)
-	mm.Set("a", 2)
+	mm.Add("a", 1)
+	mm.Add("a", 2)
 
 	t.Run("Get", func(t *testing.T) {
 		tests := []struct {
@@ -136,18 +137,19 @@ func TestMultiMap_GetOperations(t *testing.T) {
 func TestMultiMap_SetOperations(t *testing.T) {
 	mm, _ := multimap.New[string, int](intCmp)
 
-	t.Run("Set", func(t *testing.T) {
-		mm.Set("a", 1)
-		mm.Set("a", 2)
+	t.Run("Add appends a value", func(t *testing.T) {
+		mm.Add("a", 1)
+		mm.Add("a", 2)
 
 		vals, exists := mm.Get("a")
 		assert.True(t, exists)
 		assert.Equal(t, []int{1, 2}, vals)
 	})
 
-	t.Run("SetAll", func(t *testing.T) {
+	t.Run("Set replaces the values with a copy", func(t *testing.T) {
+		mm.Add("b", 9)
 		original := []int{3, 4}
-		mm.SetAll("b", original)
+		mm.Set("b", original...)
 
 		// Modify original to verify deep copy
 		original[0] = 100
@@ -156,14 +158,22 @@ func TestMultiMap_SetOperations(t *testing.T) {
 		assert.True(t, exists)
 		assert.Equal(t, []int{3, 4}, vals)
 	})
+
+	t.Run("Set with no values removes the key", func(t *testing.T) {
+		mm.Add("c", 1)
+		mm.Set("c")
+
+		assert.False(t, mm.Has("c"))
+		assert.Zero(t, mm.Count("c"))
+	})
 }
 
 func TestMultiMap_DeleteOperations(t *testing.T) {
 	mm, _ := multimap.New[string, int](intCmp)
-	mm.Set("a", 1)
-	mm.Set("a", 2)
-	mm.Set("a", 1)
-	mm.Set("b", 3)
+	mm.Add("a", 1)
+	mm.Add("a", 2)
+	mm.Add("a", 1)
+	mm.Add("b", 3)
 
 	t.Run("Delete", func(t *testing.T) {
 		mm.Delete("a")
@@ -186,9 +196,9 @@ func TestMultiMap_DeleteOperations(t *testing.T) {
 
 func TestMultiMap_QueryOperations(t *testing.T) {
 	mm, _ := multimap.New[string, int](intCmp)
-	mm.Set("a", 1)
-	mm.Set("a", 2)
-	mm.Set("b", 3)
+	mm.Add("a", 1)
+	mm.Add("a", 2)
+	mm.Add("b", 3)
 
 	t.Run("Size and Length", func(t *testing.T) {
 		assert.Equal(t, 2, mm.Len())
@@ -202,7 +212,7 @@ func TestMultiMap_QueryOperations(t *testing.T) {
 	})
 
 	t.Run("Has and Contains", func(t *testing.T) {
-		mm.Set("a", 1)
+		mm.Add("a", 1)
 		assert.True(t, mm.Has("a"))
 		assert.True(t, mm.Contains("a", 1))
 		assert.False(t, mm.Contains("a", 999))
@@ -221,14 +231,14 @@ func TestMultiMap_QueryOperations(t *testing.T) {
 
 func TestMultiMap_CloneAndMap(t *testing.T) {
 	original, _ := multimap.New[string, int](intCmp)
-	original.Set("a", 1)
-	original.Set("a", 2)
+	original.Add("a", 1)
+	original.Add("a", 2)
 
 	t.Run("Clone", func(t *testing.T) {
 		cloned := original.Clone()
 
 		// Modify original
-		original.Set("a", 3)
+		original.Add("a", 3)
 
 		// Verify cloned remains unchanged
 		vals, exists := cloned.Get("a")
@@ -247,4 +257,42 @@ func TestMultiMap_CloneAndMap(t *testing.T) {
 		assert.True(t, exists)
 		assert.Equal(t, []int{1, 2, 3}, vals)
 	})
+}
+
+// TestMultiMap_CloneHasItsOwnLock pins that a clone of a map made safe for
+// concurrent use locks on its own: writing to the clone while the original is
+// being ranged over, and so holds its read lock, does not wait on it.
+func TestMultiMap_CloneHasItsOwnLock(t *testing.T) {
+	original, err := multimap.New[string, int](intCmp, multimap.WithSafe[string, int]())
+	require.NoError(t, err)
+	original.Add("a", 1)
+	cloned := original.Clone()
+
+	requireFinishes(t, func() {
+		original.Range(func(key string, _ []int) bool {
+			cloned.Add(key, 2)
+			return true
+		})
+	})
+	vals, _ := cloned.Get("a")
+	assert.Equal(t, []int{1, 2}, vals)
+	vals, _ = original.Get("a")
+	assert.Equal(t, []int{1}, vals)
+}
+
+// requireFinishes fails the test when fn has not returned within ten seconds,
+// which is how a deadlock shows up.
+func requireFinishes(t *testing.T, fn func()) {
+	t.Helper()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		fn()
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("fn did not finish: it deadlocked")
+	}
 }
