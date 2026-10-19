@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/internal/testutil"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/provider/elastic"
 	"github.com/hydroan/gst/util"
 	"github.com/stretchr/testify/require"
@@ -20,19 +19,34 @@ func TestMain(m *testing.M) {
 }
 
 func TestIndexLifecycle(t *testing.T) {
+	ctx := context.Background()
 	name := "sample-lifecycle"
-	require.NoError(t, elastic.Index.Create(name, &elastic.IndexOption{
+	require.NoError(t, elastic.Index.Create(ctx, name, &elastic.IndexOption{
 		Settings: map[string]any{"number_of_shards": 1, "number_of_replicas": 0},
 		Mappings: map[string]any{"properties": map[string]any{"title": map[string]any{"type": "text"}}},
 	}))
-	exists, err := elastic.Index.Exists(name)
+	require.ErrorContains(t, elastic.Index.Create(ctx, name), "resource_already_exists_exception")
+	exists, err := elastic.Index.Exists(ctx, name)
 	require.NoError(t, err)
 	require.True(t, exists)
 
-	require.NoError(t, elastic.Index.Delete(name))
-	exists, err = elastic.Index.Exists(name)
+	require.NoError(t, elastic.Index.Delete(ctx, name))
+	exists, err = elastic.Index.Exists(ctx, name)
 	require.NoError(t, err)
 	require.False(t, exists)
+	require.ErrorContains(t, elastic.Index.Delete(ctx, name), "index_not_found_exception")
+}
+
+// TestIndexHonoursTheContext pins that every index operation runs under the
+// caller's context: a canceled one fails each of them before the request.
+func TestIndexHonoursTheContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	require.ErrorIs(t, elastic.Index.Create(ctx, "sample-canceled"), context.Canceled)
+	_, err := elastic.Index.Exists(ctx, "sample-canceled")
+	require.ErrorIs(t, err, context.Canceled)
+	require.ErrorIs(t, elastic.Index.Delete(ctx, "sample-canceled"), context.Canceled)
 }
 
 func TestDocumentGetReadsAnIndexedDocument(t *testing.T) {
@@ -83,7 +97,7 @@ func TestSearchAfterRequiresSort(t *testing.T) {
 // a size of zero reaches the cluster, so the answer carries the buckets and
 // no hits.
 func TestSearchWithSizeZeroAnswersAggregationsAlone(t *testing.T) {
-	docs := make([]types.ESDocumenter, 0, 12)
+	docs := make([]elastic.Documenter, 0, 12)
 	for i := range 12 {
 		kind := "even"
 		if i%2 == 1 {
@@ -102,11 +116,7 @@ func TestSearchWithSizeZeroAnswersAggregationsAlone(t *testing.T) {
 }
 
 func TestSearchNextAndPrevPageAlongTheSort(t *testing.T) {
-	docs := make([]types.ESDocumenter, 0, 5)
-	for seq := 1; seq <= 5; seq++ {
-		docs = append(docs, sampleDocument{id: strconv.Itoa(seq), fields: map[string]any{"seq": seq}})
-	}
-	index := newSampleIndex(t, docs...)
+	index := newSampleIndex(t, seqDocuments(5)...)
 
 	first, err := elastic.NewQueryBuilder().Sort("seq", elastic.Asc).Size(2).Build()
 	require.NoError(t, err)
@@ -194,7 +204,7 @@ func TestQueryBuilderMarshalsWhatWasSet(t *testing.T) {
 // the threshold and the relation says at least, and a request asking for the
 // exact count gets it with the relation saying equal.
 func TestSearchReportsWhetherTheTotalIsExact(t *testing.T) {
-	docs := make([]types.ESDocumenter, 0, 10001)
+	docs := make([]elastic.Documenter, 0, 10001)
 	for i := range 10001 {
 		docs = append(docs, sampleDocument{id: strconv.Itoa(i), fields: map[string]any{"seq": i}})
 	}
@@ -254,6 +264,90 @@ func TestQueryBuilderNestsABoolOfShouldClauses(t *testing.T) {
 	]}}`, string(body))
 }
 
+// TestSearchPrevAndNextLeaveTheRequestAlone pins that paging works on a copy
+// of the request: it keeps its size, and the builder it came from still
+// builds the original sort afterwards.
+func TestSearchPrevAndNextLeaveTheRequestAlone(t *testing.T) {
+	index := newSampleIndex(t, seqDocuments(5)...)
+	qb := elastic.NewQueryBuilder().Sort("seq", elastic.Asc).SearchAfter(3)
+	req, err := qb.Build()
+	require.NoError(t, err)
+
+	_, err = elastic.Document.SearchPrev(context.Background(), index, req, 2)
+	require.NoError(t, err)
+	_, err = elastic.Document.SearchNext(context.Background(), index, req, 1)
+	require.NoError(t, err)
+	require.Nil(t, req.Size)
+
+	again, err := qb.Build()
+	require.NoError(t, err)
+	body, err := json.Marshal(again.Sort)
+	require.NoError(t, err)
+	require.JSONEq(t, `[{"seq":{"order":"asc"}}]`, string(body))
+}
+
+// TestSearchPrevReversesAShortFormSort pins the other way the cluster reads a
+// sort, the order given as the field's value.
+func TestSearchPrevReversesAShortFormSort(t *testing.T) {
+	index := newSampleIndex(t, seqDocuments(5)...)
+	req := &elastic.SearchRequest{
+		Sort:        []map[string]any{{"seq": "asc"}},
+		SearchAfter: []any{4},
+	}
+
+	res, err := elastic.Document.SearchPrev(context.Background(), index, req, 2)
+	require.NoError(t, err)
+	require.Equal(t, []string{"2", "3"}, ids(res))
+}
+
+// TestSearchPrevRefusesASortItCannotReverse pins that SearchPrev fails rather
+// than answering a page in some other order: without a sort there is nothing
+// to page back along, and a sort entry naming no order leaves the order to a
+// default that depends on the field.
+func TestSearchPrevRefusesASortItCannotReverse(t *testing.T) {
+	index := newSampleIndex(t, seqDocuments(3)...)
+
+	_, err := elastic.Document.SearchPrev(context.Background(), index, &elastic.SearchRequest{}, 2)
+	require.ErrorContains(t, err, "SearchPrev requires sort")
+
+	_, err = elastic.Document.SearchPrev(context.Background(), index, &elastic.SearchRequest{
+		Sort: []map[string]any{{"seq": map[string]any{"missing": "_last"}}},
+	}, 2)
+	require.ErrorContains(t, err, "sort on seq names no order to reverse")
+}
+
+func TestBulkIndexHonoursTheContext(t *testing.T) {
+	index := newSampleIndex(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := elastic.Document.BulkIndex(ctx, index, sampleDocument{id: "one", fields: map[string]any{"title": "sample"}})
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+// TestBulkIndexLetsTheClusterNameADocumentWithoutAnID pins that an empty id
+// is left out of the request, so the cluster generates one.
+func TestBulkIndexLetsTheClusterNameADocumentWithoutAnID(t *testing.T) {
+	index := newSampleIndex(t, sampleDocument{fields: map[string]any{"title": "unnamed"}})
+
+	res, err := elastic.Document.Search(context.Background(), index, &elastic.SearchRequest{})
+	require.NoError(t, err)
+	require.Len(t, res.Hits, 1)
+	require.NotEmpty(t, res.Hits[0].ID)
+}
+
+func TestBulkIndexKeepsAnIDWithAQuote(t *testing.T) {
+	index := newSampleIndex(t, sampleDocument{id: `quoted"id`, fields: map[string]any{"title": "quoted"}})
+
+	res, err := elastic.Document.Search(context.Background(), index, &elastic.SearchRequest{})
+	require.NoError(t, err)
+	require.Equal(t, []string{`quoted"id`}, ids(res))
+}
+
+func TestBulkIndexWithNoDocumentsIndexesNothing(t *testing.T) {
+	require.NoError(t, elastic.Document.BulkIndex(context.Background(), "sample-nothing"))
+}
+
 // sampleDocument is a document the tests index: its id and its fields.
 type sampleDocument struct {
 	id     string
@@ -266,13 +360,13 @@ func (d sampleDocument) Document() map[string]any { return d.fields }
 // newSampleIndex creates an index named after the test, indexes docs into
 // it, refreshes it so a search sees them at once, and deletes it when the
 // test ends.
-func newSampleIndex(t *testing.T, docs ...types.ESDocumenter) string {
+func newSampleIndex(t *testing.T, docs ...elastic.Documenter) string {
 	t.Helper()
 	name := "sample-" + strings.ToLower(strings.ReplaceAll(t.Name(), "/", "-"))
-	require.NoError(t, elastic.Index.Create(name, &elastic.IndexOption{
+	require.NoError(t, elastic.Index.Create(context.Background(), name, &elastic.IndexOption{
 		Settings: map[string]any{"number_of_shards": 1, "number_of_replicas": 0},
 	}))
-	t.Cleanup(func() { require.NoError(t, elastic.Index.Delete(name)) })
+	t.Cleanup(func() { require.NoError(t, elastic.Index.Delete(context.Background(), name)) })
 	if len(docs) > 0 {
 		require.NoError(t, elastic.Document.BulkIndex(context.Background(), name, docs...))
 	}
@@ -284,6 +378,16 @@ func newSampleIndex(t *testing.T, docs ...types.ESDocumenter) string {
 	defer res.Body.Close()
 	require.False(t, res.IsError(), res.String())
 	return name
+}
+
+// seqDocuments returns n documents numbered 1 to n in the field seq, each
+// identified by its number.
+func seqDocuments(n int) []elastic.Documenter {
+	docs := make([]elastic.Documenter, 0, n)
+	for seq := 1; seq <= n; seq++ {
+		docs = append(docs, sampleDocument{id: strconv.Itoa(seq), fields: map[string]any{"seq": seq}})
+	}
+	return docs
 }
 
 // ids returns the ids of the hits in their order.

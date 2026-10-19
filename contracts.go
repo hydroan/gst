@@ -8,11 +8,6 @@ import "github.com/hydroan/gst/internal/types"
 // use model.Empty when they do not represent persistent rows.
 type Model = types.Model
 
-// ESDocumenter represents a document that can be indexed into Elasticsearch.
-// Types implementing this interface should be able to convert themselves
-// into a document format suitable for Elasticsearch indexing.
-type ESDocumenter = types.ESDocumenter
-
 // Request and Response are the framework-facing types of one action's request
 // and response payloads. They constrain the REQ and RSP type parameters of
 // Service and Module; the concrete types are declared per action by the model

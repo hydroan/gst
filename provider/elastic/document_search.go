@@ -5,7 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"maps"
+	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -96,56 +99,92 @@ type AggregationResult struct {
 	Buckets  []map[string]any `json:"buckets,omitempty"`   // For bucket aggregations
 }
 
-// SearchPrev searches for N previous hits before the current search_after position.
-// It will:
-// 1. Reverse all sort orders (asc -> desc, desc -> asc)
-// 2. Execute the search with the reversed sort orders
-// 3. Reverse the result hits to maintain the original order
-// Note: This will override the size parameter in QueryBuilder.
+// SearchPrev returns the size hits before the search_after position of req,
+// in the order of its sort: it searches with every sort order reversed and
+// reverses the hits it gets back. The page is taken on a copy, req is left as
+// it is. A request without a sort, or with a sort entry naming no order, is
+// an error: the order to page back along is not known.
 func (d *document) SearchPrev(ctx context.Context, indexName string, req *SearchRequest, size int) (*SearchResult, error) {
-	// Reverse all sort orders
-	for _, sort := range req.Sort {
-		for _, value := range sort {
-			if orderMap, ok := value.(map[string]any); ok {
-				if order, ok := orderMap["order"].(string); ok {
-					if order == "asc" {
-						orderMap["order"] = "desc"
-					} else {
-						orderMap["order"] = "asc"
-					}
-				}
-				if order, ok := orderMap["order"].(Order); ok {
-					if order == Asc {
-						orderMap["order"] = Desc
-					} else {
-						orderMap["order"] = Asc
-					}
-				}
-			}
-		}
-	}
-	// Set pagination parameters
-	req.From = 0
-	req.Size = &size
-	result, err := d.Search(ctx, indexName, req)
+	sort, err := reverseSort(req.Sort)
 	if err != nil {
 		return nil, err
 	}
-	// Reverse result order
-	for i, j := 0, len(result.Hits)-1; i < j; i, j = i+1, j-1 {
-		result.Hits[i], result.Hits[j] = result.Hits[j], result.Hits[i]
+	page := *req
+	page.From = 0
+	page.Size = &size
+	page.Sort = sort
+	result, err := d.Search(ctx, indexName, &page)
+	if err != nil {
+		return nil, err
 	}
-
+	slices.Reverse(result.Hits)
 	return result, nil
 }
 
-// SearchNext searches for N next hits after the current search_after position.
-// It performs a forward search using the current sort orders.
-// Note: This will override the size parameter in QueryBuilder.
+// SearchNext returns the size hits after the search_after position of req,
+// in the order of its sort. The page is taken on a copy, req is left as it
+// is.
 func (d *document) SearchNext(ctx context.Context, indexName string, req *SearchRequest, size int) (*SearchResult, error) {
-	req.Size = &size
-	req.From = 0
-	return d.Search(ctx, indexName, req)
+	page := *req
+	page.From = 0
+	page.Size = &size
+	return d.Search(ctx, indexName, &page)
+}
+
+// reverseSort returns sort with every order flipped and leaves sort as it is.
+// An entry gives a field its order either as the value, {"seq": "asc"}, or
+// among the field's options, {"seq": {"order": "asc"}}; an entry without an
+// order is an error, since the default it falls back to depends on the field.
+func reverseSort(sort []map[string]any) ([]map[string]any, error) {
+	if len(sort) == 0 {
+		return nil, errors.New("SearchPrev requires sort")
+	}
+	reversed := make([]map[string]any, len(sort))
+	for i, entry := range sort {
+		flipped := make(map[string]any, len(entry))
+		for field, spec := range entry {
+			switch spec := spec.(type) {
+			case string, Order:
+				order, err := reverseOrder(field, spec)
+				if err != nil {
+					return nil, err
+				}
+				flipped[field] = order
+			case map[string]any:
+				order, err := reverseOrder(field, spec["order"])
+				if err != nil {
+					return nil, err
+				}
+				options := maps.Clone(spec)
+				options["order"] = order
+				flipped[field] = options
+			default:
+				return nil, errors.Newf("sort on %s names no order to reverse", field)
+			}
+		}
+		reversed[i] = flipped
+	}
+	return reversed, nil
+}
+
+// reverseOrder returns the order opposite to order, given as a string or an
+// Order in any letter case, the way the cluster reads it.
+func reverseOrder(field string, order any) (Order, error) {
+	var name string
+	switch order := order.(type) {
+	case string:
+		name = order
+	case Order:
+		name = string(order)
+	}
+	switch {
+	case strings.EqualFold(name, string(Asc)):
+		return Desc, nil
+	case strings.EqualFold(name, string(Desc)):
+		return Asc, nil
+	default:
+		return "", errors.Newf("sort on %s names no order to reverse", field)
+	}
 }
 
 // Search runs req against indexName. The request goes to the cluster as it

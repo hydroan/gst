@@ -444,12 +444,6 @@ func (qb *QueryBuilder) request() *SearchRequest {
 	}
 }
 
-// BuildForce creates a SearchRequest without validation
-func (qb *QueryBuilder) BuildForce() *SearchRequest {
-	req, _ := qb.Build()
-	return req
-}
-
 // BuildQuery creates the query part of SearchRequest
 func (qb *QueryBuilder) BuildQuery() map[string]any {
 	req, err := qb.Build()

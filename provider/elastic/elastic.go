@@ -1,16 +1,10 @@
 package elastic
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
-	"fmt"
-	"io"
 	"net"
 	"net/http"
-	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -23,10 +17,8 @@ import (
 	"go.uber.org/zap"
 )
 
-const defaultSearchSize = 10000
-
-// timestampFile persists the SearchTimestamp cursor across restarts.
-var timestampFile = filepath.Join(os.TempDir(), "gst_elastic_timestamp")
+// pingTimeout bounds the connectivity check start performs.
+const pingTimeout = 5 * time.Second
 
 type (
 	document struct{}
@@ -52,21 +44,29 @@ func init() {
 	})
 }
 
-// start initializes the global elasticsearch client.
-// It reads elasticsearch configuration from config.App.Elasticsearch.
-func start(_ context.Context) (err error) {
+// start creates the framework's client from config.App.Elasticsearch and
+// confirms the cluster answers a ping before handing it out: a cluster that
+// refuses the request, wrong credentials included, answers the ping with an
+// error status and is reported here rather than on the first use.
+func start(_ context.Context) error {
 	cfg := config.App.Elasticsearch
-	if client, err = New(cfg); err != nil {
+	c, err := New(cfg)
+	if err != nil {
 		return errors.Wrap(err, "failed to create elasticsearch client")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), pingTimeout)
 	defer cancel()
-	if _, err := client.Ping(client.Ping.WithContext(ctx)); err != nil {
-		client = nil
+	res, err := c.Ping(c.Ping.WithContext(ctx))
+	if err != nil {
 		return errors.Wrap(err, "failed to ping elasticsearch")
 	}
+	defer res.Body.Close()
+	if res.IsError() {
+		return errors.Newf("failed to ping elasticsearch: %s", res.Status())
+	}
 
-	zap.S().Infow("successfully connect to elasticsearch", "hosts", cfg.Addrs)
+	zap.S().Infow("successfully connected to elasticsearch", "hosts", cfg.Addrs)
+	client = c
 	return nil
 }
 
@@ -167,97 +167,4 @@ func Client() (*elasticsearch.Client, error) {
 		return nil, err
 	}
 	return client, nil
-}
-
-// SearchTimestamp searches index for documents newer than the timestamp persisted in
-// timestampFile and returns the raw response body.
-// index accepts a wildcard, eg "sample-*", to query multiple indices at once.
-func SearchTimestamp(index string, size ...int) ([]byte, error) {
-	_size := defaultSearchSize
-	if len(size) > 0 {
-		if size[0] > 0 {
-			_size = size[0]
-		}
-	}
-
-	// query := `
-	// {
-	//   "size":3000,
-	//   "sort": [{"@timestamp":{"order":"asc"}}],
-	//   "query": {
-	//     "bool": {
-	//       "must": [
-	// 			{"range":{"@timestamp":{"gte":"2024-02-27T01:00:00Z","lte":"2024-02-27T23:00:00Z"}}},
-	// 			{"term":{"event.action.keyword":"Logon"}}
-	//     ]
-	//     }
-	//   }
-	// }`
-
-	var (
-		err                error
-		timestampEnd       time.Time
-		timestampStart     time.Time
-		timestampStartData []byte
-	)
-
-	now := time.Now().UTC()
-	timestampEnd = time.Date(2099, now.Month(), now.Day(), 23, 59, 59, 0, time.UTC)
-	if timestampStartData, err = os.ReadFile(timestampFile); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			timestampStart = time.Date(now.Year(), now.Month(), now.Day()-1, now.Hour(), now.Minute(), now.Second(), 0, time.UTC) // one day earlier
-			fmt.Println("------------------- touch file and write time: ", timestampStart.Format(time.RFC3339))
-			if err = os.WriteFile(timestampFile, []byte(timestampStart.Format(time.RFC3339)), 0o600); err != nil {
-				return nil, err
-			}
-		} else {
-			return nil, err
-		}
-	} else {
-		if timestampStart, err = time.ParseInLocation(time.RFC3339, string(bytes.TrimSpace(timestampStartData)), time.UTC); err != nil {
-			return nil, err
-		}
-	}
-
-	queryFormat := `{
-  "size":%d,
-  "sort": [{"@timestamp":{"order":"asc"}}],
-  "query": {
-	"bool": {
-	  "must": [
-			{"range":{"@timestamp":{"gte":"%s","lte":"%s"}}},
-			{"wildcard":{"event.action.keyword": "*"}}
-	]
-	}
-  }
-}`
-
-	query := fmt.Sprintf(queryFormat, _size, timestampStart.Format(time.RFC3339), timestampEnd.Format(time.RFC3339))
-	// fmt.Println(query)
-
-	res, err := client.Search(
-		client.Search.WithContext(context.Background()),
-		// client.Search.WithIndex("sample-*"), // use a wildcard to query multiple indices
-		client.Search.WithIndex(index), // index may be a wildcard covering multiple indices
-		client.Search.WithBody(strings.NewReader(query)),
-		client.Search.WithTrackTotalHits(true),
-		client.Search.WithPretty(),
-	)
-	if err != nil {
-		panic(err)
-	}
-	if res.IsError() {
-		fmt.Println("------------------- error")
-		fmt.Println(res.String())
-		return nil, errors.New(res.Status())
-	}
-
-	defer res.Body.Close()
-
-	return io.ReadAll(res.Body)
-}
-
-type Pagination struct {
-	Page int // page number
-	Size int // page size
 }
