@@ -178,6 +178,19 @@ func TestNewSessionRefusesAnUnknownSide(t *testing.T) {
 	require.Nil(t, session)
 }
 
+// newSession is NewSession under the signature its tests pin: assigning it
+// here is what fails to compile when the parameter widens.
+var newSession func(*net.TCPConn, tunnel.AppSide, ...string) (*tunnel.Session, error) = tunnel.NewSession
+
+// TestNewSessionTakesATCPConnection pins the connection parameter's type: a
+// connection of another type is refused by the compiler, and a nil one by
+// NewSession.
+func TestNewSessionTakesATCPConnection(t *testing.T) {
+	session, err := newSession(nil, tunnel.Server)
+	require.Error(t, err)
+	require.Nil(t, session)
+}
+
 // TestConcurrentReadsGetWholeEvents pins that a frame is read in one step:
 // two goroutines reading one session each get whole events, never the
 // header of one frame with the body of another.
@@ -195,7 +208,7 @@ func TestConcurrentReadsGetWholeEvents(t *testing.T) {
 				return
 			}
 		}
-		_ = clientConn.(*net.TCPConn).CloseWrite() //nolint:errcheck
+		_ = clientConn.CloseWrite()
 	}()
 
 	var (
@@ -231,7 +244,7 @@ func TestConcurrentReadsGetWholeEvents(t *testing.T) {
 }
 
 func server(addrCh chan<- string, errCh chan<- error) {
-	l, err := net.Listen("tcp", "127.0.0.1:0")
+	l, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)})
 	if err != nil {
 		addrCh <- ""
 		errCh <- err
@@ -241,7 +254,7 @@ func server(addrCh chan<- string, errCh chan<- error) {
 
 	addrCh <- l.Addr().String()
 
-	conn, err := l.Accept()
+	conn, err := l.AcceptTCP()
 	if err != nil {
 		errCh <- err
 		return
@@ -300,7 +313,9 @@ func client(t *testing.T, addrCh <-chan string, doneCh chan<- struct{}) {
 	addr := <-addrCh
 	require.NotEmpty(t, addr, "listener failed to start")
 
-	conn, err := net.Dial("tcp", addr)
+	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
+	require.NoError(t, err)
+	conn, err := net.DialTCP("tcp", nil, tcpAddr)
 	require.NoError(t, err)
 	defer conn.Close()
 
@@ -334,15 +349,15 @@ func client(t *testing.T, addrCh <-chan string, doneCh chan<- struct{}) {
 
 // tcpPair returns both ends of a TCP connection over the loopback, closed
 // when the test ends.
-func tcpPair(t *testing.T) (server, client net.Conn) {
+func tcpPair(t *testing.T) (server, client *net.TCPConn) {
 	t.Helper()
 
-	l, err := net.Listen("tcp", "127.0.0.1:0")
+	l, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)})
 	require.NoError(t, err)
 	defer l.Close()
-	client, err = net.Dial("tcp", l.Addr().String())
+	client, err = net.DialTCP("tcp", nil, l.Addr().(*net.TCPAddr)) //nolint:errcheck
 	require.NoError(t, err)
-	server, err = l.Accept()
+	server, err = l.AcceptTCP()
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		_ = server.Close()

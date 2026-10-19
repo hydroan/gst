@@ -167,10 +167,9 @@ func (s *Session) Close() error {
 }
 
 // NewSession creates a new tunnel session from a connection.
-// Currently only supports TCP connections (*net.TCPConn).
 //
 // Parameters:
-//   - _conn: The connection to create session from, must be *net.TCPConn
+//   - conn: The connection to create session from, which must not be nil
 //   - appSide: Indicates whether this is server or client side (Server/Client)
 //   - cid: Optional client ID, only used on server side. If provided, will be used as the connection key
 //
@@ -189,11 +188,10 @@ func (s *Session) Close() error {
 //
 // Returns:
 //   - *Session and nil if successful
-//   - nil and error if the connection is not a *net.TCPConn or appSide is neither Server nor Client
-func NewSession(_conn any, appSide AppSide, cid ...string) (*Session, error) {
-	conn, ok := _conn.(*net.TCPConn)
-	if !ok {
-		return nil, errors.New("only support tcp.Conn")
+//   - nil and error if conn is nil or appSide is neither Server nor Client
+func NewSession(conn *net.TCPConn, appSide AppSide, cid ...string) (*Session, error) {
+	if conn == nil {
+		return nil, errors.New("connection is nil")
 	}
 	var key any = conn.LocalAddr().String() + "->" + conn.RemoteAddr().String()
 	switch appSide {
