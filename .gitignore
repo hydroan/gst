@@ -17,7 +17,7 @@ TODO
 *.db
 docs
 .trae
-pkg/filetype/testdata/
+filetype/testdata/
 
 # Added by ggshield
 .cache_ggshield

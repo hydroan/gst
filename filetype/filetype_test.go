@@ -3,7 +3,7 @@ package filetype_test
 import (
 	"testing"
 
-	"github.com/hydroan/gst/pkg/filetype"
+	"github.com/hydroan/gst/filetype"
 	"github.com/stretchr/testify/require"
 )
 

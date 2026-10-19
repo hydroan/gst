@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/filetype"
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/requestctx"
@@ -14,7 +15,6 @@ import (
 	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
-	"github.com/hydroan/gst/pkg/filetype"
 	"go.uber.org/zap"
 )
 
