@@ -1,4 +1,5 @@
-// Package tunnel is communication protocol between with server and user, server and client.
+// Package tunnel is the communication protocol between a server and its
+// users, and between a server and its clients.
 package tunnel
 
 import (

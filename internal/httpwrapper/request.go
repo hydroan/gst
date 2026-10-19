@@ -67,34 +67,3 @@ func (r *WrappedRequest) UnmarshalJSON(data []byte) error {
 	r.Request.Body = io.NopCloser(bytes.NewReader(body))
 	return nil
 }
-
-//// MarshalBinary
-// func (r *WrappedRequest) MarshalBinary() ([]byte, error) {
-//    if r.Request.Body == nil {
-//        return binary.Marshal(&wrappedRequest{
-//            Body:    nil,
-//            Request: r.Request,
-//        })
-//    }
-//    body, err := io.ReadAll(r.Request.Body)
-//    if err != nil {
-//        return nil, err
-//    }
-//    r.Request.Body = io.NopCloser(bytes.NewReader(body))
-//
-//    return binary.Marshal(&wrappedRequest{
-//        Body:    body,
-//        Request: r.Request,
-//    })
-// }
-//
-//// UnmarshalBinary
-// func (r *WrappedRequest) UnmarshalBinary(data []byte) error {
-//    wreq := new(wrappedRequest)
-//    if err := binary.Unmarshal(data, wreq); err != nil {
-//        return err
-//    }
-//    r.Request = wreq.Request
-//    r.Request.Body = io.NopCloser(bytes.NewReader(wreq.Body))
-//    return nil
-// }

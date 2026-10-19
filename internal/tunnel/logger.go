@@ -16,8 +16,7 @@ var (
 // protocolLog returns the tunnel's own protocol-event logger, built lazily on
 // first use. The package is deliberately self-contained: the framework's
 // logging setup knows nothing about the protocol and binary streams, so only a
-// process that actually runs a tunnel session gets them, and retiring this
-// package will not touch the framework.
+// process that actually runs a tunnel session gets them.
 func protocolLog() types.Logger {
 	ensureLoggers()
 	return protocolLogger

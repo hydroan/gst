@@ -15,7 +15,7 @@ import (
 	"sync"
 
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/pkg/auditmanager"
+	"github.com/hydroan/gst/internal/auditmanager"
 )
 
 // TODO: Record failed operations.

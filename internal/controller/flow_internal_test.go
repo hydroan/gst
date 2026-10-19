@@ -11,12 +11,12 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/auditmanager"
 	"github.com/hydroan/gst/internal/consts"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/pkg/auditmanager"
 	"github.com/stretchr/testify/require"
 )
 
