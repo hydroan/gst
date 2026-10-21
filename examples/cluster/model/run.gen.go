@@ -5,14 +5,13 @@ package model
 
 import (
 	"github.com/hydroan/gst"
-	"gorm.io/gorm"
 )
 
 // RunCols are the typed column references of Run.
 var RunCols = struct {
 	CreatedAt gst.TimeColumn
 	CreatedBy gst.Column[string]
-	DeletedAt gst.Column[gorm.DeletedAt]
+	DeletedAt gst.TimeColumn
 	EndedAt   gst.TimeColumn
 	ID        gst.Column[string]
 	Kind      gst.Column[string]
@@ -23,7 +22,7 @@ var RunCols = struct {
 }{
 	CreatedAt: gst.NewTimeColumn[*Run]("created_at"),
 	CreatedBy: gst.NewColumn[*Run, string]("created_by"),
-	DeletedAt: gst.NewColumn[*Run, gorm.DeletedAt]("deleted_at"),
+	DeletedAt: gst.NewTimeColumn[*Run]("deleted_at"),
 	EndedAt:   gst.NewTimeColumn[*Run]("ended_at"),
 	ID:        gst.NewColumn[*Run, string]("id"),
 	Kind:      gst.NewColumn[*Run, string]("kind"),

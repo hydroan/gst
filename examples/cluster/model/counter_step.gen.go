@@ -5,14 +5,13 @@ package model
 
 import (
 	"github.com/hydroan/gst"
-	"gorm.io/gorm"
 )
 
 // CounterStepCols are the typed column references of CounterStep.
 var CounterStepCols = struct {
 	CreatedAt gst.TimeColumn
 	CreatedBy gst.Column[string]
-	DeletedAt gst.Column[gorm.DeletedAt]
+	DeletedAt gst.TimeColumn
 	ID        gst.Column[string]
 	Replica   gst.Column[string]
 	Seq       gst.NumericColumn[int64]
@@ -22,7 +21,7 @@ var CounterStepCols = struct {
 }{
 	CreatedAt: gst.NewTimeColumn[*CounterStep]("created_at"),
 	CreatedBy: gst.NewColumn[*CounterStep, string]("created_by"),
-	DeletedAt: gst.NewColumn[*CounterStep, gorm.DeletedAt]("deleted_at"),
+	DeletedAt: gst.NewTimeColumn[*CounterStep]("deleted_at"),
 	ID:        gst.NewColumn[*CounterStep, string]("id"),
 	Replica:   gst.NewColumn[*CounterStep, string]("replica"),
 	Seq:       gst.NewNumericColumn[*CounterStep, int64]("seq"),

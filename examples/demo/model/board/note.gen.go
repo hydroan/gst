@@ -5,7 +5,6 @@ package board
 
 import (
 	"github.com/hydroan/gst"
-	"gorm.io/gorm"
 )
 
 // NoteCols are the typed column references of Note.
@@ -13,7 +12,7 @@ var NoteCols = struct {
 	Body        gst.Column[string]
 	CreatedAt   gst.TimeColumn
 	CreatedBy   gst.Column[string]
-	DeletedAt   gst.Column[gorm.DeletedAt]
+	DeletedAt   gst.TimeColumn
 	ID          gst.Column[string]
 	Published   gst.Column[bool]
 	PublishedAt gst.TimeColumn
@@ -24,7 +23,7 @@ var NoteCols = struct {
 	Body:        gst.NewColumn[*Note, string]("body"),
 	CreatedAt:   gst.NewTimeColumn[*Note]("created_at"),
 	CreatedBy:   gst.NewColumn[*Note, string]("created_by"),
-	DeletedAt:   gst.NewColumn[*Note, gorm.DeletedAt]("deleted_at"),
+	DeletedAt:   gst.NewTimeColumn[*Note]("deleted_at"),
 	ID:          gst.NewColumn[*Note, string]("id"),
 	Published:   gst.NewColumn[*Note, bool]("published"),
 	PublishedAt: gst.NewTimeColumn[*Note]("published_at"),

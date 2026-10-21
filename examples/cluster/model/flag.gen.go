@@ -5,14 +5,13 @@ package model
 
 import (
 	"github.com/hydroan/gst"
-	"gorm.io/gorm"
 )
 
 // FlagCols are the typed column references of Flag.
 var FlagCols = struct {
 	CreatedAt gst.TimeColumn
 	CreatedBy gst.Column[string]
-	DeletedAt gst.Column[gorm.DeletedAt]
+	DeletedAt gst.TimeColumn
 	ID        gst.Column[string]
 	Name      gst.Column[string]
 	Note      gst.Column[string]
@@ -23,7 +22,7 @@ var FlagCols = struct {
 }{
 	CreatedAt: gst.NewTimeColumn[*Flag]("created_at"),
 	CreatedBy: gst.NewColumn[*Flag, string]("created_by"),
-	DeletedAt: gst.NewColumn[*Flag, gorm.DeletedAt]("deleted_at"),
+	DeletedAt: gst.NewTimeColumn[*Flag]("deleted_at"),
 	ID:        gst.NewColumn[*Flag, string]("id"),
 	Name:      gst.NewColumn[*Flag, string]("name"),
 	Note:      gst.NewColumn[*Flag, string]("note"),

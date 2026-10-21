@@ -5,7 +5,6 @@ package archive
 
 import (
 	"github.com/hydroan/gst"
-	"gorm.io/gorm"
 )
 
 // DocumentCols are the typed column references of Document.
@@ -15,7 +14,7 @@ var DocumentCols = struct {
 	Content   gst.Column[string]
 	CreatedAt gst.TimeColumn
 	CreatedBy gst.Column[string]
-	DeletedAt gst.Column[gorm.DeletedAt]
+	DeletedAt gst.TimeColumn
 	Format    gst.Column[DocumentFormat]
 	ID        gst.Column[string]
 	Name      gst.Column[string]
@@ -28,7 +27,7 @@ var DocumentCols = struct {
 	Content:   gst.NewColumn[*Document, string]("content"),
 	CreatedAt: gst.NewTimeColumn[*Document]("created_at"),
 	CreatedBy: gst.NewColumn[*Document, string]("created_by"),
-	DeletedAt: gst.NewColumn[*Document, gorm.DeletedAt]("deleted_at"),
+	DeletedAt: gst.NewTimeColumn[*Document]("deleted_at"),
 	Format:    gst.NewColumn[*Document, DocumentFormat]("format"),
 	ID:        gst.NewColumn[*Document, string]("id"),
 	Name:      gst.NewColumn[*Document, string]("name"),

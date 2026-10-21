@@ -5,7 +5,6 @@ go 1.27
 require (
 	github.com/cockroachdb/errors v1.14.0
 	github.com/hydroan/gst v0.0.0-20260818140852-22595f383e72
-	gorm.io/gorm v1.31.2
 )
 
 require (
@@ -164,6 +163,7 @@ require (
 	gorm.io/driver/postgres v1.6.2 // indirect
 	gorm.io/driver/sqlite v1.6.0 // indirect
 	gorm.io/driver/sqlserver v1.6.4 // indirect
+	gorm.io/gorm v1.31.2 // indirect
 	gorm.io/plugin/dbresolver v1.6.2 // indirect
 )
 

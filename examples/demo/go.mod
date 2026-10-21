@@ -10,7 +10,6 @@ require (
 	go.uber.org/zap v1.28.0
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.12
-	gorm.io/gorm v1.31.2
 )
 
 require (
@@ -223,6 +222,7 @@ require (
 	gorm.io/driver/postgres v1.6.2 // indirect
 	gorm.io/driver/sqlite v1.6.0 // indirect
 	gorm.io/driver/sqlserver v1.6.4 // indirect
+	gorm.io/gorm v1.31.2 // indirect
 	gorm.io/plugin/dbresolver v1.6.2 // indirect
 )
 

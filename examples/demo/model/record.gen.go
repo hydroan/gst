@@ -5,14 +5,13 @@ package model
 
 import (
 	"github.com/hydroan/gst"
-	"gorm.io/gorm"
 )
 
 // RecordCols are the typed column references of Record.
 var RecordCols = struct {
 	CreatedAt gst.TimeColumn
 	CreatedBy gst.Column[string]
-	DeletedAt gst.Column[gorm.DeletedAt]
+	DeletedAt gst.TimeColumn
 	ID        gst.Column[string]
 	Title     gst.Column[string]
 	Type      gst.Column[RecordType]
@@ -22,7 +21,7 @@ var RecordCols = struct {
 }{
 	CreatedAt: gst.NewTimeColumn[*Record]("created_at"),
 	CreatedBy: gst.NewColumn[*Record, string]("created_by"),
-	DeletedAt: gst.NewColumn[*Record, gorm.DeletedAt]("deleted_at"),
+	DeletedAt: gst.NewTimeColumn[*Record]("deleted_at"),
 	ID:        gst.NewColumn[*Record, string]("id"),
 	Title:     gst.NewColumn[*Record, string]("title"),
 	Type:      gst.NewColumn[*Record, RecordType]("type"),

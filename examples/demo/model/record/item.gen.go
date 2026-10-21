@@ -5,7 +5,6 @@ package record
 
 import (
 	"github.com/hydroan/gst"
-	"gorm.io/gorm"
 )
 
 // ItemCols are the typed column references of Item.
@@ -13,7 +12,7 @@ var ItemCols = struct {
 	Content   gst.Column[string]
 	CreatedAt gst.TimeColumn
 	CreatedBy gst.Column[string]
-	DeletedAt gst.Column[gorm.DeletedAt]
+	DeletedAt gst.TimeColumn
 	ID        gst.Column[string]
 	Kind      gst.Column[ItemKind]
 	RecordID  gst.Column[string]
@@ -23,7 +22,7 @@ var ItemCols = struct {
 	Content:   gst.NewColumn[*Item, string]("content"),
 	CreatedAt: gst.NewTimeColumn[*Item]("created_at"),
 	CreatedBy: gst.NewColumn[*Item, string]("created_by"),
-	DeletedAt: gst.NewColumn[*Item, gorm.DeletedAt]("deleted_at"),
+	DeletedAt: gst.NewTimeColumn[*Item]("deleted_at"),
 	ID:        gst.NewColumn[*Item, string]("id"),
 	Kind:      gst.NewColumn[*Item, ItemKind]("kind"),
 	RecordID:  gst.NewColumn[*Item, string]("record_id"),

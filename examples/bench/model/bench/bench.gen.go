@@ -5,14 +5,13 @@ package bench
 
 import (
 	"github.com/hydroan/gst"
-	"gorm.io/gorm"
 )
 
 // BenchCols are the typed column references of Bench.
 var BenchCols = struct {
 	CreatedAt gst.TimeColumn
 	CreatedBy gst.Column[string]
-	DeletedAt gst.Column[gorm.DeletedAt]
+	DeletedAt gst.TimeColumn
 	Field1    gst.Column[string]
 	Field2    gst.NumericColumn[int]
 	Field3    gst.Column[string]
@@ -24,7 +23,7 @@ var BenchCols = struct {
 }{
 	CreatedAt: gst.NewTimeColumn[*Bench]("created_at"),
 	CreatedBy: gst.NewColumn[*Bench, string]("created_by"),
-	DeletedAt: gst.NewColumn[*Bench, gorm.DeletedAt]("deleted_at"),
+	DeletedAt: gst.NewTimeColumn[*Bench]("deleted_at"),
 	Field1:    gst.NewColumn[*Bench, string]("field1"),
 	Field2:    gst.NewNumericColumn[*Bench, int]("field2"),
 	Field3:    gst.NewColumn[*Bench, string]("field3"),

@@ -5,7 +5,6 @@ package model
 
 import (
 	"github.com/hydroan/gst"
-	"gorm.io/gorm"
 )
 
 // AuditCols are the typed column references of Audit.
@@ -14,7 +13,7 @@ var AuditCols = struct {
 	Actor     gst.Column[string]
 	CreatedAt gst.TimeColumn
 	CreatedBy gst.Column[string]
-	DeletedAt gst.Column[gorm.DeletedAt]
+	DeletedAt gst.TimeColumn
 	ID        gst.Column[string]
 	RecordID  gst.Column[string]
 	UpdatedAt gst.TimeColumn
@@ -24,7 +23,7 @@ var AuditCols = struct {
 	Actor:     gst.NewColumn[*Audit, string]("actor"),
 	CreatedAt: gst.NewTimeColumn[*Audit]("created_at"),
 	CreatedBy: gst.NewColumn[*Audit, string]("created_by"),
-	DeletedAt: gst.NewColumn[*Audit, gorm.DeletedAt]("deleted_at"),
+	DeletedAt: gst.NewTimeColumn[*Audit]("deleted_at"),
 	ID:        gst.NewColumn[*Audit, string]("id"),
 	RecordID:  gst.NewColumn[*Audit, string]("record_id"),
 	UpdatedAt: gst.NewTimeColumn[*Audit]("updated_at"),
