@@ -31,6 +31,19 @@ type versionedNote struct {
 
 func (*versionedNote) TableName() string { return "versioned_notes" }
 
+// versionedScoredNote is a versioned model with a read-only column, so an
+// Upsert test can assert that the version bump of a merge leaves the rest of
+// the conflict update to gorm.
+type versionedScoredNote struct {
+	Title   string              `json:"title" gorm:"size:191"`
+	Score   int                 `json:"score" gorm:"->;default:0"`
+	Version modelschema.Version `json:"version,omitempty" gorm:"not null;default:1"`
+
+	modelregistry.Base
+}
+
+func (*versionedScoredNote) TableName() string { return "versioned_scored_notes" }
+
 func setupVersionedNotes(t *testing.T) {
 	t.Helper()
 	require.NoError(t, database.DB().AutoMigrate(&versionedNote{}))
@@ -219,6 +232,32 @@ func TestVersionUpsert(t *testing.T) {
 	reloaded := reloadNote(t, "note-upsert")
 	require.Equal(t, "merged", reloaded.Title)
 	require.EqualValues(t, 3, reloaded.Version, "conflict updates bump the row's own version")
+}
+
+// TestVersionUpsertLeavesTheRestOfTheMergeToGorm pins that the version bump
+// is the one change a versioned Upsert makes to gorm's conflict update: a
+// read-only column keeps the row's value as it does on any other model.
+func TestVersionUpsertLeavesTheRestOfTheMergeToGorm(t *testing.T) {
+	require.NoError(t, database.DB().AutoMigrate(&versionedScoredNote{}))
+	t.Cleanup(func() {
+		require.NoError(t, database.DB().Migrator().DropTable(&versionedScoredNote{}))
+	})
+	ctx := context.Background()
+
+	note := &versionedScoredNote{Title: "first"}
+	note.ID = "scored-note"
+	require.NoError(t, database.Database[*versionedScoredNote](ctx).Upsert(note))
+	require.NoError(t, database.DB().Exec("UPDATE versioned_scored_notes SET score = 42 WHERE id = ?", note.ID).Error)
+
+	merged := &versionedScoredNote{Title: "merged", Score: 7}
+	merged.ID = note.ID
+	require.NoError(t, database.Database[*versionedScoredNote](ctx).Upsert(merged))
+
+	got := new(versionedScoredNote)
+	require.NoError(t, database.Database[*versionedScoredNote](ctx).Get(got, note.ID))
+	require.Equal(t, "merged", got.Title)
+	require.Equal(t, 42, got.Score, "a read-only column keeps the row's value")
+	require.EqualValues(t, 2, got.Version, "the merge bumps the row's own version")
 }
 
 func TestVersionConcurrentUpdateOneWins(t *testing.T) {

@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/dbruntime"
@@ -40,8 +41,13 @@ import (
 // The remaining sharp edges the caller owns on every dialect:
 //   - A merging collision with a soft-deleted row updates that row and clears
 //     its deleted_at, resurrecting it.
-//   - created_at and created_by are preserved on conflict updates (creation
-//     facts are excluded from the conflict update set); on inserted rows
+//   - The conflict update is gorm's own, the UpdateAll expansion of its
+//     slice Save: a column gorm's write permissions keep off a create or an
+//     update keeps the row's value (a read-only column, a create-only one
+//     such as a tenant column), a defaulted column is left alone, and an
+//     update-time column is refreshed in its own unit.
+//   - created_at and created_by are preserved on conflict updates (both are
+//     create-only columns, see model.Base); on inserted rows
 //     created_at/updated_at are forced to the current time and
 //     created_by/updated_by to the id of the caller the context carries,
 //     exactly like Create, so caller-supplied values are never honored; a
@@ -72,9 +78,10 @@ import (
 // no conflict semantics to build on.
 //
 // All batches run in one transaction (all-or-nothing), joining the transaction
-// carried by ctx when present. WithSelect narrows the written columns. With
-// clientFoundRows enabled on MySQL, the reported affected count is 1 per row
-// whether it was inserted, updated, or left unchanged.
+// carried by ctx when present. WithSelect narrows the written columns, in the
+// insert and in the conflict update alike; the update-time columns stay
+// written. With clientFoundRows enabled on MySQL, the reported affected count
+// is 1 per row whether it was inserted, updated, or left unchanged.
 // WithDryRun builds SQL only and does not execute database I/O or object
 // field filling.
 func (db *database[M]) Upsert(objs ...M) (err error) {
@@ -123,18 +130,24 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 		}
 	}
 
-	// The pre-set clause replaces the UpdateAll clause gorm's slice Save would
-	// add: the conflict branch must keep the row's creator and, on a versioned
-	// model, bump the row's own version rather than write the object's over
-	// it. Save adopts a pre-set ON CONFLICT clause, so everything else about
-	// the slice save stays as it is. See upsertOnConflict and model.Version.
+	// The conflict update is gorm's own: the UpdateAll expansion its slice Save
+	// adds. A narrowed upsert that touched a row must not leave its update
+	// time claiming otherwise, so the columns gorm refreshes on every write
+	// join the selection, and gorm refreshes them in the conflict update too.
+	// On a versioned model the version column alone diverges, bumping the
+	// row's own version rather than writing the object's; see
+	// versionBumpingConflict and model.Version.
 	versionColumn, versioned := modelschema.VersionColumn(db.m)
-	if !versioned {
-		versionColumn = ""
-	}
-	onConflict, err := db.upsertOnConflict(versionColumn)
-	if err != nil {
-		return err
+	if len(db.selectColumns) > 0 {
+		stmt := &gorm.Statement{DB: db.ins}
+		if err = stmt.Parse(db.m); err != nil {
+			return err
+		}
+		for _, field := range stmt.Schema.Fields {
+			if field.AutoUpdateTime > 0 {
+				db.selectColumns = ensureSelected(db.selectColumns, field.DBName)
+			}
+		}
 	}
 
 	if db.dryRun {
@@ -145,7 +158,14 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 		initializeVersions(dryRunObjs)
 		for i := 0; i < len(dryRunObjs); i += batchSize {
 			end := min(i+batchSize, len(dryRunObjs))
-			tx := dryRunSession(db.ins).Clauses(onConflict).Omit(clause.Associations)
+			tx := dryRunSession(db.ins).Omit(clause.Associations)
+			if versioned {
+				var onConflict clause.OnConflict
+				if onConflict, err = versionBumpingConflict(tx, dryRunObjs[i:end], versionColumn); err != nil {
+					return err
+				}
+				tx = tx.Clauses(onConflict)
+			}
 			if err = db.collectSQL(tx.Save(dryRunObjs[i:end])); err != nil {
 				return err
 			}
@@ -175,9 +195,20 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 		if len(db.selectColumns) > 0 {
 			db.ins = db.ins.Select(db.selectColumns)
 		}
+		// gorm stamps the update times of the statement from the session's
+		// clock; pinning it to now keeps them equal to the values forced above,
+		// in the objects and in a versioned model's conflict update alike.
+		clock := func() time.Time { return now }
 		for i := 0; i < len(objs); i += batchSize {
 			end := min(i+batchSize, len(objs))
-			tx := db.ins.Session(&gorm.Session{}).Clauses(onConflict).Omit(clause.Associations)
+			tx := db.ins.Session(&gorm.Session{NowFunc: clock}).Omit(clause.Associations)
+			if versioned {
+				var onConflict clause.OnConflict
+				if onConflict, err = versionBumpingConflict(tx, objs[i:end], versionColumn); err != nil {
+					return err
+				}
+				tx = tx.Clauses(onConflict)
+			}
 			if err = tx.Save(objs[i:end]).Error; err != nil {
 				// First-hand exit of a stack-less GORM/driver error; see the
 				// error-stack contract in doc.go.

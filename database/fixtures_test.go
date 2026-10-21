@@ -425,6 +425,49 @@ type TestTenantSoftDeleteItem struct {
 
 func (*TestTenantSoftDeleteItem) TableName() string { return "test_tenant_soft_delete_items" }
 
+// TestPermissionItem carries a column under each of gorm's write
+// permissions, so the Upsert tests can assert that a merge writes what gorm's
+// own conflict update writes: Score and Note are read-only, Origin is written
+// on create alone and Reviewer on update alone. Its table is migrated on
+// demand and dropped by the test.
+type TestPermissionItem struct {
+	Name     string  `json:"name" gorm:"size:191"`
+	Score    int     `json:"score" gorm:"->;default:0"`
+	Note     *string `json:"note" gorm:"->;size:191"`
+	Origin   string  `json:"origin" gorm:"<-:create;size:191"`
+	Reviewer *string `json:"reviewer" gorm:"<-:update;size:191"`
+
+	modelregistry.Base
+}
+
+func (*TestPermissionItem) TableName() string { return "test_permission_items" }
+
+// TestColumnlessItem declares a read-only field with no column of its own,
+// gorm's ->;-:migration, the shape of a value a query computes: its table has
+// no total column, so a statement naming one fails. Its table is migrated on
+// demand and dropped by the test.
+type TestColumnlessItem struct {
+	Name  string `json:"name" gorm:"size:191"`
+	Total int    `json:"total" gorm:"->;-:migration"`
+
+	modelregistry.Base
+}
+
+func (*TestColumnlessItem) TableName() string { return "test_columnless_items" }
+
+// TestStampedItem keeps an integer column gorm refreshes in milliseconds on
+// every write, gorm's autoUpdateTime:milli, so the Upsert tests can assert
+// that a merge writes it in its unit. Its table is migrated on demand and
+// dropped by the test.
+type TestStampedItem struct {
+	Name      string `json:"name" gorm:"size:191"`
+	StampedAt int64  `json:"stamped_at" gorm:"autoUpdateTime:milli"`
+
+	modelregistry.Base
+}
+
+func (*TestStampedItem) TableName() string { return "test_stamped_items" }
+
 // TestAggregateRecord is the fixture for aggregate reads: a group key, a
 // second dimension for conditional aggregation, a numeric measure, a float
 // measure, a caller-controlled timestamp for bucketing and a nullable

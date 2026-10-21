@@ -2,9 +2,8 @@ package database
 
 import (
 	"slices"
-	"strings"
 
-	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"gorm.io/gorm"
@@ -25,8 +24,9 @@ import (
 //     plugin needs to smuggle an expression into a struct update), and the
 //     object naturally carries the new version on success.
 //   - UpdateByID and the Upsert conflict branch cannot know the row's
-//     version, so they do use the column expression; both build their SET
-//     from assignment lists, where an expression is a first-class value.
+//     version, so they do use the column expression: UpdateByID in its
+//     assignment map, Upsert in place of the version assignment of gorm's own
+//     conflict update (see versionBumpingConflict).
 //   - A failed Update restores the bumped objects, so a rolled-back write
 //     leaves every object carrying the version its row still has.
 
@@ -69,83 +69,45 @@ func ensureSelected(selectColumns []string, column string) []string {
 	return append(append(make([]string, 0, len(selectColumns)+1), selectColumns...), column)
 }
 
-// upsertOnConflict builds the ON CONFLICT clause Upsert pre-sets, versionColumn
-// naming the version column of a versioned model and "" for any other. gorm's
-// slice Save would otherwise add UpdateAll, whose expansion assigns
-// "column = VALUES(column)" to every column: created_by included, which would
-// write the object's creator over the row's, and the version column of a
-// versioned model, which would write the object's version over the row's and
-// could move a row backwards, silently reviving every stale version out there.
+// versionBumpingConflict returns the conflict update Upsert pre-sets for a
+// batch of a versioned model: gorm's own, the UpdateAll expansion its slice
+// Save adds, with the version column's assignment swapped for a bump of the
+// row's own value. UpdateAll writes the object's version, which would move a
+// row backwards and revive every stale version out there.
 //
-// The clause reproduces the UpdateAll expansion (skip primary keys, creation
-// timestamps and defaulted columns; refresh updated_at to now) with two
-// divergences: created_by stays, a creation fact like created_at, and the
-// version column bumps the row's own value. Save adopts a pre-set ON CONFLICT
-// clause instead of adding its own, so every other slice-save behavior is
-// preserved.
-//
-// Under WithSelect the conflict update narrows to the selected columns, and
-// updated_at is still refreshed: a narrowed upsert that touched a row must
-// not leave its update timestamp claiming otherwise.
-func (db *database[M]) upsertOnConflict(versionColumn string) (clause.OnConflict, error) {
-	stmt := &gorm.Statement{DB: db.ins}
-	if err := stmt.Parse(db.m); err != nil {
-		return clause.OnConflict{}, err
+// gorm offers no conflict update that writes one column through an
+// expression and expands the rest, so the expansion is asked of gorm itself:
+// a dry run of the same statement builds it the way Save would and leaves it
+// on the statement, where gorm's own SQL Server dialect reads it too. Which
+// columns a merge writes, with their permissions, defaults and time units,
+// stays gorm's; only the version column diverges. tx carries the write's
+// columns and clock, so the dry run and the write agree on both.
+func versionBumpingConflict[M any](tx *gorm.DB, batch []M, versionColumn string) (clause.OnConflict, error) {
+	dry := dryRunSession(tx).Session(&gorm.Session{SkipHooks: true}).Clauses(clause.OnConflict{UpdateAll: true}).Save(batch)
+	if dry.Error != nil {
+		// First-hand exit of a stack-less GORM build error; see the
+		// error-stack contract in doc.go.
+		return clause.OnConflict{}, errors.WithStack(dry.Error)
 	}
-
-	selected := make(map[string]struct{}, len(db.selectColumns))
-	for _, column := range db.selectColumns {
-		selected[column] = struct{}{}
+	onConflict, ok := dry.Statement.Clauses["ON CONFLICT"].Expression.(clause.OnConflict)
+	if !ok {
+		return clause.OnConflict{}, errors.New("upsert: gorm built no conflict update")
 	}
-
-	now := dbruntime.NowUTC()
-	// The bump expression qualifies the column with the target table: in
-	// postgres an unqualified name inside DO UPDATE SET is ambiguous between
-	// the existing row and the excluded pseudo-row (SQLSTATE 42702), and the
-	// qualified form reads as the existing row on every dialect.
-	var doUpdates clause.Set
-	if versionColumn != "" {
-		doUpdates = append(doUpdates, clause.Assignment{
-			Column: clause.Column{Name: versionColumn},
-			Value:  clause.Expr{SQL: "? + 1", Vars: []any{clause.Column{Table: clause.CurrentTable, Name: versionColumn}}},
-		})
+	// The bump qualifies the column with the target table: in postgres an
+	// unqualified name inside DO UPDATE SET is ambiguous between the existing
+	// row and the excluded pseudo-row (SQLSTATE 42702), and the qualified form
+	// reads as the existing row on every dialect.
+	updates := clause.Set{{
+		Column: clause.Column{Name: versionColumn},
+		Value:  clause.Expr{SQL: "? + 1", Vars: []any{clause.Column{Table: clause.CurrentTable, Name: versionColumn}}},
+	}}
+	for _, assignment := range onConflict.DoUpdates {
+		if assignment.Column.Name != versionColumn {
+			updates = append(updates, assignment)
+		}
 	}
-	columns := make([]string, 0, len(stmt.Schema.DBNames))
-	for _, dbName := range stmt.Schema.DBNames {
-		field := stmt.Schema.LookUpField(dbName)
-		if field == nil || field.PrimaryKey || dbName == versionColumn {
-			continue
-		}
-		// Creation facts belong to the insert; a conflict update keeps them.
-		if field.AutoCreateTime > 0 || dbName == "created_by" {
-			continue
-		}
-		// gorm's own expansion leaves defaulted columns alone (unless the
-		// default is NULL); reproduced so the only divergence from UpdateAll
-		// is the version column.
-		if field.HasDefaultValue && field.DefaultValueInterface == nil && !strings.EqualFold(field.DefaultValue, "NULL") {
-			continue
-		}
-		if field.AutoUpdateTime > 0 {
-			doUpdates = append(doUpdates, clause.Assignment{Column: clause.Column{Name: dbName}, Value: now})
-			continue
-		}
-		if len(selected) > 0 {
-			if _, ok := selected[dbName]; !ok {
-				continue
-			}
-		}
-		columns = append(columns, dbName)
-	}
-	doUpdates = append(doUpdates, clause.AssignmentColumns(columns)...)
-
-	onConflict := clause.OnConflict{DoUpdates: doUpdates}
-	// The conflict target mirrors gorm's UpdateAll default: the primary key.
-	// MySQL ignores it (ON DUPLICATE KEY UPDATE has no target syntax); on
-	// postgres and sqlite a conflict on another unique index is not caught,
-	// the same as with gorm's own Save(slice).
-	for _, field := range stmt.Schema.PrimaryFields {
-		onConflict.Columns = append(onConflict.Columns, clause.Column{Name: field.DBName})
-	}
+	onConflict.DoUpdates = updates
+	onConflict.UpdateAll = false
+	onConflict.DoNothing = false
 	return onConflict, nil
 }

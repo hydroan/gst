@@ -678,10 +678,12 @@ func (db *database[M]) Update(objs ...M) (err error) {
 
 // updateRowStatement builds the single-row UPDATE statement Update issues per
 // record: full-row semantics by default (Select("*") writes zero values too),
-// narrowed by WithSelect when provided, with framework-managed audit columns
-// and the associations excluded. created_at/created_by belong to creation and
-// deleted_at belongs to Delete; omitting them means callers cannot forge
-// creation audit data, soft-delete a row, or resurrect one through Update.
+// narrowed by WithSelect when provided, with deleted_at and the associations
+// excluded. deleted_at belongs to Delete; omitting it means callers cannot
+// soft-delete a row or resurrect one through Update. created_at and
+// created_by need no omission: gorm's create-only permission on them (see
+// modelregistry.Base) keeps the statement off them, Select("*") included, so
+// callers cannot forge creation audit data either.
 // updated_at stays writable because GORM's auto-update-time handling always
 // overwrites it with the current time, even under a narrowed WithSelect, and
 // updated_by stays writable because Update sets it to the caller first (see
@@ -694,7 +696,7 @@ func (db *database[M]) updateRowStatement(session *gorm.DB, obj M) *gorm.DB {
 	} else {
 		tx = tx.Select("*")
 	}
-	return tx.Omit("created_at", "created_by", "deleted_at", clause.Associations)
+	return tx.Omit("deleted_at", clause.Associations)
 }
 
 // clearAssociations zeroes the association fields of every object, the

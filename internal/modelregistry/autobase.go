@@ -26,7 +26,8 @@ var _ types.Model = (*AutoBase)(nil)
 // semantics.
 //
 // created_at/updated_at follow the same NOT NULL, no-database-default
-// contract as Base: every writer provides both explicitly, in UTC.
+// contract as Base: every writer provides both explicitly, in UTC. created_at
+// and created_by are create-only, as on Base.
 //
 // The uuid columns take a size instead of an explicit char type for the same
 // reason as Base: postgres blank-pads char values on read. The note belongs
@@ -34,11 +35,11 @@ var _ types.Model = (*AutoBase)(nil)
 type AutoBase struct {
 	ID uint64 `json:"id" gorm:"primaryKey;autoIncrement" query:"id" url:"-"` // Auto-increment identifier assigned by the database
 
-	CreatedBy string         `json:"created_by,omitempty" gorm:"size:36" query:"created_by" url:"-"` // ID of the user who created the record
-	UpdatedBy string         `json:"updated_by,omitempty" gorm:"size:36" query:"updated_by" url:"-"` // ID of the user who last updated the record
-	CreatedAt time.Time      `json:"created_at,omitzero" gorm:"not null" query:"-" url:"-"`          // Timestamp when the record was created
-	UpdatedAt time.Time      `json:"updated_at,omitzero" gorm:"not null" query:"-" url:"-"`          // Timestamp when the record was last updated
-	DeletedAt gorm.DeletedAt `json:"-" query:"-" url:"-"`                                            // Timestamp when the record was deleted
+	CreatedBy string         `json:"created_by,omitempty" gorm:"size:36;<-:create" query:"created_by" url:"-"` // ID of the user who created the record
+	UpdatedBy string         `json:"updated_by,omitempty" gorm:"size:36" query:"updated_by" url:"-"`           // ID of the user who last updated the record
+	CreatedAt time.Time      `json:"created_at,omitzero" gorm:"not null;<-:create" query:"-" url:"-"`          // Timestamp when the record was created
+	UpdatedAt time.Time      `json:"updated_at,omitzero" gorm:"not null" query:"-" url:"-"`                    // Timestamp when the record was last updated
+	DeletedAt gorm.DeletedAt `json:"-" query:"-" url:"-"`                                                      // Timestamp when the record was deleted
 }
 
 func (b *AutoBase) TableName() string        { return "" } // Business models must override with an explicit table name

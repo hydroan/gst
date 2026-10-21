@@ -39,6 +39,10 @@ var _ types.Model = (*Base)(nil)
 // framework's UTC time base. deleted_at stays nullable: NULL marks the live
 // row under soft deletion.
 //
+// created_at and created_by are creation facts: gorm's create-only permission
+// writes them on insert and keeps every later write off them, Update and the
+// conflict update of an Upsert included.
+//
 // The uuid columns take a size instead of an explicit char type: postgres
 // blank-pads char values, so an id shorter than 36 would come back with
 // trailing spaces there. varchar stores every id verbatim on all dialects.
@@ -48,11 +52,11 @@ var _ types.Model = (*Base)(nil)
 type Base struct {
 	ID string `json:"id" gorm:"primaryKey;size:36" query:"id" url:"-"` // UUIDv7 identifier for the record
 
-	CreatedBy string         `json:"created_by,omitempty" gorm:"size:36" query:"created_by" url:"-"` // ID of the user who created the record
-	UpdatedBy string         `json:"updated_by,omitempty" gorm:"size:36" query:"updated_by" url:"-"` // ID of the user who last updated the record
-	CreatedAt time.Time      `json:"created_at,omitzero" gorm:"not null" query:"-" url:"-"`          // Timestamp when the record was created
-	UpdatedAt time.Time      `json:"updated_at,omitzero" gorm:"not null" query:"-" url:"-"`          // Timestamp when the record was last updated
-	DeletedAt gorm.DeletedAt `json:"-" query:"-" url:"-"`                                            // Timestamp when the record was deleted
+	CreatedBy string         `json:"created_by,omitempty" gorm:"size:36;<-:create" query:"created_by" url:"-"` // ID of the user who created the record
+	UpdatedBy string         `json:"updated_by,omitempty" gorm:"size:36" query:"updated_by" url:"-"`           // ID of the user who last updated the record
+	CreatedAt time.Time      `json:"created_at,omitzero" gorm:"not null;<-:create" query:"-" url:"-"`          // Timestamp when the record was created
+	UpdatedAt time.Time      `json:"updated_at,omitzero" gorm:"not null" query:"-" url:"-"`                    // Timestamp when the record was last updated
+	DeletedAt gorm.DeletedAt `json:"-" query:"-" url:"-"`                                                      // Timestamp when the record was deleted
 }
 
 func (b *Base) TableName() string        { return "" } // Business models must override with an explicit table name

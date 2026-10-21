@@ -821,6 +821,95 @@ func TestDatabaseUpsert(t *testing.T) {
 		require.Equal(t, "theirs updated", got.Name)
 	})
 
+	t.Run("a merge leaves the columns gorm's write permissions keep off", func(t *testing.T) {
+		require.NoError(t, database.DB().AutoMigrate(&TestPermissionItem{}))
+		defer func() { _ = database.DB().Migrator().DropTable(&TestPermissionItem{}) }()
+
+		item := &TestPermissionItem{Name: "before", Origin: "first"}
+		item.ID = "permission-item"
+		require.NoError(t, database.Database[*TestPermissionItem](context.Background()).Create(item))
+		// The read-only and the update-only columns take their values from a
+		// writer other than the framework.
+		require.NoError(t, database.DB().Exec("UPDATE test_permission_items SET score = 42, note = 'kept', reviewer = 'rev-1' WHERE id = ?", item.ID).Error)
+
+		note, reviewer := "new", "new"
+		merged := &TestPermissionItem{Name: "after", Score: 7, Note: &note, Origin: "second", Reviewer: &reviewer}
+		merged.ID = item.ID
+		require.NoError(t, database.Database[*TestPermissionItem](context.Background()).Upsert(merged))
+
+		got := new(TestPermissionItem)
+		require.NoError(t, database.Database[*TestPermissionItem](context.Background()).Get(got, item.ID))
+		require.Equal(t, "after", got.Name)
+		require.Equal(t, 42, got.Score, "a read-only column keeps the row's value")
+		require.NotNil(t, got.Note)
+		require.Equal(t, "kept", *got.Note, "a read-only column keeps the row's value")
+		require.Equal(t, "first", got.Origin, "a create-only column keeps the row's value")
+		require.NotNil(t, got.Reviewer)
+		require.Equal(t, "rev-1", *got.Reviewer, "an update-only column is no column of the insert, so the merge leaves it")
+	})
+
+	t.Run("a read-only field without a column stays out of the statement", func(t *testing.T) {
+		require.NoError(t, database.DB().AutoMigrate(&TestColumnlessItem{}))
+		defer func() { _ = database.DB().Migrator().DropTable(&TestColumnlessItem{}) }()
+
+		item := &TestColumnlessItem{Name: "before", Total: 3}
+		item.ID = "columnless-item"
+		require.NoError(t, database.Database[*TestColumnlessItem](context.Background()).Upsert(item), "the insert path")
+		again := &TestColumnlessItem{Name: "after", Total: 4}
+		again.ID = item.ID
+		require.NoError(t, database.Database[*TestColumnlessItem](context.Background()).Upsert(again), "the merge path")
+
+		got := new(TestColumnlessItem)
+		require.NoError(t, database.Database[*TestColumnlessItem](context.Background()).Get(got, item.ID))
+		require.Equal(t, "after", got.Name)
+	})
+
+	t.Run("a cross-tenant merge leaves the row with its tenant", func(t *testing.T) {
+		require.NoError(t, database.DB().AutoMigrate(&TestTenantSoftDeleteItem{}))
+		defer func() {
+			_ = database.DB().Exec("DELETE FROM test_tenant_soft_delete_items").Error
+		}()
+		ctxA := tenant.In(context.Background(), "tenant-a")
+		across := tenant.Across(context.Background())
+
+		row := &TestTenantSoftDeleteItem{Name: "written-in-a"}
+		row.ID = "cross-tenant-merge"
+		require.NoError(t, database.Database[*TestTenantSoftDeleteItem](ctxA).Create(row))
+
+		// A caller acting across every tenant merges an object naming another
+		// tenant; the tenant column is written once, on insert.
+		moved := &TestTenantSoftDeleteItem{Name: "merged"}
+		moved.ID = row.ID
+		moved.TenantID = "tenant-b"
+		require.NoError(t, database.Database[*TestTenantSoftDeleteItem](across).Upsert(moved))
+
+		got := new(TestTenantSoftDeleteItem)
+		require.NoError(t, database.Database[*TestTenantSoftDeleteItem](across).Get(got, row.ID))
+		require.Equal(t, "merged", got.Name)
+		require.Equal(t, "tenant-a", got.GetTenantID(), "the row stays with its tenant")
+	})
+
+	t.Run("a merge refreshes an integer update time in its unit", func(t *testing.T) {
+		require.NoError(t, database.DB().AutoMigrate(&TestStampedItem{}))
+		defer func() { _ = database.DB().Migrator().DropTable(&TestStampedItem{}) }()
+
+		item := &TestStampedItem{Name: "before"}
+		item.ID = "stamped-item"
+		require.NoError(t, database.Database[*TestStampedItem](context.Background()).Upsert(item))
+
+		before := time.Now().UnixMilli()
+		again := &TestStampedItem{Name: "after"}
+		again.ID = item.ID
+		require.NoError(t, database.Database[*TestStampedItem](context.Background()).Upsert(again))
+		after := time.Now().UnixMilli()
+
+		got := new(TestStampedItem)
+		require.NoError(t, database.Database[*TestStampedItem](context.Background()).Get(got, item.ID))
+		require.Equal(t, "after", got.Name)
+		require.GreaterOrEqual(t, got.StampedAt, before, "the column holds milliseconds of the merge")
+		require.LessOrEqual(t, got.StampedAt, after, "the column holds milliseconds of the merge")
+	})
+
 	t.Run("merges on a primary key collision on every dialect", func(t *testing.T) {
 		item := &TestUniqueItem{UniqueCode: "upsert-pk", Name: "before"}
 		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Upsert(item))
