@@ -21,6 +21,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// column name order: the same query is the same statement on every
 		// run, whatever order a map would hand the columns out in.
 		var first string
+		var args []any
 		for range 20 {
 			statements := make([]types.SQLStatement, 0)
 			users := make([]*TestUser, 0)
@@ -33,11 +34,72 @@ func TestDatabaseWithQuery(t *testing.T) {
 				first = statements[0].Query
 			}
 			require.Equal(t, first, statements[0].Query)
+			args = statements[0].Args
 		}
 		age := strings.Index(first, quoteIdent("age"))
 		email := strings.Index(first, quoteIdent("email"))
 		name := strings.Index(first, quoteIdent("name"))
 		require.True(t, age >= 0 && age < email && email < name, "conditions must follow column name order: %s", first)
+		require.Equal(t, []any{18, "email", "name"}, args, "every value binds as its field holds it")
+	})
+
+	t.Run("FieldsNameTheirOwnColumns", func(t *testing.T) {
+		// Each field is a condition on its own column: the two embedded
+		// copies of TestPart carry their prefixes, and the top-level Label is
+		// neither of them, though all three share a Go name.
+		ctx := context.Background()
+		require.NoError(t, database.DB().AutoMigrate(&TestPairedRecord{}))
+		t.Cleanup(func() {
+			require.NoError(t, database.DB().Migrator().DropTable(&TestPairedRecord{}))
+		})
+		first := &TestPairedRecord{Label: "l1", First: TestPart{Label: "f1"}, Second: TestPart{Label: "s1"}}
+		second := &TestPairedRecord{Label: "f1", First: TestPart{Label: "s1"}, Second: TestPart{Label: "l1"}}
+		require.NoError(t, database.Database[*TestPairedRecord](ctx).Create(first, second))
+
+		for _, query := range []*TestPairedRecord{
+			{Label: "l1"},
+			{First: TestPart{Label: "f1"}},
+			{Second: TestPart{Label: "s1"}},
+		} {
+			rows := make([]*TestPairedRecord, 0)
+			require.NoError(t, database.Database[*TestPairedRecord](ctx).WithQuery(query).List(&rows))
+			require.Len(t, rows, 1)
+			require.Equal(t, first.ID, rows[0].ID)
+		}
+
+		// A delete by conditions names the same column.
+		statements := make([]types.SQLStatement, 0)
+		require.NoError(t, database.Database[*TestPairedRecord](ctx).
+			WithDryRun(&statements).
+			WithQuery(&TestPairedRecord{First: TestPart{Label: "f1"}}).
+			Delete())
+		require.Len(t, statements, 1)
+		require.Contains(t, statements[0].Query, quoteIdent("first_label")+" = ")
+	})
+
+	t.Run("ValuersBindTheirStoredForm", func(t *testing.T) {
+		// A column whose type implements driver.Valuer stores what Value
+		// produces, and a condition on it binds that as well, the way the
+		// operator filters bind their value: both find the row.
+		ctx := context.Background()
+		require.NoError(t, database.DB().AutoMigrate(&TestPairedRecord{}))
+		t.Cleanup(func() {
+			require.NoError(t, database.DB().Migrator().DropTable(&TestPairedRecord{}))
+		})
+		row := &TestPairedRecord{Label: "coded", Code: "abc"}
+		require.NoError(t, database.Database[*TestPairedRecord](ctx).Create(row))
+
+		rows := make([]*TestPairedRecord, 0)
+		require.NoError(t, database.Database[*TestPairedRecord](ctx).WithQuery(&TestPairedRecord{Code: "abc"}).List(&rows))
+		require.Len(t, rows, 1)
+		require.Equal(t, row.ID, rows[0].ID)
+
+		rows = make([]*TestPairedRecord, 0)
+		require.NoError(t, database.Database[*TestPairedRecord](ctx).
+			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{types.FilterEq("code", TestTaggedCode("abc"))}}).
+			List(&rows))
+		require.Len(t, rows, 1)
+		require.Equal(t, row.ID, rows[0].ID)
 	})
 
 	t.Run("ExactMatch", func(t *testing.T) {

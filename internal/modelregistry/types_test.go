@@ -1,7 +1,6 @@
 package modelregistry_test
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/hydroan/gst/internal/modelregistry"
@@ -148,22 +147,6 @@ func TestIsVirtual(t *testing.T) {
 	// Table-backed models never opt in.
 	require.False(t, modelregistry.IsVirtual(new(User)))
 	require.False(t, modelregistry.IsVirtual(new(QueryableUser)))
-}
-
-func TestIsQueryMarkerType(t *testing.T) {
-	require.True(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[modelregistry.Query]()))
-	require.True(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[*modelregistry.Query]()))
-	require.True(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[modelregistry.Pagination]()))
-	require.True(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[modelregistry.Cursor]()))
-
-	// Nested structs that embed a marker struct carry framework query
-	// parameters as well, so they are also excluded from SQL conditions.
-	require.True(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[QueryableUser]()))
-
-	require.False(t, modelregistry.IsQueryMarkerType(nil))
-	require.False(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[User]()))
-	require.False(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[markerMethodSpoofUser]()))
-	require.False(t, modelregistry.IsQueryMarkerType(reflect.TypeFor[string]()))
 }
 
 func TestIsEmpty(t *testing.T) {

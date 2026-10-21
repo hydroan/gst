@@ -1,10 +1,5 @@
 package modelregistry
 
-import (
-	"reflect"
-	"slices"
-)
-
 // Query declares framework-owned HTTP query parameters for list-style
 // controller actions.
 //
@@ -20,8 +15,9 @@ import (
 //
 // Every field is ignored by JSON and GORM. The query tags are intentionally
 // kept here because the List controller decodes URL query parameters into the
-// request model before applying those controls. Database query construction must
-// skip this struct so these controller-only values never become WHERE clauses.
+// request model before applying those controls; GORM ignoring the fields is
+// what keeps these controller-only values out of the WHERE clauses a query
+// model builds.
 type Query struct {
 	Pagination
 	Cursor
@@ -136,30 +132,4 @@ func IsPaginatable(m any) bool {
 func IsCursorable(m any) bool {
 	_, ok := m.(cursorable)
 	return ok
-}
-
-// queryMarkerTypes lists the sealed marker interfaces satisfied by the
-// framework query structs above. Matching by capability instead of by concrete
-// type keeps pointer embedding and nested marker structs working.
-var queryMarkerTypes = []reflect.Type{
-	reflect.TypeFor[queryable](),
-	reflect.TypeFor[paginatable](),
-	reflect.TypeFor[cursorable](),
-}
-
-// IsQueryMarkerType reports whether t carries framework query parameters, that
-// is, whether it or its pointer type satisfies one of the marker interfaces.
-// Database query construction uses it to keep controller-only query fields out
-// of SQL WHERE conditions.
-func IsQueryMarkerType(t reflect.Type) bool {
-	if t == nil {
-		return false
-	}
-	if slices.ContainsFunc(queryMarkerTypes, t.Implements) {
-		return true
-	}
-	if t.Kind() == reflect.Pointer {
-		return false
-	}
-	return slices.ContainsFunc(queryMarkerTypes, reflect.PointerTo(t).Implements)
 }

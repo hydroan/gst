@@ -1,21 +1,17 @@
 package database
 
 import (
-	"bytes"
-	"context"
-	"fmt"
 	"maps"
 	"reflect"
 	"slices"
-	"strconv"
-	"strings"
 	"time"
 
-	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // WithQuery sets query conditions based on the provided model struct fields.
@@ -25,11 +21,15 @@ import (
 // Parameters:
 //   - query: A model instance with fields set as query conditions. Can be nil to indicate empty query.
 //     When nil or all fields are zero values, it's treated as an empty query.
-//     Supported field types: string, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, bool, pointer types,
-//     slices of strings, integers and floats, whose elements join with commas into one value, byte slices,
-//     which match byte for byte, time.Time, compared as the instant it names whatever its offset,
-//     datatypes.Date, compared by the UTC day it names, and one-column structs implementing
-//     driver.Valuer such as sql.NullString, compared by the value they carry.
+//     The conditions are the ones gorm builds for Where(&query): one per field
+//     gorm reads as a column, named by the field's own column — a field of an
+//     embedded struct under the struct's prefix — and holding the value gorm
+//     binds for it. A type implementing driver.Valuer, such as sql.NullString,
+//     and a field declaring a serializer, a slice among them, bind the form
+//     their column stores; a byte slice matches byte for byte; time.Time
+//     compares as the instant it names whatever its offset, and datatypes.Date
+//     by the UTC day it names. Of the columns every model carries, only id,
+//     created_by and updated_by are conditions.
 //   - opts: Optional QueryOptions to control query behavior (empty-query safety, operator filters)
 //
 // Query Behavior:
@@ -126,13 +126,11 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 
 	// Process non-nil, non-empty query
 	typ := reflect.TypeOf(query).Elem()
-	val := reflect.ValueOf(query).Elem()
-	q := make(map[string]any)
 
-	// Column names come from gorm through modelschema. A model gorm cannot
-	// parse has no usable columns at all, so the query falls closed instead
-	// of matching on a guessed column name.
-	goNames, parseErr := modelschema.GoNameIndex(typ)
+	// Column names come from gorm. A model gorm cannot parse has no usable
+	// columns at all, so the query falls closed instead of matching on a
+	// guessed column name.
+	columns, parseErr := modelschema.Columns(typ)
 	if parseErr != nil {
 		logger.Database.WithContext(db.ctx, phaseWithQuery).Warnz(
 			"cannot resolve model columns, adding safety condition",
@@ -142,7 +140,7 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 		db.ins = db.ins.Where("1 = 0")
 		return db
 	}
-	structFieldToMap(db.ctx, typ, val, q, opt.PresentFields, goNames)
+	q := structConditions(db.ins.Statement, query, columns, opt.PresentFields)
 
 	// A JSON document is not a scalar, so both matching modes below treat its
 	// columns specially: exact matching fails closed and fuzzy matching runs
@@ -188,16 +186,17 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 		return db
 	}
 
-	// Every non-zero field is one equality condition. The value binds as a
-	// literal: a comma is data, never a list separator, so a value that
-	// happens to contain one stays queryable. An explicit list of values is
-	// the in operator filter's job. The conditions go out in column name
-	// order: ranging over the map would order them differently on every run,
-	// so one query would render as a different statement each time.
+	// Every non-zero field is one equality condition. The value binds as the
+	// field holds it: a comma in a string is data, never a list separator, so
+	// a value that happens to contain one stays queryable. An explicit list
+	// of values is the in operator filter's job. The conditions go out in
+	// column name order: ranging over the map would order them differently on
+	// every run, so one query would render as a different statement each time.
 	hasValidCondition := false
 	for _, k := range slices.Sorted(maps.Keys(q)) {
 		v := q[k]
-		if s, ok := v.(string); ok && len(s) == 0 {
+		// An empty string, byte slice or slice names no value to match.
+		if rv := reflect.ValueOf(v); (rv.Kind() == reflect.String || rv.Kind() == reflect.Slice) && rv.Len() == 0 {
 			continue
 		}
 		hasValidCondition = true
@@ -233,172 +232,73 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 	return db
 }
 
-// structFieldToMap extracts the field tags from a struct and writes them into a map.
-// This map can then be used to build SQL query conditions: each value is the
-// string a condition binds, except for a byte slice, which binds as it is,
-// and a column that is one struct or map, which binds by value (see
-// columnStructValue).
+// timestampColumns are the framework columns a value on the query model never
+// narrows a query by: the timestamps a fetched record carries along.
+var timestampColumns = []string{"created_at", "updated_at", "deleted_at"}
+
+// structConditions returns the conditions the fields of query stand for, by
+// column. gorm builds them the way it builds Where(&query): one equality per
+// readable field that is not zero, named by the field's own column and
+// holding the value gorm binds for it, through the type's Valuer or the
+// field's serializer. The framework keeps its own rules on top:
 //
-// Zero-value fields are treated as unset and skipped, unless their column name
-// is listed in present: presence marks filter values explicitly provided by the
-// caller, so explicit zero values such as false and 0 still become conditions.
-func structFieldToMap(ctx context.Context, typ reflect.Type, val reflect.Value, q map[string]any, present map[string]struct{}, columns map[string]modelschema.Column) {
-	for i := range typ.NumField() {
-		field := typ.Field(i)
-		fieldTyp := field.Type
-		fieldVal := val.Field(i)
-
-		// A field gorm does not map to a column is not a query condition.
-		// The embedded base structs are the exception: they are handled
-		// explicitly below, since gorm lifts their fields to the top level.
-		col, isColumn := columns[field.Name]
-
-		if fieldVal.IsZero() {
-			if len(present) == 0 {
-				continue
-			}
-			if !isColumn {
-				continue
-			}
-			if _, ok := present[col.QueryName]; !ok {
-				continue
-			}
+//   - A zero value is a condition when present lists the field's URL
+//     parameter name, kept the way gorm keeps one, by naming its column as
+//     in Where(&query, "column"). The columns every model carries are never
+//     named so (see frameworkColumns).
+//   - Of those columns, the timestamps are no condition at all (see
+//     timestampColumns).
+//   - A nil pointer names no value, and an instant or a day binds in UTC
+//     (see conditionValue).
+//
+// A query whose Label is "a" and whose embedded First, prefixed first_,
+// carries Label "b" stands for {"label": "a", "first_label": "b"}.
+func structConditions(stmt *gorm.Statement, query any, columns []modelschema.Column, present map[string]struct{}) map[string]any {
+	conds := stmt.BuildCondition(query)
+	var named []any
+	for _, column := range columns {
+		if _, ok := present[column.QueryName]; ok && !slices.Contains(frameworkColumns, column.DBName) {
+			named = append(named, column.DBName)
 		}
-		if !fieldVal.CanInterface() {
+	}
+	if len(named) > 0 {
+		conds = append(conds, stmt.BuildCondition(query, named...)...)
+	}
+
+	// gorm joins two or more conditions into one AND group.
+	var exprs []clause.Expression
+	for _, cond := range conds {
+		if and, ok := cond.(clause.AndConditions); ok {
+			exprs = append(exprs, and.Exprs...)
 			continue
 		}
-		fieldTyp, fieldVal, ok := indirectTypeAndValue(fieldTyp, fieldVal)
+		exprs = append(exprs, cond)
+	}
+
+	q := make(map[string]any, len(exprs))
+	for _, expr := range exprs {
+		eq, ok := expr.(clause.Eq)
+		if !ok || eq.Value == nil {
+			continue
+		}
+		column, ok := eq.Column.(clause.Column)
+		if !ok || slices.Contains(timestampColumns, column.Name) {
+			continue
+		}
+		typ, val, ok := indirectTypeAndValue(reflect.TypeOf(eq.Value), reflect.ValueOf(eq.Value))
 		if !ok {
 			continue
 		}
-		// The marker interfaces are sealed in modelregistry, so recognition of
-		// framework query fields lives there as the single source of truth.
-		if modelregistry.IsQueryMarkerType(fieldTyp) {
-			continue
-		}
-
-		switch fieldTyp.Kind() {
-		case reflect.Chan, reflect.Func:
-			continue
-		case reflect.Map:
-			// A map that is a column is a JSON document, which the exact
-			// match fails closed on; one that is no column is no condition.
-			if isColumn {
-				q[col.DBName] = fieldVal.Interface()
-			}
-			continue
-		case reflect.Struct:
-			switch {
-			case field.Name == "Base" || field.Name == "AutoBase":
-				// Base and AutoBase are the framework base models: lift only
-				// their query-relevant fields instead of recursing, so
-				// framework-managed fields such as DeletedAt never leak into
-				// query conditions.
-				if !fieldVal.FieldByName("CreatedBy").IsZero() {
-					// Not overwrite the "CreatedBy" value set in types.Model.
-					// The "CreatedBy" value set in types.Model has higher priority than base model.
-					if _, loaded := q["created_by"]; !loaded {
-						q["created_by"] = fieldVal.FieldByName("CreatedBy").Interface().(string) //nolint:errcheck
-					}
-				}
-				if !fieldVal.FieldByName("UpdatedBy").IsZero() {
-					// Not overwrite the "UpdatedBy" value set in types.Model.
-					// The "UpdatedBy" value set in types.Model has higher priority than base model.
-					if _, loaded := q["updated_by"]; !loaded {
-						q["updated_by"] = fieldVal.FieldByName("UpdatedBy").Interface().(string) //nolint:errcheck
-					}
-				}
-				if !fieldVal.FieldByName("ID").IsZero() {
-					// Not overwrite the "ID" value set in types.Model.
-					// The "ID" value set in types.Model has higher priority than base model.
-					if _, loaded := q["id"]; !loaded {
-						switch idField := fieldVal.FieldByName("ID"); idField.Kind() {
-						case reflect.String: // Base: UUIDv7 string primary key.
-							q["id"] = idField.String()
-						case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64: // AutoBase: auto-increment integer primary key.
-							q["id"] = strconv.FormatUint(idField.Uint(), 10)
-						}
-					}
-				}
-			case isColumn:
-				// A struct that is itself one column — an instant, a day, a
-				// JSON document, a Valuer — is a condition on its value, not
-				// a struct to look for columns in.
-				q[col.DBName] = columnStructValue(fieldTyp, fieldVal)
-			default:
-				structFieldToMap(ctx, fieldTyp, fieldVal, q, present, columns)
-			}
-			continue
-		}
-		if !isColumn {
-			continue
-		}
-		columnName := col.DBName
-
-		if !fieldVal.CanInterface() {
-			continue
-		}
-		v := fieldVal.Interface()
-		var _v string
-		switch fieldVal.Kind() {
-		case reflect.Bool:
-			// A WHERE IN clause quotes its values automatically, eg WHERE `default` IN ('true'),
-			// but what we want is WHERE `default` IN (true),
-			// so the only way out is to convert the bool into an int here.
-			_v = strconv.Itoa(boolToInt(v.(bool))) //nolint:errcheck
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			_v = fmt.Sprintf("%d", v)
-		case reflect.Float32, reflect.Float64:
-			_v = fmt.Sprintf("%g", v)
-		case reflect.String:
-			_v = fmt.Sprintf("%s", v)
-		case reflect.Slice:
-			if fieldVal.Type().Elem().Kind() == reflect.Uint8 {
-				// A byte slice is one binary value, not a list of numbers: it
-				// binds as it is, so an exact match compares byte for byte. An
-				// empty one adds an empty value, like an empty string.
-				if fieldVal.Len() == 0 {
-					q[columnName] = ""
-				} else {
-					q[columnName] = bytes.Clone(fieldVal.Bytes())
-				}
-				continue
-			}
-			_len := fieldVal.Len()
-			if _len == 0 {
-				logger.Database.WithContext(ctx, phaseWithQuery).Debugz("query model slice field is empty, treated as a single zero value")
-				_len = 1
-			}
-			slice := reflect.MakeSlice(fieldVal.Type(), _len, _len)
-			switch slice.Index(0).Kind() {
-			case reflect.String: // handle string slice.
-				// WARN: fieldVal.Type() may be a named slice type (e.g.
-				// datatypes.JSONSlice[string]) instead of []string, so asserting
-				// slice.Interface().([]string) directly would panic. Rebuild the
-				// value as a plain []string first.
-				slice = reflect.MakeSlice(reflect.TypeFor[[]string](), _len, _len)
-				reflect.Copy(slice, fieldVal)
-				_v = strings.Join(slice.Interface().([]string), ",") //nolint:errcheck
-			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-				_v = joinSliceElements(fieldVal, "%d")
-			case reflect.Float32, reflect.Float64:
-				_v = joinSliceElements(fieldVal, "%g")
-			default:
-				_v = fmt.Sprintf("%v", v)
-			}
-		default:
-			_v = fmt.Sprintf("%v", v)
-		}
-
-		q[columnName] = _v
+		q[column.Name] = conditionValue(typ, val)
 	}
+	return q
 }
 
-// columnStructValue is the value a struct field that is itself one column
-// binds: an instant in UTC, a day as the UTC day the date column stores
-// (see modelschema.UTCDay), and anything else — a JSON document, a Valuer
-// such as sql.NullString — as it is.
-func columnStructValue(typ reflect.Type, val reflect.Value) any {
+// conditionValue is the value a condition binds for a field value: an instant
+// in UTC, a day as the UTC day the date column stores (see
+// modelschema.UTCDay), and anything else — a scalar, a JSON document, a
+// Valuer such as sql.NullString — as it is.
+func conditionValue(typ reflect.Type, val reflect.Value) any {
 	if modelschema.IsDateType(typ) {
 		day, _ := reflect.TypeAssert[time.Time](val.Convert(reflect.TypeFor[time.Time]()))
 		return modelschema.UTCDay(day)
@@ -407,28 +307,6 @@ func columnStructValue(typ reflect.Type, val reflect.Value) any {
 		return t.UTC()
 	}
 	return val.Interface()
-}
-
-// joinSliceElements formats every element of the slice v with format, the
-// verb a scalar field of the element's kind is formatted with, and joins them
-// with commas into one value: []int{1, -2} with "%d" gives "1,-2", and an
-// empty slice gives "".
-func joinSliceElements(v reflect.Value, format string) string {
-	elems := make([]string, v.Len())
-	for i := range v.Len() {
-		elems[i] = fmt.Sprintf(format, v.Index(i).Interface())
-	}
-	return strings.Join(elems, ",")
-}
-
-// boolToInt converts a boolean value to an integer.
-// Returns 1 for true, 0 for false.
-// Useful for database operations that require integer representations of boolean values.
-func boolToInt(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
 }
 
 // indirectTypeAndValue dereferences pointer types and values.

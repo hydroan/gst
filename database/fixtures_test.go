@@ -1039,3 +1039,43 @@ type TestHeldEntry struct {
 }
 
 func (*TestHeldEntry) TableName() string { return "test_held_entries" }
+
+// TestPart is embedded twice in TestPairedRecord, under two prefixes, beside
+// a top-level field of the same Go name: each of the three is a column of its
+// own.
+type TestPart struct {
+	Label string `json:"label" gorm:"size:191"`
+}
+
+// TestTaggedCode stores itself behind a prefix, the form its column holds,
+// so a condition on it binds what Value produces rather than the Go string.
+type TestTaggedCode string //nolint:recvcheck // Scan writes through the pointer and Value binds the value, the receiver pair database/sql documents for a Scanner and a Valuer.
+
+func (c TestTaggedCode) Value() (driver.Value, error) { return "code:" + string(c), nil }
+
+func (c *TestTaggedCode) Scan(src any) error {
+	switch v := src.(type) {
+	case string:
+		*c = TestTaggedCode(strings.TrimPrefix(v, "code:"))
+	case []byte:
+		*c = TestTaggedCode(strings.TrimPrefix(string(v), "code:"))
+	default:
+		return errors.Newf("cannot scan %T into TestTaggedCode", src)
+	}
+	return nil
+}
+
+// TestPairedRecord carries three columns sharing a Go field name and one
+// whose stored form is not its Go value. Its table is migrated on demand and
+// dropped by the test.
+type TestPairedRecord struct {
+	Label  string         `json:"label" gorm:"size:191"`
+	First  TestPart       `json:"first" gorm:"embedded;embeddedPrefix:first_"`
+	Second TestPart       `json:"second" gorm:"embedded;embeddedPrefix:second_"`
+	Code   TestTaggedCode `json:"code" gorm:"size:191"`
+
+	modelregistry.Base
+}
+
+func (*TestPairedRecord) TableName() string { return "test_paired_records" }
+func (*TestPairedRecord) Purge() bool       { return true }
