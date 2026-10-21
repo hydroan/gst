@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"gorm.io/gorm"
+	gormschema "gorm.io/gorm/schema"
 )
 
 // sqlite loses the declared type of an expression column: an aggregated
@@ -146,12 +147,17 @@ func sqliteTimeMirrorType(rt reflect.Type) (reflect.Type, bool) {
 // struct: an anonymous struct, or a named one gorm flattens through the
 // embedded tag, descended into for its time-shaped fields and, when
 // anonymous, named so that reflect.StructOf never embeds a type carrying
-// methods; the embedded tag is added to the settings the field carries. A
-// struct gorm reads as one column, one implementing driver.Valuer, is left
-// to its own Scan under its name; an anonymous field of any other kind is
-// one column under its type's name, the name gorm gives it as well.
+// methods; the embedded tag is added to the settings the field carries. The
+// tag is read by gorm's own parser, so the field is tagged embedded exactly
+// when gorm flattens it by the tag. A struct implementing driver.Valuer is
+// not descended into, tag or no tag: gorm reads a Valuer through the value
+// its Value returns, so the struct's own fields are never columns, and the
+// field is left to that reading under its name. An anonymous field of any
+// other kind is one column under its type's name, the name gorm gives it as
+// well.
 func mirrorEmbeddedField(field reflect.StructField) reflect.StructField {
-	if !field.Anonymous && !hasGormSetting(field.Tag, "EMBEDDED") {
+	_, tagged := gormschema.ParseTagSetting(field.Tag.Get("gorm"), ";")["EMBEDDED"]
+	if !field.Anonymous && !tagged {
 		return field
 	}
 	typ := field.Type
@@ -167,7 +173,7 @@ func mirrorEmbeddedField(field reflect.StructField) reflect.StructField {
 		return field
 	}
 	if typ.Implements(valuerType) || reflect.PointerTo(typ).Implements(valuerType) {
-		// One column, read by name; embedding it would flatten it.
+		// gorm reads it through its Value, never by its own fields.
 		field.Anonymous = false
 		return field
 	}
@@ -179,23 +185,11 @@ func mirrorEmbeddedField(field reflect.StructField) reflect.StructField {
 	}
 	if field.Anonymous {
 		field.Anonymous = false
-		if !hasGormSetting(field.Tag, "EMBEDDED") {
+		if !tagged {
 			field.Tag = withGormSetting(field.Tag, "embedded")
 		}
 	}
 	return field
-}
-
-// hasGormSetting reports whether a gorm tag carries the setting, named as
-// gorm names it.
-func hasGormSetting(tag reflect.StructTag, name string) bool {
-	for setting := range strings.SplitSeq(tag.Get("gorm"), ";") {
-		key, _, _ := strings.Cut(setting, ":")
-		if strings.EqualFold(strings.TrimSpace(key), name) {
-			return true
-		}
-	}
-	return false
 }
 
 // withGormSetting prepends a setting to the field's gorm tag, keeping the
