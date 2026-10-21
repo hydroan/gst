@@ -73,7 +73,7 @@ gst 是强约定框架（Apple 风格），不是自由框架（Windows 风格�
 
 - 产生：会落库或进响应的时间值必须以 UTC 产生。框架管理的时间戳（Create/Upsert 强制写入、Update 刷新 updated_at、软删 deleted_at，后两者经各方言 `gorm.Config` 的 NowFunc）统一出自 `dbruntime.NowUTC`：UTC 且截断到毫秒，对齐存储精度，保证写入时返回的值与后续回读值完全一致。
 - 存储：各方言连接统一 UTC 口径（MySQL DSN `loc=UTC` 等），同一瞬间在所有方言落同一 UTC 墙钟；理由见 mysql 包 buildDSN 的注释。
-- 入口：URL 时间过滤只接受 RFC3339（自带时区，任意偏移都无损）；无时区字符串和 Unix 时间戳直接报错，不猜测。
+- 入口：URL 时刻与日期过滤只接受 RFC3339（自带时区，任意偏移都无损）；无时区字符串和 Unix 时间戳直接报错，不猜测。
 - 日志：业务打点 ts 统一 UTC RFC3339Nano。
 - "日历"语义（不是瞬间）同样以 UTC 为准：cron 表达式按 UTC 解释、`@every` 按 Unix 纪元对齐，所有副本算出同一组调度时刻，表达式自带 `CRON_TZ=` 前缀时按该时区；聚合时间分桶按存储的 UTC 墙钟切，按运营时区切日需在查询侧显式换算。
 
