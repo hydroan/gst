@@ -74,18 +74,6 @@ func TestDatabaseTransactionModelHook(t *testing.T) {
 		require.Equal(t, "initial", storedConfig.Value)
 	})
 
-	t.Run("a hook's chain leaves out the conditions of the delete around it", func(t *testing.T) {
-		ctx := context.Background()
-		configs := seedHookedSampleConfigs(t)
-		require.NoError(t, database.Database[*TestHookedSample](ctx).Create(&TestHookedSample{Value: "x"}))
-
-		// The delete matches value = x, and TestHookConfig has a value column
-		// too: a condition carried into the hook would narrow or break its read.
-		hookedSampleSeen.Store(-1)
-		require.NoError(t, database.Database[*TestHookedSample](ctx).WithQuery(&TestHookedSample{Value: "x"}).Delete())
-		require.EqualValues(t, configs, hookedSampleSeen.Load(), "the hook reads every config")
-	})
-
 	t.Run("a hook's chain leaves out the preloads of the create around it", func(t *testing.T) {
 		ctx := context.Background()
 		configs := seedHookedSampleConfigs(t)

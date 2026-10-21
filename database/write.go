@@ -219,6 +219,12 @@ func (db *database[M]) Create(objs ...M) (err error) {
 // meant, and a named record the conditions do not match would be skipped in
 // silence or reported as missing.
 //
+// The model's delete hooks run once per record a delete names, and a delete
+// by conditions names none: on a model overriding DeleteBefore or
+// DeleteAfter it fails with ErrConditionsWithDeleteHooks before any
+// statement, unless WithoutHook skips the hooks. Passing the records instead
+// hands the hooks the rows they act on.
+//
 // A versioned record (a model declaring model.Version) is checked when it
 // carries a non-zero version — the statement matches it, and a miss fails
 // with ErrStaleObject: a delete decided over stale data must fail like a
@@ -308,6 +314,12 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 
 	if db.dialect() == dialectClickHouse {
 		return db.clickhouseDelete(objs)
+	}
+	// A delete by conditions hands the hooks no record of the rows its
+	// statement removes (see ErrConditionsWithDeleteHooks). ClickHouse runs
+	// no hooks, so the check follows its branch.
+	if conditioned && !db.noHook && modelregistry.OverridesDeleteHooks(db.m) {
+		return errors.Wrap(ErrConditionsWithDeleteHooks, "Delete")
 	}
 	done, span := db.trace(consts.Delete, len(objs))
 	defer func() { done(err) }()

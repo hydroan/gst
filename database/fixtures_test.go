@@ -948,9 +948,10 @@ func (g *TestHookGroup) CreateAfter(ctx context.Context) error {
 // TestHookedSample reads the TestHookConfig rows inside its hooks through the
 // context the hooks get, the way the framework asks hooks to, and records how
 // many it saw in hookedSampleSeen: the tests assert that the chain a hook
-// builds starts clean, whatever conditions or preloads the write around it
-// carries. Config is a belongs-to association for the write to preload. Its
-// table is migrated on demand and dropped by the test.
+// builds starts clean, whatever preloads the write around it carries, and
+// that a delete by conditions, which names no record for DeleteBefore, fails
+// before any hook runs. Config is a belongs-to association for the write to
+// preload. Its table is migrated on demand and dropped by the test.
 type TestHookedSample struct {
 	Value    string          `json:"value" gorm:"size:191"`
 	ConfigID string          `json:"config_id" gorm:"size:191"`
@@ -990,3 +991,29 @@ type TestCategory struct {
 
 func (*TestCategory) TableName() string { return "test_categories" }
 func (*TestCategory) Purge() bool       { return true }
+
+// TestOwnerRecord holds TestOwnedEntry rows through a has-many. Once gorm
+// parses the owner it registers that has-many on TestOwnedEntry's schema as
+// well, under a hidden name, and Entries sits at the field index where
+// TestOwnedEntry keeps Name: a write taking the hidden entry for an
+// association of TestOwnedEntry would zero Name. Their tables are migrated
+// on demand and dropped by the test.
+type TestOwnerRecord struct {
+	Name    string            `json:"name" gorm:"size:191"`
+	Entries []*TestOwnedEntry `json:"entries,omitempty" gorm:"foreignKey:OwnerID;constraint:-"`
+
+	modelregistry.Base
+}
+
+func (*TestOwnerRecord) TableName() string { return "test_owner_records" }
+
+// TestOwnedEntry is held by a TestOwnerRecord and declares no association of
+// its own.
+type TestOwnedEntry struct {
+	OwnerID string `json:"owner_id" gorm:"size:191"`
+	Name    string `json:"name" gorm:"size:191"`
+
+	modelregistry.Base
+}
+
+func (*TestOwnedEntry) TableName() string { return "test_owned_entries" }

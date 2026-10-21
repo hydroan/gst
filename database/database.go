@@ -153,6 +153,14 @@ var (
 	// match would be skipped in silence or reported as missing.
 	ErrConditionsWithRecords = errors.New("WithQuery conditions cannot be combined with records: Delete removes the records named or the rows the conditions match")
 
+	// ErrConditionsWithDeleteHooks is returned when Delete is handed no
+	// record while the chain carries WithQuery conditions, on a model that
+	// overrides DeleteBefore or DeleteAfter. The hooks run once per record
+	// the delete names, and a delete by conditions names none: they would
+	// see no row of the ones the statement removes. Pass the records to
+	// delete, or skip the hooks with WithoutHook.
+	ErrConditionsWithDeleteHooks = errors.New("WithQuery conditions cannot be combined with delete hooks: pass the records to delete, or skip the hooks with WithoutHook")
+
 	// ErrAfterCommit marks a failure that happened after the transaction
 	// committed. Callers distinguish it with errors.Is because the two outcomes
 	// call for opposite handling: an ordinary error means the write was rolled

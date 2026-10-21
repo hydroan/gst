@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -433,6 +434,56 @@ func TestDatabaseDelete(t *testing.T) {
 		count := new(int)
 		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 		require.Equal(t, 3, *count, "nothing is deleted")
+	})
+
+	t.Run("a delete by conditions on a model with delete hooks fails before any statement", func(t *testing.T) {
+		ctx := context.Background()
+		require.NoError(t, database.DB().AutoMigrate(&TestHookedSample{}))
+		t.Cleanup(func() {
+			require.NoError(t, database.DB().Migrator().DropTable(&TestHookedSample{}))
+		})
+		named := &TestHookedSample{Value: "x"}
+		require.NoError(t, database.Database[*TestHookedSample](ctx).Create(named, &TestHookedSample{Value: "x"}))
+
+		// The probe counts the statements that reach the sample table: a
+		// refusal that read the rows before deciding would show up here.
+		var statements atomic.Int64
+		probe := func(tx *gorm.DB) {
+			if tx.Statement.Table == "test_hooked_samples" {
+				statements.Add(1)
+			}
+		}
+		require.NoError(t, database.DB().Callback().Query().Before("gorm:query").Register("gst:test:hooked_sample_query", probe))
+		require.NoError(t, database.DB().Callback().Delete().Before("gorm:delete").Register("gst:test:hooked_sample_delete", probe))
+		t.Cleanup(func() {
+			require.NoError(t, database.DB().Callback().Query().Remove("gst:test:hooked_sample_query"))
+			require.NoError(t, database.DB().Callback().Delete().Remove("gst:test:hooked_sample_delete"))
+		})
+
+		// The hooks run once per record a delete names, and conditions name
+		// none, so the call fails whatever the conditions match, a dry run
+		// included.
+		hookedSampleSeen.Store(-1)
+		require.ErrorIs(t, database.Database[*TestHookedSample](ctx).WithQuery(&TestHookedSample{Value: "x"}).Delete(),
+			database.ErrConditionsWithDeleteHooks)
+		require.ErrorIs(t, database.Database[*TestHookedSample](ctx).WithQuery(nil, types.QueryOptions{AllowEmpty: true}).Delete(),
+			database.ErrConditionsWithDeleteHooks)
+		stmts := make([]types.SQLStatement, 0)
+		require.ErrorIs(t, database.Database[*TestHookedSample](ctx).WithDryRun(&stmts).WithQuery(&TestHookedSample{Value: "x"}).Delete(),
+			database.ErrConditionsWithDeleteHooks)
+		require.Empty(t, stmts)
+		require.Zero(t, statements.Load(), "the refusal reads no row and deletes none")
+		require.EqualValues(t, -1, hookedSampleSeen.Load(), "no hook runs")
+
+		// The two ways through: the records themselves, which the hooks see,
+		// or WithoutHook, which declares the hooks skipped.
+		require.NoError(t, database.Database[*TestHookedSample](ctx).Delete(named))
+		require.NotEqualValues(t, -1, hookedSampleSeen.Load(), "the hook runs for the record named")
+		require.NoError(t, database.Database[*TestHookedSample](ctx).WithQuery(&TestHookedSample{Value: "x"}).WithoutHook().Delete())
+		require.EqualValues(t, 2, statements.Load(), "each delete is one statement, read nothing before")
+		remaining := new(int)
+		require.NoError(t, database.Database[*TestHookedSample](ctx).Count(remaining))
+		require.Zero(t, *remaining)
 	})
 }
 
@@ -1052,7 +1103,8 @@ func TestDatabaseUpdateByIDWritesAJSONStringsColumnAsADocument(t *testing.T) {
 // Upsert write the model's own table alone: the associations an object
 // carries, declared for queries to preload, are neither written to their
 // tables nor kept on the object, so what a write hands back is what it
-// wrote.
+// wrote. Only the model's own associations are zeroed: a model another one
+// holds through a has-many keeps every field of its own.
 func TestDatabaseWritesLeaveAssociationsAlone(t *testing.T) {
 	ctx := context.Background()
 	prefix := "associations-" + strconv.FormatInt(time.Now().UnixNano(), 36)
@@ -1090,6 +1142,32 @@ func TestDatabaseWritesLeaveAssociationsAlone(t *testing.T) {
 	require.NoError(t, database.Database[*TestCategory](ctx).Upsert(other))
 	require.Equal(t, 2, stored(), "an upsert inserts the record alone")
 	require.Nil(t, other.Children)
+
+	// Writing the owner first is what makes gorm register its has-many on
+	// the held model's schema (see TestOwnerRecord).
+	require.NoError(t, database.DB().AutoMigrate(&TestOwnerRecord{}, &TestOwnedEntry{}))
+	t.Cleanup(func() {
+		require.NoError(t, database.DB().Migrator().DropTable(&TestOwnedEntry{}, &TestOwnerRecord{}))
+	})
+	owner := &TestOwnerRecord{Name: prefix + "-owner"}
+	require.NoError(t, database.Database[*TestOwnerRecord](ctx).Create(owner))
+	entry := &TestOwnedEntry{OwnerID: owner.ID, Name: prefix + "-created"}
+	require.NoError(t, database.Database[*TestOwnedEntry](ctx).Create(entry))
+	require.Equal(t, prefix+"-created", entry.Name, "a create hands back the entry's own fields")
+	storedName := func() string {
+		read := new(TestOwnedEntry)
+		require.NoError(t, database.Database[*TestOwnedEntry](ctx).Get(read, entry.ID))
+		return read.Name
+	}
+	require.Equal(t, prefix+"-created", storedName(), "a create writes the entry's own fields")
+
+	entry.Name = prefix + "-updated"
+	require.NoError(t, database.Database[*TestOwnedEntry](ctx).Update(entry))
+	require.Equal(t, prefix+"-updated", storedName(), "an update writes the entry's own fields")
+
+	entry.Name = prefix + "-upserted"
+	require.NoError(t, database.Database[*TestOwnedEntry](ctx).Upsert(entry))
+	require.Equal(t, prefix+"-upserted", storedName(), "an upsert writes the entry's own fields")
 }
 
 func TestDatabaseUpdateByID(t *testing.T) {
