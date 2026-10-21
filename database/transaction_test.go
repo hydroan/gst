@@ -73,6 +73,50 @@ func TestDatabaseTransactionModelHook(t *testing.T) {
 		require.NoError(t, database.Database[*TestHookConfig](ctx).Get(storedConfig, config.ID))
 		require.Equal(t, "initial", storedConfig.Value)
 	})
+
+	t.Run("a hook's chain leaves out the conditions of the delete around it", func(t *testing.T) {
+		ctx := context.Background()
+		configs := seedHookedSampleConfigs(t)
+		require.NoError(t, database.Database[*TestHookedSample](ctx).Create(&TestHookedSample{Value: "x"}))
+
+		// The delete matches value = x, and TestHookConfig has a value column
+		// too: a condition carried into the hook would narrow or break its read.
+		hookedSampleSeen.Store(-1)
+		require.NoError(t, database.Database[*TestHookedSample](ctx).WithQuery(&TestHookedSample{Value: "x"}).Delete())
+		require.EqualValues(t, configs, hookedSampleSeen.Load(), "the hook reads every config")
+	})
+
+	t.Run("a hook's chain leaves out the preloads of the create around it", func(t *testing.T) {
+		ctx := context.Background()
+		configs := seedHookedSampleConfigs(t)
+
+		// TestHookConfig has no Config association: a preload carried into the
+		// hook would fail its read.
+		hookedSampleSeen.Store(-1)
+		require.NoError(t, database.Database[*TestHookedSample](ctx).WithExpand([]string{"Config"}).Create(&TestHookedSample{Value: "y"}))
+		require.EqualValues(t, configs, hookedSampleSeen.Load(), "the hook reads every config")
+	})
+}
+
+// seedHookedSampleConfigs migrates the TestHookedSample table, writes three
+// TestHookConfig rows for its hooks to read, and returns how many config rows
+// there are in all; the test drops the table and deletes its rows when done.
+func seedHookedSampleConfigs(t *testing.T) int {
+	t.Helper()
+
+	ctx := context.Background()
+	require.NoError(t, database.DB().AutoMigrate(&TestHookedSample{}))
+	ids := []string{"hooked-sample-config-a", "hooked-sample-config-b", "hooked-sample-config-c"}
+	t.Cleanup(func() {
+		require.NoError(t, database.DB().Migrator().DropTable(&TestHookedSample{}))
+		require.NoError(t, database.DB().Exec("DELETE FROM test_hook_configs WHERE id IN ?", ids).Error)
+	})
+	for _, id := range ids {
+		require.NoError(t, database.Database[*TestHookConfig](ctx).Create(&TestHookConfig{Value: id, ID: id}))
+	}
+	all := make([]*TestHookConfig, 0)
+	require.NoError(t, database.Database[*TestHookConfig](ctx).List(&all))
+	return len(all)
 }
 
 // TestDatabaseWithLock verifies row-level locking inside database.Transaction

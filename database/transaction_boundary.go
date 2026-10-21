@@ -101,7 +101,19 @@ func withTransactionBoundary(
 	// transaction, so a transaction opened on that chain would run its writes
 	// on the replica. Without replicas the clause names the one pool there is.
 	if err := ins.Clauses(dbresolver.Write).Transaction(func(tx *gorm.DB) error {
-		txCtx := dbruntime.WithTx(ctx, tx, base)
+		// gorm opens the transaction on the chain's own handle and copies the
+		// chain's statement into it: Begin starts a fresh statement only on a
+		// handle no chain has touched. The operation itself runs on tx and
+		// keeps its own conditions. The context instead hands hooks and nested
+		// chains what Begin gives a handle no chain has touched: a new
+		// statement on the same transaction, so a chain they build starts from
+		// none of the operation's conditions, selections or preloads.
+		// Initialized starts that statement now: a NewDB session alone starts
+		// it at the next chain call, and WithContext, the first call a chain
+		// makes, copies the old one. The outer NewDB session keeps the handle
+		// reusable.
+		fresh := tx.Session(&gorm.Session{NewDB: true, Initialized: true}).Session(&gorm.Session{NewDB: true})
+		txCtx := dbruntime.WithTx(ctx, fresh, base)
 		txCtx = context.WithValue(txCtx, boundaryContextKey{}, boundary)
 		return fn(txCtx, tx)
 	}); err != nil {

@@ -6,6 +6,7 @@ import (
 	"database/sql/driver"
 	"encoding/hex"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -942,6 +943,41 @@ func (g *TestHookGroup) CreateAfter(ctx context.Context) error {
 		return err
 	}
 	return errTestHookGroupCreateAfter
+}
+
+// TestHookedSample reads the TestHookConfig rows inside its hooks through the
+// context the hooks get, the way the framework asks hooks to, and records how
+// many it saw in hookedSampleSeen: the tests assert that the chain a hook
+// builds starts clean, whatever conditions or preloads the write around it
+// carries. Config is a belongs-to association for the write to preload. Its
+// table is migrated on demand and dropped by the test.
+type TestHookedSample struct {
+	Value    string          `json:"value" gorm:"size:191"`
+	ConfigID string          `json:"config_id" gorm:"size:191"`
+	Config   *TestHookConfig `json:"config,omitempty" gorm:"foreignKey:ConfigID;constraint:-"`
+
+	modelregistry.Base
+}
+
+func (*TestHookedSample) TableName() string { return "test_hooked_samples" }
+func (*TestHookedSample) Purge() bool       { return true }
+
+func (*TestHookedSample) CreateBefore(ctx context.Context) error { return readHookConfigs(ctx) }
+func (*TestHookedSample) DeleteBefore(ctx context.Context) error { return readHookConfigs(ctx) }
+
+// hookedSampleSeen holds how many TestHookConfig rows the last hook of a
+// TestHookedSample read.
+var hookedSampleSeen atomic.Int64
+
+// readHookConfigs lists the TestHookConfig rows through ctx and records how
+// many there are in hookedSampleSeen.
+func readHookConfigs(ctx context.Context) error {
+	configs := make([]*TestHookConfig, 0)
+	if err := database.Database[*TestHookConfig](ctx).List(&configs); err != nil {
+		return err
+	}
+	hookedSampleSeen.Store(int64(len(configs)))
+	return nil
 }
 
 type TestCategory struct {
