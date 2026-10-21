@@ -204,6 +204,47 @@ func TestRenderColumnsFileImportsEveryPackageACompositeTypeNames(t *testing.T) {
 	require.Contains(t, rendered, "\t\"tmpapp/shared\"\n")
 }
 
+// TestRenderColumnsFileNamesEmbeddedColumnsByPath pins that the reference of
+// a column inside a struct embedded by name takes its Go path, dots dropped,
+// beside the model's own column of the same field name. Its columns are the
+// examples of the doc comment of columnFieldName.
+func TestRenderColumnsFileNamesEmbeddedColumnsByPath(t *testing.T) {
+	models := []modelinspect.ModelColumns{{
+		PkgName: "sample",
+		Name:    "Record",
+		Columns: []modelinspect.ColumnInfo{
+			{GoName: "First.Label", DBName: "first_label", TypeExpr: "string", TypeName: "string"},
+			{GoName: "ID", DBName: "id", TypeExpr: "string", TypeName: "string"},
+			{GoName: "Label", DBName: "label", TypeExpr: "string", TypeName: "string"},
+		},
+	}}
+
+	rendered, err := renderColumnsFile("tmpapp", "sample", "model/sample/record.go", models)
+
+	require.NoError(t, err)
+	require.Contains(t, rendered, "\tFirstLabel gst.Column[string]\n")
+	require.Contains(t, rendered, "\tFirstLabel: gst.NewColumn[*Record, string](\"first_label\"),\n")
+	require.Contains(t, rendered, "\tID         gst.Column[string]\n")
+	require.Contains(t, rendered, "\tLabel      gst.Column[string]\n")
+}
+
+// TestRenderColumnsFileRejectsCollidingReferenceNames pins that two columns
+// whose references would take one field name fail the run, naming both,
+// instead of writing a file that does not compile.
+func TestRenderColumnsFileRejectsCollidingReferenceNames(t *testing.T) {
+	models := []modelinspect.ModelColumns{{
+		PkgName: "sample",
+		Name:    "Record",
+		Columns: []modelinspect.ColumnInfo{
+			{GoName: "First.Label", DBName: "first_label", TypeExpr: "string", TypeName: "string"},
+			{GoName: "FirstLabel", DBName: "first_label_copy", TypeExpr: "string", TypeName: "string"},
+		},
+	}}
+
+	_, err := renderColumnsFile("tmpapp", "sample", "model/sample/record.go", models)
+	require.ErrorContains(t, err, `model Record columns "first_label" and "first_label_copy" both take the reference name FirstLabel`)
+}
+
 func TestRenderColumnsFileRejectsImportAliasCollision(t *testing.T) {
 	models := []modelinspect.ModelColumns{{
 		PkgName: "sample",

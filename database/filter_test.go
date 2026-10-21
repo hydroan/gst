@@ -3,6 +3,7 @@ package database_test
 import (
 	"context"
 	"database/sql"
+	"net/url"
 	"slices"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/stretchr/testify/require"
 	"gorm.io/datatypes"
 )
@@ -908,6 +910,63 @@ func TestDatabaseFiltersFollowTheStoredType(t *testing.T) {
 		require.Equal(t, []string{"first"}, labels(t, types.FilterEq("clock", "09:00:00")))
 		require.Equal(t, []string{"second"}, labels(t, types.FilterGte("clock", "12:00:00")))
 	})
+}
+
+// TestURLFiltersReachEmbeddedColumnsByPath pins, on every dialect, that a URL
+// filter names a column of a struct embedded by name by the path the field
+// takes in JSON: first.label filters the first part's label and label the
+// model's own, however the three share a field name. A bare key, the exact
+// match a model takes without embedding Query, reaches the same columns by
+// the same names.
+func TestURLFiltersReachEmbeddedColumnsByPath(t *testing.T) {
+	ctx := context.Background()
+	require.NoError(t, database.DB().AutoMigrate(&TestPairedRecord{}))
+	t.Cleanup(func() {
+		require.NoError(t, database.DB().Migrator().DropTable(&TestPairedRecord{}))
+	})
+	require.NoError(t, database.Database[*TestPairedRecord](ctx).Create(
+		&TestPairedRecord{Label: "l1", First: TestPart{Label: "f1"}, Second: TestPart{Label: "s1"}},
+		&TestPairedRecord{Label: "f1", First: TestPart{Label: "s1"}, Second: TestPart{Label: "l1"}},
+	))
+	labels := func(t *testing.T, key, value string) []string {
+		t.Helper()
+		filters, err := urlquery.Filters(url.Values{key: {value}}, &TestPairedRecord{})
+		require.NoError(t, err)
+		records := make([]*TestPairedRecord, 0)
+		require.NoError(t, database.Database[*TestPairedRecord](ctx).
+			WithQuery(nil, types.QueryOptions{Filters: filters}).
+			WithOrder(types.Asc("label")).
+			List(&records))
+		labels := make([]string, 0, len(records))
+		for _, r := range records {
+			labels = append(labels, r.Label)
+		}
+		return labels
+	}
+
+	require.Equal(t, []string{"l1"}, labels(t, "label[eq]", "l1"), "label is the model's own column")
+	require.Equal(t, []string{"l1"}, labels(t, "first.label[eq]", "f1"))
+	require.Equal(t, []string{"f1"}, labels(t, "second.label[eq]", "l1"))
+
+	bare := func(t *testing.T, key, value string) []string {
+		t.Helper()
+		q := url.Values{key: {value}}
+		query := &TestPairedRecord{}
+		require.NoError(t, urlquery.Decode(q, query))
+		records := make([]*TestPairedRecord, 0)
+		require.NoError(t, database.Database[*TestPairedRecord](ctx).
+			WithQuery(query, types.QueryOptions{PresentFields: urlquery.PresentFields(q)}).
+			WithOrder(types.Asc("label")).
+			List(&records))
+		labels := make([]string, 0, len(records))
+		for _, r := range records {
+			labels = append(labels, r.Label)
+		}
+		return labels
+	}
+	require.Equal(t, []string{"f1"}, bare(t, "label", "f1"))
+	require.Equal(t, []string{"l1"}, bare(t, "first.label", "f1"))
+	require.Equal(t, []string{"f1"}, bare(t, "second.label", "l1"))
 }
 
 func TestFilterOfAnotherTableFailsTheChain(t *testing.T) {

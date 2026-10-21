@@ -114,6 +114,61 @@ func TestColumns(t *testing.T) {
 	})
 }
 
+// samplePart is embedded by name three times in sampleEmbedding, beside a
+// top-level field of the same name.
+type samplePart struct {
+	Label string `json:"label"`
+}
+
+// sampleEmbedding embeds samplePart by name: gorm lifts the field of each into
+// a column of its own, and only the path that reaches it tells them apart.
+// Third is reached through a pointer, and Hidden is kept out of JSON as a
+// whole.
+type sampleEmbedding struct {
+	SampleBase
+
+	Label  string      `json:"label"`
+	First  samplePart  `json:"first" gorm:"embedded;embeddedPrefix:first_"`
+	Second samplePart  `json:"second_part" gorm:"embedded;embeddedPrefix:second_"`
+	Third  *samplePart `json:"third" gorm:"embedded;embeddedPrefix:third_"`
+	Hidden samplePart  `json:"-" gorm:"embedded;embeddedPrefix:hidden_"`
+}
+
+func (sampleEmbedding) TableName() string { return "sample_embeddings" }
+
+func TestColumnsNameEmbeddedFieldsByPath(t *testing.T) {
+	parsed, err := Columns(reflect.TypeFor[sampleEmbedding]())
+	require.NoError(t, err)
+	byDBName := make(map[string]Column, len(parsed))
+	for _, col := range parsed {
+		byDBName[col.DBName] = col
+	}
+
+	// The Go name is the selector path Go writes, the URL name the path the
+	// field takes in JSON, each step named by its own rule; an anonymous
+	// embedded struct adds no step.
+	for dbName, want := range map[string]struct{ goName, queryName string }{
+		"label":        {"Label", "label"},
+		"first_label":  {"First.Label", "first.label"},
+		"second_label": {"Second.Label", "second_part.label"},
+		"third_label":  {"Third.Label", "third.label"},
+		"id":           {"ID", "id"},
+	} {
+		require.Equal(t, want.goName, byDBName[dbName].GoName, dbName)
+		require.Equal(t, want.queryName, byDBName[dbName].QueryName, dbName)
+		require.True(t, byDBName[dbName].Filterable, dbName)
+	}
+
+	hidden := byDBName["hidden_label"]
+	require.Equal(t, "Hidden.Label", hidden.GoName)
+	require.False(t, hidden.Filterable, "json:\"-\" on the struct holding a field keeps the field out of JSON too")
+
+	// The index path is the one reflect follows, a step through the embedded
+	// pointer Third included, where gorm records -i-1.
+	require.Equal(t, []int{4, 0}, byDBName["third_label"].Index)
+	require.Equal(t, "Label", reflect.TypeFor[sampleEmbedding]().Field(4).Type.Elem().Field(0).Name)
+}
+
 func TestColumnsCarryGormDataTypes(t *testing.T) {
 	// GORMDataType is what gorm reads from the Go type; DataType is the
 	// column type it resolves, which a type tag replaces.

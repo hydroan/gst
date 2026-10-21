@@ -225,6 +225,60 @@ func (Rule) Design() {
 	requireProjectCompiles(t)
 }
 
+// TestGenRunNamesEmbeddedColumnsByPath runs gg gen against a model that
+// embeds one struct by name twice beside a field of the same name. Each column
+// gets a reference of its own, named by its Go path, and the handwritten code
+// reading them compiles.
+func TestGenRunNamesEmbeddedColumnsByPath(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	writeProjectFile(t, filepath.Join(projectDir, "model", "sample", "pair.go"), `package sample
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type PairPart struct {
+	Label string `+"`json:\"label\" gorm:\"size:191\"`"+`
+}
+
+type Pair struct {
+	Label  string   `+"`json:\"label\" gorm:\"size:191\"`"+`
+	First  PairPart `+"`json:\"first\" gorm:\"embedded;embeddedPrefix:first_\"`"+`
+	Second PairPart `+"`json:\"second\" gorm:\"embedded;embeddedPrefix:second_\"`"+`
+
+	model.Base
+}
+
+func (Pair) TableName() string { return "pairs" }
+
+func (Pair) Design() {
+	dsl.Migrate()
+}
+`)
+	writeProjectFile(t, filepath.Join(projectDir, "model", "sample", "pair_column.go"), `package sample
+
+import "github.com/hydroan/gst"
+
+var pairColumns = []gst.AnyColumnRef{PairCols.Label, PairCols.FirstLabel, PairCols.SecondLabel}
+
+func pairColumnCount() int {
+	return len(pairColumns)
+}
+`)
+
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+	columnFile, err := os.ReadFile(filepath.Join("model", "sample", "pair.gen.go"))
+	require.NoError(t, err)
+	require.Contains(t, string(columnFile), `FirstLabel:  gst.NewColumn[*Pair, string]("first_label")`)
+	require.Contains(t, string(columnFile), `SecondLabel: gst.NewColumn[*Pair, string]("second_label")`)
+
+	requireProjectCompiles(t)
+}
+
 // TestGenRunReportsCodeReachingAColumnInspectionPlaceholder runs gg gen against
 // a project whose package initialization calls a method that reads generated
 // column references. Methods are never left out by name, so the call stays in

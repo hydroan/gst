@@ -23,9 +23,11 @@ import (
 // URL name follows modelschema.QueryColumnName — the query tag wins over the
 // json tag, which wins over the field name, snake-cased — the same rule that
 // names filter columns, so a field's bare key and its operator-filter key
-// always agree. A field carrying query:"-" is not decodable, and a field
-// whose type no setter exists for (structs such as time.Time, slices, maps)
-// is left out of the plan, so its key reports as unsupported. A column
+// always agree; a field of a struct the model embeds by name decodes under
+// its path, first.label, as its column is filtered. A field carrying
+// query:"-" is not decodable, and a field whose type no setter exists for
+// (structs such as time.Time, slices, maps) is left out of the plan, so its
+// key reports as unsupported. A column
 // hidden from clients (json:"-") is left out too: it is not the client's to
 // filter, by a bare key no more than by the operator keys Filters refuses
 // for it. A field that is no column (gorm:"-") decodes like any other: it
@@ -118,9 +120,57 @@ func decodePlanOf(typ reflect.Type) (map[string]decodableField, error) {
 			return nil, err
 		}
 		collectDecodableFields(typ, nil, 0, hidden, plan, make(map[string]int))
+		if err = collectEmbeddedColumns(typ, plan); err != nil {
+			return nil, err
+		}
 	}
 	decodePlans.Store(typ, plan)
 	return plan, nil
+}
+
+// collectEmbeddedColumns adds to the plan the columns of the structs the
+// model embeds by name, which gorm lifts into columns of the model's table
+// and the walk below does not look into: each under its URL name, the path
+// the field takes in JSON (first.label, see modelschema.Column), so a bare
+// key reaches the column the operator keys reach. A column hidden from
+// clients, a field carrying query:"-" and a field no setter exists for stay
+// out, as the model's own do, and a name the walk already took keeps its
+// field.
+func collectEmbeddedColumns(typ reflect.Type, plan map[string]decodableField) error {
+	columns, err := modelschema.Columns(typ)
+	if err != nil {
+		return errors.Wrap(err, "urlquery: resolve the model's columns")
+	}
+	for _, col := range columns {
+		if !col.Filterable || !strings.Contains(col.GoName, ".") {
+			continue
+		}
+		if _, taken := plan[col.QueryName]; taken {
+			continue
+		}
+		field := structFieldAlong(typ, col.Index)
+		if strings.TrimSpace(field.Tag.Get("query")) == "-" {
+			continue
+		}
+		if setter, ok := fieldSetter(field.Type, col.QueryName); ok {
+			plan[col.QueryName] = decodableField{assign: makeAssign(col.Index, field.Type, setter)}
+		}
+	}
+	return nil
+}
+
+// structFieldAlong returns the struct field an index path reaches in typ,
+// through the pointers on the way.
+func structFieldAlong(typ reflect.Type, index []int) reflect.StructField {
+	var field reflect.StructField
+	for _, i := range index {
+		for typ.Kind() == reflect.Pointer {
+			typ = typ.Elem()
+		}
+		field = typ.Field(i)
+		typ = field.Type
+	}
+	return field
 }
 
 // hiddenColumnFields returns the fields of the model type's columns hidden
@@ -180,11 +230,12 @@ func collectDecodableFields(typ reflect.Type, prefix []int, depth int, hidden ma
 }
 
 // makeAssign binds a setter to its field position, allocating pointer fields
-// on demand so a decoded value always lands in a live element.
+// on demand, a struct embedded through a pointer on the way included, so a
+// decoded value always lands in a live element.
 func makeAssign(index []int, typ reflect.Type, setter func(dst reflect.Value, raw string) string) func(dst reflect.Value, raw string) string {
 	if typ.Kind() != reflect.Pointer {
 		return func(dst reflect.Value, raw string) string {
-			return setter(dst.FieldByIndex(index), raw)
+			return setter(fieldAlong(dst, index), raw)
 		}
 	}
 	elem := typ.Elem()
@@ -193,9 +244,24 @@ func makeAssign(index []int, typ reflect.Type, setter func(dst reflect.Value, ra
 		if message := setter(boxed.Elem(), raw); message != "" {
 			return message
 		}
-		dst.FieldByIndex(index).Set(boxed)
+		fieldAlong(dst, index).Set(boxed)
 		return ""
 	}
+}
+
+// fieldAlong is dst.FieldByIndex(index) with the nil pointers on the way
+// allocated.
+func fieldAlong(dst reflect.Value, index []int) reflect.Value {
+	for _, i := range index {
+		for dst.Kind() == reflect.Pointer {
+			if dst.IsNil() {
+				dst.Set(reflect.New(dst.Type().Elem()))
+			}
+			dst = dst.Elem()
+		}
+		dst = dst.Field(i)
+	}
+	return dst
 }
 
 // fieldSetter returns the parse-and-set function for a field type, reported

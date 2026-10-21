@@ -45,6 +45,23 @@ func TestFilterableIndexKeepsOnlyClientFilterableColumns(t *testing.T) {
 		"pointer and struct type must share one cached index")
 }
 
+// TestIndexesTellEmbeddedFieldsApart pins that both indexes key a column of
+// a struct embedded by name by its path, so a field sharing its name with the
+// model's own, or with another embedding's, takes none of their columns.
+func TestIndexesTellEmbeddedFieldsApart(t *testing.T) {
+	filterable, err := FilterableIndex(reflect.TypeFor[sampleEmbedding]())
+	require.NoError(t, err)
+	require.Equal(t, "label", filterable["label"].DBName)
+	require.Equal(t, "first_label", filterable["first.label"].DBName)
+	require.Equal(t, "second_label", filterable["second_part.label"].DBName)
+
+	byGoName, err := GoNameIndex(reflect.TypeFor[sampleEmbedding]())
+	require.NoError(t, err)
+	require.Equal(t, "label", byGoName["Label"].DBName)
+	require.Equal(t, "first_label", byGoName["First.Label"].DBName)
+	require.Equal(t, "second_label", byGoName["Second.Label"].DBName)
+}
+
 // sampleDocumentRecord carries one column of each type the set derivations
 // look for, plus a plain column that must stay out of every set. Settled,
 // Tally and Doc store a time, a number and a JSON document that only gorm's

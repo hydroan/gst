@@ -162,6 +162,28 @@ func (*ColumnNameSample) Indexes() []modelschema.Index {
 	return []modelschema.Index{{Fields: []string{"kind"}}}
 }
 
+// EmbeddedIndexPart is embedded by name twice in EmbeddedIndexSample, beside
+// a top-level field of the same name.
+type EmbeddedIndexPart struct {
+	Label string `json:"label" gorm:"size:191"`
+}
+
+// EmbeddedIndexSample declares an index on its own Label and a unique one on
+// the Label of the struct embedded as First, each named by its path.
+type EmbeddedIndexSample struct {
+	Label  string            `json:"label" gorm:"size:191"`
+	First  EmbeddedIndexPart `json:"first" gorm:"embedded;embeddedPrefix:first_"`
+	Second EmbeddedIndexPart `json:"second" gorm:"embedded;embeddedPrefix:second_"`
+
+	modelregistry.Base
+}
+
+func (*EmbeddedIndexSample) TableName() string { return "embedded_index_samples" }
+
+func (*EmbeddedIndexSample) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Label"}}, {Fields: []string{"First.Label"}, Unique: true}}
+}
+
 func TestParseIndexPlans(t *testing.T) {
 	db := newSchemaDB(t)
 
@@ -210,6 +232,18 @@ func TestParseIndexPlansValidation(t *testing.T) {
 			require.ErrorContains(t, err, tt.want)
 		})
 	}
+}
+
+// TestParseIndexPlansNamesEmbeddedFieldsByPath pins that a declaration names
+// a field of a struct embedded by name by its Go path, and the model's own
+// field of the same name by the name alone, each resolving to its own column.
+func TestParseIndexPlansNamesEmbeddedFieldsByPath(t *testing.T) {
+	plans, err := modelschema.ParseIndexPlans(newSchemaDB(t), &EmbeddedIndexSample{})
+	require.NoError(t, err)
+	require.Equal(t, []modelschema.IndexPlan{
+		{Name: "idx_embedded_index_samples_label", Table: "embedded_index_samples", Columns: []string{"label"}},
+		{Name: "uniq_embedded_index_samples_first_label", Table: "embedded_index_samples", Columns: []string{"first_label"}, Unique: true},
+	}, plans)
 }
 
 // LongTableNameSample carries a table name long enough to push generated

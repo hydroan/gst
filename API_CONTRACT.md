@@ -40,7 +40,9 @@ HTTP 与 gRPC 一致。
 除业务字段过滤外，列表接口的通用查询参数由后端按资源逐个启用：分页由 model 嵌入
 `model.Pagination` 启用，游标分页由 `model.Cursor` 启用，排序、展开关联、
 字段操作符过滤等参数由 `model.Query` 启用（`model.Query` 同时包含前两者）。资源未启用
-对应能力时，传这些参数会返回 400。某个资源支持哪些参数以 Swagger 为准。
+对应能力时，传这些参数会返回 400。某个资源支持哪些参数以 Swagger 为准。过滤、排序和
+游标列里的字段名按 JSON 字段名写，嵌在对象里的字段写成路径：响应 `{"first":{"label":"x"}}`
+里的 label 写 `first.label`（`?first.label=x`、`?first.label[eq]=x`、`?_sort_by=first.label desc`）。
 
 | 能力 | 参数 | 启用方式 | 示例 |
 | --- | --- | --- | --- |

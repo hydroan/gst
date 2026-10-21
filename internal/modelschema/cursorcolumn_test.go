@@ -52,6 +52,18 @@ func TestIdentifyingColumnsSeparatesWhatIdentifiesARow(t *testing.T) {
 	require.Contains(t, identifying, "token", "a unique column the schema forbids NULL on identifies a row")
 }
 
+// TestIdentifyingColumnsFollowsTheDeclaredPath pins that the unique index a
+// declaration names by the Go path of a field inside a struct embedded by
+// name makes that field's column identifying, not a column of another field
+// of the same name.
+func TestIdentifyingColumnsFollowsTheDeclaredPath(t *testing.T) {
+	identifying, err := modelschema.IdentifyingColumns(&EmbeddedIndexSample{})
+	require.NoError(t, err)
+	require.Contains(t, identifying, "first_label", "First.Label carries a unique index of its own")
+	require.NotContains(t, identifying, "second_label", "Second.Label carries none")
+	require.NotContains(t, identifying, "label", "the index on the model's own Label is not unique")
+}
+
 // TestIdentifyingColumnsReadsATypeAlone pins the call the database chain
 // makes: it holds no instance, only the type, and a nil pointer must answer
 // the same declaration rather than panic inside a value method.

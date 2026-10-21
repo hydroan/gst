@@ -40,7 +40,7 @@ func indexNameLimit(db *gorm.DB) int {
 // contract). Partial, functional and fulltext indexes stay out: their
 // semantics diverge per dialect, so hand-written DDL owns them.
 type Index struct {
-	Fields []string // Go struct field names; slice order is the index column order
+	Fields []string // Go field names, First.Label for a field of a struct embedded by name; slice order is the index column order
 	Unique bool     // Unique makes the index a unique index
 }
 
@@ -135,6 +135,10 @@ func ValidateIndexes(db *gorm.DB, model any) error {
 // (see indexNameLimit).
 func buildIndexPlans(db *gorm.DB, sch *gormschema.Schema, tableName string, decls []Index) ([]IndexPlan, error) {
 	nameLimit := indexNameLimit(db)
+	byName, err := GoNameIndex(sch.ModelType)
+	if err != nil {
+		return nil, err
+	}
 	plans := make([]IndexPlan, 0, len(decls))
 	declared := make(map[string]struct{}, len(decls))
 	for _, decl := range decls {
@@ -144,11 +148,14 @@ func buildIndexPlans(db *gorm.DB, sch *gormschema.Schema, tableName string, decl
 		columns := make([]string, 0, len(decl.Fields))
 		seenColumns := make(map[string]struct{}, len(decl.Fields))
 		for _, name := range decl.Fields {
-			// Only Go struct field names resolve, exactly as declared.
+			// Only Go field names resolve, exactly as declared, a field of a
+			// struct embedded by name by its path (see Column.GoName), the
+			// name cursor pagination reads the declaration by too.
 			// Database column names are deliberately rejected: accepting both
 			// spellings would let the two forms mix across declarations.
-			field := sch.FieldsByName[name]
-			if field == nil {
+			column, found := byName[name]
+			field := sch.FieldsByDBName[column.DBName]
+			if !found || field == nil {
 				return nil, errors.Newf("model %s: custom index references unknown field %q", sch.Name, name)
 			}
 			if columnType, fix, ok := unindexableColumn(db, field); ok {
@@ -172,7 +179,7 @@ func buildIndexPlans(db *gorm.DB, sch *gormschema.Schema, tableName string, decl
 			Unique:  decl.Unique,
 		})
 	}
-	if err := checkTagIndexConflicts(sch, plans); err != nil {
+	if err = checkTagIndexConflicts(sch, plans); err != nil {
 		return nil, err
 	}
 	return plans, nil

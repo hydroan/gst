@@ -1102,14 +1102,15 @@ func (c *TestTaggedCode) Scan(src any) error {
 }
 
 // TestPairedRecord carries three columns sharing a Go field name and one
-// whose stored form is not its Go value. Its table is migrated on demand and
-// dropped by the test.
+// whose stored form is not its Go value. It embeds Query, so URL filters
+// reach it. Its table is migrated on demand and dropped by the test.
 type TestPairedRecord struct {
 	Label  string         `json:"label" gorm:"size:191"`
 	First  TestPart       `json:"first" gorm:"embedded;embeddedPrefix:first_"`
 	Second TestPart       `json:"second" gorm:"embedded;embeddedPrefix:second_"`
 	Code   TestTaggedCode `json:"code" gorm:"size:191"`
 
+	modelregistry.Query
 	modelregistry.Base
 }
 

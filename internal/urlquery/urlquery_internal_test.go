@@ -60,6 +60,25 @@ type gormTypedTestModel struct {
 	modelregistry.Base
 }
 
+// namedPart is embedded by name twice in namedEmbeddingTestModel, beside a
+// top-level field of the same name.
+type namedPart struct {
+	Label string `json:"label"`
+}
+
+// namedEmbeddingTestModel holds four columns behind one field name: its own
+// Label and the Label of each struct it embeds by name, Third through a
+// pointer, which the URL names by the path the field takes in JSON.
+type namedEmbeddingTestModel struct {
+	Label  string     `json:"label"`
+	First  namedPart  `json:"first" gorm:"embedded;embeddedPrefix:first_"`
+	Second namedPart  `json:"second" gorm:"embedded;embeddedPrefix:second_"`
+	Third  *namedPart `json:"third" gorm:"embedded;embeddedPrefix:third_"`
+
+	modelregistry.Query
+	modelregistry.Base
+}
+
 // HiddenCredentials is embedded by embeddingTestModel: its column is hidden
 // from clients from inside an embedded struct, where the field's index path
 // is the one gorm composes.
@@ -394,6 +413,16 @@ func TestFilters(t *testing.T) {
 		require.Error(t, err, "non-boolean value must be rejected")
 	})
 
+	t.Run("ReachesEmbeddedColumnsByPath", func(t *testing.T) {
+		conds, err := Filters(url.Values{"label[eq]": {"l"}, "first.label[eq]": {"f"}, "second.label[like]": {"s"}}, &namedEmbeddingTestModel{})
+		require.NoError(t, err)
+		require.Equal(t, []types.Filter{
+			types.NewFilter("", "first_label", types.FilterOpEq, "f"),
+			types.NewFilter("", "label", types.FilterOpEq, "l"),
+			types.NewFilter("", "second_label", types.FilterOpLike, "s"),
+		}, conds, "label is the model's own column, first.label and second.label the embedded ones")
+	})
+
 	t.Run("WrappedTimeFieldAcceptsOnlyRFC3339", func(t *testing.T) {
 		conds, err := Filters(url.Values{"settled[lt]": {"2026-07-01T08:00:00+08:00"}}, &gormTypedTestModel{})
 		require.NoError(t, err)
@@ -499,6 +528,16 @@ func TestDecode(t *testing.T) {
 		require.Equal(t, 7, m.ItemCount,
 			"a multi-word json name is a legal bare key; the streaming decoder silently rejected it")
 		require.Equal(t, "g1", m.GroupIDs)
+	})
+
+	t.Run("FillsEmbeddedColumnsByPath", func(t *testing.T) {
+		var m namedEmbeddingTestModel
+		require.NoError(t, Decode(url.Values{"label": {"l"}, "first.label": {"f"}, "third.label": {"t"}}, &m))
+		require.Equal(t, "l", m.Label)
+		require.Equal(t, "f", m.First.Label, "a bare key names the column of a struct embedded by name by its path, as the operator keys do")
+		require.Empty(t, m.Second.Label)
+		require.NotNil(t, m.Third, "the struct embedded through a pointer is allocated to hold the value")
+		require.Equal(t, "t", m.Third.Label)
 	})
 
 	t.Run("RejectsCaseVariantKeys", func(t *testing.T) {
@@ -694,6 +733,15 @@ func TestOrders(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, []types.Order{types.NewOrder("", "custom_column", types.OrderDesc)}, orders,
 			"the URL names a column by its query name, but ORDER BY needs the database name")
+	})
+
+	t.Run("EmbeddedColumnSortsByPath", func(t *testing.T) {
+		orders, err := Orders(url.Values{"_sort_by": {"first.label desc,label"}}, &namedEmbeddingTestModel{})
+		require.NoError(t, err)
+		require.Equal(t, []types.Order{
+			types.NewOrder("", "first_label", types.OrderDesc),
+			types.NewOrder("", "label", types.OrderAsc),
+		}, orders)
 	})
 
 	t.Run("BaseTimestampIsSortable", func(t *testing.T) {

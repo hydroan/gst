@@ -132,6 +132,18 @@ func renderColumnsFile(module string, pkgName string, source string, models []mo
 	f.Decls = append(f.Decls, importDecl)
 
 	for _, m := range models {
+		// Two columns taking one reference name would write a struct that
+		// does not compile, so the run fails naming both instead.
+		taken := make(map[string]string, len(m.Columns))
+		for _, col := range m.Columns {
+			name := columnFieldName(col.GoName)
+			if other, ok := taken[name]; ok {
+				return "", errors.Newf("model %s columns %q and %q both take the reference name %s; rename one of the fields",
+					m.Name, other, col.DBName, name)
+			}
+			taken[name] = col.DBName
+		}
+
 		lines.Next()
 		comments = append(comments, &ast.CommentGroup{List: []*ast.Comment{{
 			Slash: lines.Next(),
@@ -146,7 +158,7 @@ func renderColumnsFile(module string, pkgName string, source string, models []mo
 				return "", errors.Wrapf(err, "model %s column %q", m.Name, col.DBName)
 			}
 			structType.Fields.List = append(structType.Fields.List, &ast.Field{
-				Names: []*ast.Ident{{Name: col.GoName, NamePos: namePos}},
+				Names: []*ast.Ident{{Name: columnFieldName(col.GoName), NamePos: namePos}},
 				Type:  refType,
 			})
 			// A column whose type cannot be written as source keeps the
@@ -168,7 +180,7 @@ func renderColumnsFile(module string, pkgName string, source string, models []mo
 				return "", errors.Wrapf(err, "model %s column %q", m.Name, col.DBName)
 			}
 			literal.Elts = append(literal.Elts, &ast.KeyValueExpr{
-				Key:   &ast.Ident{Name: col.GoName, NamePos: lines.Next()},
+				Key:   &ast.Ident{Name: columnFieldName(col.GoName), NamePos: lines.Next()},
 				Value: refLiteral,
 			})
 		}
@@ -189,6 +201,14 @@ func renderColumnsFile(module string, pkgName string, source string, models []mo
 		return "", errors.Wrapf(err, "format generated columns for %s", source)
 	}
 	return rendered, nil
+}
+
+// columnFieldName is the field a column's reference takes in the Cols var:
+// the column's Go name with the dots of its path dropped, FirstLabel for
+// First.Label, the Label of a struct embedded by the name First, and the Go
+// name itself otherwise, ID for ID.
+func columnFieldName(goName string) string {
+	return strings.ReplaceAll(goName, ".", "")
 }
 
 // isStdlibImport reports whether an import path belongs to the standard
