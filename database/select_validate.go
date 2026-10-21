@@ -268,7 +268,7 @@ func (a *selectBuilder[M]) termKind(t types.Term, shape projectionShape) valueKi
 	if err != nil {
 		return kindUnknown
 	}
-	switch modelschema.ClassifyColumn(column.Type) {
+	switch modelschema.ClassifyColumn(column) {
 	case modelschema.ColumnClassNumeric:
 		return kindNumeric
 	case modelschema.ColumnClassTime:

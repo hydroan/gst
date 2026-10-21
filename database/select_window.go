@@ -366,7 +366,7 @@ func (a *selectBuilder[M]) validateRowLevelKey(key types.Term, shape projectionS
 	if err != nil {
 		return err
 	}
-	if types.TermBucketOf(key) != types.TimeBucketNone && modelschema.ClassifyColumn(column.Type) != modelschema.ColumnClassTime {
+	if types.TermBucketOf(key) != types.TimeBucketNone && modelschema.ClassifyColumn(column) != modelschema.ColumnClassTime {
 		return errors.Wrapf(ErrAggregateType, "time bucket over non-time column %q", types.TermColumnOf(key))
 	}
 	return nil

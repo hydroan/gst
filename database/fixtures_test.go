@@ -708,6 +708,26 @@ var TestScoredRecordCols = struct {
 	Grade:   types.NewColumn[*TestScoredRecord, sql.NullString]("grade"),
 }
 
+// TestTypedRecordCols are the column references of the typed fixture, typed
+// the way gg gen types them by what gorm stores: the time sql.NullTime holds
+// gets the time reference, the number sql.NullInt64 holds the numeric one,
+// and a time of day the plain one.
+var TestTypedRecordCols = struct {
+	ID      types.Column[string]
+	Label   types.Column[string]
+	Settled types.TimeColumn
+	Tally   types.NumericColumn[sql.NullInt64]
+	Payload types.Column[string]
+	Clock   types.Column[datatypes.Time]
+}{
+	ID:      types.NewColumn[*TestTypedRecord, string]("id"),
+	Label:   types.NewColumn[*TestTypedRecord, string]("label"),
+	Settled: types.NewTimeColumn[*TestTypedRecord]("settled"),
+	Tally:   types.NewNumericColumn[*TestTypedRecord, sql.NullInt64]("tally"),
+	Payload: types.NewColumn[*TestTypedRecord, string]("payload"),
+	Clock:   types.NewColumn[*TestTypedRecord, datatypes.Time]("clock"),
+}
+
 // tagSeed is the related-row fixture: two vip tags on alpha records and one
 // bulk tag on a beta record, so a semi join narrows alpha and leaves gamma
 // without any tag at all.

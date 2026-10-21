@@ -23,57 +23,64 @@ func TestClassifyColumn(t *testing.T) {
 	type namedAmount int64
 	type namedLabel string
 	type namedTime time.Time
+	type classified struct {
+		ID string `gorm:"primaryKey"`
 
-	t.Run("Numeric", func(t *testing.T) {
-		for _, typ := range []reflect.Type{
-			reflect.TypeFor[int](), reflect.TypeFor[int8](), reflect.TypeFor[int16](),
-			reflect.TypeFor[int32](), reflect.TypeFor[int64](),
-			reflect.TypeFor[uint](), reflect.TypeFor[uint8](), reflect.TypeFor[uint16](),
-			reflect.TypeFor[uint32](), reflect.TypeFor[uint64](),
-			reflect.TypeFor[float32](), reflect.TypeFor[float64](),
-			// A named numeric type is still numeric: its kind is what SUM acts on.
-			reflect.TypeFor[namedAmount](),
-			// A pointer column aggregates its pointed-to value.
-			reflect.TypeFor[*int64](),
-		} {
-			require.Equal(t, modelschema.ColumnClassNumeric, modelschema.ClassifyColumn(typ), typ.String())
-		}
-	})
+		Int      int
+		Int8     int8
+		Int16    int16
+		Int32    int32
+		Int64    int64
+		Uint     uint
+		Uint8    uint8
+		Uint16   uint16
+		Uint32   uint32
+		Uint64   uint64
+		Float32  float32
+		Float64  float64
+		Amount   namedAmount
+		Optional *int64
+		Tally    sql.NullInt64
 
-	t.Run("Time", func(t *testing.T) {
-		require.Equal(t, modelschema.ColumnClassTime, modelschema.ClassifyColumn(reflect.TypeFor[time.Time]()))
-		require.Equal(t, modelschema.ColumnClassTime, modelschema.ClassifyColumn(reflect.TypeFor[*time.Time]()))
-		// A calendar day is stored in a date column and binds as a time at
-		// midnight, so it compares and buckets like an instant.
-		require.Equal(t, modelschema.ColumnClassTime, modelschema.ClassifyColumn(reflect.TypeFor[datatypes.Date]()))
-		require.Equal(t, modelschema.ColumnClassTime, modelschema.ClassifyColumn(reflect.TypeFor[*datatypes.Date]()))
-	})
+		At      time.Time
+		Closed  *time.Time
+		Day     datatypes.Date
+		Due     *datatypes.Date
+		Named   namedTime
+		Settled sql.NullTime
+		Removed gorm.DeletedAt
 
-	t.Run("Other", func(t *testing.T) {
-		for _, typ := range []reflect.Type{
-			reflect.TypeFor[string](), reflect.TypeFor[bool](),
-			reflect.TypeFor[namedLabel](), reflect.TypeFor[[]byte](),
-			// A named type whose underlying type is time.Time is neither of
-			// the two time types the framework knows how to bind and read
-			// back, time.Time and datatypes.Date.
-			reflect.TypeFor[namedTime](),
-		} {
-			require.Equal(t, modelschema.ColumnClassOther, modelschema.ClassifyColumn(typ), typ.String())
-		}
-		require.Equal(t, modelschema.ColumnClassOther, modelschema.ClassifyColumn(nil))
-	})
+		Note   string
+		Flag   bool
+		Label  namedLabel
+		Digest []byte
+		Text   textValuer
+		Clock  datatypes.Time
+		Doc    datatypes.JSON
+	}
+	columns, err := modelschema.Columns(reflect.TypeFor[classified]())
+	require.NoError(t, err)
+	classes := make(map[modelschema.ColumnClass][]string)
+	for _, c := range columns {
+		class := modelschema.ClassifyColumn(c)
+		classes[class] = append(classes[class], c.DBName)
+	}
 
-	t.Run("RejectsValuerHeuristic", func(t *testing.T) {
-		// Every type here implements driver.Valuer while being stored as text.
-		// Classifying by that interface instead of by kind would call them
-		// numeric, and MySQL and SQLite answer SUM over text with 0 rather than
-		// an error, so the mistake would reach a report as a wrong number.
-		for _, typ := range []reflect.Type{
-			reflect.TypeFor[textValuer](), reflect.TypeFor[gorm.DeletedAt](),
-		} {
-			require.Equal(t, modelschema.ColumnClassOther, modelschema.ClassifyColumn(typ), typ.String())
-		}
-	})
+	require.ElementsMatch(t, []string{
+		"int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16", "uint32", "uint64",
+		"float32", "float64", "amount", "optional", "tally",
+	}, classes[modelschema.ColumnClassNumeric],
+		"every integer and float, named or behind a pointer, and the number sql.NullInt64 holds")
+	require.ElementsMatch(t, []string{"at", "closed", "day", "due", "named", "settled", "removed"}, classes[modelschema.ColumnClassTime],
+		"an instant and a calendar day, behind a pointer too, and the times a named time type, sql.NullTime and gorm.DeletedAt hold")
+	// gorm reads a driver.Valuer through the value it holds, so a type stored
+	// as text through one is no number: MySQL and SQLite answer SUM over text
+	// with 0 rather than an error, and the mistake would reach a report as a
+	// wrong number. A time of day is no instant, and sums to one just as
+	// wrong.
+	require.ElementsMatch(t, []string{"id", "note", "flag", "label", "digest", "text", "clock", "doc"}, classes[modelschema.ColumnClassOther],
+		"text, a flag, bytes, a type stored as text through driver.Valuer, a time of day and a JSON document")
+	require.Equal(t, modelschema.ColumnClassOther, modelschema.ClassifyColumn(modelschema.Column{}))
 }
 
 // sampleStoredRecord carries a column of each type the column predicates

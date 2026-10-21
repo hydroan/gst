@@ -2,11 +2,14 @@ package database_test
 
 import (
 	"context"
+	"database/sql"
 	"testing"
+	"time"
 
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
+	"gorm.io/datatypes"
 )
 
 // Tests for the grouped side of the select builder (select_group.go): group
@@ -301,10 +304,11 @@ func TestSelectTimeBucket(t *testing.T) {
 	})
 }
 
-// TestSumRejectsTextBackedValuer pins SUM to the single classification rule.
-// Admitting any struct that stores itself through driver.Valuer would take in
-// gorm.DeletedAt, which every model carries, and the null wrappers -- the exact
-// types ClassifyColumn exists to keep out.
+// TestSumRejectsTextBackedValuer pins SUM to the single classification rule,
+// which reads a column by the type gorm stores through the value a
+// driver.Valuer holds: a nullable string and a token stored as text are text,
+// and gorm.DeletedAt, which every model carries, is a time, so none of them
+// sums, however a reference minted by hand calls it numeric.
 func TestSumRejectsTextBackedValuer(t *testing.T) {
 	defer cleanupAggregateData()
 	setupAggregateData(t)
@@ -312,6 +316,73 @@ func TestSumRejectsTextBackedValuer(t *testing.T) {
 	rows := make([]struct{ Total int64 }, 0)
 	require.ErrorIs(t, database.Select[*TestAggregateRecord, struct{ Total int64 }](context.Background(), types.NewNumericColumn[*TestAggregateRecord, int64]("deleted_at").Sum().As("total")).
 		Scan(&rows), database.ErrAggregateType)
+	for _, column := range []string{"grade", "token"} {
+		require.ErrorIs(t, database.Select[*TestScoredRecord, struct{ Total int64 }](context.Background(), types.NewNumericColumn[*TestScoredRecord, int64](column).Sum().As("total")).
+			Scan(&rows), database.ErrAggregateType, column)
+	}
+}
+
+// TestAggregatesFollowTheStoredType pins that SUM, the time buckets and the
+// HAVING value check read a column by the type gorm stores: the number
+// sql.NullInt64 holds sums and compares as a number, the time sql.NullTime
+// holds buckets by day, and a time of day, which gorm gives the time data
+// type of an instant though it is stored as a time of day, neither sums nor
+// buckets.
+func TestAggregatesFollowTheStoredType(t *testing.T) {
+	ctx := context.Background()
+	t.Cleanup(func() { _ = database.DB().Exec("DELETE FROM test_typed_records").Error })
+	settled := time.Date(2026, time.July, 1, 8, 0, 0, 0, time.UTC)
+	require.NoError(t, database.Database[*TestTypedRecord](ctx).Create(
+		&TestTypedRecord{
+			Label: "first", Settled: sql.NullTime{Time: settled, Valid: true}, Tally: sql.NullInt64{Int64: 15, Valid: true},
+			Payload: `{}`, Clock: datatypes.NewTime(9, 0, 0, 0),
+		},
+		&TestTypedRecord{
+			Label: "second", Settled: sql.NullTime{Time: settled.Add(time.Hour), Valid: true}, Tally: sql.NullInt64{Int64: 27, Valid: true},
+			Payload: `{}`, Clock: datatypes.NewTime(17, 30, 0, 0),
+		},
+	))
+	type total struct{ Total int64 }
+
+	t.Run("AWrappedNumberSums", func(t *testing.T) {
+		got := total{}
+		require.NoError(t, database.Select[*TestTypedRecord, total](ctx, TestTypedRecordCols.Tally.Sum().As("total")).ScanOne(&got))
+		require.Equal(t, total{Total: 42}, got)
+	})
+
+	t.Run("AWrappedNumberMeasureComparesAsANumber", func(t *testing.T) {
+		type row struct {
+			Label string
+			Top   int64
+		}
+		top := TestTypedRecordCols.Tally.Max().As("top")
+		rows := make([]row, 0)
+		require.ErrorIs(t, database.Select[*TestTypedRecord, row](ctx, TestTypedRecordCols.Label.Group(), top).
+			Having(top.Gt("many")).
+			Scan(&rows), database.ErrHavingValueType)
+	})
+
+	// The day key reads into a pointer: the column is nullable, so a row
+	// without a time would group under NULL.
+	type perDay struct {
+		Day     *string
+		Records int64
+	}
+
+	t.Run("AWrappedTimeBucketsByDay", func(t *testing.T) {
+		rows := make([]perDay, 0)
+		require.NoError(t, database.Select[*TestTypedRecord, perDay](ctx, TestTypedRecordCols.Settled.ByDay().As("day"), types.Count().As("records")).Scan(&rows))
+		require.Equal(t, []perDay{{Day: new("2026-07-01"), Records: 2}}, rows)
+	})
+
+	t.Run("ATimeOfDayNeitherSumsNorBuckets", func(t *testing.T) {
+		got := total{}
+		require.ErrorIs(t, database.Select[*TestTypedRecord, total](ctx, types.NewNumericColumn[*TestTypedRecord, datatypes.Time]("clock").Sum().As("total")).ScanOne(&got),
+			database.ErrAggregateType, "MySQL and SQLite would add the readings up as plain numbers")
+		rows := make([]perDay, 0)
+		require.ErrorIs(t, database.Select[*TestTypedRecord, perDay](ctx, types.NewTimeColumn[*TestTypedRecord]("clock").ByDay().As("day"), types.Count().As("records")).Scan(&rows),
+			database.ErrAggregateType)
+	})
 }
 
 // TestSelectHavingValue pins the values a post-aggregation comparison

@@ -9,14 +9,10 @@ import (
 	gormschema "gorm.io/gorm/schema"
 )
 
-// ColumnClass is the aggregate capability a column type carries. It decides
-// which reference gg gen writes for the column and which aggregate functions
-// the query builder accepts for it at build time, so both consumers read the
+// ColumnClass is the aggregate capability a column carries. It decides which
+// reference gg gen writes for the column and which aggregate functions the
+// query builder accepts for it at build time, so both consumers read the
 // same rule rather than each carrying a copy that could drift.
-//
-// What a column's values are — which filter and cursor values it takes, how
-// a comparison on it renders — is another question, answered from the data
-// types gorm resolved for the column; see IsTimeColumn.
 type ColumnClass int
 
 const (
@@ -29,45 +25,32 @@ const (
 	ColumnClassTime
 )
 
-// timeType and dateType are the two column types holding a time value, the
-// ones that get time bucketing: time.Time, an instant, and datatypes.Date,
-// the calendar day a date column stores, which binds as a time at midnight
-// and reads back as one. A named type whose underlying type is time.Time is
-// neither: the framework knows how these two bind and read back, and nothing
-// of another type.
-var (
-	timeType = reflect.TypeFor[time.Time]()
-	dateType = reflect.TypeFor[datatypes.Date]()
-)
+// dateType is datatypes.Date, the calendar day a date column stores, which
+// binds as a time at midnight and reads back as one; see IsDateType.
+var dateType = reflect.TypeFor[datatypes.Date]()
 
-// ClassifyColumn reports the aggregate capability of a column type. Pointers
-// are dereferenced, since an aggregate reads the pointed-to value.
+// ClassifyColumn reports the aggregate capability of a column, read from the
+// data types gorm resolved for it by the rule the filters read too: a column
+// IsNumericColumn calls a number carries SUM and AVG, one IsTimeColumn calls
+// a time carries the time buckets, and every other column carries the
+// aggregates that cannot be silently wrong.
 //
-// Classification reads reflect.Kind only. Recognizing decimal types through
-// driver.Valuer looks tempting, but uuid, JSON and enum types stored as text
-// implement it too, and treating those as numeric would let in exactly the
-// failure the split exists to prevent: MySQL and SQLite answer SUM over a
-// text column with 0 and a warning rather than an error, so the mistake
-// reaches a report as a plausible wrong number instead of a failure. A decimal
-// stored as a struct is therefore classified as other, and SUM or AVG over it
-// is refused at build time whichever reference names it, a NumericColumn
-// minted by hand included; a decimal that is summed is stored in a numeric Go
-// type.
-func ClassifyColumn(typ reflect.Type) ColumnClass {
-	if typ == nil {
-		return ColumnClassOther
-	}
-	for typ.Kind() == reflect.Pointer {
-		typ = typ.Elem()
-	}
-	if typ == timeType || typ == dateType {
-		return ColumnClassTime
-	}
-	switch typ.Kind() {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
-		reflect.Float32, reflect.Float64:
+// gorm reads a driver.Valuer through the value it holds, so the uuid, JSON
+// and enum types stored as text are text to it, and so is a decimal stored
+// as a string. Treating those as numeric would let in exactly the failure
+// the split exists to prevent: MySQL and SQLite answer SUM over a text column
+// with 0 and a warning rather than an error, so the mistake reaches a report
+// as a plausible wrong number instead of a failure. SUM or AVG over them is
+// therefore refused at build time whichever reference names it, a
+// NumericColumn minted by hand included; a decimal that is summed is stored
+// in a numeric Go type. A time of day is other too: added up or bucketed, its
+// readings make numbers that mean nothing.
+func ClassifyColumn(c Column) ColumnClass {
+	switch {
+	case IsNumericColumn(c):
 		return ColumnClassNumeric
+	case IsTimeColumn(c):
+		return ColumnClassTime
 	default:
 		return ColumnClassOther
 	}

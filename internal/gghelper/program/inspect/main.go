@@ -116,7 +116,7 @@ func main() {
 		}
 		for _, col := range cols {
 			expr, imports := describeType(col.Type, typ.PkgPath())
-			class := modelschema.ClassifyColumn(col.Type)
+			class := modelschema.ClassifyColumn(col)
 			entry.Columns = append(entry.Columns, columnInfo{
 				GoName:      col.GoName,
 				DBName:      col.DBName,

@@ -39,10 +39,10 @@ func Columns(typ reflect.Type) ([]Column, error) {
 	return modelschema.Columns(typ)
 }
 
-// ClassifyColumn reports the aggregate capability of a column type, which
-// decides the column reference gg gen writes for it.
-func ClassifyColumn(typ reflect.Type) ColumnClass {
-	return modelschema.ClassifyColumn(typ)
+// ClassifyColumn reports the aggregate capability of a column, which decides
+// the column reference gg gen writes for it.
+func ClassifyColumn(c Column) ColumnClass {
+	return modelschema.ClassifyColumn(c)
 }
 
 // IsJSONStringsType reports whether a column type stores a JSON array of

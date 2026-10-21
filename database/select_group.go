@@ -152,15 +152,16 @@ func (a *selectBuilder[M]) validateGrouping(t types.Term) error {
 // applies to it: SUM and AVG need a numeric column, a time bucket a time
 // column.
 func (a *selectBuilder[M]) validateColumnClass(t types.Term, column modelschema.Column) error {
-	class := modelschema.ClassifyColumn(column.Type)
+	class := modelschema.ClassifyColumn(column)
 	switch {
 	case types.TermFnOf(t) == types.FnSum || types.TermFnOf(t) == types.FnAvg:
-		// The generated reference already blocks this at compile time for the
-		// types it can classify, so the check only bites on minted
+		// The generated reference already blocks this at compile time, gg gen
+		// classifying by the same rule, so the check only bites on minted
 		// references. It asks ClassifyColumn rather than keeping a rule of
-		// its own: a second rule admitted every struct storing itself through
-		// driver.Valuer, which is also how uuid, JSON and text-backed null
-		// wrappers travel, and gorm.DeletedAt is on every model. Two rules
+		// its own: a second rule admitting every struct that stores itself
+		// through driver.Valuer would take in uuid, JSON and text-backed
+		// wrappers, and gorm.DeletedAt, which every model carries, where
+		// ClassifyColumn reads the value such a struct holds. Two rules
 		// disagreeing about the same type is worse than one rule being strict.
 		if class != modelschema.ColumnClassNumeric {
 			return errors.Wrapf(ErrAggregateType, "%s over non-numeric column %q", types.TermFnOf(t), types.TermColumnOf(t))

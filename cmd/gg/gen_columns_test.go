@@ -29,6 +29,7 @@ func TestGenRunGeneratesColumnsReadByHandwrittenModelCode(t *testing.T) {
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/hydroan/gst/database"
@@ -46,6 +47,9 @@ type Record struct {
 	Score    int64               `+"`json:\"score\"`"+`
 	Day      datatypes.Date      `+"`json:\"day\"`"+`
 	ClosedAt *time.Time          `+"`json:\"closed_at\"`"+`
+	Settled  sql.NullTime        `+"`json:\"settled\"`"+`
+	Tally    sql.NullInt64       `+"`json:\"tally\"`"+`
+	Clock    datatypes.Time      `+"`json:\"clock\"`"+`
 	Times    []time.Time         `+"`json:\"times\" gorm:\"serializer:json\"`"+`
 	Kinds    []RecordKind        `+"`json:\"kinds\" gorm:\"serializer:json\"`"+`
 	ByKind   map[RecordKind]int64 `+"`json:\"by_kind\" gorm:\"serializer:json\"`"+`
@@ -79,8 +83,15 @@ var (
 
 var sortableColumns = []gst.AnyColumnRef{statusColumn, RecordCols.Score}
 
-// The date column and the optional instant are time references: they bucket.
-var reportKeys = []gst.Term{RecordCols.Day.ByDay(), RecordCols.ClosedAt.ByMonth()}
+// The date column, the optional instant and the times sql.NullTime and the
+// soft-delete timestamp hold are time references: they bucket. The number
+// sql.NullInt64 holds is a numeric reference: it sums.
+var reportKeys = []gst.Term{
+	RecordCols.Day.ByDay(), RecordCols.ClosedAt.ByMonth(),
+	RecordCols.Settled.ByDay(), RecordCols.DeletedAt.ByMonth(),
+}
+
+var reportTotals = []gst.Term{RecordCols.Tally.Sum()}
 
 func init() {
 	if strings.TrimSpace(statusColumn.Name()) == "" {
@@ -96,8 +107,8 @@ func sortColumns() []gst.AnyColumnRef {
 	return sortableColumns
 }
 
-func reportKeyCount() int {
-	return len(reportKeys)
+func reportTermCount() int {
+	return len(reportKeys) + len(reportTotals)
 }
 `)
 	writeProjectFile(t, filepath.Join(projectDir, "model", "item", "item.go"), `package item
@@ -142,6 +153,12 @@ func (i *Item) DeleteBefore(ctx context.Context) error {
 	require.Contains(t, string(recordColumns), "var RecordCols = struct")
 	require.Contains(t, string(recordColumns), `gst.NewTimeColumn[*Record]("day")`, "a date column gets the time reference")
 	require.Contains(t, string(recordColumns), `gst.NewTimeColumn[*Record]("closed_at")`, "an optional instant gets the time reference")
+	// gorm reads a Valuer through the value it holds, and so does the
+	// reference gg gen writes for it.
+	require.Contains(t, string(recordColumns), `gst.NewTimeColumn[*Record]("settled")`, "the time sql.NullTime holds gets the time reference")
+	require.Contains(t, string(recordColumns), `gst.NewTimeColumn[*Record]("deleted_at")`, "so does the soft-delete timestamp")
+	require.Contains(t, string(recordColumns), `gst.NewNumericColumn[*Record, sql.NullInt64]("tally")`, "the number sql.NullInt64 holds gets the numeric reference")
+	require.Contains(t, string(recordColumns), `gst.NewColumn[*Record, datatypes.Time]("clock")`, "a time of day neither sums nor buckets")
 	// A composite type is written from its elements: a type of another
 	// package qualified and imported, one of the model's own package bare.
 	require.Contains(t, string(recordColumns), `gst.NewColumn[*Record, []time.Time]("times")`)
