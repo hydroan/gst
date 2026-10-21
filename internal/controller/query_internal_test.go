@@ -278,12 +278,12 @@ type expandQueryTestEntry struct {
 }
 
 func TestParseExpandQuery(t *testing.T) {
-	t.Run("DepthRepeatsSliceExpand", func(t *testing.T) {
+	t.Run("DepthRepeatsAnAssociationHoldingTheModel", func(t *testing.T) {
 		c := newTestGetContext(t, "/items?_expand=Children&_depth=3")
 		require.Equal(t, []string{"Children.Children.Children"}, parseExpandQuery(c.Request.URL.Query(), &expandQueryTestModel{}))
 	})
 
-	t.Run("NonSliceExpandIgnoresDepth", func(t *testing.T) {
+	t.Run("ASingleValuedAssociationIgnoresDepth", func(t *testing.T) {
 		c := newTestGetContext(t, "/items?_expand=Parent&_depth=3")
 		require.Equal(t, []string{"Parent"}, parseExpandQuery(c.Request.URL.Query(), &expandQueryTestModel{}))
 	})
