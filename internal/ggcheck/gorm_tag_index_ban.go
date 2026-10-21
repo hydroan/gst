@@ -13,16 +13,9 @@ import (
 
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
+	gormschema "gorm.io/gorm/schema"
+	"gorm.io/gorm/utils"
 )
-
-// gormIndexTagKeys are the gorm tag keys that configure an index. unique is
-// banned alongside index and uniqueIndex because it creates a unique index
-// too and would reopen the side door the ban closes.
-var gormIndexTagKeys = map[string]bool{
-	"index":       true,
-	"uniqueIndex": true,
-	"unique":      true,
-}
 
 // GormTagIndexBan keeps index settings out of gorm struct tags.
 var GormTagIndexBan = Check{
@@ -113,9 +106,16 @@ func checkFileGormTagIndexBan(path string) []string {
 	return violations
 }
 
-// gormIndexTagKey returns the first banned index key the field's gorm tag
-// carries. Keys compare exactly per semicolon-separated segment, so values
-// merely containing the word (a comment, a default) never match.
+// gormIndexTagKey returns the index setting the field's gorm tag carries,
+// named the way the rule names it. The tag is read by gorm's own parser: a
+// key counts in any case, a semicolon escaped as \; keeps a word inside the
+// setting it belongs to, and a value merely containing the word (a comment,
+// a default) never matches. A setting counts when gorm acts on it: index and
+// uniqueIndex carrying a value, the condition gorm's Schema.ParseIndexes
+// builds an index on, and unique holding anything but false, gorm's
+// Field.Unique; gorm exports the parser but not these conditions. unique is
+// banned alongside index and uniqueIndex because it creates a unique index
+// too and would reopen the side door the ban closes.
 func gormIndexTagKey(field *ast.Field) (string, bool) {
 	if field.Tag == nil {
 		return "", false
@@ -128,11 +128,14 @@ func gormIndexTagKey(field *ast.Field) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	for part := range strings.SplitSeq(gormTag, ";") {
-		key, _, _ := strings.Cut(part, ":")
-		if gormIndexTagKeys[strings.TrimSpace(key)] {
-			return strings.TrimSpace(key), true
-		}
+	settings := gormschema.ParseTagSetting(gormTag, ";")
+	switch {
+	case settings["INDEX"] != "":
+		return "index", true
+	case settings["UNIQUEINDEX"] != "":
+		return "uniqueIndex", true
+	case utils.CheckTruth(settings["UNIQUE"]):
+		return "unique", true
 	}
 	return "", false
 }
