@@ -235,27 +235,24 @@ func (a *selectBuilder[M]) resolveSelectJoin(sj types.SelectJoin, alias string) 
 		}
 		seen[types.TermColumnOf(key)] = struct{}{}
 	}
+	// The derived table's columns are the keys, each read under the alias it
+	// projects as and typed by the model column it reads, the way tableInfoOf
+	// types a model's columns.
 	keyColumns := make([]string, 0, len(info.keys))
-	keyInfo := tableInfo{
-		columns:     make(map[string]struct{}, len(info.keys)),
-		timeColumns: make(map[string]struct{}),
-		jsonColumns: make(map[string]struct{}),
-		qualify:     alias,
-		rename:      make(map[string]string, len(info.keys)),
-	}
+	typed := make([]modelschema.Column, 0, len(info.keys))
+	rename := make(map[string]string, len(info.keys))
 	for _, key := range info.keys {
 		keyColumns = append(keyColumns, types.TermColumnOf(key))
-		keyInfo.columns[types.TermColumnOf(key)] = struct{}{}
-		keyInfo.rename[types.TermColumnOf(key)] = termAlias(key)
+		rename[types.TermColumnOf(key)] = termAlias(key)
 		if c, known := info.columns[types.TermColumnOf(key)]; known {
-			if modelschema.ClassifyColumn(c.Type) == modelschema.ColumnClassTime {
-				keyInfo.timeColumns[types.TermColumnOf(key)] = struct{}{}
-			}
-			if modelschema.IsJSONType(c.Type) {
-				keyInfo.jsonColumns[types.TermColumnOf(key)] = struct{}{}
-			}
+			typed = append(typed, c)
 		}
 	}
+	keyInfo := tableInfoOf(typed)
+	for _, column := range keyColumns {
+		keyInfo.columns[column] = struct{}{}
+	}
+	keyInfo.qualify, keyInfo.rename = alias, rename
 	return &joinedTable{
 		table:   info.table,
 		alias:   alias,
@@ -524,15 +521,16 @@ func (a *selectBuilder[M]) joinClauses(tx *gorm.DB, shape projectionShape) (*gor
 // before it are the ones a predicate may tie to or name.
 func (a *selectBuilder[M]) joinScope(jt *joinedTable, before map[string]tableInfo) filterScope {
 	return filterScope{
-		qualify:     jt.alias,
-		table:       jt.table,
-		parent:      jt.table,
-		columns:     jt.info.columns,
-		timeColumns: jt.info.timeColumns,
-		jsonColumns: jt.info.jsonColumns,
-		tables:      before,
-		rename:      jt.info.rename,
-		derived:     jt.sub != nil,
+		qualify:        jt.alias,
+		table:          jt.table,
+		parent:         jt.table,
+		columns:        jt.info.columns,
+		timeColumns:    jt.info.timeColumns,
+		jsonColumns:    jt.info.jsonColumns,
+		numericColumns: jt.info.numericColumns,
+		tables:         before,
+		rename:         jt.info.rename,
+		derived:        jt.sub != nil,
 	}
 }
 

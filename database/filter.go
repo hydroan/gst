@@ -127,14 +127,13 @@ func tableInfoOf(columns []modelschema.Column) tableInfo {
 	}
 	for _, c := range columns {
 		info.columns[c.DBName] = struct{}{}
-		class := modelschema.ClassifyColumn(c.Type)
-		if class == modelschema.ColumnClassTime {
+		if modelschema.IsTimeColumn(c) {
 			info.timeColumns[c.DBName] = struct{}{}
 		}
-		if class == modelschema.ColumnClassNumeric {
+		if modelschema.IsNumericColumn(c) {
 			info.numericColumns[c.DBName] = struct{}{}
 		}
-		if modelschema.IsJSONType(c.Type) {
+		if modelschema.IsJSONColumn(c) {
 			info.jsonColumns[c.DBName] = struct{}{}
 		}
 	}
@@ -818,16 +817,17 @@ func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, scope 
 		outerColumns = db.outerColumnSet()
 	}
 	inner := filterScope{
-		qualify:      childRef,
-		parent:       childRef,
-		outer:        scope.parent,
-		outerTable:   scope.table,
-		outerColumns: outerColumns,
-		columns:      child.columns,
-		timeColumns:  child.timeColumns,
-		jsonColumns:  child.jsonColumns,
-		depth:        scope.depth + 1,
-		table:        childTable,
+		qualify:        childRef,
+		parent:         childRef,
+		outer:          scope.parent,
+		outerTable:     scope.table,
+		outerColumns:   outerColumns,
+		columns:        child.columns,
+		timeColumns:    child.timeColumns,
+		jsonColumns:    child.jsonColumns,
+		numericColumns: child.numericColumns,
+		depth:          scope.depth + 1,
+		table:          childTable,
 	}
 	expr, failure := db.renderFilters(sq.Filters, false, inner)
 	if expr != nil {

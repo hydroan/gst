@@ -250,6 +250,43 @@ func TestSelectJoinPredicatesAndFilters(t *testing.T) {
 	})
 }
 
+// TestSelectJoinMatchesNumbersByTheirText pins that a column of a joined
+// model and a key of a joined select match a pattern by the number's text
+// form, cast where the dialect requires it, the way a column of the queried
+// model does.
+func TestSelectJoinMatchesNumbersByTheirText(t *testing.T) {
+	defer cleanupAggregateData()
+	defer cleanupTagData()
+	defer cleanupFlowData()
+	setupAggregateData(t)
+	setupTagData(t)
+	ctx := context.Background()
+	require.NoError(t, database.Database[*TestPayment](ctx).Create(paymentSeed()...))
+	type row struct {
+		ID string
+	}
+
+	t.Run("AColumnOfTheJoinedModel", func(t *testing.T) {
+		rows := make([]row, 0)
+		require.NoError(t, database.Select[*TestRecordTag, row](ctx, TestRecordTagCols.ID).
+			Join(types.Join[*TestAggregateRecord](TestAggregateRecordCols.ID.EqCol(TestRecordTagCols.RecordID), TestAggregateRecordCols.Amount.Like("3"))).
+			Scan(&rows))
+		require.Equal(t, []row{{ID: "t2"}}, rows, "of the tagged records only a3 holds 300")
+	})
+
+	t.Run("AKeyOfTheJoinedSelect", func(t *testing.T) {
+		type paidAmount struct {
+			Amount int64
+		}
+		amounts := database.Select[*TestPayment, paidAmount](ctx, TestPaymentCols.Amount.Group())
+		rows := make([]row, 0)
+		require.NoError(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.ID).
+			Join(types.JoinSelect(amounts, TestPaymentCols.Amount.EqCol(TestAggregateRecordCols.Amount), TestPaymentCols.Amount.Like("2"))).
+			Scan(&rows))
+		require.Equal(t, []row{{ID: "a2"}}, rows, "of the amounts paid only 200 matches")
+	})
+}
+
 func TestSelectJoinGroupedAndWindowed(t *testing.T) {
 	defer cleanupJoinData()
 	setupJoinData(t)

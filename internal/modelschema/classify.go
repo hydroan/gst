@@ -13,6 +13,10 @@ import (
 // which reference gg gen writes for the column and which aggregate functions
 // the query builder accepts for it at build time, so both consumers read the
 // same rule rather than each carrying a copy that could drift.
+//
+// What a column's values are — which filter and cursor values it takes, how
+// a comparison on it renders — is another question, answered from the data
+// types gorm resolved for the column; see IsTimeColumn.
 type ColumnClass int
 
 const (
@@ -69,11 +73,66 @@ func ClassifyColumn(typ reflect.Type) ColumnClass {
 	}
 }
 
+// dateDataType is the data type gorm reads for datatypes.Date, the name the
+// type declares through GormDataTypeInterface: gorm names no data type of
+// its own for a calendar day.
+var dateDataType = gormschema.DataType(datatypes.Date{}.GormDataType())
+
+// timeOfDayType is datatypes.Time, the time of day a TIME column stores. It
+// declares the time data type an instant carries, and only its
+// GormDBDataType, which needs a dialect to answer, tells the column it
+// creates apart from an instant's, so the type itself is what tells a time
+// of day apart.
+var timeOfDayType = reflect.TypeFor[datatypes.Time]()
+
+// IsTimeColumn reports whether a column stores a time by the data type gorm
+// reads for its field: an instant — time.Time, or the time sql.NullTime,
+// gorm.DeletedAt or a named time type holds — or a calendar day,
+// datatypes.Date (see IsDateType). A comparison on such a column compares
+// times on every dialect, and a value sent for it is RFC 3339. A time of day
+// is not one; see IsTimeOfDayColumn.
+func IsTimeColumn(c Column) bool {
+	return (c.GORMDataType == gormschema.Time || c.GORMDataType == dateDataType) && !IsTimeOfDayColumn(c)
+}
+
+// IsTimeOfDayColumn reports whether a column stores a time of day,
+// datatypes.Time, pointers dereferenced. A value sent for it names a time on
+// no particular day, in time.TimeOnly.
+func IsTimeOfDayColumn(c Column) bool {
+	typ := c.Type
+	for typ != nil && typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	return typ == timeOfDayType
+}
+
+// IsNumericColumn reports whether a column stores a number by the data type
+// gorm reads for its field: an integer, signed or not, or a float, the ones
+// sql.NullInt64, sql.NullFloat64 and their kin hold included.
+func IsNumericColumn(c Column) bool {
+	switch c.GORMDataType {
+	case gormschema.Int, gormschema.Uint, gormschema.Float:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsJSONColumn reports whether a column stores a JSON document: its Go type
+// declares a JSON data type, the way the gorm.io/datatypes types do, or its
+// type tag declares a JSON column. Either data type gorm resolved counts,
+// because a type naming its database type itself, as the datatypes family
+// does, keeps that column type whatever the tag declares.
+func IsJSONColumn(c Column) bool {
+	return isJSONDataType(c.GORMDataType) || isJSONDataType(c.DataType)
+}
+
 // IsDateType reports whether a column type stores a calendar day, which is
 // datatypes.Date, pointers dereferenced. A date column is a time column to
-// ClassifyColumn; this tells the consumers reading values for it apart from
-// an instant's: a value sent for a date column names a day, not a time of
-// day, and is read as the UTC day the column stores (see UTCDay).
+// ClassifyColumn and IsTimeColumn alike; this tells the consumers reading
+// values for it apart from an instant's: a value sent for a date column names
+// a day, not a time of day, and is read as the UTC day the column stores (see
+// UTCDay).
 func IsDateType(typ reflect.Type) bool {
 	for typ != nil && typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
@@ -91,20 +150,15 @@ func UTCDay(t time.Time) time.Time {
 	return time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
 }
 
-// IsJSONType reports whether a column type stores as a JSON document. The
+// isJSONType reports whether a column type stores as a JSON document. The
 // answer comes from the type itself through gorm's GormDataTypeInterface,
 // which is how the gorm.io/datatypes types (JSON, JSONType, JSONSlice,
 // JSONMap) and custom JSON wrappers declare their column type. Pointers are
 // dereferenced, and the method is looked up on both receivers.
 //
-// The declared name is matched by its "json" prefix rather than by equality:
-// the datatypes family does not spell one name (JSONMap declares "jsonmap",
-// the others "json"), and a dialect-flavored wrapper may declare "jsonb".
-//
-// Consumers use it to keep text operators away from JSON columns where a
-// dialect is strict about operand types; see the WithQuery JSON handling in
-// the database package.
-func IsJSONType(typ reflect.Type) bool {
+// It reads the Go type alone, which is all IsJSONStringsType has to go on;
+// a column's own answer, a type tag included, is IsJSONColumn's.
+func isJSONType(typ reflect.Type) bool {
 	if typ == nil {
 		return false
 	}
@@ -118,11 +172,19 @@ func IsJSONType(typ reflect.Type) bool {
 			return false
 		}
 	}
-	return strings.HasPrefix(strings.ToLower(decl.GormDataType()), "json")
+	return isJSONDataType(gormschema.DataType(decl.GormDataType()))
+}
+
+// isJSONDataType reports whether a gorm data type names a JSON document. The
+// name is matched by its "json" prefix rather than by equality: the
+// datatypes family does not spell one name (JSONMap declares "jsonmap", the
+// others "json"), and a dialect-flavored type or tag may declare "jsonb".
+func isJSONDataType(name gormschema.DataType) bool {
+	return strings.HasPrefix(strings.ToLower(string(name)), "json")
 }
 
 // IsJSONStringsType reports whether a column type stores a JSON array of
-// strings: a JSON document type by IsJSONType whose Go shape is a slice of
+// strings: a JSON document type by isJSONType whose Go shape is a slice of
 // strings, datatypes.JSONSlice[string] for one. Pointers are dereferenced.
 //
 // gg gen writes the JSONStringsColumn reference for such a column, the one
@@ -130,7 +192,7 @@ func IsJSONType(typ reflect.Type) bool {
 // element only (PostgreSQL's jsonb ? operator matches no other), so a
 // document of another shape gets no reference that offers the test.
 func IsJSONStringsType(typ reflect.Type) bool {
-	if !IsJSONType(typ) {
+	if !isJSONType(typ) {
 		return false
 	}
 	for typ.Kind() == reflect.Pointer {

@@ -1,6 +1,7 @@
 package modelschema
 
 import (
+	"database/sql"
 	"reflect"
 	"testing"
 	"time"
@@ -45,7 +46,10 @@ func TestFilterableIndexKeepsOnlyClientFilterableColumns(t *testing.T) {
 }
 
 // sampleDocumentRecord carries one column of each type the set derivations
-// look for, plus a plain column that must stay out of both sets.
+// look for, plus a plain column that must stay out of every set. Settled,
+// Tally and Doc store a time, a number and a JSON document that only gorm's
+// reading of the field tells, and Clock is a time of day gorm gives the time
+// data type of an instant.
 type sampleDocumentRecord struct {
 	ID        string         `json:"id" gorm:"primaryKey"`
 	Payload   datatypes.JSON `json:"payload"`
@@ -53,6 +57,10 @@ type sampleDocumentRecord struct {
 	Count     int            `json:"count"`
 	CreatedAt time.Time      `json:"created_at"`
 	Day       datatypes.Date `json:"day"`
+	Settled   sql.NullTime   `json:"settled"`
+	Tally     sql.NullInt64  `json:"tally"`
+	Doc       string         `json:"doc" gorm:"type:json"`
+	Clock     datatypes.Time `json:"clock"`
 }
 
 func (sampleDocumentRecord) TableName() string { return "sample_document_records" }
@@ -63,6 +71,8 @@ func TestTimeColumnSetReportsTimeColumns(t *testing.T) {
 	set := TimeColumnSet(reflect.TypeFor[*sampleDocumentRecord]())
 	require.Contains(t, set, "created_at")
 	require.Contains(t, set, "day", "a date column compares as a time")
+	require.Contains(t, set, "settled", "gorm stores the time sql.NullTime holds")
+	require.NotContains(t, set, "clock", "a time of day is no instant")
 	require.NotContains(t, set, "note")
 	require.NotContains(t, set, "payload")
 
@@ -79,6 +89,7 @@ func TestTimeColumnSetReportsTimeColumns(t *testing.T) {
 func TestJSONColumnSetReportsJSONColumns(t *testing.T) {
 	set := JSONColumnSet(reflect.TypeFor[*sampleDocumentRecord]())
 	require.Contains(t, set, "payload")
+	require.Contains(t, set, "doc", "the type tag declares a JSON column")
 	require.NotContains(t, set, "note")
 	require.NotContains(t, set, "created_at")
 
@@ -95,6 +106,8 @@ func TestJSONColumnSetReportsJSONColumns(t *testing.T) {
 func TestNumericColumnSetReportsNumericColumns(t *testing.T) {
 	set := NumericColumnSet(reflect.TypeFor[*sampleDocumentRecord]())
 	require.Contains(t, set, "count")
+	require.Contains(t, set, "tally", "gorm stores the integer sql.NullInt64 holds")
+	require.NotContains(t, set, "clock", "a time of day is no number, whatever its Go kind")
 	require.NotContains(t, set, "note")
 	require.NotContains(t, set, "payload")
 	require.NotContains(t, set, "created_at")

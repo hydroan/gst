@@ -117,35 +117,37 @@ func columnSet(cache *sync.Map, typ reflect.Type, keep func(Column) bool) map[st
 // timeColumnSetCache memoizes the time-typed column set per model type.
 var timeColumnSetCache sync.Map
 
-// TimeColumnSet reports the time-typed columns of a model type by database
-// name, resolved once per type and cached; see columnSet. Its consumer is the
-// filter renderer normalizing time comparisons, which every column renders
-// without on the dialects that compare time natively.
+// TimeColumnSet reports the time columns of a model type (see IsTimeColumn)
+// by database name, resolved once per type and cached; see columnSet. Its
+// consumers normalize time comparisons — the filter renderer, the WithQuery
+// conditions and the cursor boundary — which every column renders without
+// on the dialects that compare time natively.
 func TimeColumnSet(typ reflect.Type) map[string]struct{} {
-	return columnSet(&timeColumnSetCache, typ, func(c Column) bool { return ClassifyColumn(c.Type) == ColumnClassTime })
+	return columnSet(&timeColumnSetCache, typ, IsTimeColumn)
 }
 
 // jsonColumnSetCache memoizes the JSON-typed column set per model type.
 var jsonColumnSetCache sync.Map
 
-// JSONColumnSet reports the JSON-typed columns of a model type by database
-// name, resolved once per type and cached; see columnSet. Its consumers are
-// the text pattern cast in the filter renderer and the exact-match
+// JSONColumnSet reports the JSON columns of a model type (see IsJSONColumn)
+// by database name, resolved once per type and cached; see columnSet. Its
+// consumers are the JSON handling of the filter renderer — the text pattern
+// cast, the scalar check and the JSON contains operator — and the exact-match
 // fail-closed rule in WithQuery.
 func JSONColumnSet(typ reflect.Type) map[string]struct{} {
-	return columnSet(&jsonColumnSetCache, typ, func(c Column) bool { return IsJSONType(c.Type) })
+	return columnSet(&jsonColumnSetCache, typ, IsJSONColumn)
 }
 
 // numericColumnSetCache memoizes the numeric column set per model type.
 var numericColumnSetCache sync.Map
 
-// NumericColumnSet reports the numeric columns of a model type by database
-// name, resolved once per type and cached; see columnSet. Its consumer is the
-// text pattern cast in the filter renderer, which every column renders
-// without on the dialects that read a number in a string context by
-// themselves.
+// NumericColumnSet reports the numeric columns of a model type (see
+// IsNumericColumn) by database name, resolved once per type and cached; see
+// columnSet. Its consumer is the text pattern cast in the filter renderer,
+// which every column renders without on the dialects that read a number in
+// a string context by themselves.
 func NumericColumnSet(typ reflect.Type) map[string]struct{} {
-	return columnSet(&numericColumnSetCache, typ, func(c Column) bool { return ClassifyColumn(c.Type) == ColumnClassNumeric })
+	return columnSet(&numericColumnSetCache, typ, IsNumericColumn)
 }
 
 // associationFieldsCache memoizes the association field paths per model type.

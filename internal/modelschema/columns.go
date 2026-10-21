@@ -28,15 +28,22 @@ import (
 // parameter clients filter by and stays a front-end contract, while DBName is
 // whatever gorm writes into SQL. They are usually equal, and diverge when a
 // model carries a column tag or a field name gorm renders differently.
+//
+// DataType and GORMDataType are the data types gorm resolved for the field,
+// which tell what the column stores where the Go type does not: the value a
+// Valuer such as sql.NullTime holds, or a JSON column a type tag declares.
+// IsTimeColumn, IsTimeOfDayColumn, IsNumericColumn and IsJSONColumn read them.
 type Column struct {
-	GoName     string       // Go struct field name.
-	QueryName  string       // URL parameter name: query tag, else json tag, else field name, in snake case.
-	DBName     string       // Database column name resolved by gorm.
-	Type       reflect.Type // Go type of the underlying struct field.
-	Index      []int        // Struct field index path, usable with reflect.Value.FieldByIndex.
-	Filterable bool         // Whether clients may filter on the column through the URL.
-	NotNull    bool         // Whether the schema forbids NULL: a NOT NULL tag or the primary key.
-	PrimaryKey bool         // Whether the column is part of the model's primary key.
+	GoName       string              // Go struct field name.
+	QueryName    string              // URL parameter name: query tag, else json tag, else field name, in snake case.
+	DBName       string              // Database column name resolved by gorm.
+	Type         reflect.Type        // Go type of the underlying struct field.
+	DataType     gormschema.DataType // Column type gorm resolved: the type tag when the field carries one, else GORMDataType.
+	GORMDataType gormschema.DataType // Data type gorm reads from the Go type, a Valuer through the value it holds.
+	Index        []int               // Struct field index path, usable with reflect.Value.FieldByIndex.
+	Filterable   bool                // Whether clients may filter on the column through the URL.
+	NotNull      bool                // Whether the schema forbids NULL: a NOT NULL tag or the primary key.
+	PrimaryKey   bool                // Whether the column is part of the model's primary key.
 }
 
 // schemaCache is the parse cache gorm expects; parsing a model type is only
@@ -77,11 +84,13 @@ func Columns(typ reflect.Type) ([]Column, error) {
 	columns := make([]Column, 0, len(parsed.FieldsByDBName))
 	for _, field := range parsed.FieldsByDBName {
 		columns = append(columns, Column{
-			GoName:    field.StructField.Name,
-			QueryName: QueryColumnName(field.StructField),
-			DBName:    field.DBName,
-			Type:      field.FieldType,
-			Index:     field.StructField.Index,
+			GoName:       field.StructField.Name,
+			QueryName:    QueryColumnName(field.StructField),
+			DBName:       field.DBName,
+			Type:         field.FieldType,
+			DataType:     field.DataType,
+			GORMDataType: field.GORMDataType,
+			Index:        field.StructField.Index,
 			// A field hidden from JSON is framework-managed bookkeeping such
 			// as the soft-delete timestamp: it stays a real column, but
 			// clients must not filter on it.

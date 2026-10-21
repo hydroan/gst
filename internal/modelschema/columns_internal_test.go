@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	gormschema "gorm.io/gorm/schema"
 )
 
 // SampleBase mirrors an embedded framework base struct: its fields are lifted
@@ -111,6 +112,25 @@ func TestColumns(t *testing.T) {
 	t.Run("CarriesFieldType", func(t *testing.T) {
 		require.Equal(t, reflect.TypeFor[string](), cols["name"].Type)
 	})
+}
+
+func TestColumnsCarryGormDataTypes(t *testing.T) {
+	// GORMDataType is what gorm reads from the Go type; DataType is the
+	// column type it resolves, which a type tag replaces.
+	type typed struct {
+		ID  string    `gorm:"primaryKey"`
+		At  time.Time `gorm:"type:datetime(6)"`
+		Doc string    `gorm:"type:json"`
+	}
+	parsed, err := Columns(reflect.TypeFor[typed]())
+	require.NoError(t, err)
+	cols := indexByQueryName(parsed)
+	require.Equal(t, gormschema.String, cols["id"].DataType)
+	require.Equal(t, gormschema.String, cols["id"].GORMDataType)
+	require.Equal(t, gormschema.DataType("datetime(6)"), cols["at"].DataType)
+	require.Equal(t, gormschema.Time, cols["at"].GORMDataType)
+	require.Equal(t, gormschema.DataType("json"), cols["doc"].DataType)
+	require.Equal(t, gormschema.String, cols["doc"].GORMDataType)
 }
 
 func TestColumnsReportNotNull(t *testing.T) {

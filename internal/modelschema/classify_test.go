@@ -1,6 +1,7 @@
 package modelschema_test
 
 import (
+	"database/sql"
 	"database/sql/driver"
 	"reflect"
 	"testing"
@@ -75,6 +76,71 @@ func TestClassifyColumn(t *testing.T) {
 	})
 }
 
+// sampleStoredRecord carries a column of each type the column predicates
+// tell apart by the data types gorm reads for its field, beside its Go shape:
+// values held in Valuer wrappers, column types a type tag declares, a JSON
+// type tagged otherwise, a serializer storing text, and a time of day gorm
+// gives the time data type of an instant.
+type sampleStoredRecord struct {
+	ID        string    `gorm:"primaryKey"`
+	At        time.Time `gorm:"type:datetime(6)"`
+	Settled   sql.NullTime
+	Removed   gorm.DeletedAt
+	Day       datatypes.Date
+	Clock     datatypes.Time
+	Closing   *datatypes.Time
+	Count     int
+	Tally     sql.NullInt64
+	Ratio     sql.NullFloat64
+	Flag      sql.NullBool
+	Note      string
+	Doc       datatypes.JSON
+	DocText   string         `gorm:"type:json"`
+	DocBytes  []byte         `gorm:"type:jsonb"`
+	DocTagged datatypes.JSON `gorm:"type:text"`
+	Tags      []string       `gorm:"serializer:json"`
+}
+
+// columnsWhere lists, in name order, the database names of the
+// sampleStoredRecord columns a predicate holds for.
+func columnsWhere(t *testing.T, predicate func(modelschema.Column) bool) []string {
+	t.Helper()
+	columns, err := modelschema.Columns(reflect.TypeFor[sampleStoredRecord]())
+	require.NoError(t, err)
+	names := make([]string, 0)
+	for _, c := range columns {
+		if predicate(c) {
+			names = append(names, c.DBName)
+		}
+	}
+	return names
+}
+
+// TestColumnPredicatesReadGormDataTypes pins that the runtime predicates
+// classify a column by the data types gorm reads for its field, not by its
+// Go shape.
+func TestColumnPredicatesReadGormDataTypes(t *testing.T) {
+	t.Run("Time", func(t *testing.T) {
+		require.Equal(t, []string{"at", "day", "removed", "settled"}, columnsWhere(t, modelschema.IsTimeColumn),
+			"an instant whatever type its tag declares, a day, and the times Valuer wrappers hold")
+	})
+
+	t.Run("TimeOfDay", func(t *testing.T) {
+		require.Equal(t, []string{"clock", "closing"}, columnsWhere(t, modelschema.IsTimeOfDayColumn),
+			"a pointer column holds the pointed-to time of day")
+	})
+
+	t.Run("Numeric", func(t *testing.T) {
+		require.Equal(t, []string{"count", "ratio", "tally"}, columnsWhere(t, modelschema.IsNumericColumn),
+			"the numbers Valuer wrappers hold count, a time of day does not, whatever its Go kind")
+	})
+
+	t.Run("JSON", func(t *testing.T) {
+		require.Equal(t, []string{"doc", "doc_bytes", "doc_tagged", "doc_text"}, columnsWhere(t, modelschema.IsJSONColumn),
+			"a JSON type whatever type its tag declares, and a column a type tag declares JSON; a serializer stores text")
+	})
+}
+
 func TestIsDateType(t *testing.T) {
 	require.True(t, modelschema.IsDateType(reflect.TypeFor[datatypes.Date]()))
 	require.True(t, modelschema.IsDateType(reflect.TypeFor[*datatypes.Date]()), "a pointer column holds the pointed-to day")
@@ -91,41 +157,6 @@ func TestUTCDay(t *testing.T) {
 	require.Equal(t, time.Date(2026, time.January, 2, 0, 0, 0, 0, time.UTC),
 		modelschema.UTCDay(time.Date(2026, time.January, 2, 23, 59, 59, 999, time.UTC)))
 	require.True(t, modelschema.UTCDay(time.Time{}).IsZero(), "the zero time stays zero")
-}
-
-// pointerDataType declares its gorm data type on the pointer receiver, the
-// way a custom wrapper with pointer-based Scan/Value methods would.
-type pointerDataType struct{}
-
-func (*pointerDataType) GormDataType() string { return "JSONB" }
-
-func TestIsJSONType(t *testing.T) {
-	t.Run("JSON", func(t *testing.T) {
-		for _, typ := range []reflect.Type{
-			reflect.TypeFor[datatypes.JSON](),
-			reflect.TypeFor[datatypes.JSONType[map[string]string]](),
-			reflect.TypeFor[datatypes.JSONSlice[string]](),
-			reflect.TypeFor[datatypes.JSONMap](),
-			// A pointer column stores the pointed-to document.
-			reflect.TypeFor[*datatypes.JSONSlice[string]](),
-			// The declaration may hang off the pointer receiver, and the
-			// spelling is case-insensitive.
-			reflect.TypeFor[pointerDataType](),
-		} {
-			require.True(t, modelschema.IsJSONType(typ), typ.String())
-		}
-	})
-
-	t.Run("NotJSON", func(t *testing.T) {
-		for _, typ := range []reflect.Type{
-			reflect.TypeFor[string](), reflect.TypeFor[[]string](),
-			reflect.TypeFor[[]byte](), reflect.TypeFor[gorm.DeletedAt](),
-			reflect.TypeFor[time.Time](),
-		} {
-			require.False(t, modelschema.IsJSONType(typ), typ.String())
-		}
-		require.False(t, modelschema.IsJSONType(nil))
-	})
 }
 
 // sampleStringsDocument is a custom JSON wrapper over a slice of strings: it

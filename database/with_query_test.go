@@ -301,6 +301,14 @@ func TestDatabaseWithQuery(t *testing.T) {
 			require.NoError(t, database.Database[*TestScoredRecord](ctx).WithQuery(query).List(&rows))
 			require.Empty(t, rows)
 		}
+
+		// A string its type tag declares a JSON column holds a document as
+		// much as a JSON type does.
+		t.Cleanup(func() { _ = database.DB().Exec("DELETE FROM test_typed_records").Error })
+		require.NoError(t, database.Database[*TestTypedRecord](ctx).Create(&TestTypedRecord{Label: "typed", Payload: `{"code":"alpha"}`}))
+		typed := make([]*TestTypedRecord, 0)
+		require.NoError(t, database.Database[*TestTypedRecord](ctx).WithQuery(&TestTypedRecord{Label: "typed", Payload: `{"code":"alpha"}`}).List(&typed))
+		require.Empty(t, typed)
 	})
 
 	t.Run("NullableValuesMatchByTheirValue", func(t *testing.T) {

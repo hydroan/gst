@@ -1,6 +1,7 @@
 package urlquery
 
 import (
+	"database/sql"
 	"net/url"
 	"reflect"
 	"testing"
@@ -38,6 +39,22 @@ type filterTestModel struct {
 	Virtual string `json:"virtual" gorm:"-"`
 	// Meta is a JSON document, matched by its text and never compared.
 	Meta datatypes.JSONMap `json:"meta"`
+
+	modelregistry.Query
+	modelregistry.Base
+}
+
+// gormTypedTestModel holds columns whose Go shape does not tell what gorm
+// stores: Valuer wrappers gorm reads through the value they hold, a string
+// its type tag declares a JSON column, and datatypes.Time, a time of day
+// gorm gives the time data type of an instant.
+type gormTypedTestModel struct {
+	Settled sql.NullTime    `json:"settled"`
+	Tally   sql.NullInt64   `json:"tally"`
+	Ratio   sql.NullFloat64 `json:"ratio"`
+	Active  sql.NullBool    `json:"active"`
+	Payload string          `json:"payload" gorm:"type:json"`
+	Clock   datatypes.Time  `json:"clock"`
 
 	modelregistry.Query
 	modelregistry.Base
@@ -375,6 +392,71 @@ func TestFilters(t *testing.T) {
 			"enabled[eq]": {"yes"},
 		}, &filterTestModel{})
 		require.Error(t, err, "non-boolean value must be rejected")
+	})
+
+	t.Run("WrappedTimeFieldAcceptsOnlyRFC3339", func(t *testing.T) {
+		conds, err := Filters(url.Values{"settled[lt]": {"2026-07-01T08:00:00+08:00"}}, &gormTypedTestModel{})
+		require.NoError(t, err)
+		require.Equal(t, []types.Filter{types.NewFilter("", "settled", types.FilterOpLt, "2026-07-01 00:00:00")}, conds,
+			"the time sql.NullTime holds travels as the UTC wall clock like any time")
+
+		for key, value := range map[string]string{"settled[gt]": "1767225600", "settled[like]": "2026"} {
+			_, err := Filters(url.Values{key: {value}}, &gormTypedTestModel{})
+			require.Error(t, err, "%s=%s must be rejected on a time field", key, value)
+		}
+	})
+
+	t.Run("WrappedNumericFieldValidatesValues", func(t *testing.T) {
+		conds, err := Filters(url.Values{"tally[gt]": {"5"}, "ratio[lte]": {"0.5"}}, &gormTypedTestModel{})
+		require.NoError(t, err)
+		require.Equal(t, []types.Filter{
+			types.NewFilter("", "ratio", types.FilterOpLte, "0.5"),
+			types.NewFilter("", "tally", types.FilterOpGt, "5"),
+		}, conds)
+
+		for key, value := range map[string]string{"tally[gt]": "abc", "tally[in]": "1,x", "ratio[lt]": "half"} {
+			_, err := Filters(url.Values{key: {value}}, &gormTypedTestModel{})
+			require.Error(t, err, "%s=%s must be rejected on a numeric field", key, value)
+		}
+	})
+
+	t.Run("WrappedBoolFieldNormalizesAndGatesOps", func(t *testing.T) {
+		conds, err := Filters(url.Values{"active[eq]": {"true"}}, &gormTypedTestModel{})
+		require.NoError(t, err)
+		require.Equal(t, []types.Filter{types.NewFilter("", "active", types.FilterOpEq, true)}, conds)
+
+		for key, value := range map[string]string{"active[eq]": "maybe", "active[gt]": "true"} {
+			_, err := Filters(url.Values{key: {value}}, &gormTypedTestModel{})
+			require.Error(t, err, "%s=%s must be rejected on a bool field", key, value)
+		}
+	})
+
+	t.Run("TypeTaggedJSONFieldMatchesByItsTextAndRefusesComparingIt", func(t *testing.T) {
+		conds, err := Filters(url.Values{"payload[like]": {"alice"}}, &gormTypedTestModel{})
+		require.NoError(t, err)
+		require.Equal(t, []types.Filter{types.NewFilter("", "payload", types.FilterOpLike, "alice")}, conds)
+
+		_, err = Filters(url.Values{"payload[eq]": {"alice"}}, &gormTypedTestModel{})
+		require.EqualError(t, err, `invalid field filter "payload[eq]": operator "eq" is not supported on a JSON field`)
+	})
+
+	t.Run("TimeOfDayFieldAcceptsOnlyATimeOfDay", func(t *testing.T) {
+		conds, err := Filters(url.Values{"clock[gte]": {"09:00:00"}, "clock[lt]": {"17:30:00.5"}}, &gormTypedTestModel{})
+		require.NoError(t, err)
+		require.Equal(t, []types.Filter{
+			types.NewFilter("", "clock", types.FilterOpGte, "09:00:00"),
+			types.NewFilter("", "clock", types.FilterOpLt, "17:30:00.500000000"),
+		}, conds, "the bound is the spelling datatypes.Time stores")
+
+		for key, value := range map[string]string{
+			"clock[gt]":   "2026-01-01T09:00:00Z",
+			"clock[eq]":   "123000",
+			"clock[like]": "09",
+			"clock[in]":   "09:00:00",
+		} {
+			_, err := Filters(url.Values{key: {value}}, &gormTypedTestModel{})
+			require.Error(t, err, "%s=%s must be rejected on a time of day field", key, value)
+		}
 	})
 
 	t.Run("LeavesFrameworkNamespaceAlone", func(t *testing.T) {
@@ -739,6 +821,29 @@ func (cursorUniqueTestModel) Indexes() []modelschema.Index {
 	}
 }
 
+// cursorTypedTestModel pages by columns whose Go shape does not tell what
+// gorm stores: a time held in sql.NullTime, an integer held in sql.NullInt64
+// and a time of day. Each is NOT NULL under a unique index of its own, so a
+// cursor may page by it.
+type cursorTypedTestModel struct {
+	Settled sql.NullTime   `json:"settled" gorm:"not null"`
+	Tally   sql.NullInt64  `json:"tally" gorm:"not null"`
+	Clock   datatypes.Time `json:"clock"`
+
+	modelregistry.Cursor
+	modelregistry.Base
+}
+
+func (cursorTypedTestModel) TableName() string { return "cursor_typed_test_models" }
+
+func (cursorTypedTestModel) Indexes() []modelschema.Index {
+	return []modelschema.Index{
+		{Fields: []string{"Settled"}, Unique: true},
+		{Fields: []string{"Tally"}, Unique: true},
+		{Fields: []string{"Clock"}, Unique: true},
+	}
+}
+
 type cursorAutoTestModel struct {
 	modelregistry.Cursor
 	modelregistry.AutoBase
@@ -851,6 +956,26 @@ func TestCursor(t *testing.T) {
 		}, &cursorUniqueTestModel{})
 		require.NoError(t, err, "a column no two rows share leaves no gap between pages")
 		require.Equal(t, "code", cursor.Order().Column())
+	})
+
+	t.Run("BoundaryFollowsTheTypeGormStores", func(t *testing.T) {
+		cursor := func(field, value string) (types.Cursor, error) {
+			return Cursor(url.Values{"_cursor_value": {value}, "_cursor_next": {"true"}, "_cursor_field": {field}}, &cursorTypedTestModel{})
+		}
+		got, err := cursor("settled", "2026-07-01T08:00:00+08:00")
+		require.NoError(t, err)
+		require.Equal(t, types.CursorForward(types.Asc("settled"), "2026-07-01 00:00:00"), got,
+			"the time sql.NullTime holds is normalized like any time boundary")
+
+		got, err = cursor("clock", "17:30:00.5")
+		require.NoError(t, err)
+		require.Equal(t, types.CursorForward(types.Asc("clock"), "17:30:00.500000000"), got,
+			"a time of day travels in the spelling datatypes.Time stores")
+
+		for field, value := range map[string]string{"settled": "1767225600", "tally": "abc", "clock": "123000"} {
+			_, err := cursor(field, value)
+			require.Error(t, err, "%s cannot hold %q", field, value)
+		}
 	})
 
 	t.Run("PrimaryKeyPasses", func(t *testing.T) {
@@ -975,24 +1100,38 @@ func TestCursor(t *testing.T) {
 
 // TestNormalizeCursorValueFollowsTheColumnType pins the boundary check on
 // the value the column holds, a pointer dereferenced, and on the UTC day a
-// date column compares by.
+// date column compares by; the zero Column, a model without the fallback
+// column, passes the value through.
 func TestNormalizeCursorValueFollowsTheColumnType(t *testing.T) {
-	value, err := normalizeCursorValue(reflect.TypeFor[datatypes.Date](), "2026-01-02T00:00:00+08:00")
+	columns, err := modelschema.Columns(reflect.TypeFor[filterTestModel]())
+	require.NoError(t, err)
+	column := func(name string) modelschema.Column {
+		t.Helper()
+		for _, c := range columns {
+			if c.DBName == name {
+				return c
+			}
+		}
+		t.Fatalf("filterTestModel has no column %q", name)
+		return modelschema.Column{}
+	}
+
+	value, err := normalizeCursorValue(column("day"), "2026-01-02T00:00:00+08:00")
 	require.NoError(t, err)
 	require.Equal(t, "2026-01-01 00:00:00", value, "a date boundary is the UTC day at midnight")
 
-	value, err = normalizeCursorValue(reflect.TypeFor[*time.Time](), "2026-01-02T08:00:00+08:00")
+	value, err = normalizeCursorValue(column("closed_at"), "2026-01-02T08:00:00+08:00")
 	require.NoError(t, err)
 	require.Equal(t, "2026-01-02 00:00:00", value, "an optional time boundary is the UTC wall clock")
 
-	for typ, raw := range map[reflect.Type]string{
-		reflect.TypeFor[*time.Time](): "abc",
-		reflect.TypeFor[*int]():       "abc",
-		reflect.TypeFor[*bool]():      "abc",
-	} {
-		_, err = normalizeCursorValue(typ, raw)
-		require.Error(t, err, "%s cannot hold %q", typ, raw)
+	for _, name := range []string{"closed_at", "retries", "archived"} {
+		_, err = normalizeCursorValue(column(name), "abc")
+		require.Error(t, err, "%s cannot hold %q", name, "abc")
 	}
+
+	value, err = normalizeCursorValue(modelschema.Column{}, "abc")
+	require.NoError(t, err)
+	require.Equal(t, "abc", value)
 }
 
 func TestParseQueryTime(t *testing.T) {

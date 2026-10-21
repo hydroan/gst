@@ -2,6 +2,7 @@ package database_test
 
 import (
 	"context"
+	"database/sql"
 	"slices"
 	"strings"
 	"testing"
@@ -684,6 +685,13 @@ func TestDatabasePatternFiltersOnNumericColumns(t *testing.T) {
 	require.Equal(t, []int{19}, ages(types.NewFilter("", "age", types.FilterOpEndsWith, "9")))
 	require.Equal(t, []int{18, 19}, ages(types.NewFilter("", "age", types.FilterOpRegex, "^1")))
 	require.Equal(t, []int{20}, ages(types.NewFilter("", "age", types.FilterOpNotRegex, "^1")))
+
+	// Inside a subquery the column belongs to the subquery's own table, read
+	// under its alias, and still matches by the number's text form.
+	inSubquery := func(filter types.Filter) types.Filter {
+		return types.FilterExists[*TestUser](types.FilterEqCol("id", "id"), filter)
+	}
+	require.Equal(t, []int{18, 19}, ages(inSubquery(types.NewFilter("", "age", types.FilterOpLike, "1"))))
 }
 
 // TestFilterOrSingleChild is the regression test for a group that collapses to
@@ -845,6 +853,60 @@ func TestDatabaseFiltersOnDateColumns(t *testing.T) {
 			{Bucket: "2026-01-02", Records: 1},
 			{Bucket: "2026-01-03", Records: 1},
 		}, rows)
+	})
+}
+
+// TestDatabaseFiltersFollowTheStoredType pins that the filters read a column
+// by the type gorm stores, not by its Go shape, alike on every dialect: the
+// time sql.NullTime holds compares as a time, the integer sql.NullInt64
+// holds and a string its type tag declares a JSON column match a pattern by
+// their text form, and a time of day compares in the spelling datatypes.Time
+// stores, the bound the URL parser hands over.
+func TestDatabaseFiltersFollowTheStoredType(t *testing.T) {
+	ctx := context.Background()
+	t.Cleanup(func() { _ = database.DB().Exec("DELETE FROM test_typed_records").Error })
+	settled := time.Date(2026, time.July, 1, 8, 0, 0, 0, time.UTC)
+	require.NoError(t, database.Database[*TestTypedRecord](ctx).Create(
+		&TestTypedRecord{
+			Label: "first", Settled: sql.NullTime{Time: settled, Valid: true}, Tally: sql.NullInt64{Int64: 15, Valid: true},
+			Payload: `{"code":"alpha"}`, Clock: datatypes.NewTime(9, 0, 0, 0),
+		},
+		&TestTypedRecord{
+			Label: "second", Settled: sql.NullTime{Time: settled.Add(time.Hour), Valid: true}, Tally: sql.NullInt64{Int64: 27, Valid: true},
+			Payload: `{"code":"beta"}`, Clock: datatypes.NewTime(17, 30, 0, 0),
+		},
+	))
+	labels := func(t *testing.T, f types.Filter) []string {
+		t.Helper()
+		records := make([]*TestTypedRecord, 0)
+		require.NoError(t, database.Database[*TestTypedRecord](ctx).
+			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{f}}).
+			WithOrder(types.Asc("label")).
+			List(&records))
+		labels := make([]string, 0, len(records))
+		for _, r := range records {
+			labels = append(labels, r.Label)
+		}
+		return labels
+	}
+
+	t.Run("AWrappedTimeComparesAsATime", func(t *testing.T) {
+		bound := settled.Format(types.FilterTimeLayout)
+		require.Equal(t, []string{"first"}, labels(t, types.FilterEq("settled", bound)))
+		require.Equal(t, []string{"second"}, labels(t, types.FilterGt("settled", bound)))
+	})
+
+	t.Run("AWrappedNumberMatchesAPatternByItsText", func(t *testing.T) {
+		require.Equal(t, []string{"first"}, labels(t, types.FilterLike("tally", "5")))
+	})
+
+	t.Run("ATypeTaggedJSONColumnMatchesAPatternByItsText", func(t *testing.T) {
+		require.Equal(t, []string{"second"}, labels(t, types.FilterLike("payload", "beta")))
+	})
+
+	t.Run("ATimeOfDayComparesInItsStoredSpelling", func(t *testing.T) {
+		require.Equal(t, []string{"first"}, labels(t, types.FilterEq("clock", "09:00:00")))
+		require.Equal(t, []string{"second"}, labels(t, types.FilterGte("clock", "12:00:00")))
 	})
 }
 

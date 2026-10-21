@@ -11,6 +11,7 @@ import (
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
+	gormschema "gorm.io/gorm/schema"
 )
 
 // Cursor returns the cursor position of the request, ready to be passed to
@@ -52,7 +53,7 @@ func Cursor(q url.Values, m types.Model) (types.Cursor, error) {
 	// layer owns the primary key fallback, so both this path and a service
 	// building a cursor by hand land on the same default.
 	column := ""
-	var columnType reflect.Type
+	var cursorColumn modelschema.Column
 	if field := strings.TrimSpace(q.Get(consts.QUERY_CURSOR_FIELD)); len(field) > 0 {
 		columns, err := modelschema.FilterableIndex(reflect.TypeOf(m))
 		if err != nil {
@@ -74,22 +75,22 @@ func Cursor(q url.Values, m types.Model) (types.Cursor, error) {
 				"cursor column %q is not unique: page by the primary key, or by a NOT NULL column with a unique index of its own", field)
 		}
 		column = resolved.DBName
-		columnType = resolved.Type
+		cursorColumn = resolved
 	} else {
 		// Value validation still resolves the fallback column the database
 		// layer will compare against. The lookup goes by database column name
 		// over the full schema rather than the filterable set, because the
 		// fallback is framework-owned, not client-named. A model without the
-		// column keeps a nil type and the value passes through unvalidated:
-		// such a cursor only means something to a service that queries a
-		// different model with it.
+		// column keeps the zero Column and the value passes through
+		// unvalidated: such a cursor only means something to a service that
+		// queries a different model with it.
 		parsed, err := modelschema.Columns(reflect.TypeOf(m))
 		if err != nil {
 			return types.Cursor{}, err
 		}
 		for _, col := range parsed {
 			if col.DBName == modelregistry.DefaultCursorColumn {
-				columnType = col.Type
+				cursorColumn = col
 				break
 			}
 		}
@@ -99,7 +100,7 @@ func Cursor(q url.Values, m types.Model) (types.Cursor, error) {
 		// boundary to start past.
 		return types.CursorForward(types.Asc(column), ""), nil
 	}
-	value, err := normalizeCursorValue(columnType, value)
+	value, err := normalizeCursorValue(cursorColumn, value)
 	if err != nil {
 		return types.Cursor{}, err
 	}
@@ -131,8 +132,8 @@ func cursorRequested(q url.Values, m types.Model) bool {
 	return q.Has(consts.QUERY_CURSOR_FIELD) || q.Has(consts.QUERY_CURSOR_NEXT) || !modelregistry.IsPaginatable(m)
 }
 
-// normalizeCursorValue checks the boundary value against the Go type of the
-// cursor column and returns the value the SQL comparison binds, mirroring the
+// normalizeCursorValue checks the boundary value against what the cursor
+// column stores and returns the value the SQL comparison binds, mirroring the
 // fail-closed filter semantics: a mistyped "field[op]=value" filter is
 // rejected, so a mistyped cursor value must not fare better. Without the
 // check the raw string reaches the SQL comparison, where MySQL coerces it
@@ -142,33 +143,29 @@ func cursorRequested(q url.Values, m types.Model) bool {
 // A time boundary is not only validated but normalized exactly like a time
 // filter bound (see timeBound): the client spells the boundary in RFC 3339,
 // and the database compares the one wall clock the framework stores on every
-// dialect, the UTC day at midnight for a date column.
+// dialect, the UTC day at midnight for a date column; a time of day boundary
+// is spelled in time.TimeOnly and binds as datatypes.Time stores it.
 //
-// Only types the database coerces lossily are gated: numeric, bool and time
-// columns, a pointer column checked as the type it points to. String and
-// other column types accept any value, and a nil column type (the model
-// cannot resolve the fallback column, see Cursor) keeps the plain
+// Only types the database coerces lossily are gated: numeric, bool, time and
+// time of day columns, read from the data types gorm resolved for the column,
+// so a pointer or a Valuer such as sql.NullInt64 is checked as the value it
+// holds. String and other column types accept any value, and the zero Column
+// (the model cannot resolve the fallback column, see Cursor) keeps the plain
 // passthrough.
-func normalizeCursorValue(columnTyp reflect.Type, value string) (string, error) {
-	if columnTyp == nil {
-		return value, nil
-	}
-	for columnTyp.Kind() == reflect.Pointer {
-		columnTyp = columnTyp.Elem()
-	}
+func normalizeCursorValue(col modelschema.Column, value string) (string, error) {
 	var err error
-	switch class := modelschema.ClassifyColumn(columnTyp); {
-	case class == modelschema.ColumnClassTime:
+	switch {
+	case modelschema.IsTimeColumn(col), modelschema.IsTimeOfDayColumn(col):
 		var bound string
-		if bound, err = timeBound(columnTyp, value); err == nil {
+		if bound, err = timeBound(col, value); err == nil {
 			value = bound
 		}
-	case columnTyp.Kind() == reflect.Bool:
+	case col.GORMDataType == gormschema.Bool:
 		if _, parseErr := strconv.ParseBool(value); parseErr != nil {
 			err = errors.Newf("expect a boolean value, got %q", value)
 		}
-	case class == modelschema.ColumnClassNumeric:
-		err = validateNumericValue(columnTyp.Kind(), value)
+	case modelschema.IsNumericColumn(col):
+		err = validateNumericValue(col.GORMDataType, value)
 	}
 	if err != nil {
 		return "", errors.Wrapf(err, "invalid cursor value")

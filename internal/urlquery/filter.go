@@ -13,6 +13,8 @@ import (
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stoewer/go-strcase"
+	"gorm.io/datatypes"
+	gormschema "gorm.io/gorm/schema"
 )
 
 // Filters extracts field-level operator filters from URL query keys of the
@@ -69,7 +71,7 @@ func Filters(q url.Values, m types.Model) ([]types.Filter, error) {
 		if len(raw) == 0 {
 			continue
 		}
-		value, err := normalizeFilterValue(col.Type, op, raw)
+		value, err := normalizeFilterValue(col, op, raw)
 		if err != nil {
 			return nil, errors.Wrapf(err, "invalid field filter %q", key)
 		}
@@ -123,29 +125,30 @@ func splitFilterKey(key string) (field, op string, ok bool) {
 	return field, op, true
 }
 
-// normalizeFilterValue validates a filter value against the
-// column's Go type and rewrites it into the canonical typed value bound to
-// the statement, so a malformed value is rejected with an error instead of
-// being passed to the database where implicit conversion could silently
-// match the wrong rows. A pointer column holds a value of the pointed-to
-// type and is checked as that type.
+// normalizeFilterValue validates a filter value against what the column
+// stores, read from the data types gorm resolved for it (see
+// modelschema.Column), and rewrites it into the canonical typed value bound
+// to the statement, so a malformed value is rejected with an error instead
+// of being passed to the database where implicit conversion could silently
+// match the wrong rows. A pointer column, or a Valuer such as sql.NullInt64,
+// is checked as the value gorm reads through it.
 //
 //   - isnull applies to any column and requires a boolean value, carried as
 //     a bool; it is handled before the type dispatch below.
-//   - time columns (see modelschema.ClassifyColumn) accept the comparison
-//     operators only; the value must be RFC 3339 and travels as timeBound
-//     renders it.
+//   - time columns (see modelschema.IsTimeColumn) and time of day columns
+//     (see modelschema.IsTimeOfDayColumn) accept the comparison operators
+//     only; the value travels as timeBound renders it.
 //   - bool columns accept eq/ne with a boolean value, carried as a bool.
-//   - numeric columns (see modelschema.ClassifyColumn) require numeric
+//   - numeric columns (see modelschema.IsNumericColumn) require numeric
 //     values; in/notin validate every comma-separated member.
-//   - JSON columns (see modelschema.IsJSONType) accept the like family only,
-//     matching the document's text; a comparison on a document is refused,
-//     since whether two documents compare equal or order is the dialect's
-//     own affair.
+//   - JSON columns (see modelschema.IsJSONColumn) accept the like family
+//     only, matching the document's text; a comparison on a document is
+//     refused, since whether two documents compare equal or order is the
+//     dialect's own affair.
 //   - in/notin values split on commas here, so the members travel as a real
 //     slice: the URL list encoding never reaches the database layer.
 //   - string and other scalar values pass through unchanged.
-func normalizeFilterValue(columnTyp reflect.Type, op types.FilterOp, value string) (any, error) {
+func normalizeFilterValue(col modelschema.Column, op types.FilterOp, value string) (any, error) {
 	// isnull is the only operator whose value type is independent of the
 	// column type: it always carries a boolean and applies to any nullable
 	// column, including time columns the comparison gating below would block.
@@ -156,19 +159,15 @@ func normalizeFilterValue(columnTyp reflect.Type, op types.FilterOp, value strin
 		}
 		return b, nil
 	}
-	for columnTyp.Kind() == reflect.Pointer {
-		columnTyp = columnTyp.Elem()
-	}
-	class := modelschema.ClassifyColumn(columnTyp)
 	switch {
-	case class == modelschema.ColumnClassTime:
+	case modelschema.IsTimeColumn(col), modelschema.IsTimeOfDayColumn(col):
 		switch op {
 		case types.FilterOpEq, types.FilterOpNe, types.FilterOpGt, types.FilterOpGte, types.FilterOpLt, types.FilterOpLte:
-			return timeBound(columnTyp, value)
+			return timeBound(col, value)
 		default:
 			return nil, errors.Newf("operator %q is not supported on a time field", op)
 		}
-	case columnTyp.Kind() == reflect.Bool:
+	case col.GORMDataType == gormschema.Bool:
 		switch op {
 		case types.FilterOpEq, types.FilterOpNe:
 			b, err := strconv.ParseBool(value)
@@ -179,12 +178,12 @@ func normalizeFilterValue(columnTyp reflect.Type, op types.FilterOp, value strin
 		default:
 			return nil, errors.Newf("operator %q is not supported on a bool field", op)
 		}
-	case class == modelschema.ColumnClassNumeric:
+	case modelschema.IsNumericColumn(col):
 		switch op {
 		case types.FilterOpIn, types.FilterOpNotIn:
 			items := strings.Split(value, ",")
 			for _, item := range items {
-				if err := validateNumericValue(columnTyp.Kind(), item); err != nil {
+				if err := validateNumericValue(col.GORMDataType, item); err != nil {
 					return nil, err
 				}
 			}
@@ -194,12 +193,12 @@ func normalizeFilterValue(columnTyp reflect.Type, op types.FilterOp, value strin
 			// the number; the pattern itself is not numeric.
 			return value, nil
 		default:
-			if err := validateNumericValue(columnTyp.Kind(), value); err != nil {
+			if err := validateNumericValue(col.GORMDataType, value); err != nil {
 				return nil, err
 			}
 			return value, nil
 		}
-	case modelschema.IsJSONType(columnTyp):
+	case modelschema.IsJSONColumn(col):
 		switch op {
 		case types.FilterOpLike, types.FilterOpNotLike, types.FilterOpStartsWith, types.FilterOpEndsWith:
 			return value, nil
@@ -218,14 +217,16 @@ func normalizeFilterValue(columnTyp reflect.Type, op types.FilterOp, value strin
 	}
 }
 
-func validateNumericValue(kind reflect.Kind, value string) error {
+// validateNumericValue checks that value spells a number of the data type
+// gorm reads for a numeric column: an integer, an unsigned one, or a float.
+func validateNumericValue(dataType gormschema.DataType, value string) error {
 	var err error
-	switch kind {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+	switch dataType {
+	case gormschema.Int:
 		_, err = strconv.ParseInt(value, 10, 64)
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+	case gormschema.Uint:
 		_, err = strconv.ParseUint(value, 10, 64)
-	case reflect.Float32, reflect.Float64:
+	case gormschema.Float:
 		_, err = strconv.ParseFloat(value, 64)
 	}
 	if err != nil {
@@ -256,13 +257,24 @@ func parseQueryTime(value string) (time.Time, error) {
 // (see modelschema.UTCDay). The canonical string form is kept on purpose:
 // binding time.Time would let the driver re-render the value in its own
 // location, while the string pins the wall clock the parser resolved.
-func timeBound(columnTyp reflect.Type, value string) (string, error) {
+//
+// A time of day column takes its value in time.TimeOnly instead, fractional
+// seconds allowed, and binds it in the spelling datatypes.Time stores, the
+// text SQLite compares: 17:30:00.5 binds as 17:30:00.500000000.
+func timeBound(col modelschema.Column, value string) (string, error) {
+	if modelschema.IsTimeOfDayColumn(col) {
+		t, err := time.Parse(time.TimeOnly, value)
+		if err != nil {
+			return "", errors.Newf("unsupported time of day format %q, expect %s", value, time.TimeOnly)
+		}
+		return datatypes.NewTime(t.Hour(), t.Minute(), t.Second(), t.Nanosecond()).String(), nil
+	}
 	t, err := parseQueryTime(value)
 	if err != nil {
 		return "", err
 	}
 	t = t.UTC()
-	if modelschema.IsDateType(columnTyp) {
+	if modelschema.IsDateType(col.Type) {
 		t = modelschema.UTCDay(t)
 	}
 	return t.Format(types.FilterTimeLayout), nil
