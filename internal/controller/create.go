@@ -106,7 +106,7 @@ func (a *action[M, REQ, RSP]) createFlow(ctx context.Context, newServiceContext 
 	// 2.Create resource in database. Create is a pure INSERT: a primary or
 	// unique key collision (including one held by a soft-deleted row)
 	// surfaces as ErrDuplicatedKey and renders 409.
-	if err := database.Database[M](ctx).WithExpand(req.Expands()).Create(req); err != nil {
+	if err := database.Database[M](ctx).Create(req); err != nil {
 		return failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after create resource

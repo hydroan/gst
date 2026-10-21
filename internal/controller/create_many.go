@@ -101,7 +101,7 @@ func (a *action[M, REQ, RSP]) createManyFlow(ctx context.Context, newServiceCont
 	// 2.Batch create resource in database. Pure INSERT with one transaction
 	// around the batch: any unique-key collision renders 409 and rolls the
 	// whole batch back. A batch without items writes nothing.
-	if err := database.Database[M](ctx).WithExpand(val.Expands()).Create(req.Items...); err != nil {
+	if err := database.Database[M](ctx).Create(req.Items...); err != nil {
 		return failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after batch create resource
