@@ -119,9 +119,29 @@ type sampleTreeRecord struct {
 
 func (sampleTreeRecord) TableName() string { return "sample_tree_records" }
 
+// sampleOwnerRecord holds sampleOwnedRecord rows through a has-many, which
+// gorm registers on sampleOwnedRecord's schema as well, under a hidden name,
+// once it parses the owner.
+type sampleOwnerRecord struct {
+	ID      string               `json:"id" gorm:"primaryKey"`
+	Entries []*sampleOwnedRecord `json:"entries" gorm:"foreignKey:OwnerID"`
+}
+
+func (sampleOwnerRecord) TableName() string { return "sample_owner_records" }
+
+// sampleOwnedRecord is held by a sampleOwnerRecord and declares no
+// association of its own.
+type sampleOwnedRecord struct {
+	ID      string `json:"id" gorm:"primaryKey"`
+	OwnerID string `json:"owner_id"`
+}
+
+func (sampleOwnedRecord) TableName() string { return "sample_owned_records" }
+
 // TestAssociationFieldsListsTheRelationshipFields pins the field paths of a
-// model's associations, the per-type caching, and the nil-on-failure
-// contract.
+// model's associations — the relationships it declares itself, not the ones
+// gorm registers on it for a model holding it — the per-type caching, and
+// the nil-on-failure contract.
 func TestAssociationFieldsListsTheRelationshipFields(t *testing.T) {
 	paths := AssociationFields(reflect.TypeFor[*sampleTreeRecord]())
 	require.Equal(t, [][]int{{3}, {4}}, paths)
@@ -129,6 +149,11 @@ func TestAssociationFieldsListsTheRelationshipFields(t *testing.T) {
 	second := AssociationFields(reflect.TypeFor[sampleTreeRecord]())
 	require.Equal(t, reflect.ValueOf(paths).Pointer(), reflect.ValueOf(second).Pointer(),
 		"pointer and struct type must share one cached list")
+
+	// Resolving the owner first registers its has-many on the owned model's
+	// schema; that entry describes the owner's field.
+	require.Equal(t, [][]int{{1}}, AssociationFields(reflect.TypeFor[sampleOwnerRecord]()))
+	require.Empty(t, AssociationFields(reflect.TypeFor[sampleOwnedRecord]()), "the owner's has-many is no association of the owned model")
 
 	require.Empty(t, AssociationFields(reflect.TypeFor[sampleDocumentRecord]()), "a model without associations has none")
 	require.Nil(t, AssociationFields(reflect.TypeFor[string]()),

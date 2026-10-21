@@ -152,11 +152,11 @@ func NumericColumnSet(typ reflect.Type) map[string]struct{} {
 var associationFieldsCache sync.Map
 
 // AssociationFields reports the struct field index paths of a model type's
-// associations — the fields gorm's schema holds as relationships, a has-many
-// or a belongs-to for one, declared for queries to preload — resolved once
-// per type and cached, in field order; nil for a type whose schema cannot be
-// resolved. Its consumer is the write path, which zeroes them: a write
-// touches the model's own table alone.
+// associations — the relationships its gorm schema holds for the type itself,
+// a has-many or a belongs-to for one, declared for queries to preload —
+// resolved once per type and cached, in field order; nil for a type whose
+// schema cannot be resolved. Its consumer is the write path, which zeroes
+// them: a write touches the model's own table alone.
 func AssociationFields(typ reflect.Type) [][]int {
 	for typ != nil && typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
@@ -170,6 +170,14 @@ func AssociationFields(typ reflect.Type) [][]int {
 		if parsed, err := gormschema.Parse(reflect.New(typ).Interface(), schemaCache, namer); err == nil {
 			paths = make([][]int, 0, len(parsed.Relationships.Relations))
 			for _, rel := range parsed.Relationships.Relations {
+				// Once gorm parses a type holding this one through a has-one
+				// or a has-many, it registers that relationship here too,
+				// under a hidden name, with the holder's field. gorm's own
+				// preload of clause.Associations keeps the relationships
+				// whose schema is the type's, and so does this list.
+				if rel.Schema != parsed {
+					continue
+				}
 				paths = append(paths, rel.Field.StructField.Index)
 			}
 			slices.SortFunc(paths, slices.Compare)
