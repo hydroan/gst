@@ -1017,3 +1017,25 @@ type TestOwnedEntry struct {
 }
 
 func (*TestOwnedEntry) TableName() string { return "test_owned_entries" }
+
+// TestHolderRecord holds TestHeldEntry rows through a has-many, so parsing it
+// writes into TestHeldEntry's cached schema. Both are registered: a handle
+// parses every registered model before its first chain.
+type TestHolderRecord struct {
+	Name    string           `json:"name" gorm:"size:191"`
+	Entries []*TestHeldEntry `json:"entries,omitempty" gorm:"foreignKey:HolderID;constraint:-"`
+
+	modelregistry.Base
+}
+
+func (*TestHolderRecord) TableName() string { return "test_holder_records" }
+
+// TestHeldEntry is held by a TestHolderRecord.
+type TestHeldEntry struct {
+	HolderID string `json:"holder_id" gorm:"size:191"`
+	Name     string `json:"name" gorm:"size:191"`
+
+	modelregistry.Base
+}
+
+func (*TestHeldEntry) TableName() string { return "test_held_entries" }

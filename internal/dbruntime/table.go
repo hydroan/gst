@@ -37,6 +37,16 @@ func prepareTable(db *gorm.DB, m types.Model) {
 
 	begin := time.Now()
 	typ := reflect.TypeOf(m).Elem()
+	// gorm parses a model on its first use, and parsing one that holds
+	// another through a has-one or a has-many writes into the held model's
+	// cached schema under a lock the statements reading that schema never
+	// take, so a first use beside writes of the held model can panic inside
+	// gorm. Parsing every registered model here, in the handle's schema cache
+	// and in modelschema's, makes those writes before the server takes its
+	// first request. A model that cannot be parsed reports that on its first
+	// use.
+	_ = (&gorm.Statement{DB: db}).Parse(m)
+	_, _ = modelschema.Columns(typ)
 	if err := ensureTable(db, m); err != nil {
 		// Recorded rather than panicked: preparation runs on a goroutine of
 		// its own, where a panic ends the process where it stands — the

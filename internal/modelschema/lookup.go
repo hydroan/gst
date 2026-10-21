@@ -168,6 +168,10 @@ func AssociationFields(typ reflect.Type) [][]int {
 	var paths [][]int
 	if typ != nil && typ.Kind() == reflect.Struct {
 		if parsed, err := gormschema.Parse(reflect.New(typ).Interface(), schemaCache, namer); err == nil {
+			// gorm writes into these relationships under this lock when it
+			// parses a type holding this one; the walk takes the lock too, or
+			// a parse running beside it could hand it an entry half written.
+			parsed.Relationships.Mux.RLock()
 			paths = make([][]int, 0, len(parsed.Relationships.Relations))
 			for _, rel := range parsed.Relationships.Relations {
 				// Once gorm parses a type holding this one through a has-one
@@ -180,6 +184,7 @@ func AssociationFields(typ reflect.Type) [][]int {
 				}
 				paths = append(paths, rel.Field.StructField.Index)
 			}
+			parsed.Relationships.Mux.RUnlock()
 			slices.SortFunc(paths, slices.Compare)
 		}
 	}

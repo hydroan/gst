@@ -488,10 +488,42 @@ func DatabaseOn[M types.Model](ctx context.Context, instance *gorm.DB) types.Dat
 	return databaseFor[M](ctx, instance)
 }
 
+// parsedHandles records the opened databases whose schema cache holds every
+// registered model, keyed by their callbacks registry: gorm.Open makes it
+// once per database alongside the schema cache, and every session and
+// transaction derived from the database shares both, while each of them gets
+// a configuration of its own.
+var parsedHandles sync.Map
+
+// parseRegisteredModels parses every registered model in the handle's schema
+// cache before the handle's first chain runs, the first caller parsing while
+// the others wait. gorm parses a model on its first use, and parsing one that
+// holds another through a has-one or a has-many writes into the held model's
+// cached schema under a lock the statements reading that schema never take,
+// so a first use beside writes of the held model can panic inside gorm. Table
+// preparation parses the default database's models at startup (see
+// dbruntime), so this pass finds them parsed there; an application-held
+// instance gets them here. A model gorm cannot parse reports that on its
+// first use.
+func parseRegisteredModels(handle *gorm.DB) {
+	key := handle.Callback()
+	once, ok := parsedHandles.Load(key)
+	if !ok {
+		once, _ = parsedHandles.LoadOrStore(key, new(sync.Once))
+	}
+	once.(*sync.Once).Do(func() { //nolint:errcheck
+		for _, m := range modelregistry.RegisteredModels() {
+			_ = (&gorm.Statement{DB: handle}).Parse(m)
+		}
+	})
+}
+
 // databaseFor builds the operation chain for one entry-point call: it joins
 // the context-carried transaction keyed by the given connection handle when
 // present, and stamps the chain with that handle as its identity.
 func databaseFor[M types.Model](ctx context.Context, base *gorm.DB) types.Database[M] {
+	parseRegisteredModels(base)
+
 	// A nil context is a defect of the chain, reported by its first terminal
 	// operation like the other defects below; the chain is still built, on
 	// a context of its own, so every call on it stays safe.

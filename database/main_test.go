@@ -43,6 +43,8 @@ func TestMain(m *testing.M) {
 			modelregistry.Register[*TestAccount]()
 			modelregistry.Register[*TestMarkedRecord]()
 			modelregistry.Register[*TestScoredRecord]()
+			modelregistry.Register[*TestHolderRecord]()
+			modelregistry.Register[*TestHeldEntry]()
 		},
 	})
 }

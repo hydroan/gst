@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
@@ -53,6 +54,52 @@ func TestDatabaseOnNilInstancePanics(t *testing.T) {
 	require.Panics(t, func() {
 		_ = database.DatabaseOn[*TestUser](context.Background(), nil)
 	})
+}
+
+// TestDatabaseOnParsesTheRegisteredModelsBeforeTheFirstChain pins that a
+// handle has every registered model parsed in its schema cache before its
+// first chain runs. gorm parses a model on its first use, and parsing one
+// that holds another writes into the held model's cached schema, which every
+// write of the held model reads; parsed up front, the holder's first read
+// runs beside writes of the held model without writing into what they read.
+// The race detector, which make test runs under, reports the read otherwise.
+func TestDatabaseOnParsesTheRegisteredModelsBeforeTheFirstChain(t *testing.T) {
+	ins := newInstance(t, "on_parsed.db")
+	ctx := context.Background()
+
+	// The instance's first chain writes the held model alone.
+	first := make([]types.SQLStatement, 0)
+	require.NoError(t, database.DatabaseOn[*TestHeldEntry](ctx, ins).WithDryRun(&first).Create(&TestHeldEntry{Name: "first"}))
+	stmt := &gorm.Statement{DB: ins}
+	require.NoError(t, stmt.Parse(&TestHeldEntry{}))
+	holders := make([]string, 0)
+	for _, rel := range stmt.Schema.Relationships.Relations {
+		if rel.Schema != stmt.Schema {
+			holders = append(holders, rel.Schema.Name)
+		}
+	}
+	require.Equal(t, []string{"TestHolderRecord"}, holders, "the holder was parsed with the instance's first chain")
+
+	stop := make(chan struct{})
+	written := make(chan struct{})
+	go func() {
+		defer close(written)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			beside := make([]types.SQLStatement, 0)
+			_ = database.DatabaseOn[*TestHeldEntry](ctx, ins).WithDryRun(&beside).Create(&TestHeldEntry{Name: "beside"})
+		}
+	}()
+	read := make([]types.SQLStatement, 0)
+	rows := make([]*TestHolderRecord, 0)
+	require.NoError(t, database.DatabaseOn[*TestHolderRecord](ctx, ins).WithDryRun(&read).List(&rows))
+	time.Sleep(50 * time.Millisecond)
+	close(stop)
+	<-written
 }
 
 func TestSelectOn(t *testing.T) {

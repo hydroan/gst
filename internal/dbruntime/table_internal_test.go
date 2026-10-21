@@ -3,6 +3,7 @@ package dbruntime
 import (
 	"context"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -352,6 +353,59 @@ func TestWaitReportsATableThePreparationCouldNotGet(t *testing.T) {
 	err := Wait()
 	require.ErrorContains(t, err, "failed to prepare table")
 	require.ErrorContains(t, err, "must declare an explicit table name")
+}
+
+// holderRecord holds heldRecord rows through a has-many, so parsing it
+// writes into heldRecord's cached schema.
+type holderRecord struct {
+	Entries []*heldRecord `gorm:"foreignKey:HolderID"`
+
+	modelregistry.Base
+}
+
+func (*holderRecord) TableName() string { return "holder_records" }
+
+// heldRecord is held by a holderRecord.
+type heldRecord struct {
+	HolderID string
+
+	modelregistry.Base
+}
+
+func (*heldRecord) TableName() string { return "held_records" }
+
+// TestPrepareTableParsesTheModelWithoutAutoMigrate pins that preparation
+// parses every model in the handle's schema cache even where it only checks
+// that the table exists: parsing a model that holds another writes into the
+// held model's cached schema, and done here those writes come before the
+// server's first statement instead of beside one.
+func TestPrepareTableParsesTheModelWithoutAutoMigrate(t *testing.T) {
+	forgetPreparationFailure(t)
+	db := newSQLiteDB(t)
+	withAutoMigrate(t, false)
+	withSqlite(t, config.Sqlite{Path: "data.db"})
+	// The tables exist, made around gorm so that nothing is parsed yet.
+	require.NoError(t, db.Exec("CREATE TABLE held_records (id TEXT PRIMARY KEY)").Error)
+	require.NoError(t, db.Exec("CREATE TABLE holder_records (id TEXT PRIMARY KEY)").Error)
+
+	modelregistry.Register[*heldRecord]()
+	<-modelregistry.TableChan
+	prepareTable(db, &heldRecord{})
+	modelregistry.Register[*holderRecord]()
+	<-modelregistry.TableChan
+	prepareTable(db, &holderRecord{})
+	require.NoError(t, preparationFailed())
+
+	stmt := &gorm.Statement{DB: db}
+	require.NoError(t, stmt.Parse(&heldRecord{}))
+	holders := make([]reflect.Type, 0)
+	for _, rel := range stmt.Schema.Relationships.Relations {
+		if rel.Schema != stmt.Schema {
+			holders = append(holders, rel.Schema.ModelType)
+		}
+	}
+	require.Equal(t, []reflect.Type{reflect.TypeFor[holderRecord]()}, holders,
+		"preparing the holder parsed it, so its has-many sits on the held model's schema already")
 }
 
 // forgetPreparationFailure clears the failure the preparation recorded, on

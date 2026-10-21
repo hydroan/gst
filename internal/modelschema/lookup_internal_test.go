@@ -159,3 +159,49 @@ func TestAssociationFieldsListsTheRelationshipFields(t *testing.T) {
 	require.Nil(t, AssociationFields(reflect.TypeFor[string]()),
 		"a type without resolvable columns yields nil, not an error")
 }
+
+// sampleHolderRecord holds sampleHeldRecord rows through a has-many, so
+// parsing it writes into sampleHeldRecord's cached schema.
+type sampleHolderRecord struct {
+	ID      string              `json:"id" gorm:"primaryKey"`
+	Entries []*sampleHeldRecord `json:"entries" gorm:"foreignKey:HolderID"`
+}
+
+func (sampleHolderRecord) TableName() string { return "sample_holder_records" }
+
+// sampleHeldRecord is held by a sampleHolderRecord.
+type sampleHeldRecord struct {
+	ID       string `json:"id" gorm:"primaryKey"`
+	HolderID string `json:"holder_id"`
+}
+
+func (sampleHeldRecord) TableName() string { return "sample_held_records" }
+
+// TestAssociationFieldsWalksUnderTheSchemaLock pins that the walk over a
+// type's relationships takes the lock gorm writes them under: parsing a
+// holder registers its has-many on the held type's schema, and here that
+// parse runs while another goroutine keeps resolving the held type. The race
+// detector, which make test runs under, reports a walk without the lock.
+func TestAssociationFieldsWalksUnderTheSchemaLock(t *testing.T) {
+	held := reflect.TypeFor[sampleHeldRecord]()
+	require.Empty(t, AssociationFields(held))
+
+	stop := make(chan struct{})
+	walked := make(chan struct{})
+	go func() {
+		defer close(walked)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			associationFieldsCache.Delete(held)
+			AssociationFields(held)
+		}
+	}()
+	require.Equal(t, [][]int{{1}}, AssociationFields(reflect.TypeFor[sampleHolderRecord]()))
+	time.Sleep(50 * time.Millisecond)
+	close(stop)
+	<-walked
+}
