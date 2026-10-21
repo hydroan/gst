@@ -10,6 +10,7 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/consts"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
@@ -112,14 +113,15 @@ func UpdateCall[M types.Model](route string) func(ctx context.Context, params ma
 // the database layer instead of a pre-read: a missing or soft-deleted record
 // surfaces as database.ErrRecordNotFound and renders 404, and a unique-key
 // collision renders 409. The UpdateBefore service hook therefore runs before
-// existence is known. After a successful write the flow backfills the
-// creation audit columns (created_at/created_by) from the persisted row,
-// keeping the rest of req intact so hook-populated fields survive; req is the
-// replacement answered. The id req carries is replaced by id, which must not
-// be empty (see setID): SetID keeps an id already set, so the one the body
-// carries is cleared first, or the replacement would land on the record it
-// names; an id the model rejects answers 404 (see notFound) without
-// touching the database.
+// existence is known. After a successful write, and before the hook after
+// it, the flow reads the record back from the primary and backfills the
+// columns an update leaves alone, the creation audit among them (see
+// backfillUnwrittenColumns), keeping the rest of req intact so
+// hook-populated fields survive; req is the replacement answered. The id req
+// carries is replaced by id, which must not be empty (see setID): SetID
+// keeps an id already set, so the one the body carries is cleared first, or
+// the replacement would land on the record it names; an id the model rejects
+// answers 404 (see notFound) without touching the database.
 func (a *action[M, REQ, RSP]) updateFlow(ctx context.Context, newServiceContext serviceContextFunc, id string, req M) error {
 	log := logger.Controller.WithContext(ctx, consts.Update)
 	svc := a.service()
@@ -146,24 +148,21 @@ func (a *action[M, REQ, RSP]) updateFlow(ctx context.Context, newServiceContext 
 	if err := database.Database[M](ctx).Update(req); err != nil {
 		return failDatabase(ctx, log, err)
 	}
+	// The columns the update left alone hold whatever the client sent; they
+	// are read back as stored, from the primary, before the hook after the
+	// write sees them (see backfillUnwrittenColumns). On a reload failure
+	// keep req as is: the update itself already committed.
+	reloaded := a.newModel()
+	if reloadErr := database.Database[M](ctx).WithReplica(false).Get(reloaded, id); reloadErr != nil {
+		log.Warnz("reload the columns the update leaves alone failed", zap.Error(reloadErr))
+	} else {
+		backfillUnwrittenColumns(a.typ, reflect.ValueOf(req).Elem(), reflect.ValueOf(reloaded).Elem())
+	}
 	// 3.Perform business logic processing after update resource.
 	if err := a.traceServiceHook(ctx, consts.UpdateAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
 		return svc.UpdateAfter(sc, req)
 	}); err != nil {
 		return failService(ctx, log, err)
-	}
-	// Backfill the creation audit columns from the persisted row: Update
-	// never writes created_at/created_by, so the request object holds
-	// whatever the client sent. Only these two fields are copied — the
-	// response keeps req so values populated by service hooks (including
-	// non-persistent fields) survive. On a reload failure keep req as is:
-	// the update itself already committed.
-	reloaded := a.newModel()
-	if reloadErr := database.Database[M](ctx).Get(reloaded, id); reloadErr != nil {
-		log.Warnz("reload audit columns failed", zap.Error(reloadErr))
-	} else {
-		req.SetCreatedAt(reloaded.GetCreatedAt())
-		req.SetCreatedBy(reloaded.GetCreatedBy())
 	}
 
 	// 4.record operation log to database.
@@ -182,4 +181,30 @@ func (a *action[M, REQ, RSP]) updateFlow(ctx context.Context, newServiceContext 
 		log.Warnz("record operation log failed", zap.Error(err))
 	}
 	return nil
+}
+
+// backfillUnwrittenColumns copies onto dst, from stored, the columns an
+// update leaves alone, those gorm writes on insert only or never (see
+// modelschema.Column.Updatable), the creation audit among them: dst holds
+// what the request carried for them, which the database did not take, and an
+// update answers what is stored. The columns an update writes keep dst's
+// values, so what a hook set on them stands, and so do the fields no column
+// stores.
+func backfillUnwrittenColumns(typ reflect.Type, dst, stored reflect.Value) {
+	columns, err := modelschema.Columns(typ)
+	if err != nil {
+		return
+	}
+	for _, col := range columns {
+		if col.Updatable {
+			continue
+		}
+		value, err := stored.FieldByIndexErr(col.Index)
+		if err != nil {
+			continue
+		}
+		if target := fieldByIndexAllocating(dst, col.Index); target.IsValid() && target.CanSet() {
+			target.Set(value)
+		}
+	}
 }

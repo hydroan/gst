@@ -188,6 +188,25 @@ func TestColumnsCarryGormDataTypes(t *testing.T) {
 	require.Equal(t, gormschema.String, cols["doc"].GORMDataType)
 }
 
+func TestColumnsReportUpdatable(t *testing.T) {
+	// An update writes the columns gorm writes on update: not one written on
+	// insert only, nor a read-only one.
+	type sealed struct {
+		ID    string `gorm:"primaryKey"`
+		Name  string
+		Code  string `gorm:"<-:create"`
+		Mark  string `gorm:"->"`
+		Stamp string `gorm:"<-:update"`
+	}
+	parsed, err := Columns(reflect.TypeFor[sealed]())
+	require.NoError(t, err)
+	cols := indexByQueryName(parsed)
+	require.True(t, cols["name"].Updatable)
+	require.False(t, cols["code"].Updatable)
+	require.False(t, cols["mark"].Updatable)
+	require.True(t, cols["stamp"].Updatable)
+}
+
 func TestColumnsReportNotNull(t *testing.T) {
 	// The schema forbids NULL on a NOT NULL column and on the primary key,
 	// whatever the Go type could hold.

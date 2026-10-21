@@ -16,6 +16,7 @@ import (
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/requestctx"
+	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
@@ -32,7 +33,36 @@ type flowSample struct {
 
 func (flowSample) TableName() string { return "controller_flow_samples" }
 
-func init() { modelregistry.Register[*flowSample]() }
+// sealedFlowSample carries a column gorm writes on insert only, which an
+// update leaves as stored whatever the request carries.
+type sealedFlowSample struct {
+	Name string `json:"name"`
+	Code string `json:"code" gorm:"size:191;<-:create"`
+
+	modelregistry.Base
+}
+
+func (sealedFlowSample) TableName() string { return "controller_sealed_flow_samples" }
+
+// sealedAfterHook records the code the hook after an update reads. sealedAfter
+// is its one instance, registered once for the process, so a rerun of the
+// test clears it and reads its own call.
+type sealedAfterHook struct {
+	serviceregistry.Base[*sealedFlowSample, *sealedFlowSample, *sealedFlowSample]
+	seen string
+}
+
+func (h *sealedAfterHook) UpdateAfter(_ *types.ServiceContext, m *sealedFlowSample) error {
+	h.seen = m.Code
+	return nil
+}
+
+var sealedAfter = &sealedAfterHook{}
+
+func init() {
+	modelregistry.Register[*flowSample]()
+	modelregistry.Register[*sealedFlowSample]()
+}
 
 // plainServiceContext builds the service contexts of a flow run outside any
 // HTTP request, the way a transport other than HTTP will.
@@ -54,6 +84,71 @@ func TestCreateFlowRunsOnRequestMetadataAlone(t *testing.T) {
 	require.NotEmpty(t, record.GetID())
 	require.Equal(t, "u-flow", record.GetCreatedBy())
 	require.Equal(t, "u-flow", record.GetUpdatedBy())
+}
+
+// TestUpdateFlowsAnswerTheColumnsAnUpdateLeavesAsStored pins what the update
+// flows answer for a column gorm writes on insert only: the value stored, not
+// the one the request carried, which the database did not take. The hook
+// after the write reads the stored value too, and a patch never applies the
+// column at all.
+func TestUpdateFlowsAnswerTheColumnsAnUpdateLeavesAsStored(t *testing.T) {
+	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "flow-user", UserID: "u-flow"}))
+	stored := func(t *testing.T) *sealedFlowSample {
+		t.Helper()
+		record := &sealedFlowSample{Name: uniqueFlowName("sealed"), Code: "original"}
+		require.NoError(t, database.Database[*sealedFlowSample](ctx).Create(record))
+		return record
+	}
+	forged := func(id, name string) *sealedFlowSample {
+		item := &sealedFlowSample{Name: name, Code: "forged"}
+		item.SetID(id)
+		return item
+	}
+
+	t.Run("Update", func(t *testing.T) {
+		registerTestService[*sealedFlowSample, *sealedFlowSample, *sealedFlowSample](consts.Update, "sealed-flow-samples", sealedAfter)
+		sealedAfter.seen = ""
+		a := newAction[*sealedFlowSample, *sealedFlowSample, *sealedFlowSample]("sealed-flow-samples", consts.Update, consts.UpdateBefore, consts.UpdateAfter)
+		record := stored(t)
+		req := &sealedFlowSample{Name: "updated", Code: "forged"}
+
+		require.NoError(t, a.updateFlow(ctx, plainServiceContext, record.GetID(), req))
+		require.Equal(t, "updated", req.Name)
+		require.Equal(t, "original", req.Code, "the update left the code as stored, and the answer says so")
+		require.Equal(t, "original", sealedAfter.seen, "the hook after the write reads the stored code")
+		require.True(t, req.GetCreatedAt().Equal(record.GetCreatedAt()))
+	})
+
+	t.Run("UpdateMany", func(t *testing.T) {
+		a := newAction[*sealedFlowSample, *sealedFlowSample, *sealedFlowSample]("sealed-flow-samples", consts.UpdateMany, consts.UpdateManyBefore, consts.UpdateManyAfter)
+		record := stored(t)
+		req := batch[*sealedFlowSample]{Items: []*sealedFlowSample{forged(record.GetID(), "updated")}}
+
+		require.NoError(t, a.updateManyFlow(ctx, plainServiceContext, &req))
+		require.Equal(t, "updated", req.Items[0].Name)
+		require.Equal(t, "original", req.Items[0].Code)
+	})
+
+	t.Run("Patch", func(t *testing.T) {
+		a := newAction[*sealedFlowSample, *sealedFlowSample, *sealedFlowSample]("sealed-flow-samples", consts.Patch, consts.PatchBefore, consts.PatchAfter)
+		record := stored(t)
+
+		patched, err := a.patchFlow(ctx, plainServiceContext, record.GetID(), forged("", "patched"), patchFieldSet{"Name": {}, "Code": {}})
+		require.NoError(t, err)
+		require.Equal(t, "patched", patched.Name)
+		require.Equal(t, "original", patched.Code)
+	})
+
+	t.Run("PatchMany", func(t *testing.T) {
+		a := newAction[*sealedFlowSample, *sealedFlowSample, *sealedFlowSample]("sealed-flow-samples", consts.PatchMany, consts.PatchManyBefore, consts.PatchManyAfter)
+		record := stored(t)
+		req := batch[*sealedFlowSample]{Items: []*sealedFlowSample{forged(record.GetID(), "patched")}}
+
+		rsp, err := a.patchManyFlow(ctx, plainServiceContext, &req, []patchFieldSet{{"Name": {}, "Code": {}}})
+		require.NoError(t, err)
+		require.Equal(t, "patched", rsp.Items[0].Name)
+		require.Equal(t, "original", rsp.Items[0].Code)
+	})
 }
 
 // TestGetFlowAnswersNotFoundAsAServiceError pins how a flow reports a

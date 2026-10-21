@@ -241,6 +241,40 @@ func TestPatchFieldSetsLeaveThePrimaryKeyOut(t *testing.T) {
 	require.Equal(t, "after", oldRecord.Name)
 }
 
+// patchFieldsSealedRecord carries a column gorm writes on insert only and a
+// read-only one, neither of which an update writes.
+type patchFieldsSealedRecord struct {
+	ID   string `json:"id" gorm:"primaryKey"`
+	Name string `json:"name"`
+	Code string `json:"code" gorm:"<-:create"`
+	Mark string `json:"mark" gorm:"->"`
+}
+
+// TestPatchFieldSetsLeaveTheColumnsAnUpdateLeavesAloneOut pins that no patch
+// applies a column an update does not write: a body key or a mask path
+// naming it names no field, a mask naming it alone is refused, and the
+// patched record keeps the stored value, the way it keeps the framework's
+// audit columns.
+func TestPatchFieldSetsLeaveTheColumnsAnUpdateLeavesAloneOut(t *testing.T) {
+	typ := reflect.TypeFor[patchFieldsSealedRecord]()
+
+	fields, err := patchFieldSetFromJSONBody(typ, []byte(`{"code":"forged","mark":"forged","name":"renamed"}`))
+	require.NoError(t, err)
+	require.Equal(t, patchFieldSet{"Name": {}}, fields)
+
+	fields, err = maskFieldSet(typ, []string{"code", "mark", "name"})
+	require.NoError(t, err)
+	require.Equal(t, patchFieldSet{"Name": {}}, fields)
+
+	_, err = maskFieldSet(typ, []string{"code"})
+	require.EqualError(t, err, "update_mask must name at least one field a patch applies")
+
+	oldRecord := &patchFieldsSealedRecord{ID: "kept", Name: "before", Code: "original", Mark: "stored"}
+	newRecord := &patchFieldsSealedRecord{Name: "after", Code: "forged", Mark: "forged"}
+	applyPatch(nopControllerLogger{}, typ, reflect.ValueOf(oldRecord).Elem(), reflect.ValueOf(newRecord).Elem())
+	require.Equal(t, patchFieldsSealedRecord{ID: "kept", Name: "after", Code: "original", Mark: "stored"}, *oldRecord)
+}
+
 func TestApplyPatchAppliesExplicitZeroValues(t *testing.T) {
 	typ := reflect.TypeFor[patchFieldsRecord]()
 	oldRecord := &patchFieldsRecord{

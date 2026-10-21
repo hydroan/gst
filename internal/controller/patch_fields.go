@@ -3,6 +3,7 @@ package controller
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"reflect"
 	"slices"
@@ -12,6 +13,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"go.uber.org/zap"
 )
@@ -81,8 +83,8 @@ func (fields patchFieldSet) covers(name string) bool {
 }
 
 // patchFieldTables caches the table of each model type: the table is read
-// off the struct tags alone, so it is computed once per type and read-only
-// from then on.
+// off the type alone, its struct tags and the columns gorm resolves from
+// them, so it is computed once per type and read-only from then on.
 var patchFieldTables sync.Map // reflect.Type -> *patchFieldTable
 
 // frameworkBases are the framework's base types, whose fields the framework
@@ -100,9 +102,10 @@ var frameworkBases = map[reflect.Type]struct{}{
 // picks, the shallower, or the tagged one at the same depth, and neither
 // when still tied. The keys are what tell fields apart, as they do for
 // encoding/json, not their Go names, which Go's own visibility goes by.
-// Left out are the fields of the framework's base types, and a field named
-// ID at any depth: the primary key names the record patched and moves it
-// nowhere. Their keys are kept as the ones the framework manages.
+// Left out are the fields of the framework's base types, a field named ID at
+// any depth, as the primary key names the record patched and moves it
+// nowhere, and a column an update leaves alone, one gorm writes on insert
+// only or never. Their keys are kept as the ones the framework manages.
 func patchFieldsOf(typ reflect.Type) *patchFieldTable {
 	if cached, ok := patchFieldTables.Load(typ); ok {
 		return cached.(*patchFieldTable) //nolint:errcheck
@@ -114,6 +117,17 @@ func patchFieldsOf(typ reflect.Type) *patchFieldTable {
 	candidates := make(map[string][]candidate)
 	var keys []string
 	managed := make(map[string]struct{})
+	// The columns an update leaves alone, by index path: a patch applying one
+	// would answer a value the write never takes (see
+	// backfillUnwrittenColumns), so their keys are managed ones too.
+	unwritten := make(map[string]struct{})
+	if columns, err := modelschema.Columns(typ); err == nil {
+		for _, col := range columns {
+			if !col.Updatable {
+				unwritten[fmt.Sprint(col.Index)] = struct{}{}
+			}
+		}
+	}
 	// The walk is encoding/json's typeFields, which it does not export:
 	// breadth first, a level per depth of embedding, over every field a
 	// struct holds, so that two fields Go hides behind one name are the two
@@ -176,7 +190,7 @@ func patchFieldsOf(typ reflect.Type) *patchFieldTable {
 				if !field.IsExported() || name == "-" {
 					continue
 				}
-				if field.Name == consts.FIELD_ID {
+				if _, alone := unwritten[fmt.Sprint(index)]; alone || field.Name == consts.FIELD_ID {
 					managed[jsonKey(field)] = struct{}{}
 					continue
 				}
@@ -386,7 +400,8 @@ func patchFieldSetFromJSONFields(typ reflect.Type, fields map[string]json.RawMes
 // maskFieldSet returns the fields of typ the paths of an update mask name,
 // as the message names them, the JSON keys of the model: what a Patch rpc
 // applies of the values it carries. A path naming a field the framework
-// manages, the primary key or the audit columns, is passed over, the way
+// manages, the primary key, the audit columns or another column an update
+// leaves alone, is passed over, the way
 // the HTTP handler passes over the key, and the way a mask naming an
 // output-only field is read (AIP-161, AIP-203). Every other path must name
 // a field the patch applies, as a whole: a path into a field, address.city,

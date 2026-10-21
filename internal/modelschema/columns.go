@@ -44,6 +44,7 @@ type Column struct {
 	Filterable   bool                // Whether clients may filter on the column through the URL.
 	NotNull      bool                // Whether the schema forbids NULL: a NOT NULL tag or the primary key.
 	PrimaryKey   bool                // Whether the column is part of the model's primary key.
+	Updatable    bool                // Whether an update writes the column: gorm writes none it writes on insert only (<-:create) or never.
 }
 
 // schemaCache is the parse cache gorm expects; parsing a model type is only
@@ -98,6 +99,7 @@ func Columns(typ reflect.Type) ([]Column, error) {
 			Filterable: !hidden,
 			NotNull:    field.NotNull || field.PrimaryKey,
 			PrimaryKey: field.PrimaryKey,
+			Updatable:  field.Updatable,
 		})
 	}
 	sort.Slice(columns, func(i, j int) bool { return columns[i].DBName < columns[j].DBName })

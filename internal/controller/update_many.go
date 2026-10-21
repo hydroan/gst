@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"reflect"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
@@ -86,7 +87,8 @@ func UpdateManyCall[M types.Model](route string) func(ctx context.Context, param
 // a batch naming one record twice (see repeatedID) and an item naming no
 // record (see itemWithoutID) with 400, runs the batch update hooks around
 // the write and records the operation. The items are req's own, as the
-// write and the hooks left them, with the creation audit as stored.
+// write and the hooks left them, with the columns an update leaves alone, the
+// creation audit among them, as stored (see backfillUnwrittenColumns).
 func (a *action[M, REQ, RSP]) updateManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *batch[M]) error {
 	log := logger.Controller.WithContext(ctx, consts.UpdateMany)
 	svc := a.service()
@@ -117,27 +119,25 @@ func (a *action[M, REQ, RSP]) updateManyFlow(ctx context.Context, newServiceCont
 	if err := database.Database[M](ctx).Update(req.Items...); err != nil {
 		return failDatabase(ctx, log, err)
 	}
+	// The columns the update left alone hold whatever the client sent; they
+	// are read back as stored, in one statement from the primary, before the
+	// hook after the write sees them (see backfillUnwrittenColumns). On a
+	// reload failure the items stay as they are: the update itself already
+	// committed.
+	if stored, reloadErr := a.recordsByID(database.Database[M](ctx).WithReplica(false), req.itemIDs()); reloadErr != nil {
+		log.Warnz("reload the columns the update leaves alone failed", zap.Error(reloadErr))
+	} else {
+		for _, m := range req.Items {
+			if record, ok := stored[m.GetID()]; ok {
+				backfillUnwrittenColumns(a.typ, reflect.ValueOf(m).Elem(), reflect.ValueOf(record).Elem())
+			}
+		}
+	}
 	// 3.Perform business logic processing after batch update resource.
 	if err := a.traceServiceHook(ctx, consts.UpdateManyAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
 		return svc.UpdateManyAfter(sc, req.Items...)
 	}); err != nil {
 		return failService(ctx, log, err)
-	}
-	// Backfill the creation audit columns from the persisted rows, read in
-	// one statement from the primary: Update never writes
-	// created_at/created_by, so each item holds whatever the client sent.
-	// Only these two fields are copied, so the values the hooks set survive.
-	// On a reload failure the items stay as they are: the update itself
-	// already committed.
-	if stored, reloadErr := a.recordsByID(database.Database[M](ctx).WithReplica(false), req.itemIDs()); reloadErr != nil {
-		log.Warnz("reload audit columns failed", zap.Error(reloadErr))
-	} else {
-		for _, m := range req.Items {
-			if record, ok := stored[m.GetID()]; ok {
-				m.SetCreatedAt(record.GetCreatedAt())
-				m.SetCreatedBy(record.GetCreatedBy())
-			}
-		}
 	}
 
 	// 4.record operation log to database.
