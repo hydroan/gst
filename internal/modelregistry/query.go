@@ -23,7 +23,7 @@ type Query struct {
 	Cursor
 
 	Expand *string `json:"-" gorm:"-" query:"_expand" url:"_expand,omitempty"`   // Expand lists model associations to preload, separated by commas.
-	Depth  *uint   `json:"-" gorm:"-" query:"_depth" url:"_depth,omitempty"`     // Depth controls recursive expansion depth for expandable slice fields.
+	Depth  *uint   `json:"-" gorm:"-" query:"_depth" url:"_depth,omitempty"`     // Depth is how many levels an expanded association holding the model itself, the children of a tree, is preloaded to; any other association is one level.
 	SortBy string  `json:"-" gorm:"-" query:"_sort_by" url:"_sort_by,omitempty"` // SortBy is the comma-separated ORDER BY expression; the List controller validates its columns and turns it into typed orders.
 }
 

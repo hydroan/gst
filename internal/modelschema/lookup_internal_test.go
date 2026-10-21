@@ -168,6 +168,24 @@ type sampleOwnedRecord struct {
 
 func (sampleOwnedRecord) TableName() string { return "sample_owned_records" }
 
+// TestRecursiveAssociationsListsTheToManyHoldingTheTypeItself pins which
+// associations an expanding depth repeats: a has-many or many-to-many
+// holding the model itself, the Children of a tree, and not a single-valued
+// one holding it, a has-many of another model, or what gorm registers on a
+// held model for the one holding it.
+func TestRecursiveAssociationsListsTheToManyHoldingTheTypeItself(t *testing.T) {
+	type samplePeerRecord struct {
+		ID    string              `gorm:"primaryKey"`
+		Peers []*samplePeerRecord `gorm:"many2many:sample_peer_links"`
+	}
+
+	require.Equal(t, map[string]struct{}{"Children": {}}, RecursiveAssociations(reflect.TypeFor[*sampleTreeRecord]()))
+	require.Equal(t, map[string]struct{}{"Peers": {}}, RecursiveAssociations(reflect.TypeFor[samplePeerRecord]()))
+	require.Empty(t, RecursiveAssociations(reflect.TypeFor[sampleOwnerRecord]()))
+	require.Empty(t, RecursiveAssociations(reflect.TypeFor[sampleOwnedRecord]()))
+	require.Nil(t, RecursiveAssociations(reflect.TypeFor[string]()), "a type without a resolvable schema has none")
+}
+
 // TestAssociationFieldsListsTheRelationshipFields pins the field paths of a
 // model's associations — the relationships it declares itself, not the ones
 // gorm registers on it for a model holding it — the per-type caching, and

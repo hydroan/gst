@@ -5,11 +5,11 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/stoewer/go-strcase"
@@ -102,34 +102,16 @@ func checkCursorOrderConflict(cursor types.Cursor, orders []types.Order) error {
 // fanning out unbounded database work.
 const maxExpandDepth = 10
 
-// modelFieldKindsCache caches the field-name-to-kind mapping per model type.
-// The mapping is pure type information, so it is computed once per type
-// instead of on every expanding request; cached maps are read-only.
-var modelFieldKindsCache sync.Map // reflect.Type -> map[string]reflect.Kind
-
-// cachedModelFieldKinds returns the struct field kinds of the type keyed by
-// field name, computing and caching them on first use. parseExpandQuery uses
-// the kinds to repeat slice associations for recursive preloading.
-func cachedModelFieldKinds(typ reflect.Type) map[string]reflect.Kind {
-	if cached, ok := modelFieldKindsCache.Load(typ); ok {
-		return cached.(map[string]reflect.Kind) //nolint:errcheck
-	}
-	fieldKinds := make(map[string]reflect.Kind, typ.NumField())
-	for field := range typ.Fields() {
-		fieldKinds[field.Name] = field.Type.Kind()
-	}
-	modelFieldKindsCache.Store(typ, fieldKinds)
-	return fieldKinds
-}
-
 // parseExpandQuery resolves the _expand and _depth parameters of the parsed
 // query against the model's expandable association paths. Expand names are
 // matched against m.Expands() ignoring case and snake case punctuation, so
 // "childItems" and "child_items" both select "ChildItems"; "_expand=all"
 // selects every expandable path. _depth (default 1; a value outside 1 to
-// maxExpandDepth falls back to 1) repeats slice associations for recursive
-// preloading, e.g. expand "Children" with depth 3 becomes
-// "Children.Children.Children"; non-slice associations ignore depth.
+// maxExpandDepth falls back to 1) repeats the to-many associations holding
+// the model itself for recursive preloading (see
+// modelschema.RecursiveAssociations), e.g. expand "Children" with depth 3
+// becomes "Children.Children.Children"; every other association ignores
+// depth, its rows having no such association to descend into.
 func parseExpandQuery(query url.Values, m types.Model) []string {
 	if !query.Has(consts.QUERY_EXPAND) {
 		return nil
@@ -155,17 +137,10 @@ func parseExpandQuery(query url.Values, m types.Model) []string {
 		}
 	}
 
-	fieldsMap := cachedModelFieldKinds(reflect.TypeOf(m).Elem())
+	recursive := modelschema.RecursiveAssociations(reflect.TypeOf(m))
 	var expands []string
 	for _, e := range matched {
-		// If the expanding field does not exist in the structure fields, skip depth expand.
-		kind, found := fieldsMap[e]
-		if !found {
-			expands = append(expands, e)
-			continue
-		}
-		// If the expanding field exists in the structure but the kind is not slice, skip depth expand.
-		if kind != reflect.Slice {
+		if _, ok := recursive[e]; !ok {
 			expands = append(expands, e)
 			continue
 		}

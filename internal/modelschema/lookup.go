@@ -193,3 +193,42 @@ func AssociationFields(typ reflect.Type) [][]int {
 	associationFieldsCache.Store(typ, paths)
 	return paths
 }
+
+// recursiveAssociationsCache memoizes the recursive associations per model
+// type.
+var recursiveAssociationsCache sync.Map
+
+// RecursiveAssociations reports, by field name, the to-many associations of
+// a model type that hold the type itself — gorm's self-referential has-many
+// and many-to-many, the Children of a tree — resolved once per type and
+// cached; nil for a type whose schema cannot be resolved. Its consumer is the
+// depth of an expanding request, which repeats only these: the rows of any
+// other association are of a model with no such association to descend
+// into.
+func RecursiveAssociations(typ reflect.Type) map[string]struct{} {
+	for typ != nil && typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	if cached, ok := recursiveAssociationsCache.Load(typ); ok {
+		return cached.(map[string]struct{}) //nolint:errcheck
+	}
+
+	var names map[string]struct{}
+	if typ != nil && typ.Kind() == reflect.Struct {
+		if parsed, err := gormschema.Parse(reflect.New(typ).Interface(), schemaCache, namer); err == nil {
+			names = make(map[string]struct{})
+			// The relationships the type holds for itself, read under the
+			// schema lock; see AssociationFields.
+			parsed.Relationships.Mux.RLock()
+			for name, rel := range parsed.Relationships.Relations {
+				toMany := rel.Type == gormschema.HasMany || rel.Type == gormschema.Many2Many
+				if toMany && rel.Schema == parsed && rel.FieldSchema == parsed {
+					names[name] = struct{}{}
+				}
+			}
+			parsed.Relationships.Mux.RUnlock()
+		}
+	}
+	recursiveAssociationsCache.Store(typ, names)
+	return names
+}

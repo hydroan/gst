@@ -253,15 +253,29 @@ func TestCheckCursorOrderConflict(t *testing.T) {
 	})
 }
 
+// expandQueryTestModel is a self-referencing tree: Children, ChildItems and
+// Parent hold the model itself through ParentID, while Entries holds rows of
+// another model.
 type expandQueryTestModel struct {
-	Children   []*expandQueryTestModel
-	Parent     *expandQueryTestModel
-	ChildItems []*expandQueryTestModel
+	ParentID   string                  `gorm:"size:191"`
+	Children   []*expandQueryTestModel `gorm:"foreignKey:ParentID"`
+	Parent     *expandQueryTestModel   `gorm:"foreignKey:ParentID;references:ID"`
+	ChildItems []*expandQueryTestModel `gorm:"foreignKey:ParentID"`
+	Entries    []*expandQueryTestEntry `gorm:"foreignKey:OwnerID"`
 
 	modelregistry.Base
 }
 
-func (*expandQueryTestModel) Expands() []string { return []string{"Children", "Parent", "ChildItems"} }
+func (*expandQueryTestModel) Expands() []string {
+	return []string{"Children", "Parent", "ChildItems", "Entries"}
+}
+
+// expandQueryTestEntry is held by expandQueryTestModel and holds nothing.
+type expandQueryTestEntry struct {
+	OwnerID string `gorm:"size:191"`
+
+	modelregistry.Base
+}
 
 func TestParseExpandQuery(t *testing.T) {
 	t.Run("DepthRepeatsSliceExpand", func(t *testing.T) {
@@ -274,9 +288,16 @@ func TestParseExpandQuery(t *testing.T) {
 		require.Equal(t, []string{"Parent"}, parseExpandQuery(c.Request.URL.Query(), &expandQueryTestModel{}))
 	})
 
+	t.Run("AnAssociationOfAnotherModelIgnoresDepth", func(t *testing.T) {
+		// An entry holds no entries: repeating the association would name a
+		// relation the entry's model does not have, which gorm refuses.
+		c := newTestGetContext(t, "/items?_expand=Entries&_depth=3")
+		require.Equal(t, []string{"Entries"}, parseExpandQuery(c.Request.URL.Query(), &expandQueryTestModel{}))
+	})
+
 	t.Run("AllSelectsEveryModelExpand", func(t *testing.T) {
 		c := newTestGetContext(t, "/items?_expand=all")
-		require.Equal(t, []string{"Children", "Parent", "ChildItems"}, parseExpandQuery(c.Request.URL.Query(), &expandQueryTestModel{}))
+		require.Equal(t, []string{"Children", "Parent", "ChildItems", "Entries"}, parseExpandQuery(c.Request.URL.Query(), &expandQueryTestModel{}))
 	})
 
 	t.Run("ExpandMatchesCaseInsensitively", func(t *testing.T) {

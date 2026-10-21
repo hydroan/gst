@@ -48,7 +48,7 @@ func init() {
 	apidoc.Register("github.com/hydroan/gst/internal/modelregistry", "Query", apidoc.StructDoc{
 		Comment: "Query declares framework-owned HTTP query parameters for list-style\ncontroller actions.\n\nEmbedding Query in a model is an explicit opt-in: the model can still expose\nits own fields as query filters through query tags, while Query enables the\nstandard List controls, including offset pagination, cursor pagination,\nsorting, expansion, and field-level operator filters (\"field[op]=value\",\ncovering substring matching via like/notlike and time or numeric ranges via\nthe comparison operators). Query already embeds Pagination and Cursor, so\nmodels that embed Query must not embed those structs again.\n\nQuery covers every framework List control; there is no second opt-in to add.\n\nEvery field is ignored by JSON and GORM. The query tags are intentionally\nkept here because the List controller decodes URL query parameters into the\nrequest model before applying those controls; GORM ignoring the fields is\nwhat keeps these controller-only values out of the WHERE clauses a query\nmodel builds.",
 		Fields: map[string]string{
-			"Depth":  "Depth controls recursive expansion depth for expandable slice fields.",
+			"Depth":  "Depth is how many levels an expanded association holding the model itself, the children of a tree, is preloaded to; any other association is one level.",
 			"Expand": "Expand lists model associations to preload, separated by commas.",
 			"SortBy": "SortBy is the comma-separated ORDER BY expression; the List controller validates its columns and turns it into typed orders.",
 		},

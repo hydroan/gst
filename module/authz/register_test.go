@@ -249,6 +249,32 @@ func TestAuthzMenu(t *testing.T) {
 			require.GreaterOrEqual(t, list.Total, 0)
 		})
 
+		t.Run("get_expands_children_to_the_depth", func(t *testing.T) {
+			// Children holds the menu itself, so a depth repeats it: the
+			// levels of the tree below the menu come back from one request.
+			create := func(parentID, label string) string {
+				t.Helper()
+				rsp, err := cli.Post[authz.Menu](t.Context(), menuPath, &authz.Menu{ParentID: parentID, Label: label, Path: "/" + label})
+				require.NoError(t, err)
+				return rsp.ID
+			}
+			childID := create(menuID, "depth-child")
+			grandchildID := create(childID, "depth-grandchild")
+			t.Cleanup(func() {
+				for _, id := range []string{grandchildID, childID} {
+					_, err := cli.Delete[struct{}](context.Background(), menuPath+"/"+id, nil)
+					require.NoError(t, err)
+				}
+			})
+
+			rsp, err := cli.Get[authz.Menu](t.Context(), menuPath+"/"+menuID, client.WithExpand("Children", 3))
+			require.NoError(t, err)
+			require.Len(t, rsp.Children, 1)
+			require.Equal(t, childID, rsp.Children[0].ID)
+			require.Len(t, rsp.Children[0].Children, 1)
+			require.Equal(t, grandchildID, rsp.Children[0].Children[0].ID)
+		})
+
 		t.Run("delete", func(t *testing.T) {
 			_, err := cli.Delete[struct{}](t.Context(), menuPath+"/"+menuID, nil)
 			require.NoError(t, err, "delete should return success")
