@@ -18,7 +18,7 @@ import (
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
 	"github.com/hydroan/gst/internal/modelschema"
-	gormschema "gorm.io/gorm/schema"
+	"github.com/stoewer/go-strcase"
 )
 
 // VersionFieldDeclaration holds model.Version declarations to the optimistic-
@@ -206,10 +206,9 @@ type TagInsertion struct {
 	Text   string
 }
 
-// TagInsertions expands one healable finding into its byte insertions. The
-// json name for a field without any json section follows gorm's naming
-// strategy, so the wire name matches the column name a bare field gets.
-// Applied to the file, the insertions heal
+// TagInsertions expands one healable finding into its byte insertions. A
+// field without any json section is given its wire name (see
+// versionJSONName). Applied to the file, the insertions heal
 //
 //	Version model.Version
 //	Revision model.Version `json:"revision" gorm:"not null"`
@@ -249,10 +248,12 @@ func (finding VersionFieldFinding) TagInsertions() []TagInsertion {
 	return insertions
 }
 
-// versionJSONName renders the wire name a healed json section uses: version
-// for the field Version.
+// versionJSONName renders the wire name a healed json section uses, the
+// snake_case of the field name, as URL parameters and the json tag naming
+// check derive it too (see modelschema.QueryColumnName): version for the
+// field Version, https_version for HTTPSVersion.
 func versionJSONName(fieldName string) string {
-	return gormschema.NamingStrategy{}.ColumnName("", fieldName)
+	return strcase.SnakeCase(fieldName)
 }
 
 // scanVersionFieldFile reports every deviating model.Version declaration in

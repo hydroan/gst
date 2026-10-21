@@ -109,14 +109,38 @@ func TestVersionDeclarationEnforcement(t *testing.T) {
 	}
 	require.Panics(t, func() { modelschema.IsVersioned(&hiddenVersionRecord{}) })
 
-	// The compliant shape passes, whitespace and case tolerated, and a bare
-	// json:",omitempty" (wire name from the field) is compliant too.
+	// The compliant shape passes as gorm reads the tag: a key in any case
+	// with spaces around it, a value trimmed, and notnull as well as not
+	// null; a bare json:",omitempty" (wire name from the field) is compliant
+	// too.
 	type tolerantTagRecord struct {
-		Version modelschema.Version `json:",omitempty" gorm:"NOT  NULL; default: 1"`
+		Version modelschema.Version `json:",omitempty" gorm:" Not Null ; default: 1"`
 
 		modelregistry.Base
 	}
 	require.True(t, modelschema.IsVersioned(&tolerantTagRecord{}))
+	type joinedTagRecord struct {
+		Version modelschema.Version `json:"version,omitempty" gorm:"notnull;default:1"`
+
+		modelregistry.Base
+	}
+	require.True(t, modelschema.IsVersioned(&joinedTagRecord{}))
+
+	// gorm reads no not null from a key with spaces of its own inside, nor
+	// from one a semicolon escaped as \; keeps inside a comment: the column
+	// would be nullable, so first touch fails.
+	type spacedTagRecord struct {
+		Version modelschema.Version `json:"version,omitempty" gorm:"not  null;default:1"`
+
+		modelregistry.Base
+	}
+	require.Panics(t, func() { modelschema.IsVersioned(&spacedTagRecord{}) })
+	type commentedTagRecord struct {
+		Version modelschema.Version `json:"version,omitempty" gorm:"comment:a\\;not null;default:1"`
+
+		modelregistry.Base
+	}
+	require.Panics(t, func() { modelschema.IsVersioned(&commentedTagRecord{}) })
 }
 
 func TestVersionValueRoundTrip(t *testing.T) {

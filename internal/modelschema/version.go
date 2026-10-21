@@ -5,6 +5,9 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+
+	gormschema "gorm.io/gorm/schema"
+	"gorm.io/gorm/utils"
 )
 
 // Version is the optimistic-locking column type. A model opts in by declaring
@@ -187,28 +190,22 @@ func versionFieldOf(m any) versionField {
 }
 
 // VersionGormTagMissing reports which of the two required gorm tag settings
-// the Version field lacks. Matching is case-insensitive and
-// whitespace-tolerant, but the requirement itself is exact: `not null` and
-// `default:1` are the only shape the contract accepts (see the Version
-// documentation for why the default is load-bearing).
+// the Version field lacks: `not null` and `default:1`, the settings the
+// contract asks for (see the Version documentation for why the default is
+// load-bearing). The tag is read the way gorm reads it, through gorm's own
+// parser: not null is the NOT NULL or NOTNULL key holding anything but
+// false, so notnull counts and a key with spaces of its own inside
+// ("not  null") does not, and default:1 is a DEFAULT that reads 1 once
+// trimmed. gorm exports the parser but not these readings, so the two
+// conditions follow schema.Field's NotNull and DefaultValue.
 func VersionGormTagMissing(tag reflect.StructTag) []string {
-	hasNotNull, hasDefault := false, false
-	for part := range strings.SplitSeq(tag.Get("gorm"), ";") {
-		if strings.EqualFold(strings.Join(strings.Fields(part), " "), "not null") {
-			hasNotNull = true
-			continue
-		}
-		if key, value, ok := strings.Cut(part, ":"); ok &&
-			strings.EqualFold(strings.TrimSpace(key), "default") && strings.TrimSpace(value) == "1" {
-			hasDefault = true
-		}
-	}
+	settings := gormschema.ParseTagSetting(tag.Get("gorm"), ";")
 
 	var missing []string
-	if !hasNotNull {
+	if !utils.CheckTruth(settings["NOT NULL"], settings["NOTNULL"]) {
 		missing = append(missing, "not null")
 	}
-	if !hasDefault {
+	if strings.TrimSpace(settings["DEFAULT"]) != "1" {
 		missing = append(missing, "default:1")
 	}
 	return missing

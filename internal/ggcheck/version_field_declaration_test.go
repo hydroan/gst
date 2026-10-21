@@ -16,7 +16,9 @@ func TestVersionFieldDeclaration(t *testing.T) {
 	writeCheckProjectGoMod(t, projectDir)
 
 	// An embedded Version and a bare named field are both deviations; a
-	// compliant field and an unrelated local Version type are not.
+	// compliant field and an unrelated local Version type are not. The gorm
+	// tag is read the way gorm reads it: notnull is its not null as well,
+	// while a key with spaces of its own inside is no not null at all.
 	writeCheckFile(t, filepath.Join(projectDir, "model", "document", "document.go"), `package document
 
 import "github.com/hydroan/gst/model"
@@ -60,6 +62,22 @@ type Hidden struct {
 }
 
 func (Hidden) TableName() string { return "hiddens" }
+
+type Joined struct {
+	Version model.Version `+"`json:\"version,omitempty\" gorm:\"notnull;default:1\"`"+`
+
+	model.Base
+}
+
+func (Joined) TableName() string { return "joineds" }
+
+type Spaced struct {
+	Version model.Version `+"`json:\"version,omitempty\" gorm:\"not  null;default:1\"`"+`
+
+	model.Base
+}
+
+func (Spaced) TableName() string { return "spaceds" }
 `)
 	writeCheckFile(t, filepath.Join(projectDir, "model", "document", "aliased.go"), `package document
 
@@ -118,8 +136,8 @@ type UpdateReq struct {
 		}
 		t.Fatalf("expected a violation containing %q, got %#v", substr, violations)
 	}
-	if len(violations) != 6 {
-		t.Fatalf("expected 6 violations, got %#v", violations)
+	if len(violations) != 7 {
+		t.Fatalf("expected 7 violations, got %#v", violations)
 	}
 	require("struct 'Embedded' embeds model.Version")
 	require("field 'Bare.Version' (model.Version) is missing gorm not null, gorm default:1, json omitempty")
@@ -127,6 +145,7 @@ type UpdateReq struct {
 	require("field 'Aliased.Revision' (model.Version) is missing gorm not null, gorm default:1, json omitempty")
 	require("field 'Dotted.Rev' (model.Version) is missing gorm not null, gorm default:1, json omitempty")
 	require("field 'Hidden.Version' (model.Version) carries json:\"-\"")
+	require("field 'Spaced.Version' (model.Version) is missing gorm not null;")
 }
 
 func TestVersionFieldDeclarationActionTypes(t *testing.T) {
@@ -214,7 +233,9 @@ type StrayReq struct {
 // TestVersionFieldFindingsHealThroughTagInsertions pins what gg gen writes for
 // a deviating model.Version field of a database model: a field without a tag
 // gains the whole tag, and a partial tag gains only the settings it lacks.
-// The two fields are the example of the doc comment of TagInsertions.
+// The Sample and Record fields are the example of the doc comment of
+// TagInsertions; the Entry field, named after an initialism, the example of
+// versionJSONName.
 func TestVersionFieldFindingsHealThroughTagInsertions(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
@@ -237,6 +258,16 @@ import "github.com/hydroan/gst/model"
 type Record struct {
 	model.Base
 	Revision model.Version `+"`json:\"revision\" gorm:\"not null\"`"+`
+}
+`)
+	entryPath := filepath.Join("model", "entry", "entry.go")
+	writeCheckFile(t, filepath.Join(projectDir, entryPath), `package entry
+
+import "github.com/hydroan/gst/model"
+
+type Entry struct {
+	model.Base
+	HTTPSVersion model.Version
 }
 `)
 
@@ -263,6 +294,7 @@ type Record struct {
 	want := map[string]string{
 		samplePath: "\tVersion model.Version `json:\"version,omitempty\" gorm:\"not null;default:1\"`\n",
 		recordPath: "\tRevision model.Version `json:\"revision,omitempty\" gorm:\"not null;default:1\"`\n",
+		entryPath:  "\tHTTPSVersion model.Version `json:\"https_version,omitempty\" gorm:\"not null;default:1\"`\n",
 	}
 	if len(healed) != len(want) {
 		t.Fatalf("healed files = %d, want %d: %v", len(healed), len(want), findings)
