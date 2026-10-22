@@ -71,7 +71,11 @@ func ParseReplicaEndpoint(endpoint string) (host string, port uint, err error) {
 //   - a role observer stamps each statement's context with the node role
 //     that served it, which the SQL logger surfaces as db_role and the
 //     active span records as db.role — with replicas in play, "which node
-//     answered this query" must never be a guess;
+//     answered this query" must never be a guess. The resolver's own
+//     TraceResolverMode cannot do this: it only prefixes the logged SQL
+//     text with [source] or [replica], keeps the role under a context key
+//     it does not export, and leaves the statements of a transaction
+//     unmarked;
 //   - the handle's nodes are registered under the pinned handle pointer, so
 //     database.Stats and the pool metrics see every pool;
 //   - the returned handle carries the Write pin that keeps reads on the

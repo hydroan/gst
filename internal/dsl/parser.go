@@ -66,8 +66,8 @@ func Parse(file *ast.File) map[string]*Design {
 	// declare stays nil; Range visits the declared ones.
 	for name, design := range m {
 		// Default endpoint is the pluralized snake_case form of the model name,
-		// matching the RESTful convention and the default table naming,
-		// e.g. "SampleRecord" becomes "sample_records".
+		// matching the RESTful convention, e.g. "SampleRecord" becomes
+		// "sample_records".
 		if len(design.Endpoint) == 0 {
 			design.Endpoint = strcase.SnakeCase(pluralizeCli.Plural(name))
 		}
