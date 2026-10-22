@@ -116,13 +116,15 @@ func (nestedSample) TableName() string { return "controller_nested_samples" }
 // the UTC day on both transports, in a record and in a filter alike, and a
 // filter on either column is checked against the value the column holds. It
 // also carries a JSON document, which a filter matches by its text and never
-// compares, and a number, which a filter matches by its text as well.
+// compares, a number, which a filter matches by its text as well, and a time
+// of day, which a body sends in time.TimeOnly.
 type datedSample struct {
 	Name     string            `json:"name"`
 	Day      datatypes.Date    `json:"day"`
 	ClosedAt *time.Time        `json:"closed_at"`
 	Meta     datatypes.JSONMap `json:"meta"`
 	Count    int               `json:"count"`
+	Clock    datatypes.Time    `json:"clock"`
 
 	modelregistry.Query
 	modelregistry.Base
@@ -554,6 +556,14 @@ func requireDatedDay(t *testing.T, id string, want time.Time) {
 	record := new(datedSample)
 	require.NoError(t, database.Database[*datedSample](context.Background()).Get(record, id))
 	require.True(t, time.Time(record.Day).Equal(want), "stored day %s, want %s", time.Time(record.Day), want)
+}
+
+// countDatedNamed counts the stored dated samples named name.
+func countDatedNamed(t *testing.T, name string) int {
+	t.Helper()
+	var total int
+	require.NoError(t, database.Database[*datedSample](context.Background()).WithQuery(&datedSample{Name: name}).Count(&total))
+	return total
 }
 
 // shapedDueAt is the time the shaped samples are stored with, to the second

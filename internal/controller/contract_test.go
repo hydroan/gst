@@ -123,6 +123,30 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
+			// A time of day travels as a duration since midnight over gRPC, so
+			// what a duration says is what is compared: a fraction of a second
+			// kept as written on both. A spelling HTTP alone carries, abc or
+			// 17:30, is HTTP's to refuse (see TestCreateReadsATimeOfDayAsWritten).
+			name: "Create stores a time of day with the fraction of a second it names", fixture: dated, phase: consts.Create,
+			input: contractInput{record: map[string]any{"name": uniqueName("contract-clock"), "clock": "17:30:00.5"}},
+			want:  ok,
+			check: func(t *testing.T, _ contractInput, got contractAnswer) {
+				t.Helper()
+				require.Equal(t, "17:30:00.500000000", dataMap(t, got)["clock"])
+			},
+		},
+		{
+			// A duration of a whole day or more is no time of day, and nothing
+			// is stored for it.
+			name: "Create refuses a time of day past the end of a day", fixture: dated, phase: consts.Create,
+			input: contractInput{record: map[string]any{"name": uniqueName("contract-clock-overflow"), "clock": "25:00:00"}},
+			want:  contractWant{status: http.StatusBadRequest, msg: "invalid value for field 'clock'"},
+			check: func(t *testing.T, in contractInput, _ contractAnswer) {
+				t.Helper()
+				require.Zero(t, countDatedNamed(t, stringOf(in.record["name"])))
+			},
+		},
+		{
 			// The tenant is the caller's, stamped when the record is written:
 			// a tenant the record names is ignored on both transports, a
 			// generated FromProto not even reading it.

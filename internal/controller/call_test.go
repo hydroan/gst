@@ -3,9 +3,12 @@ package controller_test
 import (
 	"context"
 	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"maps"
 	"net"
 	"net/http"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -17,6 +20,7 @@ import (
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/grpcserver"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
@@ -32,6 +36,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
+	"gorm.io/datatypes"
 )
 
 // The tests of the call functions run them the way a project's generated
@@ -1035,10 +1040,11 @@ func field[T any](in map[string]any, key string) T {
 
 // fromProto converts raw, the record or the item a message carries, into T
 // through its JSON shape, the way a generated FromProto converts a message
-// into its model, refusing a value a field cannot hold the way one does
-// (see grpc.Narrow): with the status of types.NewInvalidValue naming the
-// field as encoding/json names it. A message carrying none, nil, is the nil
-// model. It reads tenant_id as well, which a generated FromProto leaves
+// into its model, a time of day as the duration it names (see
+// timeOfDayAsDuration), refusing a value a field cannot hold the way one
+// does (see grpc.Narrow): with the status of types.NewInvalidValue naming
+// the field as encoding/json names it. A message carrying none, nil, is the
+// nil model. It reads tenant_id as well, which a generated FromProto leaves
 // out; the framework stamps the caller's tenant either way, so no answer
 // differs.
 func fromProto[T any](raw any) (T, error) {
@@ -1050,7 +1056,7 @@ func fromProto[T any](raw any) (T, error) {
 	if err != nil {
 		panic(err)
 	}
-	if err = json.Unmarshal(encoded, &value); err != nil {
+	if err = jsonv2.Unmarshal(encoded, &value, json.DefaultOptionsV1(), timeOfDayAsDuration); err != nil {
 		var typeErr *json.UnmarshalTypeError
 		if errors.As(err, &typeErr) {
 			return value, grpcserver.StatusError(types.NewInvalidValue(typeErr.Field, typeErr.Value+" does not fit the field", err))
@@ -1059,6 +1065,33 @@ func fromProto[T any](raw any) (T, error) {
 	}
 	return value, nil
 }
+
+// timeOfDayAsDuration is the decoding option fromProto reads a time of day
+// with. A message carries one as a duration since midnight, which a
+// generated FromProto reads through grpc.TimeOfDay, refusing a duration
+// outside a day, while a record of the contract table spells it as HTTP
+// does. The spellings time.TimeOnly takes name exactly the durations within
+// a day, 17:30:00.5 the 63000.5 seconds a gRPC client sends for it, so a
+// spelling is read through modelschema.ParseTimeOfDay, and one naming a
+// duration past the end of a day, 25:00:00, is refused naming the field,
+// the way grpc.TimeOfDay refuses 25 hours. A null is a duration the message
+// leaves unset, read as none.
+var timeOfDayAsDuration = jsonv2.WithUnmarshalers(jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, t *datatypes.Time) error {
+	value, err := dec.ReadValue()
+	if err != nil || value.Kind() == jsontext.KindNull {
+		return err
+	}
+	text, err := jsontext.AppendUnquote(nil, value)
+	if err != nil {
+		return err
+	}
+	since, err := modelschema.ParseTimeOfDay(string(text))
+	if err != nil {
+		return &jsonv2.SemanticError{JSONPointer: dec.StackPointer(), JSONKind: value.Kind(), GoType: reflect.TypeFor[datatypes.Time](), Err: err}
+	}
+	*t = datatypes.Time(since)
+	return nil
+}))
 
 // itemsFromProto converts the items a batch message carries into models the
 // way the generated handler of a CreateMany or UpdateMany rpc does: each

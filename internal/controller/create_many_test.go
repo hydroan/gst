@@ -52,6 +52,21 @@ func TestCreateManyRefusesAnItemFailingValidation(t *testing.T) {
 	require.Contains(t, rsp.Body.String(), `"msg":"items[0].name is a required field"`, "the null entry is dropped before the items are validated")
 }
 
+// TestCreateManyRefusesATimeOfDayAnItemCannotHold pins that a time of day an
+// item carries in a form other than time.TimeOnly refuses the whole batch
+// with 400 naming the item's field, and the item beside it is not stored.
+func TestCreateManyRefusesATimeOfDayAnItemCannotHold(t *testing.T) {
+	prefix := uniqueName("create-many-clock")
+
+	rsp := serve(t, http.MethodPost, "/controller-dated-samples/batch",
+		controller.CreateManyHandler[*datedSample, *datedSample, *datedSample](configFor[*datedSample](datedRoute)),
+		"/controller-dated-samples/batch", `{"items":[{"name":"`+prefix+`-a","clock":"08:00:00"},{"name":"`+prefix+`-b","clock":"abc"}]}`)
+
+	require.Equal(t, http.StatusBadRequest, rsp.Code)
+	require.Contains(t, rsp.Body.String(), `"msg":"invalid value for field 'items[1].clock'"`)
+	require.Zero(t, countDatedNamed(t, prefix+"-a"))
+}
+
 // TestCreateManyWritesNothingTheBeforeHookRefuses pins that a
 // CreateManyBefore refusal answers with the hook's error and creates
 // nothing.

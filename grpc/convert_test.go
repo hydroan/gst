@@ -12,6 +12,7 @@ import (
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -50,6 +51,41 @@ func TestTimeRefusesATimestampOutOfRange(t *testing.T) {
 			require.Equal(t, codes.InvalidArgument, status.Code(err))
 			require.Equal(t, "invalid value for field 'due'", status.Convert(err).Message())
 			requireFieldViolation(t, err, "due", tt.want)
+		})
+	}
+}
+
+// TestTimeOfDayRefusesADurationOutsideADay pins TimeOfDay, what a generated
+// FromProto reads a time of day through: a duration within a day comes back
+// as it is, to the nanosecond, and no duration as none, midnight; a duration
+// below none or of a whole day or more, which names no time of day, and one
+// no duration can be made of are refused with InvalidArgument naming the
+// field, the way the HTTP listener refuses a time of day it cannot read.
+func TestTimeOfDayRefusesADurationOutsideADay(t *testing.T) {
+	for _, since := range []time.Duration{17*time.Hour + 30*time.Minute + 500*time.Millisecond, 24*time.Hour - time.Nanosecond} {
+		got, err := gstgrpc.TimeOfDay("clock", durationpb.New(since))
+		require.NoError(t, err)
+		require.Equal(t, since, got)
+	}
+	midnight, err := gstgrpc.TimeOfDay("clock", nil)
+	require.NoError(t, err)
+	require.Zero(t, midnight)
+
+	for _, tt := range []struct {
+		name string
+		d    *durationpb.Duration
+		want string
+	}{
+		{name: "a whole day", d: durationpb.New(24 * time.Hour), want: "24h0m0s is not a time of day"},
+		{name: "past a day", d: durationpb.New(25 * time.Hour), want: "25h0m0s is not a time of day"},
+		{name: "below none", d: durationpb.New(-time.Second), want: "-1s is not a time of day"},
+		{name: "nanos out of range", d: &durationpb.Duration{Nanos: 1_000_000_000}, want: "duration (nanos:1000000000) has out-of-range nanos"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := gstgrpc.TimeOfDay("clock", tt.d)
+			require.Equal(t, codes.InvalidArgument, status.Code(err))
+			require.Equal(t, "invalid value for field 'clock'", status.Convert(err).Message())
+			requireFieldViolation(t, err, "clock", tt.want)
 		})
 	}
 }

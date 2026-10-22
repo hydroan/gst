@@ -478,6 +478,64 @@ func BenchmarkBindJSONRequest(b *testing.B) {
 	}
 }
 
+// TestDecodeJSONRequestReadsEveryTimeOfDayStrictly pins that a time of day
+// is read in time.TimeOnly, a fractional second as written, wherever
+// encoding/json decodes one: through a pointer, promoted from an embedded
+// struct, inside a struct held by name, in a slice and in a map, under a key
+// differing from its own only in case, the last of two keys naming one field
+// winning; a null leaves the field as it is, a pointer nil, and a value in
+// another form or of another JSON type is refused under the path the decoder
+// reports for it.
+func TestDecodeJSONRequestReadsEveryTimeOfDayStrictly(t *testing.T) {
+	type promoted struct {
+		Closes datatypes.Time `json:"closes"`
+	}
+	type window struct {
+		Opens datatypes.Time `json:"opens"`
+	}
+	type holder struct {
+		promoted
+		Clock  *datatypes.Time           `json:"clock"`
+		Window window                    `json:"window"`
+		Slots  []datatypes.Time          `json:"slots"`
+		ByName map[string]datatypes.Time `json:"by_name"`
+	}
+	gin.SetMode(gin.TestMode)
+	decode := func(body string) (*holder, error) {
+		req := httptest.NewRequest(http.MethodPost, "/decode-probes", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = req
+		target := &holder{}
+		return target, decodeJSONRequest(c, target)
+	}
+
+	got, err := decode(`{"closes":"18:00:00.25","clock":"06:00:00","CLOCK":"07:00:00.5","window":{"opens":"09:00:00.75"},"slots":["10:00:00.5"],"by_name":{"a":"11:00:00.5"}}`)
+	require.NoError(t, err)
+	require.Equal(t, "18:00:00.250000000", got.Closes.String())
+	require.Equal(t, "07:00:00.500000000", got.Clock.String())
+	require.Equal(t, "09:00:00.750000000", got.Window.Opens.String())
+	require.Equal(t, "10:00:00.500000000", got.Slots[0].String())
+	require.Equal(t, "11:00:00.500000000", got.ByName["a"].String())
+
+	got, err = decode(`{"clock":null,"closes":null}`)
+	require.NoError(t, err)
+	require.Nil(t, got.Clock)
+	require.Zero(t, got.Closes)
+
+	for body, field := range map[string]string{
+		`{"window":{"opens":"9am"}}`:     "window.opens",
+		`{"slots":["10:00:00","10:00"]}`: "slots[1]",
+		`{"by_name":{"a":1730}}`:         "by_name.a",
+		`{"closes":true}`:                "closes",
+	} {
+		_, err := decode(body)
+		var refused *types.Error
+		require.ErrorAs(t, err, &refused, body)
+		require.Equal(t, "invalid value for field '"+field+"'", refused.Msg(), body)
+	}
+}
+
 // TestClientSafeBindError pins the translation table of body decoding
 // failures: one stable client-safe message per decoder error kind, a field
 // inside a batch item named as the contract spells it, items[1].rank, with

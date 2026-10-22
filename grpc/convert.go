@@ -10,6 +10,7 @@ import (
 
 	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/types"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -21,12 +22,12 @@ import (
 // and nil to nil, so a value comes back from a message as it went in. It
 // also holds what a generated FromProto reads a value through when the
 // message's type is wider than the model's, or than what the HTTP listener
-// lets through: Narrow and Number, Time, Document and Finite refuse what
-// the model's field cannot hold, the way encoding/json refuses it over HTTP,
-// so that a record a gRPC call wrote reads back over HTTP, while Map and
-// Value carry a dynamic value either way; and what a generated ToProto
-// writes a string through, UTF8, which replaces what a message cannot carry
-// the way the JSON encoder does.
+// lets through: Narrow and Number, Time and TimeOfDay, Document and Finite
+// refuse what the model's field cannot hold, the way the HTTP listener
+// refuses it, so that a record a gRPC call wrote reads back over HTTP, while
+// Map and Value carry a dynamic value either way; and what a generated
+// ToProto writes a string through, UTF8, which replaces what a message
+// cannot carry the way the JSON encoder does.
 
 // Narrow returns v as the narrower integer type T a model field holds, int8
 // for the int32 its message carries, and refuses a value T cannot hold, 300
@@ -84,7 +85,7 @@ func Time(field string, ts *timestamppb.Timestamp) (time.Time, error) {
 		return time.Time{}, nil
 	}
 	if err := ts.CheckValid(); err != nil {
-		return time.Time{}, invalidValue(field, timestampDetail(err))
+		return time.Time{}, invalidValue(field, checkValidDetail(err))
 	}
 	return ts.AsTime(), nil
 }
@@ -99,6 +100,30 @@ func Timestamp(t time.Time) *timestamppb.Timestamp {
 		return nil
 	}
 	return timestamppb.New(t)
+}
+
+// TimeOfDay returns the duration since midnight d holds, the time of day a
+// message carries as one, and none, midnight, for nil, which a message
+// leaves unset. A duration below none or of a whole day or more names no
+// time of day and is refused with invalidValue naming field, "25h0m0s is
+// not a time of day" the detail, and one no duration can be made of with
+// durationpb's own account of it, "duration (nanos:1000000000) has
+// out-of-range nanos", the way the HTTP listener refuses a time of day it
+// cannot read, one time.TimeOnly does not spell. The generated FromProto
+// reads every time of day through it, the datatypes.Time of a model made of
+// the duration it answers.
+func TimeOfDay(field string, d *durationpb.Duration) (time.Duration, error) {
+	if d == nil {
+		return 0, nil
+	}
+	if err := d.CheckValid(); err != nil {
+		return 0, invalidValue(field, checkValidDetail(err))
+	}
+	since := d.AsDuration()
+	if since < 0 || since >= 24*time.Hour {
+		return 0, invalidValue(field, since.String()+" is not a time of day")
+	}
+	return since, nil
 }
 
 // Document returns b, the bytes of a JSON document a model field holds as
@@ -223,10 +248,10 @@ func Filters[F interface {
 	return out
 }
 
-// timestampDetail is timestamppb's account of an invalid Timestamp without
-// the package prefix every protobuf error carries, "timestamp
-// (seconds:253402300800) after 9999-12-31".
-func timestampDetail(err error) string {
+// checkValidDetail is the account CheckValid gives of an invalid Timestamp
+// or Duration without the package prefix every protobuf error carries,
+// "timestamp (seconds:253402300800) after 9999-12-31".
+func checkValidDetail(err error) string {
 	_, detail, found := strings.Cut(err.Error(), "proto:")
 	if !found {
 		return err.Error()

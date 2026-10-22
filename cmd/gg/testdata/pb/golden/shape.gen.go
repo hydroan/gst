@@ -250,7 +250,12 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 		return nil, err
 	}
 	m.Date = datatypes.Date(day)
-	m.Clock = datatypes.Time(p.GetClock().AsDuration())
+	var since time.Duration
+	since, err = grpc.TimeOfDay("clock", p.GetClock())
+	if err != nil {
+		return nil, err
+	}
+	m.Clock = datatypes.Time(since)
 	m.Doc, err = grpc.Document("doc", p.GetDoc())
 	if err != nil {
 		return nil, err

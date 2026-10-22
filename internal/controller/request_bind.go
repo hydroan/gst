@@ -3,6 +3,8 @@ package controller
 import (
 	"bytes"
 	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"io"
 	"net/http"
 	"reflect"
@@ -76,7 +78,8 @@ func bindJSONRequest(c *gin.Context, target any) error {
 // so a second document appended to the first would bind as if it were clean.
 // One knob does not carry over: gin's EnableDecoderUseNumber and
 // EnableDecoderDisallowUnknownFields configure the streaming decoder only, so
-// they never apply here.
+// they never apply here. A time of day is the one value decoded otherwise
+// than json.Unmarshal decodes it (see strictTimeOfDay).
 func decodeJSONRequest(c *gin.Context, target any) error {
 	raw, err := c.GetRawData()
 	if err != nil {
@@ -86,11 +89,48 @@ func decodeJSONRequest(c *gin.Context, target any) error {
 		return io.EOF
 	}
 	c.Request.Body = io.NopCloser(bytes.NewReader(raw))
-	if err = json.Unmarshal(raw, target); err != nil {
+	if err = jsonv2.Unmarshal(raw, target, json.DefaultOptionsV1(), strictTimeOfDay); err != nil {
 		return clientSafeBindError(err)
 	}
 	return nil
 }
+
+// strictTimeOfDay is the decoding option reading a time of day the way a
+// filter reads one (see modelschema.ParseTimeOfDay): a string in
+// time.TimeOnly, taken as written, and a value in another form or of another
+// JSON type refused. datatypes.Time decodes a string leniently itself: its
+// UnmarshalJSON scans it with fmt.Sscanf and keeps no error
+// (gorm.io/datatypes v1.2.7, time.go), so "abc" decodes as midnight and the
+// fraction of "17:30:00.5" as five nanoseconds, and the library offers no
+// strict decoding to select. json.Unmarshal is encoding/json/v2 under the
+// options json.DefaultOptionsV1 names, so decoding under them with this
+// option added decodes every other value the way json.Unmarshal does, and
+// reaches every time of day the way it does. A null leaves the value as it
+// is, as datatypes.Time leaves it; a refusal is a SemanticError at the
+// value's JSON Pointer, which those options report as a
+// json.UnmarshalTypeError naming the field, items.1.clock.
+var strictTimeOfDay = jsonv2.WithUnmarshalers(jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, t *datatypes.Time) error {
+	value, err := dec.ReadValue()
+	if err != nil || value.Kind() == jsontext.KindNull {
+		return err
+	}
+	refused := func(cause error) error {
+		return &jsonv2.SemanticError{JSONPointer: dec.StackPointer(), JSONKind: value.Kind(), GoType: reflect.TypeFor[datatypes.Time](), Err: cause}
+	}
+	if value.Kind() != jsontext.KindString {
+		return refused(nil)
+	}
+	text, err := jsontext.AppendUnquote(nil, value)
+	if err != nil {
+		return refused(err)
+	}
+	since, err := modelschema.ParseTimeOfDay(string(text))
+	if err != nil {
+		return refused(err)
+	}
+	*t = datatypes.Time(since)
+	return nil
+}))
 
 // validateRequest checks target against its binding tags with gin's
 // validator: the check bindJSONRequest makes of a bound body and the call

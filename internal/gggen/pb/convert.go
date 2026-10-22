@@ -717,7 +717,12 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 //		return nil, err
 //	}
 //	m.Date = datatypes.Date(day)
-//	m.Clock = datatypes.Time(p.GetClock().AsDuration())
+//	var since time.Duration
+//	since, err = grpc.TimeOfDay("clock", p.GetClock())
+//	if err != nil {
+//		return nil, err
+//	}
+//	m.Clock = datatypes.Time(since)
 //	m.Doc, err = grpc.Document("doc", p.GetDoc())
 //	if err != nil {
 //		return nil, err
@@ -859,7 +864,9 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft pbschema.Fiel
 		read := append([]ast.Stmt{w.varDeclExpr(day, w.timeType())}, w.refusing(ident(day), call(w.grpc("Time"), path, src))...)
 		return append(read, assign(dst, call(sel(w.out.imports.fixedRef(importPathDatatypes), "Date"), ident(day))))
 	case "gorm.io/datatypes.Time":
-		return []ast.Stmt{assign(dst, call(sel(w.out.imports.fixedRef(importPathDatatypes), "Time"), call(sel(src, "AsDuration"))))}
+		since := w.temp("since")
+		read := append([]ast.Stmt{w.varDeclExpr(since, sel(w.out.imports.fixedRef(importPathTime), "Duration"))}, w.refusing(ident(since), call(w.grpc("TimeOfDay"), path, src))...)
+		return append(read, assign(dst, call(sel(w.out.imports.fixedRef(importPathDatatypes), "Time"), ident(since))))
 	case "gorm.io/gorm.DeletedAt":
 		return []ast.Stmt{w.guarded(src, func(v ast.Expr) []ast.Stmt {
 			at := w.temp("at")
