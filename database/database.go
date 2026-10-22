@@ -3,7 +3,6 @@ package database
 import (
 	"context"
 	"reflect"
-	"strings"
 	"sync"
 
 	"github.com/cockroachdb/errors"
@@ -317,6 +316,9 @@ type database[M types.Model] struct {
 	selectColumns []string
 }
 
+// quoteIdent quotes a name with the dialect's identifier quotes through
+// gorm's Statement.Quote, so reserved words such as "order" and "limit" work
+// and a name qualified by its table is quoted part by part.
 func (db *database[M]) quoteIdent(name string) string {
 	if db == nil || db.ins == nil || db.ins.Statement == nil {
 		return name
@@ -329,23 +331,6 @@ func (db *database[M]) quoteTableColumn(table, column string) string {
 		return db.quoteIdent(column)
 	}
 	return db.quoteIdent(table) + "." + db.quoteIdent(column)
-}
-
-// quoteOrderField quotes a column name for an ORDER BY term with the
-// dialect's identifier quotes, so reserved words such as "order" and "limit"
-// work. A qualified name keeps its table prefix, each part quoted on its own.
-func (db *database[M]) quoteOrderField(name string) string {
-	if len(name) == 0 {
-		return name
-	}
-	parts := strings.Split(name, ".")
-	for i := range parts {
-		if len(parts[i]) == 0 {
-			continue
-		}
-		parts[i] = db.quoteIdent(parts[i])
-	}
-	return strings.Join(parts, ".")
 }
 
 // reset clears the option fields this wrapper holds — the resolved model, the

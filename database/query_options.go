@@ -134,7 +134,7 @@ func (db *database[M]) applyCursorPagination() {
 		if direction == types.OrderDesc {
 			operator = " < "
 		}
-		lhs, rhs := db.quoteOrderField(db.cursor.Order().Column()), "?"
+		lhs, rhs := db.quoteIdent(db.cursor.Order().Column()), "?"
 		if _, isTime := modelschema.TimeColumnSet(reflect.TypeOf(*new(M)))[db.cursor.Order().Column()]; isTime {
 			lhs, rhs = db.timeComparableExpr(lhs), db.timeComparableExpr(rhs)
 		}
@@ -391,7 +391,7 @@ func (db *database[M]) orderClause(order types.Order) string {
 	if types.OrderDirectionOf(order) == types.OrderDesc {
 		direction = types.OrderDesc
 	}
-	return db.quoteOrderField(order.Column()) + " " + string(direction)
+	return db.quoteIdent(order.Column()) + " " + string(direction)
 }
 
 // WithPagination applies pagination parameters to the query.
