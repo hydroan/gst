@@ -133,6 +133,17 @@ func run(m *testing.M, s Server) int {
 	return m.Run()
 }
 
+// setupKafka, setupRocketMQ and setupElasticsearch start the services whose
+// container every test binary starts afresh, a broker or a cluster that takes
+// a quarter of a minute to come up. The package's tests replace them to check
+// what prepare does with a setup without waiting for one; the setups
+// themselves are tested against real containers in the testcontainer package.
+var (
+	setupKafka         = testcontainer.SetupKafka
+	setupRocketMQ      = testcontainer.SetupRocketMQ
+	setupElasticsearch = testcontainer.SetupElasticsearch
+)
+
 // prepare sets up the backing services and the shared test configuration,
 // returning the function that releases them and the one to run once the
 // framework has migrated the database. The releases are collected as they
@@ -204,7 +215,7 @@ func (s Server) prepare() (release func(), afterMigrate func(), err error) {
 	}
 
 	if s.Kafka {
-		cleanBroker, err := testcontainer.SetupKafka()
+		cleanBroker, err := setupKafka()
 		if err != nil {
 			return release, afterMigrate, err
 		}
@@ -216,7 +227,7 @@ func (s Server) prepare() (release func(), afterMigrate func(), err error) {
 	}
 
 	if s.RocketMQ {
-		cleanBroker, err := testcontainer.SetupRocketMQ()
+		cleanBroker, err := setupRocketMQ()
 		if err != nil {
 			return release, afterMigrate, err
 		}
@@ -228,7 +239,7 @@ func (s Server) prepare() (release func(), afterMigrate func(), err error) {
 	}
 
 	if s.Elasticsearch {
-		cleanCluster, err := testcontainer.SetupElasticsearch()
+		cleanCluster, err := setupElasticsearch()
 		if err != nil {
 			return release, afterMigrate, err
 		}
