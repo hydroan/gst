@@ -108,8 +108,9 @@ func UpdateCall[M types.Model](route string) func(ctx context.Context, params ma
 }
 
 // updateFlow runs the update flow, replacing the record id names with req: it
-// sets the updater from the identity the request carries, runs the update
-// hooks around the write, and records the operation. Existence is enforced by
+// clears the creator and updater req carries (see clearAudit), runs the
+// update hooks around the write, which names the caller the request carries
+// as the updater, and records the operation. Existence is enforced by
 // the database layer instead of a pre-read: a missing or soft-deleted record
 // surfaces as database.ErrRecordNotFound and renders 404, and a unique-key
 // collision renders 409. The UpdateBefore service hook therefore runs before
@@ -136,6 +137,7 @@ func (a *action[M, REQ, RSP]) updateFlow(ctx context.Context, newServiceContext 
 	}
 	req.ClearID()
 	req.SetID(id)
+	clearAudit(req)
 
 	// 1.Perform business logic processing before update resource.
 	if err := a.traceServiceHook(ctx, consts.UpdateBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {

@@ -82,14 +82,16 @@ func CreateManyCall[M types.Model](route string) func(ctx context.Context, param
 	}
 }
 
-// createManyFlow runs the batch create flow on the items of req: it takes the
-// creator and updater of every item from the identity the request carries,
-// runs the batch create hooks around the write, and records the operation.
-// The items are req's own, filled by the write.
+// createManyFlow runs the batch create flow on the items of req: it clears
+// the creator and updater every item carries (see clearAudit), runs the
+// batch create hooks around the write, which names the caller the request
+// carries as both, and records the operation. The items are req's own,
+// filled by the write.
 func (a *action[M, REQ, RSP]) createManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *batch[M]) error {
 	log := logger.Controller.WithContext(ctx, consts.CreateMany)
 	svc := a.service()
 	val := a.newModel()
+	clearAudit(req.Items...)
 
 	// 1.Perform business logic processing before batch create resource.
 	if err := a.traceServiceHook(ctx, consts.CreateManyBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {

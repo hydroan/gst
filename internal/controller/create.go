@@ -89,13 +89,14 @@ func CreateCall[M types.Model](route string) func(ctx context.Context, params ma
 	}
 }
 
-// createFlow runs the create flow on req: it takes the creator and updater
-// from the identity the request carries, runs the create hooks around the
-// write, and records the operation. The created model is req itself, filled
-// by the write.
+// createFlow runs the create flow on req: it clears the creator and updater
+// req carries (see clearAudit), runs the create hooks around the write,
+// which names the caller the request carries as both, and records the
+// operation. The created model is req itself, filled by the write.
 func (a *action[M, REQ, RSP]) createFlow(ctx context.Context, newServiceContext serviceContextFunc, req M) error {
 	log := logger.Controller.WithContext(ctx, consts.Create)
 	svc := a.service()
+	clearAudit(req)
 
 	// 1.Perform business logic processing before create resource.
 	if err := a.traceServiceHook(ctx, consts.CreateBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {

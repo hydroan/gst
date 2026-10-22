@@ -741,7 +741,9 @@ func TestCallsRunInTheControllerSpan(t *testing.T) {
 // taking a Struct holding what the request message of the action would
 // carry and answering a Struct holding what the response message would. One
 // listener serves the whole test binary, behind an auth interceptor naming
-// alice as the caller of every call presenting sampleCredential.
+// alice as the caller of every call presenting sampleCredential; the custom
+// OpenAction and the rpcs named after publicPrefix are declared public, so a
+// call to them runs anonymous.
 var (
 	sampleServerOnce sync.Once
 	// accessLog collects the gRPC access log of the sample server, the entry
@@ -753,6 +755,11 @@ var (
 
 // sampleCredential is the authorization a call presents to be named alice.
 const sampleCredential = "Bearer alice"
+
+// publicPrefix names the standard rpcs of publicRoute, the sample service's
+// public methods: no auth interceptor runs on them, so they serve anonymous
+// calls.
+const publicPrefix = "Public"
 
 // sampleServer returns a connection to the sample service, starting its
 // listener on first use.
@@ -796,7 +803,8 @@ func sampleServer(t *testing.T) *grpc.ClientConn {
 			if strings.Contains(name, "List") || strings.Contains(name, "Get") {
 				httpMethod = http.MethodGet
 			}
-			methods = append(methods, grpcserver.Method{Name: fullMethod, Public: name == "OpenAction", HTTPMethod: httpMethod, Route: "/api/controller-sample-" + strings.ToLower(name)})
+			public := name == "OpenAction" || strings.HasPrefix(name, publicPrefix)
+			methods = append(methods, grpcserver.Method{Name: fullMethod, Public: public, HTTPMethod: httpMethod, Route: "/api/controller-sample-" + strings.ToLower(name)})
 		}
 		for _, name := range []string{"Watch", "Upload", "Chat", "Fork", "Silence"} {
 			methods = append(methods, grpcserver.Method{Name: "/gst.test.Samples/" + name, HTTPMethod: grpcserver.MethodStream, Route: "/api/controller-sample-" + strings.ToLower(name)})
@@ -856,6 +864,7 @@ func sampleHandlers() map[string]rpcHandler {
 	standardRPCs[*sampleRecord](handlers, refusalRoute, "Refused")
 	standardRPCs[*sampleRecord](handlers, filterRefusalRoute, "FilterRefused")
 	standardRPCs[*sampleRecord](handlers, hangingRoute, "Hanging")
+	standardRPCs[*sampleRecord](handlers, publicRoute, publicPrefix)
 	standardRPCs[*sampleRecord](handlers, observedRoute, "Observed")
 	standardRPCs[*sampleRecord](handlers, cookieBeforeRoute, "CookieBefore")
 	standardRPCs[*sampleRecord](handlers, cookieAfterRoute, "CookieAfter")

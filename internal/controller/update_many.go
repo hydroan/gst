@@ -85,8 +85,10 @@ func UpdateManyCall[M types.Model](route string) func(ctx context.Context, param
 
 // updateManyFlow runs the batch update flow on the items of req: it refuses
 // a batch naming one record twice (see repeatedID) and an item naming no
-// record (see itemWithoutID) with 400, runs the batch update hooks around
-// the write and records the operation. The items are req's own, as the
+// record (see itemWithoutID) with 400, clears the creator and updater every
+// item carries (see clearAudit), runs the batch update hooks around the
+// write, which names the caller the request carries as the updater, and
+// records the operation. The items are req's own, as the
 // write and the hooks left them, with the columns an update leaves alone, the
 // creation audit among them, as stored (see backfillUnwrittenColumns).
 func (a *action[M, REQ, RSP]) updateManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *batch[M]) error {
@@ -106,6 +108,7 @@ func (a *action[M, REQ, RSP]) updateManyFlow(ctx context.Context, newServiceCont
 			return failWith(ctx, log, "batch update item without its id", err, itemWithoutID(i))
 		}
 	}
+	clearAudit(req.Items...)
 	// 1.Perform business logic processing before batch update resource.
 	if err := a.traceServiceHook(ctx, consts.UpdateManyBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
 		return svc.UpdateManyBefore(sc, req.Items...)

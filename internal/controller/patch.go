@@ -160,9 +160,10 @@ func PatchCall[M types.Model](route string) func(ctx context.Context, params map
 }
 
 // patchFlow runs the patch flow on the record id names: it loads the record,
-// copies the fields of req present in the request (fields) into it, sets the
-// updater from the identity the request carries, runs the patch hooks around
-// the write, records the operation, and returns the patched record. id must
+// copies the fields of req present in the request (fields) into it, clears
+// the updater it was stored with, runs the patch hooks around the write,
+// which names the caller the request carries as the updater, records the
+// operation, and returns the patched record. id must
 // not be empty (see setID); an id the model rejects, and one naming no
 // record, both answer 404 (see notFound).
 //
@@ -202,6 +203,11 @@ func (a *action[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceContext s
 	oldVal := reflect.ValueOf(data[0]).Elem()
 	applyPatch(log, a.typ, oldVal, newVal, fields)
 	cur := oldVal.Addr().Interface().(M) //nolint:errcheck
+	// The updater is the write's to name, the caller or, for an anonymous
+	// request, none, as on an update (see clearAudit): the one stored before
+	// did not make this change. The creator stays as stored, the record being
+	// answered whole.
+	cur.SetUpdatedBy("")
 
 	// 1.Perform business logic processing before partial update resource.
 	if err := a.traceServiceHook(ctx, consts.PatchBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {

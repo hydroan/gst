@@ -112,6 +112,8 @@ git init
 
 框架按固定的列名读写 `model.Base`/`model.AutoBase` 的字段和 `tenant.Scope` 的租户列：`id`、`created_by`、`updated_by`、`created_at`、`updated_at`、`deleted_at`、`tenant_id`。不要改这些列名：重新声明这些字段时加 `column` tag，或者嵌入 `tenant.Scope` 时加前缀，启动期都会报错退出，`gg check` 也会拒绝。
 
+`created_by`、`updated_by` 由框架写成请求调用者的 id；客户端请求里带来的这两列，在业务钩子运行之前就被清掉。上下文里没有调用者时（后台任务、匿名请求），写入保留模型里的值，所以后台任务和业务钩子可以自己设置。
+
 索引一律通过模型的 `Indexes() []model.Index` 方法集中声明：`Fields` 写 Go 字段名、顺序即列序，`Unique` 声明唯一索引，索引名由框架统一生成（`idx_` 或 `uniq_` 加表名加列名，超过方言上限的截短后带哈希：PostgreSQL 最长 63，MySQL 与 SQLite 64）。唯一的例外是主键——它由 `model.Base`/`model.AutoBase` 内置声明，业务模型不写主键。不要用 gorm tag 的 `index`/`uniqueIndex`/`unique` 配置索引，`gg check` 会拒绝。被索引的字符串字段要写列宽（如 `gorm:"size:36"`）：没有长度的字符串在 MySQL 上是 longtext 列，MySQL 不能给它建索引，配置为 mysql 的项目 `gg check` 会拒绝，启动期与 `gg migrate` 也在建表之前拒绝。
 
 ```go

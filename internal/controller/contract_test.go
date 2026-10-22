@@ -56,6 +56,8 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 	validated := standardFixture[*validatedSample](validatedRoute, "Validated")
 	dated := standardFixture[*datedSample](datedRoute, "Dated")
 	scoped := standardFixture[*scopedSample](scopedRoute, "Scoped")
+	public := standardFixture[*sampleRecord](publicRoute, publicPrefix)
+	public.anonymous = true
 	shaped := standardFixture[*shapedSample](shapedRoute, "Shaped")
 	observed := standardFixture[*sampleRecord](observedRoute, "Observed")
 	nested := standardFixture[*nestedSample](nestedRoute, "Nested")
@@ -132,6 +134,19 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				data := dataMap(t, got)
 				require.Equal(t, tenant.Default, data["tenant_id"])
 				requireScopedTenant(t, stringOf(data["id"]), tenant.Default)
+			},
+		},
+		{
+			// An anonymous request names no creator or updater, so the record
+			// is stored with none, whatever the request carries.
+			name: "Create stores no creator or updater an anonymous request names", fixture: public, phase: consts.Create,
+			input: contractInput{record: map[string]any{"name": uniqueName("contract-anonymous"), "created_by": "mallory", "updated_by": "mallory"}},
+			want:  ok,
+			check: func(t *testing.T, _ contractInput, got contractAnswer) {
+				t.Helper()
+				stored := loadSample(t, stringOf(dataMap(t, got)["id"]))
+				require.Empty(t, stored.GetCreatedBy())
+				require.Empty(t, stored.GetUpdatedBy())
 			},
 		},
 		{
@@ -374,6 +389,24 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
+			// An anonymous update names no updater: the record is stored with
+			// none, neither the one the request carries nor the one stored
+			// before, and its creator stays as stored.
+			name: "Update stores no updater an anonymous request names", fixture: public, phase: consts.Update,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				return contractInput{id: createSampleBy(t, "contract-anonymous-update", "u-0").GetID(), record: map[string]any{"name": "contract-anonymous-updated", "created_by": "mallory", "updated_by": "mallory"}}
+			},
+			want: ok,
+			check: func(t *testing.T, in contractInput, _ contractAnswer) {
+				t.Helper()
+				stored := loadSample(t, in.id)
+				require.Equal(t, "contract-anonymous-updated", stored.Name)
+				require.Equal(t, "u-0", stored.GetCreatedBy())
+				require.Empty(t, stored.GetUpdatedBy())
+			},
+		},
+		{
 			name: "Update writes the record the request names, whatever id the record carries", fixture: samples, phase: consts.Update,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
@@ -441,6 +474,24 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				require.Equal(t, "contract-patched", stored.Name)
 				require.Equal(t, "kept", stored.Note)
 				require.Equal(t, "u-1", stored.GetUpdatedBy())
+			},
+		},
+		{
+			// An anonymous patch names no updater, as an anonymous update
+			// does: the record is stored with none rather than the one stored
+			// before, and its creator stays as stored.
+			name: "Patch stores no updater an anonymous request names", fixture: public, phase: consts.Patch,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				return contractInput{id: createSampleBy(t, "contract-anonymous-patch", "u-0").GetID(), record: map[string]any{"name": "contract-anonymous-patched"}}
+			},
+			want: ok,
+			check: func(t *testing.T, in contractInput, _ contractAnswer) {
+				t.Helper()
+				stored := loadSample(t, in.id)
+				require.Equal(t, "contract-anonymous-patched", stored.Name)
+				require.Equal(t, "u-0", stored.GetCreatedBy())
+				require.Empty(t, stored.GetUpdatedBy())
 			},
 		},
 		{
@@ -637,6 +688,25 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
+			name: "CreateMany stores no creator or updater an anonymous request names", fixture: public, phase: consts.CreateMany,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				prefix := uniqueName("contract-anonymous-many")
+				return contractInput{items: []map[string]any{{"name": prefix + "-a", "created_by": "mallory", "updated_by": "mallory"}, {"name": prefix + "-b"}}}
+			},
+			want: ok,
+			check: func(t *testing.T, _ contractInput, got contractAnswer) {
+				t.Helper()
+				created := ids(dataMap(t, got)["items"])
+				require.Len(t, created, 2)
+				for _, id := range created {
+					stored := loadSample(t, id)
+					require.Empty(t, stored.GetCreatedBy())
+					require.Empty(t, stored.GetUpdatedBy())
+				}
+			},
+		},
+		{
 			name: "CreateMany stores the dates of the items as UTC days", fixture: dated, phase: consts.CreateMany,
 			input: contractInput{items: []map[string]any{{"name": uniqueName("contract-dated-many"), "day": "2026-01-02T00:00:00+08:00"}}},
 			want:  ok,
@@ -688,6 +758,22 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 					require.Equal(t, "u-1", item["updated_by"])
 					requireSameInstant(t, stored.GetCreatedAt(), item["created_at"], "the answer carries the creation audit as stored")
 				}
+			},
+		},
+		{
+			name: "UpdateMany stores no updater an anonymous request names", fixture: public, phase: consts.UpdateMany,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				stored := createSampleBy(t, "contract-anonymous-update-many", "u-0")
+				return contractInput{items: []map[string]any{{"id": stored.GetID(), "name": "contract-anonymous-update-many2", "created_by": "mallory", "updated_by": "mallory"}}}
+			},
+			want: ok,
+			check: func(t *testing.T, in contractInput, _ contractAnswer) {
+				t.Helper()
+				stored := loadSample(t, stringOf(in.items[0]["id"]))
+				require.Equal(t, "contract-anonymous-update-many2", stored.Name)
+				require.Equal(t, "u-0", stored.GetCreatedBy())
+				require.Empty(t, stored.GetUpdatedBy())
 			},
 		},
 		{
@@ -750,6 +836,22 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				require.Equal(t, "contract-patch-many-b", second.Name, "a field the item does not name stays as stored")
 				require.Equal(t, "masked", second.Note)
 				require.Equal(t, "u-1", second.GetUpdatedBy(), "the caller is who patched the record")
+			},
+		},
+		{
+			name: "PatchMany stores no updater an anonymous request names", fixture: public, phase: consts.PatchMany,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				stored := createSampleBy(t, "contract-anonymous-patch-many", "u-0")
+				return contractInput{items: []map[string]any{{"id": stored.GetID(), "name": "contract-anonymous-patch-many2"}}}
+			},
+			want: ok,
+			check: func(t *testing.T, in contractInput, _ contractAnswer) {
+				t.Helper()
+				stored := loadSample(t, stringOf(in.items[0]["id"]))
+				require.Equal(t, "contract-anonymous-patch-many2", stored.Name)
+				require.Equal(t, "u-0", stored.GetCreatedBy())
+				require.Empty(t, stored.GetUpdatedBy())
 			},
 		},
 		{
@@ -1093,11 +1195,14 @@ type grpcAnswer struct {
 // contractFixture is a model on a route as both transports serve it: the
 // route of its services, which is the path of its HTTP handlers as well,
 // the handler of each action and the name of each action's rpc on the
-// sample service.
+// sample service. An anonymous fixture is sent with no caller: an HTTP
+// request no identity names, a gRPC call presenting no credential to a
+// public rpc.
 type contractFixture struct {
-	route   string
-	handler func(phase consts.Phase) gin.HandlerFunc
-	rpc     func(phase consts.Phase) string
+	route     string
+	handler   func(phase consts.Phase) gin.HandlerFunc
+	rpc       func(phase consts.Phase) string
+	anonymous bool
 }
 
 // standardFixture is the fixture of the standard actions of M on route,
@@ -1169,8 +1274,9 @@ var contractTransports = []contractTransport{
 	{name: "gRPC", do: overGRPC, expect: requireGRPCAnswer},
 }
 
-// overHTTP sends in as the HTTP request of the action, as alice, and
-// decodes the envelope answered: the method and path of the action, the id
+// overHTTP sends in as the HTTP request of the action, as alice unless the
+// fixture is anonymous, and decodes the envelope answered: the method and
+// path of the action, the id
 // in the path, the query rendered as the query string, the record, the
 // items, the ids or the payload as the JSON body.
 func overHTTP(t *testing.T, f contractFixture, phase consts.Phase, in contractInput) contractAnswer {
@@ -1202,7 +1308,11 @@ func overHTTP(t *testing.T, f contractFixture, phase consts.Phase, in contractIn
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	rsp := serveAs(ctx, t, phase.HTTPMethod(), pattern, f.handler(phase), target, body, "alice", in.forwarded)
+	username := "alice"
+	if f.anonymous {
+		username = ""
+	}
+	rsp := serveAs(ctx, t, phase.HTTPMethod(), pattern, f.handler(phase), target, body, username, in.forwarded)
 	answer := contractAnswer{status: rsp.Code}
 	var envelope struct {
 		Msg  string `json:"msg"`
@@ -1215,7 +1325,8 @@ func overHTTP(t *testing.T, f contractFixture, phase consts.Phase, in contractIn
 }
 
 // overGRPC sends in as the rpc of the action on the sample service, as
-// alice, and returns the status answered, or the response message: the
+// alice unless the fixture is anonymous, and returns the status answered,
+// or the response message: the
 // route parameters, the id, the record with the mask of a Patch, the items,
 // each with its id, its record and its mask in a PatchMany, the ids, the
 // query and the payload, as the rpcs of the sample service read them (see
@@ -1264,7 +1375,11 @@ func overGRPC(t *testing.T, f contractFixture, phase consts.Phase, in contractIn
 		}
 		ctx = metadata.AppendToOutgoingContext(ctx, pairs...)
 	}
-	out, err := invokeIn(ctx, t, sampleServer(t), f.rpc(phase), message, sampleCredential)
+	credential := sampleCredential
+	if f.anonymous {
+		credential = ""
+	}
+	out, err := invokeIn(ctx, t, sampleServer(t), f.rpc(phase), message, credential)
 	if err != nil {
 		st := status.Convert(err)
 		return contractAnswer{code: st.Code(), msg: st.Message()}

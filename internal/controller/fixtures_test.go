@@ -173,6 +173,7 @@ const (
 	validatedRoute     = "controller-validated-samples"
 	datedRoute         = "controller-dated-samples"
 	scopedRoute        = "controller-scoped-samples"
+	publicRoute        = "controller-public-samples"
 	observedRoute      = "controller-observed-samples"
 	cookieBeforeRoute  = "controller-cookie-before-samples"
 	cookieAfterRoute   = "controller-cookie-after-samples"
@@ -504,6 +505,19 @@ func serveAs(ctx context.Context, t *testing.T, method, pattern string, handler 
 func createSample(t *testing.T, name string) *sampleRecord {
 	t.Helper()
 	record := &sampleRecord{Name: name}
+	require.NoError(t, database.Database[*sampleRecord](context.Background()).Create(record))
+	require.NotEmpty(t, record.GetID())
+	return record
+}
+
+// createSampleBy stores a sample named name whose creator and updater are
+// by, the way a job writes them, with no caller to stamp, and returns it
+// with its id.
+func createSampleBy(t *testing.T, name, by string) *sampleRecord {
+	t.Helper()
+	record := &sampleRecord{Name: name}
+	record.SetCreatedBy(by)
+	record.SetUpdatedBy(by)
 	require.NoError(t, database.Database[*sampleRecord](context.Background()).Create(record))
 	require.NotEmpty(t, record.GetID())
 	return record

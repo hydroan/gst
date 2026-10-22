@@ -87,7 +87,10 @@ func ImportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 
 		// The service's Import only parses the file into models; the controller
 		// owns persistence and splits the rows by intent: an ID marks a
-		// replacement of that record, no ID marks a creation.
+		// replacement of that record, no ID marks a creation. The rows are the
+		// service's own work, unlike a body the client sends (see clearAudit),
+		// so their creator and updater stay as its Import set them; the write
+		// still names the caller the request carries, when it carries one.
 		toCreate := make([]M, 0, len(ml))
 		toUpdate := make([]M, 0, len(ml))
 		for i := range ml {

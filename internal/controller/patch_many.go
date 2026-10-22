@@ -159,8 +159,10 @@ func PatchManyCall[M types.Model](route string) func(ctx context.Context, params
 // patchManyFlow runs the batch patch flow on the items of req: it loads the
 // record each item names, copies the fields the item carried (fieldSets, one
 // set per item in order; an item past its end carries none) into that
-// record, runs the batch patch hooks around the write, records the
-// operation, and returns the batch with the patched records, as the hooks
+// record, clears the updater it was stored with, runs the batch patch hooks
+// around the write, which names the caller the request carries as the
+// updater, records the operation, and returns the batch with the patched
+// records, as the hooks
 // left them, in place of the items. The batch patches all of its items or
 // none, as a batch update does: a batch naming one record twice (see
 // repeatedID) and an item without an id fail the whole batch with 400
@@ -210,6 +212,8 @@ func (a *action[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceConte
 			fields = fieldSets[i]
 		}
 		applyPatch(log, a.typ, reflect.ValueOf(current).Elem(), reflect.ValueOf(m).Elem(), fields)
+		// The updater is the write's to name, as in patchFlow.
+		current.SetUpdatedBy("")
 		shouldUpdates = append(shouldUpdates, current)
 	}
 

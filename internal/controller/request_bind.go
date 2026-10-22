@@ -457,6 +457,19 @@ func normalizeBatch[M types.Model](req *batch[M]) {
 	normalizeValue(reflect.ValueOf(req))
 }
 
+// clearAudit clears the creator and updater of records, what a client sent
+// in them: who created or updated a record is the server's to write. The
+// write names the caller the context carries as both (see database.Create),
+// and with no caller, an anonymous request's, the records keep what a hook
+// set, never what the client sent. The write flows call it first, before
+// any hook runs, so a hook may still set them on purpose.
+func clearAudit[M types.Model](records ...M) {
+	for _, record := range records {
+		record.SetCreatedBy("")
+		record.SetUpdatedBy("")
+	}
+}
+
 // dateType is datatypes.Date, the calendar date normalizeValue reads as the
 // UTC day it holds (see modelschema.UTCDay), so that the value answered is
 // the value a date column stores.
