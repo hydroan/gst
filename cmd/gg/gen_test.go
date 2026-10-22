@@ -23,7 +23,8 @@ import (
 // registrations refer to it through the alias; the framework packages keep
 // their names. Each case writes a few model files, runs gg gen, compares the
 // registration files it writes as a whole, and builds the project.
-func TestGenRunAliasesCollidingImports(t *testing.T) {
+func TestGenRunAliasesCollidingImports(t *testing.T) { //nolint:tparallel // Each subtest goes parallel in newGenProject, a call deeper than tparallel looks.
+	parallelInParent(t)
 	modelFile := filepath.Join("model", ggconst.FileModelGen)
 	serviceFile := filepath.Join("service", ggconst.FileServiceGen)
 	routerFile := filepath.Join("router", ggconst.FileRouterGen)
@@ -535,7 +536,8 @@ func Init() error {
 // segments and refers to it through the alias. Running gg gen again, which
 // corrects the service files that already exist, keeps them as they are, and
 // the project builds.
-func TestGenRunAliasesServiceFileModelImports(t *testing.T) {
+func TestGenRunAliasesServiceFileModelImports(t *testing.T) { //nolint:tparallel // Each subtest goes parallel in newGenProject, a call deeper than tparallel looks.
+	parallelInParent(t)
 	tests := []struct {
 		name  string
 		files map[string]string

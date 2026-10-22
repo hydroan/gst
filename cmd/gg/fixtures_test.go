@@ -259,35 +259,68 @@ var (
 	errFrameworkSources      error
 )
 
-// recordFrameworkSources records the framework's Go sources under root as
-// inputs of the test. The programs these fixtures build compile against those
-// sources in a child go command, which go test does not see as an input of
-// the test; recording them here does, so a change to the framework reruns the
-// test instead of replaying a cached result that no longer holds.
+// recordFrameworkSources records the Go sources under root that a project can
+// compile as inputs of the test. The programs these fixtures build compile
+// against those sources in a child go command, which go test does not see as
+// an input of the test; recording them here does, so a change to them reruns
+// the test instead of replaying a cached result that no longer holds.
 //
-// What gets recorded is what a build of the framework depends on and nothing
-// else: every package directory is stat'ed, which notices a file added to it
-// or removed from it, and every file the package compiles or embeds is opened.
-// No directory is listed. go test hashes a listed directory by the name, size
-// and modification time of every entry, so listing the repository root would
-// take every git operation, which touches .git, for a framework change and
-// cost the package its test cache. The packages come from go list in a child
-// process, whose reads go test does not record.
+// A project compiles the framework packages its imports reach and nothing
+// else, and it can import only what the framework exports: go refuses an
+// import of a package below an internal directory from outside the module,
+// and a main package cannot be imported at all. So the packages recorded are
+// the framework's own in the dependency closure of its importable packages,
+// the internal ones they reach included; a change elsewhere — to the
+// framework's commands, or to an internal package no importable one reaches —
+// cannot change what a project compiles, and leaves the cached results
+// standing. The gg command's own packages are among those left out: they are
+// linked into this test binary, which go test keys the results on already.
+//
+// Of every package recorded, the directory is stat'ed, which notices a file
+// added to it or removed from it, and every file the package compiles or
+// embeds is opened. No directory is listed. go test hashes a listed directory
+// by the name, size and modification time of every entry, so listing the
+// repository root would take every git operation, which touches .git, for a
+// framework change and cost the package its test cache. The packages come
+// from go list in a child process, whose reads go test does not record.
 func recordFrameworkSources(t *testing.T, root string) {
 	t.Helper()
 
 	frameworkSourcesRecorded.Do(func() {
-		list := exec.Command("go", "list", "-e", "-f",
-			`{{.Dir}}{{range .GoFiles}}{{"\t"}}{{.}}{{end}}{{range .CgoFiles}}{{"\t"}}{{.}}{{end}}{{range .EmbedFiles}}{{"\t"}}{{.}}{{end}}`,
-			"./...")
+		list := exec.Command("go", "list", "-e", "-f", `{{if ne .Name "main"}}{{.ImportPath}}{{end}}`, "./...")
 		list.Dir = root
 		output, err := list.Output()
 		if err != nil {
 			errFrameworkSources = errors.Wrap(err, "list the framework packages")
 			return
 		}
+		var importable []string
+		for path := range strings.Lines(string(output)) {
+			path = strings.TrimSuffix(path, "\n")
+			if path != "" && !slices.Contains(strings.Split(path, "/"), "internal") {
+				importable = append(importable, path)
+			}
+		}
+		args := append([]string{
+			"list", "-e", "-deps", "-f",
+			`{{.Dir}}{{range .GoFiles}}{{"\t"}}{{.}}{{end}}{{range .CgoFiles}}{{"\t"}}{{.}}{{end}}{{range .EmbedFiles}}{{"\t"}}{{.}}{{end}}`,
+		}, importable...)
+		list = exec.Command("go", args...)
+		list.Dir = root
+		output, err = list.Output()
+		if err != nil {
+			errFrameworkSources = errors.Wrap(err, "list what the importable framework packages depend on")
+			return
+		}
 		for line := range strings.Lines(string(output)) {
 			fields := strings.Split(strings.TrimSuffix(line, "\n"), "\t")
+			// A package outside root, of the standard library or of a module
+			// the framework requires, comes with the toolchain this binary is
+			// built with and the go.sum a project copies, which the child
+			// reads.
+			if fields[0] != root && !strings.HasPrefix(fields[0], root+string(filepath.Separator)) {
+				continue
+			}
 			if err := inputs.record(inputStat, fields[0]); err != nil {
 				errFrameworkSources = err
 				return
@@ -327,7 +360,8 @@ const childProjectEnv = "GG_TEST_PROJECT_CHILD"
 // under the user cache directory, keyed by project directory; nothing ever
 // reads a throwaway project's entry again, so the entry is removed when the
 // test ends. A test calls newGenProject first: whatever it does before the
-// call, it does in both processes. Under -short, what make test-short
+// call, it does in both processes. A test whose subtests call it calls
+// parallelInParent first instead. Under -short, what make test-short
 // passes, the test is skipped before any of this: these cases, building
 // against the framework for real, are what keeps the suite past a minute,
 // and make test runs them.
@@ -366,6 +400,31 @@ func newGenProject(t *testing.T) (projectDir string, ok bool) {
 	return projectDir, true
 }
 
+// parallelTests holds the names of the tests that called parallelInParent.
+var parallelTests sync.Map
+
+// parallelInParent runs a test whose subtests each take a project of their
+// own (see newGenProject) in parallel with the other tests, in the parent
+// process alone. A test taking a project itself goes parallel in the parent
+// already; one whose subtests take theirs would otherwise stay sequential,
+// and go test starts no test after a sequential one until its parallel
+// subtests are done, leaving the machine to a handful of children while every
+// other test waits. In the child, which runs one subtest in a directory of
+// its own, the test stays sequential: a test with a parallel ancestor cannot
+// change its directory (see testing.T.Chdir). runInChild fails a subtest
+// whose test did not call it. tparallel follows the calls of a test and of
+// its subtests a level down and no further, so it sees this call and not the
+// one newGenProject leads to in each subtest: a test calling parallelInParent
+// carries //nolint:tparallel.
+func parallelInParent(t *testing.T) {
+	t.Helper()
+	if os.Getenv(childProjectEnv) != "" {
+		return
+	}
+	parallelTests.Store(t.Name(), true)
+	t.Parallel()
+}
+
 // runInChild runs the calling test, its subtests included, in a child
 // process of this test binary and relays the outcome: the test fails with
 // the child's output when the child fails, each line marked so that go
@@ -374,15 +433,21 @@ func newGenProject(t *testing.T) (projectDir string, ok bool) {
 // the flags this run was given — a golden -update reaches it — but its own
 // -test.run, no -test.v, and none of the files go test hands the parent to
 // write, profiles and coverage among them: the child's would overwrite the
-// parent's. The test runs in parallel with the other tests taking a project.
-// go test caches the verdict of the parent, the process it started, by what
-// the parent read; so the parent records the framework sources itself and,
+// parent's. The test runs in parallel with the other tests taking a project;
+// a subtest fails unless its test called parallelInParent. go test caches the
+// verdict of the parent, the process it started, by what the parent read; so
+// the parent records the framework sources itself and,
 // once the child is done, reads what the child read inside the framework —
 // the golden files, go.mod, the module manifests, whatever a test compares
 // its project with — taking it from an input log of the child's own, at a
 // path the parent picks (see inputRecorder.replay).
 func runInChild(t *testing.T) {
 	t.Helper()
+	if test, _, isSubtest := strings.Cut(t.Name(), "/"); isSubtest {
+		if _, ok := parallelTests.Load(test); !ok {
+			t.Fatalf("%s takes a project in each subtest and has to call parallelInParent(t) first: run sequentially, its subtests keep every other test waiting until they are done", test)
+		}
+	}
 	t.Parallel()
 	root := frameworkRepoRoot(t)
 	recordFrameworkSources(t, root)

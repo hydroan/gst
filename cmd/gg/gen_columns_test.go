@@ -425,7 +425,8 @@ func (Record) Design() {
 // leaves the registration file as it wrote it. A subpackage's file of the
 // same name is a model file like any other, and its column file is cleaned
 // up like any other once the source is gone.
-func TestGenRunRefusesAModelFileNamedLikeAGeneratedFileOfTheModelDirectory(t *testing.T) {
+func TestGenRunRefusesAModelFileNamedLikeAGeneratedFileOfTheModelDirectory(t *testing.T) { //nolint:tparallel // Each subtest goes parallel in newGenProject, a call deeper than tparallel looks.
+	parallelInParent(t)
 	note := `package model
 
 import (

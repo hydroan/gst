@@ -365,7 +365,8 @@ func TestGenRunNumbersTheTenantKeyAsAFrameworkField(t *testing.T) {
 
 // TestGenRunRefusesAModelFileNamedPB pins that a model file named pb.go is
 // reported: its handlers file would be pb/pb.gen.go, the registration file.
-func TestGenRunRefusesAModelFileNamedPB(t *testing.T) {
+func TestGenRunRefusesAModelFileNamedPB(t *testing.T) { //nolint:tparallel // Each subtest goes parallel in newGenProject, a call deeper than tparallel looks.
+	parallelInParent(t)
 	for _, tt := range []struct {
 		name, file, want string
 	}{
@@ -398,7 +399,8 @@ func TestGenRunRefusesAModelFileNamedPB(t *testing.T) {
 // the one main.go imports, imports the packages below it, so that a project
 // whose services all live below the root still registers them through the
 // one import.
-func TestGenRunRegistersTheServicesOfEachPackageInItsOwnFile(t *testing.T) {
+func TestGenRunRegistersTheServicesOfEachPackageInItsOwnFile(t *testing.T) { //nolint:tparallel // Each subtest goes parallel in newGenProject, a call deeper than tparallel looks.
+	parallelInParent(t)
 	read := func(t *testing.T, projectDir string, path string) string {
 		t.Helper()
 		content, err := os.ReadFile(filepath.Join(projectDir, filepath.FromSlash(path)))
@@ -968,24 +970,27 @@ func TestGenRunRefusesAGRPCModelWithNothingToServe(t *testing.T) {
 // delete named for accepting the break; the numbers and names of removed
 // fields are reserved and kept over later runs, so a new field cannot take
 // them.
-func TestGenRunHoldsTheCommittedDefinitionsToTheirNumbers(t *testing.T) {
-	projectDir, ok := newGenProject(t)
-	if !ok {
-		return
-	}
-	writeProtobufProject(t, projectDir, map[string]string{"model/note.go": protobufNoteModel})
-	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+func TestGenRunHoldsTheCommittedDefinitionsToTheirNumbers(t *testing.T) { //nolint:tparallel // Each subtest goes parallel in newGenProject, a call deeper than tparallel looks.
+	parallelInParent(t)
 	proto := filepath.Join(ggconst.DirPB, "note.proto")
-	// fresh commits the definition of the model as first written, for the
-	// runs that start from it.
-	fresh := func(t *testing.T) {
+	// fresh gives the subtest a project of its own, the definition of the
+	// model as first written committed in it.
+	fresh := func(t *testing.T) (projectDir string, ok bool) {
 		t.Helper()
+		projectDir, ok = newGenProject(t)
+		if !ok {
+			return "", false
+		}
 		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": protobufNoteModel})
-		require.NoError(t, os.RemoveAll(ggconst.DirPB))
 		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+		return projectDir, true
 	}
 
 	t.Run("a field keeps its number", func(t *testing.T) {
+		projectDir, ok := fresh(t)
+		if !ok {
+			return
+		}
 		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": strings.Replace(protobufNoteModel, `pb:"11"`, `pb:"13"`, 1)})
 
 		err := genRunWithOptions(genRunOptions{Quiet: true})
@@ -994,6 +999,10 @@ func TestGenRunHoldsTheCommittedDefinitionsToTheirNumbers(t *testing.T) {
 		require.Contains(t, err.Error(), "pb/note.proto: the field title of message Note was number 11 and is now 13; keep 11, or replace the field in pb/note.proto by \"reserved 11;\" to accept the break")
 	})
 	t.Run("a number is never reused", func(t *testing.T) {
+		projectDir, ok := fresh(t)
+		if !ok {
+			return
+		}
 		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": strings.Replace(protobufNoteModel, "Title string   'json:\"title\" pb:\"11\"'", "Caption string 'json:\"caption\" pb:\"11\"'", 1)})
 
 		err := genRunWithOptions(genRunOptions{Quiet: true})
@@ -1002,6 +1011,10 @@ func TestGenRunHoldsTheCommittedDefinitionsToTheirNumbers(t *testing.T) {
 		require.Contains(t, err.Error(), "pb/note.proto: the field caption of message Note takes number 11, which the field title held; a number is never reused, so give caption a fresh number and let 11 stay reserved, or remove the field title from pb/note.proto to accept the break")
 	})
 	t.Run("a field keeps a compatible type", func(t *testing.T) {
+		projectDir, ok := fresh(t)
+		if !ok {
+			return
+		}
 		// string to bytes is wire compatible; a repeated field turning
 		// singular, or a string turning integer, is not.
 		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": strings.Replace(protobufNoteModel, "Title string   'json:\"title\" pb:\"11\"'", "Title []byte   'json:\"title\" pb:\"11\"'", 1)})
@@ -1022,7 +1035,10 @@ func TestGenRunHoldsTheCommittedDefinitionsToTheirNumbers(t *testing.T) {
 		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
 	})
 	t.Run("a hand-written reservation up to max is honored", func(t *testing.T) {
-		fresh(t)
+		projectDir, ok := fresh(t)
+		if !ok {
+			return
+		}
 		content, err := os.ReadFile(proto)
 		require.NoError(t, err)
 		require.NoError(t, os.WriteFile(proto, []byte(strings.Replace(string(content), "  repeated string tags = 12;\n}", "  repeated string tags = 12;\n\n  reserved 1000 to max;\n}", 1)), 0o600))
@@ -1037,7 +1053,10 @@ func TestGenRunHoldsTheCommittedDefinitionsToTheirNumbers(t *testing.T) {
 		require.Contains(t, err.Error(), "pb/note.proto: the field body of message Note takes number 4000, which the file reserves")
 	})
 	t.Run("removed fields stay reserved", func(t *testing.T) {
-		fresh(t)
+		projectDir, ok := fresh(t)
+		if !ok {
+			return
+		}
 		withoutTags := strings.Replace(protobufNoteModel, "\tTags  []string 'json:\"tags,omitempty\" pb:\"12\" gorm:\"-\"'\n", "", 1)
 		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": withoutTags})
 		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
@@ -1060,6 +1079,10 @@ func TestGenRunHoldsTheCommittedDefinitionsToTheirNumbers(t *testing.T) {
 		require.Contains(t, err.Error(), "pb/note.proto: the field body of message Note takes number 12, which the file reserves; give body a fresh number, or remove the reservation of 12 from pb/note.proto to accept the break")
 	})
 	t.Run("a dropped map field reserves its number", func(t *testing.T) {
+		projectDir, ok := newGenProject(t)
+		if !ok {
+			return
+		}
 		labeled := strings.Replace(protobufNoteModel, "\tmodel.Base\n", "\tLabels map[string]string 'json:\"labels,omitempty\" pb:\"13\" gorm:\"-\"'\n\n\tmodel.Base\n", 1)
 		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": labeled})
 		require.NoError(t, os.RemoveAll(ggconst.DirPB))
@@ -1077,7 +1100,10 @@ func TestGenRunHoldsTheCommittedDefinitionsToTheirNumbers(t *testing.T) {
 		require.NotContains(t, string(content), "LabelsEntry")
 	})
 	t.Run("a break is accepted by editing the file as told", func(t *testing.T) {
-		fresh(t)
+		projectDir, ok := fresh(t)
+		if !ok {
+			return
+		}
 		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": strings.Replace(protobufNoteModel, `pb:"11"`, `pb:"13"`, 1)})
 		require.Error(t, genRunWithOptions(genRunOptions{Quiet: true}))
 		content, err := os.ReadFile(proto)
@@ -2667,31 +2693,36 @@ func TestGenRunReadsTheItemsOfAPatchManyWhateverTheirPosition(t *testing.T) {
 // and an rpc keeps its request and response messages and its streaming,
 // since a client was built against each; every breach names the file to
 // delete for accepting the break.
-func TestGenRunHoldsTheCommittedServicesAndMessages(t *testing.T) {
-	projectDir, ok := newGenProject(t)
-	if !ok {
-		return
-	}
+func TestGenRunHoldsTheCommittedServicesAndMessages(t *testing.T) { //nolint:tparallel // Each subtest goes parallel in newGenProject, a call deeper than tparallel looks.
+	parallelInParent(t)
 	proto := filepath.Join(ggconst.DirPB, "note.proto")
-	// fresh commits the definition of the model as first written, then
-	// rewrites it as edit leaves it when there is one.
-	fresh := func(t *testing.T, edit func(string) string) {
+	// fresh gives the subtest a project of its own, the definition of the
+	// model as first written committed in it, then rewritten as edit leaves
+	// it when there is one.
+	fresh := func(t *testing.T, edit func(string) string) (projectDir string, ok bool) {
 		t.Helper()
+		projectDir, ok = newGenProject(t)
+		if !ok {
+			return "", false
+		}
 		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": protobufNoteModel})
-		require.NoError(t, os.RemoveAll(ggconst.DirPB))
 		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
 		if edit == nil {
-			return
+			return projectDir, true
 		}
 		content, err := os.ReadFile(proto)
 		require.NoError(t, err)
 		edited := edit(string(content))
 		require.NotEqual(t, string(content), edited, "the edit has to change the committed file")
 		require.NoError(t, os.WriteFile(proto, []byte(edited), 0o600))
+		return projectDir, true
 	}
 
 	t.Run("an rpc and its messages stay declared", func(t *testing.T) {
-		fresh(t, nil)
+		projectDir, ok := fresh(t, nil)
+		if !ok {
+			return
+		}
 		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": strings.Replace(protobufNoteModel, "\tdsl.Get(func() {})\n", "", 1)})
 
 		err := genRunWithOptions(genRunOptions{Quiet: true})
@@ -2702,9 +2733,11 @@ func TestGenRunHoldsTheCommittedServicesAndMessages(t *testing.T) {
 		require.Contains(t, err.Error(), "pb/note.proto: the message GetNoteResponse is gone; a client was built against it, so keep it, or remove it from pb/note.proto to accept the break")
 	})
 	t.Run("a service stays declared", func(t *testing.T) {
-		fresh(t, func(s string) string {
+		if _, ok := fresh(t, func(s string) string {
 			return strings.Replace(s, "service NoteService {", "service NoteArchiveService {", 1)
-		})
+		}); !ok {
+			return
+		}
 
 		err := genRunWithOptions(genRunOptions{Quiet: true})
 
@@ -2712,9 +2745,11 @@ func TestGenRunHoldsTheCommittedServicesAndMessages(t *testing.T) {
 		require.Contains(t, err.Error(), "pb/note.proto: the service NoteArchiveService is gone; a client was built against it, so keep it, or remove it from pb/note.proto to accept the break")
 	})
 	t.Run("an rpc keeps its messages", func(t *testing.T) {
-		fresh(t, func(s string) string {
+		if _, ok := fresh(t, func(s string) string {
 			return strings.Replace(s, "rpc GetNote ( GetNoteRequest ) returns ( GetNoteResponse );", "rpc GetNote ( GetNoteRequest ) returns ( CreateNoteResponse );", 1)
-		})
+		}); !ok {
+			return
+		}
 
 		err := genRunWithOptions(genRunOptions{Quiet: true})
 
@@ -2722,7 +2757,10 @@ func TestGenRunHoldsTheCommittedServicesAndMessages(t *testing.T) {
 		require.Contains(t, err.Error(), "pb/note.proto: the rpc GetNote of service NoteService answered CreateNoteResponse and now answers GetNoteResponse; a client was built against it, so keep it, or remove the rpc from pb/note.proto to accept the break")
 	})
 	t.Run("an rpc keeps its streaming", func(t *testing.T) {
-		fresh(t, nil)
+		projectDir, ok := fresh(t, nil)
+		if !ok {
+			return
+		}
 		writeProtobufProject(t, projectDir, map[string]string{"model/feed.go": protobufFeedModel})
 		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
 		writeProtobufProject(t, projectDir, map[string]string{"model/feed.go": strings.Replace(protobufFeedModel, "\t\t\tdsl.Payload[*FeedWatchReq]()\n\t\t\tdsl.StreamingResult[*FeedWatchRsp]()", "\t\t\tdsl.StreamingPayload[*FeedWatchReq]()\n\t\t\tdsl.StreamingResult[*FeedWatchRsp]()", 1)})
