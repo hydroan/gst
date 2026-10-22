@@ -3,63 +3,19 @@ package minio_test
 import (
 	"context"
 	"io"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/internal/testutil/providertest"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
-	"github.com/hydroan/gst/internal/testutil/testlog"
-	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/provider/minio"
 	"github.com/stretchr/testify/require"
 )
 
 func TestMain(m *testing.M) {
-	os.Exit(runTests(m))
-}
-
-// runTests prepares the minio server the tests store objects in. os.Exit in
-// TestMain would skip the deferred release, hence the wrapper.
-func runTests(m *testing.M) int {
-	// Before config.Init: the container publishes its address and credentials
-	// through the environment, which is what config reads.
-	release, err := testcontainer.SetupMinio()
-	if err != nil {
-		panic(err)
-	}
-	defer func() { _ = release() }()
-
-	// Before config.Init as well: the logs go to a directory of their own,
-	// out of the test output and the package source tree.
-	_, releaseLogs, err := testlog.ToTempDir()
-	if err != nil {
-		panic(err)
-	}
-	defer func() { _ = releaseLogs() }()
-
-	if err := config.Init(); err != nil {
-		panic(err)
-	}
-	if err := logger.Init(); err != nil {
-		panic(err)
-	}
-	// Bring the compiled-in providers up through the registry — the same
-	// entry the provider stage takes at bootstrap — instead of a test-only
-	// export of the unexported lifecycle.
-	for _, p := range lifecycle.Components(lifecycle.StageProvider) {
-		if err := p.Start(context.Background()); err != nil {
-			panic(err)
-		}
-	}
-
-	if err := minio.EnsureBucket(context.Background(), bucketNamed("exists"), bucketNamed("presign"), bucketNamed("list")); err != nil {
-		panic(err)
-	}
-
-	return m.Run()
+	providertest.Run(m, testcontainer.SetupMinio)
 }
 
 func TestEnsureBucket(t *testing.T) {
@@ -166,6 +122,7 @@ func TestRemove(t *testing.T) {
 
 func TestExistsAndStat(t *testing.T) {
 	bucket := bucketNamed("exists")
+	require.NoError(t, minio.EnsureBucket(context.TODO(), bucket))
 	_, err := minio.Put(context.TODO(), "exists.txt", strings.NewReader("exists"), &minio.PutOptions{Bucket: bucket})
 	require.NoError(t, err)
 
@@ -188,6 +145,7 @@ func TestExistsAndStat(t *testing.T) {
 
 func TestPresignedURL(t *testing.T) {
 	bucket := bucketNamed("presign")
+	require.NoError(t, minio.EnsureBucket(context.TODO(), bucket))
 	_, err := minio.Put(context.TODO(), "presign.txt", strings.NewReader("presign"), &minio.PutOptions{Bucket: bucket})
 	require.NoError(t, err)
 	defer func() {
@@ -205,6 +163,7 @@ func TestPresignedURL(t *testing.T) {
 
 func TestListAndCopy(t *testing.T) {
 	bucket := bucketNamed("list")
+	require.NoError(t, minio.EnsureBucket(context.TODO(), bucket))
 	_, err := minio.Put(context.TODO(), "list/a.txt", strings.NewReader("a"), &minio.PutOptions{Bucket: bucket})
 	require.NoError(t, err)
 	_, err = minio.Put(context.TODO(), "list/b.txt", strings.NewReader("b"), &minio.PutOptions{Bucket: bucket})

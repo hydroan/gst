@@ -14,7 +14,8 @@ import (
 	"github.com/apache/rocketmq-client-go/v2/consumer"
 	"github.com/apache/rocketmq-client-go/v2/primitive"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/testutil"
+	"github.com/hydroan/gst/internal/testutil/providertest"
+	"github.com/hydroan/gst/internal/testutil/testcontainer"
 	"github.com/hydroan/gst/provider/rocketmq"
 	"github.com/stretchr/testify/require"
 )
@@ -28,11 +29,11 @@ func TestMain(m *testing.M) {
 	if spec := os.Getenv(consumerProcessEnv); spec != "" {
 		os.Exit(runConsumerProcess(spec))
 	}
-	testutil.Run(m, testutil.Server{RocketMQ: true})
+	providertest.Run(m, testcontainer.SetupRocketMQ)
 }
 
-// TestProducerSends pins that Producer hands out an instance the bootstrap
-// started: a message sent through it reaches the broker.
+// TestProducerSends pins that Producer hands out an instance the provider
+// stage started: a message sent through it reaches the broker.
 func TestProducerSends(t *testing.T) {
 	p, err := rocketmq.Producer()
 	require.NoError(t, err)

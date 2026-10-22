@@ -8,14 +8,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hydroan/gst/internal/testutil"
+	"github.com/hydroan/gst/internal/testutil/providertest"
+	"github.com/hydroan/gst/internal/testutil/testcontainer"
 	"github.com/hydroan/gst/provider/elastic"
 	"github.com/hydroan/gst/util"
 	"github.com/stretchr/testify/require"
 )
 
 func TestMain(m *testing.M) {
-	testutil.Run(m, testutil.Server{Elasticsearch: true})
+	providertest.Run(m, testcontainer.SetupElasticsearch)
 }
 
 func TestIndexLifecycle(t *testing.T) {

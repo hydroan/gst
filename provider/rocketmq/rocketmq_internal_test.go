@@ -12,7 +12,7 @@ import (
 // TestStartReportsAnUnreachableNameServer pins that start confirms the name
 // servers answer before it reports success, instead of handing out clients
 // whose first send is what fails: the client library starts a producer
-// without contacting anything. The instances the bootstrap started are
+// without contacting anything. The instances the provider stage started are
 // stopped first and started again afterwards, because the library keeps one
 // connection per client and pins it to the name servers it first saw.
 func TestStartReportsAnUnreachableNameServer(t *testing.T) {
