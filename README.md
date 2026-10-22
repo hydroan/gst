@@ -166,6 +166,22 @@ func (Record) Design() {
 `model.Register` 注入 seed 记录时必须显式指定 ID 或依赖唯一索引，否则重复启动会
 重复插入；`Base` 字符串 ID 的逗号分隔多 ID 查询写法对整数 ID 不适用。
 
+### 时间字段
+
+时间分三种，用不同的字段类型声明，框架按类型决定它怎么存、怎么写、怎么比较：
+
+| 含义 | 字段类型 | 库里存成 | 请求体与 URL 过滤的写法 | gRPC |
+|---|---|---|---|---|
+| 时刻：某一个瞬间 | `time.Time`、`*time.Time` | 各方言统一存 UTC | RFC 3339，必须带时区偏移，如 `2026-01-02T08:00:00+08:00` | `google.protobuf.Timestamp` |
+| 日期：某一天 | `datatypes.Date`，或加了 `gorm:"type:date"` 的 `time.Time`、`*time.Time` | 日期列 | RFC 3339，先换成 UTC 再取那一天：`2026-01-02T00:00:00+08:00` 是 2026-01-01 | `google.protobuf.Timestamp`，同样取 UTC 那一天 |
+| 时段：一天里的几点几分 | `datatypes.Time` | 时间列，MySQL 上不保留小数秒 | `15:04:05`，可带小数秒，`17:30:00.5` 是 17:30 过半秒 | `google.protobuf.Duration`，从零点起、不满一天 |
+
+- 写法不对或超出范围的值答 400（gRPC 答 InvalidArgument），并点名字段；不带时区的时间和 Unix 时间戳一律不收。
+- 响应里时刻和日期写成 RFC 3339，日期是那一天的 UTC 零点（`2026-01-01T00:00:00Z`）；时段写成 `17:30:00`，有小数秒时写满九位（`17:30:00.500000000`）。
+- URL 过滤对这三种字段只支持比较（`eq`、`ne`、`gt`、`gte`、`lt`、`lte`）和 `isnull`，前端的完整写法见 [API_CONTRACT.md](API_CONTRACT.md)。
+- 框架自己写的 `created_at`、`updated_at`、`deleted_at` 是 UTC，截到毫秒。
+- 定时任务的表达式按 UTC 解释，按别的时区算要写 `CRON_TZ=` 前缀；分析查询按时间分桶也按存储的 UTC 切。要按运营时区切日，在查询里自己换算。
+
 ### 自定义动作
 
 不直接表示数据库表的接口优先使用 `model.Empty`，并为当前接口单独定义自己的
