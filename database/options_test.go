@@ -279,7 +279,8 @@ func TestDatabaseWithDryRun(t *testing.T) {
 		uu := &TestUser{ID: existingID}
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithDryRun().Get(uu, u2.ID))
 		require.Equal(t, existingID, uu.ID, "Get should leave destination values unchanged in dry-run mode")
-		require.Equal(t, []any{u2.ID}, gotVars, "Get dry-run SQL should only use the requested id")
+		require.Contains(t, gotVars, u2.ID, "Get dry-run SQL binds the requested id")
+		require.NotContains(t, gotVars, existingID, "and never the id the destination carried")
 	})
 
 	t.Run("Count", func(t *testing.T) {
@@ -569,9 +570,11 @@ func TestDatabaseWithDryRunCollector(t *testing.T) {
 
 		require.NoError(t, err)
 		require.Len(t, stmts, 1)
-		requireSQLContains(t, stmts[0], "SELECT", "FROM", "test_users", "WHERE")
-		require.Equal(t, []any{requestedID}, stmts[0].Args, "Get SQL should only use the requested id")
+		requireSQLContains(t, stmts[0], "SELECT", "FROM", "test_users", "WHERE", "LIMIT")
+		require.Contains(t, stmts[0].Args, requestedID, "Get SQL binds the requested id")
+		require.NotContains(t, stmts[0].Args, existingID, "and never the id the destination carried")
 		require.Contains(t, stmts[0].RenderedSQL, requestedID)
+		require.Contains(t, stmts[0].RenderedSQL, "LIMIT 1", "Take reads the one row")
 		require.Equal(t, existingID, dest.ID, "WithDryRun should leave destination values unchanged")
 	})
 

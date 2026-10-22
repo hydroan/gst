@@ -189,7 +189,7 @@ func (db *database[M]) Get(dest M, id string) (err error) {
 		tableName := db.m.TableName()
 		dryRunDest := cloneDryRunModel(dest)
 		dryRunDest.ClearID()
-		tx := dryRunSession(db.ins).Where(db.quoteTableColumn(tableName, "id")+" = ?", id).Find(dryRunDest)
+		tx := dryRunSession(db.ins).Where(db.quoteTableColumn(tableName, "id")+" = ?", id).Take(dryRunDest)
 		return db.collectSQL(tx)
 	}
 	// Invoke model hook: GetBefore.
@@ -202,14 +202,11 @@ func (db *database[M]) Get(dest M, id string) (err error) {
 	}
 	tableName := db.m.TableName()
 	// Use an explicit WHERE clause instead of relying on primary key fields
-	// already present on dest.
+	// already present on dest; Take answers ErrRecordNotFound when no row
+	// matches.
 	dest.ClearID()
-	tx := db.ins.Where(db.quoteTableColumn(tableName, "id")+" = ?", id).Find(dest)
-	if err = tx.Error; err != nil {
+	if err = db.ins.Where(db.quoteTableColumn(tableName, "id")+" = ?", id).Take(dest).Error; err != nil {
 		return errors.WithStack(err)
-	}
-	if tx.RowsAffected == 0 {
-		return errors.WithStack(ErrRecordNotFound)
 	}
 	// Invoke model hook: GetAfter.
 	if !db.noHook {
