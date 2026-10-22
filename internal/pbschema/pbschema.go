@@ -10,9 +10,9 @@
 // jsonshape, the same reading of the Go types the TypeScript declarations
 // use, so both descriptions agree; field numbers come from the pb struct tag
 // every business field carries (see pbTag), while the keys of the framework's
-// model base have fixed numbers (see baseFieldNumbers). A type whose shape
-// protobuf cannot express is reported as a diagnostic instead of being
-// approximated, and nothing is derived then.
+// model base and tenant scope have fixed numbers (see frameworkFields). A
+// type whose shape protobuf cannot express is reported as a diagnostic
+// instead of being approximated, and nothing is derived then.
 //
 // The files already under pb/ are the contract in force, what the clients
 // were built against, so a derived file replaces one only if every field
@@ -37,32 +37,37 @@ import (
 // `pb:"11"`.
 const pbTag = "pb"
 
-// baseFieldNumbers are the field numbers of the keys the framework's model
-// base, model.Base and model.AutoBase, encodes to. They are fixed so that every
-// model agrees on them; the numbers below firstBusinessFieldNumber stay with
-// the framework.
-var baseFieldNumbers = map[string]int32{
-	"id":         1,
-	"created_by": 2,
-	"updated_by": 3,
-	"created_at": 4,
-	"updated_at": 5,
+// frameworkField is a key a struct of the framework encodes to, one a model
+// embeds: its field number is fixed, so that every model agrees on it, and
+// so is its comment, the struct being declared outside the project, where
+// the derivation reads no doc comment.
+type frameworkField struct {
+	number  int32
+	pkg     string // the path of the package declaring the field
+	comment string
+	// outputOnly marks the key of a value the server writes alone, which
+	// the conversion of a message into the model leaves out (see
+	// FieldConversion.OutputOnly).
+	outputOnly bool
 }
 
-// baseFieldComments are the comments the keys of the framework's model base
-// carry in every message: the base is declared outside the project, where
-// the derivation reads no doc comment, so each key gets a fixed one.
-var baseFieldComments = map[string]string{
-	"id":         "The identifier of the record, assigned when it is created.",
-	"created_by": "The id of the user who created the record.",
-	"updated_by": "The id of the user who last updated the record.",
-	"created_at": "When the record was created.",
-	"updated_at": "When the record was last updated.",
+// frameworkFields are the keys of the framework's model base, model.Base and
+// model.AutoBase, and of its tenant scope, tenant.Scope; the numbers below
+// firstBusinessFieldNumber stay with the framework. The tenant is stamped
+// from the caller when the record is created and never written again, so a
+// value a message carries for it could never take effect.
+var frameworkFields = map[string]frameworkField{
+	"id":         {number: 1, pkg: modelRegistryPath, comment: "The identifier of the record, assigned when it is created."},
+	"created_by": {number: 2, pkg: modelRegistryPath, comment: "The id of the user who created the record."},
+	"updated_by": {number: 3, pkg: modelRegistryPath, comment: "The id of the user who last updated the record."},
+	"created_at": {number: 4, pkg: modelRegistryPath, comment: "When the record was created."},
+	"updated_at": {number: 5, pkg: modelRegistryPath, comment: "When the record was last updated."},
+	"tenant_id":  {number: 6, pkg: tenantPath, comment: "The tenant the record belongs to, stamped from the caller when the record is created.", outputOnly: true},
 }
 
 // firstBusinessFieldNumber is the lowest field number a business field of a
-// model embedding the framework's base may carry: 1 to 10 belong to the
-// framework. A type without the base numbers its fields from 1.
+// model carrying the framework's keys may carry: 1 to 10 belong to the
+// framework. A type without them numbers its fields from 1.
 const firstBusinessFieldNumber int32 = 11
 
 // Config describes one run: the derivation, and the generation built on it.

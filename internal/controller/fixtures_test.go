@@ -23,6 +23,7 @@ import (
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"gorm.io/datatypes"
@@ -129,6 +130,17 @@ type datedSample struct {
 
 func (datedSample) TableName() string { return "controller_dated_samples" }
 
+// scopedSample is filed under a tenant: the framework stamps the tenant of
+// the caller when a record is created, whatever tenant the record names.
+type scopedSample struct {
+	Name string `json:"name"`
+
+	tenant.Scope
+	modelregistry.Base
+}
+
+func (scopedSample) TableName() string { return "controller_scoped_samples" }
+
 // sampleAddress is the struct value of a shaped sample; the floor is an
 // integer narrower than a JSON number, for a nested value a field cannot
 // hold.
@@ -160,6 +172,7 @@ const (
 	versionedRoute     = "controller-versioned-samples"
 	validatedRoute     = "controller-validated-samples"
 	datedRoute         = "controller-dated-samples"
+	scopedRoute        = "controller-scoped-samples"
 	observedRoute      = "controller-observed-samples"
 	cookieBeforeRoute  = "controller-cookie-before-samples"
 	cookieAfterRoute   = "controller-cookie-after-samples"

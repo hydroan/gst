@@ -235,7 +235,7 @@ func (Entry) Design() {
 
 模型顶层声明 `GRPC()`，它就同时走 gRPC：`gg gen` 从 Go 类型和 `Design()` 推导 `.proto`，进程内
 编译出 `pb/` 下的 Go 代码，并在 gRPC 服务上注册和 HTTP 路由相同的动作，业务代码只写 `service/` 那一份。
-字段用 `pb` tag 给消息编号（`pb:"11"`，框架的 `model.Base` 字段占 1 到 10），缺的 `gg gen` 会补上。
+字段用 `pb` tag 给消息编号（`pb:"11"`，1 到 10 留给框架：`model.Base` 的字段，以及嵌入 `tenant.Scope` 时的 `tenant_id`），缺的 `gg gen` 会补上。
 只在 gRPC 上有的是流：自定义动作里用 `Stream(func(){...})` 声明，流的那一侧写 `StreamingPayload`/`StreamingResult`，
 另一侧写 `Payload`/`Result`，两侧都流就是双向流，service 方法收发 `grpc.ServerStream`、`ClientStream`
 或 `BidiStream`。测试里 `testutil.GRPCTarget()` 给出测试服务器的 gRPC 地址；测试二进制没导入 `pb` 包、一个 gRPC 服务都没注册时，它直接 panic 并点名要加的导入，`gg gen` 写测试骨架时也会为此警告。完整示例见

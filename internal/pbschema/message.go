@@ -45,9 +45,13 @@ var timeTypes = map[string]struct{ typeName, proto string }{
 	"gorm.io/gorm.DeletedAt": {WellKnownTimestamp, timestampProto},
 }
 
-// modelRegistryPath is the package declaring the framework's model base, whose
-// promoted keys carry the fixed field numbers of baseFieldNumbers.
-const modelRegistryPath = ggconst.ImportPathGst + "/internal/modelregistry"
+// modelRegistryPath and tenantPath are the packages declaring the
+// framework's model base and its tenant scope, whose promoted keys carry
+// fixed field numbers (see frameworkFields).
+const (
+	modelRegistryPath = ggconst.ImportPathGst + "/internal/modelregistry"
+	tenantPath        = ggconst.ImportPathGst + "/internal/tenant"
+)
 
 // The query markers of the model registry a model embeds to opt in to the
 // framework's List controls, named after the types themselves.
@@ -150,6 +154,10 @@ type FieldConversion struct {
 	Field  jsonshape.Field
 	Type   FieldType
 	GoName string
+	// OutputOnly marks a field the server writes alone, tenant_id of a
+	// model embedding tenant.Scope: the conversions encode it into its
+	// message and never decode it out of one.
+	OutputOnly bool
 	// path selects the field from a value of the struct, the embedded
 	// structs it is promoted through first (see fieldPath).
 	Path []string
@@ -215,9 +223,9 @@ func unexportedOnPath(s *types.Struct, path []string) string {
 
 // buildMessage fills the message of obj with the fields of its struct type.
 // The keys are the ones the type encodes to (see jsonshape.Fields); each
-// carries the number of its pb tag, or the fixed number of a framework base
-// key, the type of its Go type (see fieldTypeOf), and its doc comment, or
-// the fixed comment of a framework base key (see baseFieldComments).
+// carries the number of its pb tag, or the fixed number of a framework key,
+// the type of its Go type (see fieldTypeOf), and its doc comment, or the
+// fixed comment of a framework key (see frameworkFields).
 //
 // For the model type
 //
@@ -291,7 +299,7 @@ type numberedField struct {
 // of its file, the message of an unnamed struct field included (see
 // fieldTypeOf), so the message takes its place in the file before its fields
 // are built and the messages of those fields follow it. The fields are
-// listed by number, so the framework's base keys come first. The tagged
+// listed by number, so the framework's keys come first. The tagged
 // fields take their numbers first; a field without a tag is then given the
 // next number after every number in use (see nextNumbers), reported with it
 // for gg check, and listed in
@@ -299,7 +307,8 @@ type numberedField struct {
 // promoted through an embedded pointer is reported: the handlers read and
 // write every field of a message as a field of the struct, which a nil
 // pointer would have them leave out or allocate. So is a key promoted from
-// a struct outside the project, whose fields cannot carry pb tags.
+// a struct outside the project, whose fields cannot carry pb tags, but for
+// the framework's own keys (see frameworkFields).
 func (g *Schema) messageOfStruct(name, comment string, st *types.Struct, file *ProtoFile, s jsonshape.Site) *Conversion {
 	desc := &descriptorpb.DescriptorProto{Name: new(name)}
 	goName, protoName := goCamelCase(name), name
@@ -308,9 +317,9 @@ func (g *Schema) messageOfStruct(name, comment string, st *types.Struct, file *P
 	prefix := []int32{fileMessagesTag, int32Index(len(file.Messages))}
 	file.addMessage(desc, comment)
 	fields := g.project.Fields(st, s)
-	base := false
+	framework := false
 	for _, f := range fields {
-		base = base || isBaseField(f)
+		framework = framework || isFrameworkField(f)
 	}
 	numbers := make(map[int32]string)
 	planned := make([]int32, len(fields)) // the number of each field, 0 for one left out
@@ -322,8 +331,8 @@ func (g *Schema) messageOfStruct(name, comment string, st *types.Struct, file *P
 			g.project.Report(fs, "the JSON key %q cannot name a protobuf field; name it with a json tag of letters, digits and underscores", f.Key)
 		case f.ViaPointer:
 			g.project.Report(fs, "the field is promoted through an embedded pointer, which a message has no way to leave unset; embed the struct by value")
-		case isBaseField(f):
-			planned[i] = baseFieldNumbers[f.Key]
+		case isFrameworkField(f):
+			planned[i] = frameworkFields[f.Key].number
 			numbers[planned[i]] = f.Key
 		case f.Var.Pkg() == nil || g.project.Package(f.Var.Pkg().Path()) == nil:
 			g.project.Report(fs, "the field is promoted from a struct outside the project, whose fields cannot carry pb tags; embed a project type")
@@ -331,13 +340,13 @@ func (g *Schema) messageOfStruct(name, comment string, st *types.Struct, file *P
 			tag, tagged := reflect.StructTag(f.Tag).Lookup(pbTag)
 			if !tagged {
 				if rest, malformed := malformedTag(f.Tag); malformed {
-					g.project.Report(fs, "the struct tag cannot be read from %q on, so its pb tag is not found; write each pair as key:\"value\", as in pb:%q", rest, strconv.Itoa(int(firstFieldNumber(base))))
+					g.project.Report(fs, "the struct tag cannot be read from %q on, so its pb tag is not found; write each pair as key:\"value\", as in pb:%q", rest, strconv.Itoa(int(firstFieldNumber(framework))))
 					continue
 				}
 				untagged = append(untagged, i)
 				continue
 			}
-			number := g.taggedNumber(tag, base, fs)
+			number := g.taggedNumber(tag, framework, fs)
 			if number == 0 {
 				continue
 			}
@@ -350,7 +359,7 @@ func (g *Schema) messageOfStruct(name, comment string, st *types.Struct, file *P
 		}
 	}
 	if len(untagged) > 0 {
-		next := g.nextNumbers(file, protoName, numbers, base)
+		next := g.nextNumbers(file, protoName, numbers, framework)
 		for _, i := range untagged {
 			f := fields[i]
 			fs := g.project.FieldSite(s, f.Key, f.Var)
@@ -409,10 +418,12 @@ func (g *Schema) messageOfStruct(name, comment string, st *types.Struct, file *P
 			}
 		}
 		doc := g.project.FieldDoc(f.Var)
-		if isBaseField(f) {
-			doc = baseFieldComments[f.Key]
+		outputOnly := false
+		if isFrameworkField(f) {
+			doc = frameworkFields[f.Key].comment
+			outputOnly = frameworkFields[f.Key].outputOnly
 		}
-		numbered = append(numbered, numberedField{field: field, comment: fieldComment(doc, ft.enum), conversion: FieldConversion{Field: f, Type: ft, Path: path}})
+		numbered = append(numbered, numberedField{field: field, comment: fieldComment(doc, ft.enum), conversion: FieldConversion{Field: f, Type: ft, Path: path, OutputOnly: outputOnly}})
 	}
 	slices.SortStableFunc(numbered, func(a, b numberedField) int { return cmp.Compare(a.field.GetNumber(), b.field.GetNumber()) })
 	for i, nf := range numbered {
@@ -430,7 +441,7 @@ func (g *Schema) messageOfStruct(name, comment string, st *types.Struct, file *P
 
 // nextNumbers returns the numbering of the fields without a pb tag of the
 // message protoName of file, given the numbers its tagged fields hold and
-// whether it embeds the framework's base: a field the committed definition
+// whether it carries the framework's keys: a field the committed definition
 // under pb/ already holds keeps the number it held there, and any other
 // field takes the next number after the highest one in use, in the message
 // as it is and in the committed one, skipping the numbers the committed
@@ -439,7 +450,7 @@ func (g *Schema) messageOfStruct(name, comment string, st *types.Struct, file *P
 // tags = 12 in its committed definition and declaring title tagged 11, tags
 // untagged and a new summary untagged, numbers tags 12 and summary 13; with
 // tags dropped and 12 reserved by the committed file, summary is 13 too.
-func (g *Schema) nextNumbers(file *ProtoFile, protoName string, numbers map[int32]string, base bool) func(key string) (int32, bool) {
+func (g *Schema) nextNumbers(file *ProtoFile, protoName string, numbers map[int32]string, framework bool) func(key string) (int32, bool) {
 	committed := g.committedMessage(file, protoName)
 	committedNumbers := make(map[int32]bool, len(committed.GetField()))
 	committedByName := make(map[string]int32, len(committed.GetField()))
@@ -448,7 +459,7 @@ func (g *Schema) nextNumbers(file *ProtoFile, protoName string, numbers map[int3
 		committedByName[f.GetName()] = f.GetNumber()
 	}
 	first := int32(1)
-	if base {
+	if framework {
 		first = firstBusinessFieldNumber
 	}
 	candidate := first - 1
@@ -478,26 +489,30 @@ func (g *Schema) nextNumbers(file *ProtoFile, protoName string, numbers map[int3
 	}
 }
 
-// isBaseField reports whether f is a key promoted from the framework's model
-// base, which carries a fixed field number.
-func isBaseField(f jsonshape.Field) bool {
-	_, fixed := baseFieldNumbers[f.Key]
-	return fixed && f.Var.Pkg() != nil && f.Var.Pkg().Path() == modelRegistryPath
+// isFrameworkField reports whether f is a key promoted from a struct of the
+// framework, its model base or its tenant scope, which carries a fixed field
+// number: the key must be one of frameworkFields and come from the package
+// declaring it, so a project field taking the same JSON key is a business
+// field like any other.
+func isFrameworkField(f jsonshape.Field) bool {
+	known, fixed := frameworkFields[f.Key]
+	return fixed && f.Var.Pkg() != nil && f.Var.Pkg().Path() == known.pkg
 }
 
 // taggedNumber returns the field number the pb tag of a field names, which
 // must be positive, at most 536870911, outside the range 19000 to 19999
 // protobuf reserves, and from firstBusinessFieldNumber on in a message
-// embedding the base. A number that fails these is reported and yields 0.
-func (g *Schema) taggedNumber(tag string, base bool, s jsonshape.Site) int32 {
-	first := firstFieldNumber(base)
+// carrying the framework's keys. A number that fails these is reported and
+// yields 0.
+func (g *Schema) taggedNumber(tag string, framework bool, s jsonshape.Site) int32 {
+	first := firstFieldNumber(framework)
 	number, err := strconv.ParseInt(tag, 10, 32)
 	switch {
 	case err != nil:
 		g.project.Report(s, "the pb tag %q is not a field number; write the number alone, as in pb:%q", tag, strconv.Itoa(int(first)))
 	case number < int64(first):
-		if base {
-			g.project.Report(s, "the pb tag names field number %d, but 1 to %d belong to the framework's base fields; number business fields from %d", number, firstBusinessFieldNumber-1, first)
+		if framework {
+			g.project.Report(s, "the pb tag names field number %d, but 1 to %d belong to the framework; number business fields from %d", number, firstBusinessFieldNumber-1, first)
 		} else {
 			g.project.Report(s, "the pb tag names field number %d; field numbers start at 1", number)
 		}
@@ -512,10 +527,10 @@ func (g *Schema) taggedNumber(tag string, base bool, s jsonshape.Site) int32 {
 }
 
 // firstFieldNumber returns the lowest number a business field of a message
-// may take: 11 in a message embedding the base, whose fields take 1 to 10,
-// and 1 in any other.
-func firstFieldNumber(base bool) int32 {
-	if base {
+// may take: 11 in a message carrying the framework's keys, 1 to 10
+// belonging to the framework, and 1 in any other.
+func firstFieldNumber(framework bool) int32 {
+	if framework {
 		return firstBusinessFieldNumber
 	}
 	return 1

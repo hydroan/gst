@@ -18,6 +18,10 @@ func init() {
 		grpc.Method{Name: FeedService_IngestFeed_FullMethodName, HTTPMethod: grpc.MethodStream, Route: "/api/feeds/ingest"},
 		grpc.Method{Name: FeedService_WatchFeed_FullMethodName, HTTPMethod: grpc.MethodStream, Route: "/api/feeds/watch"},
 	)
+	grpc.Register[FolderServiceServer](RegisterFolderServiceServer, folderService{},
+		grpc.Method{Name: FolderService_CreateFolder_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/folders"},
+		grpc.Method{Name: FolderService_GetFolder_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/folders/:id"},
+	)
 	grpc.Register[NoteServiceServer](RegisterNoteServiceServer, noteService{},
 		grpc.Method{Name: NoteService_CreateNote_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/notes"},
 		grpc.Method{Name: NoteService_GetNote_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/notes/:id"},

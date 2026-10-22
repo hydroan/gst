@@ -29,7 +29,9 @@ var update = flag.Bool("update", false, "rewrite the golden files under testdata
 // .gen.go with the type serving the service, the calls of its actions, the
 // handlers of its rpcs and the conversions of its messages; and, in every
 // package under pb/, a pb.gen.go registering its services, the root one
-// importing the packages below it. A model without GRPC() gets no file. A model
+// importing the packages below it. A model without GRPC() gets no file. A
+// model filed under tenants, Folder, gets the tenant key at the framework's
+// fixed number, which its FromProto leaves out. A model
 // referring to a type of another directory, Pin's Link of
 // model/record/item.go, gets a definition importing the other's by its
 // registered path, tmpapp/record/item.proto, and conversions calling the
@@ -63,6 +65,7 @@ func TestGenRunWritesTheProtobufDefinitionsOfGRPCModels(t *testing.T) {
 		"model/pin.go":         protobufPinModel,
 		"model/shape.go":       protobufShapeModel,
 		"model/feed.go":        protobufFeedModel,
+		"model/folder.go":      protobufFolderModel,
 	})
 
 	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
@@ -326,6 +329,38 @@ func TestGenRunCommentsTheFrameworkBaseFields(t *testing.T) {
   // When the record was last updated.
   google.protobuf.Timestamp updated_at = 5;
 `)
+}
+
+// TestGenRunNumbersTheTenantKeyAsAFrameworkField pins the field a model
+// filed under tenants gets for its tenant: tenant.Scope is declared outside
+// the project, like the model base, so its key takes the framework's fixed
+// number 6 and a fixed comment. The server writes it alone, stamping the
+// tenant of the caller when the record is created, so the generated
+// FromProto never reads it, which also keeps the conversions off its Go
+// type, one of an internal package the project cannot name.
+func TestGenRunNumbersTheTenantKeyAsAFrameworkField(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	writeProtobufProject(t, projectDir, map[string]string{"model/folder.go": protobufFolderModel})
+
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+
+	got := readGenerated(t, filepath.Join(projectDir, "pb"))
+	require.Contains(t, got["folder.proto"], `
+  // The tenant the record belongs to, stamped from the caller when the record is created.
+  string tenant_id = 6;
+
+  // Title is the display title.
+  string title = 11;
+`)
+	toProto, fromProto, found := strings.Cut(got["folder.gen.go"], "func FolderFromProto")
+	require.True(t, found, "folder.gen.go declares FolderFromProto")
+	require.Contains(t, toProto, "m.TenantID")
+	require.Contains(t, got["folder.gen.go"], `// FolderFromProto decodes Folder messages into values, nil into nil. Leaves
+// out tenant_id, which the server writes alone.`)
+	require.NotContains(t, fromProto, "TenantID", "the server writes the tenant alone")
 }
 
 // TestGenRunRefusesAModelFileNamedPB pins that a model file named pb.go is
@@ -616,7 +651,7 @@ func TestGenRunWritesNoProtobufDefinitionWhenAShapeCannotBeDescribed(t *testing.
 	// pb tag beside the unreadable one on every run.
 	require.Regexp(t, "Spaced +string +`json:\"spaced\" pb: \"21\"`", string(healed))
 	for _, want := range []string{
-		"tmpapp/model.Rejected.low: the pb tag names field number 3, but 1 to 10 belong to the framework's base fields; number business fields from 11",
+		"tmpapp/model.Rejected.low: the pb tag names field number 3, but 1 to 10 belong to the framework; number business fields from 11",
 		"tmpapp/model.Rejected.reserved: the pb tag names field number 19500, inside the range 19000 to 19999 protobuf reserves",
 		"tmpapp/model.Rejected.twice: field number 11 is already taken by title; give each field its own number",
 		"tmpapp/model.Rejected.matrix: a slice of slices or maps has no protobuf type; wrap the element in a struct type",
@@ -1307,6 +1342,37 @@ func (Note) Design() {
 	dsl.GRPC()
 	dsl.Migrate()
 	dsl.Endpoint("notes")
+	dsl.Create(func() {})
+	dsl.Get(func() {})
+}
+`
+
+// protobufFolderModel is a model filed under tenants and served over gRPC:
+// the key of its tenant scope takes the framework's fixed number.
+const protobufFolderModel = `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/tenant"
+)
+
+// Folder is a folder kept by the folder service, filed under the tenant of
+// whoever created it.
+type Folder struct {
+	// Title is the display title.
+	Title string 'json:"title" pb:"11"'
+
+	tenant.Scope
+	model.Base
+}
+
+func (Folder) TableName() string { return "folders" }
+
+func (Folder) Design() {
+	dsl.GRPC()
+	dsl.Migrate()
+	dsl.Endpoint("folders")
 	dsl.Create(func() {})
 	dsl.Get(func() {})
 }

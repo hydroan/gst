@@ -1098,8 +1098,12 @@ func (w *fileWriter) structFromProto(dst, src ast.Expr, conv *pbschema.Conversio
 // fieldFromProto decodes the field fc of the message src, known to be set,
 // into the field of its struct dst: through the getter of the field, or the
 // field itself for the pointer of an optional scalar. The field is named by
-// its path behind path, that of the struct (see keyPath).
+// its path behind path, that of the struct (see keyPath). A field the server
+// writes alone (see pbschema.FieldConversion.OutputOnly) is not decoded.
 func (w *fileWriter) fieldFromProto(dst, src ast.Expr, fc pbschema.FieldConversion, path ast.Expr) []ast.Stmt {
+	if fc.OutputOnly {
+		return nil
+	}
 	var value ast.Expr = call(sel(src, "Get"+fc.GoName))
 	if fc.Type.Optional {
 		value = sel(src, fc.GoName)
@@ -1112,7 +1116,10 @@ func (w *fileWriter) fieldFromProto(dst, src ast.Expr, fc pbschema.FieldConversi
 // XFromProto decoding a message into a value, nil into nil both ways.
 // XFromProto answers an error as well, the refusal of a value a field
 // cannot hold (see refusing), which the handlers answer the call with; a
-// message no field of which reads that way answers nil for it.
+// message no field of which reads that way answers nil for it. A field the
+// server writes alone XToProto encodes and XFromProto leaves out, saying so
+// in its doc: FolderFromProto of the golden fixture's folder.gen.go never
+// reads tenant_id.
 //
 // The Link type of the golden fixture, record/item.proto, gets
 //
@@ -1163,15 +1170,22 @@ func (w *fileWriter) conversionFuncs(msg *pbschema.Message) {
 	w.fallible = false
 	w.resetFuncTemps()
 	var fields []ast.Stmt
+	var outputOnly []string
 	for _, fc := range msg.Conversion.Fields {
 		w.resetTemps()
 		fields = append(fields, w.fieldFromProto(ident("m"), ident("p"), fc, nil)...)
+		if fc.OutputOnly {
+			outputOnly = append(outputOnly, fc.Field.Key)
+		}
 	}
 	body = []ast.Stmt{
 		ifStmt(nil, &ast.BinaryExpr{X: ident("p"), Op: token.EQL, Y: ident("nil")}, returns(ident("nil"), ident("nil"))),
 		define([]string{"m"}, newCall(w.goType(msg.TypeName.Type()))),
 	}
 	doc := goName + "FromProto decodes " + msg.TypeName.Name() + " messages into values, nil into nil."
+	if len(outputOnly) > 0 {
+		doc += " Leaves out " + strings.Join(outputOnly, ", ") + ", which the server writes alone."
+	}
 	if w.fallible {
 		// err is declared once, for every value read through a helper or a
 		// conversion function that may refuse it (see refusing).

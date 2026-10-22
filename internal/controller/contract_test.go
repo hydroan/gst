@@ -18,6 +18,7 @@ import (
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/response"
+	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -54,6 +55,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 	versioned := standardFixture[*versionedSample](versionedRoute, "Versioned")
 	validated := standardFixture[*validatedSample](validatedRoute, "Validated")
 	dated := standardFixture[*datedSample](datedRoute, "Dated")
+	scoped := standardFixture[*scopedSample](scopedRoute, "Scoped")
 	shaped := standardFixture[*shapedSample](shapedRoute, "Shaped")
 	observed := standardFixture[*sampleRecord](observedRoute, "Observed")
 	nested := standardFixture[*nestedSample](nestedRoute, "Nested")
@@ -116,6 +118,20 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				data := dataMap(t, got)
 				require.Equal(t, "2026-01-01T00:00:00Z", data["day"])
 				requireDatedDay(t, stringOf(data["id"]), time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
+			},
+		},
+		{
+			// The tenant is the caller's, stamped when the record is written:
+			// a tenant the record names is ignored on both transports, a
+			// generated FromProto not even reading it.
+			name: "Create files the record under the caller's tenant whatever tenant it names", fixture: scoped, phase: consts.Create,
+			input: contractInput{record: map[string]any{"name": uniqueName("contract-scoped"), "tenant_id": "contract-other-tenant"}},
+			want:  ok,
+			check: func(t *testing.T, _ contractInput, got contractAnswer) {
+				t.Helper()
+				data := dataMap(t, got)
+				require.Equal(t, tenant.Default, data["tenant_id"])
+				requireScopedTenant(t, stringOf(data["id"]), tenant.Default)
 			},
 		},
 		{
@@ -1423,6 +1439,16 @@ func countValidatedNamed(t *testing.T, name string) int {
 	require.NoError(t, database.Database[*validatedSample](context.Background()).
 		WithQuery(&validatedSample{Name: name}).Count(&total))
 	return total
+}
+
+// requireScopedTenant asserts that the scoped sample with the given id is
+// filed under want, read across every tenant so that a record filed under
+// another one is found as well.
+func requireScopedTenant(t *testing.T, id, want string) {
+	t.Helper()
+	record := new(scopedSample)
+	require.NoError(t, database.Database[*scopedSample](tenant.Across(context.Background())).Get(record, id))
+	require.Equal(t, want, record.GetTenantID())
 }
 
 // countSamplesWithID counts the stored samples carrying id: 1 or 0.
