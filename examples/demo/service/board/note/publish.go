@@ -2,7 +2,6 @@ package note
 
 import (
 	"net/http"
-	"time"
 
 	"demo/model/board"
 
@@ -32,7 +31,9 @@ func (p *Publish) Create(ctx *gst.ServiceContext, req *board.NotePublishReq) (*b
 		}
 		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load the note", err)
 	}
-	now := time.Now().UTC().Truncate(time.Millisecond)
+	// The framework's clock, the one behind created_at and updated_at: UTC,
+	// to the millisecond.
+	now := database.DB().NowFunc()
 	note.Published = true
 	note.PublishedAt = &now
 	if err := database.Database[*board.Note](ctx).Update(note); err != nil {
