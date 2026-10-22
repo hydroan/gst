@@ -246,6 +246,35 @@ func TestParseIndexPlansNamesEmbeddedFieldsByPath(t *testing.T) {
 	}, plans)
 }
 
+// QualifiedIndexSample lives in a table qualified by its schema, which gorm
+// takes ahead of the name: a PostgreSQL schema, or a MySQL database.
+type QualifiedIndexSample struct {
+	Code string `json:"code" gorm:"size:191"`
+
+	modelregistry.Base
+}
+
+func (*QualifiedIndexSample) TableName() string { return "audit.qualified_samples" }
+
+func (*QualifiedIndexSample) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Code"}, Unique: true}}
+}
+
+// TestParseIndexPlansNamesAQualifiedTableLikeGorm pins that the index of a
+// table qualified by its schema is named with the dot turned into an
+// underscore, the way gorm names its own indexes, so the CREATE INDEX
+// statement names one index rather than a schema and an index.
+func TestParseIndexPlansNamesAQualifiedTableLikeGorm(t *testing.T) {
+	plans, err := modelschema.ParseIndexPlans(newSchemaDB(t), &QualifiedIndexSample{})
+	require.NoError(t, err)
+	require.Equal(t, []modelschema.IndexPlan{
+		{Name: "uniq_audit_qualified_samples_code", Table: "audit.qualified_samples", Columns: []string{"code"}, Unique: true},
+	}, plans)
+	require.Equal(t,
+		`CREATE UNIQUE INDEX "uniq_audit_qualified_samples_code" ON "audit"."qualified_samples" ("code")`,
+		plans[0].CreateSQL(postgres.New(postgres.Config{})))
+}
+
 // LongTableNameSample carries a table name long enough to push generated
 // index names past the identifier limit.
 type LongTableNameSample struct {

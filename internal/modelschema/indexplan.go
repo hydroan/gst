@@ -311,15 +311,18 @@ func CheckCrossModelIndexPlanConflicts(sets []ModelIndexPlans) error {
 // indexName generates the deterministic framework index name: an idx_ (or
 // uniq_ for unique) prefix, the table name, and the column names,
 // idx_samples_kind_created_at for the columns kind and created_at of
-// samples. A name beyond limit characters (see indexNameLimit) keeps a
-// readable prefix and ends with an fnv-32a hash of the full name, so
-// truncation stays deterministic across runs.
+// samples. A dot turns into an underscore, the way gorm names its own
+// indexes, so a table qualified by its schema still names one index:
+// uniq_audit_events_code for the column code of audit.events. A name beyond
+// limit characters (see indexNameLimit) keeps a readable prefix and ends
+// with an fnv-32a hash of the full name, so truncation stays deterministic
+// across runs.
 func indexName(table string, columns []string, unique bool, limit int) string {
 	prefix := "idx_"
 	if unique {
 		prefix = "uniq_"
 	}
-	name := prefix + table + "_" + strings.Join(columns, "_")
+	name := strings.ReplaceAll(prefix+table+"_"+strings.Join(columns, "_"), ".", "_")
 	if len(name) <= limit {
 		return name
 	}
