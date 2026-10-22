@@ -3,12 +3,10 @@ package ggcheck
 import (
 	"fmt"
 	"os"
-	"sort"
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
-	"github.com/hydroan/gst/internal/modelinfo"
 	"github.com/hydroan/gst/internal/modelinspect"
 )
 
@@ -26,11 +24,8 @@ var IndexDeclarations = Check{
 // and gg migrate read it, names MySQL as the database, and otherwise has
 // nothing to report. The column type a field gets is gorm's to decide from the
 // field's tags and type, so the check asks the models themselves through the
-// inspection gg gen also runs (see modelinspect.Inspect), built from the
-// project as it is: a project whose model packages do not compile, its
-// generated column files out of date among the causes, cannot be asked and is
-// reported as such rather than passed. Models of copyable framework modules
-// are skipped, since copied module code is owned by the framework repository.
+// column inspection (see inspectedModelViolations) and reports what
+// model.ValidateIndexes refused.
 func checkIndexDeclarations(ignore gghelper.ProjectIgnore) []string {
 	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
 		return nil
@@ -42,43 +37,7 @@ func checkIndexDeclarations(ignore gghelper.ProjectIgnore) []string {
 	if config.App.Database.Type != config.DBMySQL {
 		return nil
 	}
-
-	scanned, err := scanModels(ignore)
-	if err != nil {
-		return []string{fmt.Sprintf("index declarations could not be checked: %v", err)}
-	}
-	owned, err := copyableModuleOwners()
-	if err != nil {
-		return []string{fmt.Sprintf("listing copyable framework modules: %v", err)}
-	}
-	inspected, ok, err := modelinspect.Inspect(scanned.Module, ggconst.DirModel, scanned.Models, ignore, nil)
-	if err != nil {
-		return []string{fmt.Sprintf("index declarations could not be checked: %v", err)}
-	}
-	if !ok {
-		return nil
-	}
-
-	declared := make(map[string]*modelinfo.Model, len(scanned.Models))
-	for _, m := range scanned.Models {
-		declared[m.ImportPath()+"."+m.ModelName] = m
-	}
-	var violations []string
-	for _, model := range inspected {
-		if model.IndexViolation == "" {
-			continue
-		}
-		// A model the scan knows is reported under the file declaring it; one
-		// registered from elsewhere, a framework module's, under its package.
-		origin := model.PkgPath
-		if m, found := declared[model.PkgPath+"."+model.Name]; found {
-			if moduleOwnedPath(owned, ggconst.DirModel, m.ModelFilePath) {
-				continue
-			}
-			origin = m.ModelFilePath
-		}
-		violations = append(violations, origin+": "+model.IndexViolation)
-	}
-	sort.Strings(violations)
-	return violations
+	return inspectedModelViolations(ignore, "index declarations", func(model modelinspect.ModelColumns) string {
+		return model.IndexViolation
+	})
 }

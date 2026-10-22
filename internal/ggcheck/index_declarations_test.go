@@ -52,6 +52,24 @@ func TestIndexDeclarationsRefusesAColumnMySQLCannotIndex(t *testing.T) {
 	}
 }
 
+// TestIndexDeclarationsLeavesARefusedScanToTheDSLDesignRules pins that model
+// files the scan refuses are reported by the DSL design rules alone: the index
+// declarations, unable to read the models, add nothing of their own.
+func TestIndexDeclarationsLeavesARefusedScanToTheDSLDesignRules(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+	writeCheckProjectGoMod(t, projectDir)
+	writeCheckFile(t, filepath.Join(projectDir, "config.ini"), "[database]\ntype = mysql\n")
+	writeCheckFile(t, filepath.Join(projectDir, "model", "record.go"), "package model\n\ntype Record struct {\n")
+
+	if violations := runCheck(ggcheck.IndexDeclarations); len(violations) != 0 {
+		t.Fatalf("a refused scan is the DSL design rules' to report, got %#v", violations)
+	}
+	if violations := runCheck(ggcheck.DSLDesignRules); len(violations) != 1 {
+		t.Fatalf("the DSL design rules should report the refused file once, got %#v", violations)
+	}
+}
+
 // indexedRecordModel is a table-backed model indexing its Owner field, the
 // field's struct tag extended by ownerTag after its json tag; "" leaves the
 // string without a size.

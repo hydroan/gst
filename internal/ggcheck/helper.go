@@ -1,16 +1,19 @@
 // The helpers the checks share: the files gg generates and owns, the subtrees
-// gg module copy writes, the explicit DSL Payload and Result calls and the
-// names type expressions end in, and what the checks know about imports and
-// packages, the framework's own and the project's. No check lives here; every
-// check has a file of its own.
+// gg module copy writes, the models read the way gg gen reads them and what
+// the column inspection finds in them, the explicit DSL Payload and Result
+// calls and the names type expressions end in, and what the checks know about
+// imports and packages, the framework's own and the project's. No check lives
+// here; every check has a file of its own.
 
 package ggcheck
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -21,6 +24,7 @@ import (
 	"github.com/hydroan/gst/internal/ggmodule"
 	"github.com/hydroan/gst/internal/goast"
 	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelinspect"
 )
 
 // isGeneratedFileName reports whether a path is a file gg generates and owns.
@@ -248,6 +252,57 @@ func scanModels(ignore gghelper.ProjectIgnore) (modelinfo.ScannedModels, error) 
 		return modelinfo.ScannedModels{}, errors.Mark(errors.Wrap(err, "scanning model designs"), errModelsRefused)
 	}
 	return scanned, nil
+}
+
+// inspectedModelViolations serves the checks only the compiled models can
+// answer. It runs the column inspection gg gen also runs (see
+// modelinspect.Inspect) over the project as it is, and reports what violation
+// reads off each model, under the file declaring the model; one registered
+// from elsewhere, a framework module's, is reported under its package, and the
+// models of copyable framework modules are skipped, since copied module code
+// is owned by the framework repository. A project whose model packages do not
+// compile, its generated column files out of date among the causes, cannot be
+// asked: that is reported, prefixed with what, the subject that could not be
+// checked, rather than passed. A scan the model files, gst.yaml or go.mod
+// stopped adds nothing, the DSL design rules reporting it (see scanModels).
+func inspectedModelViolations(ignore gghelper.ProjectIgnore, what string, violation func(modelinspect.ModelColumns) string) []string {
+	scanned, err := scanModels(ignore)
+	if err != nil {
+		return nil
+	}
+	owned, err := copyableModuleOwners()
+	if err != nil {
+		return []string{fmt.Sprintf("listing copyable framework modules: %v", err)}
+	}
+	inspected, ok, err := modelinspect.Inspect(scanned.Module, ggconst.DirModel, scanned.Models, ignore, nil)
+	if err != nil {
+		return []string{fmt.Sprintf("%s could not be checked: %v", what, err)}
+	}
+	if !ok {
+		return nil
+	}
+
+	declared := make(map[string]*modelinfo.Model, len(scanned.Models))
+	for _, m := range scanned.Models {
+		declared[m.ImportPath()+"."+m.ModelName] = m
+	}
+	var violations []string
+	for _, model := range inspected {
+		found := violation(model)
+		if found == "" {
+			continue
+		}
+		origin := model.PkgPath
+		if m, known := declared[model.PkgPath+"."+model.Name]; known {
+			if moduleOwnedPath(owned, ggconst.DirModel, m.ModelFilePath) {
+				continue
+			}
+			origin = m.ModelFilePath
+		}
+		violations = append(violations, origin+": "+found)
+	}
+	sort.Strings(violations)
+	return violations
 }
 
 // varObj is the parser-resolved declaration object of a local variable.
