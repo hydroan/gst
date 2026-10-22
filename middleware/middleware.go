@@ -16,22 +16,23 @@ import (
 )
 
 // Register adds middlewares that run on every API route. Call it from an init
-// function: a route registered before the call runs without the middleware,
-// and a call once the server runs panics, the routes having their chains
-// already. Registered that way, they run in registration order, and on the
-// routes of router.Auth ahead of every middleware RegisterAuth adds. When
-// tracing is enabled, each middleware runs in a span of its own.
+// function: gin fixes the chain of a route as the route registers, so a call
+// once a route is registered, or once the server runs, panics rather than
+// leave the routes registered before it without the middleware. Registered
+// that way, they run in registration order, and on the routes of router.Auth
+// ahead of every middleware RegisterAuth adds. When tracing is enabled, each
+// middleware runs in a span of its own.
 func Register(middlewares ...gin.HandlerFunc) {
 	middleware.Register(middlewares...)
 }
 
 // RegisterAuth adds middlewares that run only on the routes registered on
 // router.Auth: the place for authentication and authorization. Call it from an
-// init function: a route registered before the call runs without the
-// middleware, and a call once the server runs panics, the routes having their
-// chains already. Registered that way, they run in registration order, after
-// every middleware Register adds. When tracing is enabled, each middleware runs
-// in a span of its own.
+// init function: like Register, a call once a route is registered, or once
+// the server runs, panics rather than leave the routes registered before it
+// without the middleware. Registered that way, they run in registration
+// order, after every middleware Register adds. When tracing is enabled, each
+// middleware runs in a span of its own.
 func RegisterAuth(middlewares ...gin.HandlerFunc) {
 	middleware.RegisterAuth(middlewares...)
 }

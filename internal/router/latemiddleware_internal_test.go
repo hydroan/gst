@@ -24,3 +24,20 @@ func TestRegisterAfterRunPanics(t *testing.T) {
 	require.PanicsWithValue(t, "router: middleware.Register after the server started; register middleware at package initialization", func() { middleware.Register(pass) })
 	require.PanicsWithValue(t, "router: middleware.RegisterAuth after the server started; register middleware at package initialization", func() { middleware.RegisterAuth(pass) })
 }
+
+// TestRegisterAfterARouteRegisteredPanics pins that a middleware registered
+// once a route is, before the server runs, is reported at once as well: in
+// that window — the routes-ready hooks, the components starting — it would
+// leave every route registered so far without the middleware, while an
+// interceptor queued then guards every gRPC method. The test server of this
+// package registered its routes already; the start flag is cleared and
+// restored, so the test holds whatever brought it up.
+func TestRegisterAfterARouteRegisteredPanics(t *testing.T) {
+	was := started.Load()
+	started.Store(0)
+	t.Cleanup(func() { started.Store(was) })
+	pass := func(*gin.Context) {}
+
+	require.PanicsWithValue(t, "router: middleware.Register after a route was registered; register middleware at package initialization", func() { middleware.Register(pass) })
+	require.PanicsWithValue(t, "router: middleware.RegisterAuth after a route was registered; register middleware at package initialization", func() { middleware.RegisterAuth(pass) })
+}

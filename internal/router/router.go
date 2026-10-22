@@ -218,21 +218,30 @@ func Init() error {
 	auth = root.Group("")
 	auth.Use(middleware.AuthMarker())
 	pub = root.Group("")
-	// A middleware registered once the server runs would guard nothing: gin
-	// fixes the chain of a route as the route registers. The handlers report
-	// it at once, as grpcserver.Use reports an interceptor registered late.
+	// A middleware registered once a route is would miss every route before
+	// it: gin fixes the chain of a route as the route registers. The handlers
+	// report it at once, before the server runs as well as after, the way
+	// grpcserver.Use reports an interceptor registered once the server runs.
+	// The routes mounted above count for nothing, since no registered
+	// middleware runs on them; whatever the groups below carry is a route a
+	// late middleware would miss, however it was registered.
+	frameworkRoutes := len(root.Routes())
+	refuseLate := func(register string) {
+		if started.Load() != 0 {
+			panic("router: middleware." + register + " after the server started; register middleware at package initialization")
+		}
+		if len(root.Routes()) > frameworkRoutes {
+			panic("router: middleware." + register + " after a route was registered; register middleware at package initialization")
+		}
+	}
 	middleware.SetApplyHandlers(
 		func(mid gin.HandlerFunc) {
-			if started.Load() != 0 {
-				panic("router: middleware.Register after the server started; register middleware at package initialization")
-			}
+			refuseLate("Register")
 			auth.Use(mid)
 			pub.Use(mid)
 		},
 		func(mid gin.HandlerFunc) {
-			if started.Load() != 0 {
-				panic("router: middleware.RegisterAuth after the server started; register middleware at package initialization")
-			}
+			refuseLate("RegisterAuth")
 			auth.Use(mid)
 			authGuarded.Store(true)
 		},
