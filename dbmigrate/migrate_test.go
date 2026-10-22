@@ -784,13 +784,13 @@ func TestMigrateTableRenameAdvisoryOnSQLite(t *testing.T) {
 		&dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
 	require.NoError(t, err)
 	require.True(t, plan.Changed())
-	require.Contains(t, plan.Advisory, `ALTER TABLE "samples" RENAME TO "records";`)
-	require.Contains(t, plan.Advisory, `DROP INDEX "idx_samples_code";`, "sqlite renames no index: the old one is dropped for the next run to create the new one")
+	require.Contains(t, plan.Advisory, "ALTER TABLE `samples` RENAME TO `records`;")
+	require.Contains(t, plan.Advisory, "DROP INDEX `idx_samples_code`;", "sqlite renames no index: the old one is dropped for the next run to create the new one")
 
 	// Applying the advisory instead of the plan leaves only the index to
 	// create under its new name.
-	execSQLite(t, file, `ALTER TABLE "samples" RENAME TO "records"`)
-	execSQLite(t, file, `DROP INDEX "idx_samples_code"`)
+	execSQLite(t, file, "ALTER TABLE `samples` RENAME TO `records`")
+	execSQLite(t, file, "DROP INDEX `idx_samples_code`")
 	plan, err = dbmigrate.Migrate([]string{after}, config.DBSqlite, databaseConfig,
 		&dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
 	require.NoError(t, err)

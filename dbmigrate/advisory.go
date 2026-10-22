@@ -4,22 +4,26 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/sqldef/sqldef/v3/schema"
+	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
-// dialectFor returns the name of the dialect the generator mode targets,
-// the one dbruntime renders the identifiers and rename statements of the
-// advisory for, so the executable block pastes into that server as it is.
-func dialectFor(mode schema.GeneratorMode) string {
+// dialectorFor returns the gorm dialector of the database the generator mode
+// targets, connected to nothing: dbruntime quotes the identifiers and spells
+// the rename statements of the advisory with it, the way gorm speaks to that
+// server, so the executable block pastes into it as it is.
+func dialectorFor(mode schema.GeneratorMode) gorm.Dialector {
 	switch mode {
 	case schema.GeneratorModePostgres:
-		return string(config.DBPostgres)
+		return postgres.New(postgres.Config{})
 	case schema.GeneratorModeSQLite3:
-		return string(config.DBSqlite)
+		return sqlite.New(sqlite.Config{})
 	}
-	return string(config.DBMySQL)
+	return mysql.New(mysql.Config{})
 }
 
 // combineAdvisories joins the non-empty advisory sections with one blank
@@ -52,7 +56,7 @@ func formatTableRenames(mode schema.GeneratorMode, pairs []tableRenamePair) stri
 	if len(pairs) == 0 {
 		return ""
 	}
-	dialect := dialectFor(mode)
+	dialector := dialectorFor(mode)
 
 	var b strings.Builder
 	b.WriteString("  -- The plan above drops and re-creates the tables below; the created table keeps every column of the dropped one, so these are renames.\n")
@@ -73,13 +77,13 @@ func formatTableRenames(mode schema.GeneratorMode, pairs []tableRenamePair) stri
 		}
 	}
 	for _, pair := range pairs {
-		fmt.Fprintf(&b, "  -- Table %s -> %s\n", dbruntime.QuoteIdentifier(dialect, pair.From), dbruntime.QuoteIdentifier(dialect, pair.To))
+		fmt.Fprintf(&b, "  -- Table %s -> %s\n", dbruntime.QuoteIdentifier(dialector, pair.From), dbruntime.QuoteIdentifier(dialector, pair.To))
 		for _, index := range pair.IndexRenames {
 			unique := ""
 			if index.Unique {
 				unique = ", UNIQUE"
 			}
-			fmt.Fprintf(&b, "  --   index %s -> %s (%s%s)\n", dbruntime.QuoteIdentifier(dialect, index.From), dbruntime.QuoteIdentifier(dialect, index.To), index.Columns, unique)
+			fmt.Fprintf(&b, "  --   index %s -> %s (%s%s)\n", dbruntime.QuoteIdentifier(dialector, index.From), dbruntime.QuoteIdentifier(dialector, index.To), index.Columns, unique)
 		}
 		for _, statement := range pair.Residual {
 			fmt.Fprintf(&b, "  --   remaining change: %s\n", statement)
@@ -87,9 +91,9 @@ func formatTableRenames(mode schema.GeneratorMode, pairs []tableRenamePair) stri
 	}
 	b.WriteString("\n")
 	for _, pair := range pairs {
-		b.WriteString(dbruntime.RenameTableSQL(dialect, pair.From, pair.To) + "\n")
+		b.WriteString(dbruntime.RenameTableSQL(dialector, pair.From, pair.To) + "\n")
 		for _, index := range pair.IndexRenames {
-			b.WriteString(dbruntime.RenameIndexSQL(dialect, index.Table, index.From, index.To) + "\n")
+			b.WriteString(dbruntime.RenameIndexSQL(dialector, index.Table, index.From, index.To) + "\n")
 		}
 	}
 	return b.String()
@@ -112,7 +116,7 @@ func formatIndexRenames(mode schema.GeneratorMode, pairs []indexRenamePair) stri
 	if len(pairs) == 0 || mode == schema.GeneratorModeSQLite3 {
 		return ""
 	}
-	dialect := dialectFor(mode)
+	dialector := dialectorFor(mode)
 
 	var b strings.Builder
 	b.WriteString("  -- The plan above drops and re-creates the indexes below with identical definitions; these are renames.\n")
@@ -123,11 +127,11 @@ func formatIndexRenames(mode schema.GeneratorMode, pairs []indexRenamePair) stri
 		if pair.Unique {
 			unique = ", UNIQUE"
 		}
-		fmt.Fprintf(&b, "  -- Table %s: %s -> %s (%s%s)\n", dbruntime.QuoteIdentifier(dialect, pair.Table), dbruntime.QuoteIdentifier(dialect, pair.From), dbruntime.QuoteIdentifier(dialect, pair.To), pair.Columns, unique)
+		fmt.Fprintf(&b, "  -- Table %s: %s -> %s (%s%s)\n", dbruntime.QuoteIdentifier(dialector, pair.Table), dbruntime.QuoteIdentifier(dialector, pair.From), dbruntime.QuoteIdentifier(dialector, pair.To), pair.Columns, unique)
 	}
 	b.WriteString("\n")
 	for _, pair := range pairs {
-		b.WriteString(dbruntime.RenameIndexSQL(dialect, pair.Table, pair.From, pair.To) + "\n")
+		b.WriteString(dbruntime.RenameIndexSQL(dialector, pair.Table, pair.From, pair.To) + "\n")
 	}
 	return b.String()
 }

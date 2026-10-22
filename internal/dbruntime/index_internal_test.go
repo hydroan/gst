@@ -6,6 +6,9 @@ import (
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
+	"gorm.io/driver/sqlite"
 )
 
 // indexedRecord declares custom indexes covering embedded Base columns.
@@ -153,25 +156,36 @@ func TestEnsureCustomIndexesRejectsRenameCandidate(t *testing.T) {
 	err := ensureCustomIndexes(db, m)
 	require.ErrorContains(t, err, `already exists as "legacy_records_kind"`)
 	// SQLite renames no index: the hint drops it for the start to create it.
-	require.ErrorContains(t, err, `e.g. DROP INDEX "legacy_records_kind"`)
+	require.ErrorContains(t, err, "e.g. DROP INDEX `legacy_records_kind`")
 }
 
 // TestRenameSQLFollowsTheDialect pins the examples of QuoteIdentifier,
-// RenameTableSQL and RenameIndexSQL: MySQL's backticks and RENAME forms,
-// PostgreSQL's double quotes and ALTER forms, and SQLite, which renames a
-// table but no index, so the index is dropped for the start to create it.
+// RenameTableSQL and RenameIndexSQL: each dialect quotes the way its gorm
+// dialector does, MySQL and SQLite in backticks and PostgreSQL in double
+// quotes, a quote inside a name doubled and a qualified name quoted part by
+// part; and each spells the statements its own way, MySQL's RENAME forms,
+// PostgreSQL's ALTER forms, and SQLite, which renames a table but no index,
+// so the index is dropped for the start to create it.
 func TestRenameSQLFollowsTheDialect(t *testing.T) {
-	require.Equal(t, "`records`", QuoteIdentifier("mysql", "records"))
-	require.Equal(t, `"records"`, QuoteIdentifier("postgres", "records"))
-	require.Equal(t, `"records"`, QuoteIdentifier("sqlite", "records"))
+	mysqlDialector := mysql.New(mysql.Config{})
+	postgresDialector := postgres.New(postgres.Config{})
+	sqliteDialector := sqlite.New(sqlite.Config{})
 
-	require.Equal(t, "RENAME TABLE `old_records` TO `records`;", RenameTableSQL("mysql", "old_records", "records"))
-	require.Equal(t, `ALTER TABLE "old_records" RENAME TO "records";`, RenameTableSQL("postgres", "old_records", "records"))
-	require.Equal(t, `ALTER TABLE "old_records" RENAME TO "records";`, RenameTableSQL("sqlite", "old_records", "records"))
+	require.Equal(t, "`records`", QuoteIdentifier(mysqlDialector, "records"))
+	require.Equal(t, `"records"`, QuoteIdentifier(postgresDialector, "records"))
+	require.Equal(t, "`records`", QuoteIdentifier(sqliteDialector, "records"))
+	require.Equal(t, "`a``b`", QuoteIdentifier(mysqlDialector, "a`b"))
+	require.Equal(t, `"a""b"`, QuoteIdentifier(postgresDialector, `a"b`))
+	require.Equal(t, `"analytics"."records"`, QuoteIdentifier(postgresDialector, "analytics.records"))
 
-	require.Equal(t, "ALTER TABLE `records` RENAME INDEX `legacy_records_kind` TO `idx_records_kind`;", RenameIndexSQL("mysql", "records", "legacy_records_kind", "idx_records_kind"))
-	require.Equal(t, `ALTER INDEX "legacy_records_kind" RENAME TO "idx_records_kind";`, RenameIndexSQL("postgres", "records", "legacy_records_kind", "idx_records_kind"))
-	require.Equal(t, `DROP INDEX "legacy_records_kind";`, RenameIndexSQL("sqlite", "records", "legacy_records_kind", "idx_records_kind"))
+	require.Equal(t, "RENAME TABLE `old_records` TO `records`;", RenameTableSQL(mysqlDialector, "old_records", "records"))
+	require.Equal(t, `ALTER TABLE "old_records" RENAME TO "records";`, RenameTableSQL(postgresDialector, "old_records", "records"))
+	require.Equal(t, "ALTER TABLE `old_records` RENAME TO `records`;", RenameTableSQL(sqliteDialector, "old_records", "records"))
+
+	require.Equal(t, "ALTER TABLE `records` RENAME INDEX `legacy_records_kind` TO `idx_records_kind`;", RenameIndexSQL(mysqlDialector, "records", "legacy_records_kind", "idx_records_kind"))
+	require.Equal(t, "ALTER TABLE `analytics`.`records` RENAME INDEX `legacy_records_kind` TO `idx_records_kind`;", RenameIndexSQL(mysqlDialector, "analytics.records", "legacy_records_kind", "idx_records_kind"))
+	require.Equal(t, `ALTER INDEX "legacy_records_kind" RENAME TO "idx_records_kind";`, RenameIndexSQL(postgresDialector, "records", "legacy_records_kind", "idx_records_kind"))
+	require.Equal(t, "DROP INDEX `legacy_records_kind`;", RenameIndexSQL(sqliteDialector, "records", "legacy_records_kind", "idx_records_kind"))
 }
 
 func TestEnsureCustomIndexesRejectsOccupiedName(t *testing.T) {
