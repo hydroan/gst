@@ -11,6 +11,7 @@ import (
 
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
+	gormschema "gorm.io/gorm/schema"
 )
 
 // SchemaFingerprint returns a short hash of everything the registered models
@@ -73,8 +74,14 @@ func modelDeclaration(m types.Model) string {
 	return declaration.String()
 }
 
-// writeFieldDeclarations writes the fields typ declares, walking into embedded
-// structs because a column promoted from one is a column all the same.
+// writeFieldDeclarations writes the fields typ declares, walking into every
+// anonymous embedding and every field tagged embedded, the two ways gorm
+// expands a struct into columns, because a column promoted from one is a
+// column all the same. The tag is read with gorm's own parser. Where gorm
+// keeps such a struct whole, a Valuer or an embedded time.Time, the walk
+// still goes in, which only ever errs towards a rebuild. Any other struct
+// field, a time.Time or an association, is written as that one field: what
+// it holds is no column of this table.
 //
 // The names written are Go field names and the tags are written verbatim: this
 // records what a model declares, it does not resolve it into columns, which
@@ -92,7 +99,8 @@ func writeFieldDeclarations(declaration *strings.Builder, typ reflect.Type, seen
 		for embedded.Kind() == reflect.Pointer {
 			embedded = embedded.Elem()
 		}
-		if field.Anonymous && embedded.Kind() == reflect.Struct {
+		_, tagged := gormschema.ParseTagSetting(field.Tag.Get("gorm"), ";")["EMBEDDED"]
+		if (field.Anonymous || tagged) && embedded.Kind() == reflect.Struct {
 			writeFieldDeclarations(declaration, embedded, seen)
 		}
 	}

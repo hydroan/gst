@@ -1,6 +1,7 @@
 package modelregistry
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -9,10 +10,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The samples below all map to one table on purpose: each differs from
-// fingerprintSample in a single declaration, so a declaration that failed to
-// reach the rendering is the only thing that could make two of them read the
-// same.
+// The fingerprintSample variants below each differ from fingerprintSample in
+// a single declaration, so a declaration that failed to reach the rendering
+// is the only thing that could make two of them read the same. They map to
+// one table on purpose, all but fingerprintSampleOtherTable, whose one
+// differing declaration is the table name.
 
 type fingerprintSample struct {
 	Name string `gorm:"size:64"`
@@ -88,6 +90,25 @@ func (*fingerprintSampleOtherTable) Indexes() []modelschema.Index {
 	return []modelschema.Index{{Fields: []string{"Name"}}}
 }
 
+// fingerprintSpan is the struct fingerprintSpanSample embeds by tag: gorm
+// expands its fields into columns of the model just as it does an anonymous
+// embedding.
+type fingerprintSpan struct {
+	Start int64
+	End   int64 `gorm:"column:ends_at"`
+}
+
+// fingerprintSpanSample embeds a struct both ways gorm expands one into
+// columns: Base anonymously, the span by tag.
+type fingerprintSpanSample struct {
+	Name string          `gorm:"size:64"`
+	Span fingerprintSpan `gorm:"embedded;embeddedPrefix:span_"`
+
+	Base
+}
+
+func (*fingerprintSpanSample) TableName() string { return "fingerprint_span_samples" }
+
 func TestModelDeclaration(t *testing.T) {
 	baseline := modelDeclaration(&fingerprintSample{})
 
@@ -107,12 +128,19 @@ func TestModelDeclaration(t *testing.T) {
 		}
 	})
 
-	t.Run("fields_promoted_from_an_embedded_struct_are_declared_too", func(t *testing.T) {
-		// Base carries the primary key and the timestamps, which are columns
-		// like any other; a declaration blind to them would let a change to
-		// them pass for no change at all.
-		require.Contains(t, baseline, "field=ID")
-		require.Contains(t, baseline, "field=CreatedAt")
+	t.Run("every_field_gorm_expands_into_a_column_is_declared", func(t *testing.T) {
+		// gorm promotes the columns of a struct it expands, embedded
+		// anonymously like Base, which carries the primary key and the
+		// timestamps, or by the embedded tag like the span; a declaration
+		// blind to them would let a change to them pass for no change at all.
+		declaration := modelDeclaration(&fingerprintSpanSample{})
+		columns, err := modelschema.Columns(reflect.TypeFor[fingerprintSpanSample]())
+		require.NoError(t, err)
+		require.NotEmpty(t, columns)
+		for _, column := range columns {
+			field := column.GoName[strings.LastIndex(column.GoName, ".")+1:]
+			require.Contains(t, declaration, " field="+field+" ", column.DBName)
+		}
 	})
 
 	t.Run("the_table_name_is_declared", func(t *testing.T) {
