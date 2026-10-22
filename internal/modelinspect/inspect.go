@@ -2,8 +2,9 @@
 // a program into the project's module that loads the model packages, has gorm
 // parse every model and reports what only the compiled models can tell: the
 // database columns behind the fields, for the column references gg gen writes,
-// and what the index declarations violate on MySQL, for gg check. Both lines
-// of gg depend on this package and on nothing of each other's. An inspection
+// and for gg check what the index declarations violate on MySQL and which
+// framework columns a model renames. Both lines of gg depend on this package
+// and on nothing of each other's. An inspection
 // is cached by its inputs under the user cache directory, so a project one
 // command inspected is not built again by the other.
 package modelinspect
@@ -26,20 +27,23 @@ type ColumnInfo struct {
 }
 
 // ModelColumns is one model as the inspection program reports it: its columns,
-// and what model.ValidateIndexes refused in its index declarations on MySQL,
-// "" when nothing.
+// what model.ValidateIndexes refused in its index declarations on MySQL, and
+// what modelschema.ValidateFrameworkColumns refused in its columns, each ""
+// when nothing.
 type ModelColumns struct {
-	PkgPath        string       `json:"pkg_path"`
-	PkgName        string       `json:"pkg_name"`
-	Name           string       `json:"name"`
-	Columns        []ColumnInfo `json:"columns"`
-	IndexViolation string       `json:"index_violation"`
+	PkgPath                  string       `json:"pkg_path"`
+	PkgName                  string       `json:"pkg_name"`
+	Name                     string       `json:"name"`
+	Columns                  []ColumnInfo `json:"columns"`
+	IndexViolation           string       `json:"index_violation"`
+	FrameworkColumnViolation string       `json:"framework_column_violation"`
 }
 
 // Inspect inspects the project's models by running them: the inspection
 // program (see buildProgram) is built into the project's module and reports
-// every model's columns and what model.ValidateIndexes refused in its index
-// declarations on MySQL. The result comes from the cache when every input of
+// every model's columns, what model.ValidateIndexes refused in its index
+// declarations on MySQL and what modelschema.ValidateFrameworkColumns refused
+// in its columns. The result comes from the cache when every input of
 // the inspection is unchanged, otherwise from a build and run of the program.
 // The build takes the files overlay returns in place of the project's own,
 // which gg gen uses to stub out the column files it is about to rewrite; a

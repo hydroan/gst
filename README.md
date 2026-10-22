@@ -110,6 +110,8 @@ git init
 
 普通资源使用 `model.Base`。如果这个资源需要建表或迁移，声明 `Migrate()`。
 
+框架按固定的列名读写 `model.Base`/`model.AutoBase` 的字段和 `tenant.Scope` 的租户列：`id`、`created_by`、`updated_by`、`created_at`、`updated_at`、`deleted_at`、`tenant_id`。不要改这些列名：重新声明这些字段时加 `column` tag，或者嵌入 `tenant.Scope` 时加前缀，启动期都会报错退出，`gg check` 也会拒绝。
+
 索引一律通过模型的 `Indexes() []model.Index` 方法集中声明：`Fields` 写 Go 字段名、顺序即列序，`Unique` 声明唯一索引，索引名由框架统一生成（`idx_` 或 `uniq_` 加表名加列名，超过方言上限的截短后带哈希：PostgreSQL 最长 63，MySQL 与 SQLite 64）。唯一的例外是主键——它由 `model.Base`/`model.AutoBase` 内置声明，业务模型不写主键。不要用 gorm tag 的 `index`/`uniqueIndex`/`unique` 配置索引，`gg check` 会拒绝。被索引的字符串字段要写列宽（如 `gorm:"size:36"`）：没有长度的字符串在 MySQL 上是 longtext 列，MySQL 不能给它建索引，配置为 mysql 的项目 `gg check` 会拒绝，启动期与 `gg migrate` 也在建表之前拒绝。
 
 ```go
@@ -978,10 +980,11 @@ func init() {
 | `gg migrate` | 生成当前数据库方言的 schema，预览并按确认执行数据库迁移 |
 
 `gg check` 会检查依赖边界、model/service 文件边界、命名规范、`json` tag、
-REQ/RSP 命名、业务项目根目录结构，以及声明了 `GRPC()` 的 model 的 protobuf
+REQ/RSP 命名、业务项目根目录结构、框架字段的列名，以及声明了 `GRPC()` 的 model 的 protobuf
 定义（pb tag、撞名、与 `pb/` 下已提交契约的兼容）和它们的 service 有没有调用
 只有 HTTP 才有的 ServiceContext 方法。`gg gen` 生成前也会执行这些检查（protobuf
-定义那条由生成本身完成，不重复跑）；检查失败会停止生成。
+定义那条由生成本身完成，不重复跑；框架字段列名那条要先编译项目，生成前项目未必
+编得过，不在生成前跑）；检查失败会停止生成。
 
 `gg check`、`gg gen`（含 `gg gen ts`）、`gg routes` 和 `gg route-tree` 读项目
 代码时，跳过项目 Git 忽略规则排除的路径，也跳过 Go 工具链内置忽略的路径。

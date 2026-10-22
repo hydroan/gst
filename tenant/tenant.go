@@ -73,6 +73,9 @@ var (
 // every later write off it. A row therefore cannot change hands, and a client
 // cannot move one by sending a different value. GetTenantID reports the tenant
 // a row belongs to.
+//
+// The framework names the column itself, so Scope is embedded without a
+// prefix; the start and gg check refuse a model renaming the column.
 type Scope = tenant.Scope
 
 // In returns a context acting inside one tenant.

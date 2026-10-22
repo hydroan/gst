@@ -15,10 +15,16 @@ var (
 
 type (
 	// Base provides common fields and default hooks for database-backed resources.
+	//
+	// The framework names the columns of those fields itself: id, created_by,
+	// updated_by, created_at, updated_at and deleted_at. A model re-declaring one
+	// of the fields keeps its column; the start and gg check refuse one renaming
+	// it.
 	Base = modelregistry.Base
 
 	// AutoBase provides the same common fields and default hooks as Base but
-	// uses an auto-increment integer primary key assigned by the database.
+	// uses an auto-increment integer primary key assigned by the database. Its
+	// columns are fixed the way Base's are.
 	AutoBase = modelregistry.AutoBase
 
 	// Query enables framework-owned list query parameters when embedded by a

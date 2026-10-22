@@ -39,6 +39,14 @@ func Columns(typ reflect.Type) ([]Column, error) {
 	return modelschema.Columns(typ)
 }
 
+// ValidateFrameworkColumns refuses a model mapping a framework field, one of
+// model.Base, model.AutoBase or tenant.Scope, to a column other than the one
+// the framework fixes for it. The inspection program asks it of every model
+// it inspects, so gg check refuses what table preparation refuses at startup.
+func ValidateFrameworkColumns(typ reflect.Type) error {
+	return modelschema.ValidateFrameworkColumns(typ)
+}
+
 // ClassifyColumn reports the aggregate capability of a column, which decides
 // the column reference gg gen writes for it.
 func ClassifyColumn(c Column) ColumnClass {

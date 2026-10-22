@@ -47,6 +47,7 @@ var projectChecks = []ggcheck.Check{
 	ggcheck.ModelTableNameDeclaration,
 	ggcheck.GormTagIndexBan,
 	ggcheck.IndexDeclarations,
+	ggcheck.FrameworkColumns,
 	ggcheck.VersionFieldDeclaration,
 	ggcheck.ModuleAssembly,
 	ggcheck.ColumnReferenceMinting,
@@ -55,12 +56,14 @@ var projectChecks = []ggcheck.Check{
 }
 
 // generationChecks are the project checks gg gen runs before generating:
-// every one but the two whose work the run does itself, Protobuf
-// definitions, derived right before (see fillPBTags) once instead of twice,
-// and TestMain imports, synced once main.go is written (see
-// syncTestMainImports).
+// every one but three. Protobuf definitions and TestMain imports are work the
+// run does itself, the definitions derived right before (see fillPBTags) once
+// instead of twice and the imports synced once main.go is written (see
+// syncTestMainImports). Framework columns asks the compiled models, and a
+// project need not compile before the run generates its files; the start
+// refuses what that check reports.
 func generationChecks() []ggcheck.Check {
-	return projectChecksWithout(ggcheck.ProtobufDefinitions.Name, ggcheck.TestMainImports.Name)
+	return projectChecksWithout(ggcheck.ProtobufDefinitions.Name, ggcheck.TestMainImports.Name, ggcheck.FrameworkColumns.Name)
 }
 
 // moduleCopyChecks are the project checks the gg gen run of gg module copy
@@ -70,7 +73,7 @@ func generationChecks() []ggcheck.Check {
 // assembly to the project, printing what is pending once it is done (see
 // printModuleCopyAssembly); gg gen and gg check enforce it from then on.
 func moduleCopyChecks() []ggcheck.Check {
-	return projectChecksWithout(ggcheck.ProtobufDefinitions.Name, ggcheck.TestMainImports.Name, ggcheck.ModuleAssembly.Name)
+	return slices.DeleteFunc(generationChecks(), func(check ggcheck.Check) bool { return check.Name == ggcheck.ModuleAssembly.Name })
 }
 
 // projectChecksWithout returns projectChecks in their order but the checks
@@ -86,7 +89,7 @@ func projectChecksWithout(names ...string) []ggcheck.Check {
 }
 
 // projectCheckSkips closes the gg check help: what the checks leave out.
-const projectCheckSkips = `Model and service subtrees owned by copyable framework modules are skipped by Service test coverage, Service test organization, Log field boundedness, Model table name declaration, Gorm tag index ban, Index declarations, Version field declaration and Column reference minting, and their service subtrees by Detached context: copied module code is tested inside the framework repository.
+const projectCheckSkips = `Model and service subtrees owned by copyable framework modules are skipped by Service test coverage, Service test organization, Log field boundedness, Model table name declaration, Gorm tag index ban, Index declarations, Framework columns, Version field declaration and Column reference minting, and their service subtrees by Detached context: copied module code is tested inside the framework repository.
 Paths ignored by the project's Git ignore rules are skipped by every check, so runtime artifacts such as log directories never fail checks.`
 
 // projectCheckHelp renders the gg check help from projectChecks: one numbered

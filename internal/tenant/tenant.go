@@ -76,7 +76,8 @@ func (ID) CreateClauses(f *gormschema.Field) []clause.Interface {
 // The column is tenant_id on every model rather than a name the model chose.
 // A chosen name would have to be resolved again by everything that consumes
 // it, and three resolutions of one name are three chances to disagree; the
-// framework fixes id, created_at and deleted_at on the same reasoning.
+// framework fixes id, created_at and deleted_at on the same reasoning, and
+// modelschema.ValidateFrameworkColumns refuses a model renaming any of them.
 type Scope struct {
 	TenantID ID `json:"tenant_id,omitempty" gorm:"column:tenant_id;size:191;not null;default:default;<-:create" query:"tenant_id" url:"-"`
 }

@@ -1,12 +1,12 @@
-// The inspection program reports the project models' columns, and what
-// their index declarations violate on MySQL, as JSON written to the file its
-// argument names: it is what gg gen and gg check build and run inside the
-// project. gg embeds it (see gghelper.InspectProgram), writes it next to a
-// generated project.go that imports the project's model packages and sets
-// the models beyond the registry, and builds it with the project's
-// dependency versions, so it resolves exactly the columns the framework
-// resolves at run time. It is written as project code: it imports the
-// framework's public packages only.
+// The inspection program reports the project models' columns, what their
+// index declarations violate on MySQL, and the framework columns they rename,
+// as JSON written to the file its argument names: it is what gg gen and gg
+// check build and run inside the project. gg embeds it (see
+// gghelper.InspectProgram), writes it next to a generated project.go that
+// imports the project's model packages and sets the models beyond the
+// registry, and builds it with the project's dependency versions, so it
+// resolves exactly the columns the framework resolves at run time. It is
+// written as project code: it imports the framework's public packages only.
 package main
 
 import (
@@ -36,11 +36,12 @@ type columnInfo struct {
 }
 
 type modelColumns struct {
-	PkgPath        string       `json:"pkg_path"`
-	PkgName        string       `json:"pkg_name"`
-	Name           string       `json:"name"`
-	Columns        []columnInfo `json:"columns"`
-	IndexViolation string       `json:"index_violation"`
+	PkgPath                  string       `json:"pkg_path"`
+	PkgName                  string       `json:"pkg_name"`
+	Name                     string       `json:"name"`
+	Columns                  []columnInfo `json:"columns"`
+	IndexViolation           string       `json:"index_violation"`
+	FrameworkColumnViolation string       `json:"framework_column_violation"`
 }
 
 // The project's models beyond the registry, set by the generated project.go
@@ -113,6 +114,9 @@ func main() {
 		entry := modelColumns{PkgPath: typ.PkgPath(), PkgName: packageName(typ), Name: typ.Name()}
 		if validateErr := model.ValidateIndexes(schemaDB, m); validateErr != nil {
 			entry.IndexViolation = validateErr.Error()
+		}
+		if validateErr := modelschema.ValidateFrameworkColumns(typ); validateErr != nil {
+			entry.FrameworkColumnViolation = validateErr.Error()
 		}
 		for _, col := range cols {
 			expr, imports := describeType(col.Type, typ.PkgPath())

@@ -109,6 +109,26 @@ func TestEnsureTableRejectsUndeclaredTableName(t *testing.T) {
 	require.False(t, db.Migrator().HasTable("undeclared_records"))
 }
 
+// renamedColumnRecord re-declares the soft-delete field under a column of its
+// own; table preparation must refuse it before the table exists, whatever the
+// database.
+type renamedColumnRecord struct {
+	DeletedAt gorm.DeletedAt `json:"-" gorm:"column:removed_at"`
+
+	modelregistry.Base
+}
+
+func (*renamedColumnRecord) TableName() string { return "renamed_column_records" }
+
+func TestEnsureTableRejectsARenamedFrameworkColumn(t *testing.T) {
+	db := newSQLiteDB(t)
+	withAutoMigrate(t, true)
+
+	err := ensureTable(db, &renamedColumnRecord{})
+	require.ErrorContains(t, err, `framework field DeletedAt maps to column "removed_at" instead of "deleted_at"`)
+	require.False(t, db.Migrator().HasTable("renamed_column_records"))
+}
+
 // raceRecord is the model several processes prepare at once; its index makes
 // the custom index step part of the race. The indexed column carries a size:
 // without one gorm maps it to TEXT on MySQL, which cannot be indexed whole.

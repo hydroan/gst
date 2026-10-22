@@ -43,8 +43,9 @@ func prepareTable(db *gorm.DB, m types.Model) {
 	// take, so a first use beside writes of the held model can panic inside
 	// gorm. Parsing every registered model here, in the handle's schema cache
 	// and in modelschema's, makes those writes before the server takes its
-	// first request. A model that cannot be parsed reports that on its first
-	// use.
+	// first request. A model that cannot be parsed fails the start in
+	// ensureTable, which resolves its columns to check the ones the framework
+	// fixes.
 	_ = (&gorm.Statement{DB: db}).Parse(m)
 	_, _ = modelschema.Columns(typ)
 	if err := ensureTable(db, m); err != nil {
@@ -89,6 +90,11 @@ func preparationFailed() error {
 
 // ensureTable prepares the backing table for a registered model.
 //
+// A model has to declare its table name and keep the columns the framework
+// fixes under their names (see modelschema.ValidateFrameworkColumns); a model
+// failing either is refused before anything touches the database, whatever
+// the database.
+//
 // With database.auto_migrate enabled it runs gorm AutoMigrate and creates
 // custom indexes, which suits local development and tests. With the option
 // disabled (the default) it only verifies that the table already exists via
@@ -104,6 +110,9 @@ func preparationFailed() error {
 func ensureTable(handler *gorm.DB, m types.Model) error {
 	tableName, err := requireTableName(m)
 	if err != nil {
+		return err
+	}
+	if err = modelschema.ValidateFrameworkColumns(reflect.TypeOf(m)); err != nil {
 		return err
 	}
 
