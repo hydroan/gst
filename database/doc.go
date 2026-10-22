@@ -53,8 +53,9 @@
 // Wrapping preserves the unwrap chain, so errors.Is/As checks against
 // ErrRecordNotFound, ErrDuplicatedKey, and friends see through it.
 //
-// ClickHouse is an analytical instance (see clickhouse.New), never the
-// default database. Supported on it:
+// ClickHouse is an analytical database: an instance the application opens
+// (see clickhouse.New), or the default database itself when database.type
+// names it. Supported on it:
 //
 //   - the read path: List, Get, Count, First, Last, Take, WithQuery, the
 //     filter operators, ordering, paging, and cursor pagination;

@@ -7,6 +7,7 @@ import (
 
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/database/clickhouse"
+	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
 	"github.com/hydroan/gst/internal/types"
@@ -301,6 +302,34 @@ func TestClickhouse(t *testing.T) {
 		// passes silently instead of answering ErrRecordNotFound.
 		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithSelect(TestAggregateRecordCols.Status).
 			Update(&TestAggregateRecord{Category: "mutate", ID: "no-such-row"}))
+
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).Delete(row))
+	})
+
+	t.Run("WritesStampTheCallerTheContextCarries", func(t *testing.T) {
+		// The caller the context carries is who created and who updated a
+		// row, here as on the transactional write path, whatever the object
+		// holds.
+		as := func(userID string) context.Context {
+			return requestctx.WithMetadata(ctx, requestctx.New(requestctx.Fields{Username: "alice", UserID: userID}))
+		}
+		row := &TestAggregateRecord{Category: "stamp", Status: "before", Amount: 1, OccurredAt: time.Date(2024, 3, 3, 0, 0, 0, 0, time.UTC)}
+		row.CreatedBy, row.UpdatedBy = "mallory", "mallory"
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](as("u-1"), ins).Create(row))
+		created := new(TestAggregateRecord)
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).Get(created, row.ID))
+		require.Equal(t, "u-1", created.CreatedBy)
+		require.Equal(t, "u-1", created.UpdatedBy)
+
+		row.Status, row.UpdatedBy = "after", "mallory"
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](as("u-2"), ins).WithSelect(TestAggregateRecordCols.Status).Update(row))
+		require.Eventually(t, func() bool {
+			got := new(TestAggregateRecord)
+			if err := database.DatabaseOn[*TestAggregateRecord](ctx, ins).Get(got, row.ID); err != nil {
+				return false
+			}
+			return got.Status == "after" && got.UpdatedBy == "u-2"
+		}, 5*time.Second, 50*time.Millisecond, "the mutation must name the caller as the updater")
 
 		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).Delete(row))
 	})

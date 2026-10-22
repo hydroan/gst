@@ -8,15 +8,17 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// This file is the ClickHouse write path: Create, Delete, Update and
-// UpdateByID dispatch here when the chain's dialect is ClickHouse, so the
-// same call site works against an OLTP database and an analytical instance.
+// This file is the ClickHouse write path: Create, Delete and Update dispatch
+// here when the chain's dialect is ClickHouse, so the same call site works
+// against an OLTP database and an analytical instance; UpdateByID runs its
+// one statement as on any dialect, which ClickHouse takes as a mutation.
 // The contract is deliberately weaker than the transactional write path and
 // each entry point's doc spells it out: no model hooks, no transaction
 // boundary, no unique-key or matched-rows semantics. What stays identical:
-// id and timestamp filling, batch splitting, dry-run SQL building, tracing
-// and SQL logging, and the clauses a column type attaches to a statement,
-// the tenant predicate among them (see tenant.ID).
+// id and timestamp filling, the caller named as creator and updater, which
+// Create and Update stamp before they dispatch, batch splitting, dry-run SQL
+// building, tracing and SQL logging, and the clauses a column type attaches
+// to a statement, the tenant predicate among them (see tenant.ID).
 
 // clickhouseCreate is Create on a ClickHouse instance: plain batch INSERTs.
 // A single INSERT statement lands atomically (within one partition and the

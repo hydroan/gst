@@ -50,8 +50,9 @@ import (
 //     create-only columns, see model.Base); on inserted rows
 //     created_at/updated_at are forced to the current time and
 //     created_by/updated_by to the id of the caller the context carries,
-//     exactly like Create, so caller-supplied values are never honored; a
-//     conflict update refreshes updated_at and updated_by the same way.
+//     when it carries one, exactly like Create: whatever the objects hold
+//     then, and what they hold when no caller is carried; a conflict update
+//     refreshes updated_at and updated_by the same way.
 //   - On a model whose rows belong to a tenant, a key held by another
 //     tenant's row fails the call with ErrDuplicatedKey instead of merging
 //     into that row (see refuseForeignTenantRows): the conflict update is no

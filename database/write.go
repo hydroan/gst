@@ -59,9 +59,10 @@ func (db *database[M]) caller() string {
 //   - Automatically generates ID if empty using SetID()
 //   - Forces created_at and updated_at to the current time, and created_by
 //     and updated_by to the id of the caller the context carries, when it
-//     carries one. Values carried by objs are deliberately ignored: HTTP
-//     controllers bind client JSON straight into models, so honoring
-//     caller-supplied values would let clients forge audit fields.
+//     carries one, whatever objs hold. A context carrying no caller, a job's
+//     or a seeding's, leaves objs what they hold in those two. A client
+//     cannot forge them either way: the request flows clear what the client
+//     sent in them before any hook sees the record.
 //   - Runs hooks and all batches in one transaction: a failure in any batch or
 //     hook rolls back the whole call (all-or-nothing), joining the transaction
 //     carried by ctx when present. A call that fits one batch and runs no
@@ -99,6 +100,15 @@ func (db *database[M]) Create(objs ...M) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
+	// The caller is who created the records: created_by and updated_by take
+	// the id the context carries, when it carries one, whatever the objects
+	// hold, on every dialect.
+	if caller := db.caller(); caller != "" {
+		for i := range objs {
+			objs[i].SetCreatedBy(caller)
+			objs[i].SetUpdatedBy(caller)
+		}
+	}
 	if db.dialect() == dialectClickHouse {
 		return db.clickhouseCreate(objs)
 	}
@@ -108,16 +118,6 @@ func (db *database[M]) Create(objs ...M) (err error) {
 	batchSize := defaultBatchSize
 	if db.batchSize > 0 {
 		batchSize = db.batchSize
-	}
-
-	// The caller is who created the records: created_by and updated_by take
-	// the id the context carries, when it carries one, whatever the objects
-	// hold.
-	if caller := db.caller(); caller != "" {
-		for i := range objs {
-			objs[i].SetCreatedBy(caller)
-			objs[i].SetUpdatedBy(caller)
-		}
 	}
 
 	if db.dryRun {
@@ -491,13 +491,15 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 //     returned before any database work.
 //   - Writes the full row including zero values, or only the columns chosen
 //     with WithSelect.
-//   - Timestamp and audit columns are framework-managed and cannot be forged
-//     by callers: created_at/created_by are never written (creation facts),
-//     deleted_at is never written (rows cannot be soft-deleted or resurrected
-//     through Update), updated_at is always refreshed to the current UTC
-//     time by GORM (dbruntime.NowUTC) regardless of the value carried by objs,
-//     and updated_by is the id of the caller the context carries, when it
-//     carries one, regardless of the value carried by objs.
+//   - Timestamp and audit columns are framework-managed: created_at and
+//     created_by are never written (creation facts), deleted_at is never
+//     written (rows cannot be soft-deleted or resurrected through Update),
+//     updated_at is always refreshed to the current UTC time by GORM
+//     (dbruntime.NowUTC) regardless of the value carried by objs, and
+//     updated_by is the id of the caller the context carries, when it
+//     carries one, regardless of the value carried by objs; with no caller,
+//     a job's, it is what objs hold, which the request flows clear of what a
+//     client sent.
 //   - A record matching no live row (missing or soft deleted) fails with
 //     ErrRecordNotFound. Detection relies on matched-rows semantics: the
 //     framework MySQL DSN enables clientFoundRows=true so an update that
@@ -568,17 +570,10 @@ func (db *database[M]) Update(objs ...M) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
-	if db.dialect() == dialectClickHouse {
-		return db.clickhouseUpdate(objs)
-	}
-	done, span := db.trace(consts.Update, len(objs))
-	defer func() { done(err) }()
-
-	tableName := db.m.TableName()
-
 	// The caller is who updated the records: updated_by takes the id the
-	// context carries, when it carries one, whatever the objects hold, and a
-	// narrowed update writes it along with its columns, as it does updated_at.
+	// context carries, when it carries one, whatever the objects hold, on
+	// every dialect, and a narrowed update writes it along with its columns,
+	// as it does updated_at.
 	if caller := db.caller(); caller != "" {
 		for i := range objs {
 			objs[i].SetUpdatedBy(caller)
@@ -587,6 +582,13 @@ func (db *database[M]) Update(objs ...M) (err error) {
 			db.selectColumns = ensureSelected(db.selectColumns, "updated_by")
 		}
 	}
+	if db.dialect() == dialectClickHouse {
+		return db.clickhouseUpdate(objs)
+	}
+	done, span := db.trace(consts.Update, len(objs))
+	defer func() { done(err) }()
+
+	tableName := db.m.TableName()
 
 	// The bump happens per statement below; on any failure the whole batch is
 	// rolled back, so every bumped object is restored to the version its row
