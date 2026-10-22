@@ -7,9 +7,11 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/tenant"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"gorm.io/gorm"
 )
 
 // SampleRecord is the neutral database model the assertion helpers are tested
@@ -39,6 +41,40 @@ func createSampleRecord(t *testing.T, name, tag string) *SampleRecord {
 		// may have deleted the row itself.
 		ctx := context.WithoutCancel(t.Context())
 		require.NoError(t, database.Database[*SampleRecord](ctx).WithPurge(true).WithAllowMissing().Delete(record))
+	})
+	return record
+}
+
+// otherTenant is the tenant ZeroValueRecord rows are filed under: none of the
+// assertions runs in it unless it asks.
+const otherTenant = "other"
+
+// ZeroValueRecord soft-deletes the way gorm's zeroValue tag declares it: a
+// live row holds the zero value in its soft-delete column, which the column
+// default supplies, instead of NULL. Its rows are filed under otherTenant, so
+// a read scoped to the caller's tenant does not see them at all.
+type ZeroValueRecord struct {
+	Name string
+
+	tenant.Scope
+	DeletedAt gorm.DeletedAt `gorm:"zeroValue:1970-01-01 00:00:00;default:'1970-01-01 00:00:00'" json:"-" query:"-" url:"-"`
+
+	modelregistry.Base
+}
+
+func (r *ZeroValueRecord) TableName() string { return "testutil_zero_value_records" }
+
+// createZeroValueRecord seeds one live ZeroValueRecord under otherTenant and
+// returns it; the row is purged once the test ends.
+func createZeroValueRecord(t *testing.T, name string) *ZeroValueRecord {
+	t.Helper()
+
+	record := &ZeroValueRecord{Name: name}
+	record.SetID()
+	require.NoError(t, database.Database[*ZeroValueRecord](tenant.In(t.Context(), otherTenant)).Create(record))
+	t.Cleanup(func() {
+		ctx := tenant.In(context.WithoutCancel(t.Context()), otherTenant)
+		require.NoError(t, database.Database[*ZeroValueRecord](ctx).WithPurge(true).WithAllowMissing().Delete(record))
 	})
 	return record
 }

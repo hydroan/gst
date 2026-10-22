@@ -4,14 +4,10 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
-
-// softDeleteColumn is the column the framework base models carry through
-// gorm.DeletedAt. It mirrors the entry in the database package's default
-// column list; the two must stay in sync.
-const softDeleteColumn = "deleted_at"
 
 // RequireGet asserts that the row with the given id exists and returns it.
 func RequireGet[T any, M interface {
@@ -87,25 +83,21 @@ func RequireNoRow[T any, M interface {
 	require.ErrorIs(t, database.Database[M](t.Context()).Get(M(new(T)), id), database.ErrRecordNotFound)
 }
 
-// RequireSoftDeleted asserts that the row with the given id is gone from the
-// regular query path while its record is kept with the soft-delete column
-// set. The regular chain filters soft-deleted rows out unconditionally, so
-// the kept record is counted through the raw database handle; this is the
-// one place testutil bypasses the framework query path.
+// RequireSoftDeleted asserts that the row with the given id is soft-deleted:
+// gone from the regular query path while WithDeleted still finds it. Both
+// reads span every tenant, so a row filed under another tenant is judged by
+// its deletion rather than kept out of sight by the tenant scope, and gorm's
+// own soft-delete scope decides what counts as deleted, whatever column and
+// zero value the model declares for it.
 func RequireSoftDeleted[T any, M interface {
 	types.Model
 	*T
 }](t *testing.T, id string) {
 	t.Helper()
 
-	RequireNoRow[T, M](t, id)
-
-	table := M(new(T)).TableName()
-	var kept int64
-	require.NoError(t, database.DB().
-		Table(table).
-		Where("id = ? AND "+softDeleteColumn+" IS NOT NULL", id).
-		Count(&kept).Error)
-	require.EqualValues(t, 1, kept,
-		"the soft-deleted row should stay in %s with %s set", table, softDeleteColumn)
+	ctx := tenant.Across(t.Context())
+	require.ErrorIs(t, database.Database[M](ctx).Get(M(new(T)), id), database.ErrRecordNotFound,
+		"the row should be gone from the regular query path of every tenant")
+	require.NoError(t, database.Database[M](ctx).WithDeleted().Get(M(new(T)), id),
+		"the soft-deleted row should stay in %s", M(new(T)).TableName())
 }

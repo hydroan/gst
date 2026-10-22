@@ -8,12 +8,13 @@ import (
 )
 
 // TestMain boots the framework against the default sqlite database and
-// registers the sample model the database assertions run against, and the
+// registers the sample models the database assertions run against, and the
 // probe gRPC service the listener assertions dial.
 func TestMain(m *testing.M) {
 	testutil.Run(m, testutil.Server{
 		Register: func() {
 			modelregistry.Register[*SampleRecord]()
+			modelregistry.Register[*ZeroValueRecord]()
 			registerProbeService()
 		},
 	})

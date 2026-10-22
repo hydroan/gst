@@ -175,9 +175,9 @@ func RequireNoRow[T any, M interface {
 	testutil.RequireNoRow[T, M](t, id)
 }
 
-// RequireSoftDeleted asserts that the row with the given id is gone from the
-// regular query path while its record is kept with the soft-delete column
-// set.
+// RequireSoftDeleted asserts that the row with the given id is soft-deleted:
+// gone from the regular query path while WithDeleted still finds it, both
+// read across every tenant.
 func RequireSoftDeleted[T any, M interface {
 	types.Model
 	*T
