@@ -114,13 +114,15 @@ func (nestedSample) TableName() string { return "controller_nested_samples" }
 // datedSample carries a calendar date, stored in a date column, beside an
 // optional instant: a date the client sends with its own offset is read as
 // the UTC day on both transports, in a record and in a filter alike, and a
-// filter on either column is checked against the value the column holds. It
+// filter on either column is checked against the value the column holds. Due
+// is a time declared a date column by its type tag, a day the same way. It
 // also carries a JSON document, which a filter matches by its text and never
 // compares, a number, which a filter matches by its text as well, and a time
 // of day, which a body sends in time.TimeOnly.
 type datedSample struct {
 	Name     string            `json:"name"`
 	Day      datatypes.Date    `json:"day"`
+	Due      *time.Time        `json:"due" gorm:"type:date"`
 	ClosedAt *time.Time        `json:"closed_at"`
 	Meta     datatypes.JSONMap `json:"meta"`
 	Count    int               `json:"count"`
@@ -556,6 +558,16 @@ func requireDatedDay(t *testing.T, id string, want time.Time) {
 	record := new(datedSample)
 	require.NoError(t, database.Database[*datedSample](context.Background()).Get(record, id))
 	require.True(t, time.Time(record.Day).Equal(want), "stored day %s, want %s", time.Time(record.Day), want)
+}
+
+// requireDatedDue requires the dated sample id to hold want as its due day.
+func requireDatedDue(t *testing.T, id string, want time.Time) {
+	t.Helper()
+
+	record := new(datedSample)
+	require.NoError(t, database.Database[*datedSample](context.Background()).Get(record, id))
+	require.NotNil(t, record.Due)
+	require.True(t, record.Due.Equal(want), "stored due %s, want %s", *record.Due, want)
 }
 
 // countDatedNamed counts the stored dated samples named name.

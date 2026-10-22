@@ -126,6 +126,18 @@ func TimeColumnSet(typ reflect.Type) map[string]struct{} {
 	return columnSet(&timeColumnSetCache, typ, IsTimeColumn)
 }
 
+// dateColumnSetCache memoizes the date column set per model type.
+var dateColumnSetCache sync.Map
+
+// DateColumnSet reports the date columns of a model type (see IsDateColumn)
+// by database name, resolved once per type and cached; see columnSet. Its
+// consumers bind the UTC day a value falls on where a date column is
+// compared: the filter renderer, the WithQuery conditions and the cursor
+// boundary.
+func DateColumnSet(typ reflect.Type) map[string]struct{} {
+	return columnSet(&dateColumnSetCache, typ, IsDateColumn)
+}
+
 // jsonColumnSetCache memoizes the JSON-typed column set per model type.
 var jsonColumnSetCache sync.Map
 

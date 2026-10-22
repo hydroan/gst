@@ -800,18 +800,20 @@ func TestDatabaseFiltersOnTimeColumns(t *testing.T) {
 }
 
 // TestDatabaseFiltersOnDateColumns pins the runtime behavior of comparisons
-// on a date column across dialects: the URL parser binds the UTC day at
-// midnight in types.FilterTimeLayout, service code binds a time.Time through
-// the time reference gg gen writes for the column, and both must select the
-// rows of that day however the dialect stores the date. The same reference
-// buckets the column, so a report groups by it.
+// on a date column across dialects, declared a date by its type or by its
+// type tag alike: the URL parser binds an instant in types.FilterTimeLayout,
+// service code binds a time.Time through the time reference gg gen writes for
+// the column, and both compare by the UTC day the value falls on, selecting
+// the rows of that day however the dialect stores the date. The same
+// reference buckets the column, so a report groups by it.
 func TestDatabaseFiltersOnDateColumns(t *testing.T) {
 	defer cleanupDatedData()
 	day := func(d int) time.Time { return time.Date(2026, time.January, d, 0, 0, 0, 0, time.UTC) }
+	due := func(d int) *time.Time { t := day(d); return &t }
 	require.NoError(t, database.Database[*TestDatedRecord](context.Background()).Create(
-		&TestDatedRecord{Label: "d1", Day: datatypes.Date(day(1))},
-		&TestDatedRecord{Label: "d2", Day: datatypes.Date(day(2))},
-		&TestDatedRecord{Label: "d3", Day: datatypes.Date(day(3))},
+		&TestDatedRecord{Label: "d1", Day: datatypes.Date(day(1)), Due: due(1)},
+		&TestDatedRecord{Label: "d2", Day: datatypes.Date(day(2)), Due: due(2)},
+		&TestDatedRecord{Label: "d3", Day: datatypes.Date(day(3)), Due: due(3)},
 	))
 
 	labels := func(t *testing.T, f types.Filter) []string {
@@ -836,6 +838,21 @@ func TestDatabaseFiltersOnDateColumns(t *testing.T) {
 	t.Run("TimeValueBound", func(t *testing.T) {
 		require.Equal(t, []string{"d2"}, labels(t, TestDatedRecordCols.Day.Eq(day(2))))
 		require.Equal(t, []string{"d1"}, labels(t, TestDatedRecordCols.Day.Lt(day(2))))
+	})
+
+	t.Run("InstantsCompareByTheirUTCDay", func(t *testing.T) {
+		// The start of the 2nd at +08:00 is 16:00 on the 1st in UTC, so it
+		// names the 1st; 15:59 on the 2nd in UTC names the 2nd.
+		for _, column := range []string{"day", "due"} {
+			require.Equal(t, []string{"d1", "d2", "d3"}, labels(t, types.FilterGte(column, "2026-01-01 16:00:00")), column)
+			require.Equal(t, []string{"d2"}, labels(t, types.FilterEq(column, "2026-01-02 16:00:00")), column)
+			require.Equal(t, []string{"d1", "d2"}, labels(t, types.FilterLte(column, time.Date(2026, time.January, 2, 15, 59, 0, 0, time.UTC))), column)
+		}
+		require.Equal(t, []string{"d2", "d3"}, labels(t, TestDatedRecordCols.Due.Gt(time.Date(2026, time.January, 1, 23, 0, 0, 0, time.UTC))))
+		// The members of an in or a notin list name their days the same way.
+		members := []time.Time{time.Date(2026, time.January, 1, 16, 0, 0, 0, time.UTC), time.Date(2026, time.January, 3, 9, 0, 0, 0, time.UTC)}
+		require.Equal(t, []string{"d1", "d3"}, labels(t, TestDatedRecordCols.Due.In(members...)))
+		require.Equal(t, []string{"d2"}, labels(t, TestDatedRecordCols.Day.NotIn(members...)))
 	})
 
 	t.Run("BucketsByDay", func(t *testing.T) {

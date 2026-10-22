@@ -648,6 +648,25 @@ func TestNormalizeValueReadsDatesInUTC(t *testing.T) {
 	require.True(t, time.Time(s.Zero).IsZero(), "the zero date stays zero")
 	require.True(t, s.Instant.Equal(sent), "an instant is not a calendar date and stays as sent")
 	require.Equal(t, shanghai, s.Instant.Location())
+
+	// A time a model declares a date column by its type tag is a day too, in
+	// a model and in the items of a batch alike; an instant beside it stays.
+	type scheduled struct {
+		Due    time.Time  `json:"due" gorm:"type:date"`
+		DuePtr *time.Time `json:"due_ptr" gorm:"type:date"`
+		At     time.Time  `json:"at"`
+
+		modelregistry.Base
+	}
+	ptrSent := sent
+	items := []*scheduled{{Due: sent, DuePtr: &ptrSent, At: sent}}
+	normalizeValue(reflect.ValueOf(&items))
+
+	day := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	require.Equal(t, day, items[0].Due)
+	require.Equal(t, day, *items[0].DuePtr)
+	require.True(t, items[0].At.Equal(sent), "an instant stays as sent")
+	require.Equal(t, shanghai, items[0].At.Location())
 }
 
 // newNormalizeProbeEngine wires the probe service into a fresh engine on its

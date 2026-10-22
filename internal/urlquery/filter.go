@@ -253,10 +253,11 @@ func parseQueryTime(value string) (time.Time, error) {
 // timeBound is the value a comparison with a time column binds for the RFC
 // 3339 value a client sent (see parseQueryTime): the UTC wall clock in
 // FilterTimeLayout, the one wall clock the framework stores on every
-// dialect, and for a date column the UTC day at midnight the column stores
-// (see modelschema.UTCDay). The canonical string form is kept on purpose:
-// binding time.Time would let the driver re-render the value in its own
-// location, while the string pins the wall clock the parser resolved.
+// dialect. The canonical string form is kept on purpose: binding time.Time
+// would let the driver re-render the value in its own location, while the
+// string pins the wall clock the parser resolved. A date column takes the
+// instant as well, which the database compares by the UTC day it falls on,
+// so a service reading the filter sees the time that was sent.
 //
 // A time of day column takes its value the way modelschema.ParseTimeOfDay
 // reads one instead, and binds it in the spelling datatypes.Time stores, the
@@ -273,9 +274,5 @@ func timeBound(col modelschema.Column, value string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	t = t.UTC()
-	if modelschema.IsDateType(col.Type) {
-		t = modelschema.UTCDay(t)
-	}
-	return t.Format(types.FilterTimeLayout), nil
+	return t.UTC().Format(types.FilterTimeLayout), nil
 }

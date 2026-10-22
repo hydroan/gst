@@ -26,10 +26,6 @@ const (
 	ColumnClassTime
 )
 
-// dateType is datatypes.Date, the calendar day a date column stores, which
-// binds as a time at midnight and reads back as one; see IsDateType.
-var dateType = reflect.TypeFor[datatypes.Date]()
-
 // ClassifyColumn reports the aggregate capability of a column, read from the
 // data types gorm resolved for it by the rule the filters read too: a column
 // IsNumericColumn calls a number carries SUM and AVG, one IsTimeColumn calls
@@ -72,7 +68,7 @@ var timeOfDayType = reflect.TypeFor[datatypes.Time]()
 // IsTimeColumn reports whether a column stores a time by the data type gorm
 // reads for its field: an instant — time.Time, or the time sql.NullTime,
 // gorm.DeletedAt or a named time type holds — or a calendar day,
-// datatypes.Date (see IsDateType). A comparison on such a column compares
+// datatypes.Date (see IsDateColumn). A comparison on such a column compares
 // times on every dialect, and a value sent for it is RFC 3339. A time of day
 // is not one; see IsTimeOfDayColumn.
 func IsTimeColumn(c Column) bool {
@@ -125,17 +121,15 @@ func IsJSONColumn(c Column) bool {
 	return isJSONDataType(c.GORMDataType) || isJSONDataType(c.DataType)
 }
 
-// IsDateType reports whether a column type stores a calendar day, which is
-// datatypes.Date, pointers dereferenced. A date column is a time column to
-// ClassifyColumn and IsTimeColumn alike; this tells the consumers reading
-// values for it apart from an instant's: a value sent for a date column names
-// a day, not a time of day, and is read as the UTC day the column stores (see
-// UTCDay).
-func IsDateType(typ reflect.Type) bool {
-	for typ != nil && typ.Kind() == reflect.Pointer {
-		typ = typ.Elem()
-	}
-	return typ == dateType
+// IsDateColumn reports whether a column stores a calendar day: the column
+// type gorm resolved for it is date, which datatypes.Date declares for itself
+// and a type tag declares for a time.Time, gorm keeping the tag's spelling, so
+// DATE counts too. A date column is a time column to ClassifyColumn and
+// IsTimeColumn alike; this tells the consumers of its values apart from an
+// instant's: a value sent for or compared with a date column names the UTC
+// day it falls on (see UTCDay), whatever its Go type.
+func IsDateColumn(c Column) bool {
+	return strings.EqualFold(string(c.DataType), string(dateDataType))
 }
 
 // UTCDay returns the calendar day t falls on in UTC, the one time base of

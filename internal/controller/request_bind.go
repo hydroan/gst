@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -515,6 +516,33 @@ func clearAudit[M types.Model](records ...M) {
 // the value a date column stores.
 var dateType = reflect.TypeFor[datatypes.Date]()
 
+// dayFieldCache memoizes dayFields per type.
+var dayFieldCache sync.Map // reflect.Type -> [][]int
+
+// dayFields reports the index paths of the time.Time and *time.Time fields
+// typ stores in a date column (see modelschema.IsDateColumn), which
+// normalizeValue sets to the UTC day they fall on, the way it sets a
+// datatypes.Date; none for a type that is no model, whose fields name no
+// column.
+func dayFields(typ reflect.Type) [][]int {
+	if cached, ok := dayFieldCache.Load(typ); ok {
+		return cached.([][]int) //nolint:errcheck
+	}
+	var paths [][]int
+	if reflect.PointerTo(typ).Implements(reflect.TypeFor[types.Model]()) {
+		if columns, err := modelschema.Columns(typ); err == nil {
+			instant := reflect.TypeFor[time.Time]()
+			for _, c := range columns {
+				if modelschema.IsDateColumn(c) && (c.Type == instant || c.Type == reflect.PointerTo(instant)) {
+					paths = append(paths, c.Index)
+				}
+			}
+		}
+	}
+	dayFieldCache.Store(typ, paths)
+	return paths
+}
+
 // nilableKind reports whether values of kind k can hold nil, i.e. whether a
 // JSON null entry can decode into them.
 func nilableKind(k reflect.Kind) bool {
@@ -528,8 +556,10 @@ func nilableKind(k reflect.Kind) bool {
 
 // normalizeValue walks the value graph reachable from v, removes nil
 // elements from every settable slice whose elements can hold nil, and sets
-// every settable datatypes.Date to the UTC day it holds (see dateType). Only
-// exported struct fields are visited, matching what encoding/json can bind.
+// every settable datatypes.Date to the UTC day it holds (see dateType), and
+// every time a model stores in a date column to the UTC day it falls on (see
+// dayFields). Only exported struct fields are visited, matching what
+// encoding/json can bind.
 // JSON-decoded values are acyclic, so the walk needs no cycle tracking.
 // Interface values are descended into only when they carry a pointer: other
 // interface payloads are not addressable, so their inner values cannot be
@@ -552,6 +582,22 @@ func normalizeValue(v reflect.Value) {
 			normalizeValue(v.Elem())
 		}
 	case reflect.Struct:
+		for _, index := range dayFields(v.Type()) {
+			field, err := v.FieldByIndexErr(index)
+			if err != nil || !field.CanSet() {
+				continue
+			}
+			if at, ok := reflect.TypeAssert[*time.Time](field); ok {
+				if at != nil {
+					day := modelschema.UTCDay(*at)
+					field.Set(reflect.ValueOf(&day))
+				}
+				continue
+			}
+			if at, ok := reflect.TypeAssert[time.Time](field); ok {
+				field.Set(reflect.ValueOf(modelschema.UTCDay(at)))
+			}
+		}
 		t := v.Type()
 		for i := range v.NumField() {
 			if !t.Field(i).IsExported() {

@@ -269,17 +269,18 @@ func TestFilters(t *testing.T) {
 		}
 	})
 
-	t.Run("DateFieldReadsTheUTCDay", func(t *testing.T) {
-		// Midnight in Shanghai on the 2nd is the 1st in UTC, the day a date
-		// column stores (see API_CONTRACT.md), so the bound is that day at
-		// midnight in the canonical layout.
+	t.Run("DateFieldKeepsTheInstant", func(t *testing.T) {
+		// A date column compares by the UTC day a value falls on, which the
+		// database binds; the parser keeps the instant in the canonical
+		// layout, so a service reading the filter sees what was sent:
+		// midnight in Shanghai on the 2nd is 16:00 on the 1st in UTC.
 		conds, err := Filters(url.Values{"day[eq]": {"2026-01-02T00:00:00+08:00"}}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{types.NewFilter("", "day", types.FilterOpEq, "2026-01-01 00:00:00")}, conds)
+		require.Equal(t, []types.Filter{types.NewFilter("", "day", types.FilterOpEq, "2026-01-01 16:00:00")}, conds)
 
 		conds, err = Filters(url.Values{"day[gte]": {"2026-01-02T15:30:00Z"}}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, "2026-01-02 00:00:00", conds[0].Value(), "the time of day is dropped")
+		require.Equal(t, "2026-01-02 15:30:00", conds[0].Value(), "the time of day is kept")
 
 		_, err = Filters(url.Values{"day[eq]": {"not-a-date"}}, &filterTestModel{})
 		require.Error(t, err, "a value that is not RFC 3339 is a client error, not an empty page")
@@ -1147,9 +1148,10 @@ func TestCursor(t *testing.T) {
 }
 
 // TestNormalizeCursorValueFollowsTheColumnType pins the boundary check on
-// the value the column holds, a pointer dereferenced, and on the UTC day a
-// date column compares by; the zero Column, a model without the fallback
-// column, passes the value through.
+// the value the column holds, a pointer dereferenced, a date column's
+// boundary kept as the instant sent, which the database compares by its UTC
+// day; the zero Column, a model without the fallback column, passes the
+// value through.
 func TestNormalizeCursorValueFollowsTheColumnType(t *testing.T) {
 	columns, err := modelschema.Columns(reflect.TypeFor[filterTestModel]())
 	require.NoError(t, err)
@@ -1166,7 +1168,7 @@ func TestNormalizeCursorValueFollowsTheColumnType(t *testing.T) {
 
 	value, err := normalizeCursorValue(column("day"), "2026-01-02T00:00:00+08:00")
 	require.NoError(t, err)
-	require.Equal(t, "2026-01-01 00:00:00", value, "a date boundary is the UTC day at midnight")
+	require.Equal(t, "2026-01-01 16:00:00", value, "a date boundary keeps the instant")
 
 	value, err = normalizeCursorValue(column("closed_at"), "2026-01-02T08:00:00+08:00")
 	require.NoError(t, err)

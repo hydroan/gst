@@ -170,12 +170,28 @@ func TestParseTimeOfDay(t *testing.T) {
 	}
 }
 
-func TestIsDateType(t *testing.T) {
-	require.True(t, modelschema.IsDateType(reflect.TypeFor[datatypes.Date]()))
-	require.True(t, modelschema.IsDateType(reflect.TypeFor[*datatypes.Date]()), "a pointer column holds the pointed-to day")
-	require.False(t, modelschema.IsDateType(reflect.TypeFor[time.Time]()), "an instant is not a calendar day")
-	require.False(t, modelschema.IsDateType(reflect.TypeFor[string]()))
-	require.False(t, modelschema.IsDateType(nil))
+// TestIsDateColumn pins which columns store a calendar day: the column type
+// gorm resolved for them is date, declared by the Go type or by a type tag in
+// either case, a pointer included, and DateColumnSet names the same columns;
+// an instant and a column declared as another time type are no date.
+func TestIsDateColumn(t *testing.T) {
+	type dated struct {
+		Day     datatypes.Date  `json:"day"`
+		DayPtr  *datatypes.Date `json:"day_ptr"`
+		Due     time.Time       `json:"due" gorm:"type:date"`
+		DuePtr  *time.Time      `json:"due_ptr" gorm:"type:DATE"`
+		At      time.Time       `json:"at"`
+		Stamped time.Time       `json:"stamped" gorm:"type:datetime(3)"`
+		Clock   datatypes.Time  `json:"clock"`
+	}
+	columns, err := modelschema.Columns(reflect.TypeFor[dated]())
+	require.NoError(t, err)
+	got := make(map[string]bool, len(columns))
+	for _, c := range columns {
+		got[c.DBName] = modelschema.IsDateColumn(c)
+	}
+	require.Equal(t, map[string]bool{"day": true, "day_ptr": true, "due": true, "due_ptr": true, "at": false, "stamped": false, "clock": false}, got)
+	require.Equal(t, map[string]struct{}{"day": {}, "day_ptr": {}, "due": {}, "due_ptr": {}}, modelschema.DateColumnSet(reflect.TypeFor[dated]()))
 }
 
 func TestUTCDay(t *testing.T) {

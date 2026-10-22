@@ -530,12 +530,32 @@ func (*TestCursorSnapshot) Indexes() []modelschema.Index {
 	return []modelschema.Index{{Fields: []string{"SnapshotAt"}, Unique: true}}
 }
 
+// TestDatedCursor is the model the date-column cursor walk pages through:
+// one row a day, its day stored twice, in a column declared a date by its
+// type and in one declared a date by its type tag, each with a unique index
+// of its own, so either can carry a cursor.
+type TestDatedCursor struct {
+	Label string         `json:"label" gorm:"size:191"`
+	Day   datatypes.Date `json:"day"`
+	Due   time.Time      `json:"due" gorm:"type:date"`
+
+	modelregistry.Base
+}
+
+func (*TestDatedCursor) TableName() string { return "test_dated_cursors" }
+
+func (*TestDatedCursor) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Day"}, Unique: true}, {Fields: []string{"Due"}, Unique: true}}
+}
+
 // TestDatedRecord stores a calendar day in a date column: the day a date
 // filter compares by, in UTC, whatever offset the value was sent with. Every
-// record has its day, so a report can group by it into a plain string.
+// record has its day, so a report can group by it into a plain string. Due is
+// a time declared a date column by its type tag, a day the same way.
 type TestDatedRecord struct {
 	Label string         `json:"label" gorm:"size:191"`
 	Day   datatypes.Date `json:"day" gorm:"not null"`
+	Due   *time.Time     `json:"due" gorm:"type:date"`
 
 	modelregistry.Base
 }
@@ -666,10 +686,12 @@ var TestDatedRecordCols = struct {
 	ID    types.Column[string]
 	Label types.Column[string]
 	Day   types.TimeColumn
+	Due   types.TimeColumn
 }{
 	ID:    types.NewColumn[*TestDatedRecord, string]("id"),
 	Label: types.NewColumn[*TestDatedRecord, string]("label"),
 	Day:   types.NewTimeColumn[*TestDatedRecord]("day"),
+	Due:   types.NewTimeColumn[*TestDatedRecord]("due"),
 }
 
 // TestRecordTagCols mirrors the generated column references of the related

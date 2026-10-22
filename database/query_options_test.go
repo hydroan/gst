@@ -191,6 +191,36 @@ func TestDatabaseWithCursor(t *testing.T) {
 		require.Equal(t, "s3", page[0].Label)
 	})
 
+	t.Run("DateFieldBoundaryIsTheUTCDayItFallsOn", func(t *testing.T) {
+		// A boundary on a date column names the UTC day it falls on, however
+		// the column is declared a date: 16:00 on the 2nd names the 2nd, so
+		// the page before it holds the 1st alone on every dialect.
+		ctx := context.Background()
+		rows := make([]*TestDatedCursor, 0, 3)
+		for d := 1; d <= 3; d++ {
+			day := time.Date(2026, time.January, d, 0, 0, 0, 0, time.UTC)
+			row := &TestDatedCursor{Label: fmt.Sprintf("d%d", d), Day: datatypes.Date(day), Due: day}
+			row.ID = fmt.Sprintf("dated-cursor-%d", d)
+			rows = append(rows, row)
+		}
+		require.NoError(t, database.Database[*TestDatedCursor](ctx).Create(rows...))
+		defer func() {
+			require.NoError(t, database.Database[*TestDatedCursor](ctx).WithPurge().Delete(rows...))
+		}()
+
+		for _, column := range []string{"day", "due"} {
+			page := make([]*TestDatedCursor, 0)
+			require.NoError(t, database.Database[*TestDatedCursor](ctx).
+				WithCursor(types.CursorBackward(types.Asc(column), "2026-01-02 16:00:00")).
+				List(&page))
+			labels := make([]string, 0, len(page))
+			for _, row := range page {
+				labels = append(labels, row.Label)
+			}
+			require.Equal(t, []string{"d1"}, labels, column)
+		}
+	})
+
 	t.Run("UnboundedCursorIsTheFirstPageInOrder", func(t *testing.T) {
 		defer cleanupTestData()
 		// Written one by one out of id order, so a read in storage order

@@ -143,8 +143,8 @@ func cursorRequested(q url.Values, m types.Model) bool {
 // A time boundary is not only validated but normalized exactly like a time
 // filter bound (see timeBound): the client spells the boundary in RFC 3339,
 // and the database compares the one wall clock the framework stores on every
-// dialect, the UTC day at midnight for a date column; a time of day boundary
-// is spelled in time.TimeOnly and binds as datatypes.Time stores it.
+// dialect, a date column by the UTC day the boundary falls on; a time of day
+// boundary is spelled in time.TimeOnly and binds as datatypes.Time stores it.
 //
 // Only types the database coerces lossily are gated: numeric, bool, time and
 // time of day columns, read from the data types gorm resolved for the column,

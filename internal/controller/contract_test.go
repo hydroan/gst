@@ -123,6 +123,19 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
+			// A time a model declares a date column by its type tag is a day
+			// the same way.
+			name: "Create stores a date declared on a time as the UTC day", fixture: dated, phase: consts.Create,
+			input: contractInput{record: map[string]any{"name": uniqueName("contract-due"), "due": "2026-01-02T00:00:00+08:00"}},
+			want:  ok,
+			check: func(t *testing.T, _ contractInput, got contractAnswer) {
+				t.Helper()
+				data := dataMap(t, got)
+				require.Equal(t, "2026-01-01T00:00:00Z", data["due"])
+				requireDatedDue(t, stringOf(data["id"]), time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
+			},
+		},
+		{
 			// A time of day travels as a duration since midnight over gRPC, so
 			// what a duration says is what is compared: a fraction of a second
 			// kept as written on both. A spelling HTTP alone carries, abc or

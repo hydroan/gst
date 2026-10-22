@@ -540,16 +540,11 @@ func (c onConditions) Build(builder clause.Builder) { clause.Where{Exprs: c}.Bui
 // before it are the ones a predicate may tie to or name.
 func (a *selectBuilder[M]) joinScope(jt *joinedTable, before map[string]tableInfo) filterScope {
 	return filterScope{
-		qualify:        jt.alias,
-		table:          jt.table,
-		parent:         jt.table,
-		columns:        jt.info.columns,
-		timeColumns:    jt.info.timeColumns,
-		jsonColumns:    jt.info.jsonColumns,
-		numericColumns: jt.info.numericColumns,
-		tables:         before,
-		rename:         jt.info.rename,
-		derived:        jt.sub != nil,
+		tableInfo: jt.info.qualifiedBy(jt.alias),
+		table:     jt.table,
+		parent:    jt.table,
+		tables:    before,
+		derived:   jt.sub != nil,
 	}
 }
 

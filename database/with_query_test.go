@@ -359,20 +359,24 @@ func TestDatabaseWithQuery(t *testing.T) {
 		ctx := context.Background()
 		cleanupAggregateData()
 		t.Cleanup(cleanupAggregateData)
+		first, second := seedTime(1, 10, 0), seedTime(1, 11, 0)
 		rows := []*TestDatedRecord{
-			{Label: "dated-first", Day: datatypes.Date(seedTime(1, 10, 0))},
-			{Label: "dated-second", Day: datatypes.Date(seedTime(1, 11, 0))},
+			{Label: "dated-first", Day: datatypes.Date(first), Due: &first},
+			{Label: "dated-second", Day: datatypes.Date(second), Due: &second},
 		}
 		require.NoError(t, database.Database[*TestDatedRecord](ctx).Create(rows...))
 
 		// A day on the query model is matched by the UTC day it names,
-		// whatever time of day and offset the value carries: 23:30 at +08:00
-		// on the tenth is the tenth in UTC.
-		listed := make([]*TestDatedRecord, 0)
-		day := datatypes.Date(time.Date(2024, 1, 10, 23, 30, 0, 0, time.FixedZone("", 8*3600)))
-		require.NoError(t, database.Database[*TestDatedRecord](ctx).WithQuery(&TestDatedRecord{Day: day}).List(&listed))
-		require.Len(t, listed, 1, "a day on the query model is a condition, not a field the query ignores")
-		require.Equal(t, rows[0].ID, listed[0].ID)
+		// whatever time of day and offset the value carries, declared a date
+		// by its type or by its type tag alike: 23:30 at +08:00 on the tenth
+		// is the tenth in UTC.
+		sent := time.Date(2024, 1, 10, 23, 30, 0, 0, time.FixedZone("", 8*3600))
+		for _, query := range []*TestDatedRecord{{Day: datatypes.Date(sent)}, {Due: &sent}} {
+			listed := make([]*TestDatedRecord, 0)
+			require.NoError(t, database.Database[*TestDatedRecord](ctx).WithQuery(query).List(&listed))
+			require.Len(t, listed, 1, "a day on the query model is a condition, not a field the query ignores")
+			require.Equal(t, rows[0].ID, listed[0].ID)
+		}
 	})
 
 	t.Run("ByteSliceMatchesByteForByte", func(t *testing.T) {

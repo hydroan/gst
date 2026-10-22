@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/errors"
 
@@ -31,11 +32,16 @@ import (
 // and inside a correlated subquery -- and each answers "which table does this
 // column belong to" differently.
 type filterScope struct {
-	// qualify prefixes column names. It is empty at the top level, where an
-	// unqualified name is unambiguous, and set inside a subquery, where the
-	// same name usually exists on both tables and an unqualified one silently
-	// binds to the outer query instead.
-	qualify string
+	// tableInfo is the scope's own table. Its qualify prefixes column names:
+	// empty at the top level, where an unqualified name is unambiguous, and
+	// set inside a subquery, where the same name usually exists on both tables
+	// and an unqualified one silently binds to the outer query instead. Its
+	// columns restrict which columns may be named: nil at the top level, where
+	// the producer already owns validation, and set inside a subquery, where a
+	// name the related model does not have would otherwise resolve against the
+	// outer table and quietly change the meaning of the query. Its rename is
+	// set for the ON of a joined select alone.
+	tableInfo
 	// parent is the table a correlated subquery joins back to.
 	parent string
 	// outer is the table the scope's own EqCol predicates equate against:
@@ -51,26 +57,6 @@ type filterScope struct {
 	// side is instead of reaching the database as an unknown column. It is nil
 	// at the top level, alongside outer.
 	outerColumns map[string]struct{}
-	// columns restricts which columns may be named, keyed by database name. It
-	// is nil at the top level, where the producer already owns validation, and
-	// set inside a subquery, where a name the related model does not have would
-	// otherwise resolve against the outer table and quietly change the meaning
-	// of the query.
-	columns map[string]struct{}
-	// timeColumns names the columns of the scope's model that store time,
-	// keyed by database name. Comparisons on them normalize both sides through
-	// timeComparableExpr; see comparisonSQL.
-	timeColumns map[string]struct{}
-	// jsonColumns names the columns of the scope's model that store a JSON
-	// document, keyed by database name. The text pattern filters match against
-	// the document's text form and cast the column where the dialect requires
-	// it; see textPatternColumn.
-	jsonColumns map[string]struct{}
-	// numericColumns names the columns of the scope's model that store a
-	// number, keyed by database name. The text pattern filters match against
-	// the number's text form and cast the column where the dialect requires
-	// it; see textPatternColumn.
-	numericColumns map[string]struct{}
 	// depth numbers the nesting level so each subquery can take a distinct
 	// alias when it reads the same table as the query enclosing it.
 	depth int
@@ -82,9 +68,6 @@ type filterScope struct {
 	// by table name, each with the columns it may name. It is nil outside a
 	// join, where a predicate reads one table only.
 	tables map[string]tableInfo
-	// rename maps the scope's own columns to the names they are read under,
-	// for the ON of a joined select; nil everywhere else.
-	rename map[string]string
 	// derived marks the ON scope of a joined select, whose rows are the
 	// groups the select materialized: a subquery has no row of the select's
 	// model to correlate with there.
@@ -97,9 +80,22 @@ type filterScope struct {
 // columns project as, which is how a column named through the joined select's
 // model reaches the derived column it became.
 type tableInfo struct {
-	columns        map[string]struct{}
-	timeColumns    map[string]struct{}
-	jsonColumns    map[string]struct{}
+	// columns names the columns that exist.
+	columns map[string]struct{}
+	// timeColumns names the columns that store time. Comparisons on them
+	// normalize both sides through timeComparableExpr; see comparisonSQL.
+	timeColumns map[string]struct{}
+	// dateColumns names the time columns that store a calendar day. A value
+	// compared with one, or matched against one in a list, binds the UTC day
+	// it falls on; see dayValue.
+	dateColumns map[string]struct{}
+	// jsonColumns names the columns that store a JSON document. The text
+	// pattern filters match against the document's text form and cast the
+	// column where the dialect requires it; see textPatternColumn.
+	jsonColumns map[string]struct{}
+	// numericColumns names the columns that store a number. The text pattern
+	// filters match against the number's text form and cast the column where
+	// the dialect requires it; see textPatternColumn.
 	numericColumns map[string]struct{}
 	// qualify is the name the table's columns are qualified with in SQL;
 	// empty means the table's own name.
@@ -117,11 +113,19 @@ func (info tableInfo) column(name string) string {
 	return name
 }
 
+// qualifiedBy is the same table read under name: its columns qualified with
+// name in SQL, all it knows of them kept.
+func (info tableInfo) qualifiedBy(name string) tableInfo {
+	info.qualify = name
+	return info
+}
+
 // tableInfoOf reads a model's resolved columns into a tableInfo.
 func tableInfoOf(columns []modelschema.Column) tableInfo {
 	info := tableInfo{
 		columns:        make(map[string]struct{}, len(columns)),
 		timeColumns:    make(map[string]struct{}),
+		dateColumns:    make(map[string]struct{}),
 		jsonColumns:    make(map[string]struct{}),
 		numericColumns: make(map[string]struct{}),
 	}
@@ -129,6 +133,9 @@ func tableInfoOf(columns []modelschema.Column) tableInfo {
 		info.columns[c.DBName] = struct{}{}
 		if modelschema.IsTimeColumn(c) {
 			info.timeColumns[c.DBName] = struct{}{}
+		}
+		if modelschema.IsDateColumn(c) {
+			info.dateColumns[c.DBName] = struct{}{}
 		}
 		if modelschema.IsNumericColumn(c) {
 			info.numericColumns[c.DBName] = struct{}{}
@@ -140,11 +147,6 @@ func tableInfoOf(columns []modelschema.Column) tableInfo {
 	return info
 }
 
-// own is the scope's own table as a tableInfo.
-func (s filterScope) own() tableInfo {
-	return tableInfo{columns: s.columns, timeColumns: s.timeColumns, jsonColumns: s.jsonColumns, numericColumns: s.numericColumns, qualify: s.qualify, rename: s.rename}
-}
-
 // outerScope is the filterScope of a top-level predicate: it correlates
 // against the chain's own table and knows which of that model's columns store
 // time and which store JSON.
@@ -154,6 +156,7 @@ func (db *database[M]) outerScope() filterScope {
 		parent:         db.outerTableName(),
 		table:          db.outerTableName(),
 		timeColumns:    modelschema.TimeColumnSet(typ),
+		dateColumns:    modelschema.DateColumnSet(typ),
 		jsonColumns:    modelschema.JSONColumnSet(typ),
 		numericColumns: modelschema.NumericColumnSet(typ),
 	}
@@ -330,9 +333,9 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 	case types.FilterOpLte:
 		return db.scalarFilter(f, info, db.comparisonSQL(info, f.Column(), column, " <= "))
 	case types.FilterOpIn:
-		return db.listFilter(f, column+" IN ?")
+		return db.listFilter(f, info, column+" IN ?")
 	case types.FilterOpNotIn:
-		return db.listFilter(f, column+" NOT IN ?")
+		return db.listFilter(f, info, column+" NOT IN ?")
 	case types.FilterOpLike:
 		return db.patternFilter(f, db.patternColumn(info, f.Column(), column)+" LIKE ?"+db.likeEscapeSuffix(), "%", "%")
 	case types.FilterOpNotLike:
@@ -418,14 +421,14 @@ func (db *database[M]) placeFilter(f types.Filter, scope filterScope) (string, t
 	if scope.columns != nil {
 		if _, ok := scope.columns[f.Column()]; !ok {
 			if scope.derived {
-				_, err := db.derivedKeyFilter(f, f.Column(), scope.table, scope.own())
+				_, err := db.derivedKeyFilter(f, f.Column(), scope.table, scope.tableInfo)
 				return "", tableInfo{}, err
 			}
 			_, err := db.failClosedFilter(f, fmt.Sprintf("names a column %q does not have", scope.table))
 			return "", tableInfo{}, err
 		}
 	}
-	return db.scopedColumn(f.Column(), scope), scope.own(), nil
+	return db.scopedColumn(f.Column(), scope), scope.tableInfo, nil
 }
 
 // derivedKeyFilter refuses a filter naming a column of a joined select's
@@ -510,7 +513,7 @@ func (db *database[M]) joinEqCol(f types.Filter, column, parent, parentTable str
 	var info tableInfo
 	switch parentTable {
 	case scope.table:
-		info = scope.own()
+		info = scope.tableInfo
 	default:
 		other, ok := scope.tables[parentTable]
 		if !ok {
@@ -680,21 +683,62 @@ func (db *database[M]) scalarFilter(f types.Filter, info tableInfo, sql string) 
 			return db.failClosedFilter(f, "expects a scalar value")
 		}
 	}
-	return clause.Expr{SQL: sql, Vars: []any{f.Value()}}, nil
+	value := f.Value()
+	if _, isDate := info.dateColumns[f.Column()]; isDate {
+		value = dayValue(value)
+	}
+	return clause.Expr{SQL: sql, Vars: []any{value}}, nil
+}
+
+// dayValue is the value a comparison with a date column, or a list matched
+// against one, binds for v: the UTC day v falls on (see modelschema.UTCDay),
+// in the form v came in, a string in types.FilterTimeLayout, the way the URL
+// parser binds a time, or a time, a value over one such as datatypes.Date
+// read as the time it holds; any other value binds as it is. The day is bound
+// rather than the instant because the dialects compare a day with an instant
+// differently: MySQL and SQLite take the day as its midnight, PostgreSQL
+// takes the instant as the day it falls on.
+func dayValue(v any) any {
+	switch value := v.(type) {
+	case string:
+		t, err := time.ParseInLocation(types.FilterTimeLayout, value, time.UTC)
+		if err != nil {
+			return v
+		}
+		return modelschema.UTCDay(t).Format(types.FilterTimeLayout)
+	case time.Time:
+		return modelschema.UTCDay(value)
+	}
+	timeType := reflect.TypeFor[time.Time]()
+	if val := reflect.ValueOf(v); val.IsValid() && val.Kind() == reflect.Struct && val.Type().ConvertibleTo(timeType) {
+		t, _ := reflect.TypeAssert[time.Time](val.Convert(timeType))
+		return modelschema.UTCDay(t)
+	}
+	return v
 }
 
 // listFilter binds a set-membership filter whose value must be a slice or an
 // array; anything else, including a comma-separated string, fails closed. An
 // empty slice keeps the SQL list semantics: IN matches nothing, and the result
-// never widens.
-func (db *database[M]) listFilter(f types.Filter, sql string) (clause.Expression, error) {
+// never widens. On a date column every member binds the UTC day it falls on
+// (see dayValue), the way a compared value does.
+func (db *database[M]) listFilter(f types.Filter, info tableInfo, sql string) (clause.Expression, error) {
 	if f.Value() == nil {
 		return db.failClosedFilter(f, "expects a slice value")
 	}
-	if k := reflect.ValueOf(f.Value()).Kind(); k != reflect.Slice && k != reflect.Array {
+	list := reflect.ValueOf(f.Value())
+	if k := list.Kind(); k != reflect.Slice && k != reflect.Array {
 		return db.failClosedFilter(f, "expects a slice value")
 	}
-	return clause.Expr{SQL: sql, Vars: []any{f.Value()}}, nil
+	value := f.Value()
+	if _, isDate := info.dateColumns[f.Column()]; isDate {
+		days := make([]any, list.Len())
+		for i := range days {
+			days[i] = dayValue(list.Index(i).Interface())
+		}
+		value = days
+	}
+	return clause.Expr{SQL: sql, Vars: []any{value}}, nil
 }
 
 // patternFilter binds a LIKE-family filter; the value must be a string and is
@@ -722,9 +766,9 @@ func (db *database[M]) stringFilter(f types.Filter, sql string) (clause.Expressi
 // without removing any ambiguity.
 func (db *database[M]) scopedColumn(column string, scope filterScope) string {
 	if len(scope.qualify) == 0 {
-		return db.quoteIdent(scope.own().column(column))
+		return db.quoteIdent(scope.column(column))
 	}
-	return db.quoteTableColumn(scope.qualify, scope.own().column(column))
+	return db.quoteTableColumn(scope.qualify, scope.column(column))
 }
 
 // existsCondition renders a correlated subquery as a semi join. The related
@@ -817,17 +861,13 @@ func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, scope 
 		outerColumns = db.outerColumnSet()
 	}
 	inner := filterScope{
-		qualify:        childRef,
-		parent:         childRef,
-		outer:          scope.parent,
-		outerTable:     scope.table,
-		outerColumns:   outerColumns,
-		columns:        child.columns,
-		timeColumns:    child.timeColumns,
-		jsonColumns:    child.jsonColumns,
-		numericColumns: child.numericColumns,
-		depth:          scope.depth + 1,
-		table:          childTable,
+		tableInfo:    child.qualifiedBy(childRef),
+		parent:       childRef,
+		outer:        scope.parent,
+		outerTable:   scope.table,
+		outerColumns: outerColumns,
+		depth:        scope.depth + 1,
+		table:        childTable,
 	}
 	expr, failure := db.renderFilters(sq.Filters, false, inner)
 	if expr != nil {

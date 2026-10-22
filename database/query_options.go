@@ -120,7 +120,8 @@ func (db *database[M]) ownOrder(option string, order types.Order) error {
 // boundary comparison and the ORDER BY flip; List reverses the rows afterwards
 // to hand them back in the feed's own order. A boundary on a time column goes
 // through timeComparableExpr on both sides, so the comparison agrees across
-// storage spellings.
+// storage spellings, and one on a date column binds the UTC day it falls on
+// (see dayValue).
 func (db *database[M]) applyCursorPagination() {
 	if !db.cursor.Enabled() {
 		return
@@ -134,11 +135,16 @@ func (db *database[M]) applyCursorPagination() {
 		if direction == types.OrderDesc {
 			operator = " < "
 		}
-		lhs, rhs := db.quoteIdent(db.cursor.Order().Column()), "?"
-		if _, isTime := modelschema.TimeColumnSet(reflect.TypeOf(*new(M)))[db.cursor.Order().Column()]; isTime {
+		typ, column := reflect.TypeOf(*new(M)), db.cursor.Order().Column()
+		lhs, rhs := db.quoteIdent(column), "?"
+		var value any = db.cursor.Value()
+		if _, isTime := modelschema.TimeColumnSet(typ)[column]; isTime {
 			lhs, rhs = db.timeComparableExpr(lhs), db.timeComparableExpr(rhs)
 		}
-		db.ins = db.ins.Where(lhs+operator+rhs, db.cursor.Value())
+		if _, isDate := modelschema.DateColumnSet(typ)[column]; isDate {
+			value = dayValue(value)
+		}
+		db.ins = db.ins.Where(lhs+operator+rhs, value)
 	}
 	db.ins = db.ins.Order(db.orderClause(types.NewOrder("", db.cursor.Order().Column(), direction)))
 }

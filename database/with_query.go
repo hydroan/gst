@@ -27,8 +27,9 @@ import (
 //     binds for it. A type implementing driver.Valuer, such as sql.NullString,
 //     and a field declaring a serializer, a slice among them, bind the form
 //     their column stores; a byte slice matches byte for byte; time.Time
-//     compares as the instant it names whatever its offset, and datatypes.Date
-//     by the UTC day it names. Of the columns every model carries, only id,
+//     compares as the instant it names whatever its offset, and a date
+//     column, a datatypes.Date or a time.Time its type tag declares a date, by
+//     the UTC day it names. Of the columns every model carries, only id,
 //     created_by and updated_by are conditions.
 //   - opts: Optional QueryOptions to control query behavior (empty-query safety, operator filters)
 //
@@ -256,9 +257,13 @@ var timestampColumns = []string{"created_at", "updated_at", "deleted_at"}
 func structConditions(stmt *gorm.Statement, query any, columns []modelschema.Column, present map[string]struct{}) map[string]any {
 	conds := stmt.BuildCondition(query)
 	var named []any
+	days := make(map[string]struct{})
 	for _, column := range columns {
 		if _, ok := present[column.QueryName]; ok && !slices.Contains(frameworkColumns, column.DBName) {
 			named = append(named, column.DBName)
+		}
+		if modelschema.IsDateColumn(column) {
+			days[column.DBName] = struct{}{}
 		}
 	}
 	if len(named) > 0 {
@@ -285,23 +290,23 @@ func structConditions(stmt *gorm.Statement, query any, columns []modelschema.Col
 		if !ok || slices.Contains(timestampColumns, column.Name) {
 			continue
 		}
-		typ, val, ok := indirectTypeAndValue(reflect.TypeOf(eq.Value), reflect.ValueOf(eq.Value))
+		_, val, ok := indirectTypeAndValue(reflect.TypeOf(eq.Value), reflect.ValueOf(eq.Value))
 		if !ok {
 			continue
 		}
-		q[column.Name] = conditionValue(typ, val)
+		_, day := days[column.Name]
+		q[column.Name] = conditionValue(val, day)
 	}
 	return q
 }
 
-// conditionValue is the value a condition binds for a field value: an instant
-// in UTC, a day as the UTC day the date column stores (see
-// modelschema.UTCDay), and anything else — a scalar, a JSON document, a
-// Valuer such as sql.NullString — as it is.
-func conditionValue(typ reflect.Type, val reflect.Value) any {
-	if modelschema.IsDateType(typ) {
-		day, _ := reflect.TypeAssert[time.Time](val.Convert(reflect.TypeFor[time.Time]()))
-		return modelschema.UTCDay(day)
+// conditionValue is the value a condition binds for a field value: the UTC
+// day it falls on for a date column, day (see dayValue), an instant in UTC,
+// and anything else — a scalar, a JSON document, a Valuer such as
+// sql.NullString — as it is.
+func conditionValue(val reflect.Value, day bool) any {
+	if day {
+		return dayValue(val.Interface())
 	}
 	if t, ok := reflect.TypeAssert[time.Time](val); ok {
 		return t.UTC()
