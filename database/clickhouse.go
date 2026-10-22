@@ -155,9 +155,11 @@ func (db *database[M]) clickhouseDeleteStatement(ids []string) (string, []any, e
 // unqualified returns expr with every column naming the current table
 // stripped of its table qualifier. The lightweight DELETE of clickhouse
 // resolves no qualified column in its WHERE, while gorm renders a column a
-// clause names on the current table as table.column without exception. An
-// expression of a shape this cannot see into is an error rather than a
-// statement clickhouse would then refuse.
+// clause names on the current table as table.column without exception. The
+// dialect driver strips the qualifiers inside its own DELETE builder alone,
+// which renders the ALTER TABLE mutation and offers the stripping to no
+// other statement, so it is done here. An expression of a shape this cannot
+// see into is an error rather than a statement clickhouse would then refuse.
 func unqualified(expr clause.Expression) (clause.Expression, error) {
 	unqualifyAll := func(exprs []clause.Expression) ([]clause.Expression, error) {
 		out := make([]clause.Expression, 0, len(exprs))
