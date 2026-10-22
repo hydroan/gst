@@ -152,6 +152,8 @@ linters:
               desc: "framework code imports github.com/hydroan/gst/internal/modelschema"
             - pkg: "github.com/hydroan/gst/cache$"
               desc: "framework code imports github.com/hydroan/gst/internal/cache/defaultcache, the backend the public package forwards"
+            - pkg: "github.com/hydroan/gst/tenant$"
+              desc: "framework code imports github.com/hydroan/gst/internal/tenant"
         # The same rule for the public middleware package: the handlers of
         # the copyable modules are middleware source files gg module copy
         # carries into a project, so they live in the public package, and a

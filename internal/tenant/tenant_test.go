@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/tenant"
+	"github.com/hydroan/gst/internal/tenant"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"

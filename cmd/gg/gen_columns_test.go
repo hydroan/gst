@@ -225,6 +225,45 @@ func (Rule) Design() {
 	requireProjectCompiles(t)
 }
 
+// TestGenRunReferencesTheTenantColumnByItsValueType runs gg gen against a
+// model scoped to tenants by embedding tenant.Scope. The tenant column's type
+// is the framework's own, which no public package forwards, so the generated
+// reference names the type its values are, string, and the project compiles.
+func TestGenRunReferencesTheTenantColumnByItsValueType(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	writeProjectFile(t, filepath.Join(projectDir, "model", "sample", "entry.go"), `package sample
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/tenant"
+)
+
+type Entry struct {
+	Name string `+"`json:\"name\" gorm:\"size:191\"`"+`
+
+	tenant.Scope
+	model.Base
+}
+
+func (Entry) TableName() string { return "entries" }
+
+func (Entry) Design() {
+	dsl.Migrate()
+}
+`)
+
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+	columnFile, err := os.ReadFile(filepath.Join("model", "sample", "entry.gen.go"))
+	require.NoError(t, err)
+	require.Contains(t, string(columnFile), `gst.NewColumn[*Entry, string]("tenant_id")`)
+
+	requireProjectCompiles(t)
+}
+
 // TestGenRunNamesEmbeddedColumnsByPath runs gg gen against a model that
 // embeds one struct by name twice beside a field of the same name. Each column
 // gets a reference of its own, named by its Go path, and the handwritten code

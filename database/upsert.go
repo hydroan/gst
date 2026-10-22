@@ -11,7 +11,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/tenant"
+	"github.com/hydroan/gst/internal/tenant"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	gormschema "gorm.io/gorm/schema"

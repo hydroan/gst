@@ -7,9 +7,9 @@ import (
 
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/database/clickhouse"
+	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/tenant"
 	"github.com/stretchr/testify/require"
 )
 

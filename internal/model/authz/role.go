@@ -234,7 +234,7 @@ func (r *Role) DeleteBefore(ctx context.Context) error {
 func (r *Role) DeleteAfter(ctx context.Context) error {
 	// The role ID alone identifies the bindings: it is unique across tenants,
 	// and the statement is scoped to the caller's tenant anyway (see
-	// tenant.ID). One delete by condition removes them all; the rows go
+	// tenant.Scope). One delete by condition removes them all; the rows go
 	// without their hooks. Each binding's DeleteBefore reads the row back and
 	// unassigns the role one subject at a time, while RemoveRole below drops
 	// every assignment to this role in one filtered delete — so the hooks

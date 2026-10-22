@@ -184,7 +184,9 @@ func describeType(typ reflect.Type, modelPkg string) (expr string, imports map[s
 // rewritten to the alias the model source actually wrote: model.Base and
 // its siblings for internal/modelregistry, model.Version for
 // internal/modelschema, and the root gst package, which forwards everything
-// internal/types defines under the same name.
+// internal/types defines under the same name. The tenant column's type is
+// forwarded by no package, a model carrying it only through tenant.Scope,
+// so its reference is written as the type its values are, string.
 func typeExpr(typ reflect.Type, modelPkg string, imports map[string]string) (string, bool) {
 	if name := typ.Name(); name != "" {
 		if strings.ContainsAny(name, "[]*") {
@@ -199,6 +201,8 @@ func typeExpr(typ reflect.Type, modelPkg string, imports map[string]string) (str
 		case "github.com/hydroan/gst/internal/types":
 			imports["github.com/hydroan/gst"] = "gst"
 			return "gst." + name, true
+		case "github.com/hydroan/gst/internal/tenant":
+			return typ.Kind().String(), true
 		default:
 			alias := packageName(typ)
 			imports[pkg] = alias

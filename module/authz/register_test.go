@@ -24,12 +24,12 @@ import (
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
+	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/module/authz"
 	"github.com/hydroan/gst/module/iam"
-	"github.com/hydroan/gst/tenant"
 	"github.com/hydroan/gst/util"
 	"github.com/stretchr/testify/require"
 )

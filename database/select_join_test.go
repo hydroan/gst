@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/tenant"
 	"github.com/stretchr/testify/require"
 )
 
@@ -585,14 +585,57 @@ func TestSelectJoinKeepsTheJoinedModelsTenant(t *testing.T) {
 
 	rows, statements := read(tenant.In(ctx, "tenant-a"))
 	require.Equal(t, []taggedItem{{ID: "tg1", Name: new("mine")}, {ID: "tg2", Name: nil}}, rows)
-	require.Contains(t, statements[0].Query,
-		" AND "+qualified("test_tenant_soft_delete_items", "deleted_at")+" IS NULL AND "+qualified("test_tenant_soft_delete_items", "tenant_id")+" = ",
+	on, _, found := strings.Cut(statements[0].Query, " WHERE ")
+	require.True(t, found, statements[0].Query)
+	require.Contains(t, on, qualified("test_tenant_soft_delete_items", "tenant_id")+" = ",
 		"the tenant condition sits in the ON beside the soft delete")
+	require.Contains(t, on, qualified("test_tenant_soft_delete_items", "deleted_at")+" IS NULL")
 	require.Equal(t, []any{"tenant-a"}, statements[0].Args)
 
 	rows, statements = read(tenant.Across(ctx))
 	require.Equal(t, []taggedItem{{ID: "tg1", Name: new("mine")}, {ID: "tg2", Name: new("theirs")}}, rows, "a cross-tenant context reads every tenant's rows")
 	require.NotContains(t, statements[0].Query, "tenant_id")
+}
+
+// TestSelectJoinHidesWhatAListOnTheJoinedModelHides pins that a joined model
+// carries into the ON every condition its schema hides rows by, not its soft
+// delete and its tenant alone: the account its visibility hides is no row a
+// List on accounts reads, and no row a join on accounts reads either, a LEFT
+// JOIN keeping the payment that names it with nothing joined.
+func TestSelectJoinHidesWhatAListOnTheJoinedModelHides(t *testing.T) {
+	ctx := context.Background()
+	require.NoError(t, database.DB().AutoMigrate(&TestVisibleAccount{}))
+	cleanup := func() {
+		_ = database.DB().Exec("DELETE FROM test_visible_accounts").Error
+		cleanupFlowData()
+	}
+	defer cleanup()
+	cleanup()
+	seedFlowExample()
+	require.NoError(t, database.Database[*TestVisibleAccount](ctx).Create(
+		&TestVisibleAccount{Code: "acme", Name: "Acme", Visibility: "shown"},
+		&TestVisibleAccount{Code: "bolt", Name: "Bolt", Visibility: "hidden"},
+	))
+
+	listed := make([]*TestVisibleAccount, 0)
+	require.NoError(t, database.Database[*TestVisibleAccount](ctx).List(&listed))
+	require.Len(t, listed, 1, "a List hides the account its visibility hides")
+
+	type paid struct {
+		ID   string
+		Name *string
+	}
+	rows := make([]paid, 0)
+	require.NoError(t, database.Select[*TestPayment, paid](ctx, TestPaymentCols.ID, TestVisibleAccountCols.Name.As("name")).
+		Join(types.LeftJoin[*TestVisibleAccount](TestVisibleAccountCols.Code.EqCol(TestPaymentCols.Account))).
+		OrderBy(TestPaymentCols.ID.Asc()).
+		Scan(&rows))
+	require.Equal(t, []paid{
+		{ID: "p1", Name: new("Acme")},
+		{ID: "p2", Name: new("Acme")},
+		{ID: "p3", Name: nil},
+		{ID: "p4", Name: new("Acme")},
+	}, rows)
 }
 
 func TestSelectJoinInsideAUnionBranch(t *testing.T) {

@@ -15,10 +15,13 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
+	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/tenant"
 	"github.com/stretchr/testify/require"
 	"gorm.io/datatypes"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+	gormschema "gorm.io/gorm/schema"
 )
 
 const (
@@ -905,6 +908,59 @@ var TestAccountCols = struct {
 	Code: types.NewColumn[*TestAccount, string]("code"),
 	Name: types.NewColumn[*TestAccount, string]("name"),
 	Tier: types.NewColumn[*TestAccount, string]("tier"),
+}
+
+// TestVisibility is a column type that hides the rows marked hidden from
+// every read through query clauses of its own, the mechanism gorm.DeletedAt
+// hides deleted rows by.
+type TestVisibility string
+
+func (TestVisibility) QueryClauses(f *gormschema.Field) []clause.Interface {
+	return []clause.Interface{visibilityClause{field: f}}
+}
+
+// visibilityClause narrows a statement to the rows not marked hidden.
+type visibilityClause struct{ field *gormschema.Field }
+
+func (visibilityClause) Name() string               { return "" }
+func (visibilityClause) Build(clause.Builder)       {}
+func (visibilityClause) MergeClause(*clause.Clause) {}
+
+func (c visibilityClause) ModifyStatement(stmt *gorm.Statement) {
+	const marker = "test:visibility"
+	if _, applied := stmt.Clauses[marker]; applied {
+		return
+	}
+	stmt.AddClause(clause.Where{Exprs: []clause.Expression{
+		clause.Neq{Column: clause.Column{Table: clause.CurrentTable, Name: c.field.DBName}, Value: "hidden"},
+	}})
+	stmt.Clauses[marker] = clause.Clause{}
+}
+
+// TestVisibleAccount is an account a join reads by code, unique through the
+// Indexes method like TestAccount's, whose visibility hides it from reads.
+type TestVisibleAccount struct {
+	Code       string         `json:"code" gorm:"size:191"`
+	Name       string         `json:"name" gorm:"size:191"`
+	Visibility TestVisibility `json:"visibility" gorm:"size:32"`
+
+	modelregistry.Base
+}
+
+func (*TestVisibleAccount) TableName() string { return "test_visible_accounts" }
+
+func (*TestVisibleAccount) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Code"}, Unique: true}}
+}
+
+// TestVisibleAccountCols mirrors the generated column references of the
+// visible account model.
+var TestVisibleAccountCols = struct {
+	Code types.Column[string]
+	Name types.Column[string]
+}{
+	Code: types.NewColumn[*TestVisibleAccount, string]("code"),
+	Name: types.NewColumn[*TestVisibleAccount, string]("name"),
 }
 
 // TestMarkedRecord is a fixture whose mark is a pointer column the schema

@@ -600,7 +600,7 @@ func (db *database[M]) WithAllowMissing() types.Database[M] {
 //
 // Only the soft-delete condition is lifted. Query conditions, filters,
 // ordering, pagination and tenant scoping all stay in force — the tenant
-// predicate deliberately ignores GORM's Unscoped flag (see tenant.ID) — and
+// predicate deliberately ignores GORM's Unscoped flag — and
 // associations preloaded with WithExpand keep their default scope, because
 // GORM runs preload queries on fresh sessions that do not inherit the flag.
 //

@@ -11,9 +11,10 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/modelschema"
+	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/tenant"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // This file is the join side of the select builder: how a joined model or a
@@ -48,14 +49,13 @@ type joinedTable struct {
 	alias string
 	left  bool
 	on    []types.Filter
-	// columns, softDelete and tenant describe a joined model, the last two
-	// being the conditions a List on it hides rows by; sub and derived a
-	// joined select, whose own statement carries those conditions.
-	columns    map[string]modelschema.Column
-	softDelete string
-	tenant     string
-	sub        nestedSelect
-	derived    *derivedInfo
+	// columns and queryClauses describe a joined model, the latter being the
+	// clauses its schema hides rows from every read by; sub and derived a
+	// joined select, whose own statement carries those clauses.
+	columns      map[string]modelschema.Column
+	queryClauses []clause.Interface
+	sub          nestedSelect
+	derived      *derivedInfo
 	// info is what the filter renderer knows about the source's columns,
 	// and joinColumns the columns of the tables read before it that the ON
 	// ties the source to, keyed by table.
@@ -157,8 +157,8 @@ func (a *selectBuilder[M]) resolveJoins(shape *projectionShape) error {
 	return nil
 }
 
-// resolveModelJoin reads a joined model: its table, columns and soft-delete
-// column, and the keys it is unique on.
+// resolveModelJoin reads a joined model: its table, columns and query
+// clauses, and the keys it is unique on.
 func (a *selectBuilder[M]) resolveModelJoin(mj types.ModelJoin) (*joinedTable, [][]string, error) {
 	// A joined select needs no constraint, its group keys make it unique;
 	// a joined model is proved on a constraint, which ClickHouse does not
@@ -181,15 +181,18 @@ func (a *selectBuilder[M]) resolveModelJoin(mj types.ModelJoin) (*joinedTable, [
 	if err != nil {
 		return nil, nil, err
 	}
+	stmt := &gorm.Statement{DB: a.db.ins}
+	if err = stmt.Parse(mj.Model); err != nil {
+		return nil, nil, errors.Wrapf(err, "parse joined %T", mj.Model)
+	}
 	return &joinedTable{
-		table:      table,
-		alias:      table,
-		left:       mj.Left,
-		on:         mj.On,
-		columns:    columnsByName(columns),
-		softDelete: softDeleteColumn(columns),
-		tenant:     tenantColumn(columns),
-		info:       tableInfoOf(columns),
+		table:        table,
+		alias:        table,
+		left:         mj.Left,
+		on:           mj.On,
+		columns:      columnsByName(columns),
+		queryClauses: stmt.Schema.QueryClauses,
+		info:         tableInfoOf(columns),
 	}, keys, nil
 }
 
@@ -428,21 +431,6 @@ func uniqueKeysOf(ins *gorm.DB, model any) ([][]string, error) {
 	return keys, nil
 }
 
-// deletedAtType is the type gorm soft deletes through; a model carrying a
-// column of it hides its deleted rows from every read.
-var deletedAtType = reflect.TypeFor[gorm.DeletedAt]()
-
-// softDeleteColumn returns the soft-delete column of a model, or "" when it
-// has none.
-func softDeleteColumn(columns []modelschema.Column) string {
-	for _, c := range columns {
-		if c.Type == deletedAtType {
-			return c.DBName
-		}
-	}
-	return ""
-}
-
 // tenantIDType is the type the tenant package scopes a model's rows by; a
 // model carrying a column of it belongs to one tenant per row, and a read on
 // it sees the context's tenant alone.
@@ -470,15 +458,12 @@ func columnsByName(columns []modelschema.Column) map[string]modelschema.Column {
 
 // joinClauses adds the JOIN clauses to the statement, each ON rendered by
 // the filter renderer in the joined source's own scope. A joined model
-// carries in the ON the conditions a List on it hides rows by — its
-// soft-delete condition, and its tenant condition when its rows belong to a
-// tenant — so a join never reads a row a List on that model hides; they sit
-// in the ON rather than the WHERE because in the WHERE they would turn a LEFT
-// JOIN back into an inner one. gorm adds both to the queried model on its
-// own, through the model's schema, and to a joined select's statement the
-// same way; a joined model is no statement's model, so they are written
-// here. A joined select is rendered as a derived table, its own statement
-// bound into the join.
+// carries in the ON the conditions a List on it hides rows by, the query
+// clauses of its schema (see joinedModelConditions), so a join never reads a
+// row a List on that model hides; they sit in the ON rather than the WHERE
+// because in the WHERE they would turn a LEFT JOIN back into an inner one. A
+// joined select is rendered as a derived table, its own statement, which
+// carries those clauses for its model, bound into the join.
 func (a *selectBuilder[M]) joinClauses(tx *gorm.DB, shape projectionShape) (*gorm.DB, error) {
 	before := map[string]tableInfo{shape.main: shape.mainInfo}
 	for _, jt := range shape.joins {
@@ -497,23 +482,57 @@ func (a *selectBuilder[M]) joinClauses(tx *gorm.DB, shape projectionShape) (*gor
 			}
 			tx = tx.Joins(kind+" (?) AS "+a.db.quoteIdent(jt.alias)+" ON ?", sub, expr)
 		} else {
-			sql := kind + " " + a.db.quoteIdent(jt.table) + " ON ?"
-			vars := []any{expr}
-			if len(jt.softDelete) > 0 {
-				sql += " AND " + a.db.quoteTableColumn(jt.table, jt.softDelete) + " IS NULL"
+			on := onConditions{expr}
+			if hidden, ok := a.joinedModelConditions(tx, jt); ok {
+				on = append(on, hidden)
 			}
-			// A cross-tenant context reads every tenant's rows, as it does
-			// on the queried model; any other acts in exactly one tenant.
-			if id, one := tenant.From(a.db.ctx); len(jt.tenant) > 0 && one {
-				sql += " AND " + a.db.quoteTableColumn(jt.table, jt.tenant) + " = ?"
-				vars = append(vars, id)
-			}
-			tx = tx.Joins(sql, vars...)
+			tx = tx.Joins(kind+" "+a.db.quoteIdent(jt.table)+" ON ?", on)
 		}
 		before[jt.table] = jt.info
 	}
 	return tx, nil
 }
+
+// joinedModelConditions renders the conditions a read of the joined model
+// hides rows by, the query clauses of its schema with its soft delete and
+// its tenant among them, the way gorm renders them into the ON of an
+// association join (callbacks/query.go): in a statement of their own
+// naming the joined table, each bind variable turned back into a
+// placeholder for the enclosing statement to bind. The statement carries
+// the query's context, which the tenant clause reads the tenant from. gorm
+// renders a schema's query clauses into the ON of an association join
+// alone, which a model join is not, so they are rendered here. The second
+// result is false when the clauses hide no row of this query.
+func (a *selectBuilder[M]) joinedModelConditions(tx *gorm.DB, jt *joinedTable) (clause.Expression, bool) {
+	stmt := &gorm.Statement{DB: tx, Table: jt.alias, Context: a.db.ctx, Clauses: map[string]clause.Clause{}}
+	for _, c := range jt.queryClauses {
+		stmt.AddClause(c)
+	}
+	where, ok := stmt.Clauses["WHERE"].Expression.(clause.Where)
+	if !ok {
+		return nil, false
+	}
+	where.Build(stmt)
+	sql, vars := stmt.SQL.String(), stmt.Vars
+	if len(sql) == 0 {
+		return nil, false
+	}
+	for i, v := range vars {
+		var bindVar strings.Builder
+		stmt.Vars = vars[:i+1]
+		tx.Dialector.BindVarTo(&bindVar, stmt, v)
+		sql = strings.Replace(sql, bindVar.String(), "?", 1)
+	}
+	return clause.Expr{SQL: sql, Vars: vars}, true
+}
+
+// onConditions joins the conditions of an ON with AND, parenthesized the way
+// gorm parenthesizes the conditions of a WHERE and of its own joins' ON. A
+// clause.Where is not handed to the statement itself: as a value it renders
+// with its WHERE keyword.
+type onConditions []clause.Expression
+
+func (c onConditions) Build(builder clause.Builder) { clause.Where{Exprs: c}.Build(builder) }
 
 // joinScope is the scope the ON predicates of a joined source render in: the
 // source is the scope's own table, read under its alias and, for a derived

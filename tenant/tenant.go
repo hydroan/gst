@@ -1,9 +1,10 @@
 // Package tenant scopes a model's rows to the tenant the caller acts in.
 //
-// A model opts in by embedding Scope. That embedding is the whole declaration:
-// it brings the column, its type, and the scoping the type carries, so a model
-// can never hold a tenant column that does not scope, nor claim scoping without
-// the column to do it with.
+// A model opts in by embedding Scope, and that embedding is the only
+// declaration there is: it brings the column, its type, and the scoping the
+// type carries. The column's type is not part of this package, so a model can
+// neither hold a tenant column that does not scope, nor one without what
+// Scope's tags guarantee, a column written once, on insert, and never null.
 //
 // The scoping itself is not this package's invention and not the framework's
 // either. The column's type implements Gorm's clause interfaces, which is the
@@ -27,213 +28,81 @@
 // every other tenant. Scoping cannot answer that; it is a question about who
 // may write a global record, and it has to be answered where that permission is
 // granted.
+//
+// The implementation lives in internal/tenant; this package forwards the part
+// a project uses.
 package tenant
 
 import (
-	"reflect"
+	"context"
 
-	"github.com/cockroachdb/errors"
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
-	gormschema "gorm.io/gorm/schema"
+	"github.com/hydroan/gst/internal/tenant"
 )
 
-// ErrTenantRequired reports an insert made under a cross-tenant scope without
-// naming the tenant the row belongs to.
-//
-// A cross-tenant caller is the one caller the framework cannot stamp for: it is
-// acting in every tenant, so there is no single one to write. Refusing is the
-// only safe answer — defaulting would file the row under whichever tenant the
-// framework picked, silently and in the one situation where the caller had the
-// reach to mean any of them.
-var ErrTenantRequired = errors.New("tenant: a cross-tenant insert must name the tenant the row belongs to")
+// Default is the authorization domain everything acts in when nothing resolved
+// another one. A deployment that never configures a tenant resolver runs
+// entirely inside it, which is what makes single tenancy the case that needs no
+// configuration at all.
+const Default = tenant.Default
 
-// ErrTenantImmutable reports an update carrying a tenant other than the one the
-// caller is acting in.
-//
-// The column is write-once, so the update could not have moved the row whatever
-// it said. Refusing is what keeps that from being a silent no-op: a client that
-// believed it moved a row and received a success would be wrong about where its
-// data is, and nothing in the response would say so.
-var ErrTenantImmutable = errors.New("tenant: a row cannot be moved to another tenant")
+var (
+	// ErrTenantRequired reports an insert made under a cross-tenant scope
+	// without naming the tenant the row belongs to.
+	//
+	// A cross-tenant caller is the one caller the framework cannot stamp for:
+	// it is acting in every tenant, so there is no single one to write.
+	// Refusing is the only safe answer — defaulting would file the row under
+	// whichever tenant the framework picked, silently and in the one situation
+	// where the caller had the reach to mean any of them.
+	ErrTenantRequired = tenant.ErrTenantRequired
 
-// Column is the database column a tenant-scoped model carries.
-//
-// It is fixed rather than configurable. A name the model chose would have to be
-// resolved again by everything that consumes it, and three resolutions of one
-// name are three chances to disagree. The framework already fixes id,
-// created_at and deleted_at on the same reasoning.
-const Column = "tenant_id"
-
-// ID is the tenant column's type, and the whole of the row scoping.
-//
-// The clause methods below are what Gorm discovers on the field, so a model
-// holding this type is scoped by having it. That is why the scoping cannot be
-// switched off, shadowed by a method on the model, or missed by a code path
-// nobody thought of: it is a property of the column, not of the caller.
-type ID string
-
-// String reports the tenant as plain text, for callers comparing it against a
-// value that came from somewhere without a type.
-func (id ID) String() string { return string(id) }
-
-func (ID) QueryClauses(f *gormschema.Field) []clause.Interface {
-	return []clause.Interface{predicateClause{field: f}}
-}
-
-func (ID) UpdateClauses(f *gormschema.Field) []clause.Interface {
-	return []clause.Interface{predicateClause{field: f}, immutableClause{field: f}}
-}
-
-func (ID) DeleteClauses(f *gormschema.Field) []clause.Interface {
-	return []clause.Interface{predicateClause{field: f}}
-}
-
-func (ID) CreateClauses(f *gormschema.Field) []clause.Interface {
-	return []clause.Interface{stampClause{field: f}}
-}
+	// ErrTenantImmutable reports an update carrying a tenant other than the one
+	// the caller is acting in.
+	//
+	// The column is write-once, so the update could not have moved the row
+	// whatever it said. Refusing is what keeps that from being a silent no-op:
+	// a client that believed it moved a row and received a success would be
+	// wrong about where its data is, and nothing in the response would say so.
+	ErrTenantImmutable = tenant.ErrTenantImmutable
+)
 
 // Scope is embedded by models whose rows each belong to one tenant.
 //
-// The column is written once, on insert, and never again: the framework stamps
-// it from the context and Gorm's create-only permission keeps every later write
-// off it. A row therefore cannot change hands, and a client cannot move one by
-// sending a different value.
-type Scope struct {
-	TenantID ID `json:"tenant_id,omitempty" gorm:"column:tenant_id;size:191;not null;default:default;<-:create" query:"tenant_id" url:"-"`
-}
+// The column is tenant_id, written once, on insert, and never again: the
+// framework stamps it from the context and Gorm's create-only permission keeps
+// every later write off it. A row therefore cannot change hands, and a client
+// cannot move one by sending a different value. GetTenantID reports the tenant
+// a row belongs to.
+type Scope = tenant.Scope
 
-// GetTenantID reports the tenant the row belongs to.
-func (s *Scope) GetTenantID() string { return string(s.TenantID) }
-
-// predicateClause narrows a statement to the context's tenant.
+// In returns a context acting inside one tenant.
 //
-// It deliberately does not consult Statement.Unscoped. That flag turns off soft
-// deletion, and a caller reaching for deleted rows is not asking to reach into
-// other tenants — the framework's hard-delete path and WithDeleted reads both
-// set it, and tenant scoping has to survive both.
-type predicateClause struct{ field *gormschema.Field }
+// It is how code running outside a request — a scheduled job, a startup seed, a
+// command — supplies what a request gets from its authorization. It is not a
+// way to widen a request: a request already carries the tenant it was
+// authorized in, and calling In with another one inside a request hands that
+// request data it was never authorized for.
+func In(ctx context.Context, id string) context.Context { return tenant.In(ctx, id) }
 
-func (predicateClause) Name() string               { return "" }
-func (predicateClause) Build(clause.Builder)       {}
-func (predicateClause) MergeClause(*clause.Clause) {}
-
-func (c predicateClause) ModifyStatement(stmt *gorm.Statement) {
-	if _, applied := stmt.Clauses[clauseMarker]; applied {
-		return
-	}
-	scope := resolve(stmt.Context)
-	if scope.across {
-		return
-	}
-
-	stmt.AddClause(clause.Where{Exprs: []clause.Expression{
-		clause.Eq{
-			Column: clause.Column{Table: clause.CurrentTable, Name: c.field.DBName},
-			Value:  scope.id,
-		},
-	}})
-	stmt.Clauses[clauseMarker] = clause.Clause{}
-}
-
-// stampClause writes the context's tenant onto rows being inserted, replacing
-// whatever they arrived with.
+// Across returns a context spanning every tenant.
 //
-// Replacing rather than defaulting is the point: the column is data a client
-// can send, and a create that honored it would let one tenant plant rows in
-// another. Under a cross-tenant scope there is no one tenant to stamp, so the
-// value the caller supplied stands; when it supplied none, the tenant its
-// request is acting in does, and a caller with no request at all is refused
-// rather than having one guessed for it.
-type stampClause struct{ field *gormschema.Field }
-
-func (stampClause) Name() string               { return "" }
-func (stampClause) Build(clause.Builder)       {}
-func (stampClause) MergeClause(*clause.Clause) {}
-
-func (c stampClause) ModifyStatement(stmt *gorm.Statement) {
-	scope := resolve(stmt.Context)
-
-	forEachRow(stmt.ReflectValue, func(row reflect.Value) {
-		if stmt.Error != nil {
-			return
-		}
-		if !scope.across {
-			if err := c.field.Set(stmt.Context, row, scope.id); err != nil {
-				_ = stmt.AddError(err)
-			}
-			return
-		}
-		if _, zero := c.field.ValueOf(stmt.Context, row); !zero {
-			return
-		}
-		// The row named no tenant. A cross-tenant request falls back to the one
-		// it is acting in; a caller with no request at all has nothing to fall
-		// back to, and guessing for it is how a row ends up in a tenant nobody
-		// chose.
-		if scope.id == "" {
-			_ = stmt.AddError(ErrTenantRequired)
-			return
-		}
-		if err := c.field.Set(stmt.Context, row, scope.id); err != nil {
-			_ = stmt.AddError(err)
-		}
-	})
-}
-
-// immutableClause refuses an update that names a tenant other than the one the
-// caller acts in.
+// Reserved for work that is genuinely platform-wide: a subject whose
+// authorization was not decided in any one tenant, or framework work that has
+// to reach rows in all of them — recomputing what a global record implies for
+// every tenant's roles, for instance.
 //
-// The refusal is about honesty rather than safety: Gorm's create-only
-// permission already keeps the column out of every update statement, so the row
-// was never in danger. What was in danger is the caller's belief about it.
+// Nothing about it is implicit. A context that was never given a scope acts in
+// one tenant, so forgetting this call yields too little data rather than too
+// much, and the mistake shows up as something missing rather than as something
+// leaked.
+func Across(ctx context.Context) context.Context { return tenant.Across(ctx) }
+
+// From reports the tenant a context acts in, and whether it acts in exactly
+// one. A cross-tenant context acts in none, so ok is false and the caller has
+// to get the tenant from somewhere it names explicitly.
 //
-// A cross-tenant caller is exempt because it acts in no single tenant, so there
-// is nothing to compare the value against.
-type immutableClause struct{ field *gormschema.Field }
-
-func (immutableClause) Name() string               { return "" }
-func (immutableClause) Build(clause.Builder)       {}
-func (immutableClause) MergeClause(*clause.Clause) {}
-
-func (c immutableClause) ModifyStatement(stmt *gorm.Statement) {
-	scope := resolve(stmt.Context)
-	if scope.across {
-		return
-	}
-
-	forEachRow(stmt.ReflectValue, func(row reflect.Value) {
-		if stmt.Error != nil {
-			return
-		}
-		value, zero := c.field.ValueOf(stmt.Context, row)
-		if zero {
-			return
-		}
-		if named, ok := value.(ID); ok && string(named) != scope.id {
-			_ = stmt.AddError(errors.Wrapf(ErrTenantImmutable, "named %q while acting in %q", named, scope.id))
-		}
-	})
-}
-
-// forEachRow visits every struct being written, whether the statement carries
-// one or a batch.
-func forEachRow(value reflect.Value, visit func(reflect.Value)) {
-	switch value.Kind() {
-	case reflect.Slice, reflect.Array:
-		for i := range value.Len() {
-			forEachRow(value.Index(i), visit)
-		}
-	case reflect.Pointer, reflect.Interface:
-		if !value.IsNil() {
-			forEachRow(value.Elem(), visit)
-		}
-	case reflect.Struct:
-		visit(value)
-	default:
-	}
-}
-
-// clauseMarker records that a statement already carries the tenant predicate,
-// so the query, update and delete clauses cannot each add their own.
-const clauseMarker = "gst:tenant_scope"
+// It exists for the one thing the stamp cannot do for a model: derive something
+// from the tenant before the row is written. A model computing its own key from
+// the tenant has to use the tenant the row will end up carrying, and the value
+// it arrived with is not that.
+func From(ctx context.Context) (string, bool) { return tenant.From(ctx) }
