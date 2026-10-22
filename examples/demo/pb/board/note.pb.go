@@ -29,9 +29,10 @@ const (
 // pb/board/note.proto from this type and the actions below, compile it and
 // generate the gRPC service beside the HTTP routes, both driven by the same
 // service code. Every field carries a pb tag numbering it in the message;
-// the fields of model.Base take 1 to 10, so a model's own start at 11. The
-// standard actions become the rpcs CreateNote, GetNote, ListNote and so on,
-// and the publish action PublishNote; over HTTP they are /api/board/notes.
+// 1 to 10 belong to the framework, which numbers the fields of model.Base
+// there, so a model's own start at 11. The standard actions become the rpcs
+// CreateNote, GetNote, ListNote and so on, and the publish action
+// PublishNote; over HTTP they are /api/board/notes.
 type Note struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The identifier of the record, assigned when it is created.

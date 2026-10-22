@@ -65,7 +65,7 @@ func init() {
 		Comment: "FeedWatchReq names the topic to watch.",
 	})
 	apidoc.Register("demo/model/board", "Note", apidoc.StructDoc{
-		Comment: "Note is served over gRPC as well as HTTP: GRPC() has gg gen derive\npb/board/note.proto from this type and the actions below, compile it and\ngenerate the gRPC service beside the HTTP routes, both driven by the same\nservice code. Every field carries a pb tag numbering it in the message;\nthe fields of model.Base take 1 to 10, so a model's own start at 11. The\nstandard actions become the rpcs CreateNote, GetNote, ListNote and so on,\nand the publish action PublishNote; over HTTP they are /api/board/notes.",
+		Comment: "Note is served over gRPC as well as HTTP: GRPC() has gg gen derive\npb/board/note.proto from this type and the actions below, compile it and\ngenerate the gRPC service beside the HTTP routes, both driven by the same\nservice code. Every field carries a pb tag numbering it in the message;\n1 to 10 belong to the framework, which numbers the fields of model.Base\nthere, so a model's own start at 11. The standard actions become the rpcs\nCreateNote, GetNote, ListNote and so on, and the publish action\nPublishNote; over HTTP they are /api/board/notes.",
 	})
 	apidoc.Register("demo/model/board", "NotePublishReq", apidoc.StructDoc{
 		Comment: "NotePublishReq names the channel a note is published to.",
