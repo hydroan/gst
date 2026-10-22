@@ -56,14 +56,16 @@ var projectChecks = []ggcheck.Check{
 }
 
 // generationChecks are the project checks gg gen runs before generating:
-// every one but three. Protobuf definitions and TestMain imports are work the
+// every one but four. Protobuf definitions and TestMain imports are work the
 // run does itself, the definitions derived right before (see fillPBTags) once
 // instead of twice and the imports synced once main.go is written (see
-// syncTestMainImports). Framework columns asks the compiled models, and a
-// project need not compile before the run generates its files; the start
-// refuses what that check reports.
+// syncTestMainImports). Index declarations and Framework columns ask the
+// compiled models, while a project need not compile until the run has
+// written its files: model code may read column references not generated
+// yet, and the column file of a deleted model still names it. Both stay with
+// gg check, and what they report is refused again before a table is created.
 func generationChecks() []ggcheck.Check {
-	return projectChecksWithout(ggcheck.ProtobufDefinitions.Name, ggcheck.TestMainImports.Name, ggcheck.FrameworkColumns.Name)
+	return projectChecksWithout(ggcheck.ProtobufDefinitions.Name, ggcheck.TestMainImports.Name, ggcheck.IndexDeclarations.Name, ggcheck.FrameworkColumns.Name)
 }
 
 // moduleCopyChecks are the project checks the gg gen run of gg module copy

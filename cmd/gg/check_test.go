@@ -50,14 +50,14 @@ func TestModuleCopyChecksLeaveTheModuleAssemblyToTheProject(t *testing.T) {
 	}
 }
 
-// TestGenerationChecksLeaveOutWhatTheRunDoesItselfAndFrameworkColumns pins the
-// checks gg gen leaves out of the project checks it runs before generating:
-// Protobuf definitions, which the run derives itself, TestMain imports, which
-// it syncs itself, and Framework columns, which asks the compiled models of a
-// project that need not compile yet; every other check runs, in the order of
-// gg check.
-func TestGenerationChecksLeaveOutWhatTheRunDoesItselfAndFrameworkColumns(t *testing.T) {
-	left := []string{ggcheck.ProtobufDefinitions.Name, ggcheck.TestMainImports.Name, ggcheck.FrameworkColumns.Name}
+// TestGenerationChecksLeaveOutWhatTheRunDoesItselfAndWhatAsksTheCompiledModels
+// pins the checks gg gen leaves out of the project checks it runs before
+// generating: Protobuf definitions, which the run derives itself, TestMain
+// imports, which it syncs itself, and Index declarations and Framework
+// columns, which ask the compiled models of a project that need not compile
+// yet; every other check runs, in the order of gg check.
+func TestGenerationChecksLeaveOutWhatTheRunDoesItselfAndWhatAsksTheCompiledModels(t *testing.T) {
+	left := []string{ggcheck.ProtobufDefinitions.Name, ggcheck.TestMainImports.Name, ggcheck.IndexDeclarations.Name, ggcheck.FrameworkColumns.Name}
 	want := slices.DeleteFunc(checkNames(projectChecks), func(name string) bool { return slices.Contains(left, name) })
 	if got := checkNames(generationChecks()); !slices.Equal(got, want) {
 		t.Fatalf("generationChecks() = %v, want %v", got, want)

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/hydroan/gst/internal/modelinspect"
@@ -183,6 +184,57 @@ func (i *Item) DeleteBefore(ctx context.Context) error {
 	regeneratedItemColumns, err := os.ReadFile(itemColumnsFile)
 	require.NoError(t, err)
 	require.Equal(t, string(itemColumns), string(regeneratedItemColumns))
+}
+
+// TestGenRunGeneratesBeforeAMySQLProjectCompiles runs gg gen on a project
+// configured for MySQL in the two states only the run brings back to
+// compiling: model code reading the column references the run is about to
+// write, and a model deleted since the last run, whose column file still
+// names it. No check run before generating may stop the run there; the
+// checks asking the compiled models are gg check's to run.
+func TestGenRunGeneratesBeforeAMySQLProjectCompiles(t *testing.T) { //nolint:tparallel // Each subtest goes parallel in newGenProject, a call deeper than tparallel looks.
+	parallelInParent(t)
+	t.Run("model_code_reads_columns_not_generated_yet", func(t *testing.T) {
+		projectDir, ok := newGenProject(t)
+		if !ok {
+			return
+		}
+		writeProjectFile(t, filepath.Join(projectDir, "config.ini"), "[database]\ntype = mysql\n")
+		writeProjectFile(t, filepath.Join(projectDir, "model", "model.go"), "package model\n")
+		writeProjectFile(t, filepath.Join(projectDir, "model", "sample", "record.go"), tableModelSource("Record", true))
+
+		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+		requireProjectCompiles(t)
+	})
+	t.Run("a_model_deleted_since_the_last_run", func(t *testing.T) {
+		projectDir, ok := newGenProject(t)
+		if !ok {
+			return
+		}
+		writeProjectFile(t, filepath.Join(projectDir, "config.ini"), "[database]\ntype = mysql\n")
+		writeProjectFile(t, filepath.Join(projectDir, "model", "model.go"), "package model\n")
+		writeProjectFile(t, filepath.Join(projectDir, "model", "sample", "record.go"), tableModelSource("Record", false))
+		writeProjectFile(t, filepath.Join(projectDir, "model", "sample", "entry.go"), tableModelSource("Entry", false))
+		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+
+		require.NoError(t, os.Remove(filepath.Join(projectDir, "model", "sample", "entry.go")))
+		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+		require.NoFileExists(t, filepath.Join(projectDir, "model", "sample", "entry.gen.go"))
+		requireProjectCompiles(t)
+	})
+}
+
+// tableModelSource is the source of a table-backed model named name in
+// package sample; readsColumns gives it a hook reading the column references
+// gg gen writes for it.
+func tableModelSource(name string, readsColumns bool) string {
+	imports := "\t\"github.com/hydroan/gst/dsl\"\n\t\"github.com/hydroan/gst/model\"\n"
+	hook := ""
+	if readsColumns {
+		imports = "\t\"context\"\n\n\t\"github.com/hydroan/gst/database\"\n" + imports
+		hook = "\nfunc (r *" + name + ") CreateBefore(ctx context.Context) error {\n\treturn database.Database[*" + name + "](ctx).UpdateByID(r.ID, " + name + "Cols.Status.Set(\"active\"))\n}\n"
+	}
+	return "package sample\n\nimport (\n" + imports + ")\n\ntype " + name + " struct {\n\tStatus string `json:\"status\" gorm:\"size:36\"`\n\n\tmodel.Base\n}\n\nfunc (" + name + ") TableName() string { return \"" + strings.ToLower(name) + "s\" }\n\nfunc (" + name + ") Design() {\n\tdsl.Migrate()\n}\n" + hook
 }
 
 // TestGenRunReferencesFrameworkTypesThroughTheRootPackage runs gg gen
