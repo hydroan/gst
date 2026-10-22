@@ -258,16 +258,16 @@ func parseQueryTime(value string) (time.Time, error) {
 // binding time.Time would let the driver re-render the value in its own
 // location, while the string pins the wall clock the parser resolved.
 //
-// A time of day column takes its value in time.TimeOnly instead, fractional
-// seconds allowed, and binds it in the spelling datatypes.Time stores, the
+// A time of day column takes its value the way modelschema.ParseTimeOfDay
+// reads one instead, and binds it in the spelling datatypes.Time stores, the
 // text SQLite compares: 17:30:00.5 binds as 17:30:00.500000000.
 func timeBound(col modelschema.Column, value string) (string, error) {
 	if modelschema.IsTimeOfDayColumn(col) {
-		t, err := time.Parse(time.TimeOnly, value)
+		since, err := modelschema.ParseTimeOfDay(value)
 		if err != nil {
-			return "", errors.Newf("unsupported time of day format %q, expect %s", value, time.TimeOnly)
+			return "", err
 		}
-		return datatypes.NewTime(t.Hour(), t.Minute(), t.Second(), t.Nanosecond()).String(), nil
+		return datatypes.Time(since).String(), nil
 	}
 	t, err := parseQueryTime(value)
 	if err != nil {

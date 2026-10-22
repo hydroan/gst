@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"gorm.io/datatypes"
 	gormschema "gorm.io/gorm/schema"
 )
@@ -87,6 +88,20 @@ func IsTimeOfDayColumn(c Column) bool {
 		typ = typ.Elem()
 	}
 	return typ == timeOfDayType
+}
+
+// ParseTimeOfDay reads a time of day the one way the framework takes it, in
+// a filter and in a request body alike: time.TimeOnly, a fractional second
+// allowed and read as written, answered as the duration since midnight it
+// names, so "17:30:00.5" is 17h30m0.5s. Anything else is refused, "abc",
+// "17:30" and "25:00:00" among it, where datatypes.Time's own decoding reads
+// a string leniently and keeps no error.
+func ParseTimeOfDay(value string) (time.Duration, error) {
+	t, err := time.Parse(time.TimeOnly, value)
+	if err != nil {
+		return 0, errors.Newf("unsupported time of day format %q, expect %s", value, time.TimeOnly)
+	}
+	return time.Duration(t.Hour())*time.Hour + time.Duration(t.Minute())*time.Minute + time.Duration(t.Second())*time.Second + time.Duration(t.Nanosecond()), nil
 }
 
 // IsNumericColumn reports whether a column stores a number by the data type

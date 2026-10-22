@@ -3,6 +3,7 @@ package modelschema_test
 import (
 	"database/sql"
 	"database/sql/driver"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -146,6 +147,27 @@ func TestColumnPredicatesReadGormDataTypes(t *testing.T) {
 		require.Equal(t, []string{"doc", "doc_bytes", "doc_tagged", "doc_text"}, columnsWhere(t, modelschema.IsJSONColumn),
 			"a JSON type whatever type its tag declares, and a column a type tag declares JSON; a serializer stores text")
 	})
+}
+
+// TestParseTimeOfDay pins the one reading of a time of day the framework
+// takes, in a filter and in a request body alike: time.TimeOnly, a
+// fractional second read as written, answered as the duration since
+// midnight, and anything else refused.
+func TestParseTimeOfDay(t *testing.T) {
+	for value, want := range map[string]time.Duration{
+		"17:30:00":           17*time.Hour + 30*time.Minute,
+		"17:30:00.5":         17*time.Hour + 30*time.Minute + 500*time.Millisecond,
+		"23:59:59.999":       24*time.Hour - time.Millisecond,
+		"00:00:00.000000001": time.Nanosecond,
+	} {
+		got, err := modelschema.ParseTimeOfDay(value)
+		require.NoError(t, err, value)
+		require.Equal(t, want, got, value)
+	}
+	for _, value := range []string{"abc", "17:30", "1730", "25:00:00", "17:60:00", ""} {
+		_, err := modelschema.ParseTimeOfDay(value)
+		require.EqualError(t, err, fmt.Sprintf("unsupported time of day format %q, expect 15:04:05", value), value)
+	}
 }
 
 func TestIsDateType(t *testing.T) {
