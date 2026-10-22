@@ -46,6 +46,7 @@ func TestMain(m *testing.M) {
 			modelregistry.Register[*TestTypedRecord]()
 			modelregistry.Register[*TestHolderRecord]()
 			modelregistry.Register[*TestHeldEntry]()
+			modelregistry.Register[*TestZeroValueRecord]()
 		},
 	})
 }

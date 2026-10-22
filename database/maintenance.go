@@ -10,10 +10,15 @@ import (
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // Cleanup permanently deletes all soft-deleted records of M from the default
-// database. It removes every row whose deleted_at column is not null.
+// database: the rows gorm's soft delete marked deleted through M's
+// gorm.DeletedAt field, whatever a live row holds there, NULL or the zero
+// value the field's tag declares. Under a zero value, a row holding NULL
+// there is neither live nor marked deleted, and stays. A model without a
+// gorm.DeletedAt field is refused.
 // WARNING: This is a destructive operation that cannot be undone.
 //
 // It is a package-level maintenance function rather than a chain method on
@@ -62,10 +67,42 @@ func cleanupOn[M types.Model](ctx context.Context, base *gorm.DB) (err error) {
 	done, _ := db.trace(phaseCleanup)
 	defer func() { done(err) }()
 
-	tx := db.ins.Session(&gorm.Session{}).Limit(-1).Where("deleted_at IS NOT NULL").Model(*new(M)).Unscoped().Delete(make([]M, 0))
+	deleted, err := softDeletedRows(db.ins, *new(M))
+	if err != nil {
+		return err
+	}
+	tx := db.ins.Session(&gorm.Session{}).Limit(-1).Where(deleted).Model(*new(M)).Unscoped().Delete(make([]M, 0))
 	// First-hand exit of a stack-less GORM/driver error; see the error-stack
 	// contract in doc.go. WithStack passes nil through.
 	return errors.WithStack(tx.Error)
+}
+
+// softDeletedRows returns the condition holding for the rows of m's table
+// gorm's soft delete marked deleted: the negation of the condition gorm adds
+// to every query of m to keep them out, built by gorm's own soft-delete
+// clause, so the column and the value a live row holds there, NULL or the
+// zero value the field's tag declares, are whatever m declares. Under SQL's
+// three-valued logic the negation holds for neither a live row nor, under a
+// zero value, a row holding NULL, which therefore stays. gorm applies the
+// first soft-delete clause of a model and skips the rest, and so does
+// this. A model without a gorm.DeletedAt field has no such rows, and saying
+// so beats a DELETE without a condition.
+func softDeletedRows(tx *gorm.DB, m any) (clause.Expression, error) {
+	parsed := &gorm.Statement{DB: tx}
+	if err := parsed.Parse(m); err != nil {
+		return nil, errors.WithStack(err)
+	}
+	live := &gorm.Statement{DB: tx, Table: parsed.Schema.Table, Schema: parsed.Schema, Clauses: map[string]clause.Clause{}}
+	for _, c := range parsed.Schema.QueryClauses {
+		if softDelete, ok := c.(gorm.SoftDeleteQueryClause); ok {
+			softDelete.ModifyStatement(live)
+		}
+	}
+	where, ok := live.Clauses["WHERE"].Expression.(clause.Where)
+	if !ok {
+		return nil, errors.Newf("%s declares no gorm.DeletedAt field, so it has no soft-deleted rows to remove", parsed.Schema.Name)
+	}
+	return clause.Not(where.Exprs...), nil
 }
 
 // Health checks connectivity of the default database: a round-trip statement,

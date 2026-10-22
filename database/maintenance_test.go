@@ -61,6 +61,24 @@ func TestDatabaseCleanup(t *testing.T) {
 	require.NoError(t, database.Cleanup[*TestCategory](context.Background()))
 }
 
+func TestDatabaseCleanupKeepsTheLiveRowsOfAZeroValueSoftDelete(t *testing.T) {
+	ctx := context.Background()
+	live := &TestZeroValueRecord{Name: "cleanup-zero-value-live"}
+	gone := &TestZeroValueRecord{Name: "cleanup-zero-value-gone"}
+	require.NoError(t, database.Database[*TestZeroValueRecord](ctx).Create(live, gone))
+	t.Cleanup(func() {
+		require.NoError(t, database.Database[*TestZeroValueRecord](context.Background()).WithPurge(true).WithAllowMissing().Delete(live, gone))
+	})
+	require.NoError(t, database.Database[*TestZeroValueRecord](ctx).Delete(gone))
+
+	require.NoError(t, database.Cleanup[*TestZeroValueRecord](ctx))
+
+	// A live row holds the zero value, which is not NULL: it stays, and the
+	// soft-deleted row is gone for good.
+	require.NoError(t, database.Database[*TestZeroValueRecord](ctx).Get(new(TestZeroValueRecord), live.ID))
+	require.ErrorIs(t, database.Database[*TestZeroValueRecord](ctx).WithDeleted().Get(new(TestZeroValueRecord), gone.ID), database.ErrRecordNotFound)
+}
+
 func TestDatabaseCleanupOn(t *testing.T) {
 	defer cleanupTestData()
 	setupTestData(t)

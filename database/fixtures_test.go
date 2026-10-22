@@ -1132,6 +1132,18 @@ type TestHeldEntry struct {
 
 func (*TestHeldEntry) TableName() string { return "test_held_entries" }
 
+// TestZeroValueRecord soft-deletes the way gorm's zeroValue tag declares it:
+// a live row holds the zero value in deleted_at, which the column default
+// supplies, instead of NULL.
+type TestZeroValueRecord struct {
+	Name      string         `json:"name" gorm:"size:191"`
+	DeletedAt gorm.DeletedAt `json:"-" gorm:"zeroValue:1970-01-01 00:00:00;default:'1970-01-01 00:00:00'"`
+
+	modelregistry.Base
+}
+
+func (*TestZeroValueRecord) TableName() string { return "test_zero_value_records" }
+
 // TestPart is embedded twice in TestPairedRecord, under two prefixes, beside
 // a top-level field of the same Go name: each of the three is a column of its
 // own.
