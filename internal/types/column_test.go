@@ -1,10 +1,12 @@
 package types_test
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
+	"gorm.io/datatypes"
 )
 
 // nameless stands in for a virtual model: it declares no table, the way a
@@ -224,4 +226,49 @@ func TestJSONStringsColumnBuildsTheMembershipFilter(t *testing.T) {
 	require.Equal(t, "tags", f.Column())
 	require.Equal(t, "samples", f.Table())
 	require.Equal(t, "vip", f.Value())
+}
+
+// TestJSONStringsColumnSpeaksStrings pins that the reference of a JSON array
+// of strings takes and answers plain []string, naming no type of the library
+// that binds the array, while every filter and assignment it builds still
+// carries datatypes.JSONSlice[string], the value that binds as one JSON
+// document instead of a list of parameters.
+func TestJSONStringsColumnSpeaksStrings(t *testing.T) {
+	tags := types.NewJSONStringsColumn[sampleTable]("tags")
+
+	t.Run("SignaturesNameNoLibraryType", func(t *testing.T) {
+		for method := range reflect.TypeFor[types.JSONStringsColumn]().Methods() {
+			require.NotContains(t, method.Type.String(), "datatypes", method.Name)
+		}
+	})
+
+	t.Run("BuildsDocuments", func(t *testing.T) {
+		document := datatypes.JSONSlice[string]{"vip", "new"}
+		value := []string{"vip", "new"}
+		for _, f := range []types.Filter{tags.Eq(value), tags.Ne(value), tags.Gt(value), tags.Gte(value), tags.Lt(value), tags.Lte(value)} {
+			require.Equal(t, document, f.Value(), f.Op())
+		}
+		require.Equal(t, []datatypes.JSONSlice[string]{document}, tags.In(value).Value())
+		require.Equal(t, []datatypes.JSONSlice[string]{document}, tags.NotIn(value).Value())
+		require.Equal(t, document, tags.Set(value).Value())
+	})
+
+	t.Run("ReadsBackStrings", func(t *testing.T) {
+		values, err := tags.Values([]types.Filter{tags.In([]string{"vip"}, []string{"new"})})
+		require.NoError(t, err)
+		require.Equal(t, [][]string{{"vip"}, {"new"}}, values)
+		excluded, err := tags.ExcludedValues([]types.Filter{tags.Ne([]string{"old"})})
+		require.NoError(t, err)
+		require.Equal(t, [][]string{{"old"}}, excluded)
+		lower, upper, err := tags.Bounds([]types.Filter{tags.Gte([]string{"a"}), tags.Lt([]string{"z"})})
+		require.NoError(t, err)
+		require.Equal(t, types.Bound[[]string]{Value: []string{"a"}, Inclusive: true, Present: true}, lower)
+		require.Equal(t, types.Bound[[]string]{Value: []string{"z"}, Present: true}, upper)
+	})
+
+	t.Run("TiesToAnotherArray", func(t *testing.T) {
+		f := tags.EqCol(types.NewJSONStringsColumn[*sampleRecord]("labels"))
+		require.Equal(t, types.FilterOpEqCol, f.Op())
+		require.Equal(t, "labels", f.Value().(types.AnyColumnRef).Name()) //nolint:errcheck // the type is the test's own
+	})
 }

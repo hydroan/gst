@@ -212,7 +212,11 @@ func (c Column[T]) NotRegex(expr string) Filter { return c.filter(FilterOpNotReg
 // The Col suffix says that the argument is a column rather than a value,
 // which Eq takes; Go has no overloading to tell the two apart by type, and
 // gorm gen spells the same comparison the same way.
-func (c Column[T]) EqCol(parent ColumnRef[T]) Filter {
+func (c Column[T]) EqCol(parent ColumnRef[T]) Filter { return c.eqCol(parent) }
+
+// eqCol builds the filter tying this column to parent, the other side left
+// empty when parent is nil.
+func (c Column[T]) eqCol(parent AnyColumnRef) Filter {
 	if parent == nil {
 		return c.filter(FilterOpEqCol, "")
 	}
@@ -369,23 +373,117 @@ func (c TimeColumn) bucket(bucket TimeBucket) Term {
 	return term
 }
 
+// jsonStringsBase is the plain reference a JSONStringsColumn embeds, over
+// datatypes.JSONSlice[string]: the type that binds a JSON array of strings
+// as one document, where a plain []string would bind as a list of
+// parameters.
+type jsonStringsBase = Column[datatypes.JSONSlice[string]]
+
 // JSONStringsColumn is the reference generated for a column storing a JSON
-// array of strings. It embeds Column over datatypes.JSONSlice[string], the
-// type that binds such an array as a JSON document — a document held in a
-// type of its own converts to it, a plain []string would bind as a list of
-// parameters — and adds the membership test, which only such a column
-// answers alike on every dialect: PostgreSQL's jsonb ? operator matches a
-// string element only, so over an array of numbers the test is silently
-// empty, and over a column storing no JSON document it is a SQL error.
+// array of strings. It takes and answers its values as []string, an array
+// held in a type of its own included, and carries each into the filter or
+// assignment it builds as datatypes.JSONSlice[string], which binds the array
+// as a JSON document. It carries every method Column has and adds the
+// membership test, which only such a column answers alike on every dialect:
+// PostgreSQL's jsonb ? operator matches a string element only, so over an
+// array of numbers the test is silently empty, and over a column storing no
+// JSON document it is a SQL error.
 type JSONStringsColumn struct {
-	Column[datatypes.JSONSlice[string]]
+	jsonStringsBase
 }
 
 // NewJSONStringsColumn returns the reference to the named column of M's
 // table storing a JSON array of strings, carrying JSONContains on top of
 // everything Column has.
 func NewJSONStringsColumn[M TableNamer](name string) JSONStringsColumn {
-	return JSONStringsColumn{Column: NewColumn[M, datatypes.JSONSlice[string]](name)}
+	return JSONStringsColumn{jsonStringsBase: NewColumn[M, datatypes.JSONSlice[string]](name)}
+}
+
+// sealedColumn makes the reference a ColumnRef[[]string], so that EqCol
+// ties it to another array of strings.
+func (c JSONStringsColumn) sealedColumn([]string) {}
+
+// Eq matches rows where the column equals value.
+func (c JSONStringsColumn) Eq(value []string) Filter { return c.jsonStringsBase.Eq(value) }
+
+// Ne matches rows where the column does not equal value.
+func (c JSONStringsColumn) Ne(value []string) Filter { return c.jsonStringsBase.Ne(value) }
+
+// Gt matches rows where the column is greater than value.
+func (c JSONStringsColumn) Gt(value []string) Filter { return c.jsonStringsBase.Gt(value) }
+
+// Gte matches rows where the column is greater than or equal to value.
+func (c JSONStringsColumn) Gte(value []string) Filter { return c.jsonStringsBase.Gte(value) }
+
+// Lt matches rows where the column is less than value.
+func (c JSONStringsColumn) Lt(value []string) Filter { return c.jsonStringsBase.Lt(value) }
+
+// Lte matches rows where the column is less than or equal to value.
+func (c JSONStringsColumn) Lte(value []string) Filter { return c.jsonStringsBase.Lte(value) }
+
+// In matches rows where the column is one of values; see Column.In.
+func (c JSONStringsColumn) In(values ...[]string) Filter {
+	return c.jsonStringsBase.In(documents(values)...)
+}
+
+// NotIn matches rows where the column is none of values; see Column.NotIn.
+func (c JSONStringsColumn) NotIn(values ...[]string) Filter {
+	return c.jsonStringsBase.NotIn(documents(values)...)
+}
+
+// EqCol ties this column to parent, another column storing a JSON array of
+// strings; see Column.EqCol.
+func (c JSONStringsColumn) EqCol(parent ColumnRef[[]string]) Filter { return c.eqCol(parent) }
+
+// Set assigns value to the column; see Column.Set.
+func (c JSONStringsColumn) Set(value []string) Assignment { return c.jsonStringsBase.Set(value) }
+
+// Values returns the arrays the filters on this column equal; see
+// Column.Values.
+func (c JSONStringsColumn) Values(filters []Filter) ([][]string, error) {
+	values, err := c.jsonStringsBase.Values(filters)
+	return arrays(values), err
+}
+
+// ExcludedValues returns the arrays the filters on this column exclude; see
+// Column.ExcludedValues.
+func (c JSONStringsColumn) ExcludedValues(filters []Filter) ([][]string, error) {
+	values, err := c.jsonStringsBase.ExcludedValues(filters)
+	return arrays(values), err
+}
+
+// Bounds returns the range the comparison filters on this column confine it
+// to; see Column.Bounds.
+func (c JSONStringsColumn) Bounds(filters []Filter) (lower, upper Bound[[]string], err error) {
+	documentLower, documentUpper, err := c.jsonStringsBase.Bounds(filters)
+	return arrayBound(documentLower), arrayBound(documentUpper), err
+}
+
+// documents converts arrays of strings to the values binding them as JSON
+// documents.
+func documents(values [][]string) []datatypes.JSONSlice[string] {
+	converted := make([]datatypes.JSONSlice[string], len(values))
+	for i, value := range values {
+		converted[i] = value
+	}
+	return converted
+}
+
+// arrays converts the documents filters carry back to arrays of strings.
+func arrays(values []datatypes.JSONSlice[string]) [][]string {
+	if values == nil {
+		return nil
+	}
+	converted := make([][]string, len(values))
+	for i, value := range values {
+		converted[i] = value
+	}
+	return converted
+}
+
+// arrayBound converts a bound over documents to one over arrays of strings.
+func arrayBound(bound Bound[datatypes.JSONSlice[string]]) Bound[[]string] {
+	return Bound[[]string]{Value: bound.Value, Inclusive: bound.Inclusive, Present: bound.Present}
 }
 
 // JSONContains matches rows whose array contains value as a member.

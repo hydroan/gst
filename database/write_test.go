@@ -1078,9 +1078,9 @@ func TestDatabaseUpsert(t *testing.T) {
 
 // TestDatabaseUpdateByIDWritesAJSONStringsColumnAsADocument pins that an
 // assignment through the reference of a JSON array of strings binds the
-// document as JSON: the value keeps the type that encodes it, instead of
-// being read as a list of parameters; the same reference then answers
-// membership of a written element.
+// document as JSON, given in the type that encodes it or as a plain array of
+// strings, instead of being read as a list of parameters; the same reference
+// then answers membership of a written element.
 func TestDatabaseUpdateByIDWritesAJSONStringsColumnAsADocument(t *testing.T) {
 	defer cleanupTestData()
 	setupTestData(t)
@@ -1097,6 +1097,10 @@ func TestDatabaseUpdateByIDWritesAJSONStringsColumnAsADocument(t *testing.T) {
 		List(&users))
 	require.Len(t, users, 1)
 	require.Equal(t, u1.ID, users[0].ID)
+
+	require.NoError(t, database.Database[*TestUser](context.Background()).UpdateByID(u1.ID, addr.Set([]string{"office"})))
+	require.NoError(t, database.Database[*TestUser](context.Background()).Get(u, u1.ID))
+	require.Equal(t, datatypes.NewJSONSlice([]string{"office"}), u.Addr)
 }
 
 // TestDatabaseWritesLeaveAssociationsAlone pins that Create, Update and
