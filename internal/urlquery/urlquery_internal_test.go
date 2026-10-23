@@ -134,12 +134,18 @@ func TestFilters(t *testing.T) {
 			"the bare key stays with the exact business filter and only the operator key becomes a filter")
 	})
 
-	t.Run("MapsCamelFieldToSnakeColumn", func(t *testing.T) {
+	t.Run("NamesTheFieldAsTheContractSpellsIt", func(t *testing.T) {
 		conds, err := Filters(url.Values{
-			"itemCount[notlike]": {"sample"},
+			"item_count[notlike]": {"sample"},
 		}, &filterTestModel{})
 		require.NoError(t, err)
 		require.Equal(t, []types.Filter{types.NewFilter("", "item_count", types.FilterOpNotLike, "sample")}, conds)
+
+		_, err = Filters(url.Values{
+			"itemCount[notlike]": {"sample"},
+		}, &filterTestModel{})
+		require.EqualError(t, err, `invalid field filter "itemCount[notlike]": unknown field "itemCount"`,
+			"a spelling the contract does not have names no field, as a bare key spelt so names none")
 	})
 
 	t.Run("AcceptsBaseLiftedColumns", func(t *testing.T) {
@@ -515,6 +521,41 @@ func TestFilterQueryKeyOwnership(t *testing.T) {
 	}
 }
 
+func TestFieldNamesAreTakenAsTheContractSpellsThem(t *testing.T) {
+	// Every parameter naming a field takes the field's URL name as the
+	// contract spells it (see modelschema.QueryColumnName) and refuses any
+	// other spelling alike: the Go name of a field is no URL name of it,
+	// whichever parameter carries it.
+	for _, tt := range []struct {
+		name    string
+		spelled string
+		goName  string
+		take    func(field string) error
+	}{
+		{"OperatorFilter", "item_count", "ItemCount", func(field string) error {
+			_, err := Filters(url.Values{field + "[eq]": {"1"}}, &filterTestModel{})
+			return err
+		}},
+		{"Sort", "item_count", "ItemCount", func(field string) error {
+			_, err := Orders(url.Values{"_sort_by": {field}}, &filterTestModel{})
+			return err
+		}},
+		{"Cursor", "code", "Code", func(field string) error {
+			_, err := Cursor(url.Values{"_cursor_field": {field}}, &cursorUniqueTestModel{})
+			return err
+		}},
+		{"BareKey", "item_count", "ItemCount", func(field string) error {
+			var m filterTestModel
+			return Decode(url.Values{field: {"1"}}, &m)
+		}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			require.NoError(t, tt.take(tt.spelled))
+			require.Error(t, tt.take(tt.goName), "the Go name %q is no URL name of the field", tt.goName)
+		})
+	}
+}
+
 func TestDecode(t *testing.T) {
 	t.Run("FillsModelFieldsByQueryTag", func(t *testing.T) {
 		var m filterTestModel
@@ -674,9 +715,9 @@ func TestPresentFields(t *testing.T) {
 		require.Equal(t, map[string]struct{}{
 			"is_active": {},
 			"age":       {},
-			"is_locked": {},
+			"isLocked":  {},
 			"size":      {},
-		}, present, "camel case keys should normalize to snake case column names, and bare names like size are model filter columns")
+		}, present, "keys are kept as spelled, the URL names a condition looks its field up by, and bare names like size are model filter columns")
 	})
 
 	t.Run("ExcludesFrameworkKeys", func(t *testing.T) {

@@ -10,19 +10,19 @@ import (
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/stoewer/go-strcase"
 	"gorm.io/datatypes"
 )
 
 // Filters extracts field-level operator filters from URL query keys of the
 // form "field[op]=value", e.g. "age[gt]=20" or "remark[like]=hello", plus the
 // bare framework timestamp keys ("created_at", "updated_at"), which act as
-// exact-match (eq) filters. The field token must resolve (after snake case
-// normalization) to a queryable column of the model, and op must be a known
-// types.FilterOp; anything else is rejected so a mistyped filter can never
-// silently widen the result set. Empty values mean "not filtering" and are
-// skipped. Filters require the model to embed model.Query, and the returned
-// conditions are sorted by key for deterministic SQL.
+// exact-match (eq) filters. The field token must be the URL name of a
+// queryable column of the model, spelled as the contract spells it (see
+// modelschema.QueryColumnName), and op must be a known types.FilterOp;
+// anything else is rejected so a mistyped filter can never silently widen
+// the result set. Empty values mean "not filtering" and are skipped. Filters
+// require the model to embed model.Query, and the returned conditions are
+// sorted by key for deterministic SQL.
 func Filters(q url.Values, m types.Model) ([]types.Filter, error) {
 	keys := make([]string, 0)
 	for key := range q {
@@ -60,7 +60,7 @@ func Filters(q url.Values, m types.Model) ([]types.Filter, error) {
 				return nil, errors.Newf("invalid field filter %q: unknown operator %q", key, opToken)
 			}
 		}
-		col, ok := columns[strcase.SnakeCase(field)]
+		col, ok := columns[field]
 		if !ok {
 			return nil, errors.Newf("invalid field filter %q: unknown field %q", key, field)
 		}

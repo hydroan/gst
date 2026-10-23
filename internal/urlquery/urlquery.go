@@ -20,16 +20,15 @@ package urlquery
 import (
 	"net/url"
 	"strings"
-
-	"github.com/stoewer/go-strcase"
 )
 
 // PresentFields collects the model filter keys explicitly provided in the URL
-// query string, keyed by snake case column name, so the database layer can
-// keep zero values (false, 0) of these columns as query conditions. Framework
-// parameters (the "_" prefix namespace) and keys whose values are all empty
-// are excluded: they are not model filter columns, and an empty value means
-// the caller is not filtering by that key.
+// query string, keyed as the query string spells them, the URL names the
+// database layer looks a field up by, so it can keep zero values (false, 0)
+// of these columns as query conditions. Framework parameters (the "_" prefix
+// namespace) and keys whose values are all empty are excluded: they are not
+// model filter columns, and an empty value means the caller is not filtering
+// by that key.
 func PresentFields(q url.Values) map[string]struct{} {
 	present := make(map[string]struct{}, len(q))
 	for key, values := range q {
@@ -42,7 +41,7 @@ func PresentFields(q url.Values) map[string]struct{} {
 		if len(strings.Join(values, "")) == 0 {
 			continue
 		}
-		present[strcase.SnakeCase(key)] = struct{}{}
+		present[key] = struct{}{}
 	}
 	return present
 }
