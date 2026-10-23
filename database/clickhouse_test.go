@@ -358,6 +358,18 @@ func TestClickhouse(t *testing.T) {
 		require.Empty(t, updated.UpdatedBy, "the dry run must leave the object as it is")
 	})
 
+	// WithReplica(false) asks for the connection the writes go through, and
+	// the instance's one connection is it: the read runs as it would without
+	// the option.
+	t.Run("AReadOfThePrimaryRunsOnTheOneConnection", func(t *testing.T) {
+		rows := make([]*TestAggregateRecord, 0)
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithReplica(false).List(&rows))
+		require.Len(t, rows, 6, "the read of the primary sees the seed")
+		got := new(TestAggregateRecord)
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithReplica(false).Get(got, "a1"))
+		require.Equal(t, "alpha", got.Category)
+	})
+
 	// The capability-miss rule: nothing below is carried by clickhouse, and
 	// each entry answers ErrUnsupportedOnDialect instead of half-working.
 	t.Run("UnsupportedEntriesFailFast", func(t *testing.T) {

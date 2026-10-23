@@ -81,11 +81,11 @@
 // EXISTS subqueries (FilterExists) and JSON containment (jsoncontains),
 // Upsert (no conflict semantics), Cleanup (no soft-delete regime), a delete
 // by conditions (its DELETE goes by primary key), Transaction/TransactionOn,
-// WithLock, reads under WithReplica (no replica role of its own), the dry
-// run of Create (the driver's batch insert ignores DryRun), and the model
-// joins of Select (no unique constraint to prove a join on). The instance's
-// schema — engine, ORDER BY, partitioning — is hand-written DDL owned by the
-// application: neither bootstrap nor "gg migrate" creates or alters
-// ClickHouse tables, bootstrap only verifies that a registered model's table
-// exists.
+// WithLock, the reads WithReplica() sends to a replica (no replica role of
+// its own; WithReplica(false) is a no-op), the dry run of Create (the
+// driver's batch insert ignores DryRun), and the model joins of Select (no
+// unique constraint to prove a join on). The instance's schema — engine,
+// ORDER BY, partitioning — is hand-written DDL owned by the application:
+// neither bootstrap nor "gg migrate" creates or alters ClickHouse tables,
+// bootstrap only verifies that a registered model's table exists.
 package database

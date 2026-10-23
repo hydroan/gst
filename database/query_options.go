@@ -650,14 +650,16 @@ func (db *database[M]) WithDeleted() types.Database[M] {
 // fresher data is never wrong.
 //
 // Reads only: combining it with a write operation, in either direction,
-// fails the chain with ErrWithReplicaOnWrite. On a ClickHouse instance the
-// read fails with ErrUnsupportedOnDialect, per the capability-miss rule —
-// replica topology is that dialect's own cluster concern, and an error keeps
-// anyone from believing the framework routes it. SQLite is the deliberate
-// opposite, a no-op like WithLock there: the single file is the only node,
-// so the primary answering IS the fallback contract, and business code
-// carrying WithReplica keeps running unchanged under the sqlite test
-// database.
+// fails the chain with ErrWithReplicaOnWrite. On a ClickHouse instance a
+// read sent to a replica fails with ErrUnsupportedOnDialect, per the
+// capability-miss rule — replica topology is that dialect's own cluster
+// concern, and an error keeps anyone from believing the framework routes
+// it — while WithReplica(false) is a no-op there: the instance's one
+// connection is the one its writes go through, so the read already runs
+// where the option asks. SQLite is the deliberate opposite, a no-op like
+// WithLock there: the single file is the only node, so the primary
+// answering IS the fallback contract, and business code carrying
+// WithReplica keeps running unchanged under the sqlite test database.
 //
 // Example:
 //
@@ -681,11 +683,13 @@ func (db *database[M]) WithReplica(prefer ...bool) types.Database[M] {
 	return db
 }
 
-// rejectReplicaReadTarget answers the capability-miss error for a WithReplica
-// read on a dialect that carries no replica role. Read terminals call it
-// after prepare, once the dialect is known.
+// rejectReplicaReadTarget answers the capability-miss error for a read
+// WithReplica sends to a replica on ClickHouse, which carries no replica
+// role; a read WithReplica(false) keeps on the primary runs, the instance's
+// one connection being the one its writes go through. Read terminals call
+// it after prepare, once the dialect is known.
 func (db *database[M]) rejectReplicaReadTarget() error {
-	if db.replicaRead != nil && db.dialect() == dialectClickHouse {
+	if db.replicaRead != nil && *db.replicaRead && db.dialect() == dialectClickHouse {
 		return errors.Wrap(ErrUnsupportedOnDialect, "read with WithReplica on clickhouse")
 	}
 	return nil
