@@ -100,6 +100,7 @@ type sampleStoredRecord struct {
 	Count     int
 	Tally     sql.NullInt64
 	Ratio     sql.NullFloat64
+	Active    bool
 	Flag      sql.NullBool
 	Note      string
 	Doc       datatypes.JSON
@@ -143,9 +144,65 @@ func TestColumnPredicatesReadGormDataTypes(t *testing.T) {
 			"the numbers Valuer wrappers hold count, a time of day does not, whatever its Go kind")
 	})
 
+	t.Run("Bool", func(t *testing.T) {
+		require.Equal(t, []string{"active", "flag"}, columnsWhere(t, modelschema.IsBoolColumn),
+			"a boolean, and the one sql.NullBool holds")
+	})
+
 	t.Run("JSON", func(t *testing.T) {
 		require.Equal(t, []string{"doc", "doc_bytes", "doc_tagged", "doc_text"}, columnsWhere(t, modelschema.IsJSONColumn),
 			"a JSON type whatever type its tag declares, and a column a type tag declares JSON; a serializer stores text")
+	})
+}
+
+// TestParseTime pins the one reading of a time a filter or a cursor takes:
+// RFC 3339 with its offset, fractional seconds included, and nothing
+// zone-less, digit-only or otherwise spelled.
+func TestParseTime(t *testing.T) {
+	t.Run("RFC3339UTC", func(t *testing.T) {
+		got, err := modelschema.ParseTime("2026-07-01T08:30:15Z")
+		require.NoError(t, err)
+		require.True(t, got.Equal(time.Date(2026, 7, 1, 8, 30, 15, 0, time.UTC)))
+	})
+
+	t.Run("RFC3339KeepsExplicitOffset", func(t *testing.T) {
+		got, err := modelschema.ParseTime("2026-07-01T08:30:15+08:00")
+		require.NoError(t, err)
+		require.True(t, got.Equal(time.Date(2026, 7, 1, 8, 30, 15, 0, time.FixedZone("", 8*3600))))
+	})
+
+	t.Run("RFC3339FractionalSeconds", func(t *testing.T) {
+		got, err := modelschema.ParseTime("2026-07-01T08:30:15.123456789Z")
+		require.NoError(t, err)
+		require.True(t, got.Equal(time.Date(2026, 7, 1, 8, 30, 15, 123456789, time.UTC)))
+	})
+
+	t.Run("ZoneLessValueFails", func(t *testing.T) {
+		// Every zone-less spelling names a different instant per server zone,
+		// so all of them are rejected: RFC 3339 with its mandatory offset is
+		// the one accepted format.
+		for _, value := range []string{
+			"2026-07-01 08:30:15",
+			"2026-07-01T08:30:15",
+			"2026-07-01 08:30",
+			"2026-07-01T08:30",
+			"2026-07-01",
+		} {
+			_, err := modelschema.ParseTime(value)
+			require.Error(t, err, "zone-less value %q must be rejected", value)
+		}
+	})
+
+	t.Run("UnixTimestampFails", func(t *testing.T) {
+		for _, value := range []string{"1751328000", "1751328000123"} {
+			_, err := modelschema.ParseTime(value)
+			require.Error(t, err, "digit-only value %q must be rejected", value)
+		}
+	})
+
+	t.Run("UnsupportedFormatFails", func(t *testing.T) {
+		_, err := modelschema.ParseTime("07/01/2026")
+		require.Error(t, err)
 	})
 }
 
@@ -167,6 +224,56 @@ func TestParseTimeOfDay(t *testing.T) {
 	for _, value := range []string{"abc", "17:30", "1730", "25:00:00", "17:60:00", ""} {
 		_, err := modelschema.ParseTimeOfDay(value)
 		require.EqualError(t, err, fmt.Sprintf("unsupported time of day format %q, expect 15:04:05", value), value)
+	}
+}
+
+// TestValidateNumericValue pins that a value is checked against the kind of
+// number its column stores by the data type gorm reads for the field: an
+// integer, an unsigned one or a float, the number a Valuer holds included;
+// a column storing no number takes any value.
+func TestValidateNumericValue(t *testing.T) {
+	type counted struct {
+		ID    string `gorm:"primaryKey"`
+		Count int
+		Size  uint
+		Ratio float64
+		Tally sql.NullInt64
+		Note  string
+	}
+	columns, err := modelschema.Columns(reflect.TypeFor[counted]())
+	require.NoError(t, err)
+	byName := make(map[string]modelschema.Column, len(columns))
+	for _, c := range columns {
+		byName[c.DBName] = c
+	}
+	for name, values := range map[string]struct{ taken, refused []string }{
+		"count": {taken: []string{"-3", "42"}, refused: []string{"1.5", "x", ""}},
+		"size":  {taken: []string{"0", "42"}, refused: []string{"-1", "x"}},
+		"ratio": {taken: []string{"1.5", "-2", "1e3"}, refused: []string{"x"}},
+		"tally": {taken: []string{"7"}, refused: []string{"7.5"}},
+		"note":  {taken: []string{"x", "1.5"}},
+	} {
+		for _, value := range values.taken {
+			require.NoError(t, modelschema.ValidateNumericValue(byName[name], value), "%s %q", name, value)
+		}
+		for _, value := range values.refused {
+			require.EqualError(t, modelschema.ValidateNumericValue(byName[name], value), fmt.Sprintf("expect a numeric value, got %q", value), "%s %q", name, value)
+		}
+	}
+}
+
+// TestParseBool pins the one reading of a boolean the framework takes
+// from a client: the spellings strconv.ParseBool accepts, and a refusal
+// naming the value for anything else.
+func TestParseBool(t *testing.T) {
+	for value, want := range map[string]bool{"true": true, "1": true, "T": true, "false": false, "0": false, "F": false} {
+		got, err := modelschema.ParseBool(value)
+		require.NoError(t, err, value)
+		require.Equal(t, want, got, value)
+	}
+	for _, value := range []string{"maybe", "yes", ""} {
+		_, err := modelschema.ParseBool(value)
+		require.EqualError(t, err, fmt.Sprintf("expect a boolean value, got %q", value), value)
 	}
 }
 

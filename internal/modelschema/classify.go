@@ -2,6 +2,7 @@ package modelschema
 
 import (
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -72,7 +73,23 @@ var timeOfDayType = reflect.TypeFor[datatypes.Time]()
 // times on every dialect, and a value sent for it is RFC 3339. A time of day
 // is not one; see IsTimeOfDayColumn.
 func IsTimeColumn(c Column) bool {
-	return (c.GORMDataType == gormschema.Time || c.GORMDataType == dateDataType) && !IsTimeOfDayColumn(c)
+	return (c.gormDataType == gormschema.Time || c.gormDataType == dateDataType) && !IsTimeOfDayColumn(c)
+}
+
+// ParseTime reads a time the one way a filter or a cursor takes it, for an
+// instant and a calendar day alike (see IsTimeColumn): RFC 3339, fractional
+// seconds up to nanoseconds accepted. Its mandatory offset makes the value
+// the same instant no matter what zone the server runs in, and it is the
+// format time.Time speaks in JSON, so query values and body values spell time
+// identically. Zone-less spellings and unix timestamps are refused on
+// purpose: a zone-less value names a different instant per server zone, and
+// guessing is worse than failing.
+func ParseTime(value string) (time.Time, error) {
+	t, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		return time.Time{}, errors.Newf("unsupported time format %q, expect RFC 3339", value)
+	}
+	return t, nil
 }
 
 // IsTimeOfDayColumn reports whether a column stores a time of day,
@@ -104,12 +121,49 @@ func ParseTimeOfDay(value string) (time.Duration, error) {
 // gorm reads for its field: an integer, signed or not, or a float, the ones
 // sql.NullInt64, sql.NullFloat64 and their kin hold included.
 func IsNumericColumn(c Column) bool {
-	switch c.GORMDataType {
+	switch c.gormDataType {
 	case gormschema.Int, gormschema.Uint, gormschema.Float:
 		return true
 	default:
 		return false
 	}
+}
+
+// ValidateNumericValue checks that value spells a number of the kind a
+// column stores by the data type gorm reads for its field: an integer, an
+// unsigned one, or a float. A column storing no number (see IsNumericColumn)
+// takes any value.
+func ValidateNumericValue(c Column, value string) error {
+	var err error
+	switch c.gormDataType {
+	case gormschema.Int:
+		_, err = strconv.ParseInt(value, 10, 64)
+	case gormschema.Uint:
+		_, err = strconv.ParseUint(value, 10, 64)
+	case gormschema.Float:
+		_, err = strconv.ParseFloat(value, 64)
+	}
+	if err != nil {
+		return errors.Newf("expect a numeric value, got %q", value)
+	}
+	return nil
+}
+
+// IsBoolColumn reports whether a column stores a boolean by the data type
+// gorm reads for its field, the one sql.NullBool holds included.
+func IsBoolColumn(c Column) bool {
+	return c.gormDataType == gormschema.Bool
+}
+
+// ParseBool reads a boolean the one way the framework takes it from a
+// client: the spellings strconv.ParseBool accepts, 1, t, T, TRUE, true and
+// True, or their false counterparts. Anything else is refused.
+func ParseBool(value string) (bool, error) {
+	b, err := strconv.ParseBool(value)
+	if err != nil {
+		return false, errors.Newf("expect a boolean value, got %q", value)
+	}
+	return b, nil
 }
 
 // IsJSONColumn reports whether a column stores a JSON document: its Go type
@@ -118,7 +172,7 @@ func IsNumericColumn(c Column) bool {
 // because a type naming its database type itself, as the datatypes family
 // does, keeps that column type whatever the tag declares.
 func IsJSONColumn(c Column) bool {
-	return isJSONDataType(c.GORMDataType) || isJSONDataType(c.DataType)
+	return isJSONDataType(c.gormDataType) || isJSONDataType(c.dataType)
 }
 
 // IsDateColumn reports whether a column stores a calendar day: the column
@@ -129,7 +183,7 @@ func IsJSONColumn(c Column) bool {
 // instant's: a value sent for or compared with a date column names the UTC
 // day it falls on (see UTCDay), whatever its Go type.
 func IsDateColumn(c Column) bool {
-	return strings.EqualFold(string(c.DataType), string(dateDataType))
+	return strings.EqualFold(string(c.dataType), string(dateDataType))
 }
 
 // UTCDay returns the calendar day t falls on in UTC, the one time base of

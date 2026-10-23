@@ -29,17 +29,19 @@ import (
 // whatever gorm writes into SQL. They are usually equal, and diverge when a
 // model carries a column tag or a field name gorm renders differently.
 //
-// DataType and GORMDataType are the data types gorm resolved for the field,
+// dataType and gormDataType are the data types gorm resolved for the field,
 // which tell what the column stores where the Go type does not: the value a
 // Valuer such as sql.NullTime holds, or a JSON column a type tag declares.
-// IsTimeColumn, IsTimeOfDayColumn, IsNumericColumn and IsJSONColumn read them.
+// They are gorm's vocabulary and stay inside this package: IsTimeColumn,
+// IsDateColumn, IsNumericColumn, ValidateNumericValue, IsBoolColumn and
+// IsJSONColumn answer from them.
 type Column struct {
 	GoName       string              // Go selector path of the field: its name, or First.Label inside a struct embedded by name.
 	QueryName    string              // URL parameter name: query tag, else json tag, else field name, in snake case, per step of the JSON path.
 	DBName       string              // Database column name resolved by gorm.
 	Type         reflect.Type        // Go type of the underlying struct field.
-	DataType     gormschema.DataType // Column type gorm resolved: the type tag when the field carries one, else GORMDataType.
-	GORMDataType gormschema.DataType // Data type gorm reads from the Go type, a Valuer through the value it holds.
+	dataType     gormschema.DataType // Column type gorm resolved: the type tag when the field carries one, else gormDataType.
+	gormDataType gormschema.DataType // Data type gorm reads from the Go type, a Valuer through the value it holds.
 	Index        []int               // Struct field index path, usable with reflect.Value.FieldByIndex.
 	Filterable   bool                // Whether clients may filter on the column through the URL.
 	NotNull      bool                // Whether the schema forbids NULL: a NOT NULL tag or the primary key.
@@ -90,8 +92,8 @@ func Columns(typ reflect.Type) ([]Column, error) {
 			QueryName:    queryName,
 			DBName:       field.DBName,
 			Type:         field.FieldType,
-			DataType:     field.DataType,
-			GORMDataType: field.GORMDataType,
+			dataType:     field.DataType,
+			gormDataType: field.GORMDataType,
 			Index:        index,
 			// A field hidden from JSON is framework-managed bookkeeping such
 			// as the soft-delete timestamp: it stays a real column, but

@@ -170,7 +170,7 @@ func TestColumnsNameEmbeddedFieldsByPath(t *testing.T) {
 }
 
 func TestColumnsCarryGormDataTypes(t *testing.T) {
-	// GORMDataType is what gorm reads from the Go type; DataType is the
+	// gormDataType is what gorm reads from the Go type; dataType is the
 	// column type it resolves, which a type tag replaces.
 	type typed struct {
 		ID  string    `gorm:"primaryKey"`
@@ -180,12 +180,12 @@ func TestColumnsCarryGormDataTypes(t *testing.T) {
 	parsed, err := Columns(reflect.TypeFor[typed]())
 	require.NoError(t, err)
 	cols := indexByQueryName(parsed)
-	require.Equal(t, gormschema.String, cols["id"].DataType)
-	require.Equal(t, gormschema.String, cols["id"].GORMDataType)
-	require.Equal(t, gormschema.DataType("datetime(6)"), cols["at"].DataType)
-	require.Equal(t, gormschema.Time, cols["at"].GORMDataType)
-	require.Equal(t, gormschema.DataType("json"), cols["doc"].DataType)
-	require.Equal(t, gormschema.String, cols["doc"].GORMDataType)
+	require.Equal(t, gormschema.String, cols["id"].dataType)
+	require.Equal(t, gormschema.String, cols["id"].gormDataType)
+	require.Equal(t, gormschema.DataType("datetime(6)"), cols["at"].dataType)
+	require.Equal(t, gormschema.Time, cols["at"].gormDataType)
+	require.Equal(t, gormschema.DataType("json"), cols["doc"].dataType)
+	require.Equal(t, gormschema.String, cols["doc"].gormDataType)
 }
 
 func TestColumnsReportUpdatable(t *testing.T) {

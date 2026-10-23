@@ -267,7 +267,8 @@ func fieldAlong(dst reflect.Value, index []int) reflect.Value {
 // fieldSetter returns the parse-and-set function for a field type, reported
 // per kind so a named scalar type decodes like its underlying kind. A type
 // without a setter is not decodable and stays out of the plan. Error wording
-// matches the filter and cursor validators.
+// matches the filter and cursor validators, and a boolean is read by the
+// modelschema.ParseBool they read one by.
 func fieldSetter(typ reflect.Type, key string) (func(dst reflect.Value, raw string) string, bool) {
 	if typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
@@ -280,9 +281,9 @@ func fieldSetter(typ reflect.Type, key string) (func(dst reflect.Value, raw stri
 		}, true
 	case reflect.Bool:
 		return func(dst reflect.Value, raw string) string {
-			parsed, err := strconv.ParseBool(raw)
+			parsed, err := modelschema.ParseBool(raw)
 			if err != nil {
-				return fmt.Sprintf("invalid query parameter %q: expect a boolean value, got %q", key, raw)
+				return fmt.Sprintf("invalid query parameter %q: %v", key, err)
 			}
 			dst.SetBool(parsed)
 			return ""

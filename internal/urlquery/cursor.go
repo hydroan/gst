@@ -3,7 +3,6 @@ package urlquery
 import (
 	"net/url"
 	"reflect"
-	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -11,7 +10,6 @@ import (
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
-	gormschema "gorm.io/gorm/schema"
 )
 
 // Cursor returns the cursor position of the request, ready to be passed to
@@ -105,7 +103,7 @@ func Cursor(q url.Values, m types.Model) (types.Cursor, error) {
 		return types.Cursor{}, err
 	}
 
-	if next, _ := strconv.ParseBool(q.Get(consts.QUERY_CURSOR_NEXT)); next {
+	if next, _ := modelschema.ParseBool(q.Get(consts.QUERY_CURSOR_NEXT)); next {
 		return types.CursorForward(types.Asc(column), value), nil
 	}
 	return types.CursorBackward(types.Asc(column), value), nil
@@ -160,12 +158,10 @@ func normalizeCursorValue(col modelschema.Column, value string) (string, error) 
 		if bound, err = timeBound(col, value); err == nil {
 			value = bound
 		}
-	case col.GORMDataType == gormschema.Bool:
-		if _, parseErr := strconv.ParseBool(value); parseErr != nil {
-			err = errors.Newf("expect a boolean value, got %q", value)
-		}
+	case modelschema.IsBoolColumn(col):
+		_, err = modelschema.ParseBool(value)
 	case modelschema.IsNumericColumn(col):
-		err = validateNumericValue(col.GORMDataType, value)
+		err = modelschema.ValidateNumericValue(col, value)
 	}
 	if err != nil {
 		return "", errors.Wrapf(err, "invalid cursor value")

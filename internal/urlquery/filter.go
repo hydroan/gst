@@ -4,9 +4,7 @@ import (
 	"net/url"
 	"reflect"
 	"sort"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/modelregistry"
@@ -14,7 +12,6 @@ import (
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stoewer/go-strcase"
 	"gorm.io/datatypes"
-	gormschema "gorm.io/gorm/schema"
 )
 
 // Filters extracts field-level operator filters from URL query keys of the
@@ -153,7 +150,7 @@ func normalizeFilterValue(col modelschema.Column, op types.FilterOp, value strin
 	// column type: it always carries a boolean and applies to any nullable
 	// column, including time columns the comparison gating below would block.
 	if op == types.FilterOpIsNull {
-		b, err := strconv.ParseBool(value)
+		b, err := modelschema.ParseBool(value)
 		if err != nil {
 			return nil, errors.Newf("isnull expects a boolean value, got %q", value)
 		}
@@ -167,12 +164,12 @@ func normalizeFilterValue(col modelschema.Column, op types.FilterOp, value strin
 		default:
 			return nil, errors.Newf("operator %q is not supported on a time field", op)
 		}
-	case col.GORMDataType == gormschema.Bool:
+	case modelschema.IsBoolColumn(col):
 		switch op {
 		case types.FilterOpEq, types.FilterOpNe:
-			b, err := strconv.ParseBool(value)
+			b, err := modelschema.ParseBool(value)
 			if err != nil {
-				return nil, errors.Newf("expect a boolean value, got %q", value)
+				return nil, err
 			}
 			return b, nil
 		default:
@@ -183,7 +180,7 @@ func normalizeFilterValue(col modelschema.Column, op types.FilterOp, value strin
 		case types.FilterOpIn, types.FilterOpNotIn:
 			items := strings.Split(value, ",")
 			for _, item := range items {
-				if err := validateNumericValue(col.GORMDataType, item); err != nil {
+				if err := modelschema.ValidateNumericValue(col, item); err != nil {
 					return nil, err
 				}
 			}
@@ -193,7 +190,7 @@ func normalizeFilterValue(col modelschema.Column, op types.FilterOp, value strin
 			// the number; the pattern itself is not numeric.
 			return value, nil
 		default:
-			if err := validateNumericValue(col.GORMDataType, value); err != nil {
+			if err := modelschema.ValidateNumericValue(col, value); err != nil {
 				return nil, err
 			}
 			return value, nil
@@ -217,41 +214,8 @@ func normalizeFilterValue(col modelschema.Column, op types.FilterOp, value strin
 	}
 }
 
-// validateNumericValue checks that value spells a number of the data type
-// gorm reads for a numeric column: an integer, an unsigned one, or a float.
-func validateNumericValue(dataType gormschema.DataType, value string) error {
-	var err error
-	switch dataType {
-	case gormschema.Int:
-		_, err = strconv.ParseInt(value, 10, 64)
-	case gormschema.Uint:
-		_, err = strconv.ParseUint(value, 10, 64)
-	case gormschema.Float:
-		_, err = strconv.ParseFloat(value, 64)
-	}
-	if err != nil {
-		return errors.Newf("expect a numeric value, got %q", value)
-	}
-	return nil
-}
-
-// parseQueryTime parses a time-typed query value. RFC 3339 (fractional
-// seconds up to nanoseconds accepted) is the one accepted format: its
-// mandatory UTC offset makes the value the same instant no matter what zone
-// the server runs in, and it is the format time.Time speaks in JSON, so
-// query values and body values spell time identically. Zone-less spellings
-// and unix timestamps are rejected on purpose — a zone-less value names a
-// different instant per server zone, and guessing is worse than failing.
-func parseQueryTime(value string) (time.Time, error) {
-	t, err := time.Parse(time.RFC3339Nano, value)
-	if err != nil {
-		return time.Time{}, errors.Newf("unsupported time format %q, expect RFC 3339", value)
-	}
-	return t, nil
-}
-
 // timeBound is the value a comparison with a time column binds for the RFC
-// 3339 value a client sent (see parseQueryTime): the UTC wall clock in
+// 3339 value a client sent (see modelschema.ParseTime): the UTC wall clock in
 // FilterTimeLayout, the one wall clock the framework stores on every
 // dialect. The canonical string form is kept on purpose: binding time.Time
 // would let the driver re-render the value in its own location, while the
@@ -270,7 +234,7 @@ func timeBound(col modelschema.Column, value string) (string, error) {
 		}
 		return datatypes.Time(since).String(), nil
 	}
-	t, err := parseQueryTime(value)
+	t, err := modelschema.ParseTime(value)
 	if err != nil {
 		return "", err
 	}
