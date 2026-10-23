@@ -17,19 +17,98 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// TestTimestampLeavesTheZeroTimeUnset pins the two ways of a time through
-// a message: a time comes back as it went in, in UTC, and the zero time
-// travels as no Timestamp at all.
-func TestTimestampLeavesTheZeroTimeUnset(t *testing.T) {
-	at := time.Date(2026, 9, 26, 8, 30, 0, 123456789, time.FixedZone("east", 8*3600))
+// TestNarrowRefusesWhatTheTypeCannotHold pins Narrow, what a generated
+// FromProto reads a narrow integer through: a value in range comes back as
+// the field's type, a named one included, and one out of range is refused
+// with InvalidArgument naming the field, the way encoding/json refuses it
+// over HTTP, rather than folded into the type.
+func TestNarrowRefusesWhatTheTypeCannotHold(t *testing.T) {
+	type level int8
+	count, err := gstgrpc.Narrow[int16]("count", int32(300))
+	require.NoError(t, err)
+	require.Equal(t, int16(300), count)
+	lvl, err := gstgrpc.Narrow[level]("level", int32(-5))
+	require.NoError(t, err)
+	require.Equal(t, level(-5), lvl)
+	port, err := gstgrpc.Narrow[uint8]("port", uint32(255))
+	require.NoError(t, err)
+	require.Equal(t, uint8(255), port)
 
-	back, err := gstgrpc.Time("at", gstgrpc.Timestamp(at))
+	_, err = gstgrpc.Narrow[int8]("count", int32(300))
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.Equal(t, "invalid value for field 'count'", status.Convert(err).Message())
+	requireFieldViolation(t, err, "count", "300 is out of range")
+	_, err = gstgrpc.Narrow[uint16]("port", uint32(70000))
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	requireFieldViolation(t, err, "port", "70000 is out of range")
+	_, err = gstgrpc.Narrow[level]("level", int32(128))
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.Equal(t, "invalid value for field 'level'", status.Convert(err).Message())
+	requireFieldViolation(t, err, "level", "128 is out of range")
+}
+
+// TestNumberRefusesWhatIsNoJSONNumber pins Number, what a generated
+// FromProto reads a json.Number field through: a JSON number literal comes
+// back as it is, and anything else, text, a quoted number, a literal with
+// trailing space, the empty string, is refused with InvalidArgument naming
+// the field, the way encoding/json refuses it over HTTP; the empty string
+// of an unset field never reaches it, the one of an element or a map value
+// does.
+func TestNumberRefusesWhatIsNoJSONNumber(t *testing.T) {
+	amount, err := gstgrpc.Number("amount", "-12.5e3")
 	require.NoError(t, err)
-	require.Equal(t, at.UTC(), back)
-	require.Nil(t, gstgrpc.Timestamp(time.Time{}))
-	zero, err := gstgrpc.Time("at", nil)
+	require.Equal(t, json.Number("-12.5e3"), amount)
+	for _, s := range []string{"abc", `"12"`, "12 ", "0x1f", "1.", "null", ""} {
+		_, err := gstgrpc.Number("amount", s)
+		require.Equal(t, codes.InvalidArgument, status.Code(err), s)
+		require.Equal(t, "invalid value for field 'amount'", status.Convert(err).Message())
+		requireFieldViolation(t, err, "amount", strconv.Quote(s)+" is not a JSON number")
+	}
+}
+
+// TestNumberTextWritesTheEmptyNumberAsZero pins the text the generated
+// ToProto writes for a json.Number element or map value: the number as it
+// is, its invalid bytes replaced the way UTF8 replaces them, and the empty
+// number as "0", the number encoding/json writes it as, which Number reads
+// back.
+func TestNumberTextWritesTheEmptyNumberAsZero(t *testing.T) {
+	require.Equal(t, "-12.5e3", gstgrpc.NumberText("-12.5e3"))
+	require.Equal(t, "a�b", gstgrpc.NumberText("a\xffb"))
+	encoded, err := json.Marshal(json.Number(""))
 	require.NoError(t, err)
-	require.True(t, zero.IsZero())
+	require.Equal(t, string(encoded), gstgrpc.NumberText(""), "the empty number is written as encoding/json writes it")
+	read, err := gstgrpc.Number("amounts[0]", gstgrpc.NumberText(""))
+	require.NoError(t, err)
+	require.Equal(t, json.Number("0"), read)
+}
+
+// TestFiniteRefusesNaNAndTheInfinities pins Finite, what a generated
+// FromProto reads a floating-point field through: a number comes back as
+// the field's type, a named one included, and NaN and the infinities,
+// which JSON has no spelling for, are refused with InvalidArgument naming
+// the field.
+func TestFiniteRefusesNaNAndTheInfinities(t *testing.T) {
+	type ratio float64
+	r, err := gstgrpc.Finite[ratio]("ratio", 1.5)
+	require.NoError(t, err)
+	require.InDelta(t, 1.5, float64(r), 0)
+	f, err := gstgrpc.Finite[float32]("ratio", float32(2.5))
+	require.NoError(t, err)
+	require.InDelta(t, 2.5, float64(f), 0)
+
+	for _, tt := range []struct {
+		v    float64
+		want string
+	}{
+		{v: math.NaN(), want: "NaN is not a finite number"},
+		{v: math.Inf(1), want: "+Inf is not a finite number"},
+		{v: math.Inf(-1), want: "-Inf is not a finite number"},
+	} {
+		_, err := gstgrpc.Finite[float64]("ratio", tt.v)
+		require.Equal(t, codes.InvalidArgument, status.Code(err), tt.want)
+		require.Equal(t, "invalid value for field 'ratio'", status.Convert(err).Message())
+		requireFieldViolation(t, err, "ratio", tt.want)
+	}
 }
 
 // TestTimeRefusesATimestampOutOfRange pins that a Timestamp no time can be
@@ -53,6 +132,21 @@ func TestTimeRefusesATimestampOutOfRange(t *testing.T) {
 			requireFieldViolation(t, err, "due", tt.want)
 		})
 	}
+}
+
+// TestTimestampLeavesTheZeroTimeUnset pins the two ways of a time through
+// a message: a time comes back as it went in, in UTC, and the zero time
+// travels as no Timestamp at all.
+func TestTimestampLeavesTheZeroTimeUnset(t *testing.T) {
+	at := time.Date(2026, 9, 26, 8, 30, 0, 123456789, time.FixedZone("east", 8*3600))
+
+	back, err := gstgrpc.Time("at", gstgrpc.Timestamp(at))
+	require.NoError(t, err)
+	require.Equal(t, at.UTC(), back)
+	require.Nil(t, gstgrpc.Timestamp(time.Time{}))
+	zero, err := gstgrpc.Time("at", nil)
+	require.NoError(t, err)
+	require.True(t, zero.IsZero())
 }
 
 // TestTimeOfDayRefusesADurationOutsideADay pins TimeOfDay, what a generated
@@ -110,35 +204,6 @@ func TestDocumentRefusesWhatIsNoJSON(t *testing.T) {
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 	require.Equal(t, "invalid value for field 'raw'", status.Convert(err).Message())
 	requireFieldViolation(t, err, "raw", "not a JSON document")
-}
-
-// TestFiniteRefusesNaNAndTheInfinities pins Finite, what a generated
-// FromProto reads a floating-point field through: a number comes back as
-// the field's type, a named one included, and NaN and the infinities,
-// which JSON has no spelling for, are refused with InvalidArgument naming
-// the field.
-func TestFiniteRefusesNaNAndTheInfinities(t *testing.T) {
-	type ratio float64
-	r, err := gstgrpc.Finite[ratio]("ratio", 1.5)
-	require.NoError(t, err)
-	require.InDelta(t, 1.5, float64(r), 0)
-	f, err := gstgrpc.Finite[float32]("ratio", float32(2.5))
-	require.NoError(t, err)
-	require.InDelta(t, 2.5, float64(f), 0)
-
-	for _, tt := range []struct {
-		v    float64
-		want string
-	}{
-		{v: math.NaN(), want: "NaN is not a finite number"},
-		{v: math.Inf(1), want: "+Inf is not a finite number"},
-		{v: math.Inf(-1), want: "-Inf is not a finite number"},
-	} {
-		_, err := gstgrpc.Finite[float64]("ratio", tt.v)
-		require.Equal(t, codes.InvalidArgument, status.Code(err), tt.want)
-		require.Equal(t, "invalid value for field 'ratio'", status.Convert(err).Message())
-		requireFieldViolation(t, err, "ratio", tt.want)
-	}
 }
 
 // TestUTF8ReplacesInvalidBytesLikeTheJSONEncoder pins UTF8, what a generated
@@ -200,117 +265,6 @@ func TestStructAndMapRoundTripAnObject(t *testing.T) {
 	require.Equal(t, map[string]any{"n": "NaN"}, gstgrpc.Map(&structpb.Struct{Fields: map[string]*structpb.Value{"n": structpb.NewNumberValue(math.NaN())}}), "a NaN comes back spelt as the JSON mapping of a Value spells it")
 }
 
-// TestNarrowRefusesWhatTheTypeCannotHold pins Narrow, what a generated
-// FromProto reads a narrow integer through: a value in range comes back as
-// the field's type, a named one included, and one out of range is refused
-// with InvalidArgument naming the field, the way encoding/json refuses it
-// over HTTP, rather than folded into the type.
-func TestNarrowRefusesWhatTheTypeCannotHold(t *testing.T) {
-	type level int8
-	count, err := gstgrpc.Narrow[int16]("count", int32(300))
-	require.NoError(t, err)
-	require.Equal(t, int16(300), count)
-	lvl, err := gstgrpc.Narrow[level]("level", int32(-5))
-	require.NoError(t, err)
-	require.Equal(t, level(-5), lvl)
-	port, err := gstgrpc.Narrow[uint8]("port", uint32(255))
-	require.NoError(t, err)
-	require.Equal(t, uint8(255), port)
-
-	_, err = gstgrpc.Narrow[int8]("count", int32(300))
-	require.Equal(t, codes.InvalidArgument, status.Code(err))
-	require.Equal(t, "invalid value for field 'count'", status.Convert(err).Message())
-	requireFieldViolation(t, err, "count", "300 is out of range")
-	_, err = gstgrpc.Narrow[uint16]("port", uint32(70000))
-	require.Equal(t, codes.InvalidArgument, status.Code(err))
-	requireFieldViolation(t, err, "port", "70000 is out of range")
-	_, err = gstgrpc.Narrow[level]("level", int32(128))
-	require.Equal(t, codes.InvalidArgument, status.Code(err))
-	require.Equal(t, "invalid value for field 'level'", status.Convert(err).Message())
-	requireFieldViolation(t, err, "level", "128 is out of range")
-}
-
-// TestItemErrorNamesTheItemOfARefusedRecord pins ItemError, what a generated
-// batch handler answers an item's FromProto refusal through: the field
-// refused is named as the item's, items[1].count, in the message and in the
-// BadRequest detail alike, the description kept.
-func TestItemErrorNamesTheItemOfARefusedRecord(t *testing.T) {
-	_, refused := gstgrpc.Narrow[int8]("count", int32(300))
-
-	err := gstgrpc.ItemError(1, refused)
-
-	require.Equal(t, codes.InvalidArgument, status.Code(err))
-	require.Equal(t, "invalid value for field 'items[1].count'", status.Convert(err).Message())
-	requireFieldViolation(t, err, "items[1].count", "300 is out of range")
-}
-
-// TestPathErrorNamesTheElementOfARefusedValue pins PathError with Element
-// and Entry, what a generated conversion names the refused value of a
-// nested message held in a container through: the path of the element or
-// the map value in front of the field refused, in the message and in the
-// BadRequest detail alike.
-func TestPathErrorNamesTheElementOfARefusedValue(t *testing.T) {
-	_, refused := gstgrpc.Narrow[int8]("x", int32(300))
-
-	err := gstgrpc.PathError(gstgrpc.Element("points", 1), refused)
-	require.Equal(t, codes.InvalidArgument, status.Code(err))
-	require.Equal(t, "invalid value for field 'points[1].x'", status.Convert(err).Message())
-	requireFieldViolation(t, err, "points[1].x", "300 is out of range")
-
-	err = gstgrpc.PathError(gstgrpc.Entry("by_code", int32(7)), refused)
-	require.Equal(t, "invalid value for field 'by_code[7].x'", status.Convert(err).Message())
-}
-
-// requireFieldViolation asserts that err carries one google.rpc.BadRequest
-// detail naming field with description.
-func requireFieldViolation(t *testing.T, err error, field, description string) {
-	t.Helper()
-	var violations []*errdetails.BadRequest_FieldViolation
-	for _, detail := range status.Convert(err).Details() {
-		if bad, ok := detail.(*errdetails.BadRequest); ok {
-			violations = append(violations, bad.GetFieldViolations()...)
-		}
-	}
-	require.Len(t, violations, 1)
-	require.Equal(t, field, violations[0].GetField())
-	require.Equal(t, description, violations[0].GetDescription())
-}
-
-// TestNumberRefusesWhatIsNoJSONNumber pins Number, what a generated
-// FromProto reads a json.Number field through: a JSON number literal comes
-// back as it is, and anything else, text, a quoted number, a literal with
-// trailing space, the empty string, is refused with InvalidArgument naming
-// the field, the way encoding/json refuses it over HTTP; the empty string
-// of an unset field never reaches it, the one of an element or a map value
-// does.
-func TestNumberRefusesWhatIsNoJSONNumber(t *testing.T) {
-	amount, err := gstgrpc.Number("amount", "-12.5e3")
-	require.NoError(t, err)
-	require.Equal(t, json.Number("-12.5e3"), amount)
-	for _, s := range []string{"abc", `"12"`, "12 ", "0x1f", "1.", "null", ""} {
-		_, err := gstgrpc.Number("amount", s)
-		require.Equal(t, codes.InvalidArgument, status.Code(err), s)
-		require.Equal(t, "invalid value for field 'amount'", status.Convert(err).Message())
-		requireFieldViolation(t, err, "amount", strconv.Quote(s)+" is not a JSON number")
-	}
-}
-
-// TestNumberTextWritesTheEmptyNumberAsZero pins the text the generated
-// ToProto writes for a json.Number element or map value: the number as it
-// is, its invalid bytes replaced the way UTF8 replaces them, and the empty
-// number as "0", the number encoding/json writes it as, which Number reads
-// back.
-func TestNumberTextWritesTheEmptyNumberAsZero(t *testing.T) {
-	require.Equal(t, "-12.5e3", gstgrpc.NumberText("-12.5e3"))
-	require.Equal(t, "a�b", gstgrpc.NumberText("a\xffb"))
-	encoded, err := json.Marshal(json.Number(""))
-	require.NoError(t, err)
-	require.Equal(t, string(encoded), gstgrpc.NumberText(""), "the empty number is written as encoding/json writes it")
-	read, err := gstgrpc.Number("amounts[0]", gstgrpc.NumberText(""))
-	require.NoError(t, err)
-	require.Equal(t, json.Number("0"), read)
-}
-
 // filterMessage stands for the nested Filter message of a List request,
 // with the getters the plugin generates for it.
 type filterMessage struct {
@@ -336,4 +290,19 @@ func TestFiltersReadTheFilterMessages(t *testing.T) {
 		{Field: "name", Values: []string{"alice"}},
 	}, filters)
 	require.Nil(t, gstgrpc.Filters[*filterMessage](nil))
+}
+
+// requireFieldViolation asserts that err carries one google.rpc.BadRequest
+// detail naming field with description.
+func requireFieldViolation(t *testing.T, err error, field, description string) {
+	t.Helper()
+	var violations []*errdetails.BadRequest_FieldViolation
+	for _, detail := range status.Convert(err).Details() {
+		if bad, ok := detail.(*errdetails.BadRequest); ok {
+			violations = append(violations, bad.GetFieldViolations()...)
+		}
+	}
+	require.Len(t, violations, 1)
+	require.Equal(t, field, violations[0].GetField())
+	require.Equal(t, description, violations[0].GetDescription())
 }

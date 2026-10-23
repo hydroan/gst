@@ -14,13 +14,15 @@ import (
 // Each returns the call of M's action on route, the path the generated
 // router registers the action at, /api/records/:rec as router.gen.go and
 // service.gen.go spell it, built once at package initialization and shared
-// by every call. Given the route parameters the request message
-// carries, keyed as the route names them, and what else it decoded — the
-// id, the model, the items, the update mask, the query — a call validates
-// the input the way the HTTP handler validates a bound body, runs the very
-// flow of the HTTP action, hooks, database access and operation log alike,
-// and answers with the result, or with the status the failure maps to, the
-// way StatusError maps a service error.
+// by every call. Given the route parameters the request message carries,
+// keyed as the route names them, and what else it decoded — the id, the
+// model, the items, the update mask, the query — a call validates the input
+// the way the HTTP handler validates a bound body, runs the very flow of the
+// HTTP action, hooks, database access and operation log alike, and answers
+// with the result, or with the status the failure maps to, the way
+// StatusError maps a service error. After the call functions come what the
+// generated handlers read a batch item and name a refusal through:
+// PatchItem, ItemError, PathError, Element and Entry.
 
 // Query is what the request message of a List or Get rpc carries for the
 // query parameters of the same action over HTTP, as the generated messages
@@ -162,6 +164,32 @@ func UpdateManyCall[M types.Model](route string) func(ctx context.Context, param
 	return controller.UpdateManyCall[M](route)
 }
 
+// PatchManyCall returns the batch patch call of M on route: given the route
+// parameters, the items and the paths of each item's update mask, in order,
+// it answers with the records patched.
+func PatchManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, items []M, paths [][]string) ([]M, error) {
+	return controller.PatchManyCall[M](route)
+}
+
+// DeleteManyCall returns the batch delete call of M on route: given the
+// route parameters and the ids, it answers nothing.
+func DeleteManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, ids []string) error {
+	return controller.DeleteManyCall[M](route)
+}
+
+// ServiceCall returns the call of the phase service's method for the action
+// of phase on route, for the generated handler of the rpc of an action
+// declaring a Payload or Result of its own: given the route parameters, the
+// query of a List or Get and the payload the request message decoded into,
+// it validates the payload the way the HTTP handler validates a bound body,
+// runs the method on a service context answering the parameters, the query
+// and the caller, and answers with its result, or with the status its error
+// maps to. phase is one of the actions gRPC serves; the phase of an HTTP-only
+// action panics, as the route registers.
+func ServiceCall[M types.Model, REQ types.Request, RSP types.Response](phase consts.Phase, route string) func(ctx context.Context, params map[string]string, query Query, req REQ) (RSP, error) {
+	return controller.ServiceCall[M, REQ, RSP](phase, route)
+}
+
 // PatchItem readies the record of the item at index i of a batch patch,
 // what the generated handler of a PatchMany rpc reads each item through,
 // an item being the request of a single Patch: the item names its record by
@@ -207,30 +235,4 @@ func Element(path string, i int) string {
 // conversion names a refused map value by.
 func Entry[K comparable](path string, key K) string {
 	return controller.Entry(path, key)
-}
-
-// PatchManyCall returns the batch patch call of M on route: given the route
-// parameters, the items and the paths of each item's update mask, in order,
-// it answers with the records patched.
-func PatchManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, items []M, paths [][]string) ([]M, error) {
-	return controller.PatchManyCall[M](route)
-}
-
-// DeleteManyCall returns the batch delete call of M on route: given the
-// route parameters and the ids, it answers nothing.
-func DeleteManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, ids []string) error {
-	return controller.DeleteManyCall[M](route)
-}
-
-// ServiceCall returns the call of the phase service's method for the action
-// of phase on route, for the generated handler of the rpc of an action
-// declaring a Payload or Result of its own: given the route parameters, the
-// query of a List or Get and the payload the request message decoded into,
-// it validates the payload the way the HTTP handler validates a bound body,
-// runs the method on a service context answering the parameters, the query
-// and the caller, and answers with its result, or with the status its error
-// maps to. phase is one of the actions gRPC serves; the phase of an HTTP-only
-// action panics, as the route registers.
-func ServiceCall[M types.Model, REQ types.Request, RSP types.Response](phase consts.Phase, route string) func(ctx context.Context, params map[string]string, query Query, req REQ) (RSP, error) {
-	return controller.ServiceCall[M, REQ, RSP](phase, route)
 }

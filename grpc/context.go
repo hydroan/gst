@@ -22,10 +22,10 @@ const (
 )
 
 // Bearer returns the credential the call's authorization metadata carries
-// as "Bearer <credential>" — a token for JwtAuth, a session id for the IAM
-// session interceptor — and whether it carries one: the check
-// jwt.ParseTokenFromHeader makes of the Authorization header. Any other
-// scheme, or no authorization metadata at all, is no credential.
+// as "Bearer <credential>", a token or a session id, and whether it carries
+// one: the check jwt.ParseTokenFromHeader makes of the Authorization
+// header. Any other scheme, or no authorization metadata at all, is no
+// credential.
 func Bearer(ctx context.Context) (credential string, ok bool) {
 	md, _ := metadata.FromIncomingContext(ctx)
 	values := md.Get(authorizationKey)

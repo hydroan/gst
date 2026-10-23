@@ -26,8 +26,9 @@ import (
 // refuse what the model's field cannot hold, the way the HTTP listener
 // refuses it, so that a record a gRPC call wrote reads back over HTTP, while
 // Map and Value carry a dynamic value either way; and what a generated
-// ToProto writes a string through, UTF8, which replaces what a message
-// cannot carry the way the JSON encoder does.
+// ToProto writes a value through the way the JSON encoder writes it: UTF8,
+// which replaces what a message cannot carry in a string, and NumberText,
+// which writes the empty JSON number of a repeated field or a map as 0.
 
 // Narrow returns v as the narrower integer type T a model field holds, int8
 // for the int32 its message carries, and refuses a value T cannot hold, 300
@@ -183,19 +184,6 @@ func UTF8(s string) string {
 	return b.String()
 }
 
-// invalidValue is the InvalidArgument a generated FromProto refuses a
-// message field with when the value it carries is not one the model field
-// holds: the refusal HTTP answers with for a body value it cannot decode
-// into a field it can name (see types.NewInvalidValue), "invalid value for
-// field 'rank'", as the status it maps to (see grpcserver.StatusError), a
-// google.rpc.BadRequest detail naming the field with description, the way
-// the fields a validator refused are detailed. HTTP names the field of a
-// number it cannot decode only when encoding/json reports it, which for a
-// json.Number field it does not, answering without the name there.
-func invalidValue(field, description string) error {
-	return grpcserver.StatusError(types.NewInvalidValue(field, description, nil))
-}
-
 // Value returns the Value holding v, the JSON value encoding/json encodes v
 // to, and nil for nil: a Go value travels in a Value as it travels in a JSON
 // body. It panics on a value encoding/json cannot encode, a channel or a
@@ -261,6 +249,19 @@ func Filters[F interface {
 		out[i] = Filter{Field: f.GetField(), Op: f.GetOp(), Values: f.GetValues()}
 	}
 	return out
+}
+
+// invalidValue is the InvalidArgument a generated FromProto refuses a
+// message field with when the value it carries is not one the model field
+// holds: the refusal HTTP answers with for a body value it cannot decode
+// into a field it can name (see types.NewInvalidValue), "invalid value for
+// field 'rank'", as the status it maps to (see grpcserver.StatusError), a
+// google.rpc.BadRequest detail naming the field with description, the way
+// the fields a validator refused are detailed. HTTP names the field of a
+// number it cannot decode only when encoding/json reports it, which for a
+// json.Number field it does not, answering without the name there.
+func invalidValue(field, description string) error {
+	return grpcserver.StatusError(types.NewInvalidValue(field, description, nil))
 }
 
 // checkValidDetail is the account CheckValid gives of an invalid Timestamp

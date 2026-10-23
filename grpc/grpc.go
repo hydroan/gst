@@ -4,12 +4,12 @@
 // CreateCall and its kind for the standard actions, ServiceCall for the
 // actions with a payload or result of their own (see call.go) and
 // ServerStreamCall and its kind for the Stream actions (see stream.go); an
-// interceptor of the project or of a copied module (see Interceptor) reads
-// and establishes what a call carries — its caller, the HTTP action it maps
-// to (see context.go) — and answers a failure with the status it maps to
-// (see status.go). The listener itself and its chain of interceptors are
-// the framework's own; the interceptors a project mounts are registered
-// through package interceptor, the counterpart of package middleware.
+// interceptor (see Interceptor) reads and establishes what a call carries —
+// its caller, the HTTP action it maps to (see context.go) — and answers a
+// failure with the status it maps to (see status.go). The listener itself
+// and its chain of interceptors are the framework's own; the interceptors a
+// project mounts are registered through package interceptor, the
+// counterpart of package middleware.
 package grpc
 
 import (
@@ -17,16 +17,16 @@ import (
 	"google.golang.org/grpc"
 )
 
-// Interceptor is an interceptor a project or a copied module mounts through
-// interceptor.Register or interceptor.RegisterAuth: it reads what the call
-// carries, its metadata, its caller (see CallerOf) and the action it maps
-// to (see Route), and returns the context the call goes on with, the
-// caller established on it (see WithCaller), or the error refusing the
-// call: a status error answers as it is, a gst.Error with the code its HTTP
-// status maps to and its client-safe message (see StatusError), any other
-// error as Internal with the server failure message. The one form serves a
-// unary call and a stream alike, an authentication running once, ahead of
-// the first message.
+// Interceptor is an interceptor mounted through interceptor.Register or
+// interceptor.RegisterAuth: it reads what the call carries, its metadata,
+// its caller (see CallerOf) and the action it maps to (see Route), and
+// returns the context the call goes on with, the caller established on it
+// (see WithCaller), or the error refusing the call: a status error answers
+// as it is, a gst.Error with the code its HTTP status maps to and its
+// client-safe message (see StatusError), any other error as Internal with
+// the server failure message. The one form serves a unary call and a
+// stream alike, an authentication running once, ahead of the first
+// message.
 type Interceptor = grpcserver.Interceptor
 
 // MethodStream is what the registration describes the rpc of a Stream
@@ -37,8 +37,7 @@ const MethodStream = grpcserver.MethodStream
 // Method describes one rpc of a registered service the way the generated
 // registration file declares it: its full name, whether its action declares
 // Public(), and the HTTP method and route the same action is served at over
-// HTTP, which Route answers and the interceptors of the modules judge a call
-// by.
+// HTTP, which Route answers and an interceptor judges a call by.
 type Method = grpcserver.Method
 
 // Register queues the service server serves to be registered on the
