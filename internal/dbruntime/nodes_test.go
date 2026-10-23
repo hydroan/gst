@@ -1,11 +1,13 @@
 package dbruntime_test
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/dbruntime/dbnode"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
@@ -57,4 +59,35 @@ func TestParseReplicaEndpoint(t *testing.T) {
 			require.ErrorContains(t, err, endpoint)
 		})
 	}
+}
+
+// TestAttachResolverReturnsAHandleSafeToReuse pins that the handle
+// AttachResolver returns, the one database.DB answers with once replicas are
+// configured, can be chained on again and again the way a handle without
+// replicas can: a condition one chain set is no condition of the next.
+func TestAttachResolverReturnsAHandleSafeToReuse(t *testing.T) {
+	type reusedRecord struct {
+		ID   uint
+		Name string
+	}
+	dir := t.TempDir()
+	primary, err := gorm.Open(sqlite.Open(filepath.Join(dir, "primary.db")), &gorm.Config{})
+	require.NoError(t, err)
+	handle, err := dbruntime.AttachResolver(primary, []gorm.Dialector{sqlite.Open(filepath.Join(dir, "replica.db"))})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		for _, node := range dbruntime.NodesFor(handle) {
+			require.NoError(t, node.DB.Close())
+		}
+		dbruntime.AttachNodes(handle, nil)
+	})
+	require.NoError(t, handle.AutoMigrate(&reusedRecord{}))
+	require.NoError(t, handle.Create(&[]reusedRecord{{Name: "first"}, {Name: "second"}}).Error)
+
+	var named []reusedRecord
+	require.NoError(t, handle.Where("name = ?", "first").Find(&named).Error)
+	require.Len(t, named, 1)
+	var all []reusedRecord
+	require.NoError(t, handle.Find(&all).Error)
+	require.Len(t, all, 2, "the condition of the chain before is no condition of this one")
 }

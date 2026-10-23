@@ -79,7 +79,8 @@ func ParseReplicaEndpoint(endpoint string) (host string, port uint, err error) {
 //   - the handle's nodes are registered under the pinned handle pointer, so
 //     database.Stats and the pool metrics see every pool;
 //   - the returned handle carries the Write pin that keeps reads on the
-//     primary unless a model or call site says otherwise.
+//     primary unless a model or call site says otherwise, and is a session,
+//     safe to chain on again and again.
 func AttachResolver(db *gorm.DB, replicas []gorm.Dialector) (*gorm.DB, error) {
 	resolver := dbresolver.Register(dbresolver.Config{Replicas: replicas})
 	resolver.SetMaxIdleConns(config.App.Database.MaxIdleConns).
@@ -98,7 +99,12 @@ func AttachResolver(db *gorm.DB, replicas []gorm.Dialector) (*gorm.DB, error) {
 		return nil, err
 	}
 
-	pinned := db.Clauses(dbresolver.Write)
+	// A chain method answers with an instance gorm reuses for the next
+	// call, its statement keeping every condition the calls before it set,
+	// so the pin is taken as a new session, which copies the statement on
+	// every call: the application chains on the handle it keeps again and
+	// again.
+	pinned := db.Clauses(dbresolver.Write).Session(&gorm.Session{})
 	nodes := make([]Node, 0, len(replicas)+1)
 	if err := resolver.Call(func(pool gorm.ConnPool) error {
 		sqlDB, ok := pool.(*sql.DB)
