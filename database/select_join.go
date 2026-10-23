@@ -397,8 +397,8 @@ var uniqueKeyCache sync.Map
 
 // uniqueKeysOf resolves the column sets a row of the model is unique on: its
 // primary key, then every unique index, whether declared by the Indexes
-// method or a struct tag. The indexes come from the collector the Upsert
-// result sync reads, so the two never disagree about what is unique.
+// method or a struct tag. The indexes come from collectUniqueIndexes, the
+// collector Upsert reads too, so the two never disagree about what is unique.
 func uniqueKeysOf(ins *gorm.DB, model any) ([][]string, error) {
 	typ := reflect.TypeOf(model)
 	if cached, ok := uniqueKeyCache.Load(typ); ok {
@@ -412,7 +412,7 @@ func uniqueKeysOf(ins *gorm.DB, model any) ([][]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	indexes, err := collectSaveResultSyncUniqueIndexes(stmt.Schema, plans)
+	indexes, err := collectUniqueIndexes(stmt.Schema, plans)
 	if err != nil {
 		return nil, err
 	}
@@ -421,11 +421,7 @@ func uniqueKeysOf(ins *gorm.DB, model any) ([][]string, error) {
 		keys = append(keys, append([]string(nil), stmt.Schema.PrimaryFieldDBNames...))
 	}
 	for _, index := range indexes {
-		key := make([]string, 0, len(index.Fields))
-		for _, field := range index.Fields {
-			key = append(key, field.Field.DBName)
-		}
-		keys = append(keys, key)
+		keys = append(keys, indexColumns(index))
 	}
 	uniqueKeyCache.Store(typ, keys)
 	return keys, nil

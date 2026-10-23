@@ -39,9 +39,13 @@ var (
 	colNotExists = types.NewColumn[*TestUser, string]("notexists")
 )
 
-// colUniqueItemName is the name column of the unique-key fixture; the upsert
-// tests narrow a merge to it, and a reference must name the model it writes.
-var colUniqueItemName = types.NewColumn[*TestUniqueItem, string]("name")
+// colUniqueItemName and colUniqueItemCode are the name and the unique key
+// columns of the unique-key fixture; the upsert tests narrow a merge to them,
+// and a reference must name the model it writes.
+var (
+	colUniqueItemName = types.NewColumn[*TestUniqueItem, string]("name")
+	colUniqueItemCode = types.NewColumn[*TestUniqueItem, string]("unique_code")
+)
 
 var (
 	errTestHookGroupCreateAfter = errors.New("test hook group create after failed")
@@ -444,6 +448,43 @@ type TestTenantSoftDeleteItem struct {
 }
 
 func (*TestTenantSoftDeleteItem) TableName() string { return "test_tenant_soft_delete_items" }
+
+// TestTenantAutoItem is tenant-scoped and keyed by an auto-increment primary
+// key, so a new row carries no id until the database assigns one. Its table
+// is migrated on demand and dropped by the test.
+type TestTenantAutoItem struct {
+	Name string `json:"name" gorm:"size:191"`
+
+	tenant.Scope
+	modelregistry.AutoBase
+}
+
+func (*TestTenantAutoItem) TableName() string { return "test_tenant_auto_items" }
+
+// TestTenantUniqueItem is tenant-scoped and carries a unique key on Code, so
+// an Upsert reads every key of a batch across tenants before it writes. Its
+// table is migrated on demand and dropped by the test.
+type TestTenantUniqueItem struct {
+	Code string `json:"code" gorm:"size:191;uniqueIndex"`
+
+	tenant.Scope
+	modelregistry.Base
+}
+
+func (*TestTenantUniqueItem) TableName() string { return "test_tenant_unique_items" }
+
+// TestTenantCompositeItem is tenant-scoped and keyed by Kind and the id
+// together, so a key of a batch is a pair of values. Its table is migrated on
+// demand and dropped by the test.
+type TestTenantCompositeItem struct {
+	Kind string `json:"kind" gorm:"primaryKey;size:191"`
+	Name string `json:"name" gorm:"size:191"`
+
+	tenant.Scope
+	modelregistry.Base
+}
+
+func (*TestTenantCompositeItem) TableName() string { return "test_tenant_composite_items" }
 
 // TestPermissionItem carries a column under each of gorm's write
 // permissions, so the Upsert tests can assert that a merge writes what gorm's

@@ -82,7 +82,7 @@ func newSyncCollectDB(t *testing.T) *gorm.DB {
 }
 
 // syncCollectInputs resolves the parsed schema and the index plans of m the
-// way saveResultSyncUniqueIndexes does before collecting.
+// way uniqueIndexes does before collecting.
 func syncCollectInputs(t *testing.T, gormDB *gorm.DB, m any) (*gormschema.Schema, []modelschema.IndexPlan) {
 	t.Helper()
 	stmt := &gorm.Statement{DB: gormDB}
@@ -92,21 +92,12 @@ func syncCollectInputs(t *testing.T, gormDB *gorm.DB, m any) (*gormschema.Schema
 	return stmt.Schema, plans
 }
 
-// indexColumns flattens an index to its column names in index order.
-func indexColumns(index *gormschema.Index) []string {
-	columns := make([]string, 0, len(index.Fields))
-	for _, field := range index.Fields {
-		columns = append(columns, field.Field.DBName)
-	}
-	return columns
-}
-
-func TestCollectSaveResultSyncUniqueIndexes(t *testing.T) {
+func TestCollectUniqueIndexes(t *testing.T) {
 	gormDB := newSyncCollectDB(t)
 
 	t.Run("merges tag and Indexes sources", func(t *testing.T) {
 		schema, plans := syncCollectInputs(t, gormDB, &syncCollectMergedItem{})
-		indexes, err := collectSaveResultSyncUniqueIndexes(schema, plans)
+		indexes, err := collectUniqueIndexes(schema, plans)
 		require.NoError(t, err)
 		require.Len(t, indexes, 2, "one index per declaration source")
 
@@ -120,7 +111,7 @@ func TestCollectSaveResultSyncUniqueIndexes(t *testing.T) {
 
 	t.Run("keeps the declared composite column order", func(t *testing.T) {
 		schema, plans := syncCollectInputs(t, gormDB, &syncCollectCompositeItem{})
-		indexes, err := collectSaveResultSyncUniqueIndexes(schema, plans)
+		indexes, err := collectUniqueIndexes(schema, plans)
 		require.NoError(t, err)
 		require.Len(t, indexes, 1)
 		require.Equal(t, []string{"kind", "code"}, indexColumns(indexes[0]))
@@ -128,28 +119,28 @@ func TestCollectSaveResultSyncUniqueIndexes(t *testing.T) {
 
 	t.Run("ignores non-unique plans", func(t *testing.T) {
 		schema, plans := syncCollectInputs(t, gormDB, &syncCollectPlainIndexItem{})
-		indexes, err := collectSaveResultSyncUniqueIndexes(schema, plans)
+		indexes, err := collectUniqueIndexes(schema, plans)
 		require.NoError(t, err)
 		require.Empty(t, indexes)
 	})
 
 	t.Run("drops declarations covering only primary key columns", func(t *testing.T) {
 		schema, plans := syncCollectInputs(t, gormDB, &syncCollectPrimaryOnlyItem{})
-		indexes, err := collectSaveResultSyncUniqueIndexes(schema, plans)
+		indexes, err := collectUniqueIndexes(schema, plans)
 		require.NoError(t, err)
 		require.Empty(t, indexes)
 	})
 
 	t.Run("fails on a plan column the schema does not carry", func(t *testing.T) {
 		schema, _ := syncCollectInputs(t, gormDB, &syncCollectMergedItem{})
-		_, err := collectSaveResultSyncUniqueIndexes(schema, []modelschema.IndexPlan{
+		_, err := collectUniqueIndexes(schema, []modelschema.IndexPlan{
 			{Name: "uniq_sync_collect_merged_items_ghost", Table: "sync_collect_merged_items", Columns: []string{"ghost"}, Unique: true},
 		})
 		require.ErrorContains(t, err, `column "ghost"`)
 	})
 }
 
-func TestSaveResultSyncUniqueIndexesCached(t *testing.T) {
+func TestUniqueIndexesCached(t *testing.T) {
 	gormDB := newSyncCollectDB(t)
 	db := &database[*syncCollectMergedItem]{
 		ins: gormDB,
@@ -157,11 +148,11 @@ func TestSaveResultSyncUniqueIndexesCached(t *testing.T) {
 		ctx: context.Background(),
 	}
 
-	first, err := db.saveResultSyncUniqueIndexes()
+	first, err := db.uniqueIndexes()
 	require.NoError(t, err)
 	require.Len(t, first, 2)
 
-	second, err := db.saveResultSyncUniqueIndexes()
+	second, err := db.uniqueIndexes()
 	require.NoError(t, err)
 	require.Len(t, second, 2)
 	require.Same(t, first[0], second[0], "later calls must answer from the per-type cache")

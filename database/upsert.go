@@ -190,9 +190,6 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 		// Insert candidates start at version 1; a conflict never reads the
 		// object's version (the pre-set clause bumps the row's own instead).
 		initializeVersions(objs)
-		if err = db.refuseForeignTenantRows(tableName, objs); err != nil {
-			return err
-		}
 		if len(db.selectColumns) > 0 {
 			db.ins = db.ins.Select(db.selectColumns)
 		}
@@ -202,6 +199,11 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 		clock := func() time.Time { return now }
 		for i := 0; i < len(objs); i += batchSize {
 			end := min(i+batchSize, len(objs))
+			// The keys are read batch by batch, so the read before a write is
+			// bounded by the batch size the way the write is.
+			if err = db.refuseForeignTenantRows(tableName, objs[i:end]); err != nil {
+				return err
+			}
 			tx := db.ins.Session(&gorm.Session{NowFunc: clock}).Omit(clause.Associations)
 			if versioned {
 				var onConflict clause.OnConflict
@@ -223,18 +225,23 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 	})
 }
 
-// refuseForeignTenantRows refuses an Upsert whose rows would merge into
-// another tenant's. The conflict update of an INSERT is no UPDATE statement,
-// so the tenant predicate every update carries (see tenant.ID) never reaches
-// it: a row keyed like another tenant's would be rewritten and the call
-// answered with success, where an Update of the same key answers that the
-// row is not there. The rows the batch could merge into are read first,
-// across tenants: by primary key, and by every complete unique index value,
-// since MySQL merges on any unique key. One held by another tenant fails the
-// batch with ErrDuplicatedKey, the answer a key already taken gets; a
-// soft-deleted row counts, since a merge would resurrect it. A model whose
+// refuseForeignTenantRows refuses a batch of an Upsert whose rows would merge
+// into another tenant's. The conflict update of an INSERT is no UPDATE
+// statement, so the tenant predicate every update carries (see tenant.ID)
+// never reaches it: a row keyed like another tenant's would be rewritten and
+// the call answered with success, where an Update of the same key answers
+// that the row is not there. The rows the batch could merge into are read
+// first, across tenants: by primary key, and by every complete unique index
+// value, since MySQL merges on any unique key. One held by another tenant
+// fails the call with ErrDuplicatedKey, the answer a key already taken gets;
+// a soft-deleted row counts, since a merge would resurrect it. A model whose
 // rows belong to no tenant, and a caller acting across every tenant, pay no
 // read.
+//
+// Each key is one IN over the values the batch holds for it (see keyIn), the
+// primary key included. A primary key zero in every column is left out of its
+// IN: the database numbers that row when it inserts it, so no row holds the
+// key yet.
 //
 // The read locks nothing and answers for the rows that exist when it runs. A
 // row another tenant puts under one of the keys between the read and the
@@ -258,35 +265,53 @@ func (db *database[M]) refuseForeignTenantRows(tableName string, objs []M) error
 		return nil
 	}
 
-	primaryKeys := make([]string, 0, 1)
-	for _, c := range columns {
-		if c.PrimaryKey {
-			primaryKeys = append(primaryKeys, c.DBName)
-		}
+	stmt := &gorm.Statement{DB: db.ins}
+	if err = stmt.Parse(db.m); err != nil {
+		return err
 	}
-	query := db.ins.Session(&gorm.Session{NewDB: true}).Table(tableName)
-	if len(primaryKeys) == 1 {
-		ids := make([]string, 0, len(objs))
-		for _, obj := range objs {
-			ids = append(ids, obj.GetID())
-		}
-		query = query.Where(db.quoteTableColumn(tableName, primaryKeys[0])+" IN ?", ids)
-	}
-	indexes, err := db.saveResultSyncUniqueIndexes()
+	indexes, err := db.uniqueIndexes()
 	if err != nil {
 		return err
 	}
-	for _, index := range indexes {
-		for _, obj := range objs {
-			values, ok := saveResultSyncUniqueValues(db.ctx, index, obj)
-			if !ok {
-				continue
-			}
-			condition, args := db.saveResultSyncUniqueCondition(tableName, index, values)
-			query = query.Or(condition, args...)
+	conditions := make([]clause.Expression, 0, 1+len(indexes))
+	// The primary keys are read here rather than through gorm's
+	// GetIdentityFieldValuesMap, which leaves out the same all-zero keys but
+	// takes two keys for one when their values joined by "_" read the same,
+	// ("a_b", "c") and ("a", "b_c"), and so leaves a key out of the read.
+	primaryKeys := make([][]any, 0, len(objs))
+	for _, obj := range objs {
+		value := reflect.ValueOf(obj)
+		key := make([]any, len(stmt.Schema.PrimaryFields))
+		numbered := false
+		for i, field := range stmt.Schema.PrimaryFields {
+			var zero bool
+			key[i], zero = field.ValueOf(db.ctx, value)
+			numbered = numbered || !zero
+		}
+		if numbered {
+			primaryKeys = append(primaryKeys, key)
 		}
 	}
+	if len(primaryKeys) > 0 {
+		conditions = append(conditions, keyIn(tableName, stmt.Schema.PrimaryFieldDBNames, primaryKeys))
+	}
+	for _, index := range indexes {
+		indexKeys := make([][]any, 0, len(objs))
+		for _, obj := range objs {
+			if values, ok := uniqueIndexValues(db.ctx, index, obj); ok {
+				indexKeys = append(indexKeys, values)
+			}
+		}
+		if len(indexKeys) > 0 {
+			conditions = append(conditions, keyIn(tableName, indexColumns(index), indexKeys))
+		}
+	}
+	if len(conditions) == 0 {
+		return nil
+	}
+
 	held := make([]string, 0)
+	query := db.ins.Session(&gorm.Session{NewDB: true}).Table(tableName).Where(clause.Or(conditions...))
 	if err := query.Pluck(column, &held).Error; err != nil {
 		// First-hand exit of a stack-less GORM/driver error; see the
 		// error-stack contract in doc.go.
@@ -317,15 +342,18 @@ func (db *database[M]) refuseForeignTenantRows(tableName string, objs []M) error
 // The reconciliation is intentionally narrow:
 //   - models without non-primary unique indexes pay no extra query cost, and
 //     the indexes themselves are resolved once per model type;
-//   - only complete unique-index values are used for lookup;
+//   - only complete unique-index values are used for lookup, each index read
+//     with one IN over the distinct values of the batch (see keyIn);
 //   - only GORM-persistent fields are copied back, preserving gorm:"-" values
-//     that hooks or controllers may have placed on the object.
+//     that hooks or controllers may have placed on the object; they are read
+//     whole, whatever columns WithSelect narrowed the write to, so the object
+//     holds the row's values.
 func (db *database[M]) syncSaveResultsByUniqueIndexes(tableName string, objs []M) error {
 	if len(objs) == 0 {
 		return nil
 	}
 
-	indexes, err := db.saveResultSyncUniqueIndexes()
+	indexes, err := db.uniqueIndexes()
 	if err != nil {
 		return err
 	}
@@ -341,46 +369,42 @@ func (db *database[M]) syncSaveResultsByUniqueIndexes(tableName string, objs []M
 	syncedIDs := make(map[string]struct{}, len(objs))
 	for _, index := range indexes {
 		candidatesByKey := make(map[string][]M)
-		query := db.ins.Session(&gorm.Session{})
-		if len(tableName) > 0 {
-			query = query.Table(tableName)
-		}
-		query = query.Limit(-1)
-
-		var hasCondition bool
+		keys := make([][]any, 0, len(objs))
 		for _, obj := range objs {
 			if _, synced := syncedIDs[obj.GetID()]; synced {
 				continue
 			}
-			values, ok := saveResultSyncUniqueValues(db.ctx, index, obj)
+			values, ok := uniqueIndexValues(db.ctx, index, obj)
 			if !ok {
 				continue
 			}
 
-			condition, args := db.saveResultSyncUniqueCondition(tableName, index, values)
-			if !hasCondition {
-				query = query.Where(condition, args...)
-				hasCondition = true
-			} else {
-				query = query.Or(condition, args...)
+			key := uniqueIndexKey(values)
+			if _, seen := candidatesByKey[key]; !seen {
+				keys = append(keys, values)
 			}
-			key := saveResultSyncUniqueKey(values)
 			candidatesByKey[key] = append(candidatesByKey[key], obj)
 		}
-		if !hasCondition {
+		if len(keys) == 0 {
 			continue
 		}
 
-		persisted := make([]M, 0, len(candidatesByKey))
-		if err := query.Find(&persisted).Error; err != nil {
+		// A session of its own, so the row is read whole: the chain's
+		// selection names the columns WithSelect narrowed the write to.
+		query := db.ins.Session(&gorm.Session{NewDB: true})
+		if len(tableName) > 0 {
+			query = query.Table(tableName)
+		}
+		persisted := make([]M, 0, len(keys))
+		if err := query.Where(keyIn(tableName, indexColumns(index), keys)).Find(&persisted).Error; err != nil {
 			return errors.WithStack(err)
 		}
 		for _, current := range persisted {
-			values, ok := saveResultSyncUniqueValues(db.ctx, index, current)
+			values, ok := uniqueIndexValues(db.ctx, index, current)
 			if !ok {
 				continue
 			}
-			for _, candidate := range candidatesByKey[saveResultSyncUniqueKey(values)] {
+			for _, candidate := range candidatesByKey[uniqueIndexKey(values)] {
 				originalID := candidate.GetID()
 				if err := copySaveResultPersistentFields(db.ctx, stmt.Schema, candidate, current); err != nil {
 					return err
@@ -394,24 +418,26 @@ func (db *database[M]) syncSaveResultsByUniqueIndexes(tableName string, objs []M
 	return nil
 }
 
-// saveResultSyncUniqueIndexCache memoizes the resolved unique indexes per
-// model type. The key space is bounded: keys are the canonical reflect.Type
-// singletons of the model structs compiled into the binary, the same shape as
-// the per-type caches gorm and internal/modelschema keep, so the map never
-// grows past the number of model types. Caching is sound because both index
-// sources are static: struct tags are fixed at compile time and Indexes is a
-// pure declaration invoked on zero-value instances.
-var saveResultSyncUniqueIndexCache sync.Map
+// uniqueIndexCache memoizes the resolved unique indexes per model type. The
+// key space is bounded: keys are the canonical reflect.Type singletons of the
+// model structs compiled into the binary, the same shape as the per-type
+// caches gorm and internal/modelschema keep, so the map never grows past the
+// number of model types. Caching is sound because both index sources are
+// static: struct tags are fixed at compile time and Indexes is a pure
+// declaration invoked on zero-value instances.
+var uniqueIndexCache sync.Map
 
-// saveResultSyncUniqueIndexes returns the unique indexes the save-result sync
-// must look through for db's model, resolving them on the first call per
-// model type and answering every later call from the cache. gorm re-parses
-// tag indexes on every ParseIndexes call, so without the cache each Upsert
-// batch would pay the full tag parse plus the index plan validation again.
-// Resolution errors are returned without being cached.
-func (db *database[M]) saveResultSyncUniqueIndexes() ([]*gormschema.Index, error) {
+// uniqueIndexes returns the unique indexes of db's model a key of an Upsert
+// batch collides on besides the primary key (see uniqueIndexUsable): the read
+// before a tenant model's write and the sync after it look through them. They
+// are resolved on the first call per model type, and every later call is
+// answered from the cache: gorm re-parses tag indexes on every ParseIndexes
+// call, so without the cache each Upsert batch would pay the full tag parse
+// plus the index plan validation again. Resolution errors are returned
+// without being cached.
+func (db *database[M]) uniqueIndexes() ([]*gormschema.Index, error) {
 	typ := reflect.TypeOf(db.m)
-	if cached, ok := saveResultSyncUniqueIndexCache.Load(typ); ok {
+	if cached, ok := uniqueIndexCache.Load(typ); ok {
 		return cached.([]*gormschema.Index), nil //nolint:errcheck
 	}
 
@@ -423,25 +449,25 @@ func (db *database[M]) saveResultSyncUniqueIndexes() ([]*gormschema.Index, error
 	if err != nil {
 		return nil, err
 	}
-	indexes, err := collectSaveResultSyncUniqueIndexes(stmt.Schema, plans)
+	indexes, err := collectUniqueIndexes(stmt.Schema, plans)
 	if err != nil {
 		return nil, err
 	}
-	saveResultSyncUniqueIndexCache.Store(typ, indexes)
+	uniqueIndexCache.Store(typ, indexes)
 	return indexes, nil
 }
 
-// collectSaveResultSyncUniqueIndexes gathers the model's unique indexes from
-// every declaration source: composite tag indexes parsed by gorm, single
-// column unique tags, and the plans resolved from the model's Indexes method,
-// which never appear in the gorm schema. The sources merge without
-// deduplication: plan declarations duplicating a parsed tag index are already
-// rejected at resolution (checkTagIndexConflicts), and the sync marks
-// reconciled objects, so a redundant index entry could never re-sync one.
-func collectSaveResultSyncUniqueIndexes(schema *gormschema.Schema, plans []modelschema.IndexPlan) ([]*gormschema.Index, error) {
+// collectUniqueIndexes gathers the model's unique indexes from every
+// declaration source: composite tag indexes parsed by gorm, single column
+// unique tags, and the plans resolved from the model's Indexes method, which
+// never appear in the gorm schema. The sources merge without deduplication:
+// plan declarations duplicating a parsed tag index are already rejected at
+// resolution (checkTagIndexConflicts), and the sync marks reconciled objects,
+// so a redundant index entry could never re-sync one.
+func collectUniqueIndexes(schema *gormschema.Schema, plans []modelschema.IndexPlan) ([]*gormschema.Index, error) {
 	indexes := make([]*gormschema.Index, 0)
 	for _, index := range schema.ParseIndexes() {
-		if !saveResultSyncUniqueIndexUsable(index) {
+		if !uniqueIndexUsable(index) {
 			continue
 		}
 		indexes = append(indexes, index)
@@ -480,7 +506,7 @@ func collectSaveResultSyncUniqueIndexes(schema *gormschema.Schema, plans []model
 		// key columns: a primary-key merge keeps the caller's id and needs no
 		// reconciliation.
 		index := &gormschema.Index{Name: plan.Name, Class: "UNIQUE", Fields: fields}
-		if !saveResultSyncUniqueIndexUsable(index) {
+		if !uniqueIndexUsable(index) {
 			continue
 		}
 		indexes = append(indexes, index)
@@ -488,7 +514,11 @@ func collectSaveResultSyncUniqueIndexes(schema *gormschema.Schema, plans []model
 	return indexes, nil
 }
 
-func saveResultSyncUniqueIndexUsable(index *gormschema.Index) bool {
+// uniqueIndexUsable reports whether an index is a unique key rows can be
+// looked up by: unique, unconditional, over plain columns, and holding a
+// column besides the primary key, which every reader takes as a key of its
+// own.
+func uniqueIndexUsable(index *gormschema.Index) bool {
 	if index == nil || index.Class != "UNIQUE" || index.Where != "" || len(index.Fields) == 0 {
 		return false
 	}
@@ -505,12 +535,15 @@ func saveResultSyncUniqueIndexUsable(index *gormschema.Index) bool {
 	return hasNonPrimaryField
 }
 
-func saveResultSyncUniqueValues(ctx context.Context, index *gormschema.Index, obj any) ([]any, bool) {
+// uniqueIndexValues returns the values obj holds for the columns of index, in
+// order, or false when one of them is nil: a unique index tells NULL apart
+// from every value, so a key holding one collides with no row.
+func uniqueIndexValues(ctx context.Context, index *gormschema.Index, obj any) ([]any, bool) {
 	modelValue := reflect.ValueOf(obj)
 	values := make([]any, 0, len(index.Fields))
 	for _, field := range index.Fields {
 		value, _ := field.Field.ValueOf(ctx, modelValue)
-		if saveResultSyncValueIsNil(value) {
+		if isNilValue(value) {
 			return nil, false
 		}
 		values = append(values, value)
@@ -518,7 +551,7 @@ func saveResultSyncUniqueValues(ctx context.Context, index *gormschema.Index, ob
 	return values, true
 }
 
-func saveResultSyncValueIsNil(value any) bool {
+func isNilValue(value any) bool {
 	if value == nil {
 		return true
 	}
@@ -531,17 +564,28 @@ func saveResultSyncValueIsNil(value any) bool {
 	}
 }
 
-func (db *database[M]) saveResultSyncUniqueCondition(tableName string, index *gormschema.Index, values []any) (string, []any) {
-	parts := make([]string, 0, len(index.Fields))
-	args := make([]any, 0, len(index.Fields))
-	for i, field := range index.Fields {
-		parts = append(parts, db.quoteTableColumn(tableName, field.Field.DBName)+" = ?")
-		args = append(args, values[i])
+// indexColumns lists the columns of an index in the order it declares them.
+func indexColumns(index *gormschema.Index) []string {
+	columns := make([]string, 0, len(index.Fields))
+	for _, field := range index.Fields {
+		columns = append(columns, field.Field.DBName)
 	}
-	return strings.Join(parts, " AND "), args
+	return columns
 }
 
-func saveResultSyncUniqueKey(values []any) string {
+// keyIn matches the rows of tableName holding one of keys, each key the
+// values of columns in order. It is the lookup by a set of keys gorm runs for
+// a preload, schema.ToQueryValues into clause.IN: column IN (...) on a key of
+// one column, (a, b) IN ((...), ...) on a key of several. A key adds a
+// parameter per column and no nesting, where a condition per key chained
+// with OR nests a level per key, which SQLite refuses from about a thousand
+// keys on.
+func keyIn(tableName string, columns []string, keys [][]any) clause.IN {
+	column, values := gormschema.ToQueryValues(tableName, columns, keys)
+	return clause.IN{Column: column, Values: values}
+}
+
+func uniqueIndexKey(values []any) string {
 	parts := make([]string, 0, len(values))
 	for _, value := range values {
 		parts = append(parts, fmt.Sprintf("%T:%#v", value, value))

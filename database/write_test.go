@@ -1074,6 +1074,123 @@ func TestDatabaseUpsert(t *testing.T) {
 		require.NoError(t, database.Database[*TestMixedUniqueItem](context.Background()).Upsert(byRef))
 		require.Equal(t, rowB.ID, byRef.ID, "a collision on the Indexes-declared key must reconcile the id")
 	})
+
+	// A merge narrowed by WithSelect writes the named columns only, and the
+	// sync after it reads the whole row back: the collided object holds the
+	// row's values, the columns the merge left alone included.
+	t.Run("a narrowed merge on a non-primary unique key reads the whole row back", func(t *testing.T) {
+		first := &TestUniqueItem{UniqueCode: "upsert-narrow", Name: "first"}
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Upsert(first))
+
+		second := &TestUniqueItem{UniqueCode: "upsert-narrow", Name: "second"}
+		err := database.Database[*TestUniqueItem](context.Background()).WithSelect(colUniqueItemCode).Upsert(second)
+		if config.App.Database.Type != config.DBMySQL {
+			require.ErrorIs(t, err, database.ErrDuplicatedKey)
+			return
+		}
+
+		require.NoError(t, err)
+		require.Equal(t, first.ID, second.ID, "the collided object must expose the persisted row id")
+		require.Equal(t, "first", second.Name, "a column outside WithSelect holds the row's value")
+	})
+
+	// The keys of a batch are read before the write on a tenant model: the
+	// database assigns the id of a new row, so the object carries none to
+	// read by, and none may reach the comparison with the integer column.
+	t.Run("a new row of a tenant model keyed by an auto-increment id", func(t *testing.T) {
+		require.NoError(t, database.DB().AutoMigrate(&TestTenantAutoItem{}))
+		defer func() { _ = database.DB().Migrator().DropTable(&TestTenantAutoItem{}) }()
+		ctxA := tenant.In(context.Background(), "tenant-a")
+
+		item := &TestTenantAutoItem{Name: "auto"}
+		require.NoError(t, database.Database[*TestTenantAutoItem](ctxA).Upsert(item))
+
+		items := make([]*TestTenantAutoItem, 0)
+		require.NoError(t, database.Database[*TestTenantAutoItem](ctxA).List(&items))
+		require.Len(t, items, 1)
+		require.Equal(t, "auto", items[0].Name)
+	})
+
+	// A batch is looked up by its unique keys after the write, one IN per key
+	// rather than one condition per row: SQLite refuses an expression nested
+	// about a thousand deep, which a condition per row of a full batch builds.
+	t.Run("a full batch on a model with a unique key", func(t *testing.T) {
+		items := make([]*TestUniqueItem, 0, 1000)
+		for i := range 1000 {
+			items = append(items, &TestUniqueItem{UniqueCode: fmt.Sprintf("bulk-%04d", i), Name: "bulk"})
+		}
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Upsert(items...))
+
+		count := new(int)
+		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).WithQuery(&TestUniqueItem{Name: "bulk"}).Count(count))
+		require.Equal(t, 1000, *count)
+	})
+
+	// The same bound on the read of a tenant model's keys before the write,
+	// which still finds a key another tenant holds anywhere in the batch.
+	t.Run("a full batch on a tenant model with a unique key", func(t *testing.T) {
+		require.NoError(t, database.DB().AutoMigrate(&TestTenantUniqueItem{}))
+		defer func() { _ = database.DB().Migrator().DropTable(&TestTenantUniqueItem{}) }()
+		ctxA := tenant.In(context.Background(), "tenant-a")
+		ctxB := tenant.In(context.Background(), "tenant-b")
+
+		require.NoError(t, database.Database[*TestTenantUniqueItem](ctxB).Create(&TestTenantUniqueItem{Code: "bulk-0999"}))
+
+		items := make([]*TestTenantUniqueItem, 0, 1000)
+		for i := range 1000 {
+			items = append(items, &TestTenantUniqueItem{Code: fmt.Sprintf("bulk-%04d", i)})
+		}
+		err := database.Database[*TestTenantUniqueItem](ctxA).Upsert(items...)
+		require.ErrorIs(t, err, database.ErrDuplicatedKey)
+		require.ErrorContains(t, err, `tenant "tenant-b"`, "the key is held by another tenant's row")
+
+		require.NoError(t, database.Database[*TestTenantUniqueItem](ctxA).Upsert(items[:999]...))
+		count := new(int)
+		require.NoError(t, database.Database[*TestTenantUniqueItem](ctxA).Count(count))
+		require.Equal(t, 999, *count)
+	})
+
+	// The read before the write runs batch by batch: one over every key of a
+	// call would bind a parameter per row, past the 32766 SQLite takes.
+	t.Run("more rows of a tenant model than SQLite takes parameters", func(t *testing.T) {
+		require.NoError(t, database.DB().AutoMigrate(&TestTenantSoftDeleteItem{}))
+		defer func() {
+			_ = database.DB().Exec("DELETE FROM test_tenant_soft_delete_items").Error
+		}()
+		ctxA := tenant.In(context.Background(), "tenant-a")
+
+		items := make([]*TestTenantSoftDeleteItem, 0, 32767)
+		for range 32767 {
+			items = append(items, &TestTenantSoftDeleteItem{Name: "bulk"})
+		}
+		require.NoError(t, database.Database[*TestTenantSoftDeleteItem](ctxA).Upsert(items...))
+
+		count := new(int)
+		require.NoError(t, database.Database[*TestTenantSoftDeleteItem](ctxA).Count(count))
+		require.Equal(t, 32767, *count)
+	})
+
+	// A key of a model keyed by two columns is the pair: the rows read before
+	// the write are the ones holding a pair of the batch, not every row.
+	t.Run("a tenant model keyed by a pair reads the pairs of the batch", func(t *testing.T) {
+		require.NoError(t, database.DB().AutoMigrate(&TestTenantCompositeItem{}))
+		defer func() { _ = database.DB().Migrator().DropTable(&TestTenantCompositeItem{}) }()
+		ctxA := tenant.In(context.Background(), "tenant-a")
+		ctxB := tenant.In(context.Background(), "tenant-b")
+
+		theirs := &TestTenantCompositeItem{Kind: "k", Name: "theirs"}
+		theirs.ID = "pair-b"
+		require.NoError(t, database.Database[*TestTenantCompositeItem](ctxB).Create(theirs))
+
+		mine := &TestTenantCompositeItem{Kind: "k", Name: "mine"}
+		mine.ID = "pair-a"
+		require.NoError(t, database.Database[*TestTenantCompositeItem](ctxA).Upsert(mine), "another tenant's row under another pair")
+
+		taken := &TestTenantCompositeItem{Kind: "k", Name: "taken"}
+		taken.ID = "pair-b"
+		require.ErrorIs(t, database.Database[*TestTenantCompositeItem](ctxA).Upsert(taken), database.ErrDuplicatedKey,
+			"the pair is held by another tenant's row")
+	})
 }
 
 // TestDatabaseUpdateByIDWritesAJSONStringsColumnAsADocument pins that an
