@@ -44,6 +44,19 @@ type sealedFlowSample struct {
 
 func (sealedFlowSample) TableName() string { return "controller_sealed_flow_samples" }
 
+// replicaFlowSample is flowSample with its reads preferring a replica (see
+// modelregistry.PrefersReplica). Its tables are where useReplica puts them,
+// not on the default database.
+type replicaFlowSample struct {
+	Name string `json:"name"`
+
+	modelregistry.Base
+}
+
+func (replicaFlowSample) TableName() string { return "controller_replica_flow_samples" }
+
+func (replicaFlowSample) PreferReplica() bool { return true }
+
 // sealedAfterHook records the code the hook after an update reads. sealedAfter
 // is its one instance, registered once for the process, so a rerun of the
 // test clears it and reads its own call.

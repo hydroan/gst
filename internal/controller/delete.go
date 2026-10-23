@@ -106,13 +106,14 @@ func (a *action[M, REQ, RSP]) deleteFlow(ctx context.Context, newServiceContext 
 	}
 
 	// The record as it was, for the operation log: read before the delete,
-	// since afterwards there is nothing to read, and only when the log
-	// records deletes, so a disabled audit costs no query.
+	// since afterwards there is nothing to read; only when the log records
+	// deletes, so a disabled audit costs no query; and from the primary the
+	// delete runs on, since a replica may not have caught up on the record.
 	var copied M
 	if audit.Enabled(consts.OP_DELETE) {
 		copied = a.newModel()
 		copied.SetID(m.GetID())
-		if err := database.Database[M](ctx).WithExpand(copied.Expands()).Get(copied, m.GetID()); err != nil {
+		if err := database.Database[M](ctx).WithReplica(false).WithExpand(copied.Expands()).Get(copied, m.GetID()); err != nil {
 			// The read has answered existence: a record that is gone is
 			// the 404 the delete below would answer.
 			if errors.Is(err, database.ErrRecordNotFound) {

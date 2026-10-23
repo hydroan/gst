@@ -126,12 +126,13 @@ func (a *action[M, REQ, RSP]) deleteManyFlow(ctx context.Context, newServiceCont
 		return failService(ctx, log, err)
 	}
 	// The records as they were, for the operation log: read before the
-	// delete, since afterwards there is nothing to read, in one statement
-	// for the batch, and only when the log records batch deletes, so a
-	// disabled audit costs no query.
+	// delete, since afterwards there is nothing to read; in one statement
+	// for the batch; only when the log records batch deletes, so a disabled
+	// audit costs no query; and from the primary the delete runs on, since
+	// a replica may not have caught up on the records.
 	var deleted []M
 	if audit.Enabled(consts.OP_DELETE_MANY) {
-		stored, err := a.recordsByID(database.Database[M](ctx).WithExpand(a.newModel().Expands()), req.itemIDs())
+		stored, err := a.recordsByID(database.Database[M](ctx).WithReplica(false).WithExpand(a.newModel().Expands()), req.itemIDs())
 		if err != nil {
 			log.Errorz("database operation failed", zap.Error(err))
 			gstotel.RecordError(trace.SpanFromContext(ctx), err)

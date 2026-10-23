@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"net/http"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -12,8 +13,10 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
+	gstsqlite "github.com/hydroan/gst/database/sqlite"
 	"github.com/hydroan/gst/internal/auditmanager"
 	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/dbruntime"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/types"
@@ -21,9 +24,11 @@ import (
 	"gorm.io/gorm"
 )
 
-// These tests pin how many statements a flow reads with: a batch reads its
-// records in one statement, and a delete reads the record it deletes only
-// for the operation log, so a disabled audit costs no query.
+// These tests pin how a flow reads: a batch reads its records in one
+// statement, and a delete reads the record it deletes only for the
+// operation log, so a disabled audit costs no query, and from the primary,
+// so a record a replica has not caught up on is deleted and logged all the
+// same.
 
 // captureSelects records the SELECT statements run against table from now
 // until the test ends, through a query callback on the shared handle, and
@@ -63,6 +68,36 @@ func useAudit(t *testing.T, cfg config.Audit) {
 	t.Cleanup(func() { audit = previous })
 }
 
+// useReplica points the database layer at a primary with a replica behind
+// it until the test ends, each a database file of its own: the primary
+// holds the table of replicaFlowSample and, once useAudit runs, the
+// operation log, and the replica the sample table without a row, a replica
+// that has not caught up on anything the test stores.
+func useReplica(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	replica, err := gstsqlite.New(config.Sqlite{Path: filepath.Join(dir, "replica.db")})
+	require.NoError(t, err)
+	require.NoError(t, replica.AutoMigrate(&replicaFlowSample{}))
+	primary, err := gstsqlite.New(config.Sqlite{Path: filepath.Join(dir, "primary.db")})
+	require.NoError(t, err)
+	handle, err := dbruntime.AttachResolver(primary, []gorm.Dialector{replica.Dialector})
+	require.NoError(t, err)
+	require.NoError(t, handle.AutoMigrate(&replicaFlowSample{}))
+	previous := dbruntime.DB
+	dbruntime.DB = handle
+	t.Cleanup(func() {
+		dbruntime.DB = previous
+		for _, node := range dbruntime.NodesFor(handle) {
+			require.NoError(t, node.DB.Close())
+		}
+		dbruntime.AttachNodes(handle, nil)
+		replicaPool, err := replica.DB()
+		require.NoError(t, err)
+		require.NoError(t, replicaPool.Close())
+	})
+}
+
 // createFlowSamples stores n flow samples named after prefix and returns
 // them with their ids.
 func createFlowSamples(ctx context.Context, t *testing.T, prefix string, n int) []*flowSample {
@@ -89,12 +124,13 @@ func uniqueFlowName(prefix string) string {
 	return prefix + " " + strconv.FormatInt(time.Now().UnixNano(), 36)
 }
 
-// operationLogEntries returns the entries of op whose Record mentions text.
-func operationLogEntries(ctx context.Context, t *testing.T, a *action[*flowSample, *flowSample, *flowSample], op consts.OP, text string) []*modellogmgmt.OperationLog {
+// operationLogEntries returns the entries of op on model whose Record
+// mentions text.
+func operationLogEntries(ctx context.Context, t *testing.T, model string, op consts.OP, text string) []*modellogmgmt.OperationLog {
 	t.Helper()
 	var entries []*modellogmgmt.OperationLog
 	require.NoError(t, database.Database[*modellogmgmt.OperationLog](ctx).
-		WithQuery(&modellogmgmt.OperationLog{Model: a.name, OP: op}).List(&entries))
+		WithQuery(&modellogmgmt.OperationLog{Model: model, OP: op}).List(&entries))
 	return slices.DeleteFunc(entries, func(entry *modellogmgmt.OperationLog) bool { return !strings.Contains(entry.Record, text) })
 }
 
@@ -180,9 +216,22 @@ func TestDeleteFlowReadsTheRecordOnlyForTheOperationLog(t *testing.T) {
 		require.NoError(t, a.deleteFlow(ctx, plainServiceContext, record.GetID()))
 
 		require.Len(t, selects(), 1)
-		entries := operationLogEntries(ctx, t, a, consts.OP_DELETE, record.Name)
+		entries := operationLogEntries(ctx, t, a.name, consts.OP_DELETE, record.Name)
 		require.Len(t, entries, 1)
 		require.Equal(t, record.GetID(), entries[0].RecordID)
+	})
+	t.Run("a record preferring replicas is read from the primary", func(t *testing.T) {
+		useReplica(t)
+		useAudit(t, config.Audit{Enabled: true})
+		ra := newAction[*replicaFlowSample, *replicaFlowSample, *replicaFlowSample]("replica-flow-samples", consts.Delete, consts.DeleteBefore, consts.DeleteAfter)
+		record := &replicaFlowSample{Name: uniqueFlowName("delete from the primary")}
+		require.NoError(t, database.Database[*replicaFlowSample](ctx).Create(record))
+
+		require.NoError(t, ra.deleteFlow(ctx, plainServiceContext, record.GetID()), "a record the replica has not caught up on is the primary's to delete")
+
+		require.ErrorIs(t, database.Database[*replicaFlowSample](ctx).WithReplica(false).Get(&replicaFlowSample{}, record.GetID()), database.ErrRecordNotFound)
+		entries := operationLogEntries(ctx, t, ra.name, consts.OP_DELETE, record.Name)
+		require.Len(t, entries, 1, "the log carries the record as the primary holds it")
 	})
 }
 
@@ -210,11 +259,28 @@ func TestDeleteManyFlowRecordsTheDeletedRecordsWhenAudited(t *testing.T) {
 		require.NoError(t, a.deleteManyFlow(ctx, plainServiceContext, &req))
 
 		require.Len(t, selects(), 1, "the batch reads the records it deletes in one statement")
-		entries := operationLogEntries(ctx, t, a, consts.OP_DELETE_MANY, name)
+		entries := operationLogEntries(ctx, t, a.name, consts.OP_DELETE_MANY, name)
 		require.Len(t, entries, 1)
 		for _, record := range stored {
 			require.Contains(t, entries[0].Record, record.GetID())
 			require.Contains(t, entries[0].Record, record.Name, "the log carries the records as they were, not only their ids")
+		}
+	})
+	t.Run("records preferring replicas are read from the primary", func(t *testing.T) {
+		useReplica(t)
+		useAudit(t, config.Audit{Enabled: true})
+		ra := newAction[*replicaFlowSample, *replicaFlowSample, *replicaFlowSample]("replica-flow-samples", consts.DeleteMany, consts.DeleteManyBefore, consts.DeleteManyAfter)
+		name := uniqueFlowName("delete many from the primary")
+		stored := []*replicaFlowSample{{Name: name + " 0"}, {Name: name + " 1"}}
+		require.NoError(t, database.Database[*replicaFlowSample](ctx).Create(stored...))
+		req := batch[*replicaFlowSample]{IDs: []string{stored[0].GetID(), stored[1].GetID()}}
+
+		require.NoError(t, ra.deleteManyFlow(ctx, plainServiceContext, &req))
+
+		entries := operationLogEntries(ctx, t, ra.name, consts.OP_DELETE_MANY, name)
+		require.Len(t, entries, 1, "the log carries the records as the primary holds them")
+		for _, record := range stored {
+			require.Contains(t, entries[0].Record, record.Name)
 		}
 	})
 }
