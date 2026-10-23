@@ -14,16 +14,15 @@ import (
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
-	"github.com/hydroan/gst/util"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
 
 // GetHandler returns a Gin handler that retrieves one resource.
 //
-// When M, REQ, and RSP are the same type, the handler reads the configured route
-// parameter as the resource id, runs the get flow (see getFlow), and returns
-// the model.
+// When M, REQ, and RSP are the same type, the handler reads the configured
+// route parameter as the resource id, runs the get flow (see getFlow), and
+// returns the model.
 //
 // When REQ or RSP differs from M, the handler is the phase service's (see
 // serviceHandler): its Get method runs on a zero-value REQ, the GET request
@@ -42,21 +41,13 @@ func GetHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 			return
 		}
 
-		reqMeta := requestctx.FromGin(c)
 		log := logger.Controller.WithContext(c.Request.Context(), consts.Get)
-
-		var param string
-		if len(cfg) > 0 {
-			param = reqMeta.Param(util.Deref(cfg[0]).ParamName)
-		}
-		if len(param) == 0 {
-			log.Errorz(missingRouteParamMsg)
-			response.Error(c, badRequest(missingRouteParamMsg))
-			gstotel.RecordError(span, errors.New(missingRouteParamMsg))
+		id, ok := routeID(c, cfg, log, span)
+		if !ok {
 			return
 		}
 
-		m, err := a.getFlow(requestContext(c), ginServiceContext(c), param)
+		m, err := a.getFlow(requestContext(c), ginServiceContext(c), id)
 		if err != nil {
 			response.Error(c, err)
 			return
@@ -103,9 +94,8 @@ func (a *action[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext ser
 	log := logger.Controller.WithContext(ctx, consts.Get)
 	svc := a.service()
 
-	// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
+	// The GetBefore hook reads the id, so it is set first.
 	m := a.newModel()
-	// `GetBefore` hook need id.
 	if !setID(m, id) {
 		// An id the model rejects cannot match any row; answer 404 before
 		// the raw value reaches SQL, where implicit string-to-integer
@@ -122,7 +112,8 @@ func (a *action[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext ser
 		return zero, failService(ctx, log, err)
 	}
 	// 2.Get resource from database. The database layer answers existence:
-	// database.ErrRecordNotFound renders 404 instead of the server's own failure.
+	// database.ErrRecordNotFound renders 404 instead of the server's own
+	// failure.
 	if err := database.Database[M](ctx).WithExpand(expands).Get(m, m.GetID()); err != nil {
 		return zero, failDatabase(ctx, log, err)
 	}

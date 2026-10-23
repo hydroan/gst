@@ -13,12 +13,13 @@ import (
 	"go.uber.org/zap"
 )
 
-// TestDatabaseError pins the canonical mapping of database errors: a service
-// error keeps its own status and message, the database sentinels answer
-// their fixed status and message with the error behind them as the cause,
-// the constraints a client's data breaks among them, and everything else is
-// answered as it is, the server's own failure carrying no service error.
-func TestDatabaseError(t *testing.T) {
+// TestDatabaseErrorMapsEachDatabaseErrorToItsAnswer pins the canonical
+// mapping of database errors: a service error keeps its own status and
+// message, the database sentinels answer their fixed status and message with
+// the error behind them as the cause, the constraints a client's data breaks
+// among them, and everything else is answered as it is, the server's own
+// failure carrying no service error.
+func TestDatabaseErrorMapsEachDatabaseErrorToItsAnswer(t *testing.T) {
 	serviceErr := types.NewError(http.StatusForbidden, "operation refused")
 
 	tests := []struct {
@@ -36,6 +37,7 @@ func TestDatabaseError(t *testing.T) {
 		{"foreign_key_answers_409", errors.Wrap(database.ErrForeignKeyViolated, "create sample"), http.StatusConflict, "The request refers to a record that does not exist or is still in use."},
 		{"check_constraint_answers_400", errors.Wrap(database.ErrCheckConstraintViolated, "create sample"), http.StatusBadRequest, "The request contains invalid parameters."},
 		{"value_too_long_answers_400", errors.Wrap(database.ErrValueTooLong, "create sample"), http.StatusBadRequest, "The request contains invalid parameters."},
+		{"not_null_answers_400", errors.Wrap(database.ErrNotNullViolated, "create sample"), http.StatusBadRequest, "The request contains invalid parameters."},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

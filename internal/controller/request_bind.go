@@ -138,9 +138,10 @@ var strictTimeOfDay = jsonv2.WithUnmarshalers(jsonv2.UnmarshalFromFunc(func(dec 
 // functions make of the value a request message decoded into, so a model or
 // payload meets the same tags on both transports. The error is the
 // validator's own, naming Go fields, with the type it checked (see
-// refusedRequestError), for each transport to wrap in its client-safe message. A
-// nil binding.Validator is gin's documented way to turn validation off;
-// gin's own binding paths nil-check it, so this does the same.
+// refusedRequestError), for each transport to wrap in its client-safe
+// message. A nil binding.Validator is gin's documented way to turn
+// validation off; gin's own binding paths nil-check it, so this does the
+// same.
 func validateRequest(target any) error {
 	if binding.Validator == nil {
 		return nil
@@ -148,9 +149,9 @@ func validateRequest(target any) error {
 	return withRequestType(binding.Validator.ValidateStruct(target), target)
 }
 
-// refusedRequestError is the error of a request the validator refused, with the
-// type the validator checked: the type names the fields refused by the JSON
-// path the client sent them under (see jsonFieldPath), which the
+// refusedRequestError is the error of a request the validator refused, with
+// the type the validator checked: the type names the fields refused by the
+// JSON path the client sent them under (see jsonFieldPath), which the
 // validator's namespaces, one of tag names and one of Go names, do not tell
 // on their own, an embedded struct being a level of both and none of the
 // JSON. The validator's own error stays reachable through Unwrap.
@@ -159,7 +160,10 @@ type refusedRequestError struct {
 	typ reflect.Type
 }
 
+// Error returns the validator's own message.
 func (r *refusedRequestError) Error() string { return r.err.Error() }
+
+// Unwrap returns the validator's own error.
 func (r *refusedRequestError) Unwrap() error { return r.err }
 
 // withRequestType returns err, the outcome of validating target, as the
@@ -498,19 +502,6 @@ func normalizeBatch[M types.Model](req *batch[M]) {
 	normalizeValue(reflect.ValueOf(req))
 }
 
-// clearAudit clears the creator and updater of records, what a client sent
-// in them: who created or updated a record is the server's to write. The
-// write names the caller the context carries as both (see database.Create),
-// and with no caller, an anonymous request's, the records keep what a hook
-// set, never what the client sent. The write flows call it first, before
-// any hook runs, so a hook may still set them on purpose.
-func clearAudit[M types.Model](records ...M) {
-	for _, record := range records {
-		record.SetCreatedBy("")
-		record.SetUpdatedBy("")
-	}
-}
-
 // dateType is datatypes.Date, the calendar date normalizeValue reads as the
 // UTC day it holds (see modelschema.UTCDay), so that the value answered is
 // the value a date column stores.
@@ -559,11 +550,10 @@ func nilableKind(k reflect.Kind) bool {
 // every settable datatypes.Date to the UTC day it holds (see dateType), and
 // every time a model stores in a date column to the UTC day it falls on (see
 // dayFields). Only exported struct fields are visited, matching what
-// encoding/json can bind.
-// JSON-decoded values are acyclic, so the walk needs no cycle tracking.
-// Interface values are descended into only when they carry a pointer: other
-// interface payloads are not addressable, so their inner values cannot be
-// changed in place and are left untouched.
+// encoding/json can bind. JSON-decoded values are acyclic, so the walk needs
+// no cycle tracking. Interface values are descended into only when they
+// carry a pointer: other interface payloads are not addressable, so their
+// inner values cannot be changed in place and are left untouched.
 func normalizeValue(v reflect.Value) {
 	if v.Type() == dateType {
 		if v.CanSet() {

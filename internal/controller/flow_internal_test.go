@@ -65,15 +65,14 @@ func init() {
 }
 
 // plainServiceContext builds the service contexts of a flow run outside any
-// HTTP request, the way a transport other than HTTP will.
+// HTTP request, the way a call does (see call.serviceContext).
 func plainServiceContext(ctx context.Context, phase consts.Phase) *types.ServiceContext {
 	return types.NewServiceContext(nil, ctx, phase)
 }
 
-// TestCreateFlowRunsOnRequestMetadataAlone pins what the flows are extracted
-// for: the create flow needs no HTTP request, only a context carrying the
-// request metadata, and takes the audit identity of the record from that
-// metadata.
+// TestCreateFlowRunsOnRequestMetadataAlone pins that a flow needs no HTTP
+// request: the create flow runs on a context carrying the request metadata
+// alone, and takes the audit identity of the record from that metadata.
 func TestCreateFlowRunsOnRequestMetadataAlone(t *testing.T) {
 	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.Create, consts.CreateBefore, consts.CreateAfter)
 	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "flow-user", UserID: "u-flow"}))

@@ -21,9 +21,9 @@ import (
 // listFlow) and returns the items with a total count, zero under cursor
 // pagination, which counts nothing.
 //
-// The automatic listing branch supports model schema fields plus framework query
-// parameters for pagination, cursor pagination, expansion, depth, ordering, and
-// field operator filters.
+// The automatic listing branch supports model schema fields plus framework
+// query parameters for pagination, cursor pagination, expansion, depth,
+// ordering, and field operator filters.
 //
 // When REQ or RSP differs from M, the handler is the phase service's (see
 // serviceHandler): its List method runs on a zero-value REQ, the GET request
@@ -93,7 +93,6 @@ func (a *action[M, REQ, RSP]) listFlow(ctx context.Context, newServiceContext se
 	// parsers only read the values.
 	query := requestctx.QueryValues(ctx)
 
-	// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
 	m := a.newModel()
 
 	if err := decodeListQuery(m, query); err != nil {

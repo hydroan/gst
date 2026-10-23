@@ -5,9 +5,14 @@ import (
 	"context"
 	"io"
 
+	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/requestctx"
+	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
+	gstotel "github.com/hydroan/gst/otel"
+	"github.com/hydroan/gst/util"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // This file holds what a handler reads off its request before the flow
@@ -25,6 +30,25 @@ func routeFromConfig[M types.Model](cfg ...*types.ControllerConfig[M]) string {
 		return cfg[0].Route
 	}
 	return ""
+}
+
+// routeID returns the id the request c serves names its record by: the
+// route parameter the config names, the one place an id comes from over
+// HTTP, the body's own ignored. A request naming none, the parameter empty
+// or the config naming no parameter, is refused with 400 and
+// missingRouteParamMsg, logged and recorded on span, and reported false.
+func routeID[M types.Model](c *gin.Context, cfg []*types.ControllerConfig[M], log types.Logger, span trace.Span) (string, bool) {
+	var id string
+	if len(cfg) > 0 {
+		id = requestctx.FromGin(c).Param(util.Deref(cfg[0]).ParamName)
+	}
+	if len(id) == 0 {
+		log.Errorz(missingRouteParamMsg)
+		response.Error(c, badRequest(missingRouteParamMsg))
+		gstotel.RecordError(span, errors.New(missingRouteParamMsg))
+		return "", false
+	}
+	return id, true
 }
 
 // setID copies the id the request names a record by — the route parameter

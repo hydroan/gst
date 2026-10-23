@@ -16,6 +16,8 @@ type probe struct {
 	draining atomic.Bool
 }
 
+// Probe answers the liveness and readiness probes of the process (see
+// Healthz and Readyz) and is drained once its shutdown begins (see Drain).
 var Probe = new(probe)
 
 // Healthz reports that the process is alive.

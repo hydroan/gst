@@ -20,7 +20,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// PatchManyHandler returns a Gin handler that partially updates multiple resources.
+// PatchManyHandler returns a Gin handler that partially updates multiple
+// resources.
 //
 // When M, REQ, and RSP are the same type, the handler binds the JSON body into
 // batch[M] along with the set of fields each item carried, and runs the
@@ -172,12 +173,11 @@ func PatchManyCall[M types.Model](route string) func(ctx context.Context, params
 // record, clears the updater it was stored with, runs the batch patch hooks
 // around the write, which names the caller the request carries as the
 // updater, records the operation, and returns the batch with the patched
-// records, as the hooks
-// left them, in place of the items. The batch patches all of its items or
-// none, as a batch update does: a batch naming one record twice (see
-// repeatedID) and an item without an id fail the whole batch with 400
-// before any record is read, and an item whose record does not exist fails
-// it with 404 before anything is written.
+// records, as the hooks left them, in place of the items. The batch patches
+// all of its items or none, as a batch update does: a batch naming one
+// record twice (see repeatedID) and an item without an id fail the whole
+// batch with 400 before any record is read, and an item whose record does
+// not exist fails it with 404 before anything is written.
 //
 // Each write is the whole record loaded, not only the fields its item
 // carried, so concurrent patches of one record resolve as last writer wins
@@ -210,7 +210,7 @@ func (a *action[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceConte
 	if err != nil {
 		return zero, failDatabase(ctx, log, err)
 	}
-	shouldUpdates := make([]M, 0, len(req.Items))
+	patched := make([]M, 0, len(req.Items))
 	for i, m := range req.Items {
 		current, ok := stored[m.GetID()]
 		if !ok {
@@ -224,12 +224,12 @@ func (a *action[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceConte
 		applyPatch(log, a.typ, reflect.ValueOf(current).Elem(), reflect.ValueOf(m).Elem(), fields)
 		// The updater is the write's to name, as in patchFlow.
 		current.SetUpdatedBy("")
-		shouldUpdates = append(shouldUpdates, current)
+		patched = append(patched, current)
 	}
 
 	// 1.Perform business logic processing before batch patch resource.
 	if err := a.traceServiceHook(ctx, consts.PatchManyBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
-		return svc.PatchManyBefore(sc, shouldUpdates...)
+		return svc.PatchManyBefore(sc, patched...)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
 	}
@@ -238,12 +238,12 @@ func (a *action[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceConte
 	// unique-key collisions from the patched values render 409. Either way
 	// the transaction rolls the whole batch back. A batch without items
 	// writes nothing.
-	if err := database.Database[M](ctx).Update(shouldUpdates...); err != nil {
+	if err := database.Database[M](ctx).Update(patched...); err != nil {
 		return zero, failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after batch patch resource.
 	if err := a.traceServiceHook(ctx, consts.PatchManyAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
-		return svc.PatchManyAfter(sc, shouldUpdates...)
+		return svc.PatchManyAfter(sc, patched...)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
 	}
@@ -251,10 +251,9 @@ func (a *action[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceConte
 	// The response carries the patched records, whose fields the hooks
 	// may have set, not the items of the request.
 	rsp := *req
-	rsp.Items = shouldUpdates
+	rsp.Items = patched
 
 	// 4.record operation log to database.
-	// NOTE: We should record the `req` instead of `oldVal`, the req is `newVal`.
 	// Record and Request both carry the request payload, so one marshal
 	// feeds both columns; Response carries the patched records instead.
 	if err := audit.RecordOperation(ctx, a.newModel(), consts.OP_PATCH_MANY,

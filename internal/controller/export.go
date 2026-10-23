@@ -34,9 +34,10 @@ const (
 )
 
 // resolveExportFormat decides the export format from the query parameter,
-// honoring an explicit valid value and otherwise sniffing the produced bytes so
-// the response never relies solely on the client-supplied format. Bytes detected
-// as an xlsx workbook resolve to xlsx; anything else resolves to csv.
+// honoring an explicit valid value and otherwise sniffing the produced bytes
+// so the response never relies solely on the client-supplied format. Bytes
+// detected as an xlsx workbook resolve to xlsx; anything else resolves to
+// csv.
 func resolveExportFormat(queryFormat string, data []byte) string {
 	switch queryFormat {
 	case exportFormatXLSX, exportFormatCSV:
@@ -62,9 +63,9 @@ func exportAttachment(format string) (filename, contentType string) {
 // ExportHandler returns a Gin handler that exports resources.
 //
 // The handler decodes query parameters into M, applies service filters, runs
-// list hooks, queries the configured database handler with export-oriented limit
-// and query options, delegates byte generation to the phase service's Export
-// method, and writes the result as an attachment.
+// list hooks, queries the configured database handler with export-oriented
+// limit and query options, delegates byte generation to the phase service's
+// Export method, and writes the result as an attachment.
 func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.Export, consts.ListBefore, consts.ListAfter)
 	return func(c *gin.Context) {
@@ -76,7 +77,6 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 
 		log := logger.Controller.WithContext(c.Request.Context(), consts.Export)
 
-		// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
 		m := a.newModel()
 		svc := a.service()
 
@@ -94,6 +94,7 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			// The request's memoized query parse, shared by every parser below
 			// and by each metadata construction of this request; the parsers
 			// only read the values.
+			//
 			// QUERY_FORMAT is this controller's own parameter, resolved after
 			// the export bytes exist; urlquery.Decode drops it for every
 			// caller, including virtual-resource services parsing on their own.

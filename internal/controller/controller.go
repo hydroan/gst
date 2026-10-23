@@ -24,14 +24,14 @@ var (
 	// audit is the global audit manager, which records the operation log.
 	audit *auditmanager.AuditManager
 
+	// initMu guards initialized, which records that Init built audit.
 	initMu      sync.Mutex
 	initialized bool
 )
 
-// Init initializes controller-owned audit logging state.
-//
-// Init is idempotent after a successful initialization. Failed initialization is
-// not cached, so a later call can retry after configuration has been fixed.
+// Init builds the audit manager the operation log is recorded through, from
+// config.App.Audit, once: a later call leaves it as it is. Building it cannot
+// fail; the error is always nil.
 func Init() (err error) {
 	initMu.Lock()
 	defer initMu.Unlock()

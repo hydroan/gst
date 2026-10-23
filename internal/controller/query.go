@@ -97,9 +97,9 @@ func checkCursorOrderConflict(cursor types.Cursor, orders []types.Order) error {
 }
 
 // maxExpandDepth is the largest _depth a request may ask for; a value
-// outside 1 to maxExpandDepth falls back to 1 (see parseExpandQuery). Every depth level becomes one
-// more recursive preload query, so the cap keeps a single request from
-// fanning out unbounded database work.
+// outside 1 to maxExpandDepth falls back to 1 (see parseExpandQuery). Every
+// depth level becomes one more recursive preload query, so the cap keeps a
+// single request from fanning out unbounded database work.
 const maxExpandDepth = 10
 
 // parseExpandQuery resolves the _expand and _depth parameters of the parsed
@@ -148,7 +148,8 @@ func parseExpandQuery(query url.Values, m types.Model) []string {
 		for i := range depth {
 			t[i] = e
 		}
-		// If expand="Children" and depth=3, the depth expanded is "Children.Children.Children".
+		// If expand="Children" and depth=3, the depth expanded is
+		// "Children.Children.Children".
 		expands = append(expands, strings.Join(t, "."))
 	}
 	return expands

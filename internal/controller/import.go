@@ -27,7 +27,8 @@ const tooLargeFileMsg = "too large file"
 // response for the same reason bind failures render stable messages.
 const missingUploadFileMsg = "upload file is required"
 
-// ImportHandler returns a Gin handler that imports resources from an uploaded file.
+// ImportHandler returns a Gin handler that imports resources from an
+// uploaded file.
 //
 // The handler reads the multipart form file named "file", rejects files larger
 // than maxImportSize, passes the file content to the phase service's Import
@@ -46,7 +47,8 @@ func ImportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		}
 
 		log := logger.Controller.WithContext(c.Request.Context(), consts.Import)
-		// NOTE: the form field name is "file", it must be agreed on with the frontend.
+		// NOTE: the form field name is "file", it must be agreed on with the
+		// frontend.
 		file, err := c.FormFile("file")
 		if err != nil {
 			log.Errorz("read upload file failed", zap.Error(err))

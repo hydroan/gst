@@ -212,10 +212,9 @@ func TestUpdateHandlerRequiresBody(t *testing.T) {
 }
 
 // TestDeleteManyHandlerBindFailureRendersClientSafeMessage pins the model-path
-// batch-delete bind failure to the ordinary invalid-parameter envelope. The
-// rendered error must be the bind error itself: this handler once passed a
-// separate, still-nil error variable into the envelope, turning every bind
-// failure into a nil-dereference panic instead of a 400.
+// batch-delete bind failure to the ordinary invalid-parameter envelope: the
+// envelope renders the bind error the handler checked, so a body that fails
+// to bind answers 400.
 func TestDeleteManyHandlerBindFailureRendersClientSafeMessage(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -234,8 +233,7 @@ func TestDeleteManyHandlerBindFailureRendersClientSafeMessage(t *testing.T) {
 
 // TestUpdateManyHandlerBindFailureAnswersTheFieldRefused pins the answer of
 // a model-path bind failure: 400 with the message naming the field refused,
-// aligning the batch and patch handlers with the create/update
-// single-resource ones.
+// as the create and update handlers of a single resource answer it.
 func TestUpdateManyHandlerBindFailureAnswersTheFieldRefused(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -537,12 +535,12 @@ func TestDecodeJSONRequestReadsEveryTimeOfDayStrictly(t *testing.T) {
 	}
 }
 
-// TestClientSafeBindError pins the translation table of body decoding
-// failures: one stable client-safe message per decoder error kind, a field
-// inside a batch item named as the contract spells it, items[1].rank, with
-// the original error preserved as the cause so logs keep the full decoder
-// text.
-func TestClientSafeBindError(t *testing.T) {
+// TestClientSafeBindErrorAnswersEachDecoderErrorStably pins the translation
+// table of body decoding failures: one stable client-safe message per
+// decoder error kind, a field inside a batch item named as the contract
+// spells it, items[1].rank, with the original error preserved as the cause
+// so logs keep the full decoder text.
+func TestClientSafeBindErrorAnswersEachDecoderErrorStably(t *testing.T) {
 	// batchProbe carries an integer narrower than a JSON number inside its
 	// items, for a value a field of an item cannot hold.
 	type batchProbe struct {

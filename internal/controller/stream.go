@@ -136,9 +136,10 @@ func BidiStreamCall[M types.Model, REQ types.Request, RSP types.Response](route 
 	}
 }
 
-// firstMessageMsg is the message a stream the client ended before its
-// first message is refused with (see FirstMessage).
+// The messages a Stream call is refused with.
 const (
+	// firstMessageMsg refuses a stream the client ended before its first
+	// message (see FirstMessage).
 	firstMessageMsg = "the stream ended before its first message, which carries the route parameters"
 	// unimplementedMsg answers a Stream call nothing serves; see unimplemented.
 	unimplementedMsg = "the Stream action is served by no Stream method of its kind"

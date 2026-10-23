@@ -9,7 +9,6 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/consts"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
-	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
@@ -42,18 +41,9 @@ func DeleteHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			return
 		}
 
-		reqMeta := requestctx.FromGin(c)
 		log := logger.Controller.WithContext(c.Request.Context(), consts.Delete)
-
-		// The resource id comes from the configured route parameter only.
-		var id string
-		if len(cfg) > 0 {
-			id = reqMeta.Param(util.Deref(cfg[0]).ParamName)
-		}
-		if len(id) == 0 {
-			log.Errorz(missingRouteParamMsg)
-			response.Error(c, badRequest(missingRouteParamMsg))
-			gstotel.RecordError(span, errors.New(missingRouteParamMsg))
+		id, ok := routeID(c, cfg, log, span)
+		if !ok {
 			return
 		}
 
@@ -100,7 +90,6 @@ func (a *action[M, REQ, RSP]) deleteFlow(ctx context.Context, newServiceContext 
 	log := logger.Controller.WithContext(ctx, consts.Delete)
 	svc := a.service()
 
-	// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
 	m := a.newModel()
 	if !setID(m, id) {
 		// An id the model rejects cannot match any row; answer 404 instead

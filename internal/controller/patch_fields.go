@@ -62,6 +62,13 @@ func (t *patchFieldTable) lookup(key string) (*patchField, bool) {
 	return nil, false
 }
 
+// add records field in the table.
+func (t *patchFieldTable) add(field *patchField) {
+	t.fields = append(t.fields, field)
+	t.byKey[field.key] = field
+	t.byName[field.name] = field
+}
+
 // patchFieldSet is the set of fields a patch applies, keyed by the Go path
 // of each (see patchField).
 type patchFieldSet map[string]struct{}
@@ -194,7 +201,8 @@ func patchFieldsOf(typ reflect.Type) *patchFieldTable {
 					managed[jsonKey(field)] = struct{}{}
 					continue
 				}
-				// A tag naming the field is a tag, spelt like the Go name or not.
+				// A tag naming the field is a tag, spelt like the Go name or
+				// not.
 				tagged := name != ""
 				if !tagged {
 					name = field.Name
@@ -246,13 +254,6 @@ func patchFieldsOf(typ reflect.Type) *patchFieldTable {
 	return table
 }
 
-// add records field in the table.
-func (t *patchFieldTable) add(field *patchField) {
-	t.fields = append(t.fields, field)
-	t.byKey[field.key] = field
-	t.byName[field.name] = field
-}
-
 // jsonKey returns the key field encodes to in JSON, the name its json tag
 // gives it or its own name, and "" for a field encoding to none, unexported
 // or left out by its tag.
@@ -297,7 +298,7 @@ func applyPatch(log types.Logger, typ reflect.Type, oldVal reflect.Value, newVal
 			// so the field it carries is the zero value.
 			value = reflect.Zero(field.typ)
 		}
-		// output log must before set value.
+		// The copy is logged before it is made.
 		log.Infof("[PATCH %s] field: %q: %v --> %v", typ.Name(), field.name, patchValue(target), patchValue(value))
 		target.Set(value)
 	}
@@ -401,15 +402,15 @@ func patchFieldSetFromJSONFields(typ reflect.Type, fields map[string]json.RawMes
 // as the message names them, the JSON keys of the model: what a Patch rpc
 // applies of the values it carries. A path naming a field the framework
 // manages, the primary key, the audit columns or another column an update
-// leaves alone, is passed over, the way
-// the HTTP handler passes over the key, and the way a mask naming an
-// output-only field is read (AIP-161, AIP-203). Every other path must name
-// a field the patch applies, as a whole: a path into a field, address.city,
-// is refused and told the field to name instead, and so is a path naming a
-// field the model does not have, a key the HTTP handler passes over. The
-// mask must leave at least one field to apply, a Patch applying nothing
-// being a mistake to report rather than a record to answer unchanged,
-// where the HTTP handler writes the record back as stored.
+// leaves alone, is passed over, the way the HTTP handler passes over the
+// key, and the way a mask naming an output-only field is read (AIP-161,
+// AIP-203). Every other path must name a field the patch applies, as a
+// whole: a path into a field, address.city, is refused and told the field
+// to name instead, and so is a path naming a field the model does not have,
+// a key the HTTP handler passes over. The mask must leave at least one field
+// to apply, a Patch applying nothing being a mistake to report rather than a
+// record to answer unchanged, where the HTTP handler writes the record back
+// as stored.
 func maskFieldSet(typ reflect.Type, paths []string) (patchFieldSet, error) {
 	table := patchFieldsOf(typ)
 	fields := make(patchFieldSet, len(paths))

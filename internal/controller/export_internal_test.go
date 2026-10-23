@@ -16,6 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// The download names and MIME types of the two export formats, as the
+// attachments carry them.
 const (
 	xlsxTestName = "exported.xlsx"
 	xlsxTestMIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -23,9 +25,13 @@ const (
 	csvTestMIME  = "text/csv; charset=utf-8"
 )
 
-func TestResolveExportFormat(t *testing.T) {
+// TestResolveExportFormatTakesTheQueryOrSniffsTheBytes pins how an export's
+// format is chosen: a valid _format wins over the bytes, and an empty or
+// unknown one leaves them to tell, an xlsx workbook resolving to xlsx and
+// anything else to csv.
+func TestResolveExportFormatTakesTheQueryOrSniffsTheBytes(t *testing.T) {
 	xlsxBytes := minimalXLSX(t)
-	csvBytes := append([]byte{0xEF, 0xBB, 0xBF}, []byte("账号,昵称\na1,昵称1\n")...)
+	csvBytes := append([]byte{0xEF, 0xBB, 0xBF}, []byte("名称,编号\n样例1,r1\n")...)
 
 	tests := []struct {
 		name        string
@@ -49,7 +55,8 @@ func TestResolveExportFormat(t *testing.T) {
 	}
 }
 
-// minimalXLSX builds a tiny valid xlsx workbook so filetype detection reports xlsx.
+// minimalXLSX builds a tiny valid xlsx workbook so filetype detection
+// reports xlsx.
 func minimalXLSX(t *testing.T) []byte {
 	t.Helper()
 	buf := &bytes.Buffer{}
@@ -68,7 +75,10 @@ func minimalXLSX(t *testing.T) []byte {
 	return buf.Bytes()
 }
 
-func TestExportAttachment(t *testing.T) {
+// TestExportAttachmentNamesTheFileOfTheFormat pins the download name and
+// MIME type each export format answers with, xlsx's for an empty or unknown
+// format.
+func TestExportAttachmentNamesTheFileOfTheFormat(t *testing.T) {
 	tests := []struct {
 		name         string
 		format       string
@@ -119,6 +129,9 @@ func (s *exportVirtualSampleService) Export(_ *types.ServiceContext, ms ...*expo
 	return []byte("name\nsample\n"), nil
 }
 
+// TestExportHandlerVirtualModelSkipsListing pins that a virtual model, which
+// has no table behind it, is exported by its service alone: the handler
+// lists nothing, and the exporter receives no rows.
 func TestExportHandlerVirtualModelSkipsListing(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -175,6 +188,9 @@ func (s *exportFormatSampleService) Filter(_ *types.ServiceContext, m *exportFor
 	return m, opts, errors.New("stop before the database stage")
 }
 
+// TestExportHandlerKeepsFormatParamFromModelBind pins that _format, the
+// export controller's own parameter, never reaches the bind of the model,
+// which refuses a key the model does not declare.
 func TestExportHandlerKeepsFormatParamFromModelBind(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

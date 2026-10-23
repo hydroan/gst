@@ -18,13 +18,13 @@ import (
 // TODO: decide whether a batch delete may accept an empty id instead of
 // refusing the request, switched on by a member of this body beside ids.
 type batch[M types.Model] struct {
-	// IDs is the id list that should be batch delete.
+	// IDs are the ids of the records a batch delete deletes.
 	IDs []string `json:"ids,omitempty"`
-	// Items is the resource list that should be batch create/update/partial
-	// update. Each item is validated against its binding tags the way the
-	// body of a single-resource request is: the validator only descends into
-	// a slice told to dive. A batch patch validates each item on the fields
-	// it names instead, see validatePatchFields.
+	// Items are the records a batch create, update or patch writes. Each item
+	// is validated against its binding tags the way the body of a
+	// single-resource request is: the validator only descends into a slice
+	// told to dive. A batch patch validates each item on the fields it names
+	// instead, see validatePatchFields.
 	Items []M `json:"items,omitempty" binding:"dive"`
 }
 
@@ -35,25 +35,6 @@ func (req *batch[M]) itemIDs() []string {
 		ids = append(ids, m.GetID())
 	}
 	return ids
-}
-
-// recordsByID reads the live records of M the ids name in one statement
-// through db, the chain prepared the way the caller reads (the primary, the
-// expands), and returns them by id; an id naming no live record is absent.
-// No ids read nothing.
-func (a *action[M, REQ, RSP]) recordsByID(db types.Database[M], ids []string) (map[string]M, error) {
-	byID := make(map[string]M, len(ids))
-	if len(ids) == 0 {
-		return byID, nil
-	}
-	var records []M
-	if err := db.WithQuery(a.newModel(), types.QueryOptions{Filters: []types.Filter{a.idColumn.In(ids...)}}).List(&records); err != nil {
-		return nil, err
-	}
-	for _, record := range records {
-		byID[record.GetID()] = record
-	}
-	return byID, nil
 }
 
 // repeatedID returns the error of a batch update or patch whose items name
@@ -85,4 +66,23 @@ func (req *batch[M]) repeatedID() error {
 // transports.
 func itemWithoutID(i int) *types.Error {
 	return badRequest(fmt.Sprintf("items[%d] names no id", i))
+}
+
+// recordsByID reads the live records of M the ids name in one statement
+// through db, the chain prepared the way the caller reads (the primary, the
+// expands), and returns them by id; an id naming no live record is absent.
+// No ids read nothing.
+func (a *action[M, REQ, RSP]) recordsByID(db types.Database[M], ids []string) (map[string]M, error) {
+	byID := make(map[string]M, len(ids))
+	if len(ids) == 0 {
+		return byID, nil
+	}
+	var records []M
+	if err := db.WithQuery(a.newModel(), types.QueryOptions{Filters: []types.Filter{a.idColumn.In(ids...)}}).List(&records); err != nil {
+		return nil, err
+	}
+	for _, record := range records {
+		byID[record.GetID()] = record
+	}
+	return byID, nil
 }

@@ -60,12 +60,6 @@ type action[M types.Model, REQ types.Request, RSP types.Response] struct {
 	itemParam string
 }
 
-// phaseSpan carries the precomputed span name and operation label of one phase.
-type phaseSpan struct {
-	name      string // canonical gst span name
-	operation string // phase method name recorded in span attributes
-}
-
 // newAction builds the action of the primary phase on route, the one the
 // handler or call is registered under, whose served path keys the service
 // registry lookup together with the phase (see serviceregistry.Key); an
@@ -122,6 +116,15 @@ func newAction[M types.Model, REQ types.Request, RSP types.Response](route strin
 // parameter carrying the record's id.
 var itemPhases = map[consts.Phase]bool{consts.Get: true, consts.Update: true, consts.Patch: true, consts.Delete: true}
 
+// phaseSpan carries the precomputed span name and operation label of one phase.
+type phaseSpan struct {
+	name      string // canonical gst span name
+	operation string // phase method name recorded in span attributes
+}
+
+// newPhaseSpan returns the span of phase for component, "controller" or
+// "service", on the model named modelName: its canonical gst span name and
+// the phase's method name as its operation.
 func newPhaseSpan(component, modelName string, phase consts.Phase) phaseSpan {
 	return phaseSpan{
 		name:      gstotel.FrameworkSpanName(component, modelName, phase.Name()),

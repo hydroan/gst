@@ -12,7 +12,6 @@ import (
 	"github.com/hydroan/gst/internal/consts"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
@@ -37,8 +36,6 @@ func PatchHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		return a.serviceHandler()
 	}
 	return func(c *gin.Context) {
-		var id string
-
 		// The span context lives on in the request context the span start
 		// rebinds, which requestContext reads for the flow.
 		_, span, ok := a.beginRequest(c)
@@ -47,7 +44,6 @@ func PatchHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			return
 		}
 
-		reqMeta := requestctx.FromGin(c)
 		log := logger.Controller.WithContext(c.Request.Context(), consts.Patch)
 
 		req := a.newModel()
@@ -64,10 +60,6 @@ func PatchHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			response.Error(c, invalidArgument(err))
 			gstotel.RecordError(span, err)
 			return
-		}
-		// The resource id comes from the configured route parameter only.
-		if len(cfg) > 0 {
-			id = reqMeta.Param(util.Deref(cfg[0]).ParamName)
 		}
 		if err = decodeJSONRequest(c, &req); err != nil {
 			// A single-resource patch without a body patches nothing; refuse it
@@ -86,7 +78,7 @@ func PatchHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		// way a call is, and before the existence query, so that a defective
 		// request costs no database work. See modelschema.Version.
 		if versionField, versioned := modelschema.VersionFieldName(req); versioned {
-			if _, ok := fields[versionField]; !ok {
+			if _, carried := fields[versionField]; !carried {
 				log.Errorz("versioned model patched without its version", zap.String("field", versionField))
 				response.Error(c, databaseError(database.ErrVersionRequired))
 				gstotel.RecordError(span, database.ErrVersionRequired)
@@ -101,10 +93,8 @@ func PatchHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			gstotel.RecordError(span, err)
 			return
 		}
-		if len(id) == 0 {
-			log.Errorz(missingRouteParamMsg)
-			response.Error(c, badRequest(missingRouteParamMsg))
-			gstotel.RecordError(span, errors.New(missingRouteParamMsg))
+		id, ok := routeID(c, cfg, log, span)
+		if !ok {
 			return
 		}
 
@@ -168,9 +158,9 @@ func PatchCall[M types.Model](route string) func(ctx context.Context, params map
 // copies the fields of req present in the request (fields) into it, clears
 // the updater it was stored with, runs the patch hooks around the write,
 // which names the caller the request carries as the updater, records the
-// operation, and returns the patched record. id must
-// not be empty (see setID); an id the model rejects, and one naming no
-// record, both answer 404 (see notFound).
+// operation, and returns the patched record. id must not be empty (see
+// setID); an id the model rejects, and one naming no record, both answer 404
+// (see notFound).
 //
 // The write is the whole record loaded, not only the fields the request
 // carried. Concurrent patches of one record therefore resolve as last writer
@@ -184,7 +174,6 @@ func (a *action[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceContext s
 	svc := a.service()
 
 	data := make([]M, 0)
-	// 'm' is a fresh model instance, such as: &model.User{ID: myid, Name: myname}.
 	m := a.newModel()
 	if !setID(m, id) {
 		// An id the model rejects cannot match any row; answer 404 without
@@ -193,10 +182,10 @@ func (a *action[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceContext s
 		return zero, notFound(nil)
 	}
 
-	// Make sure the record already exists. The read is pinned to
-	// the primary because what it reads is written straight back: the
-	// patch merges onto this row, so a replica still catching up would
-	// have the fields the request does not touch written back stale.
+	// Make sure the record already exists. The read is pinned to the
+	// primary because what it reads is written straight back: the patch
+	// merges onto this row, so a replica still catching up would have the
+	// fields the request does not touch written back stale.
 	if err := database.Database[M](ctx).WithReplica(false).WithLimit(1).WithQuery(m).List(&data); err != nil {
 		return zero, failDatabase(ctx, log, err)
 	}
@@ -234,7 +223,6 @@ func (a *action[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceContext s
 	}
 
 	// 4.record operation log to database.
-	// NOTE: We should record the `req` instead of `oldVal`, the req is `newVal`.
 	// Record and Request both carry the request payload, so one marshal
 	// feeds both columns; Response carries the resulting row instead. The
 	// entry names the patched record by its own id: the body need not carry

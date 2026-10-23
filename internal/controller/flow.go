@@ -24,8 +24,8 @@ import (
 
 // serviceContextFunc builds the service context of one hook or service call
 // from the context of that call and its phase. Only the transport knows what
-// else the service context should carry -- the HTTP handler's gin context,
-// nothing at all for a transport without one -- so the transport supplies it.
+// else the service context should carry — the HTTP handler's gin context,
+// nothing at all for a transport without one — so the transport supplies it.
 type serviceContextFunc func(ctx context.Context, phase consts.Phase) *types.ServiceContext
 
 // ginServiceContext returns the serviceContextFunc of the HTTP handler
@@ -34,6 +34,19 @@ type serviceContextFunc func(ctx context.Context, phase consts.Phase) *types.Ser
 func ginServiceContext(c *gin.Context) serviceContextFunc {
 	return func(ctx context.Context, phase consts.Phase) *types.ServiceContext {
 		return types.NewServiceContext(c, ctx, phase)
+	}
+}
+
+// clearAudit clears the creator and updater of records, what a client sent
+// in them: who created or updated a record is the server's to write. The
+// write names the caller the context carries as both (see database.Create),
+// and with no caller, an anonymous request's, the records keep what a hook
+// set, never what the client sent. The write flows call it first, before
+// any hook runs, so a hook may still set them on purpose.
+func clearAudit[M types.Model](records ...M) {
+	for _, record := range records {
+		record.SetCreatedBy("")
+		record.SetUpdatedBy("")
 	}
 }
 

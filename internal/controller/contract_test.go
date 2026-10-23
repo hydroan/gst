@@ -139,7 +139,8 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			// A time of day travels as a duration since midnight over gRPC, so
 			// what a duration says is what is compared: a fraction of a second
 			// kept as written on both. A spelling HTTP alone carries, abc or
-			// 17:30, is HTTP's to refuse (see TestCreateReadsATimeOfDayAsWritten).
+			// 17:30, is HTTP's to refuse (see
+			// TestCreateReadsATimeOfDayAsWritten).
 			name: "Create stores a time of day with the fraction of a second it names", fixture: dated, phase: consts.Create,
 			input: contractInput{record: map[string]any{"name": uniqueName("contract-clock"), "clock": "17:30:00.5"}},
 			want:  ok,
@@ -1243,14 +1244,16 @@ type contractScenario struct {
 // Patch, the body over HTTP, the record of the message over gRPC, its keys
 // the paths of the mask of a Patch; the items of a batch, over gRPC an item
 // of a batch patch carrying its id, the record and, as its mask, its keys
-// but the id; the ids of a batch delete; the query of
-// a List, the query string over HTTP; and the payload of a custom action. A
-// nil record is a request carrying none: an absent body, a message without
-// a record. params are the parameters of a route carrying some of its own,
-// filled into the path over HTTP, an empty one leaving its segment empty the
-// way a path carries one, and sent under params over gRPC. ctx is the
-// context the request is sent in, set by a scenario that ends the request
-// on the client's behalf; nil sends it in a context of the transport's own.
+// but the id; the ids of a batch delete; the query of a List, the query
+// string over HTTP; and the payload of a custom action. A nil record is a
+// request carrying none: an absent body, a message without a record.
+// params are the parameters of a route carrying some of its own, filled
+// into the path over HTTP, an empty one leaving its segment empty the way a
+// path carries one, and sent under params over gRPC. forwarded are the
+// headers a proxy in front adds, X-Forwarded-For and X-Real-IP, sent as
+// headers over HTTP and as metadata over gRPC. ctx is the context the
+// request is sent in, set by a scenario that ends the request on the
+// client's behalf; nil sends it in a context of the transport's own.
 type contractInput struct {
 	ctx       context.Context
 	params    map[string]string
@@ -1386,9 +1389,9 @@ var contractTransports = []contractTransport{
 
 // overHTTP sends in as the HTTP request of the action, as alice unless the
 // fixture is anonymous, and decodes the envelope answered: the method and
-// path of the action, the id
-// in the path, the query rendered as the query string, the record, the
-// items, the ids or the payload as the JSON body.
+// path of the action, the id in the path, the query rendered as the query
+// string, the record, the items, the ids or the payload as the JSON body,
+// and the forwarding headers as headers of the request.
 func overHTTP(t *testing.T, f contractFixture, phase consts.Phase, in contractInput) contractAnswer {
 	t.Helper()
 	pattern, target := "/"+f.route, "/"+routePath(f.route, in.params)
@@ -1436,11 +1439,11 @@ func overHTTP(t *testing.T, f contractFixture, phase consts.Phase, in contractIn
 
 // overGRPC sends in as the rpc of the action on the sample service, as
 // alice unless the fixture is anonymous, and returns the status answered,
-// or the response message: the
-// route parameters, the id, the record with the mask of a Patch, the items,
-// each with its id, its record and its mask in a PatchMany, the ids, the
-// query and the payload, as the rpcs of the sample service read them (see
-// standardRPCs).
+// or the response message: the route parameters, the id, the record with
+// the mask of a Patch, the items, each with its id, its record and its mask
+// in a PatchMany, the ids, the query and the payload, as the rpcs of the
+// sample service read them (see standardRPCs), and the forwarding headers
+// as metadata of the call.
 func overGRPC(t *testing.T, f contractFixture, phase consts.Phase, in contractInput) contractAnswer {
 	t.Helper()
 	message := map[string]any{}

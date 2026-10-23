@@ -91,9 +91,9 @@ func UpdateManyCall[M types.Model](route string) func(ctx context.Context, param
 // record (see itemWithoutID) with 400, clears the creator and updater every
 // item carries (see clearAudit), runs the batch update hooks around the
 // write, which names the caller the request carries as the updater, and
-// records the operation. The items are req's own, as the
-// write and the hooks left them, with the columns an update leaves alone, the
-// creation audit among them, as stored (see backfillUnwrittenColumns).
+// records the operation. The items are req's own, as the write and the hooks
+// left them, with the columns an update leaves alone, the creation audit
+// among them, as stored (see backfillUnwrittenColumns).
 func (a *action[M, REQ, RSP]) updateManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *batch[M]) error {
 	log := logger.Controller.WithContext(ctx, consts.UpdateMany)
 	svc := a.service()

@@ -231,7 +231,10 @@ func BenchmarkDecodeListQuery(b *testing.B) {
 	})
 }
 
-func TestCheckCursorOrderConflict(t *testing.T) {
+// TestCheckCursorOrderConflictRefusesASortByUnderACursor pins that a cursor
+// and an explicit ordering are refused together, the cursor column being the
+// order a cursor pages by, while either alone, or neither, is accepted.
+func TestCheckCursorOrderConflictRefusesASortByUnderACursor(t *testing.T) {
 	cursor := types.CursorForward(types.Asc("id"), "abc")
 	orders := []types.Order{types.Desc("created_at")}
 
@@ -277,7 +280,13 @@ type expandQueryTestEntry struct {
 	modelregistry.Base
 }
 
-func TestParseExpandQuery(t *testing.T) {
+// TestParseExpandQueryResolvesTheExpandableAssociations pins how _expand and
+// _depth name the associations a read preloads: names match the model's
+// expands ignoring case and snake case, all selects every one, a name the
+// model does not expand is dropped, and the depth repeats an association
+// holding the model itself, up to ten and one outside that, while any other
+// association ignores it.
+func TestParseExpandQueryResolvesTheExpandableAssociations(t *testing.T) {
 	t.Run("DepthRepeatsAnAssociationHoldingTheModel", func(t *testing.T) {
 		c := newTestGetContext(t, "/items?_expand=Children&_depth=3")
 		require.Equal(t, []string{"Children.Children.Children"}, parseExpandQuery(c.Request.URL.Query(), &expandQueryTestModel{}))

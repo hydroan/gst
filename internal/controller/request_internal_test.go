@@ -11,36 +11,46 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type routeIDUUIDRecord struct {
+// setIDUUIDRecord is keyed by a string id, which takes any value.
+type setIDUUIDRecord struct {
 	Name string `json:"name"`
 
 	modelregistry.Base
 }
 
-type routeIDIntegerRecord struct {
+// setIDIntegerRecord is keyed by an auto-increment integer, whose id takes a
+// positive number alone.
+type setIDIntegerRecord struct {
 	Name string `json:"name"`
 
 	modelregistry.AutoBase
 }
 
+// TestSetIDAcceptsAnyValueForUUIDKeyedModel pins that a string-keyed model
+// takes any non-empty id as it is.
 func TestSetIDAcceptsAnyValueForUUIDKeyedModel(t *testing.T) {
-	m := new(routeIDUUIDRecord)
+	m := new(setIDUUIDRecord)
 
 	require.True(t, setID(m, "custom-id"))
 	require.Equal(t, "custom-id", m.GetID())
 }
 
+// TestSetIDNormalizesIntegerKeyedModelID pins that an integer-keyed model
+// takes an id with leading zeros as the number it names.
 func TestSetIDNormalizesIntegerKeyedModelID(t *testing.T) {
-	m := new(routeIDIntegerRecord)
+	m := new(setIDIntegerRecord)
 
 	require.True(t, setID(m, "007"))
 	require.Equal(t, "7", m.GetID())
 	require.Equal(t, uint64(7), m.ID)
 }
 
+// TestSetIDRejectsUnparsableIntegerKeyedModelID pins that an integer-keyed
+// model leaves its id unset for a value naming no positive number it can
+// hold, which setID reports.
 func TestSetIDRejectsUnparsableIntegerKeyedModelID(t *testing.T) {
 	for _, id := range []string{"abc", "7abc", "0", "-1", "18446744073709551616"} {
-		m := new(routeIDIntegerRecord)
+		m := new(setIDIntegerRecord)
 
 		require.Falsef(t, setID(m, id), "id %q should be rejected", id)
 		require.Zero(t, m.ID)
