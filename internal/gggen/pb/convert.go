@@ -460,6 +460,26 @@ func typeKey(t types.Type) string {
 //			p.Spans[i].Weight = int32(v.Weight)
 //		}
 //	}
+//
+// and the JSON numbers of a repeated field and of a map, which have no
+// unset state, an empty one written as 0 (see grpc.NumberText), as
+//
+//	if m.Amounts != nil {
+//		p.Amounts = make([]string, len(m.Amounts))
+//		for i, v := range m.Amounts {
+//			p.Amounts[i] = grpc.NumberText(v)
+//		}
+//	}
+//	p.Pair = make([]string, len(m.Pair))
+//	for i, v := range m.Pair {
+//		p.Pair[i] = grpc.NumberText(v)
+//	}
+//	if m.Rates != nil {
+//		p.Rates = make(map[string]string, len(m.Rates))
+//		for k, v := range m.Rates {
+//			p.Rates[grpc.UTF8(k)] = grpc.NumberText(v)
+//		}
+//	}
 func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft pbschema.FieldType, inner bool) []ast.Stmt {
 	t = types.Unalias(t)
 	if p, ok := t.(*types.Pointer); ok {
@@ -499,6 +519,13 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft pbschema.FieldT
 	case "gorm.io/gorm.DeletedAt":
 		return []ast.Stmt{ifStmt(nil, sel(src, "Valid"), assign(dst, call(sel(w.out.imports.fixedRef(importPathTimestampPB), "New"), sel(src, "Time"))))}
 	case "encoding/json.Number":
+		// A field's empty number is the field unset, written as it is; an
+		// element or a map value has no unset state, so an empty one is
+		// written as the number the JSON encoder writes it as (see
+		// grpc.NumberText).
+		if inner {
+			return []ast.Stmt{assign(dst, call(w.grpc("NumberText"), src))}
+		}
 		return []ast.Stmt{assign(dst, call(w.grpc("UTF8"), call(ident("string"), src)))}
 	}
 	if n, ok := t.(*types.Named); ok {
@@ -904,7 +931,8 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft pbschema.Fiel
 			if typeKey(t) == "encoding/json.Number" {
 				// The empty string is the field unset, read as it is; any
 				// other is read through Number, which refuses what is no
-				// number, the empty string among them.
+				// number. An element or a map value is read through
+				// elementFromProto, which refuses the empty string too.
 				s := w.temp("s")
 				read, _ = w.reader(declared, path, ident(s))
 				return []ast.Stmt{ifStmt(define([]string{s}, src), &ast.BinaryExpr{X: ident(s), Op: token.NEQ, Y: strLit("")}, w.refusing(dst, read)...)}
@@ -919,12 +947,12 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft pbschema.Fiel
 		i, v := w.temp("i"), w.temp("v")
 		return []ast.Stmt{ifNotNil(src,
 			assign(dst, makeCall(w.goType(declared), lenCall(src))),
-			rangeStmt(i, v, src, w.fromProto(index(dst, ident(i)), ident(v), u.Elem(), elementOf(ft), w.elementPath(path, ident(i)))...),
+			rangeStmt(i, v, src, w.elementFromProto(index(dst, ident(i)), ident(v), u.Elem(), elementOf(ft), w.elementPath(path, ident(i)))...),
 		)}
 	case *types.Array:
 		i := w.temp("i")
 		return []ast.Stmt{rangeStmt(i, "", call(ident("min"), lenCall(src), lenCall(dst)),
-			w.fromProto(index(dst, ident(i)), index(src, ident(i)), u.Elem(), elementOf(ft), w.elementPath(path, ident(i)))...)}
+			w.elementFromProto(index(dst, ident(i)), index(src, ident(i)), u.Elem(), elementOf(ft), w.elementPath(path, ident(i)))...)}
 	case *types.Map:
 		if ft.TypeName == pbschema.WellKnownStruct {
 			return []ast.Stmt{assign(dst, call(w.grpc("Map"), src))}
@@ -944,7 +972,7 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft pbschema.Fiel
 		} else if !types.Identical(types.Unalias(u.Key()), scalarType(ft.MapKey)) {
 			key = converted(w.goType(u.Key()), ident(k))
 		}
-		value := w.fromProto(index(dst, key), ident(v), u.Elem(), *ft.MapValue, w.entryPath(path, ident(k)))
+		value := w.elementFromProto(index(dst, key), ident(v), u.Elem(), *ft.MapValue, w.entryPath(path, ident(k)))
 		if _, anonymous := types.Unalias(u.Elem()).(*types.Struct); anonymous {
 			// The fields of a struct held in a map cannot be assigned one
 			// by one, the element not being addressable: the struct is
@@ -962,6 +990,44 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft pbschema.Fiel
 		return []ast.Stmt{w.guarded(src, func(v ast.Expr) []ast.Stmt { return w.structFromProto(dst, v, ft.Nested, path) })}
 	}
 	panic(fmt.Sprintf("pb: no decoding for a %s", t))
+}
+
+// elementFromProto returns the statements decoding src, an element of a
+// repeated field or the value of a map entry at path, into dst, a Go value
+// of type t: what fromProto returns, but for a JSON number, which is read
+// through grpc.Number whatever it holds. A field's empty string is the field
+// unset; an element or a value has no unset state for it to stand for, and
+// it is no number, so it is refused like any other string that is none.
+// The amounts and rates fields of the Shape model, a repeated field and a
+// map of JSON numbers, decode as
+//
+//	if p.GetAmounts() != nil {
+//		m.Amounts = make([]json.Number, len(p.GetAmounts()))
+//		for i, v := range p.GetAmounts() {
+//			m.Amounts[i], err = grpc.Number(grpc.Element("amounts", i), v)
+//			if err != nil {
+//				return nil, err
+//			}
+//		}
+//	}
+//
+// and
+//
+//	if p.GetRates() != nil {
+//		m.Rates = make(map[string]json.Number, len(p.GetRates()))
+//		for k, v := range p.GetRates() {
+//			m.Rates[k], err = grpc.Number(grpc.Entry("rates", k), v)
+//			if err != nil {
+//				return nil, err
+//			}
+//		}
+//	}
+func (w *fileWriter) elementFromProto(dst, src ast.Expr, t types.Type, ft pbschema.FieldType, path ast.Expr) []ast.Stmt {
+	if typeKey(types.Unalias(t)) == "encoding/json.Number" {
+		read, _ := w.reader(t, path, src)
+		return w.refusing(dst, read)
+	}
+	return w.fromProto(dst, src, t, ft, path)
 }
 
 // declared returns the statements declaring the variable name of type t and

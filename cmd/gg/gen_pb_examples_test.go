@@ -17,12 +17,12 @@ import (
 // internal/gggen/pb whose doc comments quote what the generator writes, every
 // example a passage of a golden file under testdata/pb/golden, and the model
 // it writes it for a passage of the model sources gen_pb_test.go writes (see
-// TestGenRunMatchesGolden).
+// TestGenRunWritesTheProtobufDefinitionsOfGRPCModels).
 var pbDocExampleFuncs = []string{
 	"Generate", "buildMessage", "declareService", "rpcMessages", "customRequest",
 	"customResponse", "queryFields", "fileDescriptor", "handlerFile", "serviceType",
 	"actionCalls", "handler", "streamHandler", "toProto", "fromProto",
-	"conversionFuncs", "registrationFiles",
+	"elementFromProto", "conversionFuncs", "registrationFiles",
 }
 
 // pbDocExampleDirs are the packages pbDocExampleFuncs are declared in.

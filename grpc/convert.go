@@ -49,14 +49,29 @@ func Narrow[T ~int8 | ~int16 | ~uint8 | ~uint16, V ~int32 | ~uint32](field strin
 // empty string among them: the message carries the number as a string, and
 // one that is not a number would be written out as one. encoding/json
 // judges the literal, so the two listeners refuse the same strings. The
-// generated FromProto reads every json.Number field through it, a field the
-// message leaves empty, "", standing for the unset value and read as it is.
+// generated FromProto reads every json.Number through it: a field the
+// message leaves empty, "", stands for the unset value and is read as it
+// is, while an element of a repeated field or the value of a map entry,
+// which has no unset state, is read through it whatever it holds.
 func Number(field, s string) (json.Number, error) {
 	var n json.Number
 	if err := json.Unmarshal([]byte(s), &n); err != nil || string(n) != s {
 		return "", invalidValue(field, fmt.Sprintf("%q is not a JSON number", s))
 	}
 	return n, nil
+}
+
+// NumberText returns the text a message carries for n, a json.Number held
+// as an element of a repeated field or the value of a map entry: n through
+// UTF8 like any string, and the empty number, what an HTTP body's null
+// leaves in one, as "0", the number encoding/json writes it as, so that the
+// message read back through Number is taken. A field's empty number is the
+// field unset, which the generated ToProto writes as it is.
+func NumberText(n json.Number) string {
+	if n == "" {
+		return "0"
+	}
+	return UTF8(string(n))
 }
 
 // Finite returns v as the floating-point type T a model field holds, a

@@ -31,21 +31,20 @@ var update = flag.Bool("update", false, "rewrite the golden files under testdata
 // package under pb/, a pb.gen.go registering its services, the root one
 // importing the packages below it. A model without GRPC() gets no file. A
 // model filed under tenants, Folder, gets the tenant key at the framework's
-// fixed number, which its FromProto leaves out. A model
-// referring to a type of another directory, Pin's Link of
-// model/record/item.go, gets a definition importing the other's by its
-// registered path, tmpapp/record/item.proto, and conversions calling the
-// other package's. The definitions are compiled the way protoc compiles
-// them as well. The files
-// are where the examples in the doc comments of the pb package come from:
-// pb.Generate's whole note.proto, the excerpts of buildMessage,
-// declareService, rpcMessages, customRequest, customResponse, queryFields
-// and descriptor; the whole report.gen.go of handlerFile, the excerpts of
-// serviceType, actionCalls, handler, streamHandler, toProto, fromProto and
-// conversionFuncs; and the two pb.gen.go of registrationFiles.
-// TestPBDocExamplesComeFromTheGoldenFiles holds the two together: every code
-// block of those doc comments must be a passage of a file here, or of the
-// model sources this test writes.
+// fixed number, which its FromProto leaves out. A model referring to a type
+// of another directory, Pin's Link of model/record/item.go, gets a
+// definition importing the other's by its registered path,
+// tmpapp/record/item.proto, and conversions calling the other package's.
+// The definitions are compiled the way protoc compiles them as well. The
+// files are where the examples in the doc comments of the pbschema and pb
+// packages come from: pb.Generate's whole note.proto, the excerpts of
+// buildMessage, declareService, rpcMessages, customRequest, customResponse,
+// queryFields and fileDescriptor; the whole report.gen.go of handlerFile,
+// the excerpts of serviceType, actionCalls, handler, streamHandler, toProto,
+// fromProto, elementFromProto and conversionFuncs; and the two pb.gen.go of
+// registrationFiles. TestPBDocExamplesComeFromTheGoldenFiles holds the two
+// together: every code block of those doc comments must be a passage of a
+// file here, or of the model sources this test writes.
 //
 // Beside every .proto the run writes the Go files the protobuf plugins
 // compile from it (see pb.Compile): the messages in note.pb.go and the
@@ -1813,6 +1812,12 @@ type Shape struct {
 	Ratio   *float64           'json:"ratio,omitempty" pb:"53" gorm:"-"'
 	Factors []float64          'json:"factors,omitempty" pb:"54" gorm:"-"'
 	Costs   map[string]float64 'json:"costs,omitempty" pb:"55" gorm:"-"'
+	// Amounts, Pair and Rates hold JSON numbers in a repeated field, an
+	// array and a map, where the empty string is no number, but what a null
+	// in an HTTP body leaves in one.
+	Amounts []json.Number          'json:"amounts,omitempty" pb:"56" gorm:"-"'
+	Pair    [2]json.Number         'json:"pair" pb:"57" gorm:"-"'
+	Rates   map[string]json.Number 'json:"rates,omitempty" pb:"58" gorm:"-"'
 	// Name shadows the Name of the embedded ShapeMeta, which keeps its own
 	// key and is selected by its path.
 	Name string 'json:"name" pb:"41"'
@@ -2025,6 +2030,9 @@ func TestShapeRoundTrips(t *testing.T) {
 		Ratio:   &ratio,
 		Factors: []float64{1.5, 2},
 		Costs:   map[string]float64{"c": 0.25},
+		Amounts: []json.Number{"1", "2.5"},
+		Pair:    [2]json.Number{"3", "4"},
+		Rates:   map[string]json.Number{"r": "0.5"},
 	}
 	in.Window = struct {
 		Width int32 'json:"width" pb:"1"'
@@ -2075,6 +2083,9 @@ func TestShapeRoundTrips(t *testing.T) {
 	require.True(t, msg.GetStamps()[0].AsTime().IsZero(), "the zero time of an element travels as 0001-01-01, not as nothing")
 	require.Equal(t, day, msg.GetStamps()[1].AsTime())
 	require.Equal(t, "o", msg.GetOwners()["o"].GetName())
+	require.Equal(t, []string{"1", "2.5"}, msg.GetAmounts())
+	require.Equal(t, []string{"3", "4"}, msg.GetPair())
+	require.Equal(t, "0.5", msg.GetRates()["r"])
 
 	out, err := pb.ShapeFromProto(msg)
 	require.NoError(t, err)
@@ -2201,6 +2212,35 @@ func TestConversionsGuardContainerElements(t *testing.T) {
 		require.Equal(t, codes.InvalidArgument, status.Code(err), tt.field)
 		require.Equal(t, "invalid value for field \x27"+tt.field+"\x27", status.Convert(err).Message(), tt.field)
 	}
+
+	// A JSON number in a repeated field, an array or a map is read through
+	// grpc.Number like a number field, the empty string included, which is
+	// no number and stands for no unset field there: it is refused naming
+	// the element by its index and the map value by its key.
+	for _, tt := range []struct {
+		field string
+		msg   *pb.Shape
+	}{
+		{"amounts[1]", &pb.Shape{Amounts: []string{"1", ""}}},
+		{"pair[0]", &pb.Shape{Pair: []string{"", "1"}}},
+		{"rates.r", &pb.Shape{Rates: map[string]string{"r": ""}}},
+	} {
+		_, err := pb.ShapeFromProto(tt.msg)
+		require.Equal(t, codes.InvalidArgument, status.Code(err), tt.field)
+		require.Equal(t, "invalid value for field \x27"+tt.field+"\x27", status.Convert(err).Message(), tt.field)
+	}
+
+	// An empty JSON number in a repeated field, an array or a map, what an
+	// HTTP body's null leaves in one, is written out as 0, the number the
+	// JSON encoder writes it as, so the message read back is taken.
+	zeros := pb.ShapeToProto(&model.Shape{Amounts: []json.Number{""}, Rates: map[string]json.Number{"r": ""}})
+	require.Equal(t, []string{"0"}, zeros.GetAmounts())
+	require.Equal(t, []string{"0", "0"}, zeros.GetPair())
+	require.Equal(t, "0", zeros.GetRates()["r"])
+	read, err := pb.ShapeFromProto(zeros)
+	require.NoError(t, err, "the message read back is taken")
+	require.Equal(t, []json.Number{"0"}, read.Amounts)
+	require.Equal(t, map[string]json.Number{"r": "0"}, read.Rates)
 }
 `
 

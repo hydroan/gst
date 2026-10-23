@@ -153,6 +153,15 @@ message Shape {
   repeated double factors = 54;
 
   map<string, double> costs = 55;
+
+  // Amounts, Pair and Rates hold JSON numbers in a repeated field, an
+  // array and a map, where the empty string is no number, but what a null
+  // in an HTTP body leaves in one.
+  repeated string amounts = 56;
+
+  repeated string pair = 57;
+
+  map<string, string> rates = 58;
 }
 
 // ShapeSpans is the message of the spans field of Shape.

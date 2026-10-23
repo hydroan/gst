@@ -220,6 +220,22 @@ func ShapeToProto(m *model.Shape) *Shape {
 			p.Costs[grpc.UTF8(k)] = v
 		}
 	}
+	if m.Amounts != nil {
+		p.Amounts = make([]string, len(m.Amounts))
+		for i, v := range m.Amounts {
+			p.Amounts[i] = grpc.NumberText(v)
+		}
+	}
+	p.Pair = make([]string, len(m.Pair))
+	for i, v := range m.Pair {
+		p.Pair[i] = grpc.NumberText(v)
+	}
+	if m.Rates != nil {
+		p.Rates = make(map[string]string, len(m.Rates))
+		for k, v := range m.Rates {
+			p.Rates[grpc.UTF8(k)] = grpc.NumberText(v)
+		}
+	}
 	return p
 }
 
@@ -539,6 +555,30 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 		m.Costs = make(map[string]float64, len(p.GetCosts()))
 		for k, v := range p.GetCosts() {
 			m.Costs[k], err = grpc.Finite[float64](grpc.Entry("costs", k), v)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	if p.GetAmounts() != nil {
+		m.Amounts = make([]json.Number, len(p.GetAmounts()))
+		for i, v := range p.GetAmounts() {
+			m.Amounts[i], err = grpc.Number(grpc.Element("amounts", i), v)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	for i := range min(len(p.GetPair()), len(m.Pair)) {
+		m.Pair[i], err = grpc.Number(grpc.Element("pair", i), p.GetPair()[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	if p.GetRates() != nil {
+		m.Rates = make(map[string]json.Number, len(p.GetRates()))
+		for k, v := range p.GetRates() {
+			m.Rates[k], err = grpc.Number(grpc.Entry("rates", k), v)
 			if err != nil {
 				return nil, err
 			}

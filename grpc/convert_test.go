@@ -281,7 +281,8 @@ func requireFieldViolation(t *testing.T, err error, field, description string) {
 // back as it is, and anything else, text, a quoted number, a literal with
 // trailing space, the empty string, is refused with InvalidArgument naming
 // the field, the way encoding/json refuses it over HTTP; the empty string
-// of an unset field never reaches it.
+// of an unset field never reaches it, the one of an element or a map value
+// does.
 func TestNumberRefusesWhatIsNoJSONNumber(t *testing.T) {
 	amount, err := gstgrpc.Number("amount", "-12.5e3")
 	require.NoError(t, err)
@@ -292,6 +293,22 @@ func TestNumberRefusesWhatIsNoJSONNumber(t *testing.T) {
 		require.Equal(t, "invalid value for field 'amount'", status.Convert(err).Message())
 		requireFieldViolation(t, err, "amount", strconv.Quote(s)+" is not a JSON number")
 	}
+}
+
+// TestNumberTextWritesTheEmptyNumberAsZero pins the text the generated
+// ToProto writes for a json.Number element or map value: the number as it
+// is, its invalid bytes replaced the way UTF8 replaces them, and the empty
+// number as "0", the number encoding/json writes it as, which Number reads
+// back.
+func TestNumberTextWritesTheEmptyNumberAsZero(t *testing.T) {
+	require.Equal(t, "-12.5e3", gstgrpc.NumberText("-12.5e3"))
+	require.Equal(t, "a�b", gstgrpc.NumberText("a\xffb"))
+	encoded, err := json.Marshal(json.Number(""))
+	require.NoError(t, err)
+	require.Equal(t, string(encoded), gstgrpc.NumberText(""), "the empty number is written as encoding/json writes it")
+	read, err := gstgrpc.Number("amounts[0]", gstgrpc.NumberText(""))
+	require.NoError(t, err)
+	require.Equal(t, json.Number("0"), read)
 }
 
 // filterMessage stands for the nested Filter message of a List request,
