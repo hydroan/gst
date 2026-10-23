@@ -100,6 +100,11 @@ func (db *database[M]) Create(objs ...M) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
+	// A dry run builds its statements from copies, so the objects the caller
+	// passed stay as they are (see WithDryRun).
+	if db.dryRun {
+		objs = cloneDryRunModels(objs)
+	}
 	// The caller is who created the records: created_by and updated_by take
 	// the id the context carries, when it carries one, whatever the objects
 	// hold, on every dialect.
@@ -121,11 +126,10 @@ func (db *database[M]) Create(objs ...M) (err error) {
 	}
 
 	if db.dryRun {
-		dryRunObjs := cloneDryRunModels(objs)
-		initializeVersions(dryRunObjs)
-		for i := 0; i < len(dryRunObjs); i += batchSize {
-			end := min(i+batchSize, len(dryRunObjs))
-			tx := dryRunSession(db.ins).Omit(clause.Associations).Create(dryRunObjs[i:end])
+		initializeVersions(objs)
+		for i := 0; i < len(objs); i += batchSize {
+			end := min(i+batchSize, len(objs))
+			tx := dryRunSession(db.ins).Omit(clause.Associations).Create(objs[i:end])
 			if err = db.collectSQL(tx); err != nil {
 				return err
 			}
@@ -247,7 +251,9 @@ func (db *database[M]) Create(objs ...M) (err error) {
 //     / DELETE ... IN statement's own atomicity is the whole contract. A
 //     batch naming several records that must all exist runs in a
 //     transaction, so a statement that found fewer rows than named is rolled
-//     back and the batch deletes nothing.
+//     back and the batch deletes nothing, and so does a delete of several
+//     records carrying versions, a statement each: a stale one rolls back
+//     the ones before it.
 //   - Returns nil if no valid objects provided (empty slice or all objects are empty) and the chain carries no conditions
 //   - WithDryRun builds SQL only and does not execute hooks, database I/O, or object field filling
 //
@@ -255,7 +261,8 @@ func (db *database[M]) Create(objs ...M) (err error) {
 // a lightweight DELETE by primary key with no hooks and no transaction, and
 // always physical — ClickHouse has no application-level soft delete, so the
 // model's Purge and WithPurge are ignored there — and a missing record
-// passes silently instead of ErrRecordNotFound.
+// passes silently instead of ErrRecordNotFound. A delete by conditions
+// answers ErrUnsupportedOnDialect there.
 //
 // Example:
 //
@@ -313,6 +320,11 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 	session := &gorm.Session{AllowGlobalUpdate: db.matchAll}
 
 	if db.dialect() == dialectClickHouse {
+		// The lightweight DELETE goes by primary key, and a delete by
+		// conditions names no record to go by.
+		if conditioned {
+			return errors.Wrap(ErrUnsupportedOnDialect, "Delete by conditions on clickhouse")
+		}
 		return db.clickhouseDelete(objs)
 	}
 	// A delete by conditions hands the hooks no record of the rows its
@@ -467,10 +479,11 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 	}
 	// One batch is one UPDATE ... IN (soft delete) or DELETE ... IN (purge);
 	// without overridden delete hooks the statement's own atomicity is the
-	// whole contract, as long as the statement cannot be partly right: one
-	// naming several records that must all exist runs in a transaction, so
-	// finding fewer rows than named rolls it back.
-	if (db.noHook || !modelregistry.OverridesDeleteHooks(db.m)) && len(objs) <= batchSize && (!strict || expected <= 1) {
+	// whole contract, as long as the call is one statement that cannot be
+	// partly right: one naming several records that must all exist runs in a
+	// transaction, so finding fewer rows than named rolls it back, and so do
+	// several records checked by version, a statement each.
+	if (db.noHook || !modelregistry.OverridesDeleteHooks(db.m)) && len(objs) <= batchSize && (!strict || expected <= 1) && (!guarded || len(objs) <= 1) {
 		return db.withSingleStatementWrite(write)
 	}
 	return db.withWriteTransaction(write)
@@ -570,6 +583,11 @@ func (db *database[M]) Update(objs ...M) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
+	// A dry run builds its statements from copies, so the objects the caller
+	// passed stay as they are (see WithDryRun).
+	if db.dryRun {
+		objs = cloneDryRunModels(objs)
+	}
 	// The caller is who updated the records: updated_by takes the id the
 	// context carries, when it carries one, whatever the objects hold, on
 	// every dialect, and a narrowed update writes it along with its columns,
@@ -609,14 +627,13 @@ func (db *database[M]) Update(objs ...M) (err error) {
 	}
 
 	if db.dryRun {
-		dryRunObjs := cloneDryRunModels(objs)
-		for i := range dryRunObjs {
+		for i := range objs {
 			session := dryRunSession(db.ins)
 			if versioned {
-				prev, _ := bumpVersionForUpdate(dryRunObjs[i])
+				prev, _ := bumpVersionForUpdate(objs[i])
 				session = session.Where(db.quoteIdent(versionColumn)+" = ?", prev)
 			}
-			tx := db.updateRowStatement(session, dryRunObjs[i]).Updates(dryRunObjs[i])
+			tx := db.updateRowStatement(session, objs[i]).Updates(objs[i])
 			if err = db.collectSQL(tx); err != nil {
 				return err
 			}
@@ -849,8 +866,9 @@ func (db *database[M]) UpdateByID(id string, assignments ...types.Assignment) (e
 	return nil
 }
 
-// cloneDryRunModels returns shallow copies so GORM dry-run callbacks can build SQL without
-// mutating caller-owned model fields such as ID, timestamps, or soft-delete markers.
+// cloneDryRunModels returns shallow copies so a dry run builds its statements — the fields the
+// framework writes first and GORM's dry-run callbacks alike — without mutating caller-owned
+// model fields such as ID, timestamps, creator and updater, or soft-delete markers.
 func cloneDryRunModels[M types.Model](objs []M) []M {
 	cloned := make([]M, 0, len(objs))
 	for _, obj := range objs {

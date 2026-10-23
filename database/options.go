@@ -79,7 +79,7 @@ func (db *database[M]) WithBatchSize(size int) types.Database[M] {
 //   - List/Get/Count/First/Last/Take: Builds SQL without reading database rows
 //   - Read operations leave destination values unchanged because no rows are loaded
 //   - Model hooks are not executed because dry-run is limited to SQL construction
-//   - Input model objects are left unchanged; no ID, timestamp, or soft-delete fields are filled
+//   - Input model objects are left unchanged; no ID, timestamp, creator, updater, or soft-delete fields are filled
 //
 // Example:
 //

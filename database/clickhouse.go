@@ -237,10 +237,10 @@ func (db *database[M]) clickhouseUpdate(objs []M) (err error) {
 	done, _ := db.trace(consts.Update, len(objs))
 	defer func() { done(err) }()
 
+	// A dry run hands in the copies Update made of the caller's objects.
 	if db.dryRun {
-		dryRunObjs := cloneDryRunModels(objs)
-		for i := range dryRunObjs {
-			tx := db.updateRowStatement(dryRunSession(db.ins), dryRunObjs[i]).Updates(dryRunObjs[i])
+		for i := range objs {
+			tx := db.updateRowStatement(dryRunSession(db.ins), objs[i]).Updates(objs[i])
 			if err = db.collectSQL(tx); err != nil {
 				return err
 			}

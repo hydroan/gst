@@ -7,7 +7,6 @@ import (
 
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/database/clickhouse"
-	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
 	"github.com/hydroan/gst/internal/types"
@@ -310,19 +309,16 @@ func TestClickhouse(t *testing.T) {
 		// The caller the context carries is who created and who updated a
 		// row, here as on the transactional write path, whatever the object
 		// holds.
-		as := func(userID string) context.Context {
-			return requestctx.WithMetadata(ctx, requestctx.New(requestctx.Fields{Username: "alice", UserID: userID}))
-		}
 		row := &TestAggregateRecord{Category: "stamp", Status: "before", Amount: 1, OccurredAt: time.Date(2024, 3, 3, 0, 0, 0, 0, time.UTC)}
 		row.CreatedBy, row.UpdatedBy = "mallory", "mallory"
-		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](as("u-1"), ins).Create(row))
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](asCaller("u-1"), ins).Create(row))
 		created := new(TestAggregateRecord)
 		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).Get(created, row.ID))
 		require.Equal(t, "u-1", created.CreatedBy)
 		require.Equal(t, "u-1", created.UpdatedBy)
 
 		row.Status, row.UpdatedBy = "after", "mallory"
-		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](as("u-2"), ins).WithSelect(TestAggregateRecordCols.Status).Update(row))
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](asCaller("u-2"), ins).WithSelect(TestAggregateRecordCols.Status).Update(row))
 		require.Eventually(t, func() bool {
 			got := new(TestAggregateRecord)
 			if err := database.DatabaseOn[*TestAggregateRecord](ctx, ins).Get(got, row.ID); err != nil {
@@ -340,9 +336,10 @@ func TestClickhouse(t *testing.T) {
 		// would write real rows.
 		stmts := make([]types.SQLStatement, 0)
 		row := &TestAggregateRecord{Category: "dry", Status: "x", OccurredAt: time.Date(2024, 3, 3, 0, 0, 0, 0, time.UTC)}
-		require.ErrorIs(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithDryRun(&stmts).Create(row),
+		require.ErrorIs(t, database.DatabaseOn[*TestAggregateRecord](asCaller(dryRunCaller), ins).WithDryRun(&stmts).Create(row),
 			database.ErrUnsupportedOnDialect)
 		require.Empty(t, listIDs(t, types.FilterEq("category", "dry")), "the refused dry run must not persist rows")
+		require.Empty(t, row.CreatedBy, "the refused dry run must leave the object as it is")
 
 		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithDryRun(&stmts).
 			Delete(&TestAggregateRecord{ID: "dry-1"}))
@@ -351,11 +348,14 @@ func TestClickhouse(t *testing.T) {
 			"delete must render the lightweight DELETE, not an ALTER TABLE mutation")
 
 		stmts = stmts[:0]
-		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithDryRun(&stmts).WithSelect(TestAggregateRecordCols.Status).
-			Update(&TestAggregateRecord{Status: "y", ID: "dry-1"}))
+		updated := &TestAggregateRecord{Status: "y", ID: "dry-1"}
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](asCaller(dryRunCaller), ins).WithDryRun(&stmts).WithSelect(TestAggregateRecordCols.Status).
+			Update(updated))
 		require.Len(t, stmts, 1)
 		require.Contains(t, stmts[0].RenderedSQL, "ALTER TABLE",
 			"update must render the ALTER TABLE mutation")
+		require.Contains(t, stmts[0].RenderedSQL, dryRunCaller, "the mutation names the caller as updater")
+		require.Empty(t, updated.UpdatedBy, "the dry run must leave the object as it is")
 	})
 
 	// The capability-miss rule: nothing below is carried by clickhouse, and
@@ -365,6 +365,13 @@ func TestClickhouse(t *testing.T) {
 
 		require.ErrorIs(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).Upsert(record), database.ErrUnsupportedOnDialect)
 		require.ErrorIs(t, database.CleanupOn[*TestAggregateRecord](ctx, ins), database.ErrUnsupportedOnDialect)
+		// The lightweight DELETE goes by primary key, and a delete by
+		// conditions names no record: it is refused before any statement.
+		require.ErrorIs(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithQuery(&TestAggregateRecord{Category: "alpha"}).Delete(),
+			database.ErrUnsupportedOnDialect)
+		require.ErrorIs(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithQuery(nil, types.QueryOptions{AllowEmpty: true}).Delete(),
+			database.ErrUnsupportedOnDialect)
+		require.Len(t, listIDs(t), 6, "the refused deletes leave the seed")
 		rows := make([]*TestAggregateRecord, 0)
 		require.ErrorIs(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithReplica().List(&rows), database.ErrUnsupportedOnDialect)
 		require.ErrorIs(t, database.TransactionOn(ctx, ins, func(ctx context.Context) error { return nil }), database.ErrUnsupportedOnDialect)

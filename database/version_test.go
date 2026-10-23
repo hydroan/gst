@@ -183,6 +183,19 @@ func TestVersionDeleteGuards(t *testing.T) {
 	staleHard.Version = hard.Version + 1
 	require.ErrorIs(t, database.Database[*versionedNote](ctx).WithPurge().Delete(staleHard), database.ErrStaleObject)
 	require.NoError(t, database.Database[*versionedNote](ctx).WithPurge().Delete(hard))
+
+	// Records carrying versions delete in one transaction, missing ones
+	// allowed or not: a stale one fails the call, and the record before it
+	// stays.
+	first := mustCreateNote(t, "note-del-first", "v1")
+	mustCreateNote(t, "note-del-second", "v1")
+	staleSecond := reloadNote(t, "note-del-second")
+	moved := reloadNote(t, "note-del-second")
+	moved.Title = "moved-on"
+	require.NoError(t, database.Database[*versionedNote](ctx).Update(moved))
+	require.ErrorIs(t, database.Database[*versionedNote](ctx).WithAllowMissing().Delete(first, staleSecond), database.ErrStaleObject)
+	kept := new(versionedNote)
+	require.NoError(t, database.Database[*versionedNote](ctx).Get(kept, "note-del-first"), "the record before the stale one stays")
 }
 
 func TestVersionUpdateByIDBumps(t *testing.T) {

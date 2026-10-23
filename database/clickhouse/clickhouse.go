@@ -45,11 +45,11 @@ func Init() (err error) {
 // plus a write path with a deliberately weaker contract: no model hooks and
 // no transaction boundary; Create is plain batch INSERTs, Delete a
 // lightweight physical DELETE by primary key, Update an asynchronous ALTER
-// TABLE mutation for low-frequency data correction. Upsert, Cleanup, the
-// transaction boundary, row locks, and the model joins of Select (no unique
-// constraint to prove a join on) are not carried and fail with
-// database.ErrUnsupportedOnDialect; the database package doc lists the
-// whole contract. The schema (engine, ORDER BY, partitioning) is
+// TABLE mutation for low-frequency data correction. Upsert, Cleanup, a
+// delete by conditions, the transaction boundary, row locks, and the model
+// joins of Select (no unique constraint to prove a join on) are not carried
+// and fail with database.ErrUnsupportedOnDialect; the database package doc
+// lists the whole contract. The schema (engine, ORDER BY, partitioning) is
 // hand-written DDL owned by the application; the framework never creates or
 // migrates ClickHouse tables.
 func New(cfg config.Clickhouse) (*gorm.DB, error) {

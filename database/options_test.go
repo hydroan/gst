@@ -180,6 +180,16 @@ func TestDatabaseWithDryRun(t *testing.T) {
 		require.True(t, dryRunUser.CreatedAt.IsZero(), "Create should not set created_at in dry-run mode")
 		require.True(t, dryRunUser.UpdatedAt.IsZero(), "Create should not set updated_at in dry-run mode")
 		require.Nil(t, dryRunUser.Remark, "Create should not run model hooks in dry-run mode")
+
+		// The statement names the caller the context carries as creator and
+		// updater, and the object keeps what it holds.
+		stmts := make([]types.SQLStatement, 0)
+		audited := &TestUser{Name: "dry-run-audited", Email: "dry-run-audited@example.com"}
+		require.NoError(t, database.Database[*TestUser](asCaller(dryRunCaller)).WithDryRun(&stmts).Create(audited))
+		require.Len(t, stmts, 1)
+		require.Contains(t, stmts[0].RenderedSQL, dryRunCaller)
+		require.Empty(t, audited.CreatedBy, "Create should not set created_by in dry-run mode")
+		require.Empty(t, audited.UpdatedBy, "Create should not set updated_by in dry-run mode")
 	})
 
 	t.Run("Delete", func(t *testing.T) {
@@ -224,6 +234,16 @@ func TestDatabaseWithDryRun(t *testing.T) {
 		require.True(t, dryRunUser.CreatedAt.IsZero(), "Update should not set created_at in dry-run mode")
 		require.True(t, dryRunUser.UpdatedAt.IsZero(), "Update should not set updated_at in dry-run mode")
 		require.Nil(t, dryRunUser.Remark, "Update should not run model hooks in dry-run mode")
+
+		// The statement names the caller the context carries as updater, and
+		// the object keeps what it holds.
+		stmts := make([]types.SQLStatement, 0)
+		audited := &TestUser{Name: "dry-run-audited", Email: "dry-run-audited@example.com"}
+		audited.ID = "dry-run-audited"
+		require.NoError(t, database.Database[*TestUser](asCaller(dryRunCaller)).WithDryRun(&stmts).Update(audited))
+		require.Len(t, stmts, 1)
+		require.Contains(t, stmts[0].RenderedSQL, dryRunCaller)
+		require.Empty(t, audited.UpdatedBy, "Update should not set updated_by in dry-run mode")
 	})
 
 	t.Run("UpdateByID", func(t *testing.T) {

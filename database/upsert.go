@@ -117,6 +117,11 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 		batchSize = db.batchSize
 	}
 
+	// A dry run builds its statements from copies, so the objects the caller
+	// passed stay as they are (see WithDryRun).
+	if db.dryRun {
+		objs = cloneDryRunModels(objs)
+	}
 	// The caller is who wrote the records: created_by and updated_by take the
 	// id the context carries, when it carries one, whatever the objects hold;
 	// the values land on inserted rows, and the conflict update keeps
@@ -155,19 +160,18 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 		if len(db.selectColumns) > 0 {
 			db.ins = db.ins.Select(db.selectColumns)
 		}
-		dryRunObjs := cloneDryRunModels(objs)
-		initializeVersions(dryRunObjs)
-		for i := 0; i < len(dryRunObjs); i += batchSize {
-			end := min(i+batchSize, len(dryRunObjs))
+		initializeVersions(objs)
+		for i := 0; i < len(objs); i += batchSize {
+			end := min(i+batchSize, len(objs))
 			tx := dryRunSession(db.ins).Omit(clause.Associations)
 			if versioned {
 				var onConflict clause.OnConflict
-				if onConflict, err = versionBumpingConflict(tx, dryRunObjs[i:end], versionColumn); err != nil {
+				if onConflict, err = versionBumpingConflict(tx, objs[i:end], versionColumn); err != nil {
 					return err
 				}
 				tx = tx.Clauses(onConflict)
 			}
-			if err = db.collectSQL(tx.Save(dryRunObjs[i:end])); err != nil {
+			if err = db.collectSQL(tx.Save(objs[i:end])); err != nil {
 				return err
 			}
 		}

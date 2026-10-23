@@ -15,6 +15,7 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
+	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
@@ -167,6 +168,16 @@ func setupTestData(tb testing.TB) {
 	require.NoError(tb, database.Database[*TestUser](context.Background()).WithAllowMissing().Delete(ul...))
 	require.NoError(tb, database.Database[*TestUser](context.Background()).Create(ul...))
 }
+
+// asCaller returns a context carrying userID as the caller, the user a
+// write's audit columns name as creator and updater.
+func asCaller(userID string) context.Context {
+	return requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "alice", UserID: userID}))
+}
+
+// dryRunCaller is the caller the dry-run tests write as (see asCaller): the
+// statements name it, and the objects they are built from stay without it.
+const dryRunCaller = "dry-run-caller"
 
 // quoteIdent renders an identifier the way the dialect under test quotes it,
 // so SQL assertions stay dialect-neutral: backticks on mysql and sqlite,
@@ -1146,6 +1157,25 @@ type TestCategory struct {
 
 func (*TestCategory) TableName() string { return "test_categories" }
 func (*TestCategory) Purge() bool       { return true }
+
+// TestCategoryRelations is embedded through a pointer in TestExtendedCategory
+// and declares its association, so the path to the association steps
+// through the pointer.
+type TestCategoryRelations struct {
+	Children []*TestExtendedCategory `json:"children,omitempty" gorm:"foreignKey:ParentID;constraint:-"`
+}
+
+// TestExtendedCategory reaches its association through a pointer-embedded
+// struct. Its table is migrated on demand and dropped by the test.
+type TestExtendedCategory struct {
+	Name     string `json:"name" gorm:"size:191"`
+	ParentID string `json:"parent_id" gorm:"size:191"`
+	*TestCategoryRelations
+
+	modelregistry.Base
+}
+
+func (*TestExtendedCategory) TableName() string { return "test_extended_categories" }
 
 // TestOwnerRecord holds TestOwnedEntry rows through a has-many. Once gorm
 // parses the owner it registers that has-many on TestOwnedEntry's schema as

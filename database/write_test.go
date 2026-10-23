@@ -12,7 +12,6 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
@@ -721,9 +720,6 @@ func TestDatabaseUpdate(t *testing.T) {
 // it when the context carries no caller, as a job's does.
 func TestWritesStampTheCallerTheContextCarries(t *testing.T) {
 	defer cleanupTestData()
-	as := func(userID string) context.Context {
-		return requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "alice", UserID: userID}))
-	}
 	stored := func(t *testing.T, id string) *TestUser {
 		t.Helper()
 		u := new(TestUser)
@@ -734,7 +730,7 @@ func TestWritesStampTheCallerTheContextCarries(t *testing.T) {
 	t.Run("Create names the caller as creator and updater", func(t *testing.T) {
 		u := &TestUser{Name: "stamped-create", Email: "stamped-create@example.com"}
 		u.SetCreatedBy("forged")
-		require.NoError(t, database.Database[*TestUser](as("u-1")).Create(u))
+		require.NoError(t, database.Database[*TestUser](asCaller("u-1")).Create(u))
 		require.Equal(t, "u-1", u.CreatedBy)
 		require.Equal(t, "u-1", u.UpdatedBy)
 		require.Equal(t, "u-1", stored(t, u.ID).CreatedBy)
@@ -742,30 +738,30 @@ func TestWritesStampTheCallerTheContextCarries(t *testing.T) {
 	})
 	t.Run("Update names the caller as updater and keeps the creator", func(t *testing.T) {
 		u := &TestUser{Name: "stamped-update", Email: "stamped-update@example.com"}
-		require.NoError(t, database.Database[*TestUser](as("u-1")).Create(u))
+		require.NoError(t, database.Database[*TestUser](asCaller("u-1")).Create(u))
 		u.Name = "stamped-update-2"
 		u.SetUpdatedBy("forged")
-		require.NoError(t, database.Database[*TestUser](as("u-2")).Update(u))
+		require.NoError(t, database.Database[*TestUser](asCaller("u-2")).Update(u))
 		require.Equal(t, "u-2", u.UpdatedBy)
 		require.Equal(t, "u-1", stored(t, u.ID).CreatedBy)
 		require.Equal(t, "u-2", stored(t, u.ID).UpdatedBy)
 
 		u.Name = "stamped-update-3"
-		require.NoError(t, database.Database[*TestUser](as("u-3")).WithSelect(colName).Update(u))
+		require.NoError(t, database.Database[*TestUser](asCaller("u-3")).WithSelect(colName).Update(u))
 		require.Equal(t, "u-3", stored(t, u.ID).UpdatedBy, "a narrowed update still writes the updater")
 	})
 	t.Run("UpdateByID names the caller as updater", func(t *testing.T) {
 		u := &TestUser{Name: "stamped-by-id", Email: "stamped-by-id@example.com"}
-		require.NoError(t, database.Database[*TestUser](as("u-1")).Create(u))
-		require.NoError(t, database.Database[*TestUser](as("u-2")).UpdateByID(u.ID, colName.Set("stamped-by-id-2")))
+		require.NoError(t, database.Database[*TestUser](asCaller("u-1")).Create(u))
+		require.NoError(t, database.Database[*TestUser](asCaller("u-2")).UpdateByID(u.ID, colName.Set("stamped-by-id-2")))
 		require.Equal(t, "u-1", stored(t, u.ID).CreatedBy)
 		require.Equal(t, "u-2", stored(t, u.ID).UpdatedBy)
 	})
 	t.Run("Upsert names the caller on insert and refreshes only the updater on conflict", func(t *testing.T) {
 		item := &TestUniqueItem{UniqueCode: "stamped-upsert", Name: "first"}
-		require.NoError(t, database.Database[*TestUniqueItem](as("u-1")).Upsert(item))
+		require.NoError(t, database.Database[*TestUniqueItem](asCaller("u-1")).Upsert(item))
 		item.Name = "second"
-		require.NoError(t, database.Database[*TestUniqueItem](as("u-2")).Upsert(item))
+		require.NoError(t, database.Database[*TestUniqueItem](asCaller("u-2")).Upsert(item))
 		got := new(TestUniqueItem)
 		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Get(got, item.ID))
 		require.Equal(t, "second", got.Name)
@@ -820,6 +816,16 @@ func TestDatabaseUpsert(t *testing.T) {
 		items := make([]*TestUniqueItem, 0)
 		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).WithQuery(&TestUniqueItem{UniqueCode: "upsert-dry"}).List(&items))
 		require.Empty(t, items, "dry run must not persist rows")
+
+		// The statement names the caller the context carries as creator and
+		// updater, and the object keeps what it holds.
+		stmts = stmts[:0]
+		audited := &TestUniqueItem{UniqueCode: "upsert-dry-audited", Name: "dry"}
+		require.NoError(t, database.Database[*TestUniqueItem](asCaller(dryRunCaller)).WithDryRun(&stmts).Upsert(audited))
+		require.Len(t, stmts, 1)
+		require.Contains(t, stmts[0].RenderedSQL, dryRunCaller)
+		require.Empty(t, audited.CreatedBy, "dry run must not fill created_by")
+		require.Empty(t, audited.UpdatedBy, "dry run must not fill updated_by")
 	})
 
 	t.Run("WithSelect narrows the merged columns", func(t *testing.T) {
@@ -1263,6 +1269,28 @@ func TestDatabaseWritesLeaveAssociationsAlone(t *testing.T) {
 	require.NoError(t, database.Database[*TestCategory](ctx).Upsert(other))
 	require.Equal(t, 2, stored(), "an upsert inserts the record alone")
 	require.Nil(t, other.Children)
+
+	// An association declared in a struct embedded through a pointer is
+	// zeroed the same way, the path to it stepping through the pointer; a nil
+	// pointer holds no association to zero.
+	require.NoError(t, database.DB().AutoMigrate(&TestExtendedCategory{}))
+	t.Cleanup(func() {
+		require.NoError(t, database.DB().Migrator().DropTable(&TestExtendedCategory{}))
+	})
+	leaves := func() []*TestExtendedCategory { return []*TestExtendedCategory{{Name: prefix + "-leaf"}} }
+	extended := &TestExtendedCategory{Name: prefix + "-extended", TestCategoryRelations: &TestCategoryRelations{Children: leaves()}}
+	require.NoError(t, database.Database[*TestExtendedCategory](ctx).Create(extended))
+	require.Nil(t, extended.Children, "the children are not handed back as written")
+	extended.Children = leaves()
+	require.NoError(t, database.Database[*TestExtendedCategory](ctx).Update(extended))
+	require.Nil(t, extended.Children)
+	extended.Children = leaves()
+	require.NoError(t, database.Database[*TestExtendedCategory](ctx).Upsert(extended))
+	require.Nil(t, extended.Children)
+	require.NoError(t, database.Database[*TestExtendedCategory](ctx).Create(&TestExtendedCategory{Name: prefix + "-bare"}))
+	var extendedRows int
+	require.NoError(t, database.Database[*TestExtendedCategory](ctx).Count(&extendedRows))
+	require.Equal(t, 2, extendedRows, "the records alone are inserted")
 
 	// Writing the owner first is what makes gorm register its has-many on
 	// the held model's schema (see TestOwnerRecord).
