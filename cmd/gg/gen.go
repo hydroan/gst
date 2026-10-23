@@ -322,21 +322,28 @@ func genRunWithOptions(opts genRunOptions) error {
 	pbPaths := make([]string, 0, len(pbFiles))
 	for _, f := range pbFiles {
 		pbPaths = append(pbPaths, f.Path)
+	}
+	// The Go files under pb/ this run does not write served a model deleted
+	// or no longer declaring GRPC(): derived from the models alone, they go
+	// with it, so that the project builds. The definition stays, with the
+	// numbers and names it reserves, for prune to delete (see
+	// pruneLeftovers). They are worked out before anything is written, so a
+	// Go file there gg gen did not generate leaves pb/ as it was.
+	stale, err := staleDerivedPBFiles(pbPaths, scanned.pruneConfig)
+	if err != nil {
+		return err
+	}
+	for _, f := range pbFiles {
 		if err = writeGenFile(filepath.FromSlash(f.Path), f.Content); err != nil {
 			return err
 		}
 	}
-	// The Go files under pb/ this run did not write served a model deleted
-	// or no longer declaring GRPC(): derived from the models alone, they go
-	// with it, so that the project builds. The definition stays, with the
-	// numbers and names it reserves, for prune to delete (see
-	// pruneLeftovers).
-	for _, stale := range staleDerivedPBFiles(pbPaths, scanned.pruneConfig) {
-		if err = os.Remove(stale); err != nil {
-			return errors.Wrapf(err, "remove %s", stale)
+	for _, path := range stale {
+		if err = os.Remove(path); err != nil {
+			return errors.Wrapf(err, "remove %s", path)
 		}
 		if !opts.Quiet {
-			clioutput.Success("REMOVE", "%s (its model is no longer served over gRPC)", stale)
+			clioutput.Success("REMOVE", "%s (its model is no longer served over gRPC)", path)
 		}
 	}
 
@@ -463,7 +470,9 @@ func genRunWithOptions(opts genRunOptions) error {
 	// Prune what the models no longer need
 	// ============================================================
 	if prune {
-		pruneLeftovers(oldServiceFiles, allModels, ignoreResult.KeptServiceFiles, ignoreResult.KeptServiceDirs, ignore, scanned.pruneConfig, existingPBFiles(), pbPaths)
+		if pruneErr := pruneLeftovers(oldServiceFiles, allModels, ignoreResult.KeptServiceFiles, ignoreResult.KeptServiceDirs, ignore, scanned.pruneConfig, existingPBFiles(), pbPaths); pruneErr != nil {
+			return pruneErr
+		}
 	}
 
 	// ============================================================
