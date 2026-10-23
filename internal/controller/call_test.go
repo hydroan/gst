@@ -151,11 +151,13 @@ func TestCreateCallRefusesAnHTTPOnlyMethodBeforeWriting(t *testing.T) {
 }
 
 // TestCallsRefuseAnEmptyParentParameterWhateverItsName pins that only the
-// parameter carrying the id of an item action, the last one of its route, is
-// left to the call's own refusal: a parent parameter named id, the default
-// name of a model declaring no Param, is refused when empty on a collection
-// action and on an item action alike, and the item action refuses an empty
-// id by the field's name.
+// parameter carrying the id of a standard item action, the last one of its
+// route, is left to the call's own refusal: a parent parameter named id, the
+// default name of a model declaring no Param, is refused when empty on a
+// collection action and on an item action alike, and the item action refuses
+// an empty id by the field's name. A custom action on an item route has no id
+// field to refuse an empty one by, so it refuses that parameter like any
+// other.
 func TestCallsRefuseAnEmptyParentParameterWhateverItsName(t *testing.T) {
 	conn := sampleServer(t)
 
@@ -167,6 +169,9 @@ func TestCallsRefuseAnEmptyParentParameterWhateverItsName(t *testing.T) {
 
 	_, err = invoke(t, conn, "ParentGet", map[string]any{"params": map[string]string{"id": "p-1"}})
 	requireStatus(t, err, codes.InvalidArgument, "id is required")
+
+	_, err = invoke(t, conn, "ActionGet", map[string]any{"params": map[string]string{"id": ""}})
+	requireStatus(t, err, codes.InvalidArgument, `route parameter "id" is required`)
 }
 
 // TestGetCallAnswersTheRecordOrNotFound pins the get call: the record the id
@@ -899,6 +904,10 @@ func sampleHandlers() map[string]rpcHandler {
 	handlers["OpenAction"] = handlers["Action"]
 	handlers["ActionList"] = func(ctx context.Context, in map[string]any) (any, error) {
 		return actionList(ctx, params(in), field[controller.Query](in, "query"), field[*sampleActionReq](in, "payload"))
+	}
+	actionGet := controller.ServiceCall[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Get, actionItemRoute)
+	handlers["ActionGet"] = func(ctx context.Context, in map[string]any) (any, error) {
+		return actionGet(ctx, params(in), field[controller.Query](in, "query"), field[*sampleActionReq](in, "payload"))
 	}
 	return handlers
 }

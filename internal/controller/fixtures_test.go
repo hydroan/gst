@@ -57,9 +57,12 @@ type sampleCounter struct {
 func (sampleCounter) TableName() string { return "controller_counters" }
 
 // versionedSample is a table model under optimistic locking: a patch of it
-// must carry the version it was read at.
+// must carry the version it was read at. Its code, when written, holds three
+// characters at most, so an item of a batch patch can fail validation beside
+// one lacking its version.
 type versionedSample struct {
 	Name    string              `json:"name"`
+	Code    string              `json:"code" binding:"omitempty,max=3"`
 	Version modelschema.Version `json:"version,omitempty" gorm:"not null;default:1"`
 
 	modelregistry.Base
@@ -182,6 +185,7 @@ const (
 	cookieBeforeRoute  = "controller-cookie-before-samples"
 	cookieAfterRoute   = "controller-cookie-after-samples"
 	actionRoute        = "controller-sample-actions"
+	actionItemRoute    = "controller-sample-actions/:id"
 	watchRoute         = "controller-sample-watches"
 	uploadRoute        = "controller-sample-uploads"
 	chatRoute          = "controller-sample-chats"
@@ -208,6 +212,7 @@ func registerFixtureServices() {
 	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](consts.Create, cookieAfterRoute, &cookieAfterService{})
 	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Create, actionRoute, &actionService{})
 	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.List, actionRoute, &actionService{})
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Get, actionItemRoute, &actionService{})
 	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Stream, watchRoute, &watchService{})
 	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Stream, uploadRoute, &uploadService{})
 	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Stream, chatRoute, &chatService{})
@@ -383,8 +388,8 @@ var actionEntered = make(chan struct{}, 1)
 // fails with a plain error for actionBreak, writes a raw response, which
 // only HTTP can carry, for actionWrite, reads a form value, which only an
 // HTTP request carries, for actionRead, and hangs until the call ends for
-// actionHang, returning the error the context reports. Its List answers the
-// same, for the query a GET action reads.
+// actionHang, returning the error the context reports. Its List and Get
+// answer the same, for the query a GET action reads.
 type actionService struct {
 	serviceregistry.Base[*sampleRecord, *sampleActionReq, *sampleActionRsp]
 }
@@ -408,6 +413,10 @@ func (*actionService) Create(sc *types.ServiceContext, req *sampleActionReq) (*s
 }
 
 func (*actionService) List(sc *types.ServiceContext, req *sampleActionReq) (*sampleActionRsp, error) {
+	return &sampleActionRsp{Note: req.Note, observedCall: observe(sc)}, nil
+}
+
+func (*actionService) Get(sc *types.ServiceContext, req *sampleActionReq) (*sampleActionRsp, error) {
 	return &sampleActionRsp{Note: req.Note, observedCall: observe(sc)}, nil
 }
 

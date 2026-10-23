@@ -3,18 +3,24 @@ package controller
 import (
 	"context"
 	"fmt"
+	"iter"
 	"reflect"
+	"strings"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/requestctx"
+	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+	"go.uber.org/zap"
 )
 
 // action is one action of a model on a route as the framework serves it,
@@ -43,12 +49,14 @@ type action[M types.Model, REQ types.Request, RSP types.Response] struct {
 
 	idColumn types.Column[string] // the id column of M, the reference the batch flows read records by
 
-	// itemParam is the route parameter carrying the id of an item action, a
-	// Get, Update, Patch or Delete: the last parameter segment of its route
-	// (see consts.LastRouteParam), the one the generated gRPC handler fills
-	// from the id field of the message, so beginCall leaves an empty one to
-	// the call to refuse by that field's name; "" for any other action, which
-	// exempts no parameter.
+	// itemParam is the route parameter carrying the id of a standard item
+	// action, a Get, Update, Patch or Delete of the model itself: the last
+	// parameter segment of its route (see consts.LastRouteParam), the one the
+	// generated gRPC handler fills from the id field of the message and the
+	// HTTP handler reads the id from, so beginCall and beginRequest leave an
+	// empty one to the action, which refuses the id it lacks; "" for any other
+	// action, a custom one on an item route included, which refuses no empty
+	// id of its own and so exempts no parameter.
 	itemParam string
 }
 
@@ -89,15 +97,16 @@ func newAction[M types.Model, REQ types.Request, RSP types.Response](route strin
 	for _, hookPhase := range hookPhases {
 		serviceSpans[hookPhase] = newPhaseSpan("service", name, hookPhase)
 	}
+	typesEqual := modelregistry.AreTypesEqual[M, REQ, RSP]()
 	itemParam := ""
-	if itemPhases[phase] {
+	if itemPhases[phase] && typesEqual {
 		itemParam = consts.LastRouteParam(route)
 	}
 
 	return &action[M, REQ, RSP]{
 		typ:            typ,
 		name:           name,
-		typesEqual:     modelregistry.AreTypesEqual[M, REQ, RSP](),
+		typesEqual:     typesEqual,
 		phase:          phase,
 		serviceKey:     serviceregistry.Key(phase, route),
 		reqKind:        reqKind,
@@ -159,16 +168,61 @@ func (a *action[M, REQ, RSP]) service() types.Service[M, REQ, RSP] {
 	return serviceregistry.Resolve[M, REQ, RSP](a.serviceKey)
 }
 
-// startControllerSpan starts the span for the controller operation of the
-// request c serves (see startSpan) and rebinds the request context so
-// downstream layers nest under it.
-func (a *action[M, REQ, RSP]) startControllerSpan(c *gin.Context) (context.Context, trace.Span) {
+// beginRequest starts the span for the controller operation of the request
+// c serves (see startSpan), rebinds the request context so downstream
+// layers nest under it, and reports whether the action serves the request:
+// a route parameter it may not carry (see routeParamError) is refused with
+// 400, the way beginCall refuses one on a call, its span recording the
+// refusal. The caller ends the span either way.
+func (a *action[M, REQ, RSP]) beginRequest(c *gin.Context) (context.Context, trace.Span, bool) {
 	spanCtx, span := a.startSpan(c.Request.Context(), c.Request.Method, c.FullPath())
 
 	// Update request context with new span context
 	c.Request = c.Request.WithContext(requestctx.WithMetadata(spanCtx, requestctx.FromGin(c)))
 
-	return spanCtx, span
+	err := routeParamError(func(yield func(string, string) bool) {
+		for _, param := range c.Params {
+			if !yield(param.Key, param.Value) {
+				return
+			}
+		}
+	}, a.itemParam)
+	if err != nil {
+		logger.Controller.WithContext(c.Request.Context(), a.phase).Errorz("request rejected", zap.Error(err))
+		gstotel.RecordError(span, err)
+		response.Error(c, invalidArgument(err))
+		return spanCtx, span, false
+	}
+	return spanCtx, span, true
+}
+
+// routeParamError reports the route parameter a request or a call may not
+// carry, the first of them by name: one left empty, unless it is exempt, the
+// parameter carrying the id of a standard item action (see
+// action.itemParam), or one carrying a slash. A message may carry either,
+// and a path carries an empty one as an empty segment, /records//items; a
+// service scoping its work by such a parameter would scope it by nothing,
+// or by a path of its own.
+func routeParamError(params iter.Seq2[string, string], exempt string) error {
+	var name, problem string
+	for key, value := range params {
+		var found string
+		switch {
+		case value == "" && key != exempt:
+			found = "is required"
+		case strings.Contains(value, "/"):
+			found = `must not contain "/"`
+		default:
+			continue
+		}
+		if problem == "" || key < name {
+			name, problem = key, found
+		}
+	}
+	if problem == "" {
+		return nil
+	}
+	return errors.Newf("route parameter %q %s", name, problem)
 }
 
 // startSpan starts the span for the controller operation under the request

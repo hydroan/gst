@@ -2,6 +2,7 @@ package controller_test
 
 import (
 	"bytes"
+	"context"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/controller"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -73,9 +75,31 @@ func TestImportAnswersTheServiceRefusal(t *testing.T) {
 	require.Zero(t, countSamplesNamed(t, name))
 }
 
+// TestImportAnswersAClientThatWentAwayAsCanceled pins that an import the
+// client cut short answers as canceled, the client's doing, not as a failure
+// of the server, and writes nothing.
+func TestImportAnswersAClientThatWentAwayAsCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	name := uniqueName("import-canceled")
+
+	rsp := uploadIn(ctx, t, controller.ImportHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](importRoute)),
+		[]byte(`[{"name":"`+name+`"}]`))
+
+	require.Equal(t, types.StatusClientClosedRequest, rsp.Code, rsp.Body.String())
+	require.Zero(t, countSamplesNamed(t, name))
+}
+
 // upload posts content to handler as the multipart file field an import
 // reads, and returns the recorded response.
 func upload(t *testing.T, handler gin.HandlerFunc, content []byte) *httptest.ResponseRecorder {
+	t.Helper()
+	return uploadIn(context.Background(), t, handler, content)
+}
+
+// uploadIn is upload for a request sent in ctx, which a test ending the
+// request on the client's behalf cancels.
+func uploadIn(ctx context.Context, t *testing.T, handler gin.HandlerFunc, content []byte) *httptest.ResponseRecorder {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -89,7 +113,7 @@ func upload(t *testing.T, handler gin.HandlerFunc, content []byte) *httptest.Res
 
 	engine := gin.New()
 	engine.POST("/controller-imports/import", handler)
-	req := httptest.NewRequest(http.MethodPost, "/controller-imports/import", body)
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/controller-imports/import", body)
 	req.Header.Set("Content-Type", form.FormDataContentType())
 	recorder := httptest.NewRecorder()
 	engine.ServeHTTP(recorder, req)

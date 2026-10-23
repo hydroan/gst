@@ -39,8 +39,11 @@ const missingUploadFileMsg = "upload file is required"
 func ImportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.Import)
 	return func(c *gin.Context) {
-		ctrlSpanCtx, span := a.startControllerSpan(c)
+		ctrlSpanCtx, span, ok := a.beginRequest(c)
 		defer span.End()
+		if !ok {
+			return
+		}
 
 		log := logger.Controller.WithContext(c.Request.Context(), consts.Import)
 		// NOTE: the form field name is "file", it must be agreed on with the frontend.
@@ -79,9 +82,7 @@ func ImportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				Import(types.NewServiceContext(c, spanCtx, consts.Import), buf)
 		})
 		if err != nil {
-			log.Errorz("service operation failed", zap.Error(err))
-			response.Error(c, err)
-			gstotel.RecordError(span, err)
+			response.Error(c, failService(ctrlSpanCtx, log, err))
 			return
 		}
 
@@ -113,9 +114,7 @@ func ImportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			}
 			return database.Database[M](txCtx).Update(toUpdate...)
 		}); err != nil {
-			log.Errorz("database operation failed", zap.Error(err))
-			response.Error(c, databaseError(err))
-			gstotel.RecordError(span, err)
+			response.Error(c, failDatabase(ctrlSpanCtx, log, err))
 			return
 		}
 		response.JSON(c)

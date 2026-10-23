@@ -68,8 +68,11 @@ func exportAttachment(format string) (filename, contentType string) {
 func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.Export, consts.ListBefore, consts.ListAfter)
 	return func(c *gin.Context) {
-		ctrlSpanCtx, span := a.startControllerSpan(c)
+		ctrlSpanCtx, span, ok := a.beginRequest(c)
 		defer span.End()
+		if !ok {
+			return
+		}
 
 		log := logger.Controller.WithContext(c.Request.Context(), consts.Export)
 
@@ -134,9 +137,7 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			if err = a.traceServiceHook(ctrlSpanCtx, consts.ListBefore, svc, exportServiceContext, func(sc *types.ServiceContext) error {
 				return svc.ListBefore(sc, &data)
 			}); err != nil {
-				log.Errorz("service operation failed", zap.Error(err))
-				response.Error(c, err)
-				gstotel.RecordError(span, err)
+				response.Error(c, failService(ctrlSpanCtx, log, err))
 				return
 			}
 			// 2.Let the service rewrite the query condition and options; the
@@ -148,9 +149,7 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				Filters:       filters,
 			}
 			if m, queryOpts, err = svc.Filter(svcCtx, m, queryOpts); err != nil {
-				log.Errorz("service operation failed", zap.Error(err))
-				response.Error(c, err)
-				gstotel.RecordError(span, err)
+				response.Error(c, failService(ctrlSpanCtx, log, err))
 				return
 			}
 			// 3.List resources from database. An export is bounded by the limit
@@ -161,18 +160,14 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				WithExpand(expands, orders...).
 				WithOrder(orders...).
 				List(&data); err != nil {
-				log.Errorz("database operation failed", zap.Error(err))
-				response.Error(c, databaseError(err))
-				gstotel.RecordError(span, err)
+				response.Error(c, failDatabase(ctrlSpanCtx, log, err))
 				return
 			}
 			// 4.Perform business logic processing after list resources.
 			if err = a.traceServiceHook(ctrlSpanCtx, consts.ListAfter, svc, exportServiceContext, func(sc *types.ServiceContext) error {
 				return svc.ListAfter(sc, &data)
 			}); err != nil {
-				log.Errorz("service operation failed", zap.Error(err))
-				response.Error(c, err)
-				gstotel.RecordError(span, err)
+				response.Error(c, failService(ctrlSpanCtx, log, err))
 				return
 			}
 		}
@@ -181,9 +176,7 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			return svc.Export(types.NewServiceContext(c, spanCtx, consts.Export), data...)
 		})
 		if err != nil {
-			log.Errorz("service operation failed", zap.Error(err))
-			response.Error(c, err)
-			gstotel.RecordError(span, err)
+			response.Error(c, failService(ctrlSpanCtx, log, err))
 			return
 		}
 		format := resolveExportFormat(c.Query(consts.QUERY_FORMAT), exported)

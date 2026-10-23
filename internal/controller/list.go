@@ -36,8 +36,11 @@ func ListHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 	return func(c *gin.Context) {
 		// The span context lives on in the request context the span start
 		// rebinds, which requestContext reads for the flow.
-		_, span := a.startControllerSpan(c)
+		_, span, ok := a.beginRequest(c)
 		defer span.End()
+		if !ok {
+			return
+		}
 
 		items, total, err := a.listFlow(requestContext(c), ginServiceContext(c))
 		if err != nil {

@@ -230,30 +230,20 @@ type call struct {
 // (see grpcserver.WithParams) and starts the controller span on it, the way
 // the HTTP handler starts one on the request, described by the method and
 // route the call carries, the action's as the registration described it;
-// the caller ends the span through end. A route parameter left empty, or
-// carrying a slash, is reported once the call began, so the caller refuses
-// it on the call, its span recording the refusal: over HTTP a parameter
-// matches one segment of the path, so no request carries an empty one or
-// one with a slash in it, while a message may carry either, and a service
-// scoping its work by the parameter would then scope it by nothing, or by a
-// path of its own. The parameter carrying the id of an item action (see
-// action.itemParam) is left to the caller when empty: the generated handler
-// fills it from the id field of the message, so an empty one is an empty id,
-// which the caller refuses by that field's name (see missingID).
+// the caller ends the span through end. A route parameter the call may not
+// carry (see routeParamError) is reported once the call began, so the caller
+// refuses it on the call, its span recording the refusal, the way
+// beginRequest refuses one on a request. The parameter carrying the id of a
+// standard item action (see action.itemParam) is left to the caller when
+// empty: the generated handler fills it from the id field of the message, so
+// an empty one is an empty id, which the caller refuses by that field's name
+// (see missingID).
 func (a *action[M, REQ, RSP]) beginCall(ctx context.Context, params map[string]string, query url.Values) (*call, error) {
 	ctx = grpcserver.WithParams(ctx, params, query)
 	reqMeta := requestctx.FromContext(ctx)
 	spanCtx, span := a.startSpan(ctx, reqMeta.Method(), reqMeta.Route())
 	c := &call{ctx: spanCtx, span: span, log: logger.Controller.WithContext(ctx, a.phase)}
-	for _, name := range slices.Sorted(maps.Keys(params)) {
-		if params[name] == "" && name != a.itemParam {
-			return c, errors.Newf("route parameter %q is required", name)
-		}
-		if strings.Contains(params[name], "/") {
-			return c, errors.Newf("route parameter %q must not contain \"/\"", name)
-		}
-	}
-	return c, nil
+	return c, routeParamError(maps.All(params), a.itemParam)
 }
 
 // beginQueryCall is beginCall for an action reading a query, a List or a

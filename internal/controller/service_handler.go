@@ -36,8 +36,11 @@ func (a *action[M, REQ, RSP]) serviceHandler() gin.HandlerFunc {
 	invoke := serviceMethod[M, REQ, RSP](a.phase)
 	binds := a.phase != consts.List && a.phase != consts.Get
 	return func(c *gin.Context) {
-		ctrlSpanCtx, span := a.startControllerSpan(c)
+		ctrlSpanCtx, span, ok := a.beginRequest(c)
 		defer span.End()
+		if !ok {
+			return
+		}
 
 		log := logger.Controller.WithContext(c.Request.Context(), a.phase)
 		req := a.newRequest()
@@ -70,9 +73,7 @@ func (a *action[M, REQ, RSP]) serviceHandler() gin.HandlerFunc {
 			return invoke(svc, types.NewServiceContext(c, spanCtx, a.phase), req)
 		})
 		if err != nil {
-			log.Errorz("service operation failed", zap.Error(err))
-			response.Error(c, err)
-			gstotel.RecordError(span, err)
+			response.Error(c, failService(ctrlSpanCtx, log, err))
 			return
 		}
 		// Check if response is already written (e.g., SSE streaming)

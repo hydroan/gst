@@ -16,7 +16,9 @@ import (
 var errServerShutdown = errors.New("grpc: the server is shutting down")
 
 // shutdownMsg is the status message a stream the stop ended is answered
-// with.
+// with: the counterpart of the controller package's shutdownMsg, which a
+// Server-Sent Events stream the shutdown ended before it opened is answered
+// with over HTTP, the same sentence on both lines.
 const shutdownMsg = "the server is shutting down"
 
 // streamShutdown returns the stream interceptor closest to the handler: it

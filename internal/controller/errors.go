@@ -29,6 +29,12 @@ const (
 	foreignKeyMsg      = "The request refers to a record that does not exist or is still in use." // 409
 )
 
+// shutdownMsg answers, with 503, a Server-Sent Events stream the server's
+// shutdown ended before it opened: the counterpart of the grpcserver
+// package's shutdownMsg, which a gRPC stream the stop ended is answered
+// with, the same sentence on both lines.
+const shutdownMsg = "the server is shutting down"
+
 // invalidArgument returns the refusal of a request the controller could not
 // carry, err: 400 with the client-safe text of err — the message of the
 // service error err wraps, when it does, err's own text otherwise — and err
@@ -69,14 +75,26 @@ func failWith(ctx context.Context, log types.Logger, msg string, err, answer err
 	ended := ctx.Err()
 	if errors.Is(ended, context.Canceled) {
 		log.Infoz(msg, zap.Error(err))
-		return types.NewErrorWithCause(types.StatusClientClosedRequest, ended.Error(), err)
+		return endedAnswer(ended, err)
 	}
 	log.Errorz(msg, zap.Error(err))
 	gstotel.RecordError(trace.SpanFromContext(ctx), err)
 	if ended != nil {
-		return types.NewErrorWithCause(http.StatusGatewayTimeout, ended.Error(), err)
+		return endedAnswer(ended, err)
 	}
 	return answer
+}
+
+// endedAnswer returns the answer of a request whose context ended, ended
+// being how, with err behind it: a request the client canceled as
+// types.StatusClientClosedRequest with the context's message, what gRPC
+// answers Canceled, and one whose deadline passed as 504 with the context's
+// message, what gRPC answers DeadlineExceeded.
+func endedAnswer(ended, err error) error {
+	if errors.Is(ended, context.Canceled) {
+		return types.NewErrorWithCause(types.StatusClientClosedRequest, ended.Error(), err)
+	}
+	return types.NewErrorWithCause(http.StatusGatewayTimeout, ended.Error(), err)
 }
 
 // failService reports a service hook or operation that refused or failed,

@@ -37,8 +37,11 @@ func UpdateHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 	return func(c *gin.Context) {
 		// The span context lives on in the request context the span start
 		// rebinds, which requestContext reads for the flow.
-		_, span := a.startControllerSpan(c)
+		_, span, ok := a.beginRequest(c)
 		defer span.End()
+		if !ok {
+			return
+		}
 
 		reqMeta := requestctx.FromGin(c)
 		log := logger.Controller.WithContext(c.Request.Context(), consts.Update)

@@ -37,8 +37,11 @@ func PatchManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg 
 	return func(c *gin.Context) {
 		// The span context lives on in the request context the span start
 		// rebinds, which requestContext reads for the flow.
-		_, span := a.startControllerSpan(c)
+		_, span, ok := a.beginRequest(c)
 		defer span.End()
+		if !ok {
+			return
+		}
 
 		log := logger.Controller.WithContext(c.Request.Context(), consts.PatchMany)
 
@@ -68,21 +71,28 @@ func PatchManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg 
 		// the single-resource patch; failing the whole batch up front keeps
 		// the all-or-nothing shape a defective request deserves. See
 		// modelschema.Version. Each item is then validated on the fields it
-		// names, like the single-resource patch too.
+		// names, like the single-resource patch too. Every version is checked
+		// before any item is validated, the order the call checks a batch in,
+		// so a batch defective in several items is refused for the same one
+		// on both transports.
 		versionField, versioned := modelschema.VersionFieldName(a.newModel())
-		for i, item := range req.Items {
-			itemFields := patchFieldSet{}
+		fieldsOf := func(i int) patchFieldSet {
 			if i < len(fieldSets) {
-				itemFields = fieldSets[i]
+				return fieldSets[i]
 			}
-			if _, ok := itemFields[versionField]; versioned && !ok {
+			return patchFieldSet{}
+		}
+		for i := range req.Items {
+			if _, ok := fieldsOf(i)[versionField]; versioned && !ok {
 				log.Errorz("versioned model patched without its version",
 					zap.Int("item", i), zap.String("field", versionField))
 				response.Error(c, databaseError(database.ErrVersionRequired))
 				gstotel.RecordError(span, database.ErrVersionRequired)
 				return
 			}
-			if fieldErr := validatePatchFields(item, itemFields); fieldErr != nil {
+		}
+		for i, item := range req.Items {
+			if fieldErr := validatePatchFields(item, fieldsOf(i)); fieldErr != nil {
 				fieldErr = clientSafeItemBindError(i, fieldErr)
 				log.Errorz("bind request body failed", zap.Error(fieldErr))
 				response.Error(c, invalidArgument(fieldErr))

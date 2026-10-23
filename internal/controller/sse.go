@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
@@ -11,10 +12,8 @@ import (
 	"github.com/hydroan/gst/internal/sse"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
-	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/zap"
 )
 
 // SSEHandler returns a Gin handler that streams Server-Sent Events.
@@ -29,7 +28,10 @@ import (
 // A stream ending that way is how streams end, not a failure. The span
 // records how it ended as an interrupted event with the reason, and a service
 // returning nothing but that ending is neither logged nor recorded as an
-// error, on this span or on the service's. A failure of its own is: the
+// error, on this span or on the service's; a stream that ended that way
+// before it opened is answered by what ended it, the server shutting down
+// with 503, a client that went away as a canceled request. A failure of its
+// own is reported the way every flow reports one (see failService): the
 // handler distinguishes the two failure shapes by whether the response was
 // written. A setup failure before the stream opened is answered as a regular
 // error envelope, while an error after streaming began can only be logged,
@@ -41,8 +43,11 @@ func SSEHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 		defer stopStream()
 		c.Request = c.Request.WithContext(stream)
 
-		ctrlSpanCtx, span := a.startControllerSpan(c)
+		ctrlSpanCtx, span, ok := a.beginRequest(c)
 		defer span.End()
+		if !ok {
+			return
+		}
 
 		log := logger.Controller.WithContext(c.Request.Context(), consts.SSE)
 		svc := a.service()
@@ -62,8 +67,7 @@ func SSEHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 		}
 		switch {
 		case err != nil:
-			log.Errorz("service operation failed", zap.Error(err))
-			gstotel.RecordError(span, err)
+			err = failService(ctrlSpanCtx, log, err)
 			if !c.Writer.Written() {
 				response.Error(c, err)
 			}
@@ -71,7 +75,16 @@ func SSEHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 			// A finished stream needs no envelope; the connection closing is
 			// the response.
 		case ended != nil:
-			response.Error(c, ended)
+			// A stream that ended before it opened is answered by what ended
+			// it: the server shutting down as unavailable, the status gRPC
+			// answers a stream the stop ended, so that the client resumes on
+			// another replica, and the client going away as a canceled
+			// request.
+			answer := endedAnswer(stream.Err(), ended)
+			if errors.Is(context.Cause(stream), sse.ErrServerShutdown) {
+				answer = types.NewErrorWithCause(http.StatusServiceUnavailable, shutdownMsg, ended)
+			}
+			response.Error(c, answer)
 		default:
 			// A service that never opened the stream and returned nil still
 			// owes the client an answer.

@@ -41,8 +41,11 @@ func PatchHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 
 		// The span context lives on in the request context the span start
 		// rebinds, which requestContext reads for the flow.
-		_, span := a.startControllerSpan(c)
+		_, span, ok := a.beginRequest(c)
 		defer span.End()
+		if !ok {
+			return
+		}
 
 		reqMeta := requestctx.FromGin(c)
 		log := logger.Controller.WithContext(c.Request.Context(), consts.Patch)
@@ -62,19 +65,6 @@ func PatchHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			gstotel.RecordError(span, err)
 			return
 		}
-		// A versioned model must carry the version it was read with on every
-		// partial update, exactly like Update: the merge would otherwise keep
-		// the freshly loaded row's version and the lock would silently check
-		// the row against itself. Enforced before the existence query so a
-		// defective request costs no database work. See modelschema.Version.
-		if versionField, versioned := modelschema.VersionFieldName(req); versioned {
-			if _, ok := fields[versionField]; !ok {
-				log.Errorz("versioned model patched without its version", zap.String("field", versionField))
-				response.Error(c, databaseError(database.ErrVersionRequired))
-				gstotel.RecordError(span, database.ErrVersionRequired)
-				return
-			}
-		}
 		// The resource id comes from the configured route parameter only.
 		if len(cfg) > 0 {
 			id = reqMeta.Param(util.Deref(cfg[0]).ParamName)
@@ -87,6 +77,21 @@ func PatchHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			response.Error(c, invalidArgument(err))
 			gstotel.RecordError(span, err)
 			return
+		}
+		// A versioned model must carry the version it was read with on every
+		// partial update, exactly like Update: the merge would otherwise keep
+		// the freshly loaded row's version and the lock would silently check
+		// the row against itself. Checked once the body is read, so that a
+		// request carrying no record is refused for the record it lacks, the
+		// way a call is, and before the existence query, so that a defective
+		// request costs no database work. See modelschema.Version.
+		if versionField, versioned := modelschema.VersionFieldName(req); versioned {
+			if _, ok := fields[versionField]; !ok {
+				log.Errorz("versioned model patched without its version", zap.String("field", versionField))
+				response.Error(c, databaseError(database.ErrVersionRequired))
+				gstotel.RecordError(span, database.ErrVersionRequired)
+				return
+			}
 		}
 		a.normalizeModel(&req)
 		if err = validatePatchFields(req, fields); err != nil {

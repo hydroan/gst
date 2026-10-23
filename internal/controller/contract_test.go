@@ -411,6 +411,18 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			want: contractWant{status: types.StatusClientClosedRequest, msg: "context canceled"},
 		},
 		{
+			name: "List reads under the parent its route names", fixture: parentFixture, phase: consts.List,
+			input: contractInput{params: map[string]string{"id": "contract-parent"}},
+			want:  ok,
+		},
+		{
+			// A path carries an empty parameter as an empty segment,
+			// controller-parents//samples, the way a message carries one.
+			name: "List refuses an empty route parameter", fixture: parentFixture, phase: consts.List,
+			input: contractInput{params: map[string]string{"id": ""}},
+			want:  contractWant{status: http.StatusBadRequest, msg: `route parameter "id" is required`},
+		},
+		{
 			name: "Update replaces the record for the caller", fixture: samples, phase: consts.Update,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
@@ -624,6 +636,24 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				return contractInput{id: createValidated(t, "contract-patch-unnamed").GetID(), record: map[string]any{"note": "only the note"}}
 			},
 			want: ok,
+		},
+		{
+			name: "Patch refuses a request carrying no record", fixture: samples, phase: consts.Patch,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				return contractInput{id: createSample(t, "contract-patch-no-record").GetID()}
+			},
+			want: noRecord,
+		},
+		{
+			// A request carrying no record carries no version either: the
+			// record it lacks is what it is refused for.
+			name: "Patch refuses a request carrying no record on a versioned model", fixture: versioned, phase: consts.Patch,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				return contractInput{id: createVersioned(t, "contract-patch-versioned-no-record").GetID()}
+			},
+			want: noRecord,
 		},
 		{
 			name: "Patch refuses a versioned record without its version", fixture: versioned, phase: consts.Patch,
@@ -930,6 +960,18 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			want: invalid,
 		},
 		{
+			// Every item's version is checked before any item is validated, so
+			// a batch defective in several items is refused for the same one.
+			name: "PatchMany refuses a missing version before an invalid field", fixture: versioned, phase: consts.PatchMany,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				invalidCode := createVersioned(t, "contract-patch-many-invalid-code").GetID()
+				unversioned := createVersioned(t, "contract-patch-many-second-unversioned").GetID()
+				return contractInput{items: []map[string]any{{"id": invalidCode, "version": 1, "code": "too-long"}, {"id": unversioned, "name": "contract-patched"}}}
+			},
+			want: invalid,
+		},
+		{
 			name: "PatchMany refuses an item failing validation", fixture: validated, phase: consts.PatchMany,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
@@ -1054,6 +1096,23 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			name: "A custom action answers any other error as the server's own failure", fixture: actionFixture, phase: consts.Create,
 			input: contractInput{payload: map[string]any{"note": actionBreak}},
 			want:  contractWant{status: http.StatusInternalServerError, msg: types.FailureMsg},
+		},
+		{
+			name: "A custom action answers a client that went away as canceled, not as a failure of the server", fixture: actionFixture, phase: consts.Create,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				ctx, cancel := context.WithCancel(context.Background())
+				t.Cleanup(cancel)
+				go func() {
+					select {
+					case <-actionEntered:
+						cancel()
+					case <-ctx.Done():
+					}
+				}()
+				return contractInput{ctx: ctx, payload: map[string]any{"note": actionHang}}
+			},
+			want: contractWant{status: types.StatusClientClosedRequest, msg: "context canceled"},
 		},
 		{
 			name: "A custom List reads the query", fixture: actionFixture, phase: consts.List,
@@ -1187,11 +1246,14 @@ type contractScenario struct {
 // but the id; the ids of a batch delete; the query of
 // a List, the query string over HTTP; and the payload of a custom action. A
 // nil record is a request carrying none: an absent body, a message without
-// a record. ctx is the context the request is sent in, set by a scenario
-// that ends the request on the client's behalf; nil sends it in a context
-// of the transport's own.
+// a record. params are the parameters of a route carrying some of its own,
+// filled into the path over HTTP, an empty one leaving its segment empty the
+// way a path carries one, and sent under params over gRPC. ctx is the
+// context the request is sent in, set by a scenario that ends the request
+// on the client's behalf; nil sends it in a context of the transport's own.
 type contractInput struct {
 	ctx       context.Context
+	params    map[string]string
 	id        string
 	record    map[string]any
 	items     []map[string]any
@@ -1298,6 +1360,17 @@ var actionFixture = contractFixture{
 	},
 }
 
+// parentFixture is the fixture of the List of the samples nested under a
+// parent (see parentRoute), a route carrying a parameter of its own, which a
+// scenario names in its params.
+var parentFixture = contractFixture{
+	route: parentRoute,
+	handler: func(consts.Phase) gin.HandlerFunc {
+		return controller.ListHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](parentRoute))
+	},
+	rpc: func(consts.Phase) string { return "ParentList" },
+}
+
 // contractTransport sends a scenario's input over one transport, returns
 // what it answered, and holds the answer to what the scenario wants of it.
 type contractTransport struct {
@@ -1318,7 +1391,7 @@ var contractTransports = []contractTransport{
 // items, the ids or the payload as the JSON body.
 func overHTTP(t *testing.T, f contractFixture, phase consts.Phase, in contractInput) contractAnswer {
 	t.Helper()
-	pattern, target := "/"+f.route, "/"+f.route
+	pattern, target := "/"+f.route, "/"+routePath(f.route, in.params)
 	switch phase {
 	case consts.Get, consts.Update, consts.Patch, consts.Delete:
 		pattern += "/:id"
@@ -1371,6 +1444,9 @@ func overHTTP(t *testing.T, f contractFixture, phase consts.Phase, in contractIn
 func overGRPC(t *testing.T, f contractFixture, phase consts.Phase, in contractInput) contractAnswer {
 	t.Helper()
 	message := map[string]any{}
+	if in.params != nil {
+		message["params"] = in.params
+	}
 	if in.id != "" {
 		message["id"] = in.id
 	}
@@ -1490,6 +1566,22 @@ func grpcCodeOf(httpStatus int) codes.Code {
 		return codes.Canceled
 	}
 	panic("no gRPC code of " + strconv.Itoa(httpStatus))
+}
+
+// routePath spells route as the path of a request carrying params: a
+// parameter segment params names a value for holds that value, an empty one
+// an empty segment, so controller-parents/:id/samples with an empty id is
+// controller-parents//samples; any other segment stays as route spells it.
+func routePath(route string, params map[string]string) string {
+	segments := strings.Split(route, "/")
+	for i, segment := range segments {
+		if name, ok := strings.CutPrefix(segment, ":"); ok {
+			if value, given := params[name]; given {
+				segments[i] = value
+			}
+		}
+	}
+	return strings.Join(segments, "/")
 }
 
 // queryString renders q as the query string of the HTTP request: a filter
