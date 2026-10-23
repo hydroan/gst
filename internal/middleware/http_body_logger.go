@@ -118,9 +118,10 @@ func (b *httpBodyCapture) hasContent() bool {
 }
 
 // captureRequestBody buffers a JSON request body and restores it for the
-// handler chain. Bodies over the size cap (or of unknown length) are not read
-// at all: only their size is recorded and the handler keeps the original
-// stream untouched.
+// handler chain; a body failing to read is restored as far as it was read,
+// followed by the failure. Bodies over the size cap (or of unknown length)
+// are not read at all: only their size is recorded and the handler keeps the
+// original stream untouched.
 func captureRequestBody(c *gin.Context, maxBodySize int64) *httpBodyCapture {
 	if !isJSONContentType(c.GetHeader("Content-Type")) || c.Request.Body == nil {
 		return nil
@@ -136,13 +137,25 @@ func captureRequestBody(c *gin.Context, maxBodySize int64) *httpBodyCapture {
 	// ContentLength is known and within the cap here, so allocate exactly once
 	// instead of paying io.ReadAll's grow-from-512-bytes buffering.
 	body := make([]byte, c.Request.ContentLength)
-	if _, err := io.ReadFull(c.Request.Body, body); err != nil {
+	if n, err := io.ReadFull(c.Request.Body, body); err != nil {
+		// The handler reads the body the way it would have without the
+		// capture: the bytes read before the failure, then the failure.
+		c.Request.Body = io.NopCloser(io.MultiReader(bytes.NewReader(body[:n]), failedRead{err: err}))
 		return &httpBodyCapture{size: c.Request.ContentLength, err: "read request body: " + err.Error()}
 	}
 	c.Request.Body = io.NopCloser(bytes.NewReader(body))
 
 	return &httpBodyCapture{content: body, size: int64(len(body))}
 }
+
+// failedRead answers every read with err, the failure a read of the request
+// body met, for the reads after the bytes read before it. testing/iotest's
+// ErrReader is the same reader, kept to tests.
+type failedRead struct {
+	err error
+}
+
+func (r failedRead) Read([]byte) (int, error) { return 0, r.err }
 
 // captureResponseBody extracts the JSON response text collected by the tee
 // writer. Bodies over the size cap keep a truncated prefix so oversized

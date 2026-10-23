@@ -5,8 +5,11 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"testing/iotest"
 
+	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/consts"
@@ -299,6 +302,38 @@ func TestHTTPBodyLoggerSkipsLargeRequestBodyContent(t *testing.T) {
 	require.NotContains(t, ctx, "request")
 	require.Equal(t, true, ctx["request_truncated"])
 	require.Equal(t, int64(len(`{"a":1}`)), ctx["request_size"])
+}
+
+// TestHTTPBodyLoggerHandsTheHandlerTheFailedRead pins that a request body
+// the middleware fails to read reaches the handler as it would have without
+// the middleware: the bytes read before the failure, then the same failure,
+// so the handler refuses a body it could not read rather than taking it for
+// a short or an absent one.
+func TestHTTPBodyLoggerHandsTheHandlerTheFailedRead(t *testing.T) {
+	setupHTTPBodyLoggerTest(t, config.HTTPBodyLogger{
+		Enabled:     true,
+		LogRequest:  config.HTTPBodyLogModeAll,
+		LogResponse: config.HTTPBodyLogModeNone,
+		MaxBodySize: 1024,
+	})
+	readErr := errors.New("read timed out")
+
+	router := gin.New()
+	router.Use(bodyLogger())
+	router.POST("/api/records", func(c *gin.Context) {
+		body, err := io.ReadAll(c.Request.Body)
+		require.ErrorIs(t, err, readErr)
+		require.Equal(t, `{"a"`, string(body))
+		c.Status(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/records", io.MultiReader(strings.NewReader(`{"a"`), iotest.ErrReader(readErr)))
+	req.ContentLength = int64(len(`{"a":1}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNoContent, w.Code)
 }
 
 func TestHTTPBodyLoggerTruncatesLargeResponseBody(t *testing.T) {
