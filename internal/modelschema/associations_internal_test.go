@@ -39,6 +39,22 @@ type sampleOwnedRecord struct {
 
 func (sampleOwnedRecord) TableName() string { return "sample_owned_records" }
 
+// SampleRecordExtras is embedded through a pointer in sampleExtendedRecord
+// and declares the record's has-many; gorm reads an embedded struct only when
+// its type is exported.
+type SampleRecordExtras struct {
+	Notes []*sampleOwnedRecord `json:"notes" gorm:"foreignKey:OwnerID"`
+}
+
+// sampleExtendedRecord reaches its association through a pointer-embedded
+// struct, a step gorm's schema writes as a negative field index.
+type sampleExtendedRecord struct {
+	ID string `json:"id" gorm:"primaryKey"`
+	*SampleRecordExtras
+}
+
+func (sampleExtendedRecord) TableName() string { return "sample_extended_records" }
+
 // TestRecursiveAssociationsListsTheToManyHoldingTheTypeItself pins which
 // associations an expanding depth repeats: a has-many or many-to-many
 // holding the model itself, the Children of a tree, and not a single-valued
@@ -73,6 +89,10 @@ func TestAssociationFieldsListsTheRelationshipFields(t *testing.T) {
 	// schema; that entry describes the owner's field.
 	require.Equal(t, [][]int{{1}}, AssociationFields(reflect.TypeFor[sampleOwnerRecord]()))
 	require.Empty(t, AssociationFields(reflect.TypeFor[sampleOwnedRecord]()), "the owner's has-many is no association of the owned model")
+
+	// A step through a pointer-embedded struct is the index reflect takes:
+	// the path walks into the embedded struct, field 1, and on to Notes.
+	require.Equal(t, [][]int{{1, 0}}, AssociationFields(reflect.TypeFor[sampleExtendedRecord]()))
 
 	require.Empty(t, AssociationFields(reflect.TypeFor[sampleDocumentRecord]()), "a model without associations has none")
 	require.Nil(t, AssociationFields(reflect.TypeFor[string]()),

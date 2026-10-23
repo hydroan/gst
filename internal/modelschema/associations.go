@@ -15,8 +15,10 @@ var associationFieldsCache sync.Map
 // associations — the relationships its gorm schema holds for the type itself,
 // a has-many or a belongs-to for one, declared for queries to preload —
 // resolved once per type and cached, in field order; nil for a type whose
-// schema cannot be resolved. Its consumer is the write path, which zeroes
-// them: a write touches the model's own table alone.
+// schema cannot be resolved. A path is the one reflect walks
+// (reflect.Value.FieldByIndexErr), a step through a pointer-embedded struct
+// included. Its consumer is the write path, which zeroes them: a write
+// touches the model's own table alone.
 func AssociationFields(typ reflect.Type) [][]int {
 	for typ != nil && typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
@@ -27,7 +29,15 @@ func AssociationFields(typ reflect.Type) [][]int {
 
 	paths := [][]int{}
 	if !walkOwnRelationships(typ, func(_ string, rel *gormschema.Relationship, _ *gormschema.Schema) {
-		paths = append(paths, rel.Field.StructField.Index)
+		// gorm's schema writes a step through a pointer-embedded struct as
+		// -i-1 for the field i it takes, which reflect takes as i.
+		path := slices.Clone(rel.Field.StructField.Index)
+		for i, step := range path {
+			if step < 0 {
+				path[i] = -step - 1
+			}
+		}
+		paths = append(paths, path)
 	}) {
 		paths = nil
 	}
