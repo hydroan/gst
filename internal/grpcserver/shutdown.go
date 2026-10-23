@@ -83,8 +83,11 @@ type shutdownStream struct {
 	reads   chan error // what the read answered
 }
 
+// Context returns ctx, the context the stop ends.
 func (s *shutdownStream) Context() context.Context { return s.ctx }
 
+// RecvMsg reads the next message into m, or answers the status of ctx once
+// ctx ends first (see shutdownStream).
 func (s *shutdownStream) RecvMsg(m any) error {
 	s.reading.Do(func() {
 		s.wants, s.reads = make(chan any), make(chan error)

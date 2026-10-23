@@ -142,7 +142,7 @@ func Run() error {
 	// group with nothing registered on it (see router.Run), and a project
 	// may authenticate in an interceptor registered for every method, so
 	// this is a warning and not a refusal.
-	if unguarded := unguardedMethods(); len(unguarded) > 0 && len(authInterceptors) == 0 {
+	if unguarded := nonPublicMethods(); len(unguarded) > 0 && len(authInterceptors) == 0 {
 		log.Warnw("grpc server serves non-public methods with no auth interceptor registered", "methods", unguarded)
 	}
 	// The health service answers SERVING from the start and NOT_SERVING

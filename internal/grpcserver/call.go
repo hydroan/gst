@@ -47,8 +47,8 @@ func (c *callRecord) requestFields() requestctx.Fields {
 
 // Route returns the HTTP method and route the registration described the
 // call's rpc with, "GET" and "/api/records" for a call of ListRecord: what
-// an interceptor judging the call by the action, the way the module
-// middleware judges a request, asks for. Both are empty outside a call and
+// an interceptor judging the call by the action, the way its middleware
+// counterpart judges a request, asks for. Both are empty outside a call and
 // for a method registered without them, the health and reflection services'
 // among them. The public grpc.Route forwards to it.
 func Route(ctx context.Context) (httpMethod, route string) {

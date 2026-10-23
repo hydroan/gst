@@ -42,11 +42,11 @@ func TestWithCallerNamesTheCallerDownstreamAndInTheAccessLog(t *testing.T) {
 	require.Equal(t, "u-1", fields[consts.CTX_USER_ID])
 }
 
-// TestRouteAndCallerOfDescribeTheCall pins what the interceptors of the
-// modules read off a call: Route answers the HTTP method and route the
-// registration described the rpc with, the ones the same action is served
-// at over HTTP, and CallerOf answers the caller an earlier interceptor
-// established; outside a call both answer nothing.
+// TestRouteAndCallerOfDescribeTheCall pins what an interceptor reads off a
+// call: Route answers the HTTP method and route the registration described
+// the rpc with, the ones the same action is served at over HTTP, and
+// CallerOf answers the caller an earlier interceptor established; outside a
+// call both answer nothing.
 func TestRouteAndCallerOfDescribeTheCall(t *testing.T) {
 	reset(t)
 	type seen struct {

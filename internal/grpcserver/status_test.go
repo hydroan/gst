@@ -16,11 +16,11 @@ import (
 
 // TestStatusErrorMapsTheStatusToTheCode pins the code a failure answers
 // with over gRPC, from the HTTP status the service or the flow chose: the
-// standard mapping of the HTTP statuses that have a gRPC code, a stale
-// object's 409 as Aborted and a foreign key's as FailedPrecondition rather
-// than AlreadyExists, any other client error
-// as InvalidArgument and any other server error as Internal. The status
-// carries the message the envelope would, and nothing else.
+// standard mapping of the HTTP statuses that have a gRPC code, the 499 of a
+// client that went away as Canceled, a stale object's 409 as Aborted and a
+// foreign key's as FailedPrecondition rather than AlreadyExists, any other
+// client error as InvalidArgument and any other server error as Internal.
+// The status carries the message the envelope would, and nothing else.
 func TestStatusErrorMapsTheStatusToTheCode(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -38,11 +38,12 @@ func TestStatusErrorMapsTheStatusToTheCode(t *testing.T) {
 		{"412", types.NewError(http.StatusPreconditionFailed, "not yet"), codes.FailedPrecondition},
 		{"422", types.NewError(http.StatusUnprocessableEntity, "cannot"), codes.InvalidArgument},
 		{"429", types.NewError(http.StatusTooManyRequests, "slow down"), codes.ResourceExhausted},
+		{"499", types.NewError(types.StatusClientClosedRequest, "gone"), codes.Canceled},
 		{"500", types.NewError(http.StatusInternalServerError, "broken"), codes.Internal},
 		{"501", types.NewError(http.StatusNotImplemented, "not here"), codes.Unimplemented},
+		{"502", types.NewError(http.StatusBadGateway, "upstream broke"), codes.Internal},
 		{"503", types.NewError(http.StatusServiceUnavailable, "later"), codes.Unavailable},
 		{"504", types.NewError(http.StatusGatewayTimeout, "upstream"), codes.DeadlineExceeded},
-		{"502", types.NewError(http.StatusBadGateway, "upstream broke"), codes.Internal},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			st := status.Convert(grpcserver.StatusError(tc.err))

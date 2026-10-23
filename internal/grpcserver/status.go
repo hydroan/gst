@@ -15,12 +15,12 @@ import (
 // error, anywhere in the wrap chain, answers with the gRPC code its HTTP
 // status maps to (see codeOf) and the client-safe message it was constructed
 // with, the answer the HTTP envelope would carry, and, for the fields a
-// validator refused (see types.FieldViolations), a
-// google.rpc.BadRequest detail listing each field and its description; any
-// other error answers Internal with types.FailureMsg, the message
-// the HTTP envelope answers the server's own failure with, its text kept
-// out of the answer for the caller to log before mapping; nil stays nil.
-// The public grpc.StatusError forwards to it.
+// validator refused (see types.FieldViolations), a google.rpc.BadRequest
+// detail listing each field and its description; any other error answers
+// Internal with types.FailureMsg, the message the HTTP envelope answers the
+// server's own failure with, its text kept out of the answer for the caller
+// to log before mapping; nil stays nil. The public grpc.StatusError forwards
+// to it.
 func StatusError(err error) error {
 	if err == nil {
 		return nil
@@ -45,15 +45,14 @@ func StatusError(err error) error {
 // codeOf maps the HTTP status a failure answers with to its gRPC code: the
 // standard correspondence for the statuses that have one, the client-closed
 // status of a client that went away (see types.StatusClientClosedRequest)
-// as Canceled among them; the 409 of a stale
-// object — err wraps database.ErrStaleObject, the optimistic-lock miss of a
-// versioned model — as Aborted rather than AlreadyExists, since it is a
-// concurrent change to retry after and not a duplicate; the 409 of a
-// foreign key — err wraps database.ErrForeignKeyViolated, a record the
-// request refers to missing or still referred to — as FailedPrecondition,
-// the code AIP-135 gives a delete the records referring to the resource
-// hold up; and, for the rest, InvalidArgument for a client error and
-// Internal for a server error.
+// as Canceled among them; the 409 of a stale object — err wraps
+// database.ErrStaleObject, the optimistic-lock miss of a versioned model —
+// as Aborted rather than AlreadyExists, since it is a concurrent change to
+// retry after and not a duplicate; the 409 of a foreign key — err wraps
+// database.ErrForeignKeyViolated, a record the request refers to missing or
+// still referred to — as FailedPrecondition, the code AIP-135 gives a delete
+// the records referring to the resource hold up; and, for the rest,
+// InvalidArgument for a client error and Internal for a server error.
 func codeOf(httpStatus int, err error) codes.Code {
 	switch httpStatus {
 	case http.StatusBadRequest:

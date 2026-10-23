@@ -72,20 +72,20 @@ func observe(t *testing.T, target **zap.Logger) *observer.ObservedLogs {
 }
 
 // serve registers the service gst.test.Echo with one unary rpc per entry
-// of handlers, named by its key, described to the server by methods the way
-// the generated registration file describes them. Each rpc takes and
-// answers an empty message, answering with the error its handler returns,
-// and runs the server's interceptors first, the way the code the protobuf
-// plugin generates does.
-func serve(handlers map[string]func(ctx context.Context) error, methods ...Method) {
-	serveWith(handlers, nil, methods...)
+// of handlers, named by its key, and describes its rpcs to the server with
+// described, the way the generated registration file describes them. Each
+// rpc takes and answers an empty message, answering with the error its
+// handler returns, and runs the server's interceptors first, the way the
+// code the protobuf plugin generates does.
+func serve(handlers map[string]func(ctx context.Context) error, described ...Method) {
+	serveWith(handlers, nil, described...)
 }
 
 // serveWith is serve with the streaming rpcs of gst.test.Echo as well, each
 // named by streams and served by the handler of its desc, a client stream,
 // a server stream or both as the desc says; the server runs them through
 // the stream chain itself.
-func serveWith(handlers map[string]func(ctx context.Context) error, streams map[string]grpc.StreamDesc, methods ...Method) {
+func serveWith(handlers map[string]func(ctx context.Context) error, streams map[string]grpc.StreamDesc, described ...Method) {
 	streamDescs := make([]grpc.StreamDesc, 0, len(streams))
 	for name, desc := range streams {
 		desc.StreamName = name
@@ -122,7 +122,7 @@ func serveWith(handlers map[string]func(ctx context.Context) error, streams map[
 			Streams:     streamDescs,
 			Metadata:    "gst/test/echo.proto",
 		}, nil)
-	}, methods...)
+	}, described...)
 }
 
 // echo registers the rpc Ping, answering an empty message with an empty
@@ -246,6 +246,33 @@ func nextFrameOf[T http2.Frame](t *testing.T, framer *http2.Framer) T {
 			t.Fatalf("the server went away, %s, before a %T arrived", goAway.DebugData(), *new(T))
 		}
 	}
+}
+
+// selfSigned writes a self-signed certificate and its key for 127.0.0.1
+// into a temporary directory and returns their paths.
+func selfSigned(t *testing.T) (certFile, keyFile string) {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "gst test"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		IPAddresses:  []net.IP{net.ParseIP("127.0.0.1")},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	require.NoError(t, err)
+	keyDER, err := x509.MarshalECPrivateKey(key)
+	require.NoError(t, err)
+	dir := t.TempDir()
+	certFile = filepath.Join(dir, "cert.pem")
+	keyFile = filepath.Join(dir, "key.pem")
+	require.NoError(t, os.WriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600))
+	require.NoError(t, os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER}), 0o600))
+	return certFile, keyFile
 }
 
 // TestRunOpensNoListenerWithoutAService pins that a process registering no
@@ -698,33 +725,6 @@ func TestRunEnforcesTheKeepalivePolicy(t *testing.T) {
 			require.True(t, nextFrameOf[*http2.PingFrame](t, framer).IsAck())
 		}
 	})
-}
-
-// selfSigned writes a self-signed certificate and its key for 127.0.0.1
-// into a temporary directory and returns their paths.
-func selfSigned(t *testing.T) (certFile, keyFile string) {
-	t.Helper()
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	require.NoError(t, err)
-	template := &x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		Subject:      pkix.Name{CommonName: "gst test"},
-		NotBefore:    time.Now().Add(-time.Hour),
-		NotAfter:     time.Now().Add(time.Hour),
-		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		IPAddresses:  []net.IP{net.ParseIP("127.0.0.1")},
-	}
-	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
-	require.NoError(t, err)
-	keyDER, err := x509.MarshalECPrivateKey(key)
-	require.NoError(t, err)
-	dir := t.TempDir()
-	certFile = filepath.Join(dir, "cert.pem")
-	keyFile = filepath.Join(dir, "key.pem")
-	require.NoError(t, os.WriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600))
-	require.NoError(t, os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER}), 0o600))
-	return certFile, keyFile
 }
 
 // TestRunWarnsWhenNoAuthInterceptorGuardsTheNonPublicMethods pins the

@@ -5,9 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hydroan/gst/internal/types"
-
 	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"

@@ -38,12 +38,13 @@ func look(seen chan<- observed) {
 // request metadata — for a method the registration described with no
 // action, the full method as route, path and request URI and POST as the
 // method every gRPC call is on the wire (a method described with its action
-// carries the action's, see TestCallsDescribedByAnActionCarryItsRouteAndMethod),
-// the peer's address, the authority the call was addressed to, the user
-// agent, no TLS on a plaintext listener — and the trace id, the caller's
-// x-trace-id when it is a W3C trace id and a generated one otherwise (see
-// requestctx.TraceIDOf, the rule the HTTP listener reads the header by too),
-// published back in the response header either way.
+// carries the action's, see
+// TestCallsDescribedByAnActionCarryItsRouteAndMethod), the peer's address,
+// the authority the call was addressed to, the user agent, no TLS on a
+// plaintext listener — and the trace id, the caller's x-trace-id when it is
+// a W3C trace id and a generated one otherwise (see requestctx.TraceIDOf,
+// the rule the HTTP listener reads the header by too), published back in the
+// response header either way.
 func TestCallsCarryTheRequestMetadataAndTraceID(t *testing.T) {
 	reset(t)
 	seen := make(chan observed, 1)
@@ -139,8 +140,8 @@ func TestCallsDescribedByAnActionCarryItsRouteAndMethod(t *testing.T) {
 // method the registration described as public does not require auth, any
 // other does, the way the routes outside the HTTP listener's public group
 // do; nor does a call of the server's own services, the health and the
-// reflection service, which the auth interceptors leave alone (see guarded),
-// the way the HTTP listener's probes require none.
+// reflection service, which the auth interceptors leave alone (see
+// guardedCall), the way the HTTP listener's probes require none.
 func TestCallsCarryWhetherTheirMethodRequiresAuth(t *testing.T) {
 	reset(t)
 	seen := make(chan bool, 1)

@@ -11,8 +11,8 @@ import (
 // Method describes one rpc of a registered service the way the generated
 // registration file declares it: its full name, whether its action declares
 // Public(), and the HTTP method and route the same action is served at over
-// HTTP, which the interceptors of the modules judge a call by the way their
-// middleware judges a request.
+// HTTP, which an interceptor judges a call by the way its middleware
+// counterpart judges a request.
 type Method struct {
 	// Name is the full method name, "/app.RecordService/ListRecord".
 	Name string
@@ -38,9 +38,9 @@ const MethodStream = "STREAM"
 // methods are the rpcs Register described, keyed by their full name.
 var methods map[string]Method
 
-// unguardedMethods lists the registered methods not declared public, in
+// nonPublicMethods lists the registered methods not declared public, in
 // order of their names: the ones the auth interceptors guard, or would.
-func unguardedMethods() []string {
+func nonPublicMethods() []string {
 	names := make([]string, 0, len(methods))
 	for name, m := range methods {
 		if !m.Public {

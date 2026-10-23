@@ -14,17 +14,17 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// Interceptor is an interceptor a project or a copied module mounts through
-// Use or UseAuth: it reads what the call carries, its metadata, its caller,
-// the action it maps to (see Route), and returns the context the call goes
-// on with, the caller established on it (see WithCaller), or the error
-// refusing the call: a status error answers as it is, a service error with
-// the code its HTTP status maps to and its message, any other error as
-// Internal (see refused). The one form serves a unary call and a stream
-// alike, which is why an interceptor here transforms the context rather
-// than wrapping the handler the way a grpc.UnaryServerInterceptor does: an
-// authentication runs once, ahead of the first message either way. The
-// public grpc.Interceptor forwards to it.
+// Interceptor is an interceptor mounted through Use or UseAuth: it reads
+// what the call carries, its metadata, its caller, the action it maps to
+// (see Route), and returns the context the call goes on with, the caller
+// established on it (see WithCaller), or the error refusing the call: a
+// status error answers as it is, a service error with the code its HTTP
+// status maps to and its message, any other error as Internal (see
+// refused). The one form serves a unary call and a stream alike, which is
+// why an interceptor here transforms the context rather than wrapping the
+// handler the way a grpc.UnaryServerInterceptor does: an authentication
+// runs once, ahead of the first message either way. The public
+// grpc.Interceptor forwards to it.
 type Interceptor func(ctx context.Context) (context.Context, error)
 
 // commonInterceptors and authInterceptors are the interceptors Use and
@@ -73,8 +73,9 @@ var projectCall = selector.MatchFunc(func(_ context.Context, meta interceptors.C
 	return !ownServices[meta.Service]
 })
 
-// guarded matches the calls the auth interceptors run on (see requiresAuth).
-var guarded = selector.MatchFunc(func(_ context.Context, meta interceptors.CallMeta) bool {
+// guardedCall matches the calls the auth interceptors run on (see
+// requiresAuth).
+var guardedCall = selector.MatchFunc(func(_ context.Context, meta interceptors.CallMeta) bool {
 	return requiresAuth(meta.Service, meta.FullMethod())
 })
 
@@ -88,7 +89,7 @@ func projectUnaryInterceptors() []grpc.UnaryServerInterceptor {
 		chain = append(chain, selector.UnaryServerInterceptor(unaryOf(ic), projectCall))
 	}
 	for _, ic := range authInterceptors {
-		chain = append(chain, selector.UnaryServerInterceptor(unaryOf(ic), guarded))
+		chain = append(chain, selector.UnaryServerInterceptor(unaryOf(ic), guardedCall))
 	}
 	return chain
 }
@@ -101,7 +102,7 @@ func projectStreamInterceptors() []grpc.StreamServerInterceptor {
 		chain = append(chain, selector.StreamServerInterceptor(streamOf(ic), projectCall))
 	}
 	for _, ic := range authInterceptors {
-		chain = append(chain, selector.StreamServerInterceptor(streamOf(ic), guarded))
+		chain = append(chain, selector.StreamServerInterceptor(streamOf(ic), guardedCall))
 	}
 	return chain
 }
