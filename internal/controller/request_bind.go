@@ -56,11 +56,12 @@ func bindJSONRequest(c *gin.Context, target any) error {
 	return nil
 }
 
-// decodeJSONRequest decodes the JSON request body into target. A body that is
-// empty or a literal JSON null carries no request data, so both report io.EOF
-// — the sentinel the handlers already tolerate for empty bodies. This also
-// keeps the null body away from gin's validator, which panics on the nil
-// pointer such a body would decode into.
+// decodeJSONRequest decodes the JSON request body into target, read through
+// readJSONRequestBody, so a body failing to read is refused client-safely
+// like any bind failure. A body that is empty or a literal JSON null carries
+// no request data, so both report io.EOF — the sentinel the handlers already
+// tolerate for empty bodies. This also keeps the null body away from gin's
+// validator, which panics on the nil pointer such a body would decode into.
 //
 // The body is decoded from the bytes already read rather than handed back to
 // gin as a reader: binding through gin wraps those bytes in a reader and drives
@@ -82,14 +83,13 @@ func bindJSONRequest(c *gin.Context, target any) error {
 // they never apply here. A time of day is the one value decoded otherwise
 // than json.Unmarshal decodes it (see strictTimeOfDay).
 func decodeJSONRequest(c *gin.Context, target any) error {
-	raw, err := c.GetRawData()
+	raw, err := readJSONRequestBody(c)
 	if err != nil {
 		return err
 	}
 	if trimmed := bytes.TrimSpace(raw); len(trimmed) == 0 || bytes.Equal(trimmed, jsonNull) {
 		return io.EOF
 	}
-	c.Request.Body = io.NopCloser(bytes.NewReader(raw))
 	if err = jsonv2.Unmarshal(raw, target, json.DefaultOptionsV1(), strictTimeOfDay); err != nil {
 		return clientSafeBindError(err)
 	}

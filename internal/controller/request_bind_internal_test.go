@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -572,6 +573,26 @@ func TestClientSafeBindError(t *testing.T) {
 			require.Contains(t, wrapped.Error(), tt.err.Error(), "logs must keep the full decoder text")
 		})
 	}
+}
+
+// TestDecodeJSONRequestRefusesAnUnreadableBodyClientSafely pins that a body
+// failing to read is refused with the client-safe message of a bind failure,
+// the read error kept as the cause, whatever the error says: a malformed
+// chunk or a timeout naming the addresses of the connection never reaches
+// the envelope.
+func TestDecodeJSONRequestRefusesAnUnreadableBodyClientSafely(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	readErr := errors.New("invalid byte in chunk length")
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/samples", iotest.ErrReader(readErr))
+
+	err := decodeJSONRequest(c, &normalizeProbeReq{})
+
+	var serviceErr *types.Error
+	require.ErrorAs(t, err, &serviceErr)
+	require.Equal(t, "invalid request body", serviceErr.Msg())
+	require.Equal(t, http.StatusBadRequest, serviceErr.Status())
+	require.ErrorIs(t, err, readErr, "the read error survives as the cause")
 }
 
 // TestNormalizeValueCompactsNilSliceElements covers the reflective walk over
