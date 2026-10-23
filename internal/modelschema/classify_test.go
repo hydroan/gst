@@ -206,6 +206,40 @@ func TestParseTime(t *testing.T) {
 	})
 }
 
+// TestIsDateColumn pins which columns store a calendar day: the column type
+// gorm resolved for them is date, declared by the Go type or by a type tag in
+// either case, a pointer included, and DateColumnSet names the same columns;
+// an instant and a column declared as another time type are no date.
+func TestIsDateColumn(t *testing.T) {
+	type dated struct {
+		Day     datatypes.Date  `json:"day"`
+		DayPtr  *datatypes.Date `json:"day_ptr"`
+		Due     time.Time       `json:"due" gorm:"type:date"`
+		DuePtr  *time.Time      `json:"due_ptr" gorm:"type:DATE"`
+		At      time.Time       `json:"at"`
+		Stamped time.Time       `json:"stamped" gorm:"type:datetime(3)"`
+		Clock   datatypes.Time  `json:"clock"`
+	}
+	columns, err := modelschema.Columns(reflect.TypeFor[dated]())
+	require.NoError(t, err)
+	got := make(map[string]bool, len(columns))
+	for _, c := range columns {
+		got[c.DBName] = modelschema.IsDateColumn(c)
+	}
+	require.Equal(t, map[string]bool{"day": true, "day_ptr": true, "due": true, "due_ptr": true, "at": false, "stamped": false, "clock": false}, got)
+	require.Equal(t, map[string]struct{}{"day": {}, "day_ptr": {}, "due": {}, "due_ptr": {}}, modelschema.DateColumnSet(reflect.TypeFor[dated]()))
+}
+
+func TestUTCDay(t *testing.T) {
+	// Midnight in Shanghai on the 2nd is still the 1st in UTC.
+	sent := time.Date(2026, time.January, 2, 0, 0, 0, 0, time.FixedZone("", 8*3600))
+	require.Equal(t, time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC), modelschema.UTCDay(sent))
+	// The time of day is dropped, the day kept.
+	require.Equal(t, time.Date(2026, time.January, 2, 0, 0, 0, 0, time.UTC),
+		modelschema.UTCDay(time.Date(2026, time.January, 2, 23, 59, 59, 999, time.UTC)))
+	require.True(t, modelschema.UTCDay(time.Time{}).IsZero(), "the zero time stays zero")
+}
+
 // TestParseTimeOfDay pins the one reading of a time of day the framework
 // takes, in a filter and in a request body alike: time.TimeOnly, a
 // fractional second read as written, answered as the duration since
@@ -275,40 +309,6 @@ func TestParseBool(t *testing.T) {
 		_, err := modelschema.ParseBool(value)
 		require.EqualError(t, err, fmt.Sprintf("expect a boolean value, got %q", value), value)
 	}
-}
-
-// TestIsDateColumn pins which columns store a calendar day: the column type
-// gorm resolved for them is date, declared by the Go type or by a type tag in
-// either case, a pointer included, and DateColumnSet names the same columns;
-// an instant and a column declared as another time type are no date.
-func TestIsDateColumn(t *testing.T) {
-	type dated struct {
-		Day     datatypes.Date  `json:"day"`
-		DayPtr  *datatypes.Date `json:"day_ptr"`
-		Due     time.Time       `json:"due" gorm:"type:date"`
-		DuePtr  *time.Time      `json:"due_ptr" gorm:"type:DATE"`
-		At      time.Time       `json:"at"`
-		Stamped time.Time       `json:"stamped" gorm:"type:datetime(3)"`
-		Clock   datatypes.Time  `json:"clock"`
-	}
-	columns, err := modelschema.Columns(reflect.TypeFor[dated]())
-	require.NoError(t, err)
-	got := make(map[string]bool, len(columns))
-	for _, c := range columns {
-		got[c.DBName] = modelschema.IsDateColumn(c)
-	}
-	require.Equal(t, map[string]bool{"day": true, "day_ptr": true, "due": true, "due_ptr": true, "at": false, "stamped": false, "clock": false}, got)
-	require.Equal(t, map[string]struct{}{"day": {}, "day_ptr": {}, "due": {}, "due_ptr": {}}, modelschema.DateColumnSet(reflect.TypeFor[dated]()))
-}
-
-func TestUTCDay(t *testing.T) {
-	// Midnight in Shanghai on the 2nd is still the 1st in UTC.
-	sent := time.Date(2026, time.January, 2, 0, 0, 0, 0, time.FixedZone("", 8*3600))
-	require.Equal(t, time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC), modelschema.UTCDay(sent))
-	// The time of day is dropped, the day kept.
-	require.Equal(t, time.Date(2026, time.January, 2, 0, 0, 0, 0, time.UTC),
-		modelschema.UTCDay(time.Date(2026, time.January, 2, 23, 59, 59, 999, time.UTC)))
-	require.True(t, modelschema.UTCDay(time.Time{}).IsZero(), "the zero time stays zero")
 }
 
 // sampleStringsDocument is a custom JSON wrapper over a slice of strings: it

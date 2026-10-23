@@ -187,7 +187,7 @@ func (*EmbeddedIndexSample) Indexes() []modelschema.Index {
 func TestParseIndexPlans(t *testing.T) {
 	db := newSchemaDB(t)
 
-	t.Run("value and pointer models resolve identically", func(t *testing.T) {
+	t.Run("ValueAndPointerModelsResolveIdentically", func(t *testing.T) {
 		want := []modelschema.IndexPlan{
 			{Name: "idx_indexed_samples_kind_created_at", Table: "indexed_samples", Columns: []string{"kind", "created_at"}},
 			{Name: "uniq_indexed_samples_code_kind", Table: "indexed_samples", Columns: []string{"code", "kind"}, Unique: true},
@@ -202,7 +202,7 @@ func TestParseIndexPlans(t *testing.T) {
 		require.Equal(t, want, plans)
 	})
 
-	t.Run("models without the capability yield no plans", func(t *testing.T) {
+	t.Run("ModelsWithoutTheCapabilityYieldNoPlans", func(t *testing.T) {
 		plans, err := modelschema.ParseIndexPlans(db, &PlainSample{})
 		require.NoError(t, err)
 		require.Nil(t, plans)
@@ -217,15 +217,15 @@ func TestParseIndexPlansValidation(t *testing.T) {
 		model any
 		want  string
 	}{
-		{"empty fields", &EmptyFieldsSample{}, "at least one field"},
-		{"unknown field", &UnknownFieldSample{}, `unknown field "Missing"`},
-		{"repeated column", &RepeatedColumnSample{}, `repeats column "kind"`},
-		{"duplicate declaration", &DuplicateDeclSample{}, "duplicate custom index"},
-		{"tag index name conflict", &TagNameConflictSample{}, "conflicts with struct tag index"},
-		{"tag index columns conflict", &TagColumnsConflictSample{}, `duplicates struct tag index "custom_code_idx"`},
-		{"unique tag columns conflict", &UniqueTagConflictSample{}, `custom index on column "code" duplicates the unique struct tag`},
-		{"missing table name", &NoTableNameSample{}, "must declare an explicit table name"},
-		{"column name instead of field name", &ColumnNameSample{}, `unknown field "kind"`},
+		{"EmptyFields", &EmptyFieldsSample{}, "at least one field"},
+		{"UnknownField", &UnknownFieldSample{}, `unknown field "Missing"`},
+		{"RepeatedColumn", &RepeatedColumnSample{}, `repeats column "kind"`},
+		{"DuplicateDeclaration", &DuplicateDeclSample{}, "duplicate custom index"},
+		{"TagIndexNameConflict", &TagNameConflictSample{}, "conflicts with struct tag index"},
+		{"TagIndexColumnsConflict", &TagColumnsConflictSample{}, `duplicates struct tag index "custom_code_idx"`},
+		{"UniqueTagColumnsConflict", &UniqueTagConflictSample{}, `custom index on column "code" duplicates the unique struct tag`},
+		{"MissingTableName", &NoTableNameSample{}, "must declare an explicit table name"},
+		{"ColumnNameInsteadOfFieldName", &ColumnNameSample{}, `unknown field "kind"`},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := modelschema.ParseIndexPlans(db, tt.model)
@@ -376,7 +376,7 @@ func TestCheckCrossModelIndexPlanConflicts(t *testing.T) {
 		return modelschema.IndexPlan{Name: name, Table: table, Columns: columns, Unique: unique}
 	}
 
-	t.Run("same column sequence on one table conflicts whatever the uniqueness", func(t *testing.T) {
+	t.Run("SameColumnSequenceOnOneTableConflictsWhateverTheUniqueness", func(t *testing.T) {
 		err := modelschema.CheckCrossModelIndexPlanConflicts([]modelschema.ModelIndexPlans{
 			{Model: "pkg.SampleA", Plans: []modelschema.IndexPlan{plan("samples", "idx_samples_kind", false, "kind")}},
 			{Model: "pkg.SampleB", Plans: []modelschema.IndexPlan{plan("samples", "uniq_samples_kind", true, "kind")}},
@@ -387,7 +387,7 @@ func TestCheckCrossModelIndexPlanConflicts(t *testing.T) {
 		require.ErrorContains(t, err, "(kind)")
 	})
 
-	t.Run("same generated name for different definitions conflicts", func(t *testing.T) {
+	t.Run("SameGeneratedNameForDifferentDefinitionsConflicts", func(t *testing.T) {
 		err := modelschema.CheckCrossModelIndexPlanConflicts([]modelschema.ModelIndexPlans{
 			{Model: "pkg.SampleA", Plans: []modelschema.IndexPlan{plan("samples", "idx_samples_collision", false, "code")}},
 			{Model: "pkg.SampleB", Plans: []modelschema.IndexPlan{plan("samples", "idx_samples_collision", false, "kind")}},
@@ -395,14 +395,14 @@ func TestCheckCrossModelIndexPlanConflicts(t *testing.T) {
 		require.ErrorContains(t, err, `same index name "idx_samples_collision"`)
 	})
 
-	t.Run("same columns on different tables do not conflict", func(t *testing.T) {
+	t.Run("SameColumnsOnDifferentTablesDoNotConflict", func(t *testing.T) {
 		require.NoError(t, modelschema.CheckCrossModelIndexPlanConflicts([]modelschema.ModelIndexPlans{
 			{Model: "pkg.SampleA", Plans: []modelschema.IndexPlan{plan("samples", "idx_samples_kind", false, "kind")}},
 			{Model: "pkg.RecordB", Plans: []modelschema.IndexPlan{plan("records", "idx_records_kind", false, "kind")}},
 		}))
 	})
 
-	t.Run("one declaring model per table passes", func(t *testing.T) {
+	t.Run("OneDeclaringModelPerTablePasses", func(t *testing.T) {
 		require.NoError(t, modelschema.CheckCrossModelIndexPlanConflicts([]modelschema.ModelIndexPlans{
 			{Model: "pkg.SampleA", Plans: []modelschema.IndexPlan{
 				plan("samples", "idx_samples_kind", false, "kind"),

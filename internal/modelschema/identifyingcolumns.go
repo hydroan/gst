@@ -30,14 +30,12 @@ func IdentifyingColumns(m any) (map[string]struct{}, error) {
 		return cached.(map[string]struct{}), nil //nolint:errcheck
 	}
 
-	columns, err := Columns(typ)
+	byName, err := GoNameIndex(typ)
 	if err != nil {
 		return nil, err
 	}
 	identifying := make(map[string]struct{}, 2)
-	byGoName := make(map[string]Column, len(columns))
-	for _, col := range columns {
-		byGoName[col.GoName] = col
+	for _, col := range byName {
 		if col.PrimaryKey {
 			identifying[col.DBName] = struct{}{}
 		}
@@ -55,7 +53,7 @@ func IdentifyingColumns(m any) (map[string]struct{}, error) {
 		if !index.Unique || len(index.Fields) != 1 {
 			continue
 		}
-		if col, ok := byGoName[index.Fields[0]]; ok && (col.NotNull || !nullable(col.Type)) {
+		if col, ok := byName[index.Fields[0]]; ok && (col.NotNull || !nullable(col.Type)) {
 			identifying[col.DBName] = struct{}{}
 		}
 	}

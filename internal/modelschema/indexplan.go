@@ -12,18 +12,6 @@ import (
 	gormschema "gorm.io/gorm/schema"
 )
 
-// indexNameLimit returns the longest index name the database of db stores
-// as it is: 63 characters on PostgreSQL, which cuts a longer identifier to
-// 63 on its own and would then never find the index under its full name
-// again, 64 on MySQL, which refuses a longer one, and on SQLite, which
-// bounds none, held to MySQL's for the names to agree across the two.
-func indexNameLimit(db *gorm.DB) int {
-	if db != nil && db.Dialector != nil && strings.EqualFold(db.Dialector.Name(), string(config.DBPostgres)) {
-		return 63
-	}
-	return 64
-}
-
 // Index declares one secondary index on the model's table.
 //
 // Indexes are the single way models declare secondary indexes: gorm struct
@@ -53,6 +41,25 @@ type Index struct {
 // indexes fail fast at bootstrap and inside gg migrate.
 type indexer interface {
 	Indexes() []Index
+}
+
+// IndexDeclarations returns the secondary indexes model declares through its
+// Indexes method, nil when it declares none. A value and a pointer alike are
+// probed, since registry snapshots and schema dump inputs mix the two forms;
+// a value is probed through a zero-value pointer, which is safe because
+// Indexes must be a pure declaration.
+func IndexDeclarations(model any) []Index {
+	if declarer, ok := model.(indexer); ok {
+		return declarer.Indexes()
+	}
+	typ := reflect.TypeOf(model)
+	if typ == nil || typ.Kind() == reflect.Pointer {
+		return nil
+	}
+	if declarer, ok := reflect.TypeAssert[indexer](reflect.New(typ)); ok {
+		return declarer.Indexes()
+	}
+	return nil
 }
 
 // IndexPlan is one resolved custom index: a validated declaration bound to a
@@ -260,6 +267,41 @@ func checkTagIndexConflicts(sch *gormschema.Schema, plans []IndexPlan) error {
 	return nil
 }
 
+// indexName generates the deterministic framework index name: an idx_ (or
+// uniq_ for unique) prefix, the table name, and the column names,
+// idx_samples_kind_created_at for the columns kind and created_at of
+// samples. A dot turns into an underscore, the way gorm names its own
+// indexes, so a table qualified by its schema still names one index:
+// uniq_audit_events_code for the column code of audit.events. A name beyond
+// limit characters (see indexNameLimit) keeps a readable prefix and ends
+// with an fnv-32a hash of the full name, so truncation stays deterministic
+// across runs.
+func indexName(table string, columns []string, unique bool, limit int) string {
+	prefix := "idx_"
+	if unique {
+		prefix = "uniq_"
+	}
+	name := strings.ReplaceAll(prefix+table+"_"+strings.Join(columns, "_"), ".", "_")
+	if len(name) <= limit {
+		return name
+	}
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(name))
+	return fmt.Sprintf("%s_%08x", name[:limit-9], h.Sum32())
+}
+
+// indexNameLimit returns the longest index name the database of db stores
+// as it is: 63 characters on PostgreSQL, which cuts a longer identifier to
+// 63 on its own and would then never find the index under its full name
+// again, 64 on MySQL, which refuses a longer one, and on SQLite, which
+// bounds none, held to MySQL's for the names to agree across the two.
+func indexNameLimit(db *gorm.DB) int {
+	if db != nil && db.Dialector != nil && strings.EqualFold(db.Dialector.Name(), string(config.DBPostgres)) {
+		return 63
+	}
+	return 64
+}
+
 // ModelIndexPlans binds the resolved index plans to the model that declared
 // them, so cross-model validation can name both sides of a conflict.
 type ModelIndexPlans struct {
@@ -304,48 +346,6 @@ func CheckCrossModelIndexPlanConflicts(sets []ModelIndexPlans) error {
 			}
 			byName[nameKey] = owner{model: set.Model, columns: columns}
 		}
-	}
-	return nil
-}
-
-// indexName generates the deterministic framework index name: an idx_ (or
-// uniq_ for unique) prefix, the table name, and the column names,
-// idx_samples_kind_created_at for the columns kind and created_at of
-// samples. A dot turns into an underscore, the way gorm names its own
-// indexes, so a table qualified by its schema still names one index:
-// uniq_audit_events_code for the column code of audit.events. A name beyond
-// limit characters (see indexNameLimit) keeps a readable prefix and ends
-// with an fnv-32a hash of the full name, so truncation stays deterministic
-// across runs.
-func indexName(table string, columns []string, unique bool, limit int) string {
-	prefix := "idx_"
-	if unique {
-		prefix = "uniq_"
-	}
-	name := strings.ReplaceAll(prefix+table+"_"+strings.Join(columns, "_"), ".", "_")
-	if len(name) <= limit {
-		return name
-	}
-	h := fnv.New32a()
-	_, _ = h.Write([]byte(name))
-	return fmt.Sprintf("%s_%08x", name[:limit-9], h.Sum32())
-}
-
-// IndexDeclarations returns the secondary indexes model declares through its
-// Indexes method, nil when it declares none. A value and a pointer alike are
-// probed, since registry snapshots and schema dump inputs mix the two forms;
-// a value is probed through a zero-value pointer, which is safe because
-// Indexes must be a pure declaration.
-func IndexDeclarations(model any) []Index {
-	if declarer, ok := model.(indexer); ok {
-		return declarer.Indexes()
-	}
-	typ := reflect.TypeOf(model)
-	if typ == nil || typ.Kind() == reflect.Pointer {
-		return nil
-	}
-	if declarer, ok := reflect.TypeAssert[indexer](reflect.New(typ)); ok {
-		return declarer.Indexes()
 	}
 	return nil
 }

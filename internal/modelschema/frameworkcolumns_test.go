@@ -77,22 +77,22 @@ type embeddedStampSample struct {
 // one error with the fix.
 func TestValidateFrameworkColumns(t *testing.T) {
 	for name, typ := range map[string]reflect.Type{
-		"base_and_tenant":           reflect.TypeFor[frameworkColumnsSample](),
-		"auto_base":                 reflect.TypeFor[*autoFrameworkColumnsSample](),
-		"a_field_redeclared_as_is":  reflect.TypeFor[redeclaredDeletedAtSample](),
-		"a_struct_embedded_by_name": reflect.TypeFor[embeddedStampSample](),
+		"BaseAndTenant":         reflect.TypeFor[frameworkColumnsSample](),
+		"AutoBase":              reflect.TypeFor[*autoFrameworkColumnsSample](),
+		"AFieldRedeclaredAsIs":  reflect.TypeFor[redeclaredDeletedAtSample](),
+		"AStructEmbeddedByName": reflect.TypeFor[embeddedStampSample](),
 	} {
-		t.Run("keeps_"+name, func(t *testing.T) {
+		t.Run("Keeps"+name, func(t *testing.T) {
 			require.NoError(t, modelschema.ValidateFrameworkColumns(typ))
 		})
 	}
 
-	t.Run("refuses_renamed_framework_fields", func(t *testing.T) {
+	t.Run("RefusesRenamedFrameworkFields", func(t *testing.T) {
 		err := modelschema.ValidateFrameworkColumns(reflect.TypeFor[*renamedFrameworkColumnsSample]())
 		require.EqualError(t, err, `model renamedFrameworkColumnsSample: framework field CreatedBy maps to column "author" instead of "created_by"; framework field DeletedAt maps to column "removed_at" instead of "deleted_at"; the framework fixes the names of its columns, so drop the column tag or embedded prefix renaming them`)
 	})
 
-	t.Run("refuses_a_prefixed_tenant", func(t *testing.T) {
+	t.Run("RefusesAPrefixedTenant", func(t *testing.T) {
 		err := modelschema.ValidateFrameworkColumns(reflect.TypeFor[prefixedTenantSample]())
 		require.EqualError(t, err, `model prefixedTenantSample: framework field TenantID maps to column "owner_tenant_id" instead of "tenant_id"; the framework fixes the names of its columns, so drop the column tag or embedded prefix renaming them`)
 	})
