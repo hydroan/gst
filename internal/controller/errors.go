@@ -6,6 +6,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/types"
 	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -118,8 +119,9 @@ func failDatabase(ctx context.Context, log types.Logger, err error) error {
 // database.ErrRecordNotFound answers 404; database.ErrDuplicatedKey,
 // database.ErrStaleObject and database.ErrForeignKeyViolated 409;
 // database.ErrVersionRequired, database.ErrIDRequired,
-// database.ErrCheckConstraintViolated, database.ErrValueTooLong and
-// database.ErrNotNullViolated, request defects all, 400, each with its fixed
+// database.ErrCheckConstraintViolated, database.ErrValueTooLong,
+// database.ErrNotNullViolated, tenant.ErrTenantImmutable and
+// tenant.ErrTenantRequired, request defects all, 400, each with its fixed
 // client-safe message and err behind it as the cause; anything else is
 // answered as it is, the server's own failure. Handlers log the full error
 // themselves, so every branch deliberately keeps internal detail out of the
@@ -160,6 +162,12 @@ func databaseError(err error) error {
 	case errors.Is(err, database.ErrCheckConstraintViolated), errors.Is(err, database.ErrValueTooLong), errors.Is(err, database.ErrNotNullViolated):
 		// A value the table refuses, by a check, by the length of the
 		// column or by a column that requires one: the request's own defect.
+		return types.NewErrorWithCause(http.StatusBadRequest, invalidArgumentMsg, err)
+	case errors.Is(err, tenant.ErrTenantImmutable), errors.Is(err, tenant.ErrTenantRequired):
+		// A tenant the record cannot have: another one than the caller acts
+		// in, which the write-once column never takes, or none from a caller
+		// acting in every tenant, which leaves nothing to file the record
+		// under. Either is the request's own defect.
 		return types.NewErrorWithCause(http.StatusBadRequest, invalidArgumentMsg, err)
 	default:
 		// Any other database error is the server's own failure.

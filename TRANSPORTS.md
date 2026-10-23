@@ -287,6 +287,7 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 | update_mask | AIP-134 允许省略（省略即按已填字段）、必须支持 `*`；AIP-161 要求整字段与子字段路径都合法 | 必填，不认 `*`（等于 Update），只认顶层键、不点进字段内部，路径必须和 JSON 名精确相同（HTTP 的 body 键照 encoding/json 的规则匹配，只差大小写也算同一个键）：点名的字段整体替换，和 HTTP 的 PATCH 一致；点到 id、created_at 这类框架管理的字段或只在创建时写入的字段（如 tenant_id）时跳过（AIP-161/203 对只读字段的规定）、点到模型没有的字段拒绝（AIP-161） |
 | 什么都没点到的补丁 | AIP-134 的掩码省略即按已填字段；RFC 7396 的空补丁 `{}` 合法、表示不改 | HTTP 的 `{}` 与只含模型没有的键的 body 照 encoding/json 的惯例忽略未知键、整行按原样写回并刷新 updated_at；gRPC 的掩码不剩可改字段时拒绝。两线有意不同的地方之一；每一处有意的差异都是 internal/controller 对照用例里显式的差异行，也都登记在这页 |
 | 缺记录的请求 | AIP-203 把必填字段缺失定为 INVALID_ARGUMENT | 两线都答 400 / InvalidArgument，提示文字各按自己缺的东西说：HTTP 缺 body 答「request body is required」，gRPC 缺 record 字段答「record is required」 |
+| 请求里的租户 | AIP-203：OUTPUT_ONLY 字段出现在请求里时，服务端清掉它、不得因此报错；IMMUTABLE 字段被要求改动时应答 INVALID_ARGUMENT | gRPC 的 `tenant_id` 只出不进，生成的 FromProto 不读它，请求带了也照常处理、租户不变。HTTP 的请求体能带 `tenant_id`：创建时照样写成调用方的租户；整条更新（含批量）带了别的租户答 400，固定文案「The request contains invalid parameters.」，因为这一列只在创建时写，答成功会让客户端以为记录挪了租户；补丁两线都跳过这个键（它是框架管理的字段）。跨租户身份经 HTTP 创建时可以在请求体里点名租户，经 gRPC 点不了；没有可退回的请求租户又没点名时，两线都答 400 / InvalidArgument |
 | 包名无版本段 | Buf 的 PACKAGE_VERSION_SUFFIX 要 `v1` 这样的后缀 | gst 没有 API 版本，包名就是项目名加目录 |
 | 不生成枚举 | AIP-126 用 enum | 字符串枚举保持 string，取值列在字段注释里，HTTP 与数据库里都是字符串 |
 | 时间类型 | AIP-142 一天里的时刻用 `google.type.TimeOfDay`、日期用 `google.type.Date` | `datatypes.Time` 映射 `google.protobuf.Duration`（从零点起的时长），`datatypes.Date` 与类型标签声明成日期列的 `time.Time` 映射 `google.protobuf.Timestamp`，两线都按 UTC 日历日取日期（controller 绑定后统一归一），不引入 googleapis 的类型 |

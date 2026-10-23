@@ -171,7 +171,47 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				t.Helper()
 				data := dataMap(t, got)
 				require.Equal(t, tenant.Default, data["tenant_id"])
-				requireScopedTenant(t, stringOf(data["id"]), tenant.Default)
+				require.Equal(t, tenant.Default, storedScoped(t, stringOf(data["id"])).GetTenantID())
+			},
+		},
+		{
+			// The round trip of a client: a record read back carries its own
+			// tenant, and the update writing it back is applied, the tenant
+			// it names being the one it has.
+			name: "Update carrying the record's own tenant is applied", fixture: scoped, phase: consts.Update,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				return contractInput{id: createScoped(t, "contract-scoped-own").GetID(), record: map[string]any{"name": "contract-scoped-own-updated", "tenant_id": tenant.Default}}
+			},
+			want: ok,
+			check: func(t *testing.T, in contractInput, _ contractAnswer) {
+				t.Helper()
+				stored := storedScoped(t, in.id)
+				require.Equal(t, tenant.Default, stored.GetTenantID())
+				require.Equal(t, "contract-scoped-own-updated", stored.Name)
+			},
+		},
+		{
+			// The tenant is written once, when the record is created: an
+			// update naming another one cannot move the record, so HTTP
+			// refuses it rather than answer a move that never happened, and
+			// gRPC, whose tenant_id is output-only, never reads one (see
+			// TRANSPORTS.md, section 9).
+			name: "Update refuses another tenant over HTTP and gRPC never reads one", fixture: scoped, phase: consts.Update,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				return contractInput{id: createScoped(t, "contract-scoped-update").GetID(), record: map[string]any{"name": "contract-scoped-updated", "tenant_id": "contract-other-tenant"}}
+			},
+			want: contractWant{status: http.StatusBadRequest, msg: invalidArgumentMsg, grpc: &grpcAnswer{code: codes.OK}},
+			check: func(t *testing.T, in contractInput, got contractAnswer) {
+				t.Helper()
+				stored := storedScoped(t, in.id)
+				require.Equal(t, tenant.Default, stored.GetTenantID(), "the record stays in its tenant on both transports")
+				name := "contract-scoped-updated"
+				if got.status == http.StatusBadRequest {
+					name = "contract-scoped-update"
+				}
+				require.Equal(t, name, stored.Name, "HTTP writes nothing of the update it refuses, gRPC applies the record it reads")
 			},
 		},
 		{
@@ -1679,6 +1719,15 @@ func createVersioned(t *testing.T, name string) *versionedSample {
 	return record
 }
 
+// createScoped stores a scoped sample named name, filed under the default
+// tenant, and returns it with its id.
+func createScoped(t *testing.T, name string) *scopedSample {
+	t.Helper()
+	record := &scopedSample{Name: name}
+	require.NoError(t, database.Database[*scopedSample](context.Background()).Create(record))
+	return record
+}
+
 // countValidatedNamed counts the stored validated samples named name.
 func countValidatedNamed(t *testing.T, name string) int {
 	t.Helper()
@@ -1688,14 +1737,13 @@ func countValidatedNamed(t *testing.T, name string) int {
 	return total
 }
 
-// requireScopedTenant asserts that the scoped sample with the given id is
-// filed under want, read across every tenant so that a record filed under
-// another one is found as well.
-func requireScopedTenant(t *testing.T, id, want string) {
+// storedScoped reads the scoped sample with the given id as stored, across
+// every tenant, so that a record filed under another one is found as well.
+func storedScoped(t *testing.T, id string) *scopedSample {
 	t.Helper()
 	record := new(scopedSample)
 	require.NoError(t, database.Database[*scopedSample](tenant.Across(context.Background())).Get(record, id))
-	require.Equal(t, want, record.GetTenantID())
+	return record
 }
 
 // countSamplesWithID counts the stored samples carrying id: 1 or 0.

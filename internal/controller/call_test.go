@@ -1053,13 +1053,17 @@ func field[T any](in map[string]any, key string) T {
 // timeOfDayAsDuration), refusing a value a field cannot hold the way one
 // does (see grpc.Narrow): with the status of types.NewInvalidValue naming
 // the field as encoding/json names it. A message carrying none, nil, is the
-// nil model. It reads tenant_id as well, which a generated FromProto leaves
-// out; the framework stamps the caller's tenant either way, so no answer
-// differs.
+// nil model. It leaves tenant_id out, as a generated FromProto does: the
+// field is output-only on gRPC (see TRANSPORTS.md, section 9).
 func fromProto[T any](raw any) (T, error) {
 	var value T
 	if raw == nil {
 		return value, nil
+	}
+	if record, ok := raw.(map[string]any); ok {
+		record = maps.Clone(record)
+		delete(record, "tenant_id")
+		raw = record
 	}
 	encoded, err := json.Marshal(raw)
 	if err != nil {

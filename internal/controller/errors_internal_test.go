@@ -8,6 +8,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -17,8 +18,8 @@ import (
 // mapping of database errors: a service error keeps its own status and
 // message, the database sentinels answer their fixed status and message with
 // the error behind them as the cause, the constraints a client's data breaks
-// among them, and everything else is answered as it is, the server's own
-// failure carrying no service error.
+// and the tenants a write may not name among them, and everything else is
+// answered as it is, the server's own failure carrying no service error.
 func TestDatabaseErrorMapsEachDatabaseErrorToItsAnswer(t *testing.T) {
 	serviceErr := types.NewError(http.StatusForbidden, "operation refused")
 
@@ -38,6 +39,8 @@ func TestDatabaseErrorMapsEachDatabaseErrorToItsAnswer(t *testing.T) {
 		{"check_constraint_answers_400", errors.Wrap(database.ErrCheckConstraintViolated, "create sample"), http.StatusBadRequest, "The request contains invalid parameters."},
 		{"value_too_long_answers_400", errors.Wrap(database.ErrValueTooLong, "create sample"), http.StatusBadRequest, "The request contains invalid parameters."},
 		{"not_null_answers_400", errors.Wrap(database.ErrNotNullViolated, "create sample"), http.StatusBadRequest, "The request contains invalid parameters."},
+		{"another_tenant_answers_400", errors.Wrapf(tenant.ErrTenantImmutable, "named %q while acting in %q", "other", tenant.Default), http.StatusBadRequest, "The request contains invalid parameters."},
+		{"no_tenant_answers_400", errors.Wrap(tenant.ErrTenantRequired, "create sample"), http.StatusBadRequest, "The request contains invalid parameters."},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
