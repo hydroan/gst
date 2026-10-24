@@ -308,7 +308,8 @@ func TestTransaction(t *testing.T) {
 	err := database.Transaction(context.Background(), nil)
 	require.ErrorIs(t, err, database.ErrNilTransaction)
 
-	// Commit: chains started from the closure ctx join the transaction automatically.
+	// Commit: chains started from the closure ctx join the transaction
+	// automatically.
 	err = database.Transaction(context.Background(), func(ctx context.Context) error {
 		return database.Database[*TestUser](ctx).Create(ul...)
 	})
@@ -334,7 +335,8 @@ func TestTransaction(t *testing.T) {
 	require.NoError(t, database.Database[*TestItem](context.Background()).List(&items))
 	require.Empty(t, items, "item writes should roll back in the same transaction")
 
-	// Panic: the underlying GORM transaction rolls back before the panic propagates.
+	// Panic: the underlying GORM transaction rolls back before the panic
+	// propagates.
 	require.PanicsWithValue(t, "transaction panic", func() {
 		_ = database.Transaction(context.Background(), func(ctx context.Context) error {
 			require.NoError(t, database.Database[*TestUser](ctx).Create(ul...))

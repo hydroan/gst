@@ -56,9 +56,9 @@ func ExampleSelect_scanOne() {
 }
 
 // OrderBy sorts by a projection term, Limit caps the rows and Page keeps one
-// page of them, which is how a report ranks groups and pages through them. A second
-// order term breaks the tie between alpha and gamma so the page is stable.
-// Rendered for the first page:
+// page of them, which is how a report ranks groups and pages through them. A
+// second order term breaks the tie between alpha and gamma so the page is
+// stable. Rendered for the first page:
 //
 //	SELECT `category` AS `category`, COALESCE(SUM(`amount`), 0) AS `total`
 //	FROM `test_aggregate_records` WHERE `test_aggregate_records`.`deleted_at` IS NULL

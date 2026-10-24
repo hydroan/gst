@@ -555,6 +555,8 @@ func uniqueIndexValues(ctx context.Context, index *gormschema.Index, obj any) ([
 	return values, true
 }
 
+// isNilValue reports whether value is nil, or a nil pointer, interface, map,
+// slice, channel or function.
 func isNilValue(value any) bool {
 	if value == nil {
 		return true
@@ -589,6 +591,8 @@ func keyIn(tableName string, columns []string, keys [][]any) clause.IN {
 	return clause.IN{Column: column, Values: values}
 }
 
+// uniqueIndexKey joins the values of a unique key into one map key, each
+// spelled with its type so that the number 1 and the string "1" stay apart.
 func uniqueIndexKey(values []any) string {
 	parts := make([]string, 0, len(values))
 	for _, value := range values {
@@ -597,6 +601,9 @@ func uniqueIndexKey(values []any) string {
 	return strings.Join(parts, "\x00")
 }
 
+// copySaveResultPersistentFields copies the value of every column of schema
+// from src, the row read back, onto dst, the caller's object; the fields gorm
+// does not persist keep what dst holds.
 func copySaveResultPersistentFields(ctx context.Context, schema *gormschema.Schema, dst any, src any) error {
 	dstValue := reflect.ValueOf(dst)
 	srcValue := reflect.ValueOf(src)

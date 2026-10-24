@@ -597,7 +597,8 @@ func TestDatabaseUpdate(t *testing.T) {
 		time.Sleep(2 * time.Millisecond)
 		require.NoError(t, database.Database[*TestUser](context.Background()).Update(fresh))
 		// GORM refreshes updated_at through NowFunc; it must carry UTC so the
-		// in-memory value serializes with the same timestamp base Create forces.
+		// in-memory value serializes with the same timestamp base Create
+		// forces.
 		require.Equal(t, time.UTC, fresh.UpdatedAt.Location(), "updated_at refreshed by Update should be UTC")
 		require.True(t, fresh.UpdatedAt.After(before), "updated_at should move forward after Update")
 		// NowFunc truncates to milliseconds to match the storage precision, so

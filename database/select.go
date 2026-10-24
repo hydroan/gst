@@ -235,6 +235,9 @@ func (a *selectBuilder[M]) setPage(page, size int) {
 // that failed to attach: the error surfaces at the terminal instead of as a nil
 // dereference partway through building the query.
 
+// withDryRun marks the select a dry run and keeps the collector its statements
+// go to. An explicitly nil collector fails the select with ErrNilSQLBuilder,
+// unless an earlier defect has failed it already.
 func (a *selectBuilder[M]) withDryRun(collector ...*[]types.SQLStatement) {
 	a.dryRun = true
 	if len(collector) > 0 {
@@ -720,7 +723,10 @@ func (a *selectBuilder[M]) termExpr(t types.Term, shape projectionShape) (string
 		return a.derivedExpr(jt, t), nil, nil
 	}
 	if types.TermIsLiteral(t) {
-		return literalExpr(types.TermLiteralOf(t)), nil, nil
+		// A constant renders as a string literal: validateLiteral has held
+		// the value to a plain identifier, so the quotes cannot be closed
+		// from inside and the spelling is the same on every dialect.
+		return "'" + types.TermLiteralOf(t) + "'", nil, nil
 	}
 	if !types.TermIsMeasure(t) {
 		return a.keyExpr(t, shape), nil, nil

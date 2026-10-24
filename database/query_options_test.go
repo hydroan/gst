@@ -724,7 +724,8 @@ func TestDatabaseWithSelect(t *testing.T) {
 		t.Run("with empty columns", func(t *testing.T) {
 			defer cleanupTestData()
 			setupTestData(t)
-			// WithSelect with no columns is a no-op, so all columns should be selected (default behavior).
+			// WithSelect with no columns is a no-op, so all columns should be
+			// selected (default behavior).
 			users := make([]*TestUser, 0)
 			require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect().List(&users))
 			require.Len(t, users, 3)
@@ -732,14 +733,16 @@ func TestDatabaseWithSelect(t *testing.T) {
 			require.NotNil(t, u11)
 			require.NotNil(t, u22)
 			require.NotNil(t, u33)
-			// All columns should be present since WithSelect() with no args is a no-op.
+			// All columns should be present since WithSelect() with no args is
+			// a no-op.
 			require.NotEmpty(t, u11.ID)
 			require.NotEmpty(t, u22.ID)
 			require.NotEmpty(t, u33.ID)
 			require.NotEmpty(t, u11.CreatedAt)
 			require.NotEmpty(t, u22.CreatedAt)
 			require.NotEmpty(t, u33.CreatedAt)
-			// Verify that other fields are also present (not just default columns)
+			// Verify that other fields are also present (not just default
+			// columns)
 			require.NotEmpty(t, u11.Name)
 			require.NotEmpty(t, u22.Name)
 			require.NotEmpty(t, u33.Name)
@@ -1203,7 +1206,8 @@ func TestDatabaseWithExpand(t *testing.T) {
 		setupCategoryData(t)
 
 		categories := make([]*TestCategory, 0)
-		// Expand with more depth than available (should only expand available depth)
+		// Expand with more depth than available (should only expand available
+		// depth)
 		require.NoError(t, database.Database[*TestCategory](context.Background()).
 			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{types.FilterLike("name", "child")}}).
 			WithExpand([]string{"Parent.Parent.Parent.Parent"}).
@@ -1437,7 +1441,8 @@ func TestDatabaseWithPurge(t *testing.T) {
 		defer cleanupTestData()
 		setupTestData(t)
 
-		// WithPurge(false) explicitly enables soft delete (overrides model.Purge())
+		// WithPurge(false) explicitly enables soft delete (overrides
+		// model.Purge())
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithPurge(false).Delete(u1))
 
 		// Verify record is soft-deleted (not visible in normal queries)

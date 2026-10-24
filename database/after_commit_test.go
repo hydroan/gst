@@ -25,7 +25,7 @@ func TestAfterCommitWithoutTransaction(t *testing.T) {
 	require.True(t, ran, "outside a transaction the action should run immediately")
 
 	// An immediate failure is the action's own error, not an after-commit one:
-	// no transaction committed, so there is nothing to tell the caller apart from.
+	// no transaction committed, so there is nothing to tell it apart from.
 	errAction := errors.New("action failed")
 	err := database.AfterCommit(context.Background(), func(context.Context) error { return errAction })
 	require.ErrorIs(t, err, errAction)

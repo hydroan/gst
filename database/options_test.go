@@ -165,7 +165,8 @@ func TestDatabaseWithDryRun(t *testing.T) {
 	t.Run("Create", func(t *testing.T) {
 		defer cleanupTestData()
 
-		// WithDryRun should only build the INSERT statement without executing hooks or database I/O.
+		// WithDryRun should only build the INSERT statement without executing
+		// hooks or database I/O.
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithDryRun().Create(ul...))
 		require.Nil(t, u1.Remark, "Create should not run model hooks in dry-run mode")
 		require.Nil(t, u2.Remark, "Create should not run model hooks in dry-run mode")
@@ -214,7 +215,8 @@ func TestDatabaseWithDryRun(t *testing.T) {
 		defer cleanupTestData()
 		setupTestData(t)
 
-		// WithDryRun should only build the UPDATE statement without executing hooks or database I/O.
+		// WithDryRun should only build the UPDATE statement without executing
+		// hooks or database I/O.
 		originalName := u1.Name
 		u1.Name = "updated_name"
 		u1.Remark = nil
@@ -264,7 +266,8 @@ func TestDatabaseWithDryRun(t *testing.T) {
 		defer cleanupTestData()
 		setupTestData(t)
 
-		// WithDryRun should only build the SELECT statement without executing it.
+		// WithDryRun should only build the SELECT statement without executing
+		// it.
 		users := make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithDryRun().List(&users))
 		require.Empty(t, users, "List should not return results in dry-run mode")
@@ -274,7 +277,8 @@ func TestDatabaseWithDryRun(t *testing.T) {
 		defer cleanupTestData()
 		setupTestData(t)
 
-		// WithDryRun should only build the SELECT statement without executing it.
+		// WithDryRun should only build the SELECT statement without executing
+		// it.
 		uu := new(TestUser)
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithDryRun().Get(uu, u1.ID))
 		require.NotNil(t, uu)
@@ -307,7 +311,8 @@ func TestDatabaseWithDryRun(t *testing.T) {
 		defer cleanupTestData()
 		setupTestData(t)
 
-		// WithDryRun should only build the SELECT statement without executing it.
+		// WithDryRun should only build the SELECT statement without executing
+		// it.
 		count := new(int)
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithDryRun().Count(count))
 		require.Equal(t, 0, *count, "Count should not execute in dry-run mode")
@@ -317,7 +322,8 @@ func TestDatabaseWithDryRun(t *testing.T) {
 		defer cleanupTestData()
 		setupTestData(t)
 
-		// WithDryRun should only build the SELECT statement without executing it.
+		// WithDryRun should only build the SELECT statement without executing
+		// it.
 		uu := new(TestUser)
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithDryRun().First(uu))
 		require.NotNil(t, uu)
@@ -328,7 +334,8 @@ func TestDatabaseWithDryRun(t *testing.T) {
 		defer cleanupTestData()
 		setupTestData(t)
 
-		// WithDryRun should only build the SELECT statement without executing it.
+		// WithDryRun should only build the SELECT statement without executing
+		// it.
 		uu := new(TestUser)
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithDryRun().Last(uu))
 		require.NotNil(t, uu)
@@ -339,7 +346,8 @@ func TestDatabaseWithDryRun(t *testing.T) {
 		defer cleanupTestData()
 		setupTestData(t)
 
-		// WithDryRun should only build the SELECT statement without executing it.
+		// WithDryRun should only build the SELECT statement without executing
+		// it.
 		uu := new(TestUser)
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithDryRun().Take(uu))
 		require.NotNil(t, uu)

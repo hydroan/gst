@@ -34,21 +34,22 @@ func (db *database[M]) applyDeletedScope() {
 	}
 }
 
-// List retrieves multiple records from the database based on applied conditions.
-// Returns all records if no conditions are specified, or filtered records with WithQuery.
-// Supports pagination, sorting, and eager loading of associations.
+// List retrieves multiple records from the database based on applied
+// conditions. Returns all records if no conditions are specified, or filtered
+// records with WithQuery. Supports pagination, sorting, and eager loading of
+// associations.
 //
 // Parameters:
 //   - dest: Pointer to the result slice. The pointer itself must not be nil.
 //     The slice value may be nil or preallocated with make. List fully replaces
 //     the slice contents with the query result and never merges into or appends
-//     onto whatever dest already holds: the underlying GORM Find resets the slice
-//     length to 0 before scanning rows, so pre-existing elements are discarded.
-//     After a successful call len(*dest) equals the number of rows returned.
-//     A "dirty" or reused dest therefore cannot leak stale rows into the result,
-//     but callers should still pass an empty slice: the ListBefore model hook runs
-//     over the pre-existing elements before the query overwrites them, so leftover
-//     data would trigger useless hook invocations.
+//     onto whatever dest already holds: the underlying GORM Find resets the
+//     slice length to 0 before scanning rows, so pre-existing elements are
+//     discarded. After a successful call len(*dest) equals the number of rows
+//     returned. A "dirty" or reused dest therefore cannot leak stale rows into
+//     the result, but callers should still pass an empty slice: the ListBefore
+//     model hook runs over the pre-existing elements before the query
+//     overwrites them, so leftover data would trigger useless hook invocations.
 //
 // Features:
 //   - Supports pagination with WithLimit/WithPagination
@@ -138,8 +139,8 @@ func (db *database[M]) List(dest *[]M) (err error) {
 // Executes GetBefore and GetAfter model hooks unless disabled with WithoutHook.
 //
 // Parameters:
-//   - dest: Non-nil pointer where the result will be stored. When M is *T,
-//     both &value and new(T) are valid destinations; a nil *T returns ErrNilDest.
+//   - dest: Non-nil pointer where the result will be stored. When M is *T, both
+//     &value and new(T) are valid destinations; a nil *T returns ErrNilDest.
 //   - id: Primary key value of the record to retrieve
 //
 // Returns ErrIDRequired if id is empty. Returns ErrRecordNotFound when no
@@ -219,8 +220,9 @@ func (db *database[M]) Get(dest M, id string) (err error) {
 	return nil
 }
 
-// Count returns the total number of records matching the current query conditions.
-// Applies all previously set query conditions (WHERE, JOIN, etc.) to the count operation.
+// Count returns the total number of records matching the current query
+// conditions. Applies all previously set query conditions (WHERE, JOIN, etc.)
+// to the count operation.
 //
 // Parameters:
 //   - count: Pointer to int where the result count will be stored
@@ -270,7 +272,8 @@ func (db *database[M]) Count(count *int) (err error) {
 }
 
 // First retrieves the first record from the database ordered by primary key.
-// Applies all previously set query conditions and returns the first matching record.
+// Applies all previously set query conditions and returns the first matching
+// record.
 //
 // Parameters:
 //   - dest: Pointer to model instance where the result will be stored
@@ -334,7 +337,8 @@ func (db *database[M]) First(dest M) (err error) {
 }
 
 // Last retrieves the last record from the database ordered by primary key.
-// Applies all previously set query conditions and returns the last matching record.
+// Applies all previously set query conditions and returns the last matching
+// record.
 //
 // Parameters:
 //   - dest: Pointer to model instance where the result will be stored
@@ -399,7 +403,8 @@ func (db *database[M]) Last(dest M) (err error) {
 }
 
 // Take retrieves the first record from the database in no specified order.
-// Unlike First/Last which order by primary key, Take returns any matching record.
+// Unlike First/Last which order by primary key, Take returns any matching
+// record.
 //
 // Parameters:
 //   - dest: Pointer to model instance where the result will be stored

@@ -704,7 +704,8 @@ func (a *selectBuilder[M]) groupDerivedTerms(shape *projectionShape) error {
 				if other, ok := shape.joined[table]; ok && other.sub != nil {
 					remedy = "group by it through that select's key term"
 					// resolveJoins refused a tie to a column that is no key, so
-					// the key is found; the bare wording is the harmless answer.
+					// the key is found; the bare wording is the harmless
+					// answer.
 					if alias, key := keyAliasOf(other, column); key {
 						remedy += " " + strconv.Quote(alias)
 					}

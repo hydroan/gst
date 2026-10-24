@@ -212,16 +212,16 @@ func TestDatabaseWithQuery(t *testing.T) {
 		require.Equal(t, u1.Age, users[0].Age)
 		require.Equal(t, u1.Email, users[0].Email)
 
-		// Test exact match with multiple fields that don't match: Name="user1" AND Age=19
-		// Should return 0 records (no user matches both)
+		// Exact match on two fields no user carries together, Name="user1" AND
+		// Age=19: no record.
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
 			WithQuery(&TestUser{Name: u1.Name, Age: u2.Age}).
 			List(&users))
 		require.Empty(t, users, "multiple fields with AND logic should match all conditions")
 
-		// Test exact match with three fields: Name, Age, and Email
-		// Query: Name="user1" AND Age=18 AND Email="user1@example.com" should return u1
+		// Exact match on three fields, Name="user1" AND Age=18 AND
+		// Email="user1@example.com": u1.
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
 			WithQuery(&TestUser{Name: u1.Name, Age: u1.Age, Email: u1.Email}).
@@ -400,17 +400,19 @@ func TestDatabaseWithQuery(t *testing.T) {
 		setupTestData(t)
 		users := make([]*TestUser, 0)
 
-		// Test nil query without AllowEmpty (should return no records, blocked for safety)
+		// Test nil query without AllowEmpty (should return no records, blocked
+		// for safety)
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithQuery(nil).List(&users))
 		require.Empty(t, users, "nil query should be blocked by default")
 
-		// Test empty struct without AllowEmpty (should return no records, blocked for safety)
+		// Test empty struct without AllowEmpty (should return no records,
+		// blocked for safety)
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithQuery(&TestUser{}).List(&users))
 		require.Empty(t, users, "empty struct should be blocked by default")
 
-		// Test query with all empty string fields without AllowEmpty (should return no records)
-		// Empty strings are zero values and are skipped, so this reaches the same
-		// empty-query check as the empty struct above
+		// Every field an empty string, without AllowEmpty: no record. Empty
+		// strings are zero values and are skipped, so this reaches the same
+		// empty-query check as the empty struct above.
 		require.NoError(t, database.Database[*TestUser](context.Background()).
 			WithQuery(&TestUser{Name: "", Email: ""}).
 			List(&users))
@@ -479,9 +481,9 @@ func TestDatabaseWithQuery(t *testing.T) {
 		require.True(t, foundU2, "should find u2")
 		require.True(t, foundU3, "should find u3")
 
-		// Test query with all empty string fields with AllowEmpty=true (should return all records)
-		// The empty strings are skipped like any zero value, so AllowEmpty lifts
-		// the same empty-query check as for the empty struct
+		// Every field an empty string, with AllowEmpty=true: every record. The
+		// empty strings are skipped like any zero value, so AllowEmpty lifts
+		// the same empty-query check as for the empty struct.
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
 			WithQuery(&TestUser{Name: "", Email: ""}, types.QueryOptions{AllowEmpty: true}).
@@ -502,9 +504,8 @@ func TestDatabaseWithQuery(t *testing.T) {
 		require.True(t, foundU2, "should find u2")
 		require.True(t, foundU3, "should find u3")
 
-		// Test query with some empty and some non-empty fields (should work normally, not blocked)
-		// Query: Name="user1" (non-empty), Email="" (empty)
-		// Should return u1 (matches Name), not blocked because at least one field is non-empty
+		// One field set and one empty, Name="user1" and Email="": u1, matching
+		// the name; at least one field is set, so nothing is blocked.
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
 			WithQuery(&TestUser{Name: u1.Name, Email: ""}).
@@ -621,7 +622,8 @@ func TestDatabaseWithQuery(t *testing.T) {
 		require.Len(t, got, 1)
 		require.Equal(t, items[1].ID, got[0].ID)
 
-		// DeletedAt on the embedded base must not leak bogus conditions into the query.
+		// DeletedAt on the embedded base must not leak bogus conditions into
+		// the query.
 		got = make([]*TestAutoItem, 0)
 		require.NoError(t, database.Database[*TestAutoItem](context.Background()).
 			WithQuery(&TestAutoItem{DeletedAt: gorm.DeletedAt{Time: time.Now(), Valid: true}}).

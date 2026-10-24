@@ -15,11 +15,6 @@ var (
 	ErrLiteralWithoutAlias = errors.New("a literal needs an alias, name it with As")
 )
 
-// literalExpr renders a constant as a string literal. validate has held the
-// value to a plain identifier, so the quotes cannot be closed from inside and
-// the spelling is the same on every dialect.
-func literalExpr(value string) string { return "'" + value + "'" }
-
 // validateLiteral checks a constant term: its value must be safe to inline,
 // and it needs a name to project under.
 func validateLiteral(t types.Term) error {

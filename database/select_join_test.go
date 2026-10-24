@@ -888,7 +888,8 @@ func TestSelectJoinSelectReadsTheDerivedTerms(t *testing.T) {
 	})
 
 	t.Run("JoinSelectKeepsOnlyTaggedRecords", func(t *testing.T) {
-		// Inner: the count can no longer be NULL, so the field needs no pointer.
+		// Inner: the count can no longer be NULL, so the field needs no
+		// pointer.
 		type tagged struct {
 			ID   string
 			Tags int64

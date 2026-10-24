@@ -19,8 +19,8 @@ var (
 )
 
 // versionedNote is the optimistic-locking fixture: a model that declares
-// modelschema.Version and therefore takes part in the whole per-operation contract
-// documented on that type.
+// modelschema.Version and therefore takes part in the whole per-operation
+// contract documented on that type.
 type versionedNote struct {
 	Title   string              `json:"title" gorm:"size:191"`
 	Body    string              `json:"body" gorm:"size:191"`

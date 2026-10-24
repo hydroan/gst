@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBuildDSN(t *testing.T) {
+func TestBuildDSNAddsStrictModeAndOnlyTheSetTimeouts(t *testing.T) {
 	base := config.MySQL{Host: "127.0.0.1", Port: 3306, Database: "sample", Username: "root", Password: "secret", Strict: true}
 	plain := "root:secret@tcp(127.0.0.1:3306)/sample?charset=utf8mb4&parseTime=True&loc=UTC&clientFoundRows=true&interpolateParams=true"
 	prefix := plain + "&sql_mode=CONCAT(@@sql_mode,%27,STRICT_TRANS_TABLES%27)"

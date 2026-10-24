@@ -10,10 +10,10 @@ import (
 )
 
 // The window examples read the same six seeded rows as the aggregate examples
-// (see aggregateSeed in fixtures_test.go) and are written the way project code is written,
-// through the generated Cols vars the fixture mirrors. The SQL each one
-// renders is quoted in MySQL spelling; the other dialects differ only in the
-// identifier quotes.
+// (see aggregateSeed in fixtures_test.go) and are written the way project code
+// is written, through the generated Cols vars the fixture mirrors. The SQL each
+// one renders is quoted in MySQL spelling; the other dialects differ only in
+// the identifier quotes.
 
 // RowNumber numbers the rows of each partition in the window's order, and
 // Qualify keeps the rows the window function selects: here the latest row of

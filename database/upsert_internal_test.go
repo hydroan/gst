@@ -92,7 +92,7 @@ func syncCollectInputs(t *testing.T, gormDB *gorm.DB, m any) (*gormschema.Schema
 	return stmt.Schema, plans
 }
 
-func TestCollectUniqueIndexes(t *testing.T) {
+func TestCollectUniqueIndexesGathersTheDeclaredUniqueKeys(t *testing.T) {
 	gormDB := newSyncCollectDB(t)
 
 	t.Run("merges tag and Indexes sources", func(t *testing.T) {

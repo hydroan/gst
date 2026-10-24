@@ -12,8 +12,9 @@ import (
 // The query-shaping options — conditions, ordering, paging, locking and
 // friends — live in query_options.go and with_query.go.
 
-// WithBatchSize sets the batch size for batch operations such as batch insert, update, or delete.
-// Controls how many records are processed in a single database operation to optimize performance.
+// WithBatchSize sets the batch size for batch operations such as batch insert,
+// update, or delete. Controls how many records are processed in a single
+// database operation to optimize performance.
 //
 // Parameters:
 //   - size: The number of records to process per batch.
@@ -35,7 +36,8 @@ import (
 //   - Larger batch sizes improve performance by reducing database round trips
 //   - However, larger batches consume more memory and may hit database limits
 //   - Recommended range: 100-5000 for most use cases
-//   - Very large batches (>10000) may cause memory issues or exceed database limits
+//   - Very large batches (>10000) may cause memory issues or exceed database
+//     limits
 //
 // Examples:
 //
@@ -53,8 +55,11 @@ import (
 //	    WithBatchSize(1000).
 //	    Create(samples...)
 //
-// NOTE: If size is 0 or not set, default batch sizes are used (1000 for Create/Upsert, 10000 for Delete).
-// NOTE: The batch size setting applies only to the current operation chain and is reset afterward.
+// NOTE: If size is 0 or not set, default batch sizes are used (1000 for
+// Create/Upsert, 10000 for Delete).
+//
+// NOTE: The batch size setting applies only to the current operation chain
+// and is reset afterward.
 func (db *database[M]) WithBatchSize(size int) types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -63,9 +68,9 @@ func (db *database[M]) WithBatchSize(size int) types.Database[M] {
 }
 
 // WithDryRun enables dry-run mode to build SQL without executing database I/O.
-// Useful for debugging, query optimization, testing query generation, and measuring
-// framework overhead without touching the backing database.
-// The generated SQL will be built by GORM but not executed against the database.
+// Useful for debugging, query optimization, testing query generation, and
+// measuring framework overhead without touching the backing database. The
+// generated SQL will be built by GORM but not executed against the database.
 //
 // An optional collector receives the generated statements: pass a
 // *[]types.SQLStatement and the next terminal operation appends its Query,
@@ -75,11 +80,15 @@ func (db *database[M]) WithBatchSize(size int) types.Database[M] {
 // built, which still exercises query construction and validation.
 //
 // Behavior:
-//   - Create/Update/Delete/UpdateByID: Builds SQL without modifying database rows
+//   - Create/Update/Delete/UpdateByID: Builds SQL without modifying database
+//     rows
 //   - List/Get/Count/First/Last/Take: Builds SQL without reading database rows
-//   - Read operations leave destination values unchanged because no rows are loaded
-//   - Model hooks are not executed because dry-run is limited to SQL construction
-//   - Input model objects are left unchanged; no ID, timestamp, creator, updater, or soft-delete fields are filled
+//   - Read operations leave destination values unchanged because no rows are
+//     loaded
+//   - Model hooks are not executed because dry-run is limited to SQL
+//     construction
+//   - Input model objects are left unchanged; no ID, timestamp, creator,
+//     updater, or soft-delete fields are filled
 //
 // Example:
 //
@@ -92,8 +101,9 @@ func (db *database[M]) WithBatchSize(size int) types.Database[M] {
 //	    WithQuery(&Sample{Name: "alpha"}).
 //	    List(&samples)
 //
-// WithDryRun is build-only: it does not execute generated SQL, model hooks, or object field filling.
-// Transaction helpers are not supported because they manage real transaction control flow.
+// WithDryRun is build-only: it does not execute generated SQL, model hooks, or
+// object field filling. Transaction helpers are not supported because they
+// manage real transaction control flow.
 func (db *database[M]) WithDryRun(collector ...*[]types.SQLStatement) types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -159,8 +169,9 @@ func (db *database[M]) collectSQL(tx *gorm.DB) error {
 }
 
 // WithoutHook disables model hooks (callbacks) for the current operation.
-// Bypasses BeforeCreate, AfterCreate, BeforeUpdate, AfterUpdate, etc. hooks.
-// Use when you need direct database operations without business logic interference.
+// Bypasses CreateBefore, CreateAfter, UpdateBefore, UpdateAfter and the
+// model's other hooks. Use when you need direct database operations without
+// business logic interference.
 //
 // Example:
 //

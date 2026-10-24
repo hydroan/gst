@@ -49,34 +49,6 @@ func Transaction(ctx context.Context, fn func(ctx context.Context) error) error 
 	return transactionOn(ctx, DB(), fn)
 }
 
-// longTransaction is how long a transaction may hold its connection before
-// the framework says so. A transaction holds a connection of the pool and
-// every row it wrote for its whole length, whatever it spends that length
-// on — a slow statement, a lock it waits for, a call it makes to another
-// system — and the length is what the caller cannot see. The bound comes
-// from the protocol behind the framework's cluster-once work: a holder gives
-// its lease up once no renewal has succeeded for the local deadline, and on
-// SQLite, where one connection serves everything, a transaction this long
-// leaves the renewals no turn of their own. A variable so that this
-// package's own test can shrink it; nothing else assigns it.
-var longTransaction = 5 * time.Second
-
-// reportLongTransaction writes the entry a transaction that held its
-// connection too long leaves behind. It is not a failure record — the
-// transaction may well have committed — and it carries no statement of its
-// own: what it reports is a length, and where the length came from is in the
-// span the transaction just closed.
-func reportLongTransaction(ctx context.Context, held time.Duration) {
-	if held < longTransaction {
-		return
-	}
-	logger.Database.WithContext(ctx, phaseTransaction).Warnz(
-		"transaction held its connection for a long time",
-		zap.Duration("held", held),
-		logfield.Threshold(longTransaction),
-	)
-}
-
 // TransactionOn is Transaction on an application-held database instance: fn
 // runs inside a transaction opened on that instance, and only DatabaseOn
 // chains for the same instance join it — a default-database chain inside fn
@@ -114,9 +86,9 @@ func transactionOn(ctx context.Context, base *gorm.DB, fn func(ctx context.Conte
 
 	spanCtx, span := gstotel.StartSpan(ctx, gstotel.OperationSpanName("database", "Transaction"))
 	defer span.End()
-	// No recording gate here: both attributes are constants, so there is nothing
-	// to skip building. Gate where assembling the attributes costs something —
-	// see the per-operation batch in database[M].trace.
+	// No recording gate here: both attributes are constants, so there is
+	// nothing to skip building. Gate where assembling the attributes costs
+	// something — see the per-operation batch in database[M].trace.
 	span.SetAttributes(
 		attribute.String("component", "database"),
 		attribute.String("database.operation", "Transaction"),
@@ -145,4 +117,32 @@ func transactionOn(ctx context.Context, base *gorm.DB, fn func(ctx context.Conte
 	// is written here.
 	gstotel.RecordError(span, txErr)
 	return txErr
+}
+
+// longTransaction is how long a transaction may hold its connection before
+// the framework says so. A transaction holds a connection of the pool and
+// every row it wrote for its whole length, whatever it spends that length
+// on — a slow statement, a lock it waits for, a call it makes to another
+// system — and the length is what the caller cannot see. The bound comes
+// from the protocol behind the framework's cluster-once work: a holder gives
+// its lease up once no renewal has succeeded for the local deadline, and on
+// SQLite, where one connection serves everything, a transaction this long
+// leaves the renewals no turn of their own. A variable so that this
+// package's own test can shrink it; nothing else assigns it.
+var longTransaction = 5 * time.Second
+
+// reportLongTransaction writes the entry a transaction that held its
+// connection too long leaves behind. It is not a failure record — the
+// transaction may well have committed — and it carries no statement of its
+// own: what it reports is a length, and where the length came from is in the
+// span the transaction just closed.
+func reportLongTransaction(ctx context.Context, held time.Duration) {
+	if held < longTransaction {
+		return
+	}
+	logger.Database.WithContext(ctx, phaseTransaction).Warnz(
+		"transaction held its connection for a long time",
+		zap.Duration("held", held),
+		logfield.Threshold(longTransaction),
+	)
 }

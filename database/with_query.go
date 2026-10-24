@@ -19,19 +19,20 @@ import (
 // Non-zero fields in the model will be used as query conditions.
 //
 // Parameters:
-//   - query: A model instance with fields set as query conditions. Can be nil to indicate empty query.
-//     When nil or all fields are zero values, it's treated as an empty query.
-//     The conditions are the ones gorm builds for Where(&query): one per field
-//     gorm reads as a column, named by the field's own column — a field of an
-//     embedded struct under the struct's prefix — and holding the value gorm
-//     binds for it. A type implementing driver.Valuer, such as sql.NullString,
-//     and a field declaring a serializer, a slice among them, bind the form
-//     their column stores; a byte slice matches byte for byte; time.Time
-//     compares as the instant it names whatever its offset, and a date
-//     column, a datatypes.Date or a time.Time its type tag declares a date, by
-//     the UTC day it names. Of the columns every model carries, only id,
-//     created_by and updated_by are conditions.
-//   - opts: Optional QueryOptions to control query behavior (empty-query safety, operator filters)
+//   - query: A model instance with fields set as query conditions. Can be nil
+//     to indicate empty query. When nil or all fields are zero values, it's
+//     treated as an empty query. The conditions are the ones gorm builds for
+//     Where(&query): one per field gorm reads as a column, named by the field's
+//     own column — a field of an embedded struct under the struct's prefix —
+//     and holding the value gorm binds for it. A type implementing
+//     driver.Valuer, such as sql.NullString, and a field declaring a
+//     serializer, a slice among them, bind the form their column stores; a byte
+//     slice matches byte for byte; time.Time compares as the instant it names
+//     whatever its offset, and a date column, a datatypes.Date or a time.Time
+//     its type tag declares a date, by the UTC day it names. Of the columns
+//     every model carries, only id, created_by and updated_by are conditions.
+//   - opts: Optional QueryOptions to control query behavior (empty-query
+//     safety, operator filters)
 //
 // Query Behavior:
 //
@@ -46,15 +47,17 @@ import (
 //	the gorm.io/datatypes types JSON, JSONSlice, JSONMap and JSONType): a
 //	JSON document is not a scalar, so an exact match fails closed to an
 //	empty result on every dialect instead of comparing, a JSON array of
-//	numbers as much as one of strings or a map. Substring matching on a JSON document goes through the
-//	like-family operator filters, which cast the column where the dialect
-//	requires it.
+//	numbers as much as one of strings or a map. Substring matching on a JSON
+//	document goes through the like-family operator filters, which cast the
+//	column where the dialect requires it.
 //
 //	AllowEmpty:
-//	- By default (false): Empty queries are blocked for safety (adds WHERE 1 = 0)
+//	- By default (false): Empty queries are blocked for safety (WHERE 1 = 0)
 //	- When true: Allows empty queries to match all records (full table scan)
-//	- Empty query cases: nil, empty struct, all fields are zero values, all field values are empty strings
-//	- On Delete passed no record it means every row of the model's table (see Delete)
+//	- Empty query cases: nil, empty struct, all fields are zero values, all
+//	  field values are empty strings
+//	- On a Delete passed no record, it means every row of the model's table
+//	  (see Delete)
 //
 // Examples:
 //
@@ -79,10 +82,12 @@ import (
 //	// Query with some empty and some non-empty fields (works normally)
 //	WithQuery(&Sample{Name: "alpha", Code: ""})  // WHERE name = 'alpha' (Code is ignored)
 //
-// NOTE: The underlying type must be pointer to struct, otherwise panic will occur.
-// NOTE: Empty query conditions (nil or zero value) are blocked by default for safety to prevent
+// NOTE: The underlying type must be pointer to struct, otherwise panic will
+// occur.
 //
-//	catastrophic data loss (e.g., deleting all records). Use QueryOptions{AllowEmpty: true} to override.
+// NOTE: Empty query conditions (nil or zero value) are blocked by default for
+// safety, to prevent catastrophic data loss (e.g., deleting all records). Use
+// QueryOptions{AllowEmpty: true} to override.
 func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -154,18 +159,20 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 	// CRITICAL SAFETY CHECK: Empty query conditions
 	//
 	// Empty query will match ALL records, which is dangerous when:
-	// 1. The result is used for subsequent Delete operations → deletes all data (CATASTROPHIC!)
+	// 1. The result is used for subsequent Delete operations → deletes all data
+	//    (CATASTROPHIC!)
 	// 2. Large datasets returned without pagination → performance/memory issues
 	//
 	// Empty Query Examples:
 	//   - WithQuery(nil)                         → nil query
 	//   - WithQuery(&Sample{})                   → all fields are zero values
-	//   - WithQuery(&Sample{Name: "", Code: ""}) → all field values are empty strings
-	//   - WithQuery(&Sample{Code: code})         → code came from an empty slice
+	//   - WithQuery(&Sample{Name: "", Code: ""}) → every field an empty string
+	//   - WithQuery(&Sample{Code: code})         → code from an empty slice
 	//
-	// By default, empty queries (nil or zero value) are blocked by adding "WHERE 1 = 0" condition.
-	// To allow empty queries, use: WithQuery(nil, QueryOptions{AllowEmpty: true}) or
-	//                              WithQuery(&Sample{}, QueryOptions{AllowEmpty: true})
+	// By default, empty queries (nil or zero value) are blocked by adding a
+	// "WHERE 1 = 0" condition. To allow empty queries, use
+	// WithQuery(nil, QueryOptions{AllowEmpty: true}) or
+	// WithQuery(&Sample{}, QueryOptions{AllowEmpty: true}).
 	if len(q) == 0 {
 		// Filters are already applied above and alone are sufficient, so the
 		// empty query safety check is not needed.
@@ -314,9 +321,9 @@ func conditionValue(val reflect.Value, day bool) any {
 	return val.Interface()
 }
 
-// indirectTypeAndValue dereferences pointer types and values.
-// Follows pointer chains until reaching a non-pointer type.
-// Used for reflection operations that need to work with the underlying concrete type.
+// indirectTypeAndValue dereferences pointer types and values. Follows pointer
+// chains until reaching a non-pointer type. Used for reflection operations that
+// need to work with the underlying concrete type.
 //
 // Parameters:
 //   - t: The reflect.Type to dereference

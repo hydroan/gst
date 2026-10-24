@@ -13,11 +13,13 @@ import (
 	"gorm.io/gorm"
 )
 
+// Default is the connection Init opens when PostgreSQL is the configured
+// default database, the one database.DB returns from then on; nil otherwise.
 var Default *gorm.DB
 
-// Init initializes the default PostgreSQL connection.
-// It checks if PostgreSQL is enabled and selected as the default database.
-// If the connection is successful, it initializes the database and returns nil.
+// Init opens the default PostgreSQL connection when PostgreSQL is enabled and
+// selected as the default database, and makes it the default database that
+// database.Database and database.DB use; otherwise it does nothing.
 func Init() (err error) {
 	cfg := config.App.Postgres
 	if !cfg.Enabled || config.App.Database.Type != config.DBPostgres {
@@ -31,13 +33,12 @@ func Init() (err error) {
 	return dbruntime.InitDatabase(Default)
 }
 
-// New creates and returns a new PostgreSQL database connection with the given configuration.
-// With tracing configured on, the returned handle carries the GORM
-// OpenTelemetry tracing plugin, so application-held instances passed to
+// New creates and returns a new PostgreSQL database connection with the given
+// configuration. With tracing configured on, the returned handle carries the
+// GORM OpenTelemetry tracing plugin, so application-held instances passed to
 // DatabaseOn, SelectOn, UnionAllOn, TransactionOn, and CleanupOn are traced
-// like the default database.
-// The pool runs under the connection limits of the [database] configuration,
-// the same ones the default handle runs under.
+// like the default database. The pool runs under the connection limits of the
+// [database] configuration, the same ones the default handle runs under.
 func New(cfg config.Postgres) (*gorm.DB, error) {
 	// Statements run over pgx's simple protocol — no gorm PrepareStmt, no
 	// pgx statement cache, no server-side statement state; buildDSN explains

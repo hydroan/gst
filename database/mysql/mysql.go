@@ -14,11 +14,13 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 )
 
+// Default is the connection Init opens when MySQL is the configured default
+// database, the one database.DB returns from then on; nil otherwise.
 var Default *gorm.DB
 
-// Init initializes the default MySQL connection.
-// It checks if MySQL is enabled and selected as the default database.
-// If the connection is successful, it initializes the database and returns nil.
+// Init opens the default MySQL connection when MySQL is enabled and selected as
+// the default database, and makes it the default database that
+// database.Database and database.DB use; otherwise it does nothing.
 func Init() (err error) {
 	cfg := config.App.MySQL
 	if !cfg.Enabled || config.App.Database.Type != config.DBMySQL {
@@ -32,13 +34,12 @@ func Init() (err error) {
 	return dbruntime.InitDatabase(Default)
 }
 
-// New creates and returns a new MySQL database connection with the given configuration.
-// With tracing configured on, the returned handle carries the GORM
-// OpenTelemetry tracing plugin, so application-held instances passed to
+// New creates and returns a new MySQL database connection with the given
+// configuration. With tracing configured on, the returned handle carries the
+// GORM OpenTelemetry tracing plugin, so application-held instances passed to
 // DatabaseOn, SelectOn, UnionAllOn, TransactionOn, and CleanupOn are traced
-// like the default database.
-// The pool runs under the connection limits of the [database] configuration,
-// the same ones the default handle runs under.
+// like the default database. The pool runs under the connection limits of the
+// [database] configuration, the same ones the default handle runs under.
 func New(cfg config.MySQL) (*gorm.DB, error) {
 	// TranslateError maps dialect-specific write failures to portable gorm
 	// sentinels (gorm.ErrDuplicatedKey, gorm.ErrForeignKeyViolated) that
@@ -90,15 +91,14 @@ func DryRun() (*gorm.DB, error) {
 // untouched, so a replica-free deployment pays nothing.
 //
 // Each replica shares the primary's DSN settings — credentials, database,
-// timeouts, the utf8mb4 charset, and the UTC wire location, all of which
-// reads depend on — and differs by address only. The returned handle carries a Write pin:
-// with the resolver installed, gorm would otherwise route every plain read
-// to a replica, and that silent default breaks read-your-writes everywhere
-// (a session read right after login, a list right after create). Reads move
-// only where a model declares PreferReplica or a call site opts in with
-// WithReplica; transactions never move at all, because the resolver leaves
-// statements inside one alone. See WithReplica for the full routing
-// precedence.
+// timeouts, the utf8mb4 charset, and the UTC wire location, all of which reads
+// depend on — and differs by address only. The returned handle carries a Write
+// pin: with the resolver installed, gorm would otherwise route every plain read
+// to a replica, and that silent default breaks read-your-writes everywhere (a
+// session read right after login, a list right after create). Reads move only
+// where a model declares PreferReplica or a call site opts in with WithReplica;
+// transactions never move at all, because the resolver leaves statements inside
+// one alone. See WithReplica for the full routing precedence.
 func attachReplicas(db *gorm.DB, cfg config.MySQL) (*gorm.DB, error) {
 	if len(cfg.Replicas) == 0 {
 		return db, nil

@@ -53,9 +53,9 @@ type filterScope struct {
 	outer      string
 	outerTable string
 	// outerColumns names the columns of the enclosing model, keyed by database
-	// name, so the outer side of an EqCol predicate is checked the same way the inner
-	// side is instead of reaching the database as an unknown column. It is nil
-	// at the top level, alongside outer.
+	// name, so the outer side of an EqCol predicate is checked the same way the
+	// inner side is instead of reaching the database as an unknown column. It
+	// is nil at the top level, alongside outer.
 	outerColumns map[string]struct{}
 	// depth numbers the nesting level so each subquery can take a distinct
 	// alias when it reads the same table as the query enclosing it.

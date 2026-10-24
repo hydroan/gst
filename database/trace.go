@@ -40,16 +40,19 @@ const (
 	phaseTransaction   consts.Phase = "transaction"
 )
 
-// trace returns a timing function for database operations that provides comprehensive
-// performance monitoring, logging, and distributed tracing capabilities.
-// The returned function should be called with the operation result to complete tracing and logging.
+// trace returns a timing function for database operations that provides
+// comprehensive performance monitoring, logging, and distributed tracing
+// capabilities. The returned function should be called with the operation
+// result to complete tracing and logging.
 //
 // Parameters:
 //   - phase: Operation phase for logging and tracing identification
 //     (consts.Create, consts.List, phaseUpsert, etc.)
-//   - batch: Optional batch size for batch operations (used for span attributes and logging)
+//   - batch: Optional batch size for batch operations (used for span attributes
+//     and logging)
 //
-// Returns a function that accepts an error and completes the operation tracing and logging.
+// Returns a function that accepts an error and completes the operation tracing
+// and logging.
 //
 // Features:
 //   - Automatic timing measurement from call to completion
@@ -63,13 +66,17 @@ const (
 //   - Context propagation to GORM operations
 //
 // OTEL Tracing Integration:
-//   - Creates OpenTelemetry spans with naming pattern: "database.{Model}.{Operation}"
-//   - Records detailed span attributes: component, operation, model, table, batch_size, etc.
+//   - Creates OpenTelemetry spans with naming pattern:
+//     "database.{Model}.{Operation}"
+//   - Records detailed span attributes: component, operation, model, table,
+//     batch_size, etc.
 //   - Propagates span context to GORM operations for complete tracing hierarchy
-//   - Automatically handles span lifecycle (creation, attribute setting, completion)
-//   - Integrates with existing tracing infrastructure (controller and service layers)
-//   - Ensures trace_id is available in database logs through request metadata or
-//     the active OTEL span context
+//   - Automatically handles span lifecycle (creation, attribute setting,
+//     completion)
+//   - Integrates with existing tracing infrastructure (controller and service
+//     layers)
+//   - Ensures trace_id is available in database logs through request metadata
+//     or the active OTEL span context
 //
 // Usage Pattern:
 //
@@ -250,8 +257,10 @@ func operationLogFields(modelName string, batch int, duration time.Duration, dry
 // worth timing.
 //
 // Parameters:
-//   - ctx: Database context the hook runs under; nil falls back to context.Background
-//   - phase: Hook phase (consts.CreateBefore, ...), naming the span "model.{Model}.{Hook}"
+//   - ctx: Database context the hook runs under; nil falls back to
+//     context.Background
+//   - phase: Hook phase (consts.CreateBefore, ...), naming the span
+//     "model.{Model}.{Hook}"
 //   - parentSpan: Database operation span the hook span nests under
 //   - fn: Hook invocation, receiving the context that carries the hook span
 //
@@ -271,7 +280,8 @@ func traceModelHook[M types.Model](ctx context.Context, phase consts.Phase, pare
 	}
 
 	modelName := reflect.TypeOf(*new(M)).Elem().Name()
-	// Use a structured gst span name under the database span for hook execution.
+	// Use a structured gst span name under the database span for hook
+	// execution.
 	spanName := gstotel.FrameworkSpanName("model", modelName, phase.Name())
 	parentCtx := trace.ContextWithSpan(hookCtx, parentSpan)
 	childCtx, span := gstotel.StartSpan(parentCtx, spanName)
@@ -295,8 +305,9 @@ func traceModelHook[M types.Model](ctx context.Context, phase consts.Phase, pare
 	err := fn(childCtx)
 
 	if recording {
-		// Record execution results in a single batched SetAttributes call; every
-		// call on a recording span locks the span and re-runs deduplication.
+		// Record execution results in a single batched SetAttributes call;
+		// every call on a recording span locks the span and re-runs
+		// deduplication.
 		duration := time.Since(start)
 		attrs := make([]attribute.KeyValue, 0, hookOutcomeAttrCap)
 		attrs = append(

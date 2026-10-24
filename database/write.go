@@ -42,18 +42,19 @@ func (db *database[M]) caller() string {
 	return requestctx.FromContext(db.ctx).UserID()
 }
 
-// Create inserts one or multiple records into the database.
-// It is a pure INSERT: a record whose primary key or any unique key collides
-// with an existing row fails with ErrDuplicatedKey instead of silently
-// updating that row. Use Upsert for deliberate insert-or-update semantics.
-// It writes the model's own table alone: an association an object carries,
-// a field declared for queries to preload, is neither written nor kept on
-// the object, which hands back what was written (see clearAssociations).
-// Executes CreateBefore and CreateAfter model hooks unless disabled with WithoutHook or WithDryRun.
+// Create inserts one or multiple records into the database. It is a pure
+// INSERT: a record whose primary key or any unique key collides with an
+// existing row fails with ErrDuplicatedKey instead of silently updating that
+// row. Use Upsert for deliberate insert-or-update semantics. It writes the
+// model's own table alone: an association an object carries, a field declared
+// for queries to preload, is neither written nor kept on the object, which
+// hands back what was written (see clearAssociations). Executes CreateBefore
+// and CreateAfter model hooks unless disabled with WithoutHook or WithDryRun.
 // Supports batch processing for large datasets using configurable batch sizes.
 //
 // Parameters:
-//   - objs: One or more model instances to create. Empty objects are automatically filtered out.
+//   - objs: One or more model instances to create. Empty objects are
+//     automatically filtered out.
 //
 // Behavior:
 //   - Automatically generates ID if empty using SetID()
@@ -68,11 +69,12 @@ func (db *database[M]) caller() string {
 //     carried by ctx when present. A call that fits one batch and runs no
 //     overridden create hooks skips the wrapping transaction: the single
 //     INSERT's own atomicity is the whole contract.
-//   - Returns nil if no valid objects provided (empty slice or all objects are empty)
+//   - Returns nil if no valid objects provided (empty slice or all objects are
+//     empty)
 //
 // Returns ErrDuplicatedKey when a primary or unique key already exists, or an
-// error when hooks or other database constraints fail.
-// WithDryRun builds SQL only and does not execute hooks, database I/O, or object field filling.
+// error when hooks or other database constraints fail. WithDryRun builds SQL
+// only and does not execute hooks, database I/O, or object field filling.
 //
 // On a ClickHouse instance the contract is weaker (see clickhouseCreate):
 // plain batch INSERTs with no hooks, no transaction across batches, and no
@@ -199,10 +201,10 @@ func (db *database[M]) Create(objs ...M) (err error) {
 	return db.withWriteTransaction(write)
 }
 
-// Delete removes one or multiple records from the database.
-// By default performs soft delete (sets deleted_at timestamp).
-// Use WithPurge() for permanent deletion (hard delete).
-// Executes DeleteBefore and DeleteAfter model hooks unless disabled with WithoutHook or WithDryRun.
+// Delete removes one or multiple records from the database. By default performs
+// soft delete (sets deleted_at timestamp). Use WithPurge() for permanent
+// deletion (hard delete). Executes DeleteBefore and DeleteAfter model hooks
+// unless disabled with WithoutHook or WithDryRun.
 //
 // Every record named by its id must match a live row: a record that is
 // missing, or soft deleted already, fails the call with ErrRecordNotFound,
@@ -240,12 +242,15 @@ func (db *database[M]) Create(objs ...M) (err error) {
 // model.Version.
 //
 // Parameters:
-//   - objs: One or more model instances to delete. Empty objects are automatically filtered out.
+//   - objs: One or more model instances to delete. Empty objects are
+//     automatically filtered out.
 //
 // Behavior:
-//   - Soft delete (default): Sets deleted_at field, records remain in database but are hidden from normal queries
+//   - Soft delete (default): Sets deleted_at field, records remain in database
+//     but are hidden from normal queries
 //   - Hard delete (with WithPurge): Permanently removes records from database
-//   - Soft-deleted records are automatically excluded from List, Get, First, Last, Count, and other query operations
+//   - Soft-deleted records are automatically excluded from List, Get, First,
+//     Last, Count, and other query operations
 //   - Supports batch processing for performance
 //   - Runs hooks and all batches in one transaction, joining the transaction
 //     carried by ctx when present. A call that fits one batch, runs no
@@ -257,8 +262,10 @@ func (db *database[M]) Create(objs ...M) (err error) {
 //     back and the batch deletes nothing, and so does a delete of several
 //     records carrying versions, a statement each: a stale one rolls back
 //     the ones before it.
-//   - Returns nil if no valid objects provided (empty slice or all objects are empty) and the chain carries no conditions
-//   - WithDryRun builds SQL only and does not execute hooks, database I/O, or object field filling
+//   - Returns nil if no valid objects provided (empty slice or all objects are
+//     empty) and the chain carries no conditions
+//   - WithDryRun builds SQL only and does not execute hooks, database I/O, or
+//     object field filling
 //
 // On a ClickHouse instance the contract is weaker (see clickhouseDelete):
 // a lightweight DELETE by primary key with no hooks and no transaction, and
@@ -450,9 +457,10 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 				matched += res.RowsAffected
 			}
 		default:
-			// Soft delete: only set "deleted_at" to the current time. The row keeps
-			// occupying its unique keys, so a later Create with the same unique key
-			// fails with ErrDuplicatedKey; only Upsert can update such a row again.
+			// Soft delete: only set "deleted_at" to the current time. The row
+			// keeps occupying its unique keys, so a later Create with the same
+			// unique key fails with ErrDuplicatedKey; only Upsert can update
+			// such a row again.
 			for i := 0; i < len(objs); i += batchSize {
 				end := min(i+batchSize, len(objs))
 				res := db.ins.Session(session).Delete(objs[i:end])
@@ -492,15 +500,16 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 	return db.withWriteTransaction(write)
 }
 
-// Update saves the full state of one or multiple existing records.
-// It is a pure UPDATE by primary key: it never inserts, and every record must
-// already exist. Use Upsert for deliberate insert-or-update semantics. It
-// writes the model's own table alone, the associations an object carries
-// zeroed rather than written (see clearAssociations).
-// Executes UpdateBefore and UpdateAfter model hooks unless disabled with WithoutHook or WithDryRun.
+// Update saves the full state of one or multiple existing records. It is a pure
+// UPDATE by primary key: it never inserts, and every record must already exist.
+// Use Upsert for deliberate insert-or-update semantics. It writes the model's
+// own table alone, the associations an object carries zeroed rather than
+// written (see clearAssociations). Executes UpdateBefore and UpdateAfter model
+// hooks unless disabled with WithoutHook or WithDryRun.
 //
 // Parameters:
-//   - objs: One or more model instances to update. Empty objects are automatically filtered out.
+//   - objs: One or more model instances to update. Empty objects are
+//     automatically filtered out.
 //
 // Behavior:
 //   - Every object must carry a non-empty ID, otherwise ErrIDRequired is
@@ -534,12 +543,13 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 //     transaction carried by ctx when present. A single-record call that runs
 //     no overridden update hooks skips the wrapping transaction: the one
 //     UPDATE statement's own atomicity is the whole contract.
-//   - Returns nil if no valid objects provided (empty slice or all objects are empty)
+//   - Returns nil if no valid objects provided (empty slice or all objects are
+//     empty)
 //
 // Returns ErrIDRequired when an object has no ID, ErrRecordNotFound when a
 // record does not exist (or is soft deleted), and ErrDuplicatedKey when the new
-// values collide with a unique key owned by another row.
-// WithDryRun builds SQL only and does not execute hooks, database I/O, or object field filling.
+// values collide with a unique key owned by another row. WithDryRun builds SQL
+// only and does not execute hooks, database I/O, or object field filling.
 //
 // On a ClickHouse instance the contract is weaker (see clickhouseUpdate):
 // each record becomes an asynchronous ALTER TABLE ... UPDATE mutation — heavy,
@@ -869,9 +879,10 @@ func (db *database[M]) UpdateByID(id string, assignments ...types.Assignment) (e
 	return nil
 }
 
-// cloneDryRunModels returns shallow copies so a dry run builds its statements — the fields the
-// framework writes first and GORM's dry-run callbacks alike — without mutating caller-owned
-// model fields such as ID, timestamps, creator and updater, or soft-delete markers.
+// cloneDryRunModels returns shallow copies so a dry run builds its statements —
+// the fields the framework writes first and GORM's dry-run callbacks alike —
+// without mutating caller-owned model fields such as ID, timestamps, creator
+// and updater, or soft-delete markers.
 func cloneDryRunModels[M types.Model](objs []M) []M {
 	cloned := make([]M, 0, len(objs))
 	for _, obj := range objs {
@@ -880,6 +891,8 @@ func cloneDryRunModels[M types.Model](objs []M) []M {
 	return cloned
 }
 
+// cloneDryRunModel copies the struct obj points to into a new one; an obj that
+// is not a non-nil pointer to a struct comes back as it is.
 func cloneDryRunModel[M types.Model](obj M) M {
 	value := reflect.ValueOf(obj)
 	if !value.IsValid() || value.Kind() != reflect.Pointer || value.IsNil() {

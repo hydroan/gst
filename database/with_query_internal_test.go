@@ -78,7 +78,7 @@ type pairedQueryItem struct {
 	modelregistry.Base
 }
 
-func TestStructConditions(t *testing.T) {
+func TestStructConditionsMapTheQueriedFieldsToTheirColumns(t *testing.T) {
 	db, err := gorm.Open(tests.DummyDialector{}, &gorm.Config{})
 	require.NoError(t, err)
 	conditions := func(m any, present map[string]struct{}) map[string]any {

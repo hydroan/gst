@@ -158,9 +158,9 @@ func TestDatabaseFilters(t *testing.T) {
 	setupTestData(t)
 	users := make([]*TestUser, 0)
 
-	// Test gt with nil query: age > 18 should return u2 (age=19) and u3 (age=20).
-	// Conditions alone count as real conditions, so the nil query is not
-	// blocked by the empty-query safety check.
+	// Test gt with nil query: age > 18 should return u2 (age=19) and u3
+	// (age=20). Conditions alone count as real conditions, so the nil query is
+	// not blocked by the empty-query safety check.
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{
 			Filters: []types.Filter{
@@ -240,7 +240,8 @@ func TestDatabaseFilters(t *testing.T) {
 	require.True(t, foundU1, "should find u1")
 	require.True(t, foundU3, "should find u3")
 
-	// Test lt and lte: age < 19 should return u1; age <= 19 should return u1 and u2.
+	// Test lt and lte: age < 19 should return u1; age <= 19 should return u1
+	// and u2.
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
 		WithQuery(nil, types.QueryOptions{

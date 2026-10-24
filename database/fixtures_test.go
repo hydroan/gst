@@ -83,8 +83,9 @@ func requireRuntimeStack(t *testing.T, err error) {
 		"error must carry a run-time stack captured at its first-hand database exit")
 }
 
-// cleanupTestData deletes test data from database and restores original values of test users.
-// This function should be called in defer to ensure cleanup after each test.
+// cleanupTestData deletes test data from database and restores original values
+// of test users. This function should be called in defer to ensure cleanup
+// after each test.
 func cleanupTestData() {
 	users := make([]*TestUser, 0)
 	_ = database.Database[*TestUser](context.Background()).List(&users)
@@ -189,8 +190,8 @@ func quoteIdent(name string) string {
 	return "`" + name + "`"
 }
 
-// findUsersByID finds users from a slice by their IDs and returns them in order (u1, u2, u3).
-// Returns nil for users that are not found.
+// findUsersByID finds users from a slice by their IDs and returns them in order
+// (u1, u2, u3). Returns nil for users that are not found.
 func findUsersByID(users []*TestUser) (u11, u22, u33 *TestUser) {
 	for _, u := range users {
 		switch u.ID {
@@ -433,10 +434,10 @@ type TestAutoItem struct {
 func (*TestAutoItem) TableName() string { return "test_auto_items" }
 func (*TestAutoItem) Purge() bool       { return true }
 
-// TestSoftDeleteItem keeps the modelregistry.Base default Purge (soft delete) so write
-// tests can assert how writes treat soft-deleted rows. Its table is migrated
-// on demand inside the tests that need it and cleaned up with raw SQL because
-// soft-deleted rows are invisible to List.
+// TestSoftDeleteItem keeps the modelregistry.Base default Purge (soft delete)
+// so write tests can assert how writes treat soft-deleted rows. Its table is
+// migrated on demand inside the tests that need it and cleaned up with raw SQL
+// because soft-deleted rows are invisible to List.
 type TestSoftDeleteItem struct {
 	Code string `json:"code" gorm:"size:191;uniqueIndex"`
 	Name string `json:"name" gorm:"size:191"`
@@ -446,11 +447,11 @@ type TestSoftDeleteItem struct {
 
 func (*TestSoftDeleteItem) TableName() string { return "test_soft_delete_items" }
 
-// TestTenantSoftDeleteItem is tenant-scoped and keeps the modelregistry.Base default
-// Purge (soft delete), so the WithDeleted tests can assert that lifting the
-// soft-delete condition never lifts tenant scoping: the tenant predicate
-// ignores GORM's Unscoped flag by design (see tenant.ID). Its table is
-// migrated on demand and cleaned up with raw SQL like TestSoftDeleteItem.
+// TestTenantSoftDeleteItem is tenant-scoped and keeps the modelregistry.Base
+// default Purge (soft delete), so the WithDeleted tests can assert that lifting
+// the soft-delete condition never lifts tenant scoping: the tenant predicate
+// ignores GORM's Unscoped flag by design (see tenant.ID). Its table is migrated
+// on demand and cleaned up with raw SQL like TestSoftDeleteItem.
 type TestTenantSoftDeleteItem struct {
 	Name string `json:"name" gorm:"size:191"`
 
@@ -547,9 +548,9 @@ func (*TestStampedItem) TableName() string { return "test_stamped_items" }
 // ClosedAt; it exists so the tests can point a measure at a column that can
 // hold NULL.
 //
-// It deliberately keeps the modelregistry.Base default Purge, so its rows soft delete.
-// That is what lets the aggregate tests assert the rule an aggregate is most
-// likely to break: scanning into a plain result row parses no model, so
+// It deliberately keeps the modelregistry.Base default Purge, so its rows soft
+// delete. That is what lets the aggregate tests assert the rule an aggregate is
+// most likely to break: scanning into a plain result row parses no model, so
 // without the model the soft-delete condition disappears and an aggregate
 // counts rows a List on the same model hides.
 type TestAggregateRecord struct {

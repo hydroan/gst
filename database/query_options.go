@@ -156,8 +156,9 @@ func (db *database[M]) applyCursorPagination() {
 // ensure essential fields are always available.
 //
 // Parameters:
-//   - columns: Column references to select (frameworkColumns will be automatically added)
-//     If no columns are provided, this is a no-op operation and no columns will be selected (returns all columns).
+//   - columns: Column references to select (frameworkColumns will be
+//     automatically added). If no columns are provided, WithSelect is a no-op
+//     and the query selects every column.
 //
 // Column references must exist on the model: an unknown column fails the chain
 // with ErrUnknownColumn instead of silently skipping the write, and naming only
@@ -166,8 +167,9 @@ func (db *database[M]) applyCursorPagination() {
 //
 // Returns the same database instance for method chaining.
 //
-// WARNING: Using WithSelect may result in the removal of certain fields from table records
-// if there are multiple hooks in the service and model layers. Use with caution.
+// WARNING: Using WithSelect may result in the removal of certain fields from
+// table records if there are multiple hooks in the service and model layers.
+// Use with caution.
 //
 // Affected operations: Update, Upsert, List, Get, First, Last, Take.
 func (db *database[M]) WithSelect(columns ...types.AnyColumnRef) types.Database[M] {
@@ -224,10 +226,11 @@ func knownModelColumns[M types.Model]() (map[string]struct{}, error) {
 }
 
 // WithLock adds row-level locking to the query for concurrent access control.
-// Uses SELECT ... FOR UPDATE to prevent other transactions from modifying selected rows.
-// It requires a transaction. Outside one the lock would be released as soon as
-// the statement finished, so the chain fails with ErrLockOutsideTransaction
-// rather than returning rows the caller would wrongly believe it holds.
+// Uses SELECT ... FOR UPDATE to prevent other transactions from modifying
+// selected rows. It requires a transaction. Outside one the lock would be
+// released as soon as the statement finished, so the chain fails with
+// ErrLockOutsideTransaction rather than returning rows the caller would wrongly
+// believe it holds.
 //
 // Important: WithLock only applies to SELECT queries (Get, First, List, etc.).
 // It does not work with Create, Update, or Delete operations.
@@ -274,8 +277,8 @@ func (db *database[M]) WithLock(mode ...consts.LockMode) types.Database[M] {
 
 	// A row lock outside a transaction is released the moment the statement
 	// finishes, so the query returns rows that nothing is holding: the caller
-	// believes it has exclusive access and does not. Whether that is the case is
-	// decidable right here, so it is refused rather than warned about — a
+	// believes it has exclusive access and does not. Whether that is the case
+	// is decidable right here, so it is refused rather than warned about — a
 	// warning leaves the wrong behavior running and the guarantee to the
 	// caller's memory.
 	if _, ok := dbruntime.TxFromContext(db.ctx, db.base); !ok {
@@ -406,7 +409,8 @@ func (db *database[M]) orderClause(order types.Order) string {
 //
 // Parameters:
 //   - page: The page number (1-based). If page <= 0, it defaults to 1.
-//   - size: The number of records per page. If size <= 0, it defaults to defaultLimit.
+//   - size: The number of records per page. If size <= 0, it defaults to
+//     defaultLimit.
 //
 // Examples:
 //   - pageStr, _ := c.GetQuery("_page")
@@ -459,9 +463,9 @@ func (db *database[M]) WithPagination(page, size int) types.Database[M] {
 //	WithPagination(2, 100)  // Pagination: the second page of a hundred
 //	WithLimit(0)   // Returns all records (unlimited)
 //
-// Note: WithLimit only affects SELECT queries (List, Get, First, Last, etc.).
-// GORM ignores Limit clause in Create, Update, and Delete operations for cross-database
-// compatibility, as INSERT statements don't support LIMIT in most databases.
+// Note: WithLimit only affects SELECT queries (List, Get, First, Last, etc.):
+// the statements GORM builds for Create, Update and Delete carry no LIMIT
+// clause.
 func (db *database[M]) WithLimit(limit int) types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -472,20 +476,23 @@ func (db *database[M]) WithLimit(limit int) types.Database[M] {
 	return db
 }
 
-// WithExpand enables eager loading of specified associations.
-// Preloads related data to avoid N+1 query problems.
-// It uses GORM's Preload functionality to load associated data in a single query.
+// WithExpand enables eager loading of specified associations. Preloads related
+// data to avoid N+1 query problems: GORM's Preload reads each association in
+// one query of its own rather than one per record.
 //
 // Parameters:
-//   - expand: Slice of relationship names to preload (e.g., ["Children", "Parent"])
-//     Nested relationships can be specified using dot notation (e.g., ["Parent.Parent", "Children.Children"])
-//   - orders: Optional ordering for the preloaded relationships. The columns must
-//     exist on the associated table, which a self-referencing tree guarantees.
+//   - expand: Slice of relationship names to preload (e.g., ["Children",
+//     "Parent"]). Nested relationships can be specified using dot notation
+//     (e.g., ["Parent.Parent", "Children.Children"]).
+//   - orders: Optional ordering for the preloaded relationships. The columns
+//     must exist on the associated table, which a self-referencing tree
+//     guarantees.
 //
 // Behavior:
 //   - Supports nested relationships using dot notation (e.g., "Parent.Parent")
 //   - Automatically expands intermediate relationships for nested paths
-//   - If specified depth exceeds available relationships, only expands available depth
+//   - If specified depth exceeds available relationships, only expands
+//     available depth
 //   - Association names are case sensitive
 //   - Only works with GORM foreign key relationships
 //
@@ -505,7 +512,9 @@ func (db *database[M]) WithLimit(limit int) types.Database[M] {
 //
 // Note: WithExpand only affects SELECT queries (List, Get, First, Last, etc.).
 // It does not work with Create, Update, or Delete operations.
-// Note: For custom fields without GORM foreign key definitions, use GetAfter/ListAfter hooks instead.
+//
+// Note: For custom fields without GORM foreign key definitions, use
+// GetAfter/ListAfter hooks instead.
 //
 // The orders sort the associated rows, not the model's, so the table a
 // column reference carries is not checked here, unlike WithOrder: an order
@@ -546,8 +555,9 @@ func (db *database[M]) WithExpand(expand []string, orders ...types.Order) types.
 	return db
 }
 
-// WithPurge explicitly controls whether to permanently delete records (hard delete).
-// This option has the HIGHEST PRIORITY and overrides the model's default Purge() behavior.
+// WithPurge explicitly controls whether to permanently delete records (hard
+// delete). This option has the HIGHEST PRIORITY and overrides the model's
+// default Purge() behavior.
 //
 // Priority order:
 //  1. WithPurge() - explicitly set by user (highest priority)
@@ -565,7 +575,9 @@ func (db *database[M]) WithExpand(expand []string, orders ...types.Order) types.
 //	WithPurge(true).Delete(&sample)    // Hard delete (explicit)
 //	WithPurge(false).Delete(&sample)   // Soft delete (explicit, overrides model.Purge())
 //
-// WARNING: Hard delete will permanently remove data from the database and cannot be undone.
+// WARNING: Hard delete will permanently remove data from the database and
+// cannot be undone.
+//
 // Only works on 'Delete' method.
 func (db *database[M]) WithPurge(enable ...bool) types.Database[M] {
 	_enable := true

@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBuildDSN(t *testing.T) {
+func TestBuildDSNPinsUTCAndTheSimpleProtocol(t *testing.T) {
 	cfg := config.Postgres{
 		Host:     "127.0.0.1",
 		Port:     5432,

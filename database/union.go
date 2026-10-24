@@ -116,6 +116,8 @@ func unionFor[R any](ctx context.Context, base *gorm.DB, branches []types.Select
 	return u
 }
 
+// OrderBy adds orders to the orderings of the stacked rows, after the ones
+// given before.
 func (u *union[R]) OrderBy(orders ...types.Ordering) types.Union[R] {
 	u.orders = append(u.orders, orders...)
 	return u
@@ -148,6 +150,9 @@ func (u *union[R]) Page(page, size int) types.Union[R] {
 	return u
 }
 
+// WithDryRun marks the union a dry run and keeps the collector its statements
+// go to. An explicitly nil collector fails the union with ErrNilSQLBuilder,
+// unless an earlier defect has failed it already.
 func (u *union[R]) WithDryRun(collector ...*[]types.SQLStatement) types.Union[R] {
 	u.dryRun = true
 	if len(collector) > 0 {

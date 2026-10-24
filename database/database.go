@@ -322,6 +322,7 @@ func (db *database[M]) quoteIdent(name string) string {
 	return db.ins.Statement.Quote(name)
 }
 
+// quoteTableColumn quotes column, qualified by table when table is set.
 func (db *database[M]) quoteTableColumn(table, column string) string {
 	if len(table) == 0 {
 		return db.quoteIdent(column)
@@ -330,14 +331,15 @@ func (db *database[M]) quoteTableColumn(table, column string) string {
 }
 
 // reset clears the option fields this wrapper holds — the resolved model, the
-// delete mode, the read scope, the batch size, the hook and dry-run switches,
-// the statement collector, the cursor and the selected columns — after each
-// CRUD method returns. The chain's defect is deliberately left in place: it is
-// invalid for its whole life, not just for one operation. reset does not
-// replace the underlying *gorm.DB session either: GORM may still retain
-// WHERE/ORDER clauses on that chain, so reusing the same Database handle for
-// another independent operation is incorrect; callers must call
-// Database[M](ctx) again for each new operation chain. See Database.
+// delete options, the read scope, the batch size, the hook and dry-run
+// switches, the statement collector, the ordering and paging state and the
+// selected columns — after each CRUD method returns. The chain's defect is
+// deliberately left in place: it is invalid for its whole life, not just for
+// one operation. reset does not replace the underlying *gorm.DB session
+// either: GORM may still retain WHERE/ORDER clauses on that chain, so reusing
+// the same Database handle for another independent operation is incorrect;
+// callers must call Database[M](ctx) again for each new operation chain. See
+// Database.
 func (db *database[M]) reset() {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -382,12 +384,9 @@ func (db *database[M]) prepare() error {
 	db.typ = reflect.TypeOf(*new(M)).Elem()
 	db.m = reflect.New(db.typ).Interface().(M) //nolint:errcheck
 
-	// Set enablePurge based on model's Purge() method if not explicitly set by WithPurge().
-	// Priority: WithPurge() > model.Purge() > default (soft delete)
-	// - If WithPurge() was called, use the explicitly set value (highest priority)
-	// - Otherwise, use model.Purge() to determine the default delete behavior
-	// - model.Purge() returns true: hard delete (permanent deletion)
-	// - model.Purge() returns false: soft delete (only update deleted_at field)
+	// WithPurge, when called, decides how Delete removes a record; otherwise
+	// the model's Purge does: true removes the row, false soft deletes it,
+	// setting deleted_at.
 	if db.enablePurge == nil {
 		db.enablePurge = new(db.m.Purge())
 	}
@@ -395,10 +394,11 @@ func (db *database[M]) prepare() error {
 	return nil
 }
 
-// Database creates and returns a generic database manipulator implementing types.Database interface.
-// Provides comprehensive CRUD capabilities with advanced features like hooks and query building.
-// Automatically enables debug mode when log level is set to debug.
-// Required tables must exist before executing operations with the returned manipulator.
+// Database returns the operation chain of model M on the default database,
+// implementing types.Database: the writes, the reads and the model hooks
+// around them. The chain runs in GORM's debug mode, logging its statements,
+// when the logger level is debug. The tables it touches must exist before it
+// runs.
 //
 // Type Parameters:
 //   - M: Model type that implements types.Model interface
@@ -414,31 +414,32 @@ func (db *database[M]) prepare() error {
 //
 // Features:
 //   - Generic type safety for model operations
-//   - Automatic debug mode based on configuration
+//   - GORM's debug mode when the logger level is debug
 //   - Context-aware operations for tracing
-//   - Default query limit protection
-//   - Panic protection for uninitialized database
-//   - Transaction inheritance when ctx was produced by database.Transaction or a model-hook write
+//   - A panic when the default database is not initialized
+//   - Transaction inheritance when ctx was produced by database.Transaction or
+//     a model-hook write
 //
 // Transaction propagation:
 //
-//	Database[M](ctx) checks whether ctx carries an internal GORM transaction.
-//	When present, the returned operation chain uses that transaction instead of
-//	the package-level DB. This is how model hooks remain atomic without changing
-//	their public signature: Create/Update/Delete create a transaction, place it in
-//	the hook context, and hook code keeps calling Database[*OtherModel](ctx).
+// Database[M](ctx) checks whether ctx carries an internal GORM transaction.
+// When present, the returned operation chain uses that transaction instead of
+// the package-level DB. This is how model hooks remain atomic without changing
+// their public signature: Create/Update/Delete create a transaction, place it
+// in the hook context, and hook code keeps calling Database[*OtherModel](ctx).
 //
-//	This inheritance is strictly context-scoped. Passing context.Background()
-//	or any unrelated context starts a normal non-transactional operation chain.
+// This inheritance is strictly context-scoped. Passing context.Background()
+// or any unrelated context starts a normal non-transactional operation chain.
 //
 // Required usage:
 //
-//	You must call Database[M](ctx) again for each separate operation chain. Assigning the return
-//	value to a variable and running another independent operation on it afterward (e.g.
-//	WithQuery(...).List(...) then Get(...) or Update(...) on the same variable) is incorrect:
-//	after each method, reset() clears this wrapper's options but the underlying GORM session
-//	keeps prior clauses, so later calls can combine wrong WHERE conditions, return empty models,
-//	or corrupt data.
+// You must call Database[M](ctx) again for each separate operation chain.
+// Assigning the return value to a variable and running another independent
+// operation on it afterward (e.g. WithQuery(...).List(...) then Get(...) or
+// Update(...) on the same variable) is incorrect: each operation clears the
+// chain's own options, but the underlying GORM session keeps prior clauses,
+// so later calls can combine wrong WHERE conditions, return empty models, or
+// corrupt data.
 //
 // Example:
 //

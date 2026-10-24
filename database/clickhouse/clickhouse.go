@@ -12,11 +12,13 @@ import (
 	"gorm.io/gorm"
 )
 
+// Default is the connection Init opens when ClickHouse is the configured
+// default database, the one database.DB returns from then on; nil otherwise.
 var Default *gorm.DB
 
-// Init initializes the default Clickhouse connection.
-// It checks if Clickhouse is enabled and selected as the default database.
-// If the connection is successful, it initializes the database and returns nil.
+// Init opens the default ClickHouse connection when ClickHouse is enabled and
+// selected as the default database, and makes it the default database that
+// database.Database and database.DB use; otherwise it does nothing.
 func Init() (err error) {
 	cfg := config.App.Clickhouse
 	if !cfg.Enabled || config.App.Database.Type != config.DBClickHouse {
@@ -30,12 +32,12 @@ func Init() (err error) {
 	return dbruntime.InitDatabase(Default)
 }
 
-// New creates and returns a new Clickhouse database connection with the given configuration.
-// With tracing configured on, the returned handle carries the GORM
-// OpenTelemetry tracing plugin, so application-held instances passed to
-// DatabaseOn, SelectOn and UnionAllOn are traced like the default database.
-// The pool runs under the connection limits of the [database] configuration,
-// the same ones the default handle runs under.
+// New creates and returns a new ClickHouse database connection with the given
+// configuration. With tracing configured on, the returned handle carries the
+// GORM OpenTelemetry tracing plugin, so application-held instances passed to
+// DatabaseOn, SelectOn and UnionAllOn are traced like the default database. The
+// pool runs under the connection limits of the [database] configuration, the
+// same ones the default handle runs under.
 //
 // ClickHouse is an analytical instance. The handle carries the read side of
 // the framework — List/Get/Count/First/Last/Take, the filter operators
@@ -60,7 +62,9 @@ func New(cfg config.Clickhouse) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	// It will fix error: "Cannot create column with type 'FixedString(10240)' because fixed string with size > 256 is suspicious. Set setting allow_suspicious_fixed_string_types = 1 in order to allow it"
+	// It will fix error: "Cannot create column with type 'FixedString(10240)'
+	// because fixed string with size > 256 is suspicious. Set setting
+	// allow_suspicious_fixed_string_types = 1 in order to allow it"
 	sqlDB, err := db.DB()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get clickhouse db")
@@ -73,12 +77,14 @@ func New(cfg config.Clickhouse) (*gorm.DB, error) {
 	return db, nil
 }
 
-// buildDSN assembles the clickhouse-go DSN, e.g.
-// "clickhouse://default:secret@localhost:9000/default?debug=false&compress=false&read_timeout=30s&dial_timeout=5s&join_use_nulls=1".
+// buildDSN assembles the clickhouse-go DSN, for example:
+//
+//	clickhouse://default:secret@localhost:9000/default?debug=false&compress=false&read_timeout=30s&dial_timeout=5s&join_use_nulls=1
+//
 // The query parameters join with "&": joined with "?", URL parsing reads them
 // as one malformed first parameter and silently drops every option after the
-// first. Only options clickhouse-go v2 defines and server settings may appear
-// — it forwards unknown ones to the server as settings, and the server rejects
+// first. Only options clickhouse-go v2 defines and server settings may appear —
+// it forwards unknown ones to the server as settings, and the server rejects
 // the connection over a setting it does not know.
 //
 // join_use_nulls is the one server setting set here. ClickHouse fills the

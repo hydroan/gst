@@ -83,10 +83,10 @@ func ExampleUnionAll() {
 	// 2024-01-10 08:00 payment p1 acme 100
 }
 
-// A flow pages like a select, and with a Page the framework pushes the
-// ordering and the page's end, offset plus limit, into every branch: each branch reads its
-// first four rows by its own index, and the union sorts eight rows at most to
-// take the page. Rendered, with 4 bound inside each member and 2 and 2
+// A flow pages like a select, and with a Page the framework pushes the ordering
+// and the page's end, offset plus limit, into every branch: each branch reads
+// its first four rows by its own index, and the union sorts eight rows at most
+// to take the page. Rendered, with 4 bound inside each member and 2 and 2
 // outside:
 //
 //	SELECT * FROM (

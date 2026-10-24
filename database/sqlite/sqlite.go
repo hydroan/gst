@@ -15,11 +15,15 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+// Default is the connection Init opens when SQLite is the configured default
+// database, the one database.DB returns from then on; nil otherwise.
 var Default *gorm.DB
 
-// Init initializes the default SQLite connection.
-// It checks if SQLite is enabled and selected as the default database.
-// If the connection is successful, it initializes the database and returns nil.
+// Init opens the default SQLite connection when SQLite is enabled and selected
+// as the default database, and makes it the default database that
+// database.Database and database.DB use; otherwise it does nothing. Before
+// that it runs PRAGMA optimize, which gathers statistics for the query
+// planner; a failure there is logged, not returned.
 func Init() (err error) {
 	cfg := config.App.Sqlite
 	if !cfg.Enabled || config.App.Database.Type != config.DBSqlite {
@@ -29,7 +33,7 @@ func Init() (err error) {
 	if Default, err = New(cfg); err != nil {
 		return errors.Wrap(err, "failed to connect to sqlite")
 	}
-	// Optimize database performance with PRAGMA settings
+	// PRAGMA optimize gathers statistics for the query planner.
 	if err = optimizeDatabase(Default); err != nil {
 		zap.S().Warnw("failed to optimize sqlite database", "error", err)
 	}
@@ -38,20 +42,19 @@ func Init() (err error) {
 	return dbruntime.InitDatabase(Default)
 }
 
-// New creates and returns a new SQLite database connection with the given configuration.
-// With tracing configured on, the returned handle carries the GORM
-// OpenTelemetry tracing plugin, so application-held instances passed to
+// New creates and returns a new SQLite database connection with the given
+// configuration. With tracing configured on, the returned handle carries the
+// GORM OpenTelemetry tracing plugin, so application-held instances passed to
 // DatabaseOn, SelectOn, UnionAllOn, TransactionOn, and CleanupOn are traced
-// like the default database.
-// The pool runs under the connection limits of the [database] configuration
-// narrowed to a single connection, the same as the default handle.
-// Connections open through this package's own driver, which carries the
-// framework's REGEXP implementation and binds every time in UTC; see
-// registerRegexpFunc and utcConn. Every handle on the in-memory database
-// shares the one database of the process, which lives until the process
-// ends; see anchorMemoryDatabase.
-// Built without cgo, the driver is a stub whose connections all fail to open,
-// so New fails with the driver's error saying the binary needs cgo.
+// like the default database. The pool runs under the connection limits of the
+// [database] configuration narrowed to a single connection, the same as the
+// default handle. Connections open through this package's own driver, which
+// carries the framework's REGEXP implementation and binds every time in UTC;
+// see registerRegexpFunc and utcConn. Every handle on the in-memory database
+// shares the one database of the process, which lives until the process ends;
+// see anchorMemoryDatabase. Built without cgo, the driver is a stub whose
+// connections all fail to open, so New fails with the driver's error saying the
+// binary needs cgo.
 func New(cfg config.Sqlite) (*gorm.DB, error) {
 	dsn := buildDSN(cfg)
 	if dsn == memoryDSN {
@@ -154,8 +157,8 @@ func restoreInsertClauseContract(db *gorm.DB) {
 	delete(db.ClauseBuilders, clause.Insert{}.Name())
 }
 
-// optimizeDatabase applies performance optimization settings to the SQLite database.
-// This function executes PRAGMA optimize to collect statistics and improve query planning.
+// optimizeDatabase runs PRAGMA optimize on db, which gathers statistics for
+// the query planner.
 func optimizeDatabase(db *gorm.DB) error {
 	// Execute PRAGMA optimize to collect statistics for better query planning
 	if err := db.Exec("PRAGMA optimize").Error; err != nil {

@@ -60,8 +60,9 @@ func BenchmarkDatabaseCreateSyncOverhead(b *testing.B) {
 			})
 		}
 	})
-	// Upsert is the only write that pays the unique-index sync SELECT; these two
-	// sub-benchmarks measure it on the insert path and on the conflict path.
+	// Upsert is the only write that pays the unique-index sync SELECT; these
+	// two sub-benchmarks measure it on the insert path and on the conflict
+	// path.
 	b.Run("unique_index_upsert_insert_with_sync", func(b *testing.B) {
 		cleanupTestData()
 

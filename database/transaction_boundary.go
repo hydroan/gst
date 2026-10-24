@@ -18,6 +18,7 @@ type transactionBoundary struct {
 	actions []func(context.Context) error
 }
 
+// add registers fn to run once the transaction commits.
 func (b *transactionBoundary) add(fn func(context.Context) error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -30,9 +31,9 @@ func (b *transactionBoundary) add(fn func(context.Context) error) {
 // Stopping is deliberate. Actions are registered by the same write that
 // produced them, so a later one usually depends on an earlier one having
 // happened — a revoke followed by a re-grant, for example. Continuing past a
-// failed revoke would apply the grant on top of state the revoke was supposed to
-// have cleared, which is the wrong side to fail on; stopping leaves less access
-// in place, not more.
+// failed revoke would apply the grant on top of state the revoke was supposed
+// to have cleared, which is the wrong side to fail on; stopping leaves less
+// access in place, not more.
 //
 // The list is taken under the lock and cleared, so an action that registers
 // another one cannot extend the run it is already part of.
@@ -63,6 +64,8 @@ func (b *transactionBoundary) run(ctx context.Context) error {
 // the innermost, which is the transaction the caller is actually writing in.
 type boundaryContextKey struct{}
 
+// boundaryFromContext returns the after-commit boundary ctx carries, and false
+// when it carries none.
 func boundaryFromContext(ctx context.Context) (*transactionBoundary, bool) {
 	if ctx == nil {
 		return nil, false

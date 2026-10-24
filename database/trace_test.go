@@ -26,7 +26,8 @@ func TestTraceModelHookSpansOnlyOverriddenHooks(t *testing.T) {
 
 	t.Run("an overridden hook gets a span and its no-op partner does not", func(t *testing.T) {
 		defer cleanupTestData()
-		// TestUser overrides CreateBefore and leaves CreateAfter to the framework base.
+		// TestUser overrides CreateBefore and leaves CreateAfter to the
+		// framework base.
 		user := &TestUser{Name: "trace-create", Email: "trace-create@example.com"}
 		require.NoError(t, database.Database[*TestUser](context.Background()).Create(user))
 

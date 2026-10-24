@@ -414,10 +414,10 @@ func TestSelectHavingValue(t *testing.T) {
 	}
 }
 
-// TestSelectGroupByRendersRawExpression pins that the group key reaches gorm
-// as an already-quoted expression it must not quote again. The MySQL, PostgreSQL
-// and SQLite quoters are idempotent so a double quote is invisible there;
-// the ClickHouse one is not, and would emit ""col"".
+// TestSelectGroupByRendersRawExpression pins that the group key reaches gorm as
+// an already-quoted expression it must not quote again. The MySQL, PostgreSQL
+// and SQLite quoters are idempotent so a double quote is invisible there; the
+// ClickHouse one is not, and would emit ""col"".
 func TestSelectGroupByRendersRawExpression(t *testing.T) {
 	defer cleanupAggregateData()
 	setupAggregateData(t)

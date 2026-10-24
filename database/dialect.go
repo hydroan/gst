@@ -114,6 +114,9 @@ var (
 	backslashLikeEscaper = strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`)
 )
 
+// escapeLikePattern escapes value into a literal LIKE pattern fragment with the
+// escaper of the chain's dialect: backslash on ClickHouse, the pipe
+// likeEscapeSuffix declares everywhere else.
 func (db *database[M]) escapeLikePattern(value string) string {
 	if db.dialect() == dialectClickHouse {
 		return backslashLikeEscaper.Replace(value)
@@ -164,6 +167,8 @@ func strftimeBucketFormat(bucket types.TimeBucket) string {
 	}
 }
 
+// postgresBucketFormat serves PostgreSQL's to_char, whose template patterns
+// spell the same labels.
 func postgresBucketFormat(bucket types.TimeBucket) string {
 	switch bucket {
 	case types.TimeBucketHour:

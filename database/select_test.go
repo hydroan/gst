@@ -853,8 +853,8 @@ func TestSelectNullableResultFields(t *testing.T) {
 
 	t.Run("AcceptsNullTimeField", func(t *testing.T) {
 		// The same read through the other accepted shape: sql.NullTime tells
-		// absence apart through Valid. The update is the one AcceptsPointerFields
-		// runs, repeated so the case stands on its own.
+		// absence apart through Valid. The update is the one
+		// AcceptsPointerFields runs, repeated so the case stands on its own.
 		require.NoError(t, database.DB().Exec(
 			"UPDATE test_aggregate_records SET closed_at = occurred_at WHERE id = 'a1'",
 		).Error)
