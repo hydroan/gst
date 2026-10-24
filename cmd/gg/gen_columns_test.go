@@ -237,11 +237,12 @@ func tableModelSource(name string, readsColumns bool) string {
 	return "package sample\n\nimport (\n" + imports + ")\n\ntype " + name + " struct {\n\tStatus string `json:\"status\" gorm:\"size:36\"`\n\n\tmodel.Base\n}\n\nfunc (" + name + ") TableName() string { return \"" + strings.ToLower(name) + "s\" }\n\nfunc (" + name + ") Design() {\n\tdsl.Migrate()\n}\n" + hook
 }
 
-// TestGenRunReferencesFrameworkTypesThroughTheRootPackage runs gg gen
-// against a model whose column is typed by the framework's root package. The
-// generated reference names the type the way the model source does, under the
-// import path a business project can reach.
-func TestGenRunReferencesFrameworkTypesThroughTheRootPackage(t *testing.T) {
+// TestGenRunReferencesFrameworkTypesThroughThePublicPackages runs gg gen
+// against a model whose columns are typed by the framework's root package
+// and by its consts package. The generated references name the types the
+// way the model source does, under the import paths a business project can
+// reach.
+func TestGenRunReferencesFrameworkTypesThroughThePublicPackages(t *testing.T) {
 	projectDir, ok := newGenProject(t)
 	if !ok {
 		return
@@ -250,12 +251,14 @@ func TestGenRunReferencesFrameworkTypesThroughTheRootPackage(t *testing.T) {
 
 import (
 	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
 )
 
 type Rule struct {
 	Permission gst.Permission `+"`json:\"permission\" gorm:\"serializer:json\"`"+`
+	Phase      consts.Phase   `+"`json:\"phase\" gorm:\"size:16\"`"+`
 
 	model.Base
 }
@@ -271,6 +274,8 @@ func (Rule) Design() {
 	columnFile, err := os.ReadFile(filepath.Join("model", "sample", "rule.gen.go"))
 	require.NoError(t, err)
 	require.Contains(t, string(columnFile), `gst.NewColumn[*Rule, gst.Permission]("permission")`)
+	require.Contains(t, string(columnFile), `gst.NewColumn[*Rule, consts.Phase]("phase")`)
+	require.Contains(t, string(columnFile), `"github.com/hydroan/gst/consts"`, "the consts package is the one the model source imports")
 
 	// The project only compiles when every import the generated file carries
 	// is one it can reach.
