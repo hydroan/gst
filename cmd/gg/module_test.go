@@ -440,6 +440,43 @@ func readProjectFile(t *testing.T, path string) string {
 	return string(data)
 }
 
+// TestRunModuleCopyOfLogmgmtLeavesAProjectThatCompiles pins that the project
+// builds once module copy writes logmgmt into it: the copied operation log
+// types its op column by consts.OP, which the column file the copy's gen run
+// writes for it references through the public consts package the model
+// source imports, not the internal one reflection reports the type under.
+func TestRunModuleCopyOfLogmgmtLeavesAProjectThatCompiles(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	files, err := ggnew.ProjectFiles("tmpapp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range files {
+		writeProjectFile(t, filepath.Join(projectDir, file.Path), file.Content)
+	}
+	if err := goModTidy(); err != nil {
+		t.Fatal(err)
+	}
+
+	var copyErr error
+	output := captureStdout(t, func() {
+		copyErr = runModuleCopy("logmgmt", moduleCopyOptions{Yes: true})
+	})
+	if copyErr != nil {
+		t.Fatalf("runModuleCopy() error = %v:\n%s", copyErr, output)
+	}
+	columnFile := readProjectFile(t, filepath.Join("model", "logmgmt", "operationlog.gen.go"))
+	for _, want := range []string{`gst.NewColumn[*OperationLog, consts.OP]("op")`, `"github.com/hydroan/gst/consts"`} {
+		if !strings.Contains(columnFile, want) {
+			t.Fatalf("the column file of the copied operation log lacks %s:\n%s", want, columnFile)
+		}
+	}
+	requireProjectCompiles(t)
+}
+
 // TestPrintModuleCopyAssemblyNamesThePendingCalls pins what the copy prints
 // once it is done, before the module's notes: the assembly calls the copied
 // modules declare and the project has yet to make, worded as gg check reports
