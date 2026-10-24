@@ -200,7 +200,7 @@ HTTP 状态到 gRPC status 的映射（`grpcserver.StatusError`）：
 - 服务端流：`Stream(ctx *gst.ServiceContext, req REQ, stream *grpc.ServerStream[RSP]) error`。
 - 客户端流：`Stream(ctx, stream *grpc.ClientStream[REQ]) (RSP, error)`，对方发完 Recv 答 io.EOF。
 - 双向流：`Stream(ctx, stream *grpc.BidiStream[REQ, RSP]) error`。
-- ctx 取消即流结束：客户端停掉 watch 答 Canceled，不算错误；进程停机时流的 ctx 同样结束，正等客户端下一条消息（或首条）的 Recv 也随之返回，调用答 Unavailable「the server is shutting down」，客户端据此换副本重连（一元调用照常排空）。
+- ctx 取消即流结束：客户端停掉 watch 答 Canceled，不算错误，服务察觉 ctx 结束后返回 nil 也一样；进程停机时流的 ctx 同样结束，正等客户端下一条消息（或首条）的 Recv 也随之返回，调用答 Unavailable「the server is shutting down」，客户端据此换副本重连（一元调用照常排空）。
 
 ```plantuml
 @startuml
@@ -246,7 +246,8 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 
 观测两边对齐：
 
-- 访问日志：HTTP 写 access.log，gRPC 由 requestScope 写 grpc.log，共用的字段都经 internal/logfield 的构造函数写出，键与类型一致；HTTP 的 status 是数字状态码，gRPC 的状态码名记在 grpc_code（两套码不共用一个键），失败再加 error 字段。
+- 访问日志：HTTP 写 access.log，gRPC 由 requestScope 写 grpc.log，每次请求一条，共用的字段都经 internal/logfield 的构造函数写出，键与类型一致；HTTP 的 status 是数字状态码，gRPC 的状态码名记在 grpc_code（两套码不共用一个键），失败再加 error 字段。拦截器以非 status 错误拒绝时，原因连同 trace_id 记在框架日志（全局 logger），不进 grpc.log。
+- 客户端地址：两边对同名的转发头部都把多行（gRPC 是多个元数据值）用逗号合起来读，再按 server.trusted_proxies 从右往左认。
 - 指标：HTTP 是 `gst_backend_*`，gRPC 保持库默认 `grpc_server_*`，方便现成看板。
 - 追踪：HTTP 的 tracing 中间件与 gRPC 的 otelgrpc 各起服务端 span，trace id 都盖进 ctx；没带 W3C 头时两边都认 X-Trace-ID，但只认 W3C trace id 形态的值、其他值另生成（`requestctx.TraceIDOf`，开关 OTel 都是这一条），并都把 trace id 回写给客户端（HTTP 的 `X-Trace-ID` 头、gRPC 的 `x-trace-id` 元数据）。服务端 span 的状态两边同口径（OTel HTTP 语义约定，otelgrpc 也照它）：成功和 4xx 留 Unset，5xx 或处理器在 ctx 上报了错设 Error，不设 Ok。
 - panic：两边共用 logger.Recovery 写 recovery.log，并记在 span 上；HTTP 在响应还没写出时答信封，已经开始写出（流式）时不再追加任何内容，只把 panic 记到 ctx 上让访问日志与 span 带上。

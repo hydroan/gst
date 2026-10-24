@@ -34,17 +34,19 @@ import (
 // which the generated service file declares; a call finding none answers
 // Unimplemented. A stream ends the way the client ends it as well: once the
 // call's context is canceled or past its deadline, whatever the service
-// returns answers the context's status (see call.ended), a Recv waiting on
-// the client returning with the context too, the listener seeing to it,
-// and a stream the listener's stop ended the same way is answered
-// Unavailable by the listener in its place (see grpcserver).
+// returns answers the context's status (see finishStream and failService),
+// a Recv waiting on the client returning with the context too, the
+// listener seeing to it, and a stream the listener's stop ended the same
+// way is answered Unavailable by the listener in its place (see
+// grpcserver).
 
 // ServerStreamCall returns the call of the Stream action on route whose
 // response is streamed: given the route parameters, the request the message
 // decoded into and the function sending one response, it runs the service's
 // Stream method with a ServerStream sending through the function, and
-// answers with nil once the stream is over, or with the status a failure
-// maps to (see grpcserver.StatusError).
+// answers with nil once the stream is over, with the status a failure maps
+// to (see grpcserver.StatusError), or with the context's once the client
+// ended the stream (see finishStream).
 func ServerStreamCall[M types.Model, REQ types.Request, RSP types.Response](route string) func(ctx context.Context, params map[string]string, req REQ, send func(RSP) error) error {
 	a := newAction[M, REQ, RSP](route, consts.Stream)
 	return func(ctx context.Context, params map[string]string, req REQ, send func(RSP) error) error {
@@ -68,7 +70,7 @@ func ServerStreamCall[M types.Model, REQ types.Request, RSP types.Response](rout
 		if err != nil {
 			return c.failService(err)
 		}
-		return c.finish()
+		return c.finishStream()
 	}
 }
 
@@ -76,7 +78,8 @@ func ServerStreamCall[M types.Model, REQ types.Request, RSP types.Response](rout
 // request is streamed: given the route parameters and the function
 // receiving the next request, io.EOF once the client finished, it runs the
 // service's Stream method with a ClientStream reading through the function,
-// and answers with the response, or with the status a failure maps to.
+// and answers with the response, with the status a failure maps to, or with
+// the context's once the client ended the stream.
 func ClientStreamCall[M types.Model, REQ types.Request, RSP types.Response](route string) func(ctx context.Context, params map[string]string, recv func() (REQ, error)) (RSP, error) {
 	a := newAction[M, REQ, RSP](route, consts.Stream)
 	return func(ctx context.Context, params map[string]string, recv func() (REQ, error)) (RSP, error) {
@@ -100,7 +103,10 @@ func ClientStreamCall[M types.Model, REQ types.Request, RSP types.Response](rout
 		if err != nil {
 			return zero, c.failService(err)
 		}
-		return answer(c, rsp)
+		if err = c.finishStream(); err != nil {
+			return zero, err
+		}
+		return rsp, nil
 	}
 }
 
@@ -108,7 +114,8 @@ func ClientStreamCall[M types.Model, REQ types.Request, RSP types.Response](rout
 // both ways: given the route parameters, the function receiving the next
 // request and the function sending one response, it runs the service's
 // Stream method with a BidiStream on the two, and answers with nil once the
-// stream is over, or with the status a failure maps to.
+// stream is over, with the status a failure maps to, or with the context's
+// once the client ended the stream.
 func BidiStreamCall[M types.Model, REQ types.Request, RSP types.Response](route string) func(ctx context.Context, params map[string]string, recv func() (REQ, error), send func(RSP) error) error {
 	a := newAction[M, REQ, RSP](route, consts.Stream)
 	return func(ctx context.Context, params map[string]string, recv func() (REQ, error), send func(RSP) error) error {
@@ -132,8 +139,21 @@ func BidiStreamCall[M types.Model, REQ types.Request, RSP types.Response](route 
 		if err != nil {
 			return c.failService(err)
 		}
-		return c.finish()
+		return c.finishStream()
 	}
+}
+
+// finishStream ends a stream call whose service returned without an error:
+// once the call's context ended, the client having canceled the stream or
+// its deadline having passed, as the context's status, the way a stream
+// ends whatever its service returns (see failService), and otherwise as
+// finish does. A watch returning once its context is done thus ends
+// Canceled, as it does when it returns the send the client cut short.
+func (c *call) finishStream() error {
+	if err := c.ctx.Err(); err != nil {
+		return c.failService(err)
+	}
+	return c.finish()
 }
 
 // The messages a Stream call is refused with.

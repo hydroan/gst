@@ -1209,7 +1209,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 		{
 			name: "Create hands the hooks the client address a trusted peer forwards", fixture: observed, phase: consts.Create,
 			prepare: func(*testing.T) contractInput {
-				return contractInput{record: map[string]any{"name": uniqueName("contract-forwarded")}, forwarded: map[string]string{"X-Forwarded-For": "203.0.113.9"}}
+				return contractInput{record: map[string]any{"name": uniqueName("contract-forwarded")}, forwarded: http.Header{"X-Forwarded-For": {"203.0.113.9"}}}
 			},
 			want:  ok,
 			check: observedClientIP("203.0.113.9"),
@@ -1217,7 +1217,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 		{
 			name: "Create hands the hooks the client address a trusted peer names in X-Real-IP alone", fixture: observed, phase: consts.Create,
 			prepare: func(*testing.T) contractInput {
-				return contractInput{record: map[string]any{"name": uniqueName("contract-real-ip")}, forwarded: map[string]string{"X-Real-IP": "203.0.113.9"}}
+				return contractInput{record: map[string]any{"name": uniqueName("contract-real-ip")}, forwarded: http.Header{"X-Real-IP": {"203.0.113.9"}}}
 			},
 			want:  ok,
 			check: observedClientIP("203.0.113.9"),
@@ -1225,15 +1225,23 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 		{
 			name: "Create hands the hooks the first of a chain of trusted proxies", fixture: observed, phase: consts.Create,
 			prepare: func(*testing.T) contractInput {
-				return contractInput{record: map[string]any{"name": uniqueName("contract-proxy-chain")}, forwarded: map[string]string{"X-Forwarded-For": "::1, 127.0.0.1"}}
+				return contractInput{record: map[string]any{"name": uniqueName("contract-proxy-chain")}, forwarded: http.Header{"X-Forwarded-For": {"::1, 127.0.0.1"}}}
 			},
 			want:  ok,
 			check: observedClientIP("::1"),
 		},
 		{
+			name: "Create hands the hooks the client a trusted proxy names on an X-Forwarded-For line of its own", fixture: observed, phase: consts.Create,
+			prepare: func(*testing.T) contractInput {
+				return contractInput{record: map[string]any{"name": uniqueName("contract-forwarded-lines")}, forwarded: http.Header{"X-Forwarded-For": {"198.51.100.7", "203.0.113.9"}}}
+			},
+			want:  ok,
+			check: observedClientIP("203.0.113.9"),
+		},
+		{
 			name: "Create hands the hooks X-Real-IP when X-Forwarded-For is malformed", fixture: observed, phase: consts.Create,
 			prepare: func(*testing.T) contractInput {
-				return contractInput{record: map[string]any{"name": uniqueName("contract-malformed")}, forwarded: map[string]string{"X-Forwarded-For": "junk", "X-Real-IP": "203.0.113.9"}}
+				return contractInput{record: map[string]any{"name": uniqueName("contract-malformed")}, forwarded: http.Header{"X-Forwarded-For": {"junk"}, "X-Real-IP": {"203.0.113.9"}}}
 			},
 			want:  ok,
 			check: observedClientIP("203.0.113.9"),
@@ -1290,8 +1298,9 @@ type contractScenario struct {
 // params are the parameters of a route carrying some of its own, filled
 // into the path over HTTP, an empty one leaving its segment empty the way a
 // path carries one, and sent under params over gRPC. forwarded are the
-// headers a proxy in front adds, X-Forwarded-For and X-Real-IP, sent as
-// headers over HTTP and as metadata over gRPC. ctx is the context the
+// headers a proxy in front adds, X-Forwarded-For and X-Real-IP, each value
+// sent as a header line of its own over HTTP and as a metadata value of its
+// own over gRPC. ctx is the context the
 // request is sent in, set by a scenario that ends the request on the
 // client's behalf; nil sends it in a context of the transport's own.
 type contractInput struct {
@@ -1303,7 +1312,7 @@ type contractInput struct {
 	ids       []string
 	query     controller.Query
 	payload   map[string]any
-	forwarded map[string]string
+	forwarded http.Header
 }
 
 // contractAnswer is what a transport answered: the HTTP status and the msg
@@ -1526,8 +1535,10 @@ func overGRPC(t *testing.T, f contractFixture, phase consts.Phase, in contractIn
 	}
 	if len(in.forwarded) > 0 {
 		pairs := make([]string, 0, 2*len(in.forwarded))
-		for name, value := range in.forwarded {
-			pairs = append(pairs, strings.ToLower(name), value)
+		for name, values := range in.forwarded {
+			for _, value := range values {
+				pairs = append(pairs, strings.ToLower(name), value)
+			}
 		}
 		ctx = metadata.AppendToOutgoingContext(ctx, pairs...)
 	}

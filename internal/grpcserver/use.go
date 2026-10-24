@@ -8,7 +8,6 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/selector"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/logfield"
-	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/status"
@@ -139,16 +138,15 @@ func streamOf(ic Interceptor) grpc.StreamServerInterceptor {
 // middleware's Abort answers for the same refusal; any other error as
 // Internal with the server failure message (see StatusError). gRPC itself
 // would answer any other error as Unknown with its text, the wrapped cause
-// included. The error goes to the gRPC log first, cause included, since the
-// answer leaves that out, the way a failing service operation is logged
-// before it is mapped.
+// included. The error goes to the framework's log first, where the
+// listener's own warnings go, with the call's trace id and the cause the
+// answer leaves out, the way a failing service operation is logged before
+// it is mapped; the access log keeps its one entry for the call.
 func refused(ctx context.Context, err error) error {
 	if _, ok := status.FromError(err); ok {
 		return err
 	}
-	if logger.GRPC != nil {
-		logger.GRPC.Error("interceptor refused the call", zap.Error(err), logfield.TraceID(execctx.FromContext(ctx).TraceID))
-	}
+	zap.L().Error("interceptor refused the call", zap.Error(err), logfield.TraceID(execctx.FromContext(ctx).TraceID))
 	return StatusError(err)
 }
 

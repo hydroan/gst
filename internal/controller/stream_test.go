@@ -113,14 +113,44 @@ func recvResponse(stream grpc.ClientStream) (map[string]any, error) {
 	return out.AsMap(), nil
 }
 
+// requireAwaitEndsCanceled opens the streaming rpc name of the sample
+// service, with the stream's kind as desc says, sends the actionAwait note,
+// cancels the stream on the client's behalf once the service waits for it,
+// and requires the access log to record the call as canceled: the client
+// ended it, though the service returned no error.
+func requireAwaitEndsCanceled(t *testing.T, conn *grpc.ClientConn, name string, desc grpc.StreamDesc) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	ctx = metadata.AppendToOutgoingContext(ctx, "authorization", sampleCredential)
+	desc.StreamName = name
+	method := "/gst.test.Samples/" + name
+	stream, err := conn.NewStream(ctx, &desc, method, grpc.WaitForReady(true))
+	require.NoError(t, err)
+	sendPayload(t, stream, map[string]any{"note": actionAwait})
+	select {
+	case <-awaitEntered:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the service did not start waiting for the client")
+	}
+	before := len(accessLog.FilterMessage(method).All())
+	cancel()
+	require.Eventually(t, func() bool {
+		entries := accessLog.FilterMessage(method).All()
+		return len(entries) > before && entries[len(entries)-1].ContextMap()["grpc_code"] == codes.Canceled.String()
+	}, 10*time.Second, 20*time.Millisecond, "the access log records the stream the client ended as canceled, though the service returned no error")
+}
+
 // TestServerStreamCallStreamsTheResponses pins the server stream call end to
 // end: the service's Stream method gets the request the message carried and
 // a service context naming the caller the auth interceptor established and
 // the call, sends its responses one by one, and the stream ends when it
 // returns; a payload failing validation is refused before the service runs,
 // the service's error ends the stream with its status, a call without
-// credentials is refused by the interceptor the stream chain runs, and a
-// service streaming nothing answers Unimplemented.
+// credentials is refused by the interceptor the stream chain runs, a
+// service streaming nothing answers Unimplemented, and a stream the client
+// cancels ends as canceled, whether the service returns the failed send or
+// nothing.
 func TestServerStreamCallStreamsTheResponses(t *testing.T) {
 	conn := sampleServer(t)
 	serverStream := grpc.StreamDesc{ServerStreams: true}
@@ -196,13 +226,18 @@ func TestServerStreamCallStreamsTheResponses(t *testing.T) {
 			return len(entries) > before && entries[len(entries)-1].ContextMap()["grpc_code"] == codes.Canceled.String()
 		}, 10*time.Second, 20*time.Millisecond, "the access log records the stream as canceled, not as a failure of the service")
 	})
+
+	t.Run("a service returning nothing once the client canceled ends the stream as canceled", func(t *testing.T) {
+		requireAwaitEndsCanceled(t, conn, "Watch", grpc.StreamDesc{ServerStreams: true})
+	})
 }
 
 // TestClientStreamCallReadsTheRequestsAndAnswers pins the client stream
 // call end to end: the service's Stream method reads the requests the
 // client sends until it is done, each validated the way a payload is, and
 // its response answers the call; a request failing validation ends the
-// stream with the refusal.
+// stream with the refusal, and a stream the client cancels ends as
+// canceled, though the service answers a response.
 func TestClientStreamCallReadsTheRequestsAndAnswers(t *testing.T) {
 	conn := sampleServer(t)
 	clientStream := grpc.StreamDesc{ClientStreams: true}
@@ -237,11 +272,16 @@ func TestClientStreamCallReadsTheRequestsAndAnswers(t *testing.T) {
 		require.Equal(t, codes.InvalidArgument, status.Code(err))
 		require.Equal(t, "invalid value for field 'rank'", status.Convert(err).Message())
 	})
+
+	t.Run("a service answering once the client canceled ends the stream as canceled", func(t *testing.T) {
+		requireAwaitEndsCanceled(t, conn, "Upload", clientStream)
+	})
 }
 
 // TestBidiStreamCallStreamsBothWays pins the bidirectional stream call end
 // to end: each request the client sends is answered as it comes, and the
-// stream ends once the client is done.
+// stream ends once the client is done, or as canceled once the client
+// cancels it, though the service returns no error.
 func TestBidiStreamCallStreamsBothWays(t *testing.T) {
 	conn := sampleServer(t)
 	stream := openStream(t, conn, "Chat", sampleCredential, grpc.StreamDesc{ServerStreams: true, ClientStreams: true})
@@ -263,6 +303,10 @@ func TestBidiStreamCallStreamsBothWays(t *testing.T) {
 		_, err := recvResponse(stream)
 		require.Equal(t, codes.InvalidArgument, status.Code(err))
 		require.Equal(t, "invalid value for field 'port'", status.Convert(err).Message())
+	})
+
+	t.Run("a service returning nothing once the client canceled ends the stream as canceled", func(t *testing.T) {
+		requireAwaitEndsCanceled(t, conn, "Chat", grpc.StreamDesc{ServerStreams: true, ClientStreams: true})
 	})
 }
 

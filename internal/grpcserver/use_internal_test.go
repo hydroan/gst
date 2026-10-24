@@ -9,8 +9,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/metadata"
@@ -164,10 +168,14 @@ func TestUseAfterRunPanics(t *testing.T) {
 // interceptor returns reaches the client: a status error as it is; a service
 // error with the code its HTTP status maps to and its client-safe message,
 // the cause it wraps kept out of the answer; any other error as Internal with
-// the server failure message. Every error but a status error goes to the gRPC
-// log first, cause included.
+// the server failure message. Every error but a status error goes to the
+// framework's log first, cause included, as an error carrying the call's
+// trace id, where the listener's own warnings go; the access log keeps its
+// one entry a call.
 func TestARefusalFromAProjectInterceptorAnswersItsStatus(t *testing.T) {
 	reset(t)
+	core, frameworkLog := observer.New(zapcore.DebugLevel)
+	t.Cleanup(zap.ReplaceGlobals(zap.New(core)))
 	UseAuth(func(ctx context.Context) (context.Context, error) {
 		md, _ := metadata.FromIncomingContext(ctx)
 		switch strings.Join(md.Get("refusal"), "") {
@@ -203,7 +211,16 @@ func TestARefusalFromAProjectInterceptorAnswersItsStatus(t *testing.T) {
 		require.Equal(t, tt.message, st.Message(), tt.refusal)
 	}
 
-	logged := accessLog.FilterMessage("interceptor refused the call").All()
+	logged := frameworkLog.FilterMessage("interceptor refused the call").All()
 	require.Len(t, logged, 3, "every error but a status error is logged before it is mapped")
+	for _, entry := range logged {
+		require.Equal(t, zapcore.ErrorLevel, entry.Level)
+		require.NotEmpty(t, entry.ContextMap()[consts.TRACE_ID])
+	}
 	require.Contains(t, logged[1].ContextMap()["error"], "session store unreachable")
+	entries := accessLog.All()
+	require.Len(t, entries, 4, "the access log keeps one entry a call, the refused ones included")
+	for _, entry := range entries {
+		require.Equal(t, "/gst.test.Echo/Ping", entry.Message)
+	}
 }

@@ -377,11 +377,20 @@ const (
 	actionWrite  = "write"
 	actionRead   = "read"
 	actionHang   = "hang"
+	// actionAwait makes a stream service wait for the client to end the
+	// call and then return without an error, the way a watch returns once
+	// its context is done.
+	actionAwait = "await"
 )
 
 // actionEntered is signaled once the action service hangs in a call (see
 // actionHang), for the test canceling that call to know it is in.
 var actionEntered = make(chan struct{}, 1)
+
+// awaitEntered is signaled once a stream service waits for the client to
+// end the call (see actionAwait), for the test ending it to know the
+// service read the request and waits.
+var awaitEntered = make(chan struct{}, 1)
 
 // actionService serves the sample's custom action: it answers what it found
 // on the service context, refuses with a service error for actionRefuse,
@@ -478,7 +487,7 @@ func serve(t *testing.T, method, pattern string, handler gin.HandlerFunc, target
 // in ctx, which a test ending the request on the client's behalf cancels,
 // and arrives from the loopback, the peer the gRPC line's calls arrive
 // from, carrying the headers forwarded, which a proxy in front would set.
-func serveAs(ctx context.Context, t *testing.T, method, pattern string, handler gin.HandlerFunc, target, body, username string, forwarded map[string]string) *httptest.ResponseRecorder {
+func serveAs(ctx context.Context, t *testing.T, method, pattern string, handler gin.HandlerFunc, target, body, username string, forwarded http.Header) *httptest.ResponseRecorder {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -506,8 +515,10 @@ func serveAs(ctx context.Context, t *testing.T, method, pattern string, handler 
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	for name, value := range forwarded {
-		req.Header.Set(name, value)
+	for name, values := range forwarded {
+		for _, value := range values {
+			req.Header.Add(name, value)
+		}
 	}
 	recorder := httptest.NewRecorder()
 	engine.ServeHTTP(recorder, req)
@@ -651,8 +662,10 @@ func countShapedNamed(t *testing.T, name string) int {
 // and failing for the notes the action service does; uploadService reads
 // the requests until the client is done and answers their notes joined;
 // chatService echoes each request as it comes; forkingChatService receives
-// on a goroutine of its own. The silent route registers the action
-// service, which streams nothing, for the call to refuse.
+// on a goroutine of its own. On actionAwait the first three signal
+// awaitEntered and return without an error once the client ended the call.
+// The silent route registers the action service, which streams nothing,
+// for the call to refuse.
 type watchService struct {
 	serviceregistry.Base[*sampleRecord, *sampleActionReq, *sampleActionRsp]
 }
@@ -663,6 +676,10 @@ func (*watchService) Stream(sc *types.ServiceContext, req *sampleActionReq, stre
 		return types.NewError(http.StatusForbidden, "not yours")
 	case actionBreak:
 		return errors.New("dial tcp: connection refused")
+	case actionAwait:
+		awaitEntered <- struct{}{}
+		<-sc.Done()
+		return nil
 	}
 	count, _ := strconv.Atoi(req.Note)
 	for i := range count {
@@ -689,6 +706,11 @@ func (*uploadService) Stream(sc *types.ServiceContext, stream *types.ClientStrea
 			// the client is answered must not depend on it.
 			return nil, errors.Wrap(err, "failed to read the request")
 		}
+		if req.Note == actionAwait {
+			awaitEntered <- struct{}{}
+			<-sc.Done()
+			return &sampleActionRsp{Note: req.Note, observedCall: observe(sc)}, nil
+		}
 		notes = append(notes, req.Note)
 	}
 }
@@ -708,6 +730,11 @@ func (*chatService) Stream(sc *types.ServiceContext, stream *types.BidiStream[*s
 		}
 		if err := stream.Send(&sampleActionRsp{Note: "echo " + req.Note, observedCall: observe(sc)}); err != nil {
 			return err
+		}
+		if req.Note == actionAwait {
+			awaitEntered <- struct{}{}
+			<-sc.Done()
+			return nil
 		}
 	}
 }

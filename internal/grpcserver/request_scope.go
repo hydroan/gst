@@ -78,9 +78,11 @@ const accessLogFieldCap = 11
 // method every gRPC call is on the wire, as its method. The client address
 // a proxy in front forwards is believed from the peers server.trusted_proxies
 // names alone, the stance the HTTP listener takes through gin, resolved by
-// requestctx.ClientIP the way gin resolves it; from any other peer the
-// address is the peer's own. The protocol such headers carry is not read:
-// whether the connection speaks TLS is the connection's own fact.
+// requestctx.ClientIP the way gin resolves it, from every value a header
+// carries joined by commas, the way gin reads a header sent over several
+// lines; from any other peer the address is the peer's own. The protocol
+// such headers carry is not read: whether the connection speaks TLS is the
+// connection's own fact.
 func requestScope(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 	scope := enterCall(ctx, info.FullMethod)
 	rsp, err := handler(scope.ctx, req)
@@ -134,7 +136,7 @@ func enterCall(ctx context.Context, fullMethod string) *callScope {
 	ctx = execctx.WithTraceID(ctx, traceID)
 	address, tls := peerOf(ctx)
 	if peer, err := netip.ParseAddr(address); err == nil {
-		address = requestctx.ClientIP(peer, trustedProxies, func(name string) string { return first(md, strings.ToLower(name)) }).String()
+		address = requestctx.ClientIP(peer, trustedProxies, func(name string) string { return strings.Join(md.Get(name), ",") }).String()
 	}
 	method := methods[fullMethod]
 	route, httpMethod := fullMethod, http.MethodPost
