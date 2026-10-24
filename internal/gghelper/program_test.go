@@ -254,15 +254,10 @@ func inspectRewriteProblems(forwarded map[string][]forwardedType, rewrites map[s
 // nonColumnTypes are the forwarded internal types typeExpr leaves to its
 // default, keyed by an internal package, standing for all of its forwarded
 // types, or by a qualified type, standing for that one alone; each value
-// says what the types are: what a call, a stream or a test runs on, or what
-// gg's own programs read, none of which a model stores.
+// says what the types are, which no model stores.
 var nonColumnTypes = map[string]string{
-	ggconst.ImportPathGst + "/internal/controller":              "grpc.Query and grpc.Filter, the list query an rpc request carries, the counterpart of an HTTP query string",
-	ggconst.ImportPathGst + "/internal/grpcserver":              "grpc.Caller, grpc.Method and grpc.Interceptor, who makes an rpc call, the rpc it calls and what judges it",
 	ggconst.ImportPathGst + "/internal/modelschema.Column":      "forwarded by modelschema to gg's own programs, which describe a model's columns with it",
 	ggconst.ImportPathGst + "/internal/modelschema.ColumnClass": "forwarded by modelschema to gg's own programs, which classify a model's columns with it",
-	ggconst.ImportPathGst + "/internal/sse":                     "sse.Conn, sse.Hub, their options, sse.HubStats and sse.Event, an open stream, its fan-out and the frames it writes",
-	ggconst.ImportPathGst + "/internal/testutil":                "testutil.Server, the server a project's tests send their requests to",
 }
 
 func TestProjectProgramRunsAgainstTheProjectModuleWithOverlay(t *testing.T) {

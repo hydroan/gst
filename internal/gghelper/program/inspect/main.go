@@ -188,11 +188,14 @@ func describeType(typ reflect.Type, modelPkg string) (expr string, imports map[s
 // rewritten to the alias the model source actually wrote: model.Base and
 // its siblings for internal/modelregistry, model.Version for
 // internal/modelschema, the root gst package, which forwards everything
-// internal/types defines under the same name, and the consts package for
-// internal/consts, consts.Phase and consts.OP among them. The tenant
-// column's type is forwarded by no package, a model carrying it only
-// through tenant.Scope, so its reference is written as the type its values
-// are, string.
+// internal/types defines under the same name, the consts package for
+// internal/consts, consts.Phase and consts.OP among them, and, for the
+// types a model stores as JSON, the grpc package for internal/controller
+// and internal/grpcserver, grpc.Filter and grpc.Caller among them, sse for
+// internal/sse and testutil for internal/testutil. The tenant column's type
+// is forwarded by no package, a model carrying it only through
+// tenant.Scope, so its reference is written as the type its values are,
+// string.
 func typeExpr(typ reflect.Type, modelPkg string, imports map[string]string) (string, bool) {
 	if name := typ.Name(); name != "" {
 		if strings.ContainsAny(name, "[]*") {
@@ -210,6 +213,15 @@ func typeExpr(typ reflect.Type, modelPkg string, imports map[string]string) (str
 		case "github.com/hydroan/gst/internal/consts":
 			imports["github.com/hydroan/gst/consts"] = "consts"
 			return "consts." + name, true
+		case "github.com/hydroan/gst/internal/controller", "github.com/hydroan/gst/internal/grpcserver":
+			imports["github.com/hydroan/gst/grpc"] = "grpc"
+			return "grpc." + name, true
+		case "github.com/hydroan/gst/internal/sse":
+			imports["github.com/hydroan/gst/sse"] = "sse"
+			return "sse." + name, true
+		case "github.com/hydroan/gst/internal/testutil":
+			imports["github.com/hydroan/gst/testutil"] = "testutil"
+			return "testutil." + name, true
 		case "github.com/hydroan/gst/internal/tenant":
 			return typ.Kind().String(), true
 		default:
