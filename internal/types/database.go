@@ -33,9 +33,11 @@ type Database[M Model] interface {
 	// setting, or soft delete by default. Every record named by id must
 	// exist: a missing or soft-deleted one fails with
 	// database.ErrRecordNotFound and the batch deletes nothing, unless
-	// WithAllowMissing is set. Passed no record, it removes the rows the
-	// WithQuery conditions match, every row of the table when AllowEmpty
-	// declared it; records and conditions do not combine.
+	// WithAllowMissing is set; a versioned record carrying its version fails
+	// with database.ErrStaleObject instead, WithAllowMissing or not. Passed
+	// no record, it removes the rows the WithQuery conditions match, every
+	// row of the table when AllowEmpty declared it; records and conditions
+	// do not combine.
 	Delete(objs ...M) error
 	// Update saves one or more full model values by primary key (pure UPDATE,
 	// zero values included), the model's own table alone: the associations an
@@ -116,7 +118,10 @@ type DatabaseOption[M Model] interface {
 	// WithPurge controls whether Delete permanently removes records instead of soft deleting them.
 	WithPurge(...bool) Database[M]
 	// WithAllowMissing lets Delete skip the records that are already gone
-	// instead of failing with database.ErrRecordNotFound.
+	// instead of failing with database.ErrRecordNotFound. A versioned record
+	// carrying its version still fails with database.ErrStaleObject for a
+	// gone row, which it cannot tell from a moved-on one; its version set to
+	// zero, it is skipped, the version no longer checked.
 	WithAllowMissing() Database[M]
 	// WithDeleted includes soft-deleted records in read operations (List, Get,
 	// First, Last, Take, Count). Only the soft-delete condition is lifted;

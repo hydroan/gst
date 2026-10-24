@@ -232,9 +232,12 @@ func (db *database[M]) Create(objs ...M) (err error) {
 // A versioned record (a model declaring model.Version) is checked when it
 // carries a non-zero version — the statement matches it, and a miss fails
 // with ErrStaleObject: a delete decided over stale data must fail like a
-// stale update. An object without a version (a bare-id shell) deletes
-// unconditionally, which is the deliberate way around the lock for cascade
-// cleanup and programmatic deletion. See model.Version.
+// stale update. WithAllowMissing does not lift the check, a gone row
+// missing it like a moved-on one (see WithAllowMissing). An object without
+// a version (a bare-id shell) deletes unconditionally, which is the
+// deliberate way around the lock for cascade cleanup and programmatic
+// deletion, and passes over a gone row under WithAllowMissing. See
+// model.Version.
 //
 // Parameters:
 //   - objs: One or more model instances to delete. Empty objects are automatically filtered out.

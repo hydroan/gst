@@ -176,6 +176,17 @@ func TestVersionDeleteGuards(t *testing.T) {
 	require.NoError(t, database.Database[*versionedNote](ctx).WithQuery(&versionedNote{Title: "moved-on"}).Count(count))
 	require.Zero(t, *count)
 
+	// WithAllowMissing passes over a gone row for a record carrying no
+	// version alone: one carrying the version it was read with cannot tell a
+	// gone row from a moved-on one and fails as stale, and the bare-id shell
+	// of the same record passes.
+	goneNote := mustCreateNote(t, "note-del-gone", "v1")
+	require.NoError(t, database.Database[*versionedNote](ctx).Delete(goneNote))
+	require.ErrorIs(t, database.Database[*versionedNote](ctx).WithAllowMissing().Delete(goneNote), database.ErrStaleObject)
+	goneShell := new(versionedNote)
+	goneShell.ID = "note-del-gone"
+	require.NoError(t, database.Database[*versionedNote](ctx).WithAllowMissing().Delete(goneShell))
+
 	// Hard deletion checks the same way.
 	hard := mustCreateNote(t, "note-del-hard", "v1")
 	staleHard := &versionedNote{Version: 0}

@@ -586,9 +586,21 @@ func (db *database[M]) WithPurge(enable ...bool) types.Database[M] {
 // caller does not expect to find. Without it Delete requires every named
 // record to exist.
 //
+// A versioned record carrying the version it was read with is checked
+// against that version still, and a gone row fails the check like a
+// moved-on one, with ErrStaleObject: the one statement matching no row
+// cannot tell the two apart, and telling them would take another read that
+// still races (see ErrStaleObject). AIP-135's allow_missing ignores the
+// etag of a missing resource instead; here a versioned record passes over
+// a gone row once its version is zero, which deletes a row still there by
+// id as well, whatever version it reached since.
+//
 // Usage:
 //
-//	WithAllowMissing().Delete(&sample)   // nil whether or not the row is still there
+//	WithAllowMissing().Delete(&sample) // unversioned: nil, row or no row
+//	WithAllowMissing().Delete(&note)   // its row gone: ErrStaleObject
+//	note.Version = 0
+//	WithAllowMissing().Delete(&note)   // nil, the version unchecked
 //
 // Only works on 'Delete' method.
 func (db *database[M]) WithAllowMissing() types.Database[M] {
