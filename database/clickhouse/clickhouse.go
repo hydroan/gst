@@ -12,24 +12,21 @@ import (
 	"gorm.io/gorm"
 )
 
-// Default is the connection Init opens when ClickHouse is the configured
-// default database, the one database.DB returns from then on; nil otherwise.
-var Default *gorm.DB
-
 // Init opens the default ClickHouse connection when ClickHouse is enabled and
 // selected as the default database, and makes it the default database that
 // database.Database and database.DB use; otherwise it does nothing.
-func Init() (err error) {
+func Init() error {
 	cfg := config.App.Clickhouse
 	if !cfg.Enabled || config.App.Database.Type != config.DBClickHouse {
 		return nil
 	}
 
-	if Default, err = New(cfg); err != nil {
+	db, err := New(cfg)
+	if err != nil {
 		return errors.Wrap(err, "failed to connect to clickhouse")
 	}
 	zap.S().Infow("successfully connect to clickhouse", "host", cfg.Host, "port", cfg.Port, "database", cfg.Database)
-	return dbruntime.InitDatabase(Default)
+	return dbruntime.InitDatabase(db)
 }
 
 // New creates and returns a new ClickHouse database connection with the given

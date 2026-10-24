@@ -15,31 +15,28 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// Default is the connection Init opens when SQLite is the configured default
-// database, the one database.DB returns from then on; nil otherwise.
-var Default *gorm.DB
-
 // Init opens the default SQLite connection when SQLite is enabled and selected
 // as the default database, and makes it the default database that
 // database.Database and database.DB use; otherwise it does nothing. Before
 // that it runs PRAGMA optimize, which gathers statistics for the query
 // planner; a failure there is logged, not returned.
-func Init() (err error) {
+func Init() error {
 	cfg := config.App.Sqlite
 	if !cfg.Enabled || config.App.Database.Type != config.DBSqlite {
 		return nil
 	}
 
-	if Default, err = New(cfg); err != nil {
+	db, err := New(cfg)
+	if err != nil {
 		return errors.Wrap(err, "failed to connect to sqlite")
 	}
 	// PRAGMA optimize gathers statistics for the query planner.
-	if err = optimizeDatabase(Default); err != nil {
+	if err = optimizeDatabase(db); err != nil {
 		zap.S().Warnw("failed to optimize sqlite database", "error", err)
 	}
 
 	zap.S().Infow("successfully connect to sqlite", "file", cfg.Path, "is_memory", cfg.IsMemory)
-	return dbruntime.InitDatabase(Default)
+	return dbruntime.InitDatabase(db)
 }
 
 // New creates and returns a new SQLite database connection with the given

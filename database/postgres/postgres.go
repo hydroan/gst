@@ -13,24 +13,21 @@ import (
 	"gorm.io/gorm"
 )
 
-// Default is the connection Init opens when PostgreSQL is the configured
-// default database, the one database.DB returns from then on; nil otherwise.
-var Default *gorm.DB
-
 // Init opens the default PostgreSQL connection when PostgreSQL is enabled and
 // selected as the default database, and makes it the default database that
 // database.Database and database.DB use; otherwise it does nothing.
-func Init() (err error) {
+func Init() error {
 	cfg := config.App.Postgres
 	if !cfg.Enabled || config.App.Database.Type != config.DBPostgres {
 		return nil
 	}
 
-	if Default, err = New(cfg); err != nil {
+	db, err := New(cfg)
+	if err != nil {
 		return errors.Wrap(err, "failed to connect to postgres")
 	}
 	zap.S().Infow("successfully connect to postgres", "host", cfg.Host, "port", cfg.Port, "database", cfg.Database, "sslmode", cfg.SSLMode)
-	return dbruntime.InitDatabase(Default)
+	return dbruntime.InitDatabase(db)
 }
 
 // New creates and returns a new PostgreSQL database connection with the given

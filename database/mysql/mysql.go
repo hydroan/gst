@@ -14,24 +14,21 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 )
 
-// Default is the connection Init opens when MySQL is the configured default
-// database, the one database.DB returns from then on; nil otherwise.
-var Default *gorm.DB
-
 // Init opens the default MySQL connection when MySQL is enabled and selected as
 // the default database, and makes it the default database that
 // database.Database and database.DB use; otherwise it does nothing.
-func Init() (err error) {
+func Init() error {
 	cfg := config.App.MySQL
 	if !cfg.Enabled || config.App.Database.Type != config.DBMySQL {
 		return nil
 	}
 
-	if Default, err = New(cfg); err != nil {
+	db, err := New(cfg)
+	if err != nil {
 		return errors.Wrap(err, "failed to connect to mysql")
 	}
 	zap.S().Infow("successfully connect to mysql", "host", cfg.Host, "port", cfg.Port, "database", cfg.Database)
-	return dbruntime.InitDatabase(Default)
+	return dbruntime.InitDatabase(db)
 }
 
 // New creates and returns a new MySQL database connection with the given
