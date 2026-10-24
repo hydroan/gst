@@ -45,12 +45,20 @@ type Cassandra struct {
 	ConnectTimeout time.Duration `json:"connect_timeout" mapstructure:"connect_timeout" ini:"connect_timeout" yaml:"connect_timeout"`
 	NumConns       int           `json:"num_conns" mapstructure:"num_conns" ini:"num_conns" yaml:"num_conns"`
 	PageSize       int           `json:"page_size" mapstructure:"page_size" ini:"page_size" yaml:"page_size"`
-	// RetryPolicy is how a failed query is retried (see RetryPolicy), each
-	// policy retrying MaxRetryCount times; empty is simple.
+	// RetryPolicy is how a failed query is retried (see RetryPolicy), empty
+	// being simple: simple and exponential_backoff retry it MaxRetryCount
+	// times, downgrading_consistency once, at one, or at local_one when
+	// Consistency is local_quorum, and not at all when Consistency is one,
+	// local_one or any.
 	// Default: simple
 	RetryPolicy       RetryPolicy   `json:"retry_policy" mapstructure:"retry_policy" ini:"retry_policy" yaml:"retry_policy"`
 	ReconnectInterval time.Duration `json:"reconnect_interval" mapstructure:"reconnect_interval" ini:"reconnect_interval" yaml:"reconnect_interval"`
-	MaxRetryCount     int           `json:"max_retry_count" mapstructure:"max_retry_count" ini:"max_retry_count" yaml:"max_retry_count"`
+	// MaxRetryCount is how many times the simple and exponential_backoff
+	// policies retry a failed query and, with ReconnectInterval above 0, how
+	// many times a lost connection is retried, its first try aside; 0 is no
+	// retry, a connection still being tried once.
+	// Default: 3
+	MaxRetryCount int `json:"max_retry_count" mapstructure:"max_retry_count" ini:"max_retry_count" yaml:"max_retry_count"`
 
 	TLSEnabled         bool   `json:"tls_enabled" mapstructure:"tls_enabled" ini:"tls_enabled" yaml:"tls_enabled"`
 	CertFile           string `json:"cert_file" mapstructure:"cert_file" ini:"cert_file" yaml:"cert_file"`

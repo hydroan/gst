@@ -9,6 +9,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gocql/gocql"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/cqlpolicy"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
@@ -65,6 +66,16 @@ func start(_ context.Context) (err error) {
 // It's the caller's responsibility to close the session,
 // caller should always call Close() when it's no longer needed.
 func New(cfg config.Scylla) (gocqlx.Session, error) {
+	cluster, err := newCluster(cfg)
+	if err != nil {
+		return gocqlx.Session{}, err
+	}
+	return gocqlx.WrapSession(gocql.NewSession(*cluster))
+}
+
+// newCluster translates cfg into the driver's cluster configuration, which
+// New opens the session from.
+func newCluster(cfg config.Scylla) (*gocql.ClusterConfig, error) {
 	cluster := gocql.NewCluster(cfg.Hosts...)
 
 	if len(cfg.Username) > 0 && len(cfg.Password) > 0 {
@@ -82,7 +93,7 @@ func New(cfg config.Scylla) (gocqlx.Session, error) {
 	if cfg.Consistency != "" {
 		level, err := gocql.ParseConsistencyWrapper(string(cfg.Consistency))
 		if err != nil {
-			return gocqlx.Session{}, errors.Wrapf(err, "unsupported scylla consistency: %s", cfg.Consistency)
+			return nil, errors.Wrapf(err, "unsupported scylla consistency: %s", cfg.Consistency)
 		}
 		cluster.Consistency = level
 	}
@@ -105,17 +116,7 @@ func New(cfg config.Scylla) (gocqlx.Session, error) {
 	case config.RetryPolicySimple:
 		cluster.RetryPolicy = &gocql.SimpleRetryPolicy{NumRetries: cfg.RetryNumRetries}
 	case config.RetryPolicyDowngradingConsistency:
-		// The session's own consistency is tried first, then quorum, one and
-		// any, each once.
-		levelsToTry := []gocql.Consistency{cluster.Consistency}
-		for _, c := range []gocql.Consistency{gocql.Quorum, gocql.One, gocql.Any} {
-			if c != cluster.Consistency {
-				levelsToTry = append(levelsToTry, c)
-			}
-		}
-		cluster.RetryPolicy = &gocql.DowngradingConsistencyRetryPolicy{
-			ConsistencyLevelsToTry: levelsToTry,
-		}
+		cluster.RetryPolicy = cqlpolicy.DowngradingConsistency(cluster.Consistency)
 	case config.RetryPolicyExponentialBackoff:
 		cluster.RetryPolicy = &gocql.ExponentialBackoffRetryPolicy{
 			NumRetries: cfg.RetryNumRetries,
@@ -123,25 +124,27 @@ func New(cfg config.Scylla) (gocqlx.Session, error) {
 			Max:        cfg.RetryMaxInterval,
 		}
 	default:
-		return gocqlx.Session{}, errors.Newf("unsupported scylla retry policy: %s", cfg.RetryPolicy)
+		return nil, errors.Newf("unsupported scylla retry policy: %s", cfg.RetryPolicy)
 	}
 
-	// Configure reconnect policy; an empty policy keeps the driver's own default.
+	// Configure reconnect policy; an empty policy keeps the driver's own
+	// default. reconnect_max_retries counts the retries of a connection, its
+	// first try aside.
 	switch cfg.ReconnectPolicy {
 	case "":
 	case config.ReconnectPolicyConstant:
 		cluster.ReconnectionPolicy = &gocql.ConstantReconnectionPolicy{
 			Interval:   cfg.ReconnectConstantInterval,
-			MaxRetries: cfg.ReconnectMaxRetries,
+			MaxRetries: cqlpolicy.ReconnectAttempts(cfg.ReconnectMaxRetries),
 		}
 	case config.ReconnectPolicyExponential:
 		cluster.ReconnectionPolicy = &gocql.ExponentialReconnectionPolicy{
-			MaxRetries:      cfg.ReconnectMaxRetries,
+			MaxRetries:      cqlpolicy.ReconnectAttempts(cfg.ReconnectMaxRetries),
 			InitialInterval: cfg.ReconnectInitialInterval,
 			MaxInterval:     cfg.ReconnectMaxInterval,
 		}
 	default:
-		return gocqlx.Session{}, errors.Newf("unsupported scylla reconnect policy: %s", cfg.ReconnectPolicy)
+		return nil, errors.Newf("unsupported scylla reconnect policy: %s", cfg.ReconnectPolicy)
 	}
 
 	if cfg.TracingEnabled {
@@ -153,12 +156,12 @@ func New(cfg config.Scylla) (gocqlx.Session, error) {
 		var tlsConfig *tls.Config
 		var err error
 		if tlsConfig, err = util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify); err != nil {
-			return gocqlx.Session{}, errors.Wrap(err, "failed to build TLS config")
+			return nil, errors.Wrap(err, "failed to build TLS config")
 		}
 		cluster.SslOpts = &gocql.SslOptions{Config: tlsConfig}
 	}
 
-	return gocqlx.WrapSession(gocql.NewSession(*cluster))
+	return cluster, nil
 }
 
 // queryObserver implements gocql.QueryObserver to trace queries.

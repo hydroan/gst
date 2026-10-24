@@ -105,16 +105,24 @@ type Scylla struct {
 	Timeout        time.Duration `json:"timeout" mapstructure:"timeout" ini:"timeout" yaml:"timeout"`
 	PageSize       int           `json:"page_size" mapstructure:"page_size" ini:"page_size" yaml:"page_size"`
 
+	// RetryPolicy is how a failed query is retried (see RetryPolicy), empty
+	// keeping the driver's own default: simple and exponential_backoff retry
+	// it RetryNumRetries times, downgrading_consistency once, at one, or at
+	// local_one when Consistency is local_quorum, and not at all when
+	// Consistency is one, local_one or any.
 	RetryPolicy      RetryPolicy   `json:"retry_policy" mapstructure:"retry_policy" ini:"retry_policy" yaml:"retry_policy"`
 	RetryNumRetries  int           `json:"retry_num_retries" mapstructure:"retry_num_retries" ini:"retry_num_retries" yaml:"retry_num_retries"`
 	RetryMinInterval time.Duration `json:"retry_min_interval" mapstructure:"retry_min_interval" ini:"retry_min_interval" yaml:"retry_min_interval"`
 	RetryMaxInterval time.Duration `json:"retry_max_interval" mapstructure:"retry_max_interval" ini:"retry_max_interval" yaml:"retry_max_interval"`
 
-	ReconnectPolicy           ReconnectPolicy `json:"reconnect_policy" mapstructure:"reconnect_policy" ini:"reconnect_policy" yaml:"reconnect_policy"`
-	ReconnectMaxRetries       int             `json:"reconnect_max_retries" mapstructure:"reconnect_max_retries" ini:"reconnect_max_retries" yaml:"reconnect_max_retries"`
-	ReconnectInitialInterval  time.Duration   `json:"reconnect_initial_interval" mapstructure:"reconnect_initial_interval" ini:"reconnect_initial_interval" yaml:"reconnect_initial_interval"`
-	ReconnectMaxInterval      time.Duration   `json:"reconnect_max_interval" mapstructure:"reconnect_max_interval" ini:"reconnect_max_interval" yaml:"reconnect_max_interval"`
-	ReconnectConstantInterval time.Duration   `json:"reconnect_constant_interval" mapstructure:"reconnect_constant_interval" ini:"reconnect_constant_interval" yaml:"reconnect_constant_interval"`
+	ReconnectPolicy ReconnectPolicy `json:"reconnect_policy" mapstructure:"reconnect_policy" ini:"reconnect_policy" yaml:"reconnect_policy"`
+	// ReconnectMaxRetries is how many times ReconnectPolicy retries a lost
+	// connection, its first try aside; 0 is no retry, a connection still
+	// being tried once.
+	ReconnectMaxRetries       int           `json:"reconnect_max_retries" mapstructure:"reconnect_max_retries" ini:"reconnect_max_retries" yaml:"reconnect_max_retries"`
+	ReconnectInitialInterval  time.Duration `json:"reconnect_initial_interval" mapstructure:"reconnect_initial_interval" ini:"reconnect_initial_interval" yaml:"reconnect_initial_interval"`
+	ReconnectMaxInterval      time.Duration `json:"reconnect_max_interval" mapstructure:"reconnect_max_interval" ini:"reconnect_max_interval" yaml:"reconnect_max_interval"`
+	ReconnectConstantInterval time.Duration `json:"reconnect_constant_interval" mapstructure:"reconnect_constant_interval" ini:"reconnect_constant_interval" yaml:"reconnect_constant_interval"`
 
 	TracingEnabled     bool   `json:"tracing_enabled" mapstructure:"tracing_enabled" ini:"tracing_enabled" yaml:"tracing_enabled"`
 	TLSEnabled         bool   `json:"tls_enabled" mapstructure:"tls_enabled" ini:"tls_enabled" yaml:"tls_enabled"`

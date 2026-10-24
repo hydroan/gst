@@ -8,6 +8,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gocql/gocql"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/cqlpolicy"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
@@ -57,6 +58,20 @@ func start(_ context.Context) (err error) {
 // It's the caller's responsibility to close the session,
 // caller should always call Close() when it's no longer needed.
 func New(cfg config.Cassandra) (*gocql.Session, error) {
+	cluster, err := newCluster(cfg)
+	if err != nil {
+		return nil, err
+	}
+	s, err := cluster.CreateSession()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create cassandra session")
+	}
+	return s, nil
+}
+
+// newCluster translates cfg into the driver's cluster configuration, which
+// New opens the session from.
+func newCluster(cfg config.Cassandra) (*gocql.ClusterConfig, error) {
 	cluster := gocql.NewCluster(cfg.Hosts...)
 	cluster.Port = cfg.Port
 
@@ -101,16 +116,17 @@ func New(cfg config.Cassandra) (*gocql.Session, error) {
 	}
 
 	// Configure retry policy
-	retryPolicy, err := newRetryPolicy(cfg.RetryPolicy, cfg.MaxRetryCount)
+	retryPolicy, err := newRetryPolicy(cfg.RetryPolicy, cfg.MaxRetryCount, cluster.Consistency)
 	if err != nil {
 		return nil, err
 	}
 	cluster.RetryPolicy = retryPolicy
 
-	// Configure reconnection policy
+	// Configure reconnection policy; max_retry_count counts the retries of a
+	// connection, its first try aside.
 	if cfg.ReconnectInterval > 0 {
 		cluster.ReconnectionPolicy = &gocql.ConstantReconnectionPolicy{
-			MaxRetries: cfg.MaxRetryCount,
+			MaxRetries: cqlpolicy.ReconnectAttempts(cfg.MaxRetryCount),
 			Interval:   cfg.ReconnectInterval,
 		}
 	}
@@ -124,26 +140,22 @@ func New(cfg config.Cassandra) (*gocql.Session, error) {
 		cluster.SslOpts = &gocql.SslOptions{Config: tlsConfig}
 	}
 
-	// Create session
-	s, err := cluster.CreateSession()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create cassandra session")
-	}
-
-	return s, nil
+	return cluster, nil
 }
 
-// newRetryPolicy returns the retry policy named by policy, retrying
-// maxRetryCount times; an empty policy is the simple one. The configuration
-// admits no other name; one set in code is an error.
-func newRetryPolicy(policy config.RetryPolicy, maxRetryCount int) (gocql.RetryPolicy, error) {
+// newRetryPolicy returns the retry policy named by policy for a session at
+// level: simple and exponential_backoff retrying maxRetryCount times, an
+// empty policy being the simple one, and downgrading_consistency once below
+// level (see cqlpolicy.DowngradingConsistency). The configuration admits no
+// other name; one set in code is an error.
+func newRetryPolicy(policy config.RetryPolicy, maxRetryCount int, level gocql.Consistency) (gocql.RetryPolicy, error) {
 	switch policy {
 	case "", config.RetryPolicySimple:
 		return &gocql.SimpleRetryPolicy{NumRetries: maxRetryCount}, nil
 	case config.RetryPolicyExponentialBackoff:
 		return &gocql.ExponentialBackoffRetryPolicy{NumRetries: maxRetryCount}, nil
 	case config.RetryPolicyDowngradingConsistency:
-		return &gocql.DowngradingConsistencyRetryPolicy{}, nil
+		return cqlpolicy.DowngradingConsistency(level), nil
 	default:
 		return nil, errors.Newf("unsupported cassandra retry policy: %s", policy)
 	}
