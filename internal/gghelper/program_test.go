@@ -6,9 +6,9 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"io/fs"
 	"maps"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"slices"
@@ -72,74 +72,86 @@ type forwardedType struct {
 // instantiation, is left out as well: it stands for instantiations, whose
 // names reflection prints with their type arguments in brackets, and typeExpr
 // writes none of those back, generating the column as Column[any].
+//
+// The packages come from go list in a child process, whose reads go test does
+// not record. Of every public package, the directory and the ones above it up
+// to root are stat'ed, which notices a package or a file added or removed,
+// and every Go file is opened. No directory is listed: go test hashes a
+// listed directory by the name, size and modification time of every entry,
+// so listing root would take every git operation, which touches .git, for a
+// change to the framework and rerun the package's tests.
 func forwardedInternalTypes(t *testing.T, root string) map[string][]forwardedType {
 	t.Helper()
 	internalPrefix := ggconst.ImportPathGst + "/internal/"
+	top, err := filepath.Abs(root)
+	require.NoError(t, err)
+	list := exec.Command("go", "list", "-e", "-f",
+		`{{.ImportPath}}{{"\t"}}{{.Dir}}{{range .GoFiles}}{{"\t"}}{{.}}{{end}}{{range .CgoFiles}}{{"\t"}}{{.}}{{end}}{{range .IgnoredGoFiles}}{{"\t"}}{{.}}{{end}}`,
+		"./...")
+	list.Dir = top
+	var stderr bytes.Buffer
+	list.Stderr = &stderr
+	output, err := list.Output()
+	require.NoError(t, err, "go list: %s", stderr.String())
+
+	stated := make(map[string]bool)
 	forwarded := make(map[string][]forwardedType)
-	err := filepath.WalkDir(root, func(file string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
+	for line := range strings.Lines(string(output)) {
+		fields := strings.Split(strings.TrimSuffix(line, "\n"), "\t")
+		public, dir := fields[0], fields[1]
+		rel := strings.TrimPrefix(strings.TrimPrefix(public, ggconst.ImportPathGst), "/")
+		if slices.Contains([]string{"internal", "cmd", "examples", "module"}, strings.Split(rel, "/")[0]) {
+			continue
 		}
-		rel, relErr := filepath.Rel(root, file)
-		if relErr != nil {
-			return relErr
-		}
-		if entry.IsDir() {
-			if rel != "." && (slices.Contains([]string{"internal", "cmd", "examples", "module"}, rel) ||
-				strings.HasPrefix(entry.Name(), ".") || strings.HasPrefix(entry.Name(), "_") || entry.Name() == "testdata") {
-				return filepath.SkipDir
+		for above := dir; !stated[above]; above = filepath.Dir(above) {
+			stated[above] = true
+			_, statErr := os.Stat(above)
+			require.NoError(t, statErr)
+			if above == top {
+				break
 			}
-			return nil
 		}
-		if !strings.HasSuffix(rel, ".go") || strings.HasSuffix(rel, "_test.go") {
-			return nil
-		}
-		parsed, parseErr := parser.ParseFile(token.NewFileSet(), file, nil, parser.SkipObjectResolution)
-		if parseErr != nil {
-			return parseErr
-		}
-		imports := make(map[string]string, len(parsed.Imports))
-		for _, spec := range parsed.Imports {
-			importPath, unquoteErr := strconv.Unquote(spec.Path.Value)
-			if unquoteErr != nil {
-				return unquoteErr
-			}
-			name := path.Base(importPath)
-			if spec.Name != nil {
-				name = spec.Name.Name
-			}
-			imports[name] = importPath
-		}
-		public := ggconst.ImportPathGst
-		if dir := filepath.Dir(rel); dir != "." {
-			public += "/" + filepath.ToSlash(dir)
-		}
-		for _, decl := range parsed.Decls {
-			gen, ok := decl.(*ast.GenDecl)
-			if !ok || gen.Tok != token.TYPE {
+		for _, file := range fields[2:] {
+			if strings.HasSuffix(file, "_test.go") {
 				continue
 			}
-			for _, spec := range gen.Specs {
-				typeSpec, ok := spec.(*ast.TypeSpec)
-				if !ok || !typeSpec.Assign.IsValid() || typeSpec.TypeParams != nil {
+			parsed, parseErr := parser.ParseFile(token.NewFileSet(), filepath.Join(dir, file), nil, parser.SkipObjectResolution)
+			require.NoError(t, parseErr)
+			imports := make(map[string]string, len(parsed.Imports))
+			for _, spec := range parsed.Imports {
+				importPath, unquoteErr := strconv.Unquote(spec.Path.Value)
+				require.NoError(t, unquoteErr)
+				name := path.Base(importPath)
+				if spec.Name != nil {
+					name = spec.Name.Name
+				}
+				imports[name] = importPath
+			}
+			for _, decl := range parsed.Decls {
+				gen, ok := decl.(*ast.GenDecl)
+				if !ok || gen.Tok != token.TYPE {
 					continue
 				}
-				selector, ok := typeSpec.Type.(*ast.SelectorExpr)
-				if !ok {
-					continue
+				for _, spec := range gen.Specs {
+					typeSpec, ok := spec.(*ast.TypeSpec)
+					if !ok || !typeSpec.Assign.IsValid() || typeSpec.TypeParams != nil {
+						continue
+					}
+					selector, ok := typeSpec.Type.(*ast.SelectorExpr)
+					if !ok {
+						continue
+					}
+					qualifier, ok := selector.X.(*ast.Ident)
+					if !ok || !strings.HasPrefix(imports[qualifier.Name], internalPrefix) {
+						continue
+					}
+					internal := imports[qualifier.Name]
+					forwarded[internal] = append(forwarded[internal], forwardedType{public: public, name: typeSpec.Name.Name, target: selector.Sel.Name})
 				}
-				qualifier, ok := selector.X.(*ast.Ident)
-				if !ok || !strings.HasPrefix(imports[qualifier.Name], internalPrefix) {
-					continue
-				}
-				internal := imports[qualifier.Name]
-				forwarded[internal] = append(forwarded[internal], forwardedType{public: public, name: typeSpec.Name.Name, target: selector.Sel.Name})
 			}
 		}
-		return nil
-	})
-	require.NoError(t, err)
-	require.NotEmpty(t, forwarded, "no public package forwards an internal type; the walk reads the wrong tree")
+	}
+	require.NotEmpty(t, forwarded, "no public package forwards an internal type; go list reads the wrong tree")
 	return forwarded
 }
 
