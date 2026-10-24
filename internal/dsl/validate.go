@@ -17,29 +17,27 @@ import (
 	"github.com/hydroan/gst/internal/goast"
 )
 
-// actionMethodPhases maps DSL action method names to their phases. It serves
-// both as the action keyword set and as the phase lookup for generation
-// facts derived from an action call, such as the service filename.
-var actionMethodPhases = map[string]consts.Phase{
-	consts.Create.Name():     consts.Create,
-	consts.Delete.Name():     consts.Delete,
-	consts.Update.Name():     consts.Update,
-	consts.Patch.Name():      consts.Patch,
-	consts.List.Name():       consts.List,
-	consts.Get.Name():        consts.Get,
-	consts.CreateMany.Name(): consts.CreateMany,
-	consts.DeleteMany.Name(): consts.DeleteMany,
-	consts.UpdateMany.Name(): consts.UpdateMany,
-	consts.PatchMany.Name():  consts.PatchMany,
-	consts.Import.Name():     consts.Import,
-	consts.Export.Name():     consts.Export,
-	consts.SSE.Name():        consts.SSE,
-	consts.Stream.Name():     consts.Stream,
+// actionMethodNames is the action keyword set: the DSL method declaring an
+// action of each phase.
+var actionMethodNames = map[string]bool{
+	consts.Create.Name():     true,
+	consts.Delete.Name():     true,
+	consts.Update.Name():     true,
+	consts.Patch.Name():      true,
+	consts.List.Name():       true,
+	consts.Get.Name():        true,
+	consts.CreateMany.Name(): true,
+	consts.DeleteMany.Name(): true,
+	consts.UpdateMany.Name(): true,
+	consts.PatchMany.Name():  true,
+	consts.Import.Name():     true,
+	consts.Export.Name():     true,
+	consts.SSE.Name():        true,
+	consts.Stream.Name():     true,
 }
 
 func isActionMethod(name string) bool {
-	_, ok := actionMethodPhases[name]
-	return ok
+	return actionMethodNames[name]
 }
 
 // routeIDActionMethodNames are actions whose built-in controllers read the
@@ -185,21 +183,15 @@ func Validate(file *ast.File, modelDir string, filename string) []error {
 	}
 
 	errs := validatePointerEmbeddings(file, filename)
-	records := make([]serviceActionRecord, 0)
 	rootModelFile := isRootModelFile(file, modelDir, filename)
 	for _, name := range slices.Sorted(maps.Keys(designBase)) {
-		recs, designErrs := validateDesignFunc(designBase[name], name, rootModelFile, false, filename)
-		records = append(records, recs...)
-		errs = append(errs, designErrs...)
+		errs = append(errs, validateDesignFunc(designBase[name], name, rootModelFile, false, filename)...)
 	}
 	// Models embedding model.Empty are virtual: routes exist but no table
 	// backs them, so actions relying on built-in table access are rejected.
 	for _, name := range slices.Sorted(maps.Keys(designEmpty)) {
-		recs, designErrs := validateDesignFunc(designEmpty[name], name, rootModelFile, true, filename)
-		records = append(records, recs...)
-		errs = append(errs, designErrs...)
+		errs = append(errs, validateDesignFunc(designEmpty[name], name, rootModelFile, true, filename)...)
 	}
-	errs = append(errs, validateServiceCollisions(records, filename)...)
 	return errs
 }
 
@@ -249,12 +241,11 @@ func validatePointerEmbeddings(file *ast.File, filename string) []error {
 	return errs
 }
 
-func validateDesignFunc(fn *ast.FuncDecl, modelName string, rootModelFile, virtual bool, filename string) ([]serviceActionRecord, []error) {
+func validateDesignFunc(fn *ast.FuncDecl, modelName string, rootModelFile, virtual bool, filename string) []error {
 	if fn == nil || fn.Body == nil {
-		return nil, nil
+		return nil
 	}
 
-	records := make([]serviceActionRecord, 0)
 	errs := make([]error, 0)
 	seenActions := make(map[string]bool)
 	seenPathKeywords := make(map[string]bool)
@@ -274,14 +265,10 @@ func validateDesignFunc(fn *ast.FuncDecl, modelName string, rootModelFile, virtu
 			seenActions[name] = true
 			grpcServable = grpcServable || !httpOnlyActionMethodNames[name]
 			grpcOnly = grpcOnly || grpcOnlyActionMethodNames[name]
-			info, actionErrs := validateActionCall(call, name, rootModelFile, virtual, filename)
-			if record, ok := newServiceActionRecord(info, name, modelName, ""); ok {
-				records = append(records, record)
-			}
+			_, actionErrs := validateActionCall(call, name, rootModelFile, virtual, filename)
 			errs = append(errs, actionErrs...)
 		case name == "Route":
-			recs, servable, only, routeErrs := validateRouteCall(call, modelName, rootModelFile, virtual, filename)
-			records = append(records, recs...)
+			servable, only, routeErrs := validateRouteCall(call, modelName, rootModelFile, virtual, filename)
 			grpcServable = grpcServable || servable
 			grpcOnly = grpcOnly || only
 			errs = append(errs, routeErrs...)
@@ -305,7 +292,7 @@ func validateDesignFunc(fn *ast.FuncDecl, modelName string, rootModelFile, virtu
 	if grpcOnly && !grpc {
 		errs = append(errs, errors.Newf("%s: %s declares a Stream action but no GRPC(); a stream is served over gRPC alone, declare GRPC() or remove the Stream action", filename, modelName))
 	}
-	return records, errs
+	return errs
 }
 
 // validateEndpointOrParam reports an Endpoint or Param call at Design() top
@@ -347,10 +334,10 @@ func functionLiteralArg(call *ast.CallExpr, i int) *ast.FuncLit {
 	return flit
 }
 
-// validateRouteCall validates one Route block and reports, beside the service
-// records and errors of its actions, whether any of them is an action gRPC
-// can serve (see httpOnlyActionMethodNames) and whether any is one only
-// gRPC can serve (see grpcOnlyActionMethodNames). A parameter of the route
+// validateRouteCall validates one Route block and reports, beside the errors
+// of its actions, whether any of them is an action gRPC can serve (see
+// httpOnlyActionMethodNames) and whether any is one only gRPC can serve (see
+// grpcOnlyActionMethodNames). A parameter of the route
 // is written :name, the one form the router reads; one written {name},
 // which the router would serve as that literal segment, is refused with
 // "the Route("archive/boxes/{box}/documents") of Record writes the
@@ -358,20 +345,19 @@ func functionLiteralArg(call *ast.CallExpr, i int) *ast.FuncLit {
 // that is not a string literal, or one that trims to nothing (see
 // routePath), Route("/", block), is refused as well: the parser would
 // declare no route for it without a word.
-func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virtual bool, filename string) (records []serviceActionRecord, grpcServable, grpcOnly bool, errs []error) {
+func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virtual bool, filename string) (grpcServable, grpcOnly bool, errs []error) {
 	flit := functionLiteralArg(call, 1)
 	if flit == nil {
-		return nil, false, false, []error{errors.Newf("%s: Route takes a function literal, Route(\"path\", func() {...}); a call passing anything else, nil included, declares no route: delete it or write the block", filename)}
+		return false, false, []error{errors.Newf("%s: Route takes a function literal, Route(\"path\", func() {...}); a call passing anything else, nil included, declares no route: delete it or write the block", filename)}
 	}
 
 	route, isLiteral := stringLiteral(call.Args[0])
 	if !isLiteral {
-		return nil, false, false, []error{errors.Newf("%s: %s gives Route something other than a string literal; write Route(\"path\", func() {...})", filename, modelName)}
+		return false, false, []error{errors.Newf("%s: %s gives Route something other than a string literal; write Route(\"path\", func() {...})", filename, modelName)}
 	}
 	if routePath(route) == "" {
-		return nil, false, false, []error{errors.Newf("%s: %s declares Route %q, which names no path; write Route(\"path\", func() {...})", filename, modelName, route)}
+		return false, false, []error{errors.Newf("%s: %s declares Route %q, which names no path; write Route(\"path\", func() {...})", filename, modelName, route)}
 	}
-	records = make([]serviceActionRecord, 0)
 	errs = make([]error, 0)
 	for part := range strings.SplitSeq(route, "/") {
 		if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
@@ -404,9 +390,6 @@ func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virt
 				errs = append(errs, errors.Newf("%s: the Route(%q) block of %s declares %s twice; declare an action once per route, an Exact() one and one without at most", filename, route, modelName, name))
 			}
 			seenForms[form{name, info.exact}] = true
-			if record, ok := newServiceActionRecord(info, name, modelName, route); ok {
-				records = append(records, record)
-			}
 			errs = append(errs, actionErrs...)
 		case name == "Route":
 			errs = append(errs, errors.Newf("%s: Route() can only be used at Design() top level", filename))
@@ -416,12 +399,12 @@ func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virt
 			errs = append(errs, errors.Newf("%s: %s() can only be used at Design() top level", filename, name))
 		}
 	}
-	return records, grpcServable, grpcOnly, errs
+	return grpcServable, grpcOnly, errs
 }
 
-// actionCallInfo carries the generation-relevant keywords collected from one
-// action block, so callers can derive facts such as the service filename
-// without re-walking the block.
+// actionCallInfo carries the keywords collected from one action block: the
+// rules of validateActionCall read them, and a Route block reads exact back
+// to tell the two forms of one action apart (see validateRouteCall).
 type actionCallInfo struct {
 	service          bool
 	serviceName      string
@@ -562,106 +545,6 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile, vi
 	}
 
 	return info, errs
-}
-
-// serviceActionRecord captures one Service-enabled action and the service
-// file it generates, for collision checks across the actions of a model file.
-type serviceActionRecord struct {
-	model    string // model struct name declaring the Design
-	route    string // Route path owning the action; empty for Design top-level actions
-	action   string // action method name, e.g. "Get"
-	flatten  bool   // Flatten writes into the package service dir instead of the model file dir
-	filename string // generated service filename, e.g. "list.go"
-	role     string // generated service type name, e.g. "Lister"
-}
-
-// newServiceActionRecord builds the generation record of one action call. It
-// reports false when the action does not generate a service file.
-func newServiceActionRecord(info actionCallInfo, actionName, modelName, route string) (serviceActionRecord, bool) {
-	if !info.service {
-		return serviceActionRecord{}, false
-	}
-	action := Action{ServiceName: info.serviceName, Phase: actionMethodPhases[actionName]}
-	return serviceActionRecord{
-		model:    modelName,
-		route:    route,
-		action:   actionName,
-		flatten:  info.flatten,
-		filename: action.ServiceFilename(),
-		role:     action.RoleName(),
-	}, true
-}
-
-// validateServiceCollisions rejects two Service actions generating the same
-// service file, or the same service type in one service directory. gg gen
-// derives both from the service name, so colliding actions fight over one
-// struct: the first action creates it and every later action force-syncs
-// the service.Base type parameters to its own Payload/Result, leaving a
-// hybrid declaration that satisfies neither service registration, or, in
-// two files, a type declared twice that does not compile. Two files collide
-// when their names lower-case alike, Service("Archive") and
-// Service("archive"); two types when their names camel-case alike,
-// Service("item_archive") and Service("itemArchive"), or Service() on Create
-// and Service("creator") on another action, whose files differ. All models
-// in one file share one service dir, so records are grouped per file;
-// Flatten actions write into the package service dir instead and therefore
-// only collide with other Flatten actions.
-func validateServiceCollisions(records []serviceActionRecord, filename string) []error {
-	type key struct {
-		flatten bool
-		name    string
-	}
-	describe := func(group []serviceActionRecord) string {
-		descs := make([]string, 0, len(group))
-		for _, record := range group {
-			desc := fmt.Sprintf("%s on %s", record.action, record.model)
-			if record.route != "" {
-				desc = fmt.Sprintf("%s (route %q)", desc, record.route)
-			}
-			descs = append(descs, desc)
-		}
-		return strings.Join(descs, ", ")
-	}
-	collisions := func(keyOf func(serviceActionRecord) key) ([]key, map[key][]serviceActionRecord) {
-		groups := make(map[key][]serviceActionRecord)
-		keys := make([]key, 0)
-		for _, record := range records {
-			k := keyOf(record)
-			if _, ok := groups[k]; !ok {
-				keys = append(keys, k)
-			}
-			groups[k] = append(groups[k], record)
-		}
-		return keys, groups
-	}
-
-	errs := make([]error, 0)
-	keys, files := collisions(func(r serviceActionRecord) key { return key{flatten: r.flatten, name: r.filename} })
-	for _, k := range keys {
-		if group := files[k]; len(group) > 1 {
-			errs = append(errs, errors.Newf("%s: service file %q is generated by multiple actions: %s; give each Service action a distinct name, Service(\"name\")", filename, k.name, describe(group)))
-		}
-	}
-	keys, roles := collisions(func(r serviceActionRecord) key { return key{flatten: r.flatten, name: r.role} })
-	for _, k := range keys {
-		group := roles[k]
-		if len(group) < 2 {
-			continue
-		}
-		// One file: the file collision above reports it.
-		oneFile := true
-		for _, r := range group[1:] {
-			if r.filename != group[0].filename {
-				oneFile = false
-				break
-			}
-		}
-		if oneFile {
-			continue
-		}
-		errs = append(errs, errors.Newf("%s: service type %q is generated by multiple actions: %s; give each Service action a distinct name, Service(\"name\")", filename, k.name, describe(group)))
-	}
-	return errs
 }
 
 // keywordCall returns the call a statement makes and the DSL keyword it

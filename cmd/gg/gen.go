@@ -668,6 +668,13 @@ func scanModels(quiet bool, ignore gghelper.ProjectIgnore) (scannedModels, error
 	if conflicts := modelinfo.RouteConflicts(scanned.Models); len(conflicts) > 0 {
 		return scannedModels{}, errors.Join(conflicts...)
 	}
+	// Two actions writing one service file, one service type into a
+	// directory or two packages into one would leave a project that does
+	// not build, the one written first overwritten; the scan stops here
+	// instead, naming both.
+	if conflicts := modelinfo.ServiceConflicts(scanned.Models); len(conflicts) > 0 {
+		return scannedModels{}, errors.Join(conflicts...)
+	}
 	if !quiet && len(scanned.RouteIgnores.Matches) > 0 {
 		clioutput.Section("Ignore Routes")
 		for _, match := range scanned.RouteIgnores.Matches {

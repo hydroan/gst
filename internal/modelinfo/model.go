@@ -1,6 +1,7 @@
 package modelinfo
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/dsl"
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 // Model stores model information
@@ -123,6 +125,86 @@ func flattenedServiceOutputRel(modelFilePath, modelDir string) string {
 		return ""
 	}
 	return dir
+}
+
+// ServiceConflicts reports, for each action of models generating a service,
+// the service file, type or package it shares with an action found earlier,
+// in the order the models were found and their actions are declared: gg gen
+// writes each service where ServiceTarget puts it, so two actions put in one
+// file overwrite each other, and two declaring one type in a directory, or
+// two packages in one directory, leave a project that does not build. For
+// model/record/item.go declaring Create with Flatten() and Service("create")
+// on Item, found first, and model/record.go declaring Create with Service()
+// on Record, it returns
+//
+//	model/record.go: the Create action of Record writes its service to service/record/create.go, as the Create action of Item in model/record/item.go does; a service file serves one action, so give each a Service("name") of its own
+//
+// for the Create actions of Record under Route("sample/archive") and
+// Route("sample/seal") in model/sample/record.go naming their services
+// Service("item_archive") and Service("itemArchive")
+//
+//	model/sample/record.go: the Create action of Record under Route("sample/seal") declares the service type ItemArchive in service/sample/record, as the Create action of Record under Route("sample/archive") in model/sample/record.go does; a package declares a name once, so give each a Service("name") of its own
+//
+// and for model/sample/record.go declaring Get with Service() on Record and
+// then List with Service() on Item, whose services both go to
+// service/sample/record
+//
+//	model/sample/record.go: the List action of Item writes package item into service/sample/record, where the Get action of Record in model/sample/record.go writes package record; a directory holds one package
+//
+// An action conflicting in more than one way is reported for each, but for
+// a type it shares with the action whose file it shares as well.
+func ServiceConflicts(models []*Model) []error {
+	type service struct {
+		file, action, pkg string
+	}
+	type typeKey struct {
+		dir, name string
+	}
+	files := make(map[string]service)
+	types := make(map[typeKey]service)
+	packages := make(map[string]service)
+	var conflicts []error
+	for _, m := range models {
+		if m.Design == nil {
+			continue
+		}
+		m.Design.Range(func(route string, act *dsl.Action) {
+			if !act.Service {
+				return
+			}
+			target := ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
+			action := "the " + act.Phase.Name() + " action of " + m.ModelName
+			if route != m.Design.Endpoint {
+				action += fmt.Sprintf(" under Route(%q)", route)
+			}
+			current := service{file: m.ModelFilePath, action: action, pkg: target.PackageName}
+			declared := typeKey{dir: target.Dir, name: act.RoleName()}
+			var found []error
+			fileOwner, sharesFile := files[target.FilePath]
+			if sharesFile {
+				found = append(found, errors.Newf("%s: %s writes its service to %s, as %s in %s does; a service file serves one action, so give each a Service(\"name\") of its own",
+					current.file, current.action, target.FilePath, fileOwner.action, fileOwner.file))
+			}
+			if typeOwner, ok := types[declared]; ok && (!sharesFile || typeOwner != fileOwner) {
+				found = append(found, errors.Newf("%s: %s declares the service type %s in %s, as %s in %s does; a package declares a name once, so give each a Service(\"name\") of its own",
+					current.file, current.action, declared.name, target.Dir, typeOwner.action, typeOwner.file))
+			}
+			if packageOwner, ok := packages[target.Dir]; ok && packageOwner.pkg != current.pkg {
+				found = append(found, errors.Newf("%s: %s writes package %s into %s, where %s in %s writes package %s; a directory holds one package",
+					current.file, current.action, current.pkg, target.Dir, packageOwner.action, packageOwner.file, packageOwner.pkg))
+			}
+			if len(found) > 0 {
+				conflicts = append(conflicts, found...)
+				return
+			}
+			files[target.FilePath] = current
+			types[declared] = current
+			if _, ok := packages[target.Dir]; !ok {
+				packages[target.Dir] = current
+			}
+		})
+	}
+	return conflicts
 }
 
 // ImportPath returns the import path of the package the model is declared in

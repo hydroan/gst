@@ -1370,6 +1370,65 @@ func (Token) Design() {
 	require.EqualError(t, err, "model/token.go: the List action of Token registers GET /api/tokens, as the List action of Token in model/api/token.go does; a path is served by one action")
 }
 
+// TestGenRunRefusesTheServiceFileTwoActionsWriteAlike pins that gg gen stops
+// at the scan on two actions writing their services to one file, naming
+// both, before it writes any: model/record/item.go declaring Create with
+// Flatten() and Service("create") on Item, found first, and model/record.go
+// declaring Create with Service() on Record both put theirs in
+// service/record/create.go.
+func TestGenRunRefusesTheServiceFileTwoActionsWriteAlike(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	writeProjectFile(t, filepath.Join(projectDir, "model", "record.go"), `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) TableName() string { return "records" }
+
+func (Record) Design() {
+	dsl.Endpoint("records")
+	dsl.Create(func() {
+		dsl.Service()
+	})
+}
+`)
+	writeProjectFile(t, filepath.Join(projectDir, "model", "record", "item.go"), `package record
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Item struct {
+	model.Base
+}
+
+func (Item) TableName() string { return "items" }
+
+func (Item) Design() {
+	dsl.Endpoint("items")
+	dsl.Create(func() {
+		dsl.Flatten()
+		dsl.Service("create")
+	})
+}
+`)
+
+	err := genRunWithOptions(genRunOptions{Quiet: true})
+
+	require.EqualError(t, err, `model/record.go: the Create action of Record writes its service to service/record/create.go, as the Create action of Item in model/record/item.go does; a service file serves one action, so give each a Service("name") of its own`)
+	require.NoFileExists(t, filepath.Join(projectDir, "service", "record", "create.go"), "the scan stops before any service is written")
+}
+
 // TestGenRunAcceptsTheModelTheCIWorkflowWrites pins the model the Go
 // workflow (.github/workflows/go.yml) writes into the project it generates,
 // to the project checks gg gen runs: a check added to gg gen holds that

@@ -14,18 +14,20 @@ import (
 )
 
 // DSLDesignRules runs the Design() validation that gates gg gen over every
-// model file, and the route conflict check gg gen runs over them all.
+// model file, and the route and service conflict checks gg gen runs over
+// them all.
 var DSLDesignRules = Check{
 	Name: "DSL design rules",
-	Rule: "model files must pass the same validation rules that gate gg gen: the Design() DSL rules, the base types model.Base, model.AutoBase and model.Empty embedded by value, never through a pointer, and no two actions registering one path",
+	Rule: "model files must pass the same validation rules that gate gg gen: the Design() DSL rules, the base types model.Base, model.AutoBase and model.Empty embedded by value, never through a pointer, no two actions registering one path, and no two actions writing one service file, one service type into a directory or two packages into one",
 	run:  checkDSLDesignRules,
 }
 
 // checkDSLDesignRules runs DSL Design() validation on every model file, so keyword
 // placement and generation-semantic violations fail gg check with the same
 // rules that block gg gen, and then reports the conflicts among the routes
-// of all the models the way gg gen refuses them (see
-// modelinfo.RouteConflicts), the models read the way gg gen reads them. A
+// and the services of all the models the way gg gen refuses them (see
+// modelinfo.RouteConflicts and modelinfo.ServiceConflicts), the models read
+// the way gg gen reads them. A
 // scan the model files stopped adds nothing, the faults being reported file
 // by file above; one gst.yaml or go.mod stopped is reported here, once for
 // every check reading the models (see scanModels).
@@ -62,6 +64,9 @@ func checkDSLDesignRules(ignore gghelper.ProjectIgnore) []string {
 		return violations
 	}
 	for _, conflict := range modelinfo.RouteConflicts(scanned.Models) {
+		violations = append(violations, conflict.Error())
+	}
+	for _, conflict := range modelinfo.ServiceConflicts(scanned.Models) {
 		violations = append(violations, conflict.Error())
 	}
 	return violations

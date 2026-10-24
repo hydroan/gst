@@ -130,6 +130,66 @@ func (Token) Design() {
 	}
 }
 
+// TestDSLDesignRulesReportsTheServiceFileTwoActionsWriteAlike pins that gg
+// check reports, under the DSL design rules, two actions writing their
+// services to one file, the way gg gen refuses them: model/record/item.go
+// declaring Create with Flatten() and Service("create") on Item, and
+// model/record.go declaring Create with Service() on Record, both put in
+// service/record/create.go.
+func TestDSLDesignRulesReportsTheServiceFileTwoActionsWriteAlike(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+	writeCheckProjectGoMod(t, projectDir)
+	writeCheckFile(t, filepath.Join(projectDir, "model", "record.go"), `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) TableName() string { return "records" }
+
+func (Record) Design() {
+	dsl.Endpoint("records")
+	dsl.Create(func() {
+		dsl.Service()
+	})
+}
+`)
+	writeCheckFile(t, filepath.Join(projectDir, "model", "record", "item.go"), `package record
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Item struct {
+	model.Base
+}
+
+func (Item) TableName() string { return "items" }
+
+func (Item) Design() {
+	dsl.Endpoint("items")
+	dsl.Create(func() {
+		dsl.Flatten()
+		dsl.Service("create")
+	})
+}
+`)
+
+	violations := runCheck(ggcheck.DSLDesignRules)
+
+	want := []string{`model/record.go: the Create action of Record writes its service to service/record/create.go, as the Create action of Item in model/record/item.go does; a service file serves one action, so give each a Service("name") of its own`}
+	if !slices.Equal(violations, want) {
+		t.Fatalf("violations = %q, want %q", violations, want)
+	}
+}
+
 // TestScanFaultsAreReportedByTheDSLDesignRulesAlone pins who reports what
 // stops the scan of the models: the DSL design rules, which report a model
 // fault file by file and a gst.yaml fault once, while the other checks
