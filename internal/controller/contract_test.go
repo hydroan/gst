@@ -251,6 +251,24 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
+			name: "Create refuses a time the field cannot read and stores nothing", fixture: shaped, phase: consts.Create,
+			input: contractInput{record: map[string]any{"name": uniqueName("contract-time"), "due_at": "yesterday"}},
+			want:  contractWant{status: http.StatusBadRequest, msg: "invalid value for field 'due_at'"},
+			check: func(t *testing.T, in contractInput, _ contractAnswer) {
+				t.Helper()
+				require.Zero(t, countShapedNamed(t, stringOf(in.record["name"])))
+			},
+		},
+		{
+			name: "Create refuses a number the field cannot read and stores nothing", fixture: shaped, phase: consts.Create,
+			input: contractInput{record: map[string]any{"name": uniqueName("contract-number"), "amount": "abc"}},
+			want:  contractWant{status: http.StatusBadRequest, msg: "invalid value for field 'amount'"},
+			check: func(t *testing.T, in contractInput, _ contractAnswer) {
+				t.Helper()
+				require.Zero(t, countShapedNamed(t, stringOf(in.record["name"])))
+			},
+		},
+		{
 			name: "Create answers the hook's refusal and stores nothing", fixture: refusals, phase: consts.Create,
 			input: contractInput{record: map[string]any{"name": uniqueName("contract-create-refused")}},
 			want:  refused,

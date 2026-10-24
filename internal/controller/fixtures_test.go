@@ -86,11 +86,12 @@ func (validatedSample) TableName() string { return "controller_validated_samples
 // the plain ones: a time stored in a column of its own, a struct stored as
 // a JSON column, whose city is required whenever the address is written,
 // and the fields of an embedded struct of the model's own, promoted to keys
-// of the model's own; and an integer narrower than a JSON number, for a
-// value a field cannot hold.
+// of the model's own; and an integer narrower than a JSON number and a number
+// held as its text, for values a field cannot hold.
 type shapedSample struct {
 	Name    string        `json:"name"`
 	Rank    int8          `json:"rank"`
+	Amount  json.Number   `json:"amount"`
 	DueAt   time.Time     `json:"due_at"`
 	Address sampleAddress `json:"address" gorm:"serializer:json"`
 	SampleAudit

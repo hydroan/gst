@@ -500,14 +500,7 @@ func TestDecodeJSONRequestReadsEveryTimeOfDayStrictly(t *testing.T) {
 		ByName map[string]datatypes.Time `json:"by_name"`
 	}
 	gin.SetMode(gin.TestMode)
-	decode := func(body string) (*holder, error) {
-		req := httptest.NewRequest(http.MethodPost, "/decode-probes", strings.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		c, _ := gin.CreateTestContext(httptest.NewRecorder())
-		c.Request = req
-		target := &holder{}
-		return target, decodeJSONRequest(c, target)
-	}
+	decode := decodeBody[holder]
 
 	got, err := decode(`{"closes":"18:00:00.25","clock":"06:00:00","CLOCK":"07:00:00.5","window":{"opens":"09:00:00.75"},"slots":["10:00:00.5"],"by_name":{"a":"11:00:00.5"}}`)
 	require.NoError(t, err)
@@ -533,6 +526,79 @@ func TestDecodeJSONRequestReadsEveryTimeOfDayStrictly(t *testing.T) {
 		require.ErrorAs(t, err, &refused, body)
 		require.Equal(t, "invalid value for field '"+field+"'", refused.Msg(), body)
 	}
+}
+
+// TestDecodeJSONRequestNamesTheTimeOrNumberItRefuses pins that a time.Time
+// or a json.Number the body cannot hold is refused under the path the
+// decoder reports for it, wherever encoding/json decodes one: through a
+// pointer, promoted from an embedded struct, inside a struct held by name, in
+// a slice, as the value and as the key of a map; and that a value it can hold
+// decodes exactly as json.Unmarshal decodes it, a null leaving the field as it
+// is and a json.Number with the string option taking a quoted number alone.
+func TestDecodeJSONRequestNamesTheTimeOrNumberItRefuses(t *testing.T) {
+	type promoted struct {
+		Since time.Time `json:"since"`
+	}
+	type window struct {
+		Opens time.Time   `json:"opens"`
+		Cost  json.Number `json:"cost"`
+	}
+	type holder struct {
+		promoted
+		At     *time.Time             `json:"at"`
+		Amount json.Number            `json:"amount"`
+		Quoted json.Number            `json:"quoted,string"`
+		Window window                 `json:"window"`
+		Stamps []time.Time            `json:"stamps"`
+		Costs  map[string]json.Number `json:"costs"`
+		ByTime map[time.Time]int      `json:"by_time"`
+	}
+	gin.SetMode(gin.TestMode)
+	decode := decodeBody[holder]
+
+	valid := `{"since":"2026-01-02T03:04:05Z","at":"2026-01-02T03:04:05+08:00","amount":"7","quoted":"8","window":{"opens":"2026-01-02T03:04:05.5Z","cost":12.5},"stamps":["2026-01-02T03:04:05Z"],"costs":{"a":-3e2},"by_time":{"2026-01-02T03:04:05Z":1}}`
+	got, err := decode(valid)
+	require.NoError(t, err)
+	want := &holder{}
+	require.NoError(t, json.Unmarshal([]byte(valid), want))
+	require.Equal(t, want, got)
+
+	got, err = decode(`{"at":null,"amount":null}`)
+	require.NoError(t, err)
+	require.Nil(t, got.At)
+	require.Empty(t, got.Amount)
+
+	bare := `{"quoted":8}`
+	require.Error(t, json.Unmarshal([]byte(bare), &holder{}))
+	_, err = decode(bare)
+	require.Error(t, err, "a json.Number with the string option takes no bare number, as json.Unmarshal does")
+
+	for body, field := range map[string]string{
+		`{"since":"yesterday"}`:                   "since",
+		`{"at":"2026-01-02 03:04:05"}`:            "at",
+		`{"window":{"opens":"9am"}}`:              "window.opens",
+		`{"stamps":["2026-01-02T03:04:05Z","x"]}`: "stamps[1]",
+		`{"by_time":{"x":1}}`:                     "by_time.x",
+		`{"amount":"abc"}`:                        "amount",
+		`{"window":{"cost":true}}`:                "window.cost",
+		`{"costs":{"a":"abc"}}`:                   "costs.a",
+	} {
+		_, err := decode(body)
+		var refused *types.Error
+		require.ErrorAs(t, err, &refused, body)
+		require.Equal(t, "invalid value for field '"+field+"'", refused.Msg(), body)
+	}
+}
+
+// decodeBody decodes body into a new T through decodeJSONRequest, as a
+// handler binding a request body decodes it.
+func decodeBody[T any](body string) (*T, error) {
+	req := httptest.NewRequest(http.MethodPost, "/decode-probes", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = req
+	target := new(T)
+	return target, decodeJSONRequest(c, target)
 }
 
 // TestClientSafeBindErrorAnswersEachDecoderErrorStably pins the translation

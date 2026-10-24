@@ -81,7 +81,8 @@ func bindJSONRequest(c *gin.Context, target any) error {
 // One knob does not carry over: gin's EnableDecoderUseNumber and
 // EnableDecoderDisallowUnknownFields configure the streaming decoder only, so
 // they never apply here. A time of day is the one value decoded otherwise
-// than json.Unmarshal decodes it (see strictTimeOfDay).
+// than json.Unmarshal decodes it, and a time or a number it refuses is
+// refused naming the field (see requestDecoding).
 func decodeJSONRequest(c *gin.Context, target any) error {
 	raw, err := readJSONRequestBody(c)
 	if err != nil {
@@ -90,27 +91,66 @@ func decodeJSONRequest(c *gin.Context, target any) error {
 	if trimmed := bytes.TrimSpace(raw); len(trimmed) == 0 || bytes.Equal(trimmed, jsonNull) {
 		return io.EOF
 	}
-	if err = jsonv2.Unmarshal(raw, target, json.DefaultOptionsV1(), strictTimeOfDay); err != nil {
+	if err = jsonv2.Unmarshal(raw, target, json.DefaultOptionsV1(), requestDecoding); err != nil {
 		return clientSafeBindError(err)
 	}
 	return nil
 }
 
-// strictTimeOfDay is the decoding option reading a time of day the way a
-// filter reads one (see modelschema.ParseTimeOfDay): a string in
-// time.TimeOnly, taken as written, and a value in another form or of another
-// JSON type refused. datatypes.Time decodes a string leniently itself: its
-// UnmarshalJSON scans it with fmt.Sscanf and keeps no error
-// (gorm.io/datatypes v1.2.7, time.go), so "abc" decodes as midnight and the
-// fraction of "17:30:00.5" as five nanoseconds, and the library offers no
-// strict decoding to select. json.Unmarshal is encoding/json/v2 under the
-// options json.DefaultOptionsV1 names, so decoding under them with this
-// option added decodes every other value the way json.Unmarshal does, and
-// reaches every time of day the way it does. A null leaves the value as it
-// is, as datatypes.Time leaves it; a refusal is a SemanticError at the
-// value's JSON Pointer, which those options report as a
+// requestDecoding is the decoding option a request body is decoded under
+// beside the options json.DefaultOptionsV1 names. json.Unmarshal is
+// encoding/json/v2 under those options, so a body decodes the way
+// json.Unmarshal decodes it, every value reached the way it reaches it, with
+// two differences: a time of day is read strictly (see strictTimeOfDay), and
+// a time.Time or a json.Number json.Unmarshal refuses is refused naming the
+// field (see decodeAtPointer).
+var requestDecoding = jsonv2.WithUnmarshalers(jsonv2.JoinUnmarshalers(
+	strictTimeOfDay,
+	jsonv2.UnmarshalFromFunc(decodeAtPointer[time.Time]),
+	jsonv2.UnmarshalFromFunc(decodeAtPointer[json.Number]),
+))
+
+// decodeAtPointer decodes the value the decoder is at into v exactly as
+// json.Unmarshal decodes it, under the options json.DefaultOptionsV1 names, and
+// reports a value it refuses as a SemanticError at the value's JSON Pointer,
+// holding the value. Those options lose the field of a time.Time or a
+// json.Number they refuse: the parse error of a time comes back bare, a
+// *time.ParseError, and the refusal of a number is an UnmarshalTypeError naming
+// no field. At its pointer the refusal is reported as a json.UnmarshalTypeError
+// naming the field, which clientSafeBindError answers with
+// "invalid value for field 'due_at'", the way a generated FromProto refuses the
+// value over gRPC (see grpc.Time and grpc.Number). A JSON number or a null is
+// left to the default decoding, through errors.ErrUnsupported: it names the
+// field of what it refuses, and it honors the field's own tag options, which
+// this function never sees, a json.Number with the string option taking no
+// bare number. The gRPC stand-in of the contract table, fromProto in
+// call_test.go, decodes through a copy of this function: a change to one is a
+// change to the other.
+func decodeAtPointer[T any](dec *jsontext.Decoder, v *T) error {
+	if kind := dec.PeekKind(); kind == '0' || kind == 'n' {
+		return errors.ErrUnsupported
+	}
+	value, err := dec.ReadValue()
+	if err != nil {
+		return err
+	}
+	if err = jsonv2.Unmarshal(value, v, json.DefaultOptionsV1()); err != nil {
+		return &jsonv2.SemanticError{JSONPointer: dec.StackPointer(), JSONKind: value.Kind(), JSONValue: value.Clone(), GoType: reflect.TypeFor[T](), Err: err}
+	}
+	return nil
+}
+
+// strictTimeOfDay reads a time of day the way a filter reads one (see
+// modelschema.ParseTimeOfDay): a string in time.TimeOnly, taken as written, and
+// a value in another form or of another JSON type refused. datatypes.Time
+// decodes a string leniently itself: its UnmarshalJSON scans it with fmt.Sscanf
+// and keeps no error (gorm.io/datatypes v1.2.7, time.go), so "abc" decodes as
+// midnight and the fraction of "17:30:00.5" as five nanoseconds, and the
+// library offers no strict decoding to select. A null leaves the value as it
+// is, as datatypes.Time leaves it; a refusal is a SemanticError at the value's
+// JSON Pointer, which the options json.DefaultOptionsV1 names report as a
 // json.UnmarshalTypeError naming the field, items.1.clock.
-var strictTimeOfDay = jsonv2.WithUnmarshalers(jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, t *datatypes.Time) error {
+var strictTimeOfDay = jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, t *datatypes.Time) error {
 	value, err := dec.ReadValue()
 	if err != nil || value.Kind() == jsontext.KindNull {
 		return err
@@ -131,7 +171,7 @@ var strictTimeOfDay = jsonv2.WithUnmarshalers(jsonv2.UnmarshalFromFunc(func(dec 
 	}
 	*t = datatypes.Time(since)
 	return nil
-}))
+})
 
 // validateRequest checks target against its binding tags with gin's
 // validator: the check bindJSONRequest makes of a bound body and the call
