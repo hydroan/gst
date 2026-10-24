@@ -2853,7 +2853,8 @@ func TestGenRunHoldsTheCommittedServicesAndMessages(t *testing.T) { //nolint:tpa
 // TestGenRunWorksInsideAWorkspace pins that a project in a go workspace
 // generates like one outside it: the column inspection program and the type
 // check of the protobuf files resolve the dependencies through the
-// workspace, as go build does there.
+// workspace, as go build does there. go mod tidy, which reads no go.work,
+// is skipped, and the output says why.
 func TestGenRunWorksInsideAWorkspace(t *testing.T) {
 	projectDir, ok := newGenProject(t)
 	if !ok {
@@ -2861,9 +2862,18 @@ func TestGenRunWorksInsideAWorkspace(t *testing.T) {
 	}
 	writeProtobufProject(t, projectDir, map[string]string{"model/note.go": protobufNoteModel})
 	initWorkspace(t, projectDir)
+	tidy := goModTidy
+	goModTidy = func() error {
+		t.Error("go mod tidy ran in a workspace, whose go.work it does not read")
+		return nil
+	}
+	t.Cleanup(func() { goModTidy = tidy })
 
-	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+	var genErr error
+	output := captureStdout(t, func() { genErr = genRun() })
 
+	require.NoError(t, genErr, output)
+	require.Contains(t, output, "go mod tidy skipped: the project is in a Go workspace")
 	require.FileExists(t, filepath.Join(projectDir, ggconst.DirPB, "note.pb.go"))
 	requireProjectCompiles(t)
 }

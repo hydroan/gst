@@ -95,7 +95,7 @@ git init
 
 1. 在 `model/**/*.go` 中声明资源模型或动作模型。
 2. 每次修改 DSL 后运行 `gg gen`；生成完它会执行 `go mod tidy`，把生成代码引用的依赖收进
-   `go.mod` 和 `go.sum`。
+   `go.mod` 和 `go.sum`（项目在 go.work 工作区里时不跑，见下文工作区一段）。
 3. 在生成的 `service/**` 文件中实现业务逻辑或 hook，并把同名 `_test.go` 里的骨架换成接口测试
    （骨架被换掉之前 `go test` 会失败）。
 4. 使用 `gg check` 检查项目结构和依赖边界。
@@ -1013,6 +1013,8 @@ REQ/RSP 命名、业务项目根目录结构、框架字段的列名，以及声
 在用），但删东西时这两类规则不保护任何路径，只认 `prune.ignore`，见下文。
 
 项目放在 go.work 工作区里时，gg 和 `go build` 一样按工作区解析依赖，不用额外设置。
+`go mod tidy` 不读 go.work，所以 `gg new`、`gg gen`、`gg module copy` 收尾时在工作区里不跑它，
+只打印一行说明；要在工作区外构建这个项目，先在项目目录里跑一次 `go mod tidy`。
 但工作区里 `go build` 会报 `ambiguous import: google.golang.org/genproto/googleapis/rpc/status`：
 框架依赖的 cockroachdb/errors 还引用旧版的 genproto，和新版拆分出来的包重名。在 go.work
 里加一行，把它指到新版即可：

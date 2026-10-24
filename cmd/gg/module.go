@@ -165,13 +165,10 @@ func runModuleCopy(name string, opts moduleCopyOptions) error {
 		return err
 	}
 
-	clioutput.Section("Run Go Mod Tidy")
-	if err := goModTidy(); err != nil {
-		clioutput.Error("", "go mod tidy failed")
+	if err := tidyModule(); err != nil {
 		printModuleCopyCleanup(name)
 		return err
 	}
-	clioutput.Success("", "Dependencies tidied")
 
 	clioutput.Section("Done")
 	clioutput.Done("Module copied successfully")

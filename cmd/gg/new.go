@@ -113,12 +113,9 @@ func newProject(projectName string, inPlace bool) error {
 		clioutput.Success("CREATE", "%s", file.Path)
 	}
 
-	clioutput.Section("Run Go Mod Tidy")
-	if err := goModTidy(); err != nil {
-		clioutput.Error("", "go mod tidy failed")
+	if err := tidyModule(); err != nil {
 		return err
 	}
-	clioutput.Success("", "Dependencies tidied")
 
 	clioutput.Section("Initialize Git Repository")
 	// A project created inside a Git repository, a cloned one or a directory

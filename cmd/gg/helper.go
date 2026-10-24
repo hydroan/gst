@@ -61,12 +61,36 @@ func writeGeneratedFile(filename string, content string, log bool) error {
 	return nil
 }
 
-// goModTidy tidies the module in the working directory once gg new, gg gen
-// or gg module copy has written its files, so that go.mod and go.sum hold
-// what the written sources import; it prints only its errors. Tests replace
-// it: those of gg new because tidying resolves the framework over the
-// network, those of gg gen and gg module copy to see when it runs and to
-// make it fail.
+// tidyModule tidies the module in the working directory, under a section of
+// the output of its own, once gg new, gg gen or gg module copy has written
+// its files, so that go.mod and go.sum hold what the written sources import
+// (see goModTidy). In a Go workspace it runs no go mod tidy and says why:
+// the command reads no go.work, so it would look up a module the workspace
+// provides, or settle on a version the workspace does not build with, while
+// the workspace resolves the versions itself and adds no requirement to any
+// go.mod.
+func tidyModule() error {
+	clioutput.Section("Run Go Mod Tidy")
+	inWorkspace, err := gghelper.InWorkspace()
+	if err != nil {
+		return err
+	}
+	if inWorkspace {
+		clioutput.Warn("", "go mod tidy skipped: the project is in a Go workspace, whose go.work go mod tidy does not read; run go mod tidy outside the workspace before building there")
+		return nil
+	}
+	if err = goModTidy(); err != nil {
+		clioutput.Error("", "go mod tidy failed")
+		return err
+	}
+	clioutput.Success("", "Dependencies tidied")
+	return nil
+}
+
+// goModTidy runs go mod tidy in the working directory for tidyModule,
+// printing only its errors. Tests replace it: those of gg new because
+// tidying resolves the framework over the network, those of gg gen and gg
+// module copy to see when it runs and to make it fail.
 var goModTidy = func() error {
 	cmd := exec.Command("go", "mod", "tidy")
 	cmd.Stdout = io.Discard

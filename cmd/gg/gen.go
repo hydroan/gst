@@ -68,18 +68,12 @@ func (o genRunOptions) mergesShell(path string) bool {
 }
 
 // genRun generates the code and then tidies the module, so that go.mod and
-// go.sum hold what the written files import.
+// go.sum hold what the written files import (see tidyModule).
 func genRun() error {
 	if err := genRunWithOptions(genRunOptions{}); err != nil {
 		return err
 	}
-	clioutput.Section("Run Go Mod Tidy")
-	if err := goModTidy(); err != nil {
-		clioutput.Error("", "go mod tidy failed")
-		return err
-	}
-	clioutput.Success("", "Dependencies tidied")
-	return nil
+	return tidyModule()
 }
 
 func genRunWithOptions(opts genRunOptions) error {
