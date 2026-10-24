@@ -8,12 +8,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestSQLiteInMemory pins which configurations select the in-memory database
-// and which a database file, with the examples of SQLiteInMemory's comment
-// among them. Only the exact name counts as memory: a file of that name in a
-// directory is a file. A mode counts in a file URI alone, by its last mode
-// parameter, the one sqlite reads; outside a URI the driver takes no mode.
-func TestSQLiteInMemory(t *testing.T) {
+// TestSQLiteInMemoryTellsAMemoryDatabaseFromAFile pins which configurations
+// select the in-memory database and which a database file, with the examples of
+// SQLiteInMemory's comment among them. Only the exact name counts as memory: a
+// file of that name in a directory is a file. A mode counts in a file URI
+// alone, by its last mode parameter, the one sqlite reads; outside a URI the
+// driver takes no mode.
+func TestSQLiteInMemoryTellsAMemoryDatabaseFromAFile(t *testing.T) {
 	for name, cfg := range map[string]config.Sqlite{
 		"the_flag_over_a_path":                     {IsMemory: true, Path: "./data.db"},
 		"no_path":                                  {},

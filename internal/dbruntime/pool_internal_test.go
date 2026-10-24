@@ -47,7 +47,7 @@ func TestConfigurePoolAppliesTheConfiguredLimits(t *testing.T) {
 	require.EqualValues(t, 2, stats.MaxIdleClosed, "the connections beyond the idle cap are closed on return")
 }
 
-func TestReplicaPoolMetricNames(t *testing.T) {
+func TestReplicaPoolMetricNamesNumberTheReplicasAfterThePrimary(t *testing.T) {
 	names := replicaPoolMetricNames("default", []Node{
 		{Role: dbnode.RolePrimary},
 		{Role: dbnode.RoleReplica},

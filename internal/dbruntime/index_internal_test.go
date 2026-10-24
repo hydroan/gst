@@ -123,7 +123,7 @@ func (*conflictKindTwin) Indexes() []modelschema.Index {
 	return []modelschema.Index{{Fields: []string{"Kind", "CreatedAt"}}}
 }
 
-func TestEnsureCustomIndexes(t *testing.T) {
+func TestEnsureCustomIndexesCreatesTheDeclaredIndexes(t *testing.T) {
 	db := newSQLiteDB(t)
 	m := &indexedRecord{}
 	require.NoError(t, db.Table(m.TableName()).AutoMigrate(m))
@@ -205,10 +205,11 @@ func TestEnsureCustomIndexesRejectsUndeclaredTableName(t *testing.T) {
 	require.ErrorContains(t, err, "must declare an explicit table name")
 }
 
-// TestEnsureCustomIndexesOnMySQL covers the same contract on MySQL, whose
-// migrator reports index metadata through information_schema and rejects a
-// duplicate name outright. It skips when no server is reachable.
-func TestEnsureCustomIndexesOnMySQL(t *testing.T) {
+// TestEnsureCustomIndexesCreatesTheDeclaredIndexesOnMySQL covers the same
+// contract on MySQL, whose migrator reports index metadata through
+// information_schema and rejects a duplicate name outright. It skips when no
+// server is reachable.
+func TestEnsureCustomIndexesCreatesTheDeclaredIndexesOnMySQL(t *testing.T) {
 	db := newMySQLDB(t)
 	m := &sizedRecord{}
 
@@ -242,9 +243,10 @@ func TestEnsureCustomIndexesOnMySQL(t *testing.T) {
 	require.ErrorContains(t, err, `already exists as "legacy_sized_records_code_kind"`)
 }
 
-// TestEnsureCustomIndexesOnPostgres covers the same contract on PostgreSQL,
-// whose migrator reads index metadata from the system catalogs.
-func TestEnsureCustomIndexesOnPostgres(t *testing.T) {
+// TestEnsureCustomIndexesCreatesTheDeclaredIndexesOnPostgres covers the same
+// contract on PostgreSQL, whose migrator reads index metadata from the system
+// catalogs.
+func TestEnsureCustomIndexesCreatesTheDeclaredIndexesOnPostgres(t *testing.T) {
 	db := newPostgresDB(t)
 	m := &sizedRecord{}
 

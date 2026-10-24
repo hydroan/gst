@@ -23,7 +23,7 @@ func TestAttachNodesRoundTrip(t *testing.T) {
 	require.Nil(t, dbruntime.NodesFor(handle), "nil detaches")
 }
 
-func TestParseReplicaEndpoint(t *testing.T) {
+func TestParseReplicaEndpointSplitsHostAndPortOrNamesTheBadEntry(t *testing.T) {
 	t.Run("host_and_port_are_split", func(t *testing.T) {
 		host, port, err := dbruntime.ParseReplicaEndpoint("10.0.0.1:3306")
 		require.NoError(t, err)
