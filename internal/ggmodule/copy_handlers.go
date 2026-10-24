@@ -66,9 +66,10 @@ func moduleCopyHandlerMarker(moduleName string) string {
 	return handlerMarkerPrefix + moduleName + "). Removing the module removes this file."
 }
 
-// handlerMarkerModule returns the module name a middleware file declares in
-// its ownership marker, or "" for files module copy does not own. Only lines
-// before the package clause count, mirroring where the copy writes the marker.
+// handlerMarkerModule returns the module name a middleware or interceptor
+// file declares in its ownership marker, or "" for files module copy does
+// not own. Only lines before the package clause count, mirroring where the
+// copy writes the marker.
 func handlerMarkerModule(path string) (string, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -105,7 +106,7 @@ type moduleCopyHandler struct {
 // or interceptors, to their targets under targetDir, the project's
 // directory of the same kind.
 func (p *CopyPlan) resolveHandlers(manifest []moduleCopyHandlerManifest, targetDir string) ([]moduleCopyHandler, error) {
-	middleware := make([]moduleCopyHandler, 0, len(manifest))
+	handlers := make([]moduleCopyHandler, 0, len(manifest))
 	for _, item := range manifest {
 		// The manifest stores framework-root relative paths so module.json
 		// remains stable wherever the framework source resolves: the module
@@ -115,17 +116,17 @@ func (p *CopyPlan) resolveHandlers(manifest []moduleCopyHandlerManifest, targetD
 		if err := requireHandlerSourceFile(sourcePath, item.Handler); err != nil {
 			return nil, err
 		}
-		middleware = append(middleware, moduleCopyHandler{
+		handlers = append(handlers, moduleCopyHandler{
 			SourcePath: sourcePath,
 			TargetPath: targetPath,
 			Scope:      item.Scope,
 			Handler:    item.Handler,
 		})
 	}
-	sort.Slice(middleware, func(i, j int) bool {
-		return middleware[i].TargetPath < middleware[j].TargetPath
+	sort.Slice(handlers, func(i, j int) bool {
+		return handlers[i].TargetPath < handlers[j].TargetPath
 	})
-	return middleware, nil
+	return handlers, nil
 }
 
 func requireHandlerSourceFile(sourcePath string, handler string) error {
@@ -143,10 +144,11 @@ func requireHandlerSourceFile(sourcePath string, handler string) error {
 		if !ok || fn.Recv != nil || fn.Name == nil || fn.Name.Name != handler {
 			continue
 		}
-		// Registration is written into the project middleware package as
-		// handler(), so a handler that takes arguments would emit code that
-		// does not compile. Failing here names the manifest entry instead of
-		// leaving the copied project broken.
+		// Registration is written into the project's middleware or
+		// interceptor package as handler(), so a handler that takes
+		// arguments would emit code that does not compile. Failing here
+		// names the manifest entry instead of leaving the copied project
+		// broken.
 		if fn.Type.Params != nil && len(fn.Type.Params.List) > 0 {
 			return errors.Newf("handler %s in %s must take no arguments", handler, sourcePath)
 		}
@@ -335,7 +337,7 @@ func (e *CopyExecution) handlersOnDisk(items []moduleCopyHandler) (map[string]bo
 // targets, so both old and new handler names are attributable. Handlers the
 // module does not own are never touched.
 //
-// The edit is intentionally AST-based. The middleware template often contains
+// The edit is intentionally AST-based. A registration file often contains
 // explanatory comments, grouped imports, or existing init work; AST editing
 // preserves those structures while touching only the import and calls owned
 // by module copy.
@@ -525,18 +527,18 @@ func removeRegistrations(md managedDir, dir string, handlerNames map[string]bool
 	return safePath, true, nil
 }
 
-// isPrunedHandlerRegisterCall matches middleware.Register(Handler()) and
-// middleware.RegisterAuth(Handler()) calls whose handler name a pruned file
-// declared.
+// isPrunedHandlerRegisterCall matches the Register(Handler()) and
+// RegisterAuth(Handler()) calls of the middleware or interceptor package
+// whose handler name a pruned file declared.
 func isPrunedHandlerRegisterCall(call *ast.CallExpr, importAlias string, handlerNames map[string]bool) bool {
 	_, handler, ok := parseHandlerRegisterCall(call, importAlias)
 	return ok && handlerNames[handler]
 }
 
 // parseHandlerRegisterCall recognizes the exact call shape module copy
-// manages — middleware.Register(Handler()) or middleware.RegisterAuth(
-// Handler()) with a zero-argument handler constructor — and returns its
-// method and handler names.
+// manages — Register(Handler()) or RegisterAuth(Handler()) of the
+// middleware or interceptor package, with a zero-argument handler
+// constructor — and returns its method and handler names.
 func parseHandlerRegisterCall(call *ast.CallExpr, importAlias string) (method string, handler string, ok bool) {
 	sel, selOK := call.Fun.(*ast.SelectorExpr)
 	if !selOK || (sel.Sel.Name != "Register" && sel.Sel.Name != "RegisterAuth") || len(call.Args) != 1 {

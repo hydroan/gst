@@ -249,10 +249,12 @@ stop
 ## 第 3 步：按顺序删除
 
 1. **停用的 service 文件及其配对测试文件**：逐个删除，删掉的打印 `Deleted ...`，删不掉的打印 `Failed to delete ...` 并接着删后面的。
-2. **孤儿中间件、拦截器文件**：先中间件后拦截器，逐个删掉并打印 `Deleted ...`；再从各自的注册文件（`middleware/middleware.go`、`interceptor/interceptor.go`）删掉调用这些文件里函数的 `Register`、`RegisterAuth` 语句，框架 middleware、interceptor 包的导入没人用了也一并删掉，打印 `Removed their register calls from <注册文件>`。这一项出错时打印 `Failed to delete orphan module middleware, so orphan service directories are kept: ...`。
+2. **孤儿中间件、拦截器文件**：先中间件后拦截器，逐个删掉并打印 `Deleted ...`；再从各自的注册文件（`middleware/middleware.go`、`interceptor/interceptor.go`）删掉调用这些文件里函数的 `Register`、`RegisterAuth` 语句，框架 middleware、interceptor 包的导入没人用了也一并删掉，打印 `Removed their register calls from <注册文件>`。这一项出错时打印 `Failed to delete orphan module middleware or interceptor files, so orphan service directories are kept: ...`。
 3. **孤儿目录里的文件**：逐个删除，打印 `Deleted ...` 或 `Failed to delete ...`。孤儿目录是因为前两项的文件要删才成了孤儿，所以前两项有删不掉的文件时，孤儿目录全部保留；停用的 service 文件有删不掉的时打印 `Some disabled service files were not deleted, so orphan service directories are kept`。
 4. **过期的 protobuf 文件**：逐个删除，打印 `Deleted ...` 或 `Failed to delete ...`。清单里有 `.proto` 时，问之前先打印一条警告：它登记的 `reserved` 会随之消失，要先搬进替代它的文件。
 5. **空目录**：从最深的目录开始，删掉 `service/` 和 `pb/` 下的空目录；子目录删掉后变空的上层目录也一起删，`service/` 本身不删，`pb/` 空了则连它一起删（它只由 `gg gen` 创建）。每删一个打印 `Removed empty directory ...`。只有被 `prune.ignore` 覆盖的目录不删；被 Git 忽略的空目录、空的 `testdata` 目录照样删。
+
+删不掉的文件不会让这一步停下，其余照删；但只要有删不掉的文件，或者第 2 项出错，删完之后命令就报错退出（退出码 1），错误里写明删不掉的文件或第 2 项出错的原因，`gg prune` 不再打印 `Code pruning completed successfully!`，`gg gen --prune` 同样以出错结束。
 
 ## 不会被删的东西
 

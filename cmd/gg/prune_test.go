@@ -358,6 +358,48 @@ func TestPruneLeftoversRemindsOfUnreadSettingsBeforeAsking(t *testing.T) {
 	}
 }
 
+// TestPruneRunWarnsOnceAboutConfigFilesItDoesNotRead pins that gg prune names
+// a file next to gst.yaml that looks like gg configuration but is not read
+// once, though it reads gst.yaml both to prune and to work out the files gg
+// gen writes under pb/.
+func TestPruneRunWarnsOnceAboutConfigFilesItDoesNotRead(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	writeProjectFile(t, filepath.Join(projectDir, "model", "sample", "record.go"), `package sample
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	Name string `+"`json:\"name\"`"+`
+
+	model.Base
+}
+
+func (Record) TableName() string { return "records" }
+
+func (Record) Design() {
+	dsl.Migrate()
+}
+`)
+	writeProjectFile(t, filepath.Join(projectDir, ".gg.yaml"), "prune:\n  ignore:\n    - service/sample\n")
+
+	var pruneErr error
+	stdout := captureStdout(t, func() {
+		pruneErr = pruneRun()
+	})
+	if pruneErr != nil {
+		t.Fatal(pruneErr)
+	}
+	if count := strings.Count(stdout, "gg does not read .gg.yaml"); count != 1 {
+		t.Fatalf("the warning about .gg.yaml is printed %d times, want once:\n%s", count, stdout)
+	}
+}
+
 // TestPruneRunStopsOnABrokenConfig pins that gg prune reports what stops it
 // before it deletes anything, here a gst.yaml prune.ignore entry outside
 // service/, middleware/ and pb/, as an error the command prints, not as a
@@ -528,13 +570,15 @@ func TestPruneLeftoversCleansTheWholePackage(t *testing.T) {
 	}
 }
 
-// TestPruneLeftoversKeepsOrphansWhenADisabledFileStays pins the guard behind
-// deleting everything in one run: a service directory can be an orphan only
-// because the disabled service file importing it goes, so when a disabled file
-// cannot be deleted, no orphan directory is, and the output says why. The
-// middleware of a removed copied module still goes, while the directory only
-// it imported stays with the other orphans.
-func TestPruneLeftoversKeepsOrphansWhenADisabledFileStays(t *testing.T) {
+// TestPruneLeftoversFailsKeepingOrphansWhenADisabledFileStays pins the guard
+// behind deleting everything in one run: a service directory can be an
+// orphan only because the disabled service file importing it goes, so when a
+// disabled file cannot be deleted, no orphan directory is, and the output
+// says why. The middleware of a removed copied module still goes, while the
+// directory only it imported stays with the other orphans. The run then
+// fails, naming the file it could not delete, so the command does not report
+// a success.
+func TestPruneLeftoversFailsKeepingOrphansWhenADisabledFileStays(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root deletes a file whatever the permissions of its directory")
 	}
@@ -558,14 +602,16 @@ func TestPruneLeftoversKeepsOrphansWhenADisabledFileStays(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
 
 	var stdout string
+	var pruneErr error
 	withStdin(t, "y\n", func() {
 		stdout = captureStdout(t, func() {
-			if err := pruneLeftovers([]string{currentFile, disabledFile}, []*modelinfo.Model{pruneTestModel()}, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil); err != nil {
-				t.Error(err)
-			}
+			pruneErr = pruneLeftovers([]string{currentFile, disabledFile}, []*modelinfo.Model{pruneTestModel()}, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil)
 		})
 	})
 
+	if pruneErr == nil || !strings.Contains(pruneErr.Error(), disabledFile) {
+		t.Errorf("pruneLeftovers() error = %v, want one naming %s, the file it could not delete", pruneErr, disabledFile)
+	}
 	for _, path := range []string{disabledFile, helperFile, moduleHelperFile} {
 		if _, err := os.Stat(path); err != nil {
 			t.Errorf("%s should be kept: %v", path, err)
@@ -745,20 +791,22 @@ func SampleAuth() any {
 `)
 
 		var stdout string
+		var pruneErr error
 		withStdin(t, "y\n", func() {
 			stdout = captureStdout(t, func() {
-				if err := pruneLeftovers(nil, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil); err != nil {
-					t.Error(err)
-				}
+				pruneErr = pruneLeftovers(nil, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil)
 			})
 		})
 
+		if pruneErr == nil {
+			t.Error("pruneLeftovers() error = nil, want the failure to delete the middleware")
+		}
 		for _, path := range []string{middlewareFile, registrationFile, helperFile} {
 			if _, err := os.Stat(path); err != nil {
 				t.Errorf("%s should be kept when the middleware cannot be deleted: %v", path, err)
 			}
 		}
-		if !strings.Contains(stdout, "Failed to delete orphan module middleware, so orphan service directories are kept") {
+		if !strings.Contains(stdout, "Failed to delete orphan module middleware or interceptor files, so orphan service directories are kept") {
 			t.Errorf("output lacks the failure and what it keeps:\n%s", stdout)
 		}
 	})

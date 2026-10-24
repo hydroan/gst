@@ -239,6 +239,11 @@ func (Entry) Design() {
 - `Route("/archive/documents", func() {...})` 定义额外路径或完全自定义路径。
 - `Public()` 表示公开接口，不走认证中间件；默认不写则需要认证。
 - `Exact()` 表示当前 action 按声明路径原样注册，不追加默认的 `/:id`、`/batch` 等后缀。
+  用在单条资源动作（Get、Update、Patch、Delete）上就是去掉末尾的 `/:id`：例如
+  `PATCH /api/records/:id` 变成 `PATCH /api/records`，改哪一行由自定义 service
+  从请求体或当前用户判断；所以这时至少要声明 `Payload[T]()`、`Result[T]()`
+  其中一个（Get 不能有请求体，要声明 `Result[T]()`），动作才交给自定义 service，
+  否则 gg gen 报错。
 - `Payload[T]()` 定义请求体类型；`Result[T]()` 定义响应体类型。
 - `List`、`Get` 是 HTTP GET 接口，没有请求体，禁止声明 `Payload[T]()`；
   只声明 `Result[T]()` 即成为自定义动作，生成的请求类型固定为 `*model.Empty`，

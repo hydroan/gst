@@ -298,10 +298,16 @@ func Public() { dsl.Public() }
 // Param, Public, Service, Payload, Result, Flatten, or any other DSL keyword;
 // it only controls the current action's generated router path.
 //
-// Note that the built-in Delete, Update, and Patch controllers read the
-// resource id from the route parameter only. An Exact route without an id
-// segment must declare Payload/Result so the action is delegated to a custom
-// service method instead of the built-in controller.
+// On an action on one row, Get, Update, Patch or Delete, Exact is how the
+// route leaves off its trailing item parameter: with Endpoint("records"), an
+// exact Patch is served at PATCH /api/records instead of
+// PATCH /api/records/:id, its custom service telling the row from its own
+// Payload or from the caller instead of from the path. The built-in
+// controllers of these actions read the resource id from that parameter, so
+// an exact one declares Payload or Result, either one enough, and a Get, which
+// takes no Payload, its Result, which delegates it to a custom service
+// method; gg gen and gg check reject it otherwise, even when the route
+// declared by Endpoint or Route ends in a parameter of its own.
 func Exact() { dsl.Exact() }
 
 // Payload specifies the request payload type for the current action.

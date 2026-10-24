@@ -72,7 +72,11 @@ func genTypeScriptRun() error {
 	// generated rather than leaving stale declarations behind.
 	var models []*modelinfo.Model
 	if gghelper.FileExists(ggconst.DirModel) {
-		scanned, err := scanModels(false, gghelper.NewProjectIgnore())
+		projectCfg, err := loadProjectConfig()
+		if err != nil {
+			return err
+		}
+		scanned, err := scanModels(false, gghelper.NewProjectIgnore(), projectCfg)
 		if err != nil {
 			return err
 		}

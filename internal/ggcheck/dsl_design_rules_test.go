@@ -87,7 +87,7 @@ func (Current) Design() {
 	if len(violations) != 1 {
 		t.Fatalf("expected exactly one violation, got %#v", violations)
 	}
-	if !strings.Contains(violations[0], "uses dsl.Exact() but relies on the built-in controller") {
+	if !strings.Contains(violations[0], "uses dsl.Exact(), which leaves off the item parameter (/:id by default) the built-in controller reads the resource id from") {
 		t.Fatalf("unexpected violation message: %q", violations[0])
 	}
 	if !strings.Contains(violations[0], filepath.Join("model", "iam", "session.go")) {

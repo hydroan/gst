@@ -281,14 +281,33 @@ func TestValidateExactUsage(t *testing.T) {
 			source:    validateExactDeleteWithoutPayloadSource,
 			modelDir:  "/repo/model",
 			filename:  "/repo/model/iam/session.go",
-			wantError: "uses dsl.Exact() but relies on the built-in controller",
+			wantError: "Delete action uses dsl.Exact(), which leaves off the item parameter (/:id by default) the built-in controller reads the resource id from; declare Payload or Result for a custom service method or remove Exact()",
+		},
+		{
+			name:     "exact_delete_with_result_only",
+			source:   validateExactDeleteWithResultSource,
+			modelDir: "/repo/model",
+			filename: "/repo/model/record.go",
+		},
+		{
+			name:     "exact_patch_with_payload_only",
+			source:   validateExactPatchWithPayloadSource,
+			modelDir: "/repo/model",
+			filename: "/repo/model/record.go",
 		},
 		{
 			name:      "exact_get_in_route_block_without_payload_or_result",
 			source:    validateExactGetWithoutPayloadSource,
 			modelDir:  "/repo/model",
 			filename:  "/repo/model/iam/session.go",
-			wantError: "uses dsl.Exact() but relies on the built-in controller",
+			wantError: "Get action uses dsl.Exact(), which leaves off the item parameter (/:id by default) the built-in controller reads the resource id from; declare Result for a custom service method or remove Exact()",
+		},
+		{
+			name:      "exact_get_on_a_route_ending_in_a_parameter",
+			source:    validateExactGetOnAParameterRouteSource,
+			modelDir:  "/repo/model",
+			filename:  "/repo/model/record.go",
+			wantError: "Get action uses dsl.Exact(), which leaves off the item parameter (/:id by default) the built-in controller reads the resource id from; declare Result for a custom service method or remove Exact()",
 		},
 		{
 			name:     "exact_list_without_payload_or_result",
@@ -392,6 +411,74 @@ type Session struct {
 
 func (Session) Design() {
 	Route("iam/sessions/current", func() {
+		Get(func() {
+			Service()
+			Exact()
+		})
+	})
+}
+`
+
+const validateExactDeleteWithResultSource = `
+package model
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Route("records/current", func() {
+		Delete(func() {
+			Service()
+			Exact()
+			Result[*RecordDeleteRsp]()
+		})
+	})
+}
+`
+
+const validateExactPatchWithPayloadSource = `
+package model
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Route("records/current", func() {
+		Patch(func() {
+			Service()
+			Exact()
+			Payload[*RecordPatchReq]()
+		})
+	})
+}
+`
+
+const validateExactGetOnAParameterRouteSource = `
+package model
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Route("records/:record", func() {
 		Get(func() {
 			Service()
 			Exact()

@@ -40,12 +40,14 @@ func isActionMethod(name string) bool {
 	return actionMethodNames[name]
 }
 
-// routeIDActionMethodNames are actions whose built-in controllers read the
-// resource id from the route parameter only. Exact() removes the default
-// "/:id" suffix from the generated route, so these actions must delegate to a
-// custom service method when Exact() is used (via Payload/Result, or Result
-// alone for the GET-verb Get action); otherwise the generated route can never
-// resolve a resource id.
+// routeIDActionMethodNames are the actions on one row, whose built-in
+// controllers read the resource id from the item parameter the CRUD layout
+// appends to their route (see consts.RouteSuffix). Exact() is how such an
+// action leaves that parameter off, PATCH /api/records instead of
+// PATCH /api/records/:id, so with Exact() these actions delegate to a
+// custom service method, declaring Payload or Result, either one enough, or
+// Result for the GET-verb Get action, which takes no Payload, whatever
+// parameters the declared route carries itself.
 var routeIDActionMethodNames = map[string]bool{
 	consts.Delete.Name(): true,
 	consts.Update.Name(): true,
@@ -495,10 +497,10 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile, vi
 	if info.exact && routeIDActionMethodNames[actionName] {
 		if getVerbActionMethodNames[actionName] {
 			if !info.result {
-				errs = append(errs, errors.Newf("%s: %s action uses dsl.Exact() but relies on the built-in controller which reads the resource id from the route parameter only; declare Result with a custom service method or remove Exact()", filename, actionName))
+				errs = append(errs, errors.Newf("%s: %s action uses dsl.Exact(), which leaves off the item parameter (/:id by default) the built-in controller reads the resource id from; declare Result for a custom service method or remove Exact()", filename, actionName))
 			}
 		} else if !info.payload && !info.result {
-			errs = append(errs, errors.Newf("%s: %s action uses dsl.Exact() but relies on the built-in controller which reads the resource id from the route parameter only; declare Payload/Result with a custom service method or remove Exact()", filename, actionName))
+			errs = append(errs, errors.Newf("%s: %s action uses dsl.Exact(), which leaves off the item parameter (/:id by default) the built-in controller reads the resource id from; declare Payload or Result for a custom service method or remove Exact()", filename, actionName))
 		}
 	}
 	// A List without a custom Result runs the built-in list controller, which

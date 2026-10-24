@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/clioutput"
+	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen/pb"
 	"github.com/hydroan/gst/internal/gghelper"
@@ -42,12 +43,14 @@ import (
 // tag was written the definitions are derived again, from the files as
 // they now are — the overlay they are type-checked through is built again
 // too, since it carries the model files that read their column references
-// as they were — and what that derivation reports stops the run too.
-func fillPBTags(quiet bool, ignore gghelper.ProjectIgnore) ([]pb.File, error) {
+// as they were — and what that derivation reports stops the run too. The
+// models are scanned quietly, through the gst.yaml of projectCfg gg gen read
+// (see scanModels).
+func fillPBTags(quiet bool, ignore gghelper.ProjectIgnore, projectCfg *ggconfig.Config) ([]pb.File, error) {
 	if !gghelper.FileExists(ggconst.DirModel) {
 		return nil, nil
 	}
-	scanned, err := scanModels(true, ignore)
+	scanned, err := scanModels(true, ignore, projectCfg)
 	if err != nil {
 		return nil, err
 	}

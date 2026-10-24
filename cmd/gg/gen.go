@@ -91,11 +91,17 @@ func genRunWithOptions(opts genRunOptions) error {
 	if err := fillVersionFieldTags(opts.Quiet); err != nil {
 		return err
 	}
+	// gst.yaml is read once, the warnings about the files next to it gg does
+	// not read printed once with it, for both scans below.
+	projectCfg, err := loadProjectConfig()
+	if err != nil {
+		return err
+	}
 	// Number the fields of the models served over gRPC that carry no pb tag,
 	// for the same reason (see fillPBTags); the definitions it derived on the
 	// way are the ones written below when it wrote no tag.
 	ignore := gghelper.NewProjectIgnore()
-	pbDerived, err := fillPBTags(opts.Quiet, ignore)
+	pbDerived, err := fillPBTags(opts.Quiet, ignore, projectCfg)
 	if err != nil {
 		return err
 	}
@@ -126,7 +132,7 @@ func genRunWithOptions(opts genRunOptions) error {
 		}
 	}
 
-	scanned, err := scanModels(opts.Quiet, ignore)
+	scanned, err := scanModels(opts.Quiet, ignore, projectCfg)
 	if err != nil {
 		return err
 	}
@@ -323,7 +329,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	// numbers and names it reserves, for prune to delete (see
 	// pruneLeftovers). They are worked out before anything is written, so a
 	// Go file there gg gen did not generate leaves pb/ as it was.
-	stale, err := staleDerivedPBFiles(pbPaths, scanned.pruneConfig)
+	stale, err := staleDerivedPBFiles(pbPaths, projectCfg.Prune)
 	if err != nil {
 		return err
 	}
@@ -464,7 +470,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	// Prune what the models no longer need
 	// ============================================================
 	if prune {
-		if pruneErr := pruneLeftovers(oldServiceFiles, allModels, ignoreResult.KeptServiceFiles, ignoreResult.KeptServiceDirs, ignore, scanned.pruneConfig, existingPBFiles(), pbPaths); pruneErr != nil {
+		if pruneErr := pruneLeftovers(oldServiceFiles, allModels, ignoreResult.KeptServiceFiles, ignoreResult.KeptServiceDirs, ignore, projectCfg.Prune, existingPBFiles(), pbPaths); pruneErr != nil {
 			return pruneErr
 		}
 	}
@@ -560,8 +566,6 @@ type scannedModels struct {
 	// routeIgnores records the actions the gst.yaml route ignores disabled,
 	// with the service files pruning must keep for them.
 	routeIgnores modelinfo.RouteIgnoreResult
-	// pruneConfig holds the gst.yaml prune settings gg gen --prune applies.
-	pruneConfig ggconfig.PruneConfig
 }
 
 // protobufFiles renders the .proto files of the models declaring GRPC() and
@@ -636,22 +640,19 @@ func protobufDefinitions(models []*modelinfo.Model, ignore gghelper.ProjectIgnor
 
 // scanModels reads the models of the model directory the way every command
 // and check reads them (see modelinfo.ScanModels): their routes resolved,
-// then the gst.yaml route and model ignores applied, so a matched action
-// behaves exactly like an action that was never declared, and reports what
-// the ignores matched. gg gen and gg gen ts both start from here, which
-// keeps the TypeScript declarations on the routes the generated router
-// registers.
-func scanModels(quiet bool, ignore gghelper.ProjectIgnore) (scannedModels, error) {
+// then the gst.yaml route and model ignores of projectCfg applied, so a
+// matched action behaves exactly like an action that was never declared,
+// and reports what the ignores matched. gg gen and gg gen ts both start from
+// here, which keeps the TypeScript declarations on the routes the generated
+// router registers. The command reads gst.yaml (see loadProjectConfig) once
+// for every scan it makes.
+func scanModels(quiet bool, ignore gghelper.ProjectIgnore, projectCfg *ggconfig.Config) (scannedModels, error) {
 	if !gghelper.FileExists(ggconst.DirModel) {
 		return scannedModels{}, errors.Newf("model dir not found: %s", ggconst.DirModel)
 	}
 
 	if !quiet {
 		clioutput.Section("Scan Models")
-	}
-	projectCfg, err := loadProjectConfig()
-	if err != nil {
-		return scannedModels{}, err
 	}
 	scanned, err := modelinfo.ScanModels(module, ggconst.DirModel, ignore, projectCfg)
 	if err != nil {
@@ -691,7 +692,7 @@ func scanModels(quiet bool, ignore gghelper.ProjectIgnore) (scannedModels, error
 		reportModelIgnoreWarnings(scanned.ModelIgnores)
 	}
 
-	return scannedModels{models: scanned.Models, routeIgnores: scanned.RouteIgnores, pruneConfig: projectCfg.Prune}, nil
+	return scannedModels{models: scanned.Models, routeIgnores: scanned.RouteIgnores}, nil
 }
 
 // reportModelIgnoreWarnings warns about model ignore rules that matched no

@@ -99,10 +99,16 @@ func checkActionTypeUniqueness(ignore gghelper.ProjectIgnore) []string {
 }
 
 // actionTypeDeclaredTwice words the violation of later, a declaration of the
-// name first declared already, the file of first named when it is another:
+// name first declared already, the file of first named when it is another,
+// and the action named once when first is its other side:
 //
 //	model/sample/sample.go: List action on samples declares Result[*SampleRsp], which the Create action on samples declares as Result[*SampleRsp] already; each action names request and response types of its own
+//	model/sample/sample.go: Stream action on samples/echo declares *SampleEcho as both its StreamingPayload and its StreamingResult; request and response name types of their own
 func actionTypeDeclaredTwice(later, first actionTypeBinding) string {
+	if later.relPath == first.relPath && later.route == first.route && later.action == first.action {
+		return fmt.Sprintf("%s: %s action on %s declares %s as both its %s and its %s; request and response name types of their own",
+			later.relPath, later.action, later.route, later.raw, first.kind, later.kind)
+	}
 	where := ""
 	if first.relPath != later.relPath {
 		where = " in " + first.relPath

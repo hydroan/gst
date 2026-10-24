@@ -11,9 +11,10 @@ import (
 // TestActionTypeUniquenessReportsATypeNameTwoActionsDeclare pins the rule
 // that an explicit action type name belongs to one action: a Result, a
 // Payload and a streaming Payload declaring a name again report the action
-// declaring it first; an alias of the shared type under a name of its own,
-// an alias into another package, another package's own name and the actions
-// declaring no type pass.
+// declaring it first, and a stream naming one type on both sides is
+// reported as the one action it is; an alias of the shared type under a
+// name of its own, an alias into another package, another package's own
+// name and the actions declaring no type pass.
 func TestActionTypeUniquenessReportsATypeNameTwoActionsDeclare(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
@@ -49,6 +50,10 @@ type SampleFeedRsp struct {
 	Name string
 }
 
+type SampleEcho struct {
+	Name string
+}
+
 func (Sample) Design() {
 	dsl.Endpoint("samples")
 	dsl.Create(func() {
@@ -74,6 +79,13 @@ func (Sample) Design() {
 			dsl.Service("feed")
 			dsl.StreamingPayload[*SampleReq]()
 			dsl.StreamingResult[*SampleFeedRsp]()
+		})
+	})
+	dsl.Route("samples/echo", func() {
+		dsl.Stream(func() {
+			dsl.Service("echo")
+			dsl.StreamingPayload[*SampleEcho]()
+			dsl.StreamingResult[*SampleEcho]()
 		})
 	})
 }
@@ -109,6 +121,7 @@ func (Shared) Design() {
 		samplePath + ": List action on samples declares Result[*SampleRsp], which the Create action on samples declares as Result[*SampleRsp] already; each action names request and response types of its own",
 		samplePath + ": Create action on samples/sync declares Payload[*SampleReq], which the Create action on samples declares as Payload[*SampleReq] already; each action names request and response types of its own",
 		samplePath + ": Stream action on samples/feed declares StreamingPayload[*SampleReq], which the Create action on samples declares as Payload[*SampleReq] already; each action names request and response types of its own",
+		samplePath + ": Stream action on samples/echo declares *SampleEcho as both its StreamingPayload and its StreamingResult; request and response name types of their own",
 	}
 	slices.Sort(violations)
 	slices.Sort(want)

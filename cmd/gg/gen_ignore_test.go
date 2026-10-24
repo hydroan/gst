@@ -220,10 +220,12 @@ func collectActions(design *dsl.Design) []*dsl.Action {
 	return actions
 }
 
-// TestGenRunWarnsAboutConfigFilesItDoesNotRead pins that gg gen names every
-// file next to gst.yaml that looks like gg configuration but is not read, so a
-// setting written into one of them is not lost without a word.
-func TestGenRunWarnsAboutConfigFilesItDoesNotRead(t *testing.T) {
+// TestGenRunWarnsOnceAboutConfigFilesItDoesNotRead pins that gg gen names
+// every file next to gst.yaml that looks like gg configuration but is not
+// read, so a setting written into one of them is not lost without a word, and
+// names it once, though it scans the models twice, quietly for the protobuf
+// tags first.
+func TestGenRunWarnsOnceAboutConfigFilesItDoesNotRead(t *testing.T) {
 	projectDir, ok := newGenProject(t)
 	if !ok {
 		return
@@ -258,8 +260,8 @@ func (Record) Design() {
 		t.Fatal(genErr)
 	}
 	for _, want := range []string{"gg does not read .gg.yaml", "gg reads only gst.yaml, not gst.yml"} {
-		if !strings.Contains(stdout, want) {
-			t.Errorf("output lacks %q:\n%s", want, stdout)
+		if count := strings.Count(stdout, want); count != 1 {
+			t.Errorf("output carries %q %d times, want once:\n%s", want, count, stdout)
 		}
 	}
 }
