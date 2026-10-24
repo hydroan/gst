@@ -167,17 +167,9 @@ func importedNamesOf(filePath, importPath, defaultName string) (goast.PackageNam
 	return goast.ImportedNames(file, importPath, defaultName), goast.FindImportSpec(file, importPath) != nil
 }
 
-// gstImportPath is the framework's root package. It declares the column
-// constructors project code must not mint references with, and
-// ServiceContext, whose SSE method is a sanctioned error exit: its errors are
-// framework-governed — a setup failure carries a framework-built message, and
-// an error after the stream opened never reaches the response envelope at
-// all.
-const gstImportPath = "github.com/hydroan/gst"
-
 // gstDatabaseImportPath is the framework package whose Database function
 // starts a model-scoped operation chain.
-const gstDatabaseImportPath = "github.com/hydroan/gst/database"
+const gstDatabaseImportPath = ggconst.ImportPathGst + "/database"
 
 // gstDatabaseImportNames returns how filePath refers to the framework database
 // package, and whether it imports the package at all. It parses imports only,

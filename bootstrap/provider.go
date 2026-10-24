@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"go.uber.org/zap"
 )
@@ -24,7 +25,7 @@ func warnUnlinkedProviders() {
 		linked = append(linked, c.Name)
 	}
 	for _, name := range unlinkedProviders(enabledProviders(), linked) {
-		zap.S().Warnw("provider enabled in configuration but not compiled into this binary", "provider", name, "import", "github.com/hydroan/gst/provider/"+name)
+		zap.S().Warnw("provider enabled in configuration but not compiled into this binary", "provider", name, "import", ggconst.ImportPathGst+"/provider/"+name)
 	}
 }
 

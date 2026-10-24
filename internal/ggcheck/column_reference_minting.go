@@ -69,7 +69,7 @@ func checkColumnReferenceMinting(ignore gghelper.ProjectIgnore) []string {
 // one file. A file that fails to parse is reported as a violation so broken
 // code cannot slip past the check.
 func checkFileColumnReferenceMinting(path string) []string {
-	gstNames, found := importedNamesOf(path, gstImportPath, "gst")
+	gstNames, found := importedNamesOf(path, ggconst.ImportPathGst, "gst")
 	if !found {
 		return nil
 	}

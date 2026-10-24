@@ -234,7 +234,7 @@ func (a *errDiscAnalysis) collectFile(path string) {
 		path:       filepath.ToSlash(path),
 		pkgDir:     filepath.ToSlash(filepath.Dir(path)),
 		db:         goast.ImportedNames(file, gstDatabaseImportPath, "database"),
-		gst:        goast.ImportedNames(file, gstImportPath, "gst"),
+		gst:        goast.ImportedNames(file, ggconst.ImportPathGst, "gst"),
 		model:      goast.ImportedNames(file, ggconst.ImportPathModel, ggconst.PkgModel),
 		projectPkg: map[string]string{},
 	}

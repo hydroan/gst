@@ -9,6 +9,7 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/types"
 	"go.uber.org/zap"
@@ -46,7 +47,7 @@ func schemaComponentNameFromPath(pkgPath, name string) string {
 
 	// The framework's own contracts are reached through the module root,
 	// whose last two segments spell the module owner rather than a package.
-	if pkgPath == rootPkgPath {
+	if pkgPath == ggconst.ImportPathGst {
 		return pkgPath[strings.LastIndex(pkgPath, "/")+1:] + "." + name
 	}
 
@@ -64,12 +65,9 @@ func schemaComponentNameFromPath(pkgPath, name string) string {
 	return strings.Join(segments, ".") + "." + name
 }
 
-// Package paths of the framework's contracts: where they are defined, and
-// where business code imports them from.
-const (
-	internalTypesPkgPath = "github.com/hydroan/gst/internal/types"
-	rootPkgPath          = "github.com/hydroan/gst"
-)
+// internalTypesPkgPath is where the framework's contracts are defined;
+// business code imports them from the root package, ggconst.ImportPathGst.
+const internalTypesPkgPath = ggconst.ImportPathGst + "/internal/types"
 
 // documentedPkgPath returns the package path a type is named after in the
 // document, which is the path business code imports it from. The framework's
@@ -79,7 +77,7 @@ func documentedPkgPath(typ reflect.Type) string {
 	if pkgPath := typ.PkgPath(); pkgPath != internalTypesPkgPath {
 		return pkgPath
 	}
-	return rootPkgPath
+	return ggconst.ImportPathGst
 }
 
 // uniqueComponentName returns the component name for a type, guaranteeing
