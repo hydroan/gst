@@ -34,8 +34,8 @@ func TestUnmatchedRequestsAnswerInTheEnvelope(t *testing.T) {
 	})
 
 	// Read through the standard client rather than the framework one: this case
-	// asserts a response header, and the framework client reports refusals as an
-	// error that carries the body but not the headers.
+	// asserts a response header, and the framework client reports refusals as
+	// an error that carries the body but not the headers.
 	t.Run("a method the path does not serve", func(t *testing.T) {
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, baseURL+"/-/healthz", nil)
 		require.NoError(t, err)

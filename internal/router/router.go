@@ -46,10 +46,10 @@ var (
 	server *http.Server
 
 	started atomic.Uint32
-	mu      sync.Mutex
 
-	routeMu sync.RWMutex
-	routes  = make(map[string][]string)
+	registerMu sync.Mutex
+	routeMu    sync.RWMutex
+	routes     = make(map[string][]string)
 	// authRoutes are the endpoints registered on a group other than Pub,
 	// the ones the auth middleware guards, or would (see
 	// warnUnguardedRoutes); authGuarded reports whether an auth middleware
@@ -63,43 +63,12 @@ var (
 	ginParamPattern = regexp.MustCompile(`:([a-zA-Z0-9_]+)`)
 )
 
-func routesSnapshot() map[string][]string {
-	routeMu.RLock()
-	defer routeMu.RUnlock()
-
-	snapshot := make(map[string][]string, len(routes))
-	for endpoint, methods := range routes {
-		snapshot[endpoint] = append([]string(nil), methods...)
-	}
-	return snapshot
-}
-
-// Routes returns a snapshot of the registered API routes, keyed by path with
-// parameters written "{id}"; the public router.Routes forwards to it and
-// documents the contract.
-func Routes() map[string][]string {
-	snapshot := routesSnapshot()
-	result := make(map[string][]string, len(snapshot))
-	for endpoint, methods := range snapshot {
-		template := ginParamPattern.ReplaceAllString(endpoint, `{$1}`)
-		result[template] = sortedHTTPMethods(methods)
-	}
-	return result
-}
-
-// OnRoutesReady registers fn to run by RunRoutesReadyHooks; a nil fn is
-// ignored. The public router.OnRoutesReady forwards to it and documents the
-// contract a hook runs under.
-func OnRoutesReady(fn func(ctx context.Context, routes map[string][]string) error) {
-	if fn == nil {
-		return
-	}
-
-	routesReadyMu.Lock()
-	defer routesReadyMu.Unlock()
-	routesReadyHooks = append(routesReadyHooks, fn)
-}
-
+// Init builds the engine: gin in release mode with the configured trusted
+// proxies, the framework's middleware chain, the envelope answers for an
+// unmatched path or method, the operational endpoints, and the Auth and Pub
+// route groups along with the handlers middleware.Register and
+// middleware.RegisterAuth mount through. It fails on a server.trusted_proxies
+// entry that cannot be read.
 func Init() error {
 	gin.SetMode(gin.ReleaseMode)
 	root = gin.New()
@@ -145,10 +114,10 @@ func Init() error {
 	// and never runs the middleware chain for it: the redirect goes out with no
 	// access log line, no metrics, no trace id and no CORS headers. A
 	// cross-origin browser request therefore receives a redirect lacking
-	// Access-Control-Allow-Origin and the browser refuses it, so the convenience
-	// fails exactly the clients most likely to send such a path. With it off the
-	// request is not found, answered through the whole chain with everything a
-	// refusal carries.
+	// Access-Control-Allow-Origin and the browser refuses it, so the
+	// convenience fails exactly the clients most likely to send such a path.
+	// With it off the request is not found, answered through the whole chain
+	// with everything a refusal carries.
 	//
 	// RedirectFixedPath would correct letter case and stray path segments and
 	// redirect to the result. It takes the same redirect branch with the same
@@ -191,11 +160,11 @@ func Init() error {
 	//   /-/healthz, /-/readyz  Whether this process is alive, and whether it is
 	//                          draining. Nothing else; the readiness body is
 	//                          fixed text precisely because this is unguarded.
-	//   /metrics               The routes that have actually been served, as gin
-	//                          route patterns, with their request counts and
-	//                          latencies by status; the database table names
-	//                          behind the cache counters; process memory, CPU,
-	//                          uptime and build info.
+	//   /metrics               The routes that have actually been served, as
+	//                          gin route patterns, with their request counts
+	//                          and latencies by status; the database table
+	//                          names behind the cache counters; process memory,
+	//                          CPU, uptime and build info.
 	//   /openapi.json          Every route this server registers, with the
 	//                          request and response models of each.
 	//   /docs                  Swagger UI rendering that same document, and
@@ -205,10 +174,10 @@ func Init() error {
 	root.GET("/-/readyz", controller.Probe.Readyz)
 	root.GET("/openapi.json", gin.WrapH(openapigen.DocumentHandler()))
 	// The document has one rendering, and it is this one because its assets are
-	// compiled into the binary. It therefore renders in a cluster with no egress,
-	// and it runs no script fetched at page load from a third party — a page
-	// served without credentials is the last place to run code a CDN can change
-	// underneath it.
+	// compiled into the binary. It therefore renders in a cluster with no
+	// egress, and it runs no script fetched at page load from a third party — a
+	// page served without credentials is the last place to run code a CDN can
+	// change underneath it.
 	root.GET("/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, ginSwagger.URL("/openapi.json")))
 
 	// The groups hang off the root: a route registers by the path it is
@@ -250,140 +219,18 @@ func Init() error {
 	return nil
 }
 
-// RunRoutesReadyHooks runs the hooks OnRoutesReady registered, in
-// registration order, on ctx, and returns the first error — ctx ending
-// between two hooks included, reported as its cause, so a stop reaches a
-// hook before it starts as well as during one. Bootstrap's Run calls it once every route is
-// registered and every table exists, before the components that run
-// alongside the server start and before the listener opens: what the hooks
-// seed is there for the first round of a job and for the first request
-// alike.
-func RunRoutesReadyHooks(ctx context.Context) error {
-	routesReadyMu.Lock()
-	hooks := append([]func(context.Context, map[string][]string) error(nil), routesReadyHooks...)
-	routesReadyMu.Unlock()
-
-	for _, hook := range hooks {
-		if ctx.Err() != nil {
-			return context.Cause(ctx)
-		}
-		if err := hook(ctx, Routes()); err != nil {
-			// A hook cut short by the context ending is the stop's doing,
-			// not a failure of the hook.
-			if ctx.Err() == nil {
-				zap.S().Errorw("failed to run routes ready hooks", "err", err)
-			}
-			return err
-		}
-	}
-	return nil
-}
-
-func Run() error {
-	log := zap.S()
-	addr := net.JoinHostPort(config.App.Server.Listen, strconv.Itoa(config.App.Server.Port))
-	for _, r := range root.Routes() {
-		zap.L().Debug("", logfield.Method(r.Method), logfield.Route(r.Path))
-	}
-
-	server = newServer(addr, root)
-	warnUnguardedRoutes(log)
-
-	// mark the server as started.
-	started.Store(1)
-	log.Infow("backend server started", "addr", addr, "mode", config.App.Mode, "domain", config.App.Domain)
-
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Errorw("failed to start server", "err", err)
-		return err
-	}
-	return nil
-}
-
-// unguardedRoutesMsg is the warning warnUnguardedRoutes logs.
-const unguardedRoutesMsg = "http server serves routes of the authenticated group with no auth middleware registered"
-
-// warnUnguardedRoutes warns, on log, when routes of the authenticated group
-// were registered and no auth middleware was mounted on it, naming the
-// routes: each is served to anyone. The gRPC listener warns the same way
-// for its non-public methods (see grpcserver.Run), and a project may
-// authenticate in a middleware registered for every route (see
-// middleware.Register), so this is a warning and not a refusal.
-func warnUnguardedRoutes(log *zap.SugaredLogger) {
-	if authGuarded.Load() {
-		return
-	}
-	routeMu.RLock()
-	unguarded := slices.Sorted(maps.Keys(authRoutes))
-	routeMu.RUnlock()
-	if len(unguarded) > 0 {
-		log.Warnw(unguardedRoutesMsg, "routes", unguarded)
-	}
-}
-
-// newServer builds the HTTP server Run serves handler on at addr. A
-// Server-Sent Events stream on it ends the moment the server begins to shut
-// down: Shutdown waits for every active request and cancels none of their
-// contexts, so a stream watching only its request would hold the shutdown for
-// as long as its client stays, up to the bound Stop gives it. Every request
-// context carries the server's shutdown signal for the stream to watch, see
-// sse.StreamContext; ordinary requests do not watch it and run to completion.
-func newServer(addr string, handler http.Handler) *http.Server {
-	shutdown, beginShutdown := context.WithCancel(context.Background())
-	srv := &http.Server{
-		Addr:           addr,
-		Handler:        handler,
-		ReadTimeout:    config.App.Server.ReadTimeout,
-		WriteTimeout:   config.App.Server.WriteTimeout,
-		IdleTimeout:    config.App.IdleTimeout,
-		MaxHeaderBytes: 1 << 20, // 1 MB
-		BaseContext: func(net.Listener) context.Context {
-			return sse.WithServerShutdown(context.Background(), shutdown)
-		},
-	}
-	srv.RegisterOnShutdown(beginShutdown)
-	return srv
-}
-
+// Auth returns the authenticated route group Init built; the public router.Auth
+// forwards to it and documents the contract.
 func Auth() *gin.RouterGroup { return auth }
-func Pub() *gin.RouterGroup  { return pub }
 
-// drainTimeout bounds how long Stop waits for the requests in flight: the
-// window the shutdown stops this listener and the gRPC one within, side by
-// side (see bootstrap), the components and the providers getting a window
-// of their own after it, so the whole teardown is a budget an orchestrator's
-// grace can be set against. A variable so a test can play the bound out in
-// milliseconds.
-var drainTimeout = lifecycle.StopTimeout
+// Pub returns the public route group Init built; the public router.Pub forwards
+// to it and documents the contract.
+func Pub() *gin.RouterGroup { return pub }
 
-// Stop shuts the server down: it stops accepting connections and waits for
-// the requests in flight, for up to drainTimeout and no longer than abandon
-// lasts — not at all when it has already ended, for a process that must not
-// wait on anything, see lifecycle.FailNow. The connections a drain cut short
-// leaves open are closed, their requests cut off, rather than left to run
-// past the teardown of what they use.
-func Stop(abandon context.Context) {
-	if server == nil {
-		return
-	}
-	zap.S().Infow("backend server shutdown initiated")
-	ctx, cancel := context.WithTimeout(abandon, drainTimeout)
-	defer cancel()
-	if err := server.Shutdown(ctx); err != nil {
-		zap.S().Warnw("backend server closing the connections its drain left open", "err", err, "reason", context.Cause(ctx))
-		if closeErr := server.Close(); closeErr != nil {
-			zap.S().Errorw("backend server close failed", "err", closeErr)
-		}
-	} else {
-		zap.S().Infow("backend server shutdown completed")
-	}
-	server = nil
-}
-
-// Register registers route on the router group for each of phases, each
-// served by the controller handler of that phase, and records it for Routes, the
-// route parameter registry and the OpenAPI document; the public
-// router.Register forwards to it and documents the contract.
+// Register registers route on the router group for each of phases, each served
+// by the controller handler of that phase, and records it for Routes, the route
+// parameter registry and the OpenAPI document; the public router.Register
+// forwards to it and documents the contract.
 //
 // The path the route is served at, consts.APIPath of it, is what registers
 // on the group, and it is stamped into the controller config so the
@@ -428,9 +275,13 @@ func Register[M types.Model, REQ types.Request, RSP types.Response](router *gin.
 	register[M, REQ, RSP](router, routed.Route, set, &routed)
 }
 
+// register serves relativePath on router for each phase in phases, under the
+// phase's HTTP method and through its controller handler, and records the route
+// for Routes, the route manager and the OpenAPI document. Registrations run one
+// at a time under registerMu.
 func register[M types.Model, REQ types.Request, RSP types.Response](router *gin.RouterGroup, relativePath string, phases map[consts.Phase]bool, cfg ...*types.ControllerConfig[M]) {
-	mu.Lock()
-	defer mu.Unlock()
+	registerMu.Lock()
+	defer registerMu.Unlock()
 
 	endpoint := path.Join(router.BasePath(), relativePath)
 
@@ -509,6 +360,35 @@ func registerRoute(endpoint, method string, authRequired bool) {
 	}
 }
 
+// routesSnapshot copies the route table under its read lock, so Routes rewrites
+// the copy without holding the lock.
+func routesSnapshot() map[string][]string {
+	routeMu.RLock()
+	defer routeMu.RUnlock()
+
+	snapshot := make(map[string][]string, len(routes))
+	for endpoint, methods := range routes {
+		snapshot[endpoint] = append([]string(nil), methods...)
+	}
+	return snapshot
+}
+
+// Routes returns a snapshot of the registered API routes, keyed by path with
+// parameters written "{id}"; the public router.Routes forwards to it and
+// documents the contract.
+func Routes() map[string][]string {
+	snapshot := routesSnapshot()
+	result := make(map[string][]string, len(snapshot))
+	for endpoint, methods := range snapshot {
+		template := ginParamPattern.ReplaceAllString(endpoint, `{$1}`)
+		result[template] = sortedHTTPMethods(methods)
+	}
+	return result
+}
+
+// sortedHTTPMethods returns methods upper-cased and trimmed, blanks and repeats
+// dropped, in the order httpMethodRank gives and any other method after them
+// alphabetically.
 func sortedHTTPMethods(methods []string) []string {
 	seen := make(map[string]struct{}, len(methods))
 	result := make([]string, 0, len(methods))
@@ -540,6 +420,8 @@ func sortedHTTPMethods(methods []string) []string {
 	return result
 }
 
+// httpMethodRank returns the place of method among GET, POST, PUT, PATCH and
+// DELETE, and false for any other method.
 func httpMethodRank(method string) (int, bool) {
 	switch method {
 	case http.MethodGet:
@@ -555,4 +437,148 @@ func httpMethodRank(method string) (int, bool) {
 	default:
 		return 0, false
 	}
+}
+
+// OnRoutesReady registers fn to run by RunRoutesReadyHooks; a nil fn is
+// ignored. The public router.OnRoutesReady forwards to it and documents the
+// contract a hook runs under.
+func OnRoutesReady(fn func(ctx context.Context, routes map[string][]string) error) {
+	if fn == nil {
+		return
+	}
+
+	routesReadyMu.Lock()
+	defer routesReadyMu.Unlock()
+	routesReadyHooks = append(routesReadyHooks, fn)
+}
+
+// RunRoutesReadyHooks runs the hooks OnRoutesReady registered, in registration
+// order, on ctx, and returns the first error — ctx ending between two hooks
+// included, reported as its cause, so a stop reaches a hook before it starts as
+// well as during one. Bootstrap's Run calls it once every route is registered
+// and every table exists, before the components that run alongside the server
+// start and before the listener opens: what the hooks seed is there for the
+// first round of a job and for the first request alike.
+func RunRoutesReadyHooks(ctx context.Context) error {
+	routesReadyMu.Lock()
+	hooks := append([]func(context.Context, map[string][]string) error(nil), routesReadyHooks...)
+	routesReadyMu.Unlock()
+
+	for _, hook := range hooks {
+		if ctx.Err() != nil {
+			return context.Cause(ctx)
+		}
+		if err := hook(ctx, Routes()); err != nil {
+			// A hook cut short by the context ending is the stop's doing,
+			// not a failure of the hook.
+			if ctx.Err() == nil {
+				zap.S().Errorw("failed to run routes ready hooks", "err", err)
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+// Run serves the engine on the configured address until Stop shuts the server
+// down, returning nil then, or the error the listener failed with. Before it
+// listens it logs every route at debug level and warns when routes of the
+// authenticated group have no auth middleware; from then on a middleware
+// registration panics (see Init).
+func Run() error {
+	log := zap.S()
+	addr := net.JoinHostPort(config.App.Server.Listen, strconv.Itoa(config.App.Server.Port))
+	for _, r := range root.Routes() {
+		zap.L().Debug("", logfield.Method(r.Method), logfield.Route(r.Path))
+	}
+
+	server = newServer(addr, root)
+	warnUnguardedRoutes(log)
+
+	// From here on a middleware registration panics (see Init).
+	started.Store(1)
+	log.Infow("backend server started", "addr", addr, "mode", config.App.Mode, "domain", config.App.Domain)
+
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Errorw("failed to start server", "err", err)
+		return err
+	}
+	return nil
+}
+
+// unguardedRoutesMsg is the warning warnUnguardedRoutes logs.
+const unguardedRoutesMsg = "http server serves routes of the authenticated group with no auth middleware registered"
+
+// warnUnguardedRoutes warns, on log, when routes of the authenticated group
+// were registered and no auth middleware was mounted on it, naming the
+// routes: each is served to anyone. The gRPC listener warns the same way
+// for its non-public methods (see grpcserver.Run), and a project may
+// authenticate in a middleware registered for every route (see
+// middleware.Register), so this is a warning and not a refusal.
+func warnUnguardedRoutes(log *zap.SugaredLogger) {
+	if authGuarded.Load() {
+		return
+	}
+	routeMu.RLock()
+	unguarded := slices.Sorted(maps.Keys(authRoutes))
+	routeMu.RUnlock()
+	if len(unguarded) > 0 {
+		log.Warnw(unguardedRoutesMsg, "routes", unguarded)
+	}
+}
+
+// newServer builds the HTTP server Run serves handler on at addr. A
+// Server-Sent Events stream on it ends the moment the server begins to shut
+// down: Shutdown waits for every active request and cancels none of their
+// contexts, so a stream watching only its request would hold the shutdown for
+// as long as its client stays, up to the bound Stop gives it. Every request
+// context carries the server's shutdown signal for the stream to watch, see
+// sse.StreamContext; ordinary requests do not watch it and run to completion.
+func newServer(addr string, handler http.Handler) *http.Server {
+	shutdown, beginShutdown := context.WithCancel(context.Background())
+	srv := &http.Server{
+		Addr:           addr,
+		Handler:        handler,
+		ReadTimeout:    config.App.Server.ReadTimeout,
+		WriteTimeout:   config.App.Server.WriteTimeout,
+		IdleTimeout:    config.App.IdleTimeout,
+		MaxHeaderBytes: 1 << 20, // 1 MB
+		BaseContext: func(net.Listener) context.Context {
+			return sse.WithServerShutdown(context.Background(), shutdown)
+		},
+	}
+	srv.RegisterOnShutdown(beginShutdown)
+	return srv
+}
+
+// drainTimeout bounds how long Stop waits for the requests in flight: the
+// window the shutdown stops this listener and the gRPC one within, side by
+// side (see bootstrap), the components and the providers getting a window
+// of their own after it, so the whole teardown is a budget an orchestrator's
+// grace can be set against. A variable so a test can play the bound out in
+// milliseconds.
+var drainTimeout = lifecycle.StopTimeout
+
+// Stop shuts the server down: it stops accepting connections and waits for
+// the requests in flight, for up to drainTimeout and no longer than abandon
+// lasts — not at all when it has already ended, for a process that must not
+// wait on anything, see lifecycle.FailNow. The connections a drain cut short
+// leaves open are closed, their requests cut off, rather than left to run
+// past the teardown of what they use.
+func Stop(abandon context.Context) {
+	if server == nil {
+		return
+	}
+	zap.S().Infow("backend server shutdown initiated")
+	ctx, cancel := context.WithTimeout(abandon, drainTimeout)
+	defer cancel()
+	if err := server.Shutdown(ctx); err != nil {
+		zap.S().Warnw("backend server closing the connections its drain left open", "err", err, "reason", context.Cause(ctx))
+		if closeErr := server.Close(); closeErr != nil {
+			zap.S().Errorw("backend server close failed", "err", closeErr)
+		}
+	} else {
+		zap.S().Infow("backend server shutdown completed")
+	}
+	server = nil
 }
