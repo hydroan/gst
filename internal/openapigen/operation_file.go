@@ -83,16 +83,22 @@ func importFileRequestBody() *openapi3.RequestBodyRef {
 // setExport documents the export action (GET /{path}/export). The controller
 // filters resources with the same query parameters as the list action and
 // streams the result as a downloadable file, so the operation carries the list
-// filters plus the file-format selector and a binary file response.
+// filters plus the file-format selector and a binary file response, and the
+// cap on the records listed where the controller lists them: a virtual
+// resource's export service lists its records itself.
 func setExport[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeFor[M]()
 
+	params := append(parseParametersFromPath(path), exportFormatParameter())
+	if !modelregistry.IsVirtual(*new(M)) {
+		params = append(params, exportLimitParameter())
+	}
 	pathItem.Get = &openapi3.Operation{
 		OperationID: operationID(path, consts.Export),
 		Summary:     summary(path, consts.Export, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 		Description: description(path, consts.Export, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 		Tags:        tags(path, consts.Export, typ),
-		Parameters:  append(parseParametersFromPath(path), exportFormatParameter(), exportLimitParameter()),
+		Parameters:  params,
 		Responses:   exportFileResponses(!modelregistry.AreTypesEqual[M, REQ, RSP]()),
 	}
 	addQueryParameters[M, REQ, RSP](pathItem.Get)
@@ -118,8 +124,8 @@ func exportFormatParameter() *openapi3.ParameterRef {
 }
 
 // exportLimitParameter documents the cap on the records the export controller
-// lists: a positive integer caps them, none or zero or less lists every
-// record the query matches.
+// lists for a table-backed resource: a positive integer caps them, none or
+// zero or less lists every record the query matches.
 func exportLimitParameter() *openapi3.ParameterRef {
 	return &openapi3.ParameterRef{
 		Value: &openapi3.Parameter{

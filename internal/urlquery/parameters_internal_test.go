@@ -35,6 +35,20 @@ type plainParameterTestModel struct {
 	modelregistry.Base
 }
 
+// stampedParameterTestModel names a field of its own created_at, a key Decode
+// leaves to Filters, which takes nothing on a model without model.Query;
+// queriedStampedParameterTestModel embeds it, so Filters reads the bare key as
+// the exact match it is.
+type stampedParameterTestModel struct {
+	Stamp string `json:"stamp" query:"created_at"`
+}
+
+type queriedStampedParameterTestModel struct {
+	Stamp string `json:"stamp" query:"created_at"`
+
+	modelregistry.Query
+}
+
 // TestParameters pins the parameters a list takes, in the order of the
 // fields declaring them: a bare key for every field Decode fills, the
 // framework's own parameters among them, the operators Filters takes on the
@@ -84,6 +98,16 @@ func TestParameters(t *testing.T) {
 			{Name: "created_by", Index: []int{2, 1}, Bare: true},
 			{Name: "updated_by", Index: []int{2, 2}, Bare: true},
 		}, params)
+	})
+
+	t.Run("AKeyFiltersReadIsNoFieldOfDecode", func(t *testing.T) {
+		params, err := Parameters(reflect.TypeFor[*stampedParameterTestModel]())
+		require.NoError(t, err)
+		require.Empty(t, params, "Decode hands created_at to Filters, which a model without model.Query refuses")
+
+		params, err = Parameters(reflect.TypeFor[*queriedStampedParameterTestModel]())
+		require.NoError(t, err)
+		require.Contains(t, params, Parameter{Name: "created_at", Index: []int{0}, Bare: true, Ops: all})
 	})
 
 	t.Run("ColumnTypesTakeTheirOperators", func(t *testing.T) {

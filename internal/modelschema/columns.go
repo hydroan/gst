@@ -156,9 +156,11 @@ func fieldPath(model reflect.Type, field reflect.StructField) (index []int, goNa
 //
 // This is the client-facing name only. It never decides the database column
 // name, which comes from gorm (see Column). Column resolution above, which
-// names each step of a field's path by it, the urlquery decode plan and the
-// OpenAPI query parameters are its consumers, which is what keeps a field's
-// bare key, its operator-filter key and its documentation on one naming rule.
+// names each step of a field's path by it, the urlquery decode plan and its
+// query name check are its consumers, and the OpenAPI query parameters are
+// rendered from the list urlquery.Parameters builds on them, which is what
+// keeps a field's bare key, its operator-filter key and its documentation on
+// one naming rule.
 func QueryColumnName(field reflect.StructField) string {
 	return tagName(field, consts.TAG_QUERY)
 }

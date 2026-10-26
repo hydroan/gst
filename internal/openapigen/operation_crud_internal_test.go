@@ -331,7 +331,8 @@ type openapiWriteRequest struct {
 // itself, and no column gorm leaves out of the write: an insert none written
 // on update only or never, an update none written on insert only or never. An
 // item of a batch update names its record by its id, which it must carry. A
-// custom payload is the service's to read, every field of it.
+// custom payload is the service's to read, every field of it, a batch's
+// included, which is the payload itself rather than a list of items.
 func TestSetDocumentsTheFieldsAWriteTakes(t *testing.T) {
 	type model = openapiWriteModel
 	tests := []struct {
@@ -399,6 +400,46 @@ func TestSetDocumentsTheFieldsAWriteTakes(t *testing.T) {
 			set: func(p *openapi3.PathItem) *openapi3.Operation {
 				setCreate[*model, openapiWriteRequest, openapiWriteRequest]("/api/writes/custom-create", p)
 				return p.Post
+			},
+			fields: []string{"code", "created_by", "id"},
+		},
+		{
+			name: "custom update",
+			set: func(p *openapi3.PathItem) *openapi3.Operation {
+				setUpdate[*model, openapiWriteRequest, openapiWriteRequest]("/api/writes/custom-update/{id}", p)
+				return p.Put
+			},
+			fields: []string{"code", "created_by", "id"},
+		},
+		{
+			name: "custom patch",
+			set: func(p *openapi3.PathItem) *openapi3.Operation {
+				setPatch[*model, openapiWriteRequest, openapiWriteRequest]("/api/writes/custom-patch/{id}", p)
+				return p.Patch
+			},
+			fields: []string{"code", "created_by", "id"},
+		},
+		{
+			name: "custom create many",
+			set: func(p *openapi3.PathItem) *openapi3.Operation {
+				setCreateMany[*model, openapiWriteRequest, openapiWriteRequest]("/api/writes/custom-create-many", p)
+				return p.Post
+			},
+			fields: []string{"code", "created_by", "id"},
+		},
+		{
+			name: "custom update many",
+			set: func(p *openapi3.PathItem) *openapi3.Operation {
+				setUpdateMany[*model, openapiWriteRequest, openapiWriteRequest]("/api/writes/custom-update-many", p)
+				return p.Put
+			},
+			fields: []string{"code", "created_by", "id"},
+		},
+		{
+			name: "custom patch many",
+			set: func(p *openapi3.PathItem) *openapi3.Operation {
+				setPatchMany[*model, openapiWriteRequest, openapiWriteRequest]("/api/writes/custom-patch-many", p)
+				return p.Patch
 			},
 			fields: []string{"code", "created_by", "id"},
 		},

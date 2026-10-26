@@ -64,6 +64,27 @@ func TestSetExportDocumentsFileDownload(t *testing.T) {
 	}
 }
 
+// openapiVirtualExportModel is a virtual resource: its export service lists
+// the records itself, so the controller reads no cap on them.
+type openapiVirtualExportModel struct {
+	Name string `json:"name" query:"name"`
+
+	modelregistry.Empty
+}
+
+func TestSetExportDocumentsTheCapOfATableBackedExportAlone(t *testing.T) {
+	pathItem := &openapi3.PathItem{}
+	setExport[*openapiVirtualExportModel, *openapiVirtualExportModel, *openapiVirtualExportModel]("/api/virtual-exports/export", pathItem)
+
+	params := queryParametersByName(t, pathItem.Get)
+	if params[consts.QUERY_FORMAT] == nil {
+		t.Fatalf("virtual export query parameters = %v, want %q", parameterNames(params), consts.QUERY_FORMAT)
+	}
+	if params[consts.QUERY_LIMIT] != nil {
+		t.Fatalf("virtual export query parameters = %v, want no %q: the controller reads no cap for a virtual resource", parameterNames(params), consts.QUERY_LIMIT)
+	}
+}
+
 type openapiImportModel struct {
 	// Name is the sample name.
 	Name string `json:"name"`

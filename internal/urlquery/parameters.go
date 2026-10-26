@@ -34,9 +34,10 @@ type Parameter struct {
 // field Decode fills, the framework's own parameters among them, each with
 // the operators Filters takes on its column, and the columns Filters alone
 // reads, one no bare key decodes into under its operators alone and a
-// framework timestamp under its bare key too. The _size a model paging by
-// cursor alone takes is no field's (see Decode) and is left out. A document
-// listing them names exactly the parameters the parsers take.
+// framework timestamp under its bare key too. Three parameters the parsers
+// take are left out: the _size a model paging by cursor alone takes, which
+// is no field's (see Decode), and the export's _format and _limit, which
+// Decode lets through for the export to read and document itself.
 //
 // For a model embedding model.Query beside Title string `query:"title"` and
 // ExpiresAt time.Time `query:"expires_at"`, it returns title, bare and under
@@ -62,6 +63,10 @@ func Parameters(typ reflect.Type) ([]Parameter, error) {
 
 	params := make([]Parameter, 0, len(plan)+len(columns))
 	for name, field := range plan {
+		if isFilterQueryKey(name) {
+			// Decode hands the key to Filters, which reads it below or not at all.
+			continue
+		}
 		param := Parameter{Name: name, Index: field.index, Bare: true}
 		if col, ok := columns[name]; ok {
 			param.Ops, _ = filterOps(col)
@@ -69,7 +74,7 @@ func Parameters(typ reflect.Type) ([]Parameter, error) {
 		params = append(params, param)
 	}
 	for name, col := range columns {
-		if _, decoded := plan[name]; decoded {
+		if _, decoded := plan[name]; decoded && !isFilterQueryKey(name) {
 			continue
 		}
 		_, bare := bareTimeFilterColumns[name]
