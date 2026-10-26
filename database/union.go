@@ -20,6 +20,7 @@ var (
 	ErrNestedSelectOrdered   = errors.New("a select nested in a union or a join cannot carry OrderBy, Limit or Page, they belong to the outer query")
 	ErrUnionBranchInstance   = errors.New("union branch was opened on another database instance")
 	ErrUnionOrderNotSelected = errors.New("union order by references a column the result row does not carry")
+	ErrUnionPageWithoutOrder = errors.New("union page needs an order by: without one, pages skip and repeat rows")
 	ErrUnionUnusable         = errors.New("union could not attach to the database chain")
 )
 
@@ -45,6 +46,7 @@ type union[R any] struct {
 	limit      int
 	offset     int
 	hasLimit   bool
+	paged      bool // Page set the limit and offset; a read then needs an order (see build).
 	dryRun     bool
 	statements *[]types.SQLStatement
 }
@@ -127,7 +129,7 @@ func (u *union[R]) OrderBy(orders ...types.Ordering) types.Union[R] {
 // Page drops the page's skip. A non-positive limit means no limit, as on a
 // selector.
 func (u *union[R]) Limit(n int) types.Union[R] {
-	u.offset = 0
+	u.offset, u.paged = 0, false
 	if n <= 0 {
 		u.limit, u.hasLimit = 0, false
 		return u
@@ -140,13 +142,13 @@ func (u *union[R]) Limit(n int) types.Union[R] {
 // the offset the rows of the pages before it, as on a selector.
 func (u *union[R]) Page(page, size int) types.Union[R] {
 	if size <= 0 {
-		u.limit, u.offset, u.hasLimit = 0, 0, false
+		u.limit, u.offset, u.hasLimit, u.paged = 0, 0, false, false
 		return u
 	}
 	if page < 1 {
 		page = 1
 	}
-	u.limit, u.offset, u.hasLimit = size, (page-1)*size, true
+	u.limit, u.offset, u.hasLimit, u.paged = size, (page-1)*size, true, true
 	return u
 }
 
@@ -263,6 +265,11 @@ func (u *union[R]) Count(count *int) (err error) {
 func (u *union[R]) build(mode buildMode) (*gorm.DB, error) {
 	if err := u.validate(); err != nil {
 		return nil, err
+	}
+	// Rows in no order have no pages, each run could slice them differently;
+	// a count reads no page.
+	if mode == buildRead && u.paged && len(u.orders) == 0 {
+		return nil, ErrUnionPageWithoutOrder
 	}
 	orders := u.aliasOrders()
 	pushed, limit := u.pushdown(orders)

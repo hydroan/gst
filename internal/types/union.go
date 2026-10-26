@@ -78,10 +78,12 @@ type Union[R any] interface {
 	// Limit caps the number of stacked rows, read from the first; it drops
 	// the skip of a Page set before it.
 	Limit(n int) Union[R]
-	// Page keeps one page of the stacked rows, as Page does on a select. The
-	// union has no key of its own to complete the order with, so an ordering
-	// that pages should end in a column no two stacked rows share, or the
-	// pages may skip and repeat rows that sort equal.
+	// Page keeps one page of the stacked rows, as Page does on a select. A
+	// page needs an OrderBy: rows in no order have no pages, so Scan fails
+	// with database.ErrUnionPageWithoutOrder without one. The union has no key
+	// of its own to complete the order with, so an ordering that pages should
+	// end in a column no two stacked rows share, or the pages may skip and
+	// repeat rows that sort equal.
 	Page(page, size int) Union[R]
 
 	// Scan runs the union and fills dest with the stacked rows.

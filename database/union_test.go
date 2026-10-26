@@ -341,6 +341,12 @@ func TestUnionAllCount(t *testing.T) {
 			OrderBy(TestAggregateRecordCols.ID.Desc()).Page(2, 3).
 			Count(&total))
 		require.Equal(t, 9, total)
+
+		// A page with no order, which Scan refuses, is ignored here too: a
+		// count reads no page.
+		require.NoError(t, database.UnionAll[feedRow](ctx, recordsBranch(ctx), tagsBranch(ctx)).
+			Page(2, 3).Count(&total))
+		require.Equal(t, 9, total)
 	})
 
 	t.Run("RendersTheCountsAdded", func(t *testing.T) {
@@ -442,6 +448,23 @@ func TestUnionAllBuildErrors(t *testing.T) {
 	t.Run("OrderByAColumnTheResultRowLacks", func(t *testing.T) {
 		require.ErrorIs(t, database.UnionAll[feedRow](ctx, recordsBranch(ctx)).
 			OrderBy(TestAggregateRecordCols.Amount.Asc()).Scan(&rows), database.ErrUnionOrderNotSelected)
+	})
+
+	t.Run("PageWithoutAnOrder", func(t *testing.T) {
+		// Rows in no order have no pages: each run could slice them
+		// differently, repeating and skipping rows from page to page.
+		unordered := func() types.Union[feedRow] {
+			return database.UnionAll[feedRow](ctx, recordsBranch(ctx), tagsBranch(ctx))
+		}
+		require.ErrorIs(t, unordered().Page(2, 3).Scan(&rows), database.ErrUnionPageWithoutOrder)
+		require.ErrorIs(t, unordered().Page(1, 3).Scan(&rows), database.ErrUnionPageWithoutOrder, "a first page is a page too")
+
+		// A cap is no page, and neither is a Page a Limit replaced or one of
+		// no size.
+		statements := make([]types.SQLStatement, 0)
+		require.NoError(t, unordered().Limit(3).WithDryRun(&statements).Scan(&rows))
+		require.NoError(t, unordered().Page(2, 3).Limit(3).WithDryRun(&statements).Scan(&rows))
+		require.NoError(t, unordered().Page(2, 0).WithDryRun(&statements).Scan(&rows))
 	})
 
 	t.Run("OrderByATermNoBranchProjects", func(t *testing.T) {

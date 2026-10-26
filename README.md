@@ -648,6 +648,9 @@ feed := database.UnionAll[flow](ctx, branches...).OrderBy(at.Desc(), PaymentCols
 - **分支可以是纯列投影**，也可以分组、开窗、`Qualify`，各自带 `Where`、`Having`；
   分支上不能写 `OrderBy`、`Limit`、`Page`，它们属于联合，写了构建期报错。
   联合结果没有 `Where`，条件写进分支，每个分支用自己的索引。
+- **`Page` 必须带 `OrderBy`**：没有排序的行谈不上分页，每次执行的切法可能不同，`Scan` 直接报
+  `ErrUnionPageWithoutOrder`；只封顶的 `Limit` 和 `Count` 不受限。排序的最后一项要能区分每一行
+  （上例的 `PaymentCols.ID`），否则排序值相同的行会在页与页之间重复或漏掉。
 - **排序分页下推**：带 `Limit` 或 `Page` 时框架把同样的排序和页尾行数（`offset + limit`）下推到每个分支，
   各分支按索引只读前几十行，外层最多排 N 倍这个行数。
 - **`Count` 是各分支计数相加**，不物化任何一行，同样忽略排序分页。
