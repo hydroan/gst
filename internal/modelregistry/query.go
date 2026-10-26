@@ -70,16 +70,16 @@ type paginatable interface {
 
 // Cursor declares cursor-pagination query parameters for List actions.
 //
-// Cursor owns cursor position and direction only. Ordering for cursor pagination
-// is derived from CursorField and CursorNext, so SortBy intentionally remains
-// outside this struct to avoid multiple competing order sources. The field
-// named must be one no two rows share — the primary key, or a NOT NULL field
-// carrying a unique index of its own — because the cursor is a single
-// boundary value: on a shared one the rows holding it are split between pages
-// and the ones a page had no room for are never read. Any other field is a
-// 400. The feed is ordered from its first page on: a request with a cursor
-// parameter but no _cursor_value reads the first page in the feed's order,
-// and a model embedding Cursor alone reads it from a request naming no
+// Cursor owns cursor position and direction only. Ordering for cursor
+// pagination is derived from CursorField and CursorNext, so SortBy
+// intentionally remains outside this struct to avoid multiple competing order
+// sources. The field named must be one no two rows share — the primary key,
+// or a NOT NULL field carrying a unique index of its own — because the cursor
+// is a single boundary value: on a shared one the rows holding it are split
+// between pages and the ones a page had no room for are never read. Any other
+// field is a 400. The feed is ordered from its first page on: a request with
+// a cursor parameter but no _cursor_value reads the first page in the feed's
+// order, and a model embedding Cursor alone reads it from a request naming no
 // cursor parameter at all. Embedding Cursor also lets the client tune the
 // batch size via _size (the field lives in Pagination; the controller reads
 // it from the URL directly), while _page stays rejected: offset paging

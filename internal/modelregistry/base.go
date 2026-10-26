@@ -2,11 +2,9 @@ package modelregistry
 
 import (
 	"context"
-	"reflect"
 	"time"
 	"uuid"
 
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/types"
 	"gorm.io/gorm"
 )
@@ -16,17 +14,16 @@ var _ types.Model = (*Base)(nil)
 // Base implements types.Model for database-backed resources.
 // Custom models can override these default methods when needed.
 //
-// Usually, there are some gorm tags that may be of interest to you.
-// gorm:"foreignKey:ParentID;constraint:-"
-// gorm:"foreignKey:ParentID;references:ID;constraint:-"
-//
 // Indexes are not declared through gorm tags; models declare them through
 // the optional Indexes() []Index method instead.
 //
-// Associations are declared so queries can preload them, not to create physical
-// foreign keys, so they carry constraint:- and leave referential integrity to
-// the model hooks; a write zeroes them and touches the model's own table
-// alone (see database.Create).
+// Associations are declared so queries can preload them, not to create
+// physical foreign keys, so they carry constraint:- and leave referential
+// integrity to the model hooks; a write zeroes them and touches the model's
+// own table alone (see database.Create). Their gorm tags read like
+//
+//	gorm:"foreignKey:ParentID;constraint:-"
+//	gorm:"foreignKey:ParentID;references:ID;constraint:-"
 //
 // Timestamps: created_at/updated_at are NOT NULL and carry no database
 // default. The framework always provides both, in UTC via dbruntime.NowUTC
@@ -69,10 +66,22 @@ func (b *Base) SetUpdatedBy(s string)    { b.UpdatedBy = s }
 func (b *Base) SetCreatedAt(t time.Time) { b.CreatedAt = t }
 func (b *Base) SetUpdatedAt(t time.Time) { b.UpdatedAt = t }
 func (b *Base) GetID() string            { return b.ID }
-func (b *Base) SetID(id ...string)       { setID(b, id...) }
-func (b *Base) ClearID()                 { clearID(b) }
+func (b *Base) ClearID()                 { b.ID = "" }
 func (b *Base) Expands() []string        { return nil }
 func (b *Base) Purge() bool              { return false } // Default to soft delete
+
+// SetID sets the ID to the given id, or to a new UUIDv7 when none or an
+// empty one is given. An already set ID is kept.
+func (b *Base) SetID(id ...string) {
+	if len(b.ID) != 0 {
+		return
+	}
+	if len(id) == 0 || len(id[0]) == 0 {
+		b.ID = uuid.NewV7().String()
+		return
+	}
+	b.ID = id[0]
+}
 
 func (*Base) CreateBefore(context.Context) error { return nil }
 func (*Base) CreateAfter(context.Context) error  { return nil }
@@ -84,27 +93,3 @@ func (*Base) ListBefore(context.Context) error   { return nil }
 func (*Base) ListAfter(context.Context) error    { return nil }
 func (*Base) GetBefore(context.Context) error    { return nil }
 func (*Base) GetAfter(context.Context) error     { return nil }
-
-func setID(m types.Model, id ...string) {
-	val := reflect.ValueOf(m).Elem()
-	idField := val.FieldByName(consts.FIELD_ID)
-	if len(idField.String()) != 0 {
-		return
-	}
-	if len(id) == 0 {
-		idField.SetString(uuid.NewV7().String())
-		return
-	}
-
-	if len(id[0]) == 0 {
-		idField.SetString(uuid.NewV7().String())
-	} else {
-		idField.SetString(id[0])
-	}
-}
-
-func clearID(m types.Model) {
-	val := reflect.ValueOf(m).Elem()
-	idField := val.FieldByName(consts.FIELD_ID)
-	idField.SetString("")
-}

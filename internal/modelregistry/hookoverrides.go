@@ -92,17 +92,6 @@ func HookMethodNames() []string {
 	return names
 }
 
-// hookIndex returns the position of phase in hookPhases, or false when the
-// phase is not a model hook.
-func hookIndex(phase consts.Phase) (int, bool) {
-	for i, tracked := range hookPhases {
-		if tracked == phase {
-			return i, true
-		}
-	}
-	return 0, false
-}
-
 // hookOverrides records, by position in hookPhases, which hooks a model type
 // overrides.
 type hookOverrides [hookCount]bool
@@ -148,13 +137,16 @@ func OverridesDeleteHooks(m any) bool {
 // work on the answer keeps that work rather than skipping it for a hook the
 // detection does not know.
 func OverridesHook(m any, phase consts.Phase) bool {
-	i, ok := hookIndex(phase)
-	if !ok {
-		return true
+	for i, tracked := range hookPhases {
+		if tracked == phase {
+			return hookOverridesOf(m)[i]
+		}
 	}
-	return hookOverridesOf(m)[i]
+	return true
 }
 
+// hookOverridesOf returns which hooks the type of m overrides, detected once
+// per type and cached.
 func hookOverridesOf(m any) hookOverrides {
 	typ := reflect.TypeOf(m)
 	if typ == nil {

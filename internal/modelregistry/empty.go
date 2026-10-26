@@ -12,12 +12,14 @@ var _ types.Model = (*Empty)(nil)
 // Empty is a no-op types.Model implementation for non-persistent actions.
 //
 // Key characteristics:
-//   - Structs with an anonymous model.Empty field are never migrated to the database
+//   - Structs with an anonymous model.Empty field are never migrated to the
+//     database
 //   - All interface methods return zero values or no-op implementations
 //   - IsEmpty reports true for structs containing only model.Empty markers
 //   - IsVirtual reports true for any struct embedding model.Empty, however many
 //     other fields it declares
-//   - Service hooks are bypassed when AreTypesEqual returns false for Empty types
+//   - Service hooks are bypassed when AreTypesEqual returns false for Empty
+//     types
 //   - Commonly used for request/response DTOs that don't require persistence
 //
 // Usage example:

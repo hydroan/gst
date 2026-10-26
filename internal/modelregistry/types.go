@@ -59,14 +59,14 @@ func IsEmpty[T any]() bool {
 		return true
 	}
 
-	invalidFieldCount := 0
+	markers := 0
 	for field := range typ.Fields() {
 		if isEmptyMarker(field.Type) {
-			invalidFieldCount++
+			markers++
 		}
 	}
 
-	return typ.NumField() == invalidFieldCount
+	return typ.NumField() == markers
 }
 
 // IsTableModel reports whether T is a database-backed model, the kind
@@ -88,24 +88,16 @@ func IsEmpty[T any]() bool {
 // without fields.
 func IsTableModel[T any]() bool {
 	typ := reflect.TypeFor[T]()
-
-	// T type not pointer, return false.
 	if typ.Kind() != reflect.Pointer {
 		return false
 	}
-
-	// T type not struct, return false
 	typ = typ.Elem()
 	if typ.Kind() != reflect.Struct {
 		return false
 	}
-
-	// T has no fields, return false
 	if typ.NumField() == 0 {
 		return false
 	}
-
-	// T fields contains `Empty`, return false
 	for field := range typ.Fields() {
 		if isEmptyMarker(field.Type) {
 			return false

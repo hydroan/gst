@@ -19,7 +19,7 @@ type BaseSample struct {
 // updated_by on Base and AutoBase: 36 characters, the width of the id column
 // of Base, since they hold the id of the user who wrote the record.
 func TestBaseAuditorColumnsHoldAUserID(t *testing.T) {
-	for _, model := range []any{&BaseSample{}, &AutoUser{}} {
+	for _, model := range []any{&BaseSample{}, &AutoRecord{}} {
 		s, err := gormschema.Parse(model, &sync.Map{}, gormschema.NamingStrategy{})
 		require.NoError(t, err)
 		for _, name := range []string{"CreatedBy", "UpdatedBy"} {

@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type AutoUser struct {
+type AutoRecord struct {
 	Name string `json:"name,omitempty"`
 
 	modelregistry.AutoBase
@@ -16,14 +16,14 @@ type AutoUser struct {
 
 func TestAutoBaseImplementsModel(t *testing.T) {
 	require.Implements(t, (*types.Model)(nil), &modelregistry.AutoBase{})
-	require.True(t, modelregistry.IsTableModel[*AutoUser]())
-	require.False(t, modelregistry.IsEmpty[AutoUser]())
+	require.True(t, modelregistry.IsTableModel[*AutoRecord]())
+	require.False(t, modelregistry.IsEmpty[AutoRecord]())
 }
 
 // TestAutoBaseTimestampColumnsNotNull pins the same NOT NULL timestamp
 // contract as Base for the auto-increment variant.
 func TestAutoBaseTimestampColumnsNotNull(t *testing.T) {
-	requireTimestampColumnsNotNull(t, &AutoUser{})
+	requireTimestampColumnsNotNull(t, &AutoRecord{})
 }
 
 func TestAutoBaseGetID(t *testing.T) {

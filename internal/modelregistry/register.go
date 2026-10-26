@@ -10,7 +10,8 @@ import (
 )
 
 // TableChan is the internal queue for default-database table registration.
-// It receives model values from enqueueTable for processing by dbruntime.InitDatabase.
+// It receives the models Register queues, for dbruntime.InitDatabase to
+// process.
 var TableChan = make(chan types.Model, 10240)
 
 // tablesPending counts the models queued for table registration whose table is
@@ -19,17 +20,6 @@ var TableChan = make(chan types.Model, 10240)
 // len(TableChan) is told the work is done while a CREATE TABLE is still
 // running. Counting from the moment a model is queued leaves no such window.
 var tablesPending atomic.Int32
-
-// enqueueTable queues a model for table registration. It is the only way to
-// put a model on TableChan, so that the pending count can never miss one, and
-// it is reached through Register alone: a model that took the queue
-// without being recorded would have a table nothing knows it declared, which
-// a fingerprint of the registered models (see modelschema.Fingerprint) would
-// then leave out.
-func enqueueTable(m types.Model) {
-	tablesPending.Add(1)
-	TableChan <- m
-}
 
 // tablesChanged carries a wakeup for a waiter whenever a table finishes
 // preparing, so that waiting for the queue to drain costs no polling latency.
@@ -78,8 +68,13 @@ var (
 // the base types embedded by value only, and gg gen rejects the pointer form
 // as well (see dsl.Validate).
 //
-// It is the single entry point for both steps, so the recorded set and the
-// queue can never disagree about what was registered.
+// It is the single entry point for both steps, and the one place a model
+// takes TableChan, so the recorded set and the queue can never disagree
+// about what was registered: a model that took the queue without being
+// recorded would have a table nothing knows it declared, which a fingerprint
+// of the registered models (see modelschema.Fingerprint) would then leave
+// out. The model counts as pending before it takes the queue, so the pending
+// count never misses one.
 func Register[M types.Model]() {
 	typ := reflect.TypeFor[M]()
 	for typ.Kind() == reflect.Pointer {
@@ -99,13 +94,14 @@ func Register[M types.Model]() {
 	if !IsTableModel[M]() {
 		return
 	}
-	table := newModelSnapshot[M]()
+	table := newModel[M]()
 
 	registeredMu.Lock()
-	registeredModels = append(registeredModels, newModelSnapshot[M]())
+	registeredModels = append(registeredModels, newModel[M]())
 	registeredMu.Unlock()
 
-	enqueueTable(table)
+	tablesPending.Add(1)
+	TableChan <- table
 }
 
 // RegisteredModels returns independent values of the models registered
@@ -116,18 +112,18 @@ func RegisteredModels() []any {
 
 	models := make([]any, 0, len(registeredModels))
 	for _, m := range registeredModels {
-		models = append(models, newModelSnapshotOf(m))
+		models = append(models, newModelOf(m))
 	}
 	return models
 }
 
-// newModelSnapshot returns a fresh zero value of M.
-func newModelSnapshot[M types.Model]() M {
+// newModel returns a fresh zero value of M.
+func newModel[M types.Model]() M {
 	return reflect.New(reflect.TypeOf(*new(M)).Elem()).Interface().(M) //nolint:errcheck
 }
 
-// newModelSnapshotOf returns a fresh zero value of m's concrete type.
-func newModelSnapshotOf(m types.Model) types.Model {
+// newModelOf returns a fresh zero value of m's concrete type.
+func newModelOf(m types.Model) types.Model {
 	typ := reflect.TypeOf(m)
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()

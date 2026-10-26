@@ -41,7 +41,7 @@ func TestTableDoneSignalsWaiters(t *testing.T) {
 		}
 	}
 
-	t.Run("a_finished_table_wakes_a_waiter", func(t *testing.T) {
+	t.Run("a finished table wakes a waiter", func(t *testing.T) {
 		drain()
 		enqueue(t, 1)
 		require.Equal(t, 1, modelregistry.TablesPending())
@@ -56,7 +56,7 @@ func TestTableDoneSignalsWaiters(t *testing.T) {
 		}
 	})
 
-	t.Run("wakeups_coalesce_and_never_block", func(t *testing.T) {
+	t.Run("wakeups coalesce and never block", func(t *testing.T) {
 		drain()
 		// More finished tables than the signal buffer holds: the sends have to
 		// fall through rather than block, because TableDone runs on the
@@ -126,7 +126,7 @@ func TestRegister(t *testing.T) {
 		})
 	}
 
-	t.Run("a_database_backed_model_is_recorded_and_queued", func(t *testing.T) {
+	t.Run("a database backed model is recorded and queued", func(t *testing.T) {
 		require.False(t, registered(), "the sample must not be registered before the subtest registers it")
 
 		modelregistry.Register[*RegisteredSample]()
@@ -142,7 +142,7 @@ func TestRegister(t *testing.T) {
 		modelregistry.TableDone()
 	})
 
-	t.Run("an_empty_model_maps_to_no_table", func(t *testing.T) {
+	t.Run("an empty model maps to no table", func(t *testing.T) {
 		before := len(modelregistry.RegisteredModels())
 
 		modelregistry.Register[*SkippedSample]()
@@ -151,7 +151,7 @@ func TestRegister(t *testing.T) {
 		require.Empty(t, modelregistry.TableChan)
 	})
 
-	t.Run("a_base_type_embedded_by_pointer_is_rejected", func(t *testing.T) {
+	t.Run("a base type embedded by pointer is rejected", func(t *testing.T) {
 		before := len(modelregistry.RegisteredModels())
 
 		require.PanicsWithValue(t, "model modelregistry_test.PointerEmptySample embeds *model.Empty; embed model.Empty by value: the framework recognizes model.Empty only when it is embedded by value", func() {
@@ -167,7 +167,7 @@ func TestRegister(t *testing.T) {
 		require.Empty(t, modelregistry.TableChan)
 	})
 
-	t.Run("recorded_models_are_handed_out_independently", func(t *testing.T) {
+	t.Run("recorded models are handed out independently", func(t *testing.T) {
 		require.True(t, registered(), "the first subtest registers the sample this one reads back")
 
 		sample := func() *RegisteredSample {
