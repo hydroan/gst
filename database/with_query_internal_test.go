@@ -49,14 +49,34 @@ type valuedQueryItem struct {
 }
 
 // presenceQueryItem carries the zero values presence makes conditions of;
-// Rank carries no query tag, so no URL names it.
+// Rank carries no query tag, so no URL names it, and Secret is hidden from
+// JSON, so no URL may name it.
 type presenceQueryItem struct {
 	Enabled bool    `json:"enabled" query:"enabled"`
 	Count   int     `json:"count" query:"count"`
 	Note    *string `json:"note" query:"note"`
 	Legacy  bool    `json:"legacy_json" query:"flag"`
 	Rank    int     `json:"rank"`
+	Secret  int     `json:"-" query:"secret"`
 
+	modelregistry.Base
+}
+
+// WidenedQueryPart is the struct widenedQueryItem embeds and then widens. Its
+// type name is exported: gorm skips an embedded struct of an unexported type.
+type WidenedQueryPart struct {
+	Count int32  `json:"count" query:"count"`
+	Name  string `json:"name" query:"name"`
+}
+
+// widenedQueryItem declares Count and Name again over the ones it embeds, so
+// Go promotes its own and gorm resolves both columns to them, the embedded
+// fields shadowed.
+type widenedQueryItem struct {
+	Count int64  `json:"count" query:"count"`
+	Name  string `json:"name" query:"name"`
+
+	WidenedQueryPart
 	modelregistry.Base
 }
 
@@ -178,6 +198,22 @@ func TestStructConditionsMapTheQueriedFieldsToTheirColumns(t *testing.T) {
 	t.Run("a field without a query tag is never present", func(t *testing.T) {
 		require.NotContains(t, conditions(&presenceQueryItem{}, map[string]struct{}{"": {}}), "rank",
 			"a column without a query tag has no URL name, so not even the empty key names it")
+	})
+
+	t.Run("a column hidden from JSON is never present", func(t *testing.T) {
+		require.NotContains(t, conditions(&presenceQueryItem{}, map[string]struct{}{"secret": {}}), "secret",
+			"clients may not filter on a column hidden from JSON, so its URL name makes no condition of its zero value")
+	})
+
+	t.Run("a widened field binds the model's own value", func(t *testing.T) {
+		require.Equal(t, map[string]any{"count": int64(5)}, conditions(&widenedQueryItem{Count: 5}, map[string]struct{}{"count": {}}))
+		require.Equal(t, map[string]any{"name": "x"}, conditions(&widenedQueryItem{Name: "x"}, map[string]struct{}{"name": {}}))
+	})
+
+	t.Run("a field the model shadows makes no condition", func(t *testing.T) {
+		item := &widenedQueryItem{}
+		item.WidenedQueryPart.Name = "n"
+		require.Empty(t, conditions(item, nil), "the column reads the model's own field, which holds nothing")
 	})
 
 	t.Run("present nil pointer stays ignored", func(t *testing.T) {

@@ -11,7 +11,6 @@ import (
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 // WithQuery sets query conditions based on the provided model struct fields.
@@ -245,16 +244,20 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 var timestampColumns = []string{"created_at", "updated_at", "deleted_at"}
 
 // structConditions returns the conditions the fields of query stand for, by
-// column. gorm builds them the way it builds Where(&query): one equality per
-// readable field that is not zero, named by the field's own column and
-// holding the value gorm binds for it, through the type's Valuer or the
-// field's serializer. The framework keeps its own rules on top:
+// column, the way gorm builds Where(&query): one equality per readable field
+// that is not zero, holding the value gorm binds for it, through the type's
+// Valuer or the field's serializer. Each column reads the one field gorm
+// resolves it to (see modelschema.Columns), the model's own where it
+// declares again a field it embeds. gorm's BuildCondition cannot be asked for
+// that: it walks every field it parsed, the shadowed one included, and the
+// later of the two values it gives the column wins. The framework keeps its
+// own rules on top:
 //
-//   - A zero value is a condition when present lists the field's URL
-//     parameter name, kept the way gorm keeps one, by naming its column as
-//     in Where(&query, "column"). A field without a query tag has no such
-//     name, and the columns every model carries are never named so (see
-//     frameworkColumns).
+//   - A zero value is a condition when present lists the column's URL
+//     parameter name and clients may filter on the column (see
+//     modelschema.Column.Filterable): a column without a query tag or hidden
+//     from JSON is never named so, and neither are the columns every model
+//     carries (see frameworkColumns).
 //   - Of those columns, the timestamps are no condition at all (see
 //     timestampColumns).
 //   - A nil pointer names no value, and an instant or a day binds in UTC
@@ -263,47 +266,29 @@ var timestampColumns = []string{"created_at", "updated_at", "deleted_at"}
 // A query whose Label is "a" and whose embedded First, prefixed first_,
 // carries Label "b" stands for {"label": "a", "first_label": "b"}.
 func structConditions(stmt *gorm.Statement, query any, columns []modelschema.Column, present map[string]struct{}) map[string]any {
-	conds := stmt.BuildCondition(query)
-	var named []any
-	days := make(map[string]struct{})
+	parsed := &gorm.Statement{DB: stmt.DB}
+	if err := parsed.Parse(query); err != nil {
+		return nil
+	}
+	value := reflect.Indirect(reflect.ValueOf(query))
+
+	q := make(map[string]any, len(columns))
 	for _, column := range columns {
-		if _, ok := present[column.QueryName]; ok && column.QueryName != "" && !slices.Contains(frameworkColumns, column.DBName) {
-			named = append(named, column.DBName)
-		}
-		if modelschema.IsDateColumn(column) {
-			days[column.DBName] = struct{}{}
-		}
-	}
-	if len(named) > 0 {
-		conds = append(conds, stmt.BuildCondition(query, named...)...)
-	}
-
-	// gorm joins two or more conditions into one AND group.
-	var exprs []clause.Expression
-	for _, cond := range conds {
-		if and, ok := cond.(clause.AndConditions); ok {
-			exprs = append(exprs, and.Exprs...)
+		field := parsed.Schema.FieldsByDBName[column.DBName]
+		_, named := present[column.QueryName]
+		named = named && column.Filterable && !slices.Contains(frameworkColumns, column.DBName)
+		if field == nil || (!named && !field.Readable) || slices.Contains(timestampColumns, column.DBName) {
 			continue
 		}
-		exprs = append(exprs, cond)
-	}
-
-	q := make(map[string]any, len(exprs))
-	for _, expr := range exprs {
-		eq, ok := expr.(clause.Eq)
-		if !ok || eq.Value == nil {
+		v, zero := field.ValueOf(stmt.Context, value)
+		if (zero && !named) || v == nil {
 			continue
 		}
-		column, ok := eq.Column.(clause.Column)
-		if !ok || slices.Contains(timestampColumns, column.Name) {
-			continue
-		}
-		_, val, ok := indirectTypeAndValue(reflect.TypeOf(eq.Value), reflect.ValueOf(eq.Value))
+		_, val, ok := indirectTypeAndValue(reflect.TypeOf(v), reflect.ValueOf(v))
 		if !ok {
 			continue
 		}
-		_, day := days[column.Name]
-		q[column.Name] = conditionValue(val, day)
+		q[column.DBName] = conditionValue(val, modelschema.IsDateColumn(column))
 	}
 	return q
 }
