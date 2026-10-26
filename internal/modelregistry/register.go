@@ -24,7 +24,8 @@ var tablesPending atomic.Int32
 // put a model on TableChan, so that the pending count can never miss one, and
 // it is reached through Register alone: a model that took the queue
 // without being recorded would have a table nothing knows it declared, which
-// SchemaFingerprint would then answer for a schema it never saw.
+// a fingerprint of the registered models (see modelschema.Fingerprint) would
+// then leave out.
 func enqueueTable(m types.Model) {
 	tablesPending.Add(1)
 	TableChan <- m

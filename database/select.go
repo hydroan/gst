@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"gorm.io/gorm"
@@ -606,7 +605,7 @@ func (a *selectBuilder[M]) pageTieBreakers(shape projectionShape) []string {
 			return nil
 		}
 	}
-	key := modelregistry.DefaultCursorColumn
+	key := modelschema.DefaultCursorColumn
 	if _, ok := shape.columns[key]; !ok {
 		return nil
 	}

@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"gorm.io/gorm"
@@ -194,12 +193,12 @@ func (a *selectBuilder[M]) tieBreakers(t types.Term, shape projectionShape) []ty
 	if shape.grouped {
 		return shape.keys
 	}
-	if _, ok := shape.columns[modelregistry.DefaultCursorColumn]; !ok {
+	if _, ok := shape.columns[modelschema.DefaultCursorColumn]; !ok {
 		return nil
 	}
 	// The breaker names the queried table: a joined select may project a
 	// term under the primary key's name, and the breaker must not read as it.
-	return []types.Term{types.PlainTerm(shape.main, modelregistry.DefaultCursorColumn)}
+	return []types.Term{types.PlainTerm(shape.main, modelschema.DefaultCursorColumn)}
 }
 
 // isAggregateFn reports whether the function accumulates rows, which is what

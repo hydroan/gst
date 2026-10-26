@@ -12,7 +12,7 @@ import (
 // fixedColumns maps the Go name of each field model.Base and model.AutoBase
 // declare to the column the framework names it by.
 var fixedColumns = map[string]string{
-	"ID":        "id",
+	"ID":        fixedIDColumn,
 	"CreatedBy": "created_by",
 	"UpdatedBy": "updated_by",
 	"CreatedAt": "created_at",
@@ -20,12 +20,32 @@ var fixedColumns = map[string]string{
 	"DeletedAt": "deleted_at",
 }
 
+// fixedIDColumn is the column the framework names the primary key of
+// model.Base and model.AutoBase by.
+const fixedIDColumn = "id"
+
 // fixedTenantColumn is the column the framework names the tenant by, the one
 // tenant.Scope declares.
 const fixedTenantColumn = "tenant_id"
 
 // tenantColumnType is the type that tells the tenant column apart.
 var tenantColumnType = reflect.TypeFor[tenant.ID]()
+
+// DefaultCursorColumn is the database column cursor pagination falls back to
+// when the caller did not name one. It is the primary key of every framework
+// base model, the one column a cursor can always page by: no two rows share
+// it, so no row falls between two pages, which is also why the database layer
+// completes the order of a select and of a window with it.
+//
+// Rising, not monotonic across writers: model.Base draws its id before the
+// insert and model.AutoBase takes it from the sequence at insert time, so of
+// two rows written at once the one with the smaller id may commit second. A
+// feed read while those writes are in flight can therefore pass over the
+// later commit; a feed of rows already committed reads them all.
+// The database layer applies the fallback when building the boundary
+// comparison, and URL parsing resolves the same column to type-check the
+// cursor value, so every consumer reads this single definition.
+const DefaultCursorColumn = fixedIDColumn
 
 // ValidateFrameworkColumns refuses a model mapping a framework field to a
 // column other than the one the framework fixes for it. The framework names
@@ -43,8 +63,8 @@ var tenantColumnType = reflect.TypeFor[tenant.ID]()
 //
 // Every renamed column is reported in one error, which table preparation
 // fails the start with and the column inspection gg builds into a project
-// hands to gg check; the public modelschema.ValidateFrameworkColumns forwards
-// to it. For a model Record re-declaring the soft-delete field under
+// hands to gg check; the public inspect.ValidateFrameworkColumns forwards to
+// it. For a model Record re-declaring the soft-delete field under
 // gorm:"column:removed_at" the error reads:
 //
 //	model Record: framework field DeletedAt maps to column "removed_at" instead of "deleted_at"; the framework fixes the names of its columns, so drop the column tag or embedded prefix renaming them

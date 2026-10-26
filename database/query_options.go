@@ -8,7 +8,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/dbruntime"
-	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"gorm.io/gorm"
@@ -67,7 +66,7 @@ func (db *database[M]) WithCursor(cursor types.Cursor) types.Database[M] {
 		return db
 	}
 	if order := cursor.Order(); len(order.Column()) == 0 {
-		order = types.NewOrder(order.Table(), modelregistry.DefaultCursorColumn, types.OrderDirectionOf(order))
+		order = types.NewOrder(order.Table(), modelschema.DefaultCursorColumn, types.OrderDirectionOf(order))
 		if cursor.Backward() {
 			cursor = types.CursorBackward(order, cursor.Value())
 		} else {

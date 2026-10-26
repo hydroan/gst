@@ -86,7 +86,7 @@ type paginatable interface {
 // conflicts with cursor semantics.
 type Cursor struct {
 	CursorValue *string `json:"-" gorm:"-" query:"_cursor_value" url:"_cursor_value,omitempty"` // CursorValue is the current cursor token; it must parse as the cursor column's Go type. Unset, the request is the feed's first page.
-	CursorField string  `json:"-" gorm:"-" query:"_cursor_field" url:"_cursor_field,omitempty"` // CursorField names the single field the cursor orders by; it must be the primary key or a NOT NULL field with a unique index of its own, see DefaultCursorColumn.
+	CursorField string  `json:"-" gorm:"-" query:"_cursor_field" url:"_cursor_field,omitempty"` // CursorField names the single field the cursor orders by: the primary key, which an unset one means, or a NOT NULL field with a unique index of its own.
 	CursorNext  bool    `json:"-" gorm:"-" query:"_cursor_next" url:"_cursor_next,omitempty"`   // CursorNext chooses the cursor direction; false requests the previous page.
 }
 
@@ -97,21 +97,6 @@ func (Cursor) cursorEnabled() {}
 type cursorable interface {
 	cursorEnabled()
 }
-
-// DefaultCursorColumn is the database column cursor pagination falls back to
-// when the caller did not name one. It is the primary key of every framework
-// base model, the one column a cursor can always page by: no two rows share
-// it, so no row falls between two pages.
-//
-// Rising, not monotonic across writers: Base draws its id before the insert
-// and AutoBase takes it from the sequence at insert time, so of two rows
-// written at once the one with the smaller id may commit second. A feed read
-// while those writes are in flight can therefore pass over the later commit;
-// a feed of rows already committed reads them all.
-// The database layer applies the fallback when building the boundary
-// comparison, and URL parsing resolves the same column to type-check the
-// cursor value, so both consumers read this single definition.
-const DefaultCursorColumn = "id"
 
 // IsQueryable reports whether m opted in to general framework query parameters
 // by embedding Query.

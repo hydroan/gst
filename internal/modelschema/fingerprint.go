@@ -1,4 +1,4 @@
-package modelregistry
+package modelschema
 
 import (
 	"crypto/sha256"
@@ -9,15 +9,14 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/types"
 	gormschema "gorm.io/gorm/schema"
 )
 
-// SchemaFingerprint returns a short hash of everything the registered models
-// derive their tables from: their table names, the fields they declare with
-// the tags gorm reads a column definition out of, and the indexes they
-// declare. It is empty while nothing is registered.
+// Fingerprint returns a short hash of everything models derive their tables
+// from: their table names, the fields they declare with the tags gorm reads a
+// column definition out of, and the indexes they declare. It is empty for no
+// models; the callers pass the registered ones (see
+// modelregistry.RegisteredModels).
 //
 // The hash answers one question — may a schema prepared for an earlier run be
 // reused as it is — and is built to err towards saying no. It hashes
@@ -31,12 +30,7 @@ import (
 // removed field or index is exactly the case that has to change the hash.
 // Both are hashed by name, and so is the gorm version, which is the one thing
 // that could map an unchanged declaration onto a differently named column.
-func SchemaFingerprint() string {
-	registeredMu.Lock()
-	models := make([]types.Model, len(registeredModels))
-	copy(models, registeredModels)
-	registeredMu.Unlock()
-
+func Fingerprint(models []any) string {
 	if len(models) == 0 {
 		return ""
 	}
@@ -45,9 +39,9 @@ func SchemaFingerprint() string {
 	for _, m := range models {
 		declarations = append(declarations, modelDeclaration(m))
 	}
-	// Registration order follows package initialization, which is no part of
-	// the schema; sorting makes one set of models hash the same however it
-	// happened to arrive.
+	// The order models arrive in, the order of package initialization for the
+	// registered ones, is no part of the schema; sorting makes one set of
+	// models hash the same however it happened to arrive.
 	slices.Sort(declarations)
 
 	sum := sha256.New()
@@ -58,17 +52,23 @@ func SchemaFingerprint() string {
 	return hex.EncodeToString(sum.Sum(nil)[:8])
 }
 
-// modelDeclaration renders everything m declares about its table.
-func modelDeclaration(m types.Model) string {
+// modelDeclaration renders everything m declares about its table. The table
+// name is the one m names through gorm's Tabler, every table model does; a
+// value naming none renders an empty one beside its type.
+func modelDeclaration(m any) string {
 	typ := reflect.TypeOf(m)
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
 
+	var table string
+	if tabler, ok := m.(gormschema.Tabler); ok {
+		table = tabler.TableName()
+	}
 	var declaration strings.Builder
-	fmt.Fprintf(&declaration, "%s table=%s", typ.String(), m.TableName())
+	fmt.Fprintf(&declaration, "%s table=%s", typ.String(), table)
 	writeFieldDeclarations(&declaration, typ, map[reflect.Type]bool{})
-	for _, index := range modelschema.IndexDeclarations(m) {
+	for _, index := range IndexDeclarations(m) {
 		fmt.Fprintf(&declaration, " index=%v unique=%t", index.Fields, index.Unique)
 	}
 	return declaration.String()
@@ -85,7 +85,7 @@ func modelDeclaration(m types.Model) string {
 //
 // The names written are Go field names and the tags are written verbatim: this
 // records what a model declares, it does not resolve it into columns, which
-// stays modelschema's job alone.
+// stays Columns' job alone.
 func writeFieldDeclarations(declaration *strings.Builder, typ reflect.Type, seen map[reflect.Type]bool) {
 	if seen[typ] {
 		return

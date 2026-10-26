@@ -9,6 +9,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 )
 
 // Schema templates.
@@ -20,8 +21,9 @@ import (
 // binary copies them with one statement per table, indexes included and no
 // metadata query at all.
 //
-// A template is named after modelregistry.SchemaFingerprint, so a model change
-// names a template that does not exist yet rather than reusing a stale one.
+// A template is named after the fingerprint of the registered models (see
+// modelschema.Fingerprint), so a model change names a template that does not
+// exist yet rather than reusing a stale one.
 // The fingerprint is what makes a copy safe to keep: a migration repairs a
 // table whose definition moved, but never drops what a model stopped
 // declaring, and that is the case the fingerprint is built not to miss.
@@ -73,7 +75,7 @@ func noSchemaTemplatePublish() {}
 // which is indistinguishable from copying a template except in how long it
 // takes.
 func prepareSchemaTemplate(host string, port uint, database string) func() {
-	fingerprint := modelregistry.SchemaFingerprint()
+	fingerprint := modelschema.Fingerprint(modelregistry.RegisteredModels())
 	if len(fingerprint) == 0 {
 		// Nothing registered, so there is no schema to carry over.
 		return noSchemaTemplatePublish

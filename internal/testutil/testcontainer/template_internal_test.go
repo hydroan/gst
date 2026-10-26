@@ -8,6 +8,7 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/stretchr/testify/require"
 )
 
@@ -36,7 +37,7 @@ func TestSchemaTemplate(t *testing.T) {
 	modelregistry.TableDone()
 
 	ctx := context.Background()
-	template := schemaTemplatePrefix + modelregistry.SchemaFingerprint()
+	template := schemaTemplatePrefix + modelschema.Fingerprint(modelregistry.RegisteredModels())
 
 	// The first setup stands in for the binary that finds no template: it
 	// migrates on its own and leaves the result behind for the ones after it.

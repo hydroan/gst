@@ -87,7 +87,7 @@ func Cursor(q url.Values, m types.Model) (types.Cursor, error) {
 			return types.Cursor{}, err
 		}
 		for _, col := range parsed {
-			if col.DBName == modelregistry.DefaultCursorColumn {
+			if col.DBName == modelschema.DefaultCursorColumn {
 				cursorColumn = col
 				break
 			}
