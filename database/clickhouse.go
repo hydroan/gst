@@ -3,6 +3,7 @@ package database
 import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/modelschema"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -20,7 +21,22 @@ import (
 // carries zeroed rather than written (see clearAssociations); batch
 // splitting, dry-run SQL building, tracing and SQL logging; and the clauses
 // a column type attaches to a statement, the tenant predicate among them
-// (see tenant.ID).
+// (see tenant.ID). A versioned model (model.Version) writes nothing here (see
+// clickhouseVersioned).
+
+// clickhouseVersioned refuses op, a write, on a ClickHouse instance for a
+// model declaring model.Version, and lets it through on any other dialect or
+// model: a ClickHouse write is an asynchronous mutation that reports no
+// matched rows, so the version check has nothing to build on, and the
+// records that need one, configuration say, belong in a transactional
+// database. Every write entry asks it before it dispatches; Upsert is refused
+// on ClickHouse for every model already.
+func (db *database[M]) clickhouseVersioned(op string) error {
+	if db.dialect() != dialectClickHouse || !modelschema.IsVersioned(db.m) {
+		return nil
+	}
+	return errors.Wrapf(ErrUnsupportedOnDialect, "%s of a versioned model on clickhouse", op)
+}
 
 // clickhouseCreate is Create on a ClickHouse instance: plain batch INSERTs.
 // A single INSERT statement lands atomically (within one partition and the

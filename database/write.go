@@ -80,7 +80,8 @@ func (db *database[M]) caller() string {
 // On a ClickHouse instance the contract is weaker (see clickhouseCreate):
 // plain batch INSERTs with no hooks, no transaction across batches, and no
 // ErrDuplicatedKey — ClickHouse has no unique constraints, so duplicates are
-// stored.
+// stored. A versioned model (model.Version) answers ErrUnsupportedOnDialect
+// there.
 //
 // Example:
 //
@@ -101,6 +102,9 @@ func (db *database[M]) Create(objs ...M) (err error) {
 	}
 
 	if err = db.prepare(); err != nil {
+		return err
+	}
+	if err = db.clickhouseVersioned("Create"); err != nil {
 		return err
 	}
 	// A dry run builds its statements from copies, so the objects the caller
@@ -259,8 +263,9 @@ func (db *database[M]) Create(objs ...M) (err error) {
 // a lightweight DELETE by primary key with no hooks and no transaction, and
 // always physical — ClickHouse has no application-level soft delete, so the
 // model's Purge and WithPurge are ignored there — and a missing record
-// passes silently instead of ErrRecordNotFound. A delete by conditions
-// answers ErrUnsupportedOnDialect there.
+// passes silently instead of ErrRecordNotFound. A delete by conditions, and
+// any delete of a versioned model (model.Version), answers
+// ErrUnsupportedOnDialect there.
 //
 // Example:
 //
@@ -317,6 +322,9 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 	// the one statement allowed to run without a condition of its own.
 	session := &gorm.Session{AllowGlobalUpdate: db.matchAll}
 
+	if err = db.clickhouseVersioned("Delete"); err != nil {
+		return err
+	}
 	if db.dialect() == dialectClickHouse {
 		// The lightweight DELETE goes by primary key, and a delete by
 		// conditions names no record to go by.
@@ -545,7 +553,8 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 // and no existence detection: a nil error means accepted, not rewritten, and
 // a missing record passes silently instead of ErrRecordNotFound. ClickHouse
 // refuses to UPDATE an ORDER BY key column, so narrow the write with
-// WithSelect to the columns being corrected.
+// WithSelect to the columns being corrected. A versioned model
+// (model.Version) answers ErrUnsupportedOnDialect there.
 //
 // Example:
 //
@@ -582,6 +591,9 @@ func (db *database[M]) Update(objs ...M) (err error) {
 	}
 
 	if err = db.prepare(); err != nil {
+		return err
+	}
+	if err = db.clickhouseVersioned("Update"); err != nil {
 		return err
 	}
 	// A dry run builds its statements from copies, so the objects the caller
@@ -805,7 +817,8 @@ func clearAssociations[M types.Model](objs []M) {
 //     version column so every carried version out there expires; an explicit
 //     version assignment takes the bump over
 //   - On a ClickHouse instance the statement is an asynchronous ALTER TABLE
-//     ... UPDATE mutation: a nil error means accepted, not rewritten
+//     ... UPDATE mutation: a nil error means accepted, not rewritten; a
+//     versioned model answers ErrUnsupportedOnDialect there
 //
 // Example:
 //
@@ -852,6 +865,9 @@ func (db *database[M]) UpdateByID(id string, assignments ...types.Assignment) (e
 	}
 
 	if err = db.prepare(); err != nil {
+		return err
+	}
+	if err = db.clickhouseVersioned("UpdateByID"); err != nil {
 		return err
 	}
 	// The probe clones the shared model metadata, which must keep a zero ID;

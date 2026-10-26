@@ -441,6 +441,47 @@ func TestClickhouse(t *testing.T) {
 		require.Equal(t, 6, count, "rejected entries and cleaned-up write tests must leave the seed untouched")
 	})
 
+	t.Run("VersionedModelWritesAreRefused", func(t *testing.T) {
+		// A ClickHouse write is an asynchronous mutation that reports no
+		// matched rows, so the version check of a versioned model has nothing
+		// to build on: every write of one is refused before any statement and
+		// before it touches the objects the caller passed, and its reads stay
+		// as they are.
+		require.NoError(t, ins.Exec(`CREATE TABLE versioned_notes (
+			id         String,
+			created_by String,
+			updated_by String,
+			created_at DateTime64(3),
+			updated_at DateTime64(3),
+			deleted_at Nullable(DateTime64(3)),
+			title      String,
+			body       String,
+			version    Int64
+		) ENGINE = MergeTree ORDER BY id`).Error)
+		require.NoError(t, ins.Exec(`INSERT INTO versioned_notes (id, title, body, version, created_at, updated_at) VALUES
+			('n1', 'kept', '', 1, '2024-01-01 00:00:00', '2024-01-01 00:00:00')`).Error)
+
+		writer := asCaller("refused-writer")
+		created := &versionedNote{Title: "new"}
+		stale := &versionedNote{Title: "changed", Version: 1}
+		stale.ID = "n1"
+		require.ErrorIs(t, database.DatabaseOn[*versionedNote](writer, ins).Create(created), database.ErrUnsupportedOnDialect)
+		require.ErrorIs(t, database.DatabaseOn[*versionedNote](writer, ins).WithSelect(colVersionedNoteTitle).Update(stale), database.ErrUnsupportedOnDialect)
+		require.ErrorIs(t, database.DatabaseOn[*versionedNote](writer, ins).UpdateByID("n1", colVersionedNoteTitle.Set("changed")), database.ErrUnsupportedOnDialect)
+		require.ErrorIs(t, database.DatabaseOn[*versionedNote](writer, ins).Delete(stale), database.ErrUnsupportedOnDialect)
+		require.Empty(t, created.CreatedBy, "the refused create leaves the caller's object as it was")
+		require.Empty(t, created.UpdatedBy, "the refused create leaves the caller's object as it was")
+		require.Empty(t, stale.UpdatedBy, "the refused update leaves the caller's object as it was")
+
+		got := new(versionedNote)
+		require.NoError(t, database.DatabaseOn[*versionedNote](ctx, ins).Get(got, "n1"))
+		require.Equal(t, "kept", got.Title, "the refused writes leave the row as it was")
+		require.EqualValues(t, 1, got.Version)
+		notes := make([]*versionedNote, 0)
+		require.NoError(t, database.DatabaseOn[*versionedNote](ctx, ins).WithQuery(nil, types.QueryOptions{AllowEmpty: true}).List(&notes))
+		require.Len(t, notes, 1, "the refused create adds no row")
+	})
+
 	t.Run("JSONContainsIsRefused", func(t *testing.T) {
 		// datatypes has no clickhouse arm, so the filter is refused the way
 		// every capability the dialect lacks is, rather than rendering an

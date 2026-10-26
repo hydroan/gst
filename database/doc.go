@@ -80,7 +80,8 @@
 // Not carried by ClickHouse, answering ErrUnsupportedOnDialect: correlated
 // EXISTS subqueries (FilterExists) and JSON containment (jsoncontains),
 // Upsert (no conflict semantics), Cleanup (no soft-delete regime), a delete
-// by conditions (its DELETE goes by primary key), Transaction/TransactionOn,
+// by conditions (its DELETE goes by primary key), every write of a versioned
+// model (no matched rows for the version check), Transaction/TransactionOn,
 // WithLock, the reads WithReplica() sends to a replica (no replica role of
 // its own; WithReplica(false) is a no-op), the dry run of Create (the
 // driver's batch insert ignores DryRun), and the model joins of Select (no

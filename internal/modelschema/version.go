@@ -105,9 +105,10 @@ import (
 // stored version — stored versions start at 1 — so a zero always identifies
 // an object that was never read from the database.
 //
-// The column type is a plain int64 (BIGINT). ClickHouse instances are outside
-// this contract: the dialect has no matched-rows update semantics for the
-// check to build on.
+// The column type is a plain int64 (BIGINT). A ClickHouse instance refuses
+// every write of a versioned model with database.ErrUnsupportedOnDialect: its
+// writes are asynchronous mutations that report no matched rows, so the check
+// has nothing to build on.
 type Version int64
 
 // versionField describes where a model keeps its Version column. The zero
