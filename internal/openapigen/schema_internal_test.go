@@ -95,6 +95,34 @@ func TestSchemaFromTypeKeepsRegularStructsAsObjects(t *testing.T) {
 	}
 }
 
+// nestedSliceItem is the element of a collection of structs, holding a
+// slice of its own.
+type nestedSliceItem struct {
+	Path    string   `json:"path"`
+	Methods []string `json:"methods"`
+}
+
+// TestSchemaFromTypeDescribesSliceMembersOfNestedStructs asserts that a slice
+// member of a nested struct is described as an array. OpenAPI 3.0 defines no
+// "null" type, so emitting one makes the schema invalid.
+func TestSchemaFromTypeDescribesSliceMembersOfNestedStructs(t *testing.T) {
+	schemaRef := schemaFromType(reflect.TypeFor[[]nestedSliceItem]())
+	if schemaRef == nil || schemaRef.Value == nil {
+		t.Fatal("schemaFromType() returned nil schema")
+	}
+	element := schemaRef.Value.Items
+	if element == nil || element.Value == nil {
+		t.Fatal("element schema is missing")
+	}
+	methods := element.Value.Properties["methods"]
+	if methods == nil || methods.Value == nil {
+		t.Fatal("methods property schema is missing")
+	}
+	if methods.Value.Type == nil || !methods.Value.Type.Is(openapi3.TypeArray) {
+		t.Fatalf("methods schema type = %v, want array", methods.Value.Type)
+	}
+}
+
 type mapDocModel struct {
 	GroupRoles map[string][]string `json:"group_roles,omitempty"`
 }

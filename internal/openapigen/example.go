@@ -2,25 +2,11 @@ package openapigen
 
 import "github.com/getkin/kin-openapi/openapi3"
 
-// applyExample builds the request body example and removes the Base auto
-// fields ("created_at", "created_by", "updated_at", "updated_by", "id") from
-// the top level only. Nested structs keep those property names because there
-// they are caller-supplied fields rather than Base auto fields.
-//
-// Before:
-//
-//	{
-//	  "created_at": "2025-04-19T19:22:55.434Z",
-//	  "created_by": "string",
-//	  "desc": "string",
-//	  "id": "string",
-//	  "member_count": 0,
-//	  "name": "string",
-//	  "updated_at": "2025-04-19T19:22:55.434Z",
-//	  "updated_by": "string"
-//	}
-//
-// After:
+// applyExample sets the example of a request body: a value for every property
+// the body documents, built by buildExampleValue, so a field hidden from the
+// body (see hideUnwrittenFields) is left out of the example too, and the items
+// array of a batch body holds one record. For a body documenting desc,
+// member_count and name it sets
 //
 //	{
 //	  "desc": "string",
@@ -28,7 +14,8 @@ import "github.com/getkin/kin-openapi/openapi3"
 //	  "name": "string"
 //	}
 //
-// NOTE: struct fields must carry a json tag, otherwise they are missing from schemaRef.Value.Properties.
+// NOTE: struct fields must carry a json tag, otherwise they are missing from
+// schemaRef.Value.Properties.
 func applyExample(schemaRef *openapi3.SchemaRef) {
 	if schemaRef == nil {
 		return
@@ -39,47 +26,12 @@ func applyExample(schemaRef *openapi3.SchemaRef) {
 
 	examples := make(map[string]any)
 	for k, v := range schemaRef.Value.Properties {
-		if baseAutoFieldNames[k] {
-			continue
-		}
 		if v.Value == nil {
 			continue
 		}
 		examples[k] = buildExampleValue(v.Value, 0)
 	}
 	schemaRef.Value.Example = examples
-}
-
-// applyBatchExample builds the example of a batch request: one example for a
-// single element of the items array, and the whole batch example around it.
-func applyBatchExample(schemaRef *openapi3.SchemaRef) {
-	if schemaRef == nil || schemaRef.Value == nil {
-		return
-	}
-
-	props := schemaRef.Value.Properties
-	for k, v := range props {
-		if k == "items" && v.Value != nil && v.Value.Type.Is(openapi3.TypeArray) {
-			if v.Value.Items != nil && v.Value.Items.Value != nil {
-				// build the example for a single element of the array
-				example := make(map[string]any)
-				for propName, propRef := range v.Value.Items.Value.Properties {
-					if baseAutoFieldNames[propName] || propRef.Value == nil {
-						continue
-					}
-					example[propName] = buildExampleValue(propRef.Value, 0)
-				}
-
-				// set the example of a single item
-				v.Value.Items.Value.Example = example
-
-				// set the example of the whole batch request
-				schemaRef.Value.Example = map[string]any{
-					"items": []map[string]any{example},
-				}
-			}
-		}
-	}
 }
 
 // maxExampleDepth bounds buildExampleValue recursion so a self-referential
@@ -141,9 +93,6 @@ func buildExampleValue(schema *openapi3.Schema, depth int) any {
 				if isRefOrMissing(propRef) {
 					continue
 				}
-				// Nested fields keep their id/audit-named properties: at this
-				// depth they are caller-supplied fields, not the Base auto
-				// fields that only appear at the request top level.
 				example[propName] = buildExampleValue(propRef.Value, depth+1)
 			}
 			return example

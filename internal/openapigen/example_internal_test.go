@@ -54,7 +54,11 @@ func TestApplyExampleGeneratesRecursiveExamplesForArbitraryTypes(t *testing.T) {
 	}
 }
 
-func TestApplyExampleKeepsNestedIDFields(t *testing.T) {
+// TestApplyExampleIllustratesEveryProperty asserts that the example shows every
+// property the schema documents, whatever its name, at the top level and
+// nested: hiding the fields a write takes no value for is the request body's
+// business (see hideUnwrittenFields), done before the example is built.
+func TestApplyExampleIllustratesEveryProperty(t *testing.T) {
 	type nestedItem struct {
 		ID   string `json:"id"`
 		Name string `json:"name"`
@@ -73,29 +77,21 @@ func TestApplyExampleKeepsNestedIDFields(t *testing.T) {
 
 	applyExample(schemaRef)
 
-	example, ok := schemaRef.Value.Example.(map[string]any)
-	if !ok {
-		t.Fatalf("example type = %T, want map[string]any", schemaRef.Value.Example)
+	want := map[string]any{
+		"id":     "string",
+		"label":  "string",
+		"single": map[string]any{"id": "string", "name": "string"},
+		"items":  []any{map[string]any{"id": "string", "name": "string"}},
 	}
-
-	// The top-level id is a Base auto field and stays removed from the example.
-	if _, exists := example["id"]; exists {
-		t.Fatalf("top-level id must be removed, got example = %#v", example)
-	}
-
-	// A nested struct's id is caller-supplied and must be kept.
-	wantSingle := map[string]any{"id": "string", "name": "string"}
-	if got := example["single"]; !reflect.DeepEqual(got, wantSingle) {
-		t.Fatalf("single example = %#v, want %#v", got, wantSingle)
-	}
-
-	wantItems := []any{map[string]any{"id": "string", "name": "string"}}
-	if got := example["items"]; !reflect.DeepEqual(got, wantItems) {
-		t.Fatalf("items example = %#v, want %#v", got, wantItems)
+	if !reflect.DeepEqual(schemaRef.Value.Example, want) {
+		t.Fatalf("example = %#v, want %#v", schemaRef.Value.Example, want)
 	}
 }
 
-func TestApplyBatchExampleGeneratesRecursiveMapExample(t *testing.T) {
+// TestApplyExampleIllustratesTheRecordOfABatch asserts that the example of a
+// batch body shows its items array holding one record, every field of the
+// record illustrated, a map of slices included.
+func TestApplyExampleIllustratesTheRecordOfABatch(t *testing.T) {
 	type batchItemModel struct {
 		GroupRoles map[string][]string `json:"group_roles"`
 	}
@@ -108,24 +104,12 @@ func TestApplyBatchExampleGeneratesRecursiveMapExample(t *testing.T) {
 		t.Fatalf("NewSchemaRefForValue() error = %v", err)
 	}
 
-	applyBatchExample(schemaRef)
+	applyExample(schemaRef)
 
-	itemsProp := schemaRef.Value.Properties["items"]
-	if itemsProp == nil || itemsProp.Value == nil || itemsProp.Value.Items == nil || itemsProp.Value.Items.Value == nil {
-		t.Fatal("items schema missing")
+	want := map[string]any{
+		"items": []any{map[string]any{"group_roles": map[string]any{"string": []any{"string"}}}},
 	}
-
-	example, ok := itemsProp.Value.Items.Value.Example.(map[string]any)
-	if !ok {
-		t.Fatalf("item example type = %T, want map[string]any", itemsProp.Value.Items.Value.Example)
-	}
-
-	want := map[string]any{"string": []any{"string"}}
-	got, ok := example["group_roles"]
-	if !ok {
-		t.Fatal("group_roles example missing")
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("group_roles example = %#v, want %#v", got, want)
+	if !reflect.DeepEqual(schemaRef.Value.Example, want) {
+		t.Fatalf("example = %#v, want %#v", schemaRef.Value.Example, want)
 	}
 }

@@ -14,6 +14,9 @@ func setCreate[M types.Model, REQ types.Request, RSP types.Response](path string
 	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, consts.Create)
 	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, consts.Create)
 	reqSchemaRef := newSchemaRefWithDocs(*new(REQ))
+	if modelregistry.AreTypesEqual[M, REQ, RSP]() {
+		hideUnwrittenFields(reqSchemaRef, typ, consts.Create)
+	}
 	rspSchemaRef := newSchemaRefWithDocs(apiResponse[RSP]{})
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
 
@@ -26,7 +29,6 @@ func setCreate[M types.Model, REQ types.Request, RSP types.Response](path string
 		RequestBody: newRequestBody[REQ](reqKey),
 		Responses:   newResponses(rspKey, consts.Create, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 	}
-	removeBaseAutoFieldsFromRequestBody(pathItem.Post)
 }
 
 func setDelete[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
@@ -56,6 +58,9 @@ func setUpdate[M types.Model, REQ types.Request, RSP types.Response](path string
 	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, consts.Update)
 	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, consts.Update)
 	reqSchemaRef := newSchemaRefWithDocs(*new(REQ))
+	if modelregistry.AreTypesEqual[M, REQ, RSP]() {
+		hideUnwrittenFields(reqSchemaRef, typ, consts.Update)
+	}
 	rspSchemaRef := newSchemaRefWithDocs(apiResponse[RSP]{})
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
 
@@ -68,7 +73,6 @@ func setUpdate[M types.Model, REQ types.Request, RSP types.Response](path string
 		RequestBody: newRequestBody[REQ](reqKey),
 		Responses:   newResponses(rspKey, consts.Update, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 	}
-	removeBaseAutoFieldsFromRequestBody(pathItem.Put)
 }
 
 func setPatch[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
@@ -76,6 +80,9 @@ func setPatch[M types.Model, REQ types.Request, RSP types.Response](path string,
 	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, consts.Patch)
 	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, consts.Patch)
 	reqSchemaRef := newSchemaRefWithDocs(*new(REQ))
+	if modelregistry.AreTypesEqual[M, REQ, RSP]() {
+		hideUnwrittenFields(reqSchemaRef, typ, consts.Patch)
+	}
 	rspSchemaRef := newSchemaRefWithDocs(apiResponse[RSP]{})
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
 
@@ -88,7 +95,6 @@ func setPatch[M types.Model, REQ types.Request, RSP types.Response](path string,
 		RequestBody: newRequestBody[REQ](reqKey),
 		Responses:   newResponses(rspKey, consts.Patch, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 	}
-	removeBaseAutoFieldsFromRequestBody(pathItem.Patch)
 }
 
 func setList[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
@@ -141,6 +147,7 @@ func setCreateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 	var rspSchemaRef *openapi3.SchemaRef
 	if modelregistry.AreTypesEqual[M, REQ, RSP]() {
 		reqSchemaRef = newSchemaRefWithDocs(apiBatchRequest[REQ]{})
+		hideUnwrittenFields(reqSchemaRef, typ, consts.CreateMany)
 		rspSchemaRef = newSchemaRefWithDocs(apiBatchResponse[RSP]{})
 	} else {
 		reqSchemaRef = newSchemaRefWithDocs(*new(REQ))
@@ -157,7 +164,6 @@ func setCreateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 		RequestBody: newRequestBody[REQ](reqKey),
 		Responses:   newResponses(rspKey, consts.CreateMany, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 	}
-	removeBaseAutoFieldsFromBatchRequestBody(pathItem.Post)
 }
 
 func setDeleteMany[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
@@ -217,6 +223,7 @@ func setUpdateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 	var rspSchemaRef *openapi3.SchemaRef
 	if modelregistry.AreTypesEqual[M, REQ, RSP]() {
 		reqSchemaRef = newSchemaRefWithDocs(apiBatchRequest[REQ]{})
+		hideUnwrittenFields(reqSchemaRef, typ, consts.UpdateMany)
 		rspSchemaRef = newSchemaRefWithDocs(apiBatchResponse[RSP]{})
 	} else {
 		reqSchemaRef = newSchemaRefWithDocs(*new(REQ))
@@ -233,7 +240,6 @@ func setUpdateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 		RequestBody: newRequestBody[REQ](reqKey),
 		Responses:   newResponses(rspKey, consts.UpdateMany, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 	}
-	removeBaseAutoFieldsFromBatchRequestBody(pathItem.Put)
 }
 
 func setPatchMany[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
@@ -245,6 +251,7 @@ func setPatchMany[M types.Model, REQ types.Request, RSP types.Response](path str
 	var rspSchemaRef *openapi3.SchemaRef
 	if modelregistry.AreTypesEqual[M, REQ, RSP]() {
 		reqSchemaRef = newSchemaRefWithDocs(apiBatchRequest[REQ]{})
+		hideUnwrittenFields(reqSchemaRef, typ, consts.PatchMany)
 		rspSchemaRef = newSchemaRefWithDocs(apiBatchResponse[RSP]{})
 	} else {
 		reqSchemaRef = newSchemaRefWithDocs(*new(REQ))
@@ -261,5 +268,4 @@ func setPatchMany[M types.Model, REQ types.Request, RSP types.Response](path str
 		RequestBody: newRequestBody[REQ](reqKey),
 		Responses:   newResponses(rspKey, consts.PatchMany, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 	}
-	removeBaseAutoFieldsFromBatchRequestBody(pathItem.Patch)
 }

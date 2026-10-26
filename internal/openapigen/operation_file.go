@@ -92,7 +92,7 @@ func setExport[M types.Model, REQ types.Request, RSP types.Response](path string
 		Summary:     summary(path, consts.Export, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 		Description: description(path, consts.Export, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 		Tags:        tags(path, consts.Export, typ),
-		Parameters:  append(parseParametersFromPath(path), exportFormatParameter()),
+		Parameters:  append(parseParametersFromPath(path), exportFormatParameter(), exportLimitParameter()),
 		Responses:   exportFileResponses(!modelregistry.AreTypesEqual[M, REQ, RSP]()),
 	}
 	addQueryParameters[M, REQ, RSP](pathItem.Get)
@@ -112,6 +112,23 @@ func exportFormatParameter() *openapi3.ParameterRef {
 					Type: &openapi3.Types{openapi3.TypeString},
 					Enum: []any{exportFormatCSV, exportFormatXLSX},
 				},
+			},
+		},
+	}
+}
+
+// exportLimitParameter documents the cap on the records the export controller
+// lists: a positive integer caps them, none or zero or less lists every
+// record the query matches.
+func exportLimitParameter() *openapi3.ParameterRef {
+	return &openapi3.ParameterRef{
+		Value: &openapi3.Parameter{
+			Name:        consts.QUERY_LIMIT,
+			In:          "query",
+			Required:    false,
+			Description: "The most records to export; none, zero or less exports every record the query matches.",
+			Schema: &openapi3.SchemaRef{
+				Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeInteger}},
 			},
 		},
 	}

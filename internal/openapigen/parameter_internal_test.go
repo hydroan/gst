@@ -1,31 +1,50 @@
 package openapigen
 
 import (
+	"net/url"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/urlquery"
+	"github.com/stretchr/testify/require"
+	"gorm.io/datatypes"
 )
+
+// openapiTimeFilterModel filters on a time, which no bare key decodes into,
+// under its operators alone.
+type openapiTimeFilterModel struct {
+	ExpiresAt *time.Time `json:"expires_at,omitempty" query:"expires_at"`
+
+	modelregistry.Query
+	modelregistry.Base
+}
+
+func init() {
+	registerFixtureDoc("openapiTimeFilterModel", "", map[string]string{
+		"ExpiresAt": "ExpiresAt is the expiration time.",
+	})
+}
 
 func TestAddQueryParametersUsesDateTimeFormatForTimeFields(t *testing.T) {
 	op := &openapi3.Operation{}
+	addQueryParameters[*openapiTimeFilterModel, *openapiTimeFilterModel, *openapiTimeFilterModel](op)
+	parameters := queryParametersByName(t, op)
 
-	addQueryParameters[*openapiTimeQueryModel, *openapiTimeQueryModel, *openapiTimeQueryModel](op)
-
-	for _, parameter := range op.Parameters {
-		if parameter.Value == nil || parameter.Value.Name != "expires_at" {
-			continue
-		}
-
-		assertDateTimeSchema(t, parameter.Value.Schema)
-		if parameter.Value.Description != "The expiration time." {
-			t.Fatalf("expires_at description = %q, want API-facing field comment", parameter.Value.Description)
-		}
-		return
+	for _, name := range []string{"expires_at[gte]", "expires_at[lt]", "created_at"} {
+		require.NotNil(t, parameters[name], "query parameter %q", name)
+		assertDateTimeSchema(t, parameters[name].Schema)
 	}
+	require.Equal(t, "The expiration time.", parameters["expires_at[gte]"].Description,
+		"an operator key is described by the API-facing comment of its field")
 
-	t.Fatal("expires_at query parameter was not added")
+	isNull := parameters["expires_at[isnull]"]
+	require.NotNil(t, isNull)
+	require.True(t, isNull.Schema.Value.Type.Is(openapi3.TypeBoolean), "isnull takes a boolean")
 }
 
 type openapiPaginationQueryModel struct {
@@ -38,21 +57,24 @@ type openapiCursorQueryModel struct {
 	modelregistry.Base
 }
 
-type openapiDeepQueryFields struct {
-	Shared int `json:"-" query:"shared"`
+// The query branches are exported: the decoder walks into exported embedded
+// structs alone, as gorm does.
+
+type OpenAPIDeepQueryFields struct {
+	Shared int `json:"shared" query:"shared"`
 }
 
-type openapiFirstQueryBranch struct {
-	openapiDeepQueryFields
+type OpenAPIFirstQueryBranch struct {
+	OpenAPIDeepQueryFields
 }
 
-type openapiSecondQueryBranch struct {
-	Shared string `json:"-" query:"shared"`
+type OpenAPISecondQueryBranch struct {
+	Shared string `json:"shared" query:"shared"`
 }
 
 type openapiShallowQueryModel struct {
-	openapiFirstQueryBranch
-	openapiSecondQueryBranch
+	OpenAPIFirstQueryBranch
+	OpenAPISecondQueryBranch
 	modelregistry.Base
 }
 
@@ -132,9 +154,73 @@ func TestAddQueryParametersIncludesEmbeddedFrameworkParameters(t *testing.T) {
 	op = &openapi3.Operation{}
 	addQueryParameters[*openapiShallowQueryModel, *openapiShallowQueryModel, *openapiShallowQueryModel](op)
 	shared := queryParametersByName(t, op)["shared"]
-	if shared.Schema == nil || shared.Schema.Value == nil || shared.Schema.Value.Type == nil || !shared.Schema.Value.Type.Is(openapi3.TypeString) {
-		t.Fatalf("shared schema = %#v, want the shallower embedded string field to override the earlier deeper field", shared.Schema)
+	if shared == nil || shared.Schema == nil || shared.Schema.Value == nil || shared.Schema.Value.Type == nil || !shared.Schema.Value.Type.Is(openapi3.TypeString) {
+		t.Fatalf("shared = %#v, want the shallower embedded string field to override the earlier deeper field", shared)
 	}
+}
+
+// openapiQueryPart is embedded by name in openapiFilterQueryModel, its column
+// named by the path of query tags it takes.
+type openapiQueryPart struct {
+	Label string `json:"label" query:"label"`
+}
+
+// OpenAPIQueryExtra is embedded through a pointer in openapiFilterQueryModel,
+// its column promoted as one embedded by value is.
+type OpenAPIQueryExtra struct {
+	Code string `json:"code" query:"code"`
+}
+
+// openapiFilterQueryModel declares a field of each kind that decides which
+// parameters a list takes: a scalar column, a bool column, a time column and
+// a JSON column no bare key decodes into, a column without a query tag, a
+// column hidden from JSON though tagged, a field that is no column, hidden
+// from JSON and tagged, a struct embedded by name and one embedded through a
+// pointer.
+type openapiFilterQueryModel struct {
+	Visible   string            `json:"visible" query:"visible"`
+	Active    bool              `json:"active" query:"active"`
+	ExpiresAt time.Time         `json:"expires_at" query:"expires_at"`
+	Meta      datatypes.JSONMap `json:"meta" query:"meta"`
+	Note      string            `json:"note"`
+	Secret    string            `json:"-" query:"secret"`
+	Scope     string            `json:"-" gorm:"-" query:"scope"`
+	First     openapiQueryPart  `json:"first" gorm:"embedded;embeddedPrefix:first_" query:"first"`
+	*OpenAPIQueryExtra
+
+	modelregistry.Query
+	modelregistry.Base
+}
+
+// openapiPlainFilterQueryModel is openapiFilterQueryModel paging by offset
+// without model.Query, so no column takes an operator.
+type openapiPlainFilterQueryModel struct {
+	Visible   string            `json:"visible" query:"visible"`
+	Active    bool              `json:"active" query:"active"`
+	ExpiresAt time.Time         `json:"expires_at" query:"expires_at"`
+	Meta      datatypes.JSONMap `json:"meta" query:"meta"`
+	Note      string            `json:"note"`
+	Secret    string            `json:"-" query:"secret"`
+	Scope     string            `json:"-" gorm:"-" query:"scope"`
+	First     openapiQueryPart  `json:"first" gorm:"embedded;embeddedPrefix:first_" query:"first"`
+	*OpenAPIQueryExtra
+
+	modelregistry.Pagination
+	modelregistry.Base
+}
+
+// TestAddQueryParametersDocumentsWhatTheURLQueryTakes pins the documented
+// parameters of a list to the ones its URL query takes: every documented key
+// is taken, a bare key by the decoder or the filters and an operator key by
+// the filters, and no key the document leaves out is, under every spelling a
+// client could try for a field of the model.
+func TestAddQueryParametersDocumentsWhatTheURLQueryTakes(t *testing.T) {
+	t.Run("Queryable", func(t *testing.T) {
+		requireDocumentedAsTaken[*openapiFilterQueryModel](t)
+	})
+	t.Run("NotQueryable", func(t *testing.T) {
+		requireDocumentedAsTaken[*openapiPlainFilterQueryModel](t)
+	})
 }
 
 func TestAddQueryParametersOrdersBusinessFieldsBeforeFrameworkParameters(t *testing.T) {
@@ -163,9 +249,12 @@ func TestAddQueryParametersOrdersBusinessFieldsBeforeFrameworkParameters(t *test
 	}
 }
 
+// openapiExpandableQueryModel is a tree, its children and parent the
+// associations a list expands.
 type openapiExpandableQueryModel struct {
-	Children []*openapiExpandableQueryModel `json:"children,omitempty"`
-	Parent   *openapiExpandableQueryModel   `json:"parent,omitempty"`
+	ParentID string                         `json:"parent_id" gorm:"size:191"`
+	Children []*openapiExpandableQueryModel `json:"children,omitempty" gorm:"foreignKey:ParentID;constraint:-"`
+	Parent   *openapiExpandableQueryModel   `json:"parent,omitempty" gorm:"foreignKey:ParentID;references:ID;constraint:-"`
 
 	modelregistry.Query
 	modelregistry.Base
@@ -189,6 +278,10 @@ func TestAddQueryParametersDocumentsExpandableFields(t *testing.T) {
 	}
 }
 
+// TestAddQueryParametersDocumentsFieldOperatorFilters pins the operator note
+// of a bare parameter to the operators its column takes: every one on a
+// string, the ones a bool takes on a bool, and none on a framework parameter,
+// a field that is no column or a model without model.Query.
 func TestAddQueryParametersDocumentsFieldOperatorFilters(t *testing.T) {
 	op := &openapi3.Operation{}
 	addQueryParameters[*openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel](op)
@@ -205,6 +298,12 @@ func TestAddQueryParametersDocumentsFieldOperatorFilters(t *testing.T) {
 	}
 
 	op = &openapi3.Operation{}
+	addQueryParameters[*openapiFilterQueryModel, *openapiFilterQueryModel, *openapiFilterQueryModel](op)
+	parameters = queryParametersByName(t, op)
+	require.Contains(t, parameters["active"].Description, "op: eq/ne/isnull.", "a bool column takes eq, ne and isnull alone")
+	require.NotContains(t, parameters["scope"].Description, "[op]=value", "a field that is no column takes no operator")
+
+	op = &openapi3.Operation{}
 	addQueryParameters[*openapiPaginationQueryModel, *openapiPaginationQueryModel, *openapiPaginationQueryModel](op)
 	parameters = queryParametersByName(t, op)
 	if strings.Contains(parameters["id"].Description, "[op]=value") {
@@ -212,26 +311,30 @@ func TestAddQueryParametersDocumentsFieldOperatorFilters(t *testing.T) {
 	}
 }
 
-type openapiSliceQueryModel struct {
-	Values []string `json:"-" query:"values"`
+// openapiTagsFilterModel stores its tags as a JSON document, which no bare
+// key decodes into and the like family alone matches by its text.
+type openapiTagsFilterModel struct {
+	Tags datatypes.JSONSlice[string] `json:"tags" query:"tags"`
 
+	modelregistry.Query
 	modelregistry.Base
 }
 
-func TestAddQueryParametersBuildsSliceItemSchema(t *testing.T) {
+// TestAddQueryParametersDocumentsEachOperatorOfAColumnWithoutABareKey pins
+// a column taking its operators alone to a parameter under each of them, the
+// key spelled as the URL spells it, its value described as the operator reads
+// it: the text the like family matches and the boolean isnull takes.
+func TestAddQueryParametersDocumentsEachOperatorOfAColumnWithoutABareKey(t *testing.T) {
 	op := &openapi3.Operation{}
-	addQueryParameters[*openapiSliceQueryModel, *openapiSliceQueryModel, *openapiSliceQueryModel](op)
+	addQueryParameters[*openapiTagsFilterModel, *openapiTagsFilterModel, *openapiTagsFilterModel](op)
+	parameters := queryParametersByName(t, op)
 
-	values := queryParametersByName(t, op)["values"]
-	if values == nil || values.Schema == nil || values.Schema.Value == nil {
-		t.Fatal("values query parameter schema is missing")
+	for _, name := range []string{"tags[like]", "tags[notlike]", "tags[startswith]", "tags[endswith]"} {
+		require.NotNil(t, parameters[name], "query parameter %q", name)
+		require.True(t, parameters[name].Schema.Value.Type.Is(openapi3.TypeString), "query parameter %q schema", name)
 	}
-	if values.Schema.Value.Type == nil || !values.Schema.Value.Type.Is(openapi3.TypeArray) {
-		t.Fatalf("values schema type = %v, want array", values.Schema.Value.Type)
-	}
-	if values.Schema.Value.Items == nil || values.Schema.Value.Items.Value == nil || values.Schema.Value.Items.Value.Type == nil || !values.Schema.Value.Items.Value.Type.Is(openapi3.TypeString) {
-		t.Fatalf("values item schema = %#v, want string", values.Schema.Value.Items)
-	}
+	require.NotNil(t, parameters["tags[isnull]"])
+	require.True(t, parameters["tags[isnull]"].Schema.Value.Type.Is(openapi3.TypeBoolean))
 }
 
 type enumQueryModel struct {
@@ -264,42 +367,68 @@ func TestAddQueryParametersSetsEnumValues(t *testing.T) {
 	t.Fatal("status query parameter was not added")
 }
 
-// openapiNestedQueryItem is the element of a filterable collection, holding a
-// slice of its own.
-type openapiNestedQueryItem struct {
-	Path    string   `json:"path"`
-	Methods []string `json:"methods"`
-}
-
-// openapiNestedQueryModel filters on a field whose element type is a struct, so
-// the query schema has to describe that struct's own members.
-type openapiNestedQueryModel struct {
-	// Items is a filterable collection of structs.
-	Items []openapiNestedQueryItem `json:"items" query:"items"`
-
-	modelregistry.Base
-}
-
-// TestAddQueryParametersDescribesSliceMembersOfNestedStructs asserts that a
-// slice member of a nested struct is described as an array. OpenAPI 3.0 defines
-// no "null" type, so emitting one makes the parameter schema invalid.
-func TestAddQueryParametersDescribesSliceMembersOfNestedStructs(t *testing.T) {
+// requireDocumentedAsTaken requires the query parameters the list of M
+// documents to be exactly the keys its URL query takes, the way the list
+// reads them: the decoder, then the filters. A key is documented as a
+// parameter of its own, or as an operator the note of a bare parameter lists.
+// A key is taken when one of the values its field could hold passes both;
+// the keys tried are the documented ones and every spelling a client could
+// try for a field of M, bare and under each operator.
+func requireDocumentedAsTaken[M types.Model](t *testing.T) {
+	t.Helper()
 	op := &openapi3.Operation{}
-	addQueryParameters[*openapiNestedQueryModel, *openapiNestedQueryModel, *openapiNestedQueryModel](op)
+	addQueryParameters[M, M, M](op)
+	parameters := queryParametersByName(t, op)
+	documented := func(key string) bool {
+		if parameters[key] != nil {
+			return true
+		}
+		name, filterOp, ok := strings.Cut(strings.TrimSuffix(key, "]"), "[")
+		if !ok || parameters[name] == nil {
+			return false
+		}
+		_, ops, ok := strings.Cut(parameters[name].Description, "Operator filter: "+name+"[op]=value, op: ")
+		if !ok {
+			return false
+		}
+		ops, _, _ = strings.Cut(ops, ".")
+		for listed := range strings.SplitSeq(ops, "/") {
+			if listed == filterOp {
+				return true
+			}
+		}
+		return false
+	}
 
-	items := queryParametersByName(t, op)["items"]
-	if items == nil || items.Schema == nil || items.Schema.Value == nil {
-		t.Fatal("items query parameter schema is missing")
+	taken := func(key string) bool {
+		for _, value := range []string{"x", "1", "true", "2026-01-02T15:04:05Z"} {
+			m := reflect.New(reflect.TypeFor[M]().Elem()).Interface().(types.Model) //nolint:errcheck
+			query := url.Values{key: {value}}
+			if urlquery.Decode(query, m) != nil {
+				continue
+			}
+			if _, err := urlquery.Filters(query, m); err != nil {
+				continue
+			}
+			return true
+		}
+		return false
 	}
-	element := items.Schema.Value.Items
-	if element == nil || element.Value == nil {
-		t.Fatal("items element schema is missing")
+
+	keys := make(map[string]bool)
+	for name := range parameters {
+		keys[name] = true
 	}
-	methods := element.Value.Properties["methods"]
-	if methods == nil || methods.Value == nil {
-		t.Fatal("methods property schema is missing")
+	for _, name := range []string{
+		"visible", "active", "expires_at", "meta", "note", "secret", "scope",
+		"first", "label", "first.label", "code", "id", "created_at", "deleted_at",
+	} {
+		keys[name] = true
+		for _, filterOp := range types.FilterOps() {
+			keys[name+"["+string(filterOp)+"]"] = true
+		}
 	}
-	if methods.Value.Type == nil || !methods.Value.Type.Is(openapi3.TypeArray) {
-		t.Fatalf("methods schema type = %v, want array", methods.Value.Type)
+	for key := range keys {
+		require.Equal(t, taken(key), documented(key), "query parameter %q: documented must equal taken", key)
 	}
 }

@@ -116,6 +116,8 @@ git init
 
 索引一律通过模型的 `Indexes() []model.Index` 方法集中声明：`Fields` 写 Go 字段名、顺序即列序，`Unique` 声明唯一索引，索引名由框架统一生成（`idx_` 或 `uniq_` 加表名加列名，超过方言上限的截短后带哈希：PostgreSQL 最长 63，MySQL 与 SQLite 64）。唯一的例外是主键——它由 `model.Base`/`model.AutoBase` 内置声明，业务模型不写主键。不要用 gorm tag 的 `index`/`uniqueIndex`/`unique` 配置索引，`gg check` 会拒绝。被索引的字符串字段要写列宽（如 `gorm:"size:36"`）：没有长度的字符串在 MySQL 上是 longtext 列，MySQL 不能给它建索引，配置为 mysql 的项目 `gg check` 会拒绝，启动期与 `gg migrate` 也在建表之前拒绝。
 
+字段的三种 tag 各管一件事：`json` 管请求体与响应的序列化，`gorm` 管数据库列，`query` 管前端查询参数。前端能按哪些字段过滤、排序、做游标翻页，由 `query` tag 声明，参数名就是 tag 的值（下例的 `user_id`、`title`）；没写 `query` tag 的字段不是查询参数，前端传了返回 400。
+
 ```go
 package model
 
@@ -165,6 +167,20 @@ func (Record) Design() {
 一致，区别是 ID 由数据库在插入时分配（框架不会生成）。注意：这类模型通过
 `model.Register` 注入 seed 记录时必须显式指定 ID 或依赖唯一索引，否则重复启动会
 重复插入；`Base` 字符串 ID 的逗号分隔多 ID 查询写法对整数 ID 不适用。
+
+### 查询参数名
+
+查询参数名只来自 `query` tag，json 名和数据库列名都不参与。嵌入结构体时按下面的规则命名：
+
+- **匿名嵌入不占一层：** 没有字段名的嵌入（如 `model.Base`）把字段提升到外层，直接用字段自己的 tag，查询名是 `id`、`created_at`，不是 `base.id`；业务自己的结构体按指针匿名嵌入也一样。
+- **按名字嵌入用点连起来：** 字段带 `gorm:"embedded"` 的结构体，gorm 把它的字段摊成本表的列；这一列的查询名是路径上每一步的 `query` tag 用 `.` 连起来。外层 `First Part` 写 `query:"first"`、`Part` 里的 `Label` 写 `query:"label"`，查询名就是 `first.label`：裸键 `?first.label=x`、运算符 `?first.label[like]=x`、排序 `_sort_by=first.label desc`、游标 `_cursor_field=first.label` 都用它，gRPC 的 `Filters` 也写这个名字。路径上任何一步没写 `query` tag（或写 `query:"-"`），这一列就不是查询参数。
+- **`json:"-"` 一票否决：** 路径上任何一步带 `json:"-"`，这一列对前端整体不可见，写了 `query` tag 也不能过滤、排序，传了返回 400。
+- **裸键只给标量：** 字符串、数字、布尔这类字段收裸键精确匹配；时间、日期、JSON 这类列只收运算符写法（`?expires_at[gte]=…`），而且运算符只对嵌了 `model.Query` 的模型生效。框架时间戳 `created_at`、`updated_at` 例外：嵌了 `model.Query` 的模型上，它们的裸键也收，按精确匹配处理（`?created_at=2026-01-02T15:04:05Z`），值同样只收 RFC 3339。
+- **存成一整列的结构体没有点路径：** `datatypes.JSON` 一类类型或 `gorm:"serializer:json"` 存成一列的结构体、切片字段只有它自己的查询名，不能点进里面的字段；JSON 文档列（datatypes 的 JSON 类型，或写了 `type:json`）只收 `like` 一类运算符和 `isnull`。
+- **不落库的字段只收裸键：** `gorm:"-"` 的字段写了 `query` tag 仍是查询参数，裸键解码进模型交给服务的 `Filter` 钩子使用，不能用运算符、不能排序。
+- **写错直接报错：** 两个字段写同一个查询名、业务字段的查询名用 `_` 开头（框架参数的保留前缀）、`query` tag 里带 `[`、`]` 或 `.`，启动期直接报错退出，`gg check` 也会拒绝。
+
+每个模型实际收哪些查询参数，以 `/docs/index.html` 的 Swagger 为准：收裸键的参数在说明里列出它可用的运算符，只收运算符的列按 `字段[运算符]` 逐个列出。
 
 ### 时间字段
 

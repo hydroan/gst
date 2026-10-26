@@ -9,7 +9,9 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/urlquery"
 )
 
 func parseParametersFromPath(path string) []*openapi3.ParameterRef {
@@ -44,7 +46,13 @@ func parseParametersFromPath(path string) []*openapi3.ParameterRef {
 	return parameterRefList
 }
 
-// addQueryParameters adds query parameters for List operation.
+// addQueryParameters documents the URL query parameters the List operation
+// of the framework's own flow takes, those the parsers take (see
+// urlquery.Parameters), each described by the doc comment of the field it
+// reads. A parameter taking its bare key is documented under it, the
+// operators its column takes listed in its description; a column taking its
+// operators alone is documented under each of them, the key as the URL spells
+// it, expires_at[gte].
 func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op *openapi3.Operation) {
 	// Model-field query filters are available only to the default CRUD path.
 	if !modelregistry.AreTypesEqual[M, REQ, RSP]() {
@@ -52,79 +60,50 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 	}
 
 	typ := reflect.TypeFor[M]()
-	fields := collectQueryDocFields(typ)
 	m := reflect.New(typ.Elem()).Interface().(types.Model) //nolint:errcheck
-	queryable := modelregistry.IsQueryable(m)
+	params, err := urlquery.Parameters(typ)
+	if err != nil {
+		// The parsers refuse every parameter of a model gorm cannot parse,
+		// which is no model a list reads.
+		return
+	}
+	// The columns of the parameters taking their operators alone, whose
+	// values the operator schemas describe.
+	columns, _ := modelschema.FilterableIndex(typ)
 
-	queries := make([]*openapi3.ParameterRef, 0, len(fields))
-	for _, docField := range fields {
-		field := docField.field
-		queryTag := getFieldTag(field, consts.TAG_QUERY)
-		description := openAPIDocComment(field.Name, docField.docs[field.Name])
+	queries := make([]*openapi3.ParameterRef, 0, len(params))
+	for _, param := range params {
+		field, owner := structFieldAt(typ, param.Index)
+		description := openAPIDocComment(field.Name, modelFieldDocs(reflect.New(owner).Interface())[field.Name])
+		if !param.Bare {
+			for _, filterOp := range param.Ops {
+				queries = append(queries, queryParameter(param.Name+"["+string(filterOp)+"]",
+					operatorSchema(columns[param.Name], filterOp), operatorDescription(description, filterOp)))
+			}
+			continue
+		}
 		schemaRef := schemaFromType(field.Type)
 		if enumDoc, onItems, ok := fieldEnumDoc(field.Type); ok && schemaRef != nil && schemaRef.Value != nil {
 			applyEnum(schemaRef.Value, onItems, enumDoc)
 			description = enumDescription(description, enumDoc)
 		}
-		// Business filter fields on queryable models additionally accept the
-		// "field[op]=value" operator filter syntax; framework parameters in
-		// the "_" namespace do not.
-		if queryable && !strings.HasPrefix(queryTag, "_") {
-			description = operatorFilterDescription(description, queryTag)
+		if len(param.Ops) > 0 {
+			description = operatorFilterDescription(description, param.Name, param.Ops)
 		}
 		// The _expand parameter only accepts the model's expandable
 		// association names, so list them where the frontend reads them.
-		if queryable && queryTag == consts.QUERY_EXPAND {
+		if param.Name == consts.QUERY_EXPAND {
 			description = expandableFieldsDescription(description, m.Expands())
 		}
-
-		queries = append(queries, &openapi3.ParameterRef{
-			Value: &openapi3.Parameter{
-				Name:        queryTag,
-				In:          "query",
-				Required:    false,
-				Schema:      schemaRef,
-				Description: description,
-			},
-		})
+		queries = append(queries, queryParameter(param.Name, schemaRef, description))
 	}
 
 	// Cursor-only models accept _size as the batch size, but the field with
 	// its query tag lives in Pagination, so the parameter is synthesized.
 	if modelregistry.IsCursorable(m) && !modelregistry.IsPaginatable(m) {
-		queries = append(queries, &openapi3.ParameterRef{
-			Value: &openapi3.Parameter{
-				Name:        consts.QUERY_SIZE,
-				In:          "query",
-				Required:    false,
-				Schema:      &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeInteger}}},
-				Description: "Batch size for cursor pagination.",
-			},
-		})
-	}
-
-	// The framework-managed Base/AutoBase timestamps carry query:"-" on the
-	// model, so their filter parameters are synthesized: the bare name is an
-	// exact-match filter like every other documented parameter, and the
-	// operator syntax covers ranges. The columns are declared as an ordered
-	// slice, not a map, because sortQueryParameters is stable and keeps their
-	// insertion order in the generated document.
-	if queryable && embedsBaseModel(typ.Elem()) {
-		for _, timestamp := range []struct{ column, doc string }{
-			{"created_at", "record creation time"},
-			{"updated_at", "record last update time"},
-		} {
-			column, doc := timestamp.column, timestamp.doc
-			queries = append(queries, &openapi3.ParameterRef{
-				Value: &openapi3.Parameter{
-					Name:        column,
-					In:          "query",
-					Required:    false,
-					Schema:      &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeString}}},
-					Description: "Exact-match filter for the " + doc + ".\n\nOperator filter: " + column + "[op]=value, op: eq/ne/gt/gte/lt/lte/isnull; range example: " + column + "[gte]=2026-07-01&" + column + "[lte]=2026-07-15.",
-				},
-			})
-		}
+		queries = append(queries, queryParameter(consts.QUERY_SIZE,
+			&openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeInteger}}},
+			"Batch size for cursor pagination."))
 	}
 
 	// Business filter columns always come first; framework parameters keep a
@@ -148,69 +127,78 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 	}
 }
 
-// collectQueryDocFields collects query-tagged fields from typ and anonymous
-// embedded structs in breadth-first order. Fields declared at a shallower
-// depth win over deeper promoted fields with the same query name, matching Go
-// field selection precedence.
-func collectQueryDocFields(typ reflect.Type) []schemaDocField {
-	if typ == nil {
-		return nil
+// queryParameter is an optional query parameter, as every query parameter of
+// a list is.
+func queryParameter(name string, schemaRef *openapi3.SchemaRef, description string) *openapi3.ParameterRef {
+	return &openapi3.ParameterRef{
+		Value: &openapi3.Parameter{
+			Name:        name,
+			In:          "query",
+			Required:    false,
+			Schema:      schemaRef,
+			Description: description,
+		},
 	}
-
-	fields := make([]schemaDocField, 0)
-	seen := make(map[string]bool)
-	visited := make(map[reflect.Type]bool)
-	queue := []reflect.Type{typ}
-	for len(queue) > 0 {
-		next := make([]reflect.Type, 0)
-		for _, currentType := range queue {
-			for currentType.Kind() == reflect.Pointer {
-				currentType = currentType.Elem()
-			}
-			if currentType.Kind() != reflect.Struct || visited[currentType] {
-				continue
-			}
-			visited[currentType] = true
-
-			docs := modelFieldDocs(reflect.New(currentType).Interface())
-			for field := range currentType.Fields() {
-				queryTag := getFieldTag(field, consts.TAG_QUERY)
-				if queryTag != "" {
-					if !seen[queryTag] {
-						seen[queryTag] = true
-						fields = append(fields, schemaDocField{field: field, docs: docs})
-					}
-					continue
-				}
-				if !field.Anonymous {
-					continue
-				}
-
-				embeddedType := field.Type
-				for embeddedType.Kind() == reflect.Pointer {
-					embeddedType = embeddedType.Elem()
-				}
-				if embeddedType.Kind() == reflect.Struct {
-					next = append(next, embeddedType)
-				}
-			}
-		}
-		queue = next
-	}
-	return fields
 }
 
-// embedsBaseModel reports whether the model struct embeds Base or AutoBase.
-func embedsBaseModel(typ reflect.Type) bool {
-	if typ.Kind() != reflect.Struct {
-		return false
-	}
-	for _, name := range []string{"Base", "AutoBase"} {
-		if field, ok := typ.FieldByName(name); ok && field.Anonymous {
-			return true
+// structFieldAt returns the struct field an index path reaches in typ,
+// through the pointers on the way, and the struct type declaring it, whose
+// doc comments describe it.
+func structFieldAt(typ reflect.Type, index []int) (field reflect.StructField, owner reflect.Type) {
+	owner = typ
+	for depth, i := range index {
+		for owner.Kind() == reflect.Pointer {
+			owner = owner.Elem()
+		}
+		field = owner.Field(i)
+		if depth < len(index)-1 {
+			owner = field.Type
 		}
 	}
-	return false
+	return field, owner
+}
+
+// operatorSchema is the schema of the value of an operator key, field[op], of
+// a column no bare key decodes into: isnull takes a boolean, the like family
+// and the comma-separated members of in and notin take text, and a
+// comparison takes the value the column holds, a time of day as text, an
+// instant in RFC 3339, a boolean, a number, or text.
+func operatorSchema(col modelschema.Column, filterOp types.FilterOp) *openapi3.SchemaRef {
+	switch filterOp {
+	case types.FilterOpIsNull:
+		return &openapi3.SchemaRef{Value: openapi3.NewBoolSchema()}
+	case types.FilterOpEq, types.FilterOpNe, types.FilterOpGt, types.FilterOpGte, types.FilterOpLt, types.FilterOpLte:
+		switch {
+		case modelschema.IsTimeOfDayColumn(col):
+			return &openapi3.SchemaRef{Value: openapi3.NewStringSchema()}
+		case modelschema.IsTimeColumn(col):
+			return &openapi3.SchemaRef{Value: dateTimeSchema()}
+		case modelschema.IsBoolColumn(col):
+			return &openapi3.SchemaRef{Value: openapi3.NewBoolSchema()}
+		case modelschema.IsNumericColumn(col):
+			return &openapi3.SchemaRef{Value: openapi3.NewFloat64Schema()}
+		}
+	}
+	return &openapi3.SchemaRef{Value: openapi3.NewStringSchema()}
+}
+
+// operatorDescription is the description of an operator key: the field's
+// own, with how the value reads for in and notin, a comma-separated list, and
+// for isnull, a boolean.
+func operatorDescription(description string, filterOp types.FilterOp) string {
+	var note string
+	switch filterOp {
+	case types.FilterOpIn, types.FilterOpNotIn:
+		note = "Comma-separated values."
+	case types.FilterOpIsNull:
+		note = "true matches a null field, false a field holding a value."
+	default:
+		return description
+	}
+	if description == "" {
+		return note
+	}
+	return description + "\n\n" + note
 }
 
 // frameworkQueryParameterOrder is the canonical trailing order of framework
@@ -263,10 +251,9 @@ func expandableFieldsDescription(description string, expands []string) string {
 }
 
 // operatorFilterDescription appends the field operator filter note to a query
-// parameter description, listing the operators accepted by the
-// "field[op]=value" syntax.
-func operatorFilterDescription(description, queryTag string) string {
-	ops := types.FilterOps()
+// parameter description, listing ops, the operators the "field[op]=value"
+// syntax takes on the field's column.
+func operatorFilterDescription(description, queryTag string, ops []types.FilterOp) string {
 	tokens := make([]string, 0, len(ops))
 	for _, op := range ops {
 		tokens = append(tokens, string(op))

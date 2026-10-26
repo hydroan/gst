@@ -2,6 +2,7 @@ package openapigen
 
 import (
 	"fmt"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -459,6 +460,41 @@ func TestSetBuildsExampleForUntypedMapValues(t *testing.T) {
 	}
 	if path, found := findNullInExample(example["attributes"], "/attributes"); found {
 		t.Fatalf("example carries null at %q, want a value an untyped schema accepts", path)
+	}
+}
+
+// openapiItemsModel holds an items array of its own, a JSON column, under the
+// key a batch body carries its records under.
+type openapiItemsModel struct {
+	// Name is the record name.
+	Name string `json:"name"`
+
+	// Items are the lines of the record.
+	Items []openapiItemsLine `json:"items" gorm:"serializer:json"`
+
+	modelregistry.Base
+}
+
+// openapiItemsLine is a line of openapiItemsModel, named by an id of its own.
+type openapiItemsLine struct {
+	// ID names the line.
+	ID string `json:"id"`
+}
+
+// TestSetBuildsExampleOfEveryFieldBesideAnItemsArray asserts that the example
+// of a single record holding an items array illustrates every field the body
+// documents, the id of each line included: the array is a field like any
+// other, not the records of a batch.
+func TestSetBuildsExampleOfEveryFieldBesideAnItemsArray(t *testing.T) {
+	set[*openapiItemsModel, *openapiItemsModel, *openapiItemsModel]("/api/openapi-items-examples", true, consts.Create)
+
+	schema := registeredRequestBodySchema(t, operationForPath(t, "/api/openapi-items-examples").RequestBody)
+	want := map[string]any{
+		"name":  "string",
+		"items": []any{map[string]any{"id": "string"}},
+	}
+	if !reflect.DeepEqual(schema.Example, want) {
+		t.Fatalf("example = %#v, want %#v", schema.Example, want)
 	}
 }
 

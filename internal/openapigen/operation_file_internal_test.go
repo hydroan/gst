@@ -53,6 +53,11 @@ func TestSetExportDocumentsFileDownload(t *testing.T) {
 	if got := format.Schema.Value.Enum; !reflect.DeepEqual(got, []any{"csv", "xlsx"}) {
 		t.Fatalf("export %q enum = %v, want [csv xlsx]", consts.QUERY_FORMAT, got)
 	}
+	// The cap on the records exported takes an integer.
+	limit := params[consts.QUERY_LIMIT]
+	if limit == nil || limit.Schema == nil || limit.Schema.Value == nil || !limit.Schema.Value.Type.Is(openapi3.TypeInteger) {
+		t.Fatalf("export query parameters = %v, want %q taking an integer", parameterNames(params), consts.QUERY_LIMIT)
+	}
 	// Export shares the list filters, so model field queries are documented too.
 	if params["name"] == nil {
 		t.Fatalf("export query parameters = %v, want model filter %q", parameterNames(params), "name")

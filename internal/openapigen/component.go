@@ -169,7 +169,6 @@ func registerSchema[M types.Model, REQ types.Request, RSP types.Response](reqKey
 		}
 		if _, ok := doc.Components.RequestBodies[reqKey]; !ok && reqSchemaRef != nil {
 			applyExample(reqSchemaRef)
-			applyBatchExample(reqSchemaRef)
 			doc.Components.RequestBodies[reqKey] = &openapi3.RequestBodyRef{
 				Value: &openapi3.RequestBody{
 					Description: name + " Payload",

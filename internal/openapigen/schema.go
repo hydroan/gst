@@ -19,8 +19,10 @@ var (
 	idFormat = "" // eg: "uuid"
 )
 
-func getFieldTag(field reflect.StructField, tagName string) string {
-	val := field.Tag.Get(tagName)
+// jsonName returns the name a struct field's json tag gives it, or "" for a
+// field the tag leaves unnamed or out (json:"-").
+func jsonName(field reflect.StructField) string {
+	val := field.Tag.Get(consts.TAG_JSON)
 	switch val {
 	case "-", "":
 		return ""
@@ -156,7 +158,7 @@ func collectSchemaDocFields(typ reflect.Type, fields map[string]schemaDocField, 
 
 	var embedded []reflect.Type
 	for field := range typ.Fields() {
-		jsonTag := getFieldTag(field, consts.TAG_JSON)
+		jsonTag := jsonName(field)
 		if field.Anonymous && jsonTag == "" {
 			embeddedType := field.Type
 			for embeddedType.Kind() == reflect.Pointer {
@@ -328,7 +330,7 @@ func schemaFromTypeVisiting(dataType reflect.Type, visiting map[reflect.Type]boo
 			if !f.IsExported() {
 				continue
 			}
-			jsonTag := getFieldTag(f, consts.TAG_JSON)
+			jsonTag := jsonName(f)
 			if jsonTag == "" {
 				continue
 			}

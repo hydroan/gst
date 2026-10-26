@@ -1,6 +1,7 @@
 package openapigen
 
 import (
+	"encoding/json"
 	"maps"
 	"slices"
 	"testing"
@@ -291,6 +292,165 @@ func TestSetCustomBatchDocumentsResponseEnvelope(t *testing.T) {
 			if data == nil || data.Value == nil || data.Value.Properties["result"] == nil {
 				t.Fatalf("response data schema = %#v, want the custom response shape", data)
 			}
+		})
+	}
+}
+
+// openapiWriteModel declares a column of each gorm write permission beside
+// the framework base, whose fields the framework writes itself.
+type openapiWriteModel struct {
+	Name  string `json:"name"`
+	Code  string `json:"code" gorm:"<-:create"`
+	Stamp string `json:"stamp" gorm:"<-:update"`
+	Mark  string `json:"mark" gorm:"->"`
+
+	modelregistry.Base
+}
+
+// openapiOwnKeyModel declares a primary key of its own over the framework
+// base's, the way a model widens its id: the key is still the one a route or
+// a batch item names the record by.
+type openapiOwnKeyModel struct {
+	ID   string `json:"id" gorm:"primaryKey;size:191"`
+	Name string `json:"name"`
+
+	modelregistry.Base
+}
+
+// openapiWriteRequest is a custom payload whose fields carry the names of
+// the framework base's: they are the service's own to read.
+type openapiWriteRequest struct {
+	ID        string `json:"id"`
+	CreatedBy string `json:"created_by"`
+	Code      string `json:"code"`
+}
+
+// TestSetDocumentsTheFieldsAWriteTakes pins the request body of each write to
+// the fields it takes from the client, and its example to the same fields.
+// The framework's own flow takes none of the framework base's, which it writes
+// itself, and no column gorm leaves out of the write: an insert none written
+// on update only or never, an update none written on insert only or never. An
+// item of a batch update names its record by its id, which it must carry. A
+// custom payload is the service's to read, every field of it.
+func TestSetDocumentsTheFieldsAWriteTakes(t *testing.T) {
+	type model = openapiWriteModel
+	tests := []struct {
+		name     string
+		set      func(*openapi3.PathItem) *openapi3.Operation
+		batch    bool
+		fields   []string
+		required []string
+	}{
+		{
+			name: "create",
+			set: func(p *openapi3.PathItem) *openapi3.Operation {
+				setCreate[*model, *model, *model]("/api/writes/create", p)
+				return p.Post
+			},
+			fields: []string{"code", "name"},
+		},
+		{
+			name: "update",
+			set: func(p *openapi3.PathItem) *openapi3.Operation {
+				setUpdate[*model, *model, *model]("/api/writes/update/{id}", p)
+				return p.Put
+			},
+			fields: []string{"name", "stamp"},
+		},
+		{
+			name: "patch",
+			set: func(p *openapi3.PathItem) *openapi3.Operation {
+				setPatch[*model, *model, *model]("/api/writes/patch/{id}", p)
+				return p.Patch
+			},
+			fields: []string{"name", "stamp"},
+		},
+		{
+			name: "create many",
+			set: func(p *openapi3.PathItem) *openapi3.Operation {
+				setCreateMany[*model, *model, *model]("/api/writes/create-many", p)
+				return p.Post
+			},
+			batch:  true,
+			fields: []string{"code", "name"},
+		},
+		{
+			name: "update many",
+			set: func(p *openapi3.PathItem) *openapi3.Operation {
+				setUpdateMany[*model, *model, *model]("/api/writes/update-many", p)
+				return p.Put
+			},
+			batch:    true,
+			fields:   []string{"id", "name", "stamp"},
+			required: []string{"id"},
+		},
+		{
+			name: "patch many",
+			set: func(p *openapi3.PathItem) *openapi3.Operation {
+				setPatchMany[*model, *model, *model]("/api/writes/patch-many", p)
+				return p.Patch
+			},
+			batch:    true,
+			fields:   []string{"id", "name", "stamp"},
+			required: []string{"id"},
+		},
+		{
+			name: "custom create",
+			set: func(p *openapi3.PathItem) *openapi3.Operation {
+				setCreate[*model, openapiWriteRequest, openapiWriteRequest]("/api/writes/custom-create", p)
+				return p.Post
+			},
+			fields: []string{"code", "created_by", "id"},
+		},
+		{
+			name: "create with a key of its own",
+			set: func(p *openapi3.PathItem) *openapi3.Operation {
+				setCreate[*openapiOwnKeyModel, *openapiOwnKeyModel, *openapiOwnKeyModel]("/api/writes/own-key", p)
+				return p.Post
+			},
+			fields: []string{"name"},
+		},
+		{
+			name: "update with a key of its own",
+			set: func(p *openapi3.PathItem) *openapi3.Operation {
+				setUpdate[*openapiOwnKeyModel, *openapiOwnKeyModel, *openapiOwnKeyModel]("/api/writes/own-key/{id}", p)
+				return p.Put
+			},
+			fields: []string{"name"},
+		},
+		{
+			name: "update many with a key of its own",
+			set: func(p *openapi3.PathItem) *openapi3.Operation {
+				setUpdateMany[*openapiOwnKeyModel, *openapiOwnKeyModel, *openapiOwnKeyModel]("/api/writes/own-key/many", p)
+				return p.Put
+			},
+			batch:    true,
+			fields:   []string{"id", "name"},
+			required: []string{"id"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := registeredRequestBodySchema(t, tt.set(&openapi3.PathItem{}).RequestBody)
+			exampleJSON, err := json.Marshal(body.Example)
+			require.NoError(t, err)
+			var example map[string]any
+			if tt.batch {
+				var batch struct {
+					Items []map[string]any `json:"items"`
+				}
+				require.NoError(t, json.Unmarshal(exampleJSON, &batch))
+				require.Len(t, batch.Items, 1)
+				example = batch.Items[0]
+				body = batchItemSchema(body)
+				require.NotNil(t, body)
+			} else {
+				require.NoError(t, json.Unmarshal(exampleJSON, &example))
+			}
+
+			require.Equal(t, tt.fields, propertyNames(body))
+			require.Equal(t, tt.fields, slices.Sorted(maps.Keys(example)))
+			require.ElementsMatch(t, tt.required, body.Required)
 		})
 	}
 }

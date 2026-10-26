@@ -1,118 +1,92 @@
 package openapigen
 
 import (
-	"strings"
+	"reflect"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 )
 
-// baseAutoFieldNames are the JSON names of the fields the framework fills in
-// itself, so a request body never asks the caller to supply them.
-var baseAutoFieldNames = map[string]bool{
-	"id":         true,
-	"created_at": true,
-	"created_by": true,
-	"updated_at": true,
-	"updated_by": true,
-	"deleted_at": true,
-	"deleted_by": true,
+// frameworkBases are the framework's model bases, model.Base and
+// model.AutoBase, whose fields the framework writes itself.
+var frameworkBases = map[reflect.Type]bool{
+	reflect.TypeFor[modelregistry.Base]():     true,
+	reflect.TypeFor[modelregistry.AutoBase](): true,
 }
 
-// removeBaseAutoFieldsFromRequestBody hides the framework-managed fields in the
-// request body of a single-record CRUD operation.
-func removeBaseAutoFieldsFromRequestBody(op *openapi3.Operation) {
-	requestBody := resolveRequestBody(op)
-	if requestBody == nil || requestBody.Content == nil {
+// hideUnwrittenFields hides, in the request body schemaRef documents for
+// phase, a write of model by the framework's own flow, the fields the write
+// takes no value for: the primary key, which the route names or the insert
+// assigns, the audit columns and timestamps of the framework base the model
+// embeds (see frameworkBases), which the framework writes, and the columns
+// gorm leaves out of the write, an insert writing none it writes on update
+// only or never, an update none it writes on insert only or never (see
+// modelschema.Column). A batch body holds the records in its items array; an
+// item of a batch update keeps the primary key, which names the record the
+// item writes, as a required field, as the flow refuses an item without one.
+//
+// For a model embedding model.Base beside Name, Code `gorm:"<-:create"`,
+// Stamp `gorm:"<-:update"` and Mark `gorm:"->"`, a create documents code and
+// name, an update or a patch name and stamp, and an item of a batch update or
+// patch id, name and stamp, id required.
+func hideUnwrittenFields(schemaRef *openapi3.SchemaRef, model reflect.Type, phase consts.Phase) {
+	if schemaRef == nil || schemaRef.Value == nil {
 		return
 	}
-
-	// hold the write lock while the schema is modified
-	docMutex.Lock()
-	defer docMutex.Unlock()
-
-	for _, mediaType := range requestBody.Content {
-		if mediaType.Schema == nil || mediaType.Schema.Value == nil {
-			continue
-		}
-		removeBaseAutoFields(mediaType.Schema.Value)
+	insert := phase == consts.Create || phase == consts.CreateMany
+	batch := phase == consts.CreateMany || phase == consts.UpdateMany || phase == consts.PatchMany
+	schema := schemaRef.Value
+	if batch {
+		schema = batchItemSchema(schema)
 	}
-}
-
-// removeBaseAutoFieldsFromBatchRequestBody hides the framework-managed fields
-// in the request body of a batch CRUD operation, where the payload sits in an
-// items array instead of at the top level.
-func removeBaseAutoFieldsFromBatchRequestBody(op *openapi3.Operation) {
-	requestBody := resolveRequestBody(op)
-	if requestBody == nil || requestBody.Content == nil {
+	columns, err := modelschema.Columns(model)
+	if schema == nil || err != nil {
 		return
 	}
-
-	// hold the write lock while the schema is modified
-	docMutex.Lock()
-	defer docMutex.Unlock()
-
-	for _, mediaType := range requestBody.Content {
-		if mediaType.Schema == nil || mediaType.Schema.Value == nil {
+	for _, col := range columns {
+		key, base, ok := bodyKey(model, col.Index)
+		if !ok {
 			continue
 		}
-		schema := mediaType.Schema.Value
-
-		if itemSchema := batchItemSchema(schema); itemSchema != nil {
-			removeBaseAutoFields(itemSchema)
+		written := col.Updatable
+		if insert {
+			written = col.Creatable
 		}
-		removeBaseAutoFieldsFromBatchExample(schema)
+		switch {
+		case col.PrimaryKey && batch && !insert:
+			schema.Required = append(schema.Required, key)
+		case col.PrimaryKey || base || !written:
+			delete(schema.Properties, key)
+		}
 	}
 }
 
-// resolveRequestBody returns the request body an operation documents, following
-// the component reference when the operation carries one. It returns nil when
-// the operation declares no body or the referenced component is missing.
-func resolveRequestBody(op *openapi3.Operation) *openapi3.RequestBody {
-	if op == nil || op.RequestBody == nil {
-		return nil
-	}
-	if op.RequestBody.Ref == "" {
-		return op.RequestBody.Value
-	}
-
-	docMutex.RLock()
-	defer docMutex.RUnlock()
-	if doc.Components.RequestBodies == nil {
-		return nil
-	}
-	refKey := strings.TrimPrefix(op.RequestBody.Ref, "#/components/requestBodies/")
-	if rb, exists := doc.Components.RequestBodies[refKey]; exists && rb.Value != nil {
-		return rb.Value
-	}
-	return nil
-}
-
-// removeBaseAutoFields drops the framework-managed fields from one object
-// schema: its properties, its required list and its example.
-func removeBaseAutoFields(schema *openapi3.Schema) {
-	if schema.Properties != nil {
-		for field := range baseAutoFieldNames {
-			delete(schema.Properties, field)
+// bodyKey returns the key the JSON object of model holds the field at index
+// under, a column's path (see modelschema.Column.Index), and whether the field
+// is one of a framework base's; ok is false for a field the object does not
+// hold at its top level, one inside a struct field encoded as a value of its
+// own, or one JSON leaves out. For the ID of a model embedding model.Base it
+// returns "id", true, true.
+func bodyKey(model reflect.Type, index []int) (key string, base, ok bool) {
+	typ := model
+	for _, i := range index[:len(index)-1] {
+		for typ.Kind() == reflect.Pointer {
+			typ = typ.Elem()
 		}
-	}
-
-	if len(schema.Required) > 0 {
-		newRequired := []string{}
-		for _, req := range schema.Required {
-			if !baseAutoFieldNames[req] {
-				newRequired = append(newRequired, req)
-			}
+		step := typ.Field(i)
+		if !step.Anonymous || jsonName(step) != "" {
+			return "", false, false
 		}
-		schema.Required = newRequired
+		typ = step.Type
+		base = base || frameworkBases[typ]
 	}
-
-	if schema.Example != nil {
-		if exampleMap, ok := schema.Example.(map[string]any); ok {
-			for field := range baseAutoFieldNames {
-				delete(exampleMap, field)
-			}
-		}
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
 	}
+	key = jsonName(typ.Field(index[len(index)-1]))
+	return key, base, key != ""
 }
 
 // batchItemSchema returns the element schema of the items array a batch request
@@ -126,37 +100,4 @@ func batchItemSchema(schema *openapi3.Schema) *openapi3.Schema {
 		return nil
 	}
 	return itemsProp.Value.Items.Value
-}
-
-// removeBaseAutoFieldsFromBatchExample drops the framework-managed fields from
-// every element of the example of the whole batch request.
-func removeBaseAutoFieldsFromBatchExample(schema *openapi3.Schema) {
-	if schema.Example == nil {
-		return
-	}
-	exampleMap, ok := schema.Example.(map[string]any)
-	if !ok {
-		return
-	}
-	items, exists := exampleMap["items"]
-	if !exists {
-		return
-	}
-
-	switch itemsArray := items.(type) {
-	case []map[string]any:
-		for _, item := range itemsArray {
-			for field := range baseAutoFieldNames {
-				delete(item, field)
-			}
-		}
-	case []any:
-		for _, item := range itemsArray {
-			if itemMap, ok := item.(map[string]any); ok {
-				for field := range baseAutoFieldNames {
-					delete(itemMap, field)
-				}
-			}
-		}
-	}
 }
