@@ -22,7 +22,8 @@ import (
 // sort, the fields to return, search_after for deep pagination and the
 // aggregations. QueryBuilder composes one. What a request leaves unset is
 // left to the cluster, which ranks unsorted hits by relevance and answers ten
-// of them.
+// of them. Search, SearchNext and SearchPrev read a nil request as the empty
+// one.
 type SearchRequest struct {
 	Query map[string]any `json:"query,omitempty"`
 	From  int            `json:"from,omitempty"`
@@ -72,6 +73,14 @@ func (r *SearchRequest) validate() error {
 	return nil
 }
 
+// orEmpty returns r, or the empty request when r is nil.
+func (r *SearchRequest) orEmpty() *SearchRequest {
+	if r == nil {
+		return new(SearchRequest)
+	}
+	return r
+}
+
 // TotalRelation says how SearchResult.Total relates to the number of hits.
 type TotalRelation string
 
@@ -116,6 +125,7 @@ type AggregationResult struct {
 // it is. A request without a sort, or with a sort entry naming no order, is
 // an error: the order to page back along is not known.
 func (d *document) SearchPrev(ctx context.Context, indexName string, req *SearchRequest, size int) (*SearchResult, error) {
+	req = req.orEmpty()
 	sort, err := reverseSort(req.Sort)
 	if err != nil {
 		return nil, err
@@ -136,7 +146,7 @@ func (d *document) SearchPrev(ctx context.Context, indexName string, req *Search
 // in the order of its sort. The page is taken on a copy, req is left as it
 // is.
 func (d *document) SearchNext(ctx context.Context, indexName string, req *SearchRequest, size int) (*SearchResult, error) {
-	page := *req
+	page := *req.orEmpty()
 	page.From = 0
 	page.Size = &size
 	return d.Search(ctx, indexName, &page)
@@ -216,8 +226,9 @@ func sortOrder(field string, spec any) (order Order, given bool, err error) {
 // Search runs req against indexName. The request goes to the cluster as it
 // is: no sort means relevance order, no size means the cluster's default
 // page, and the total is counted up to the cluster's threshold unless
-// TrackTotalHits asks for all of it, see SearchResult.TotalRelation. A
-// request the cluster would refuse, see validate, fails before it is sent.
+// TrackTotalHits asks for all of it, see SearchResult.TotalRelation. A nil
+// req is the empty request, which matches every document. A request the
+// cluster would refuse, see validate, fails before it is sent.
 func (*document) Search(ctx context.Context, indexName string, req *SearchRequest) (*SearchResult, error) {
 	if err := _check(); err != nil {
 		return nil, errors.Wrap(err, "elasticsearch client check")
@@ -225,6 +236,7 @@ func (*document) Search(ctx context.Context, indexName string, req *SearchReques
 	if indexName == "" {
 		return nil, errors.New("index name cannot be empty")
 	}
+	req = req.orEmpty()
 	if err := req.validate(); err != nil {
 		return nil, err
 	}

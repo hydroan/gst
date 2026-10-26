@@ -50,7 +50,11 @@ func TestIndexHonoursTheContext(t *testing.T) {
 	require.ErrorIs(t, elastic.Index.Delete(ctx, "sample-canceled"), context.Canceled)
 }
 
-func TestDocumentGetReadsAnIndexedDocument(t *testing.T) {
+// TestDocumentGetTellsAMissingDocumentFromAMissingIndex pins the two answers
+// the cluster gives with a 404: a document the index does not hold reads as
+// not found, and an index that does not exist is an error, not a document
+// that is not there.
+func TestDocumentGetTellsAMissingDocumentFromAMissingIndex(t *testing.T) {
 	index := newSampleIndex(t, sampleDocument{id: "one", fields: map[string]any{"title": "sample"}})
 
 	got, err := elastic.Document.Get(context.Background(), index, "one", nil)
@@ -61,6 +65,9 @@ func TestDocumentGetReadsAnIndexedDocument(t *testing.T) {
 	missing, err := elastic.Document.Get(context.Background(), index, "two", nil)
 	require.NoError(t, err)
 	require.False(t, missing.Found)
+
+	_, err = elastic.Document.Get(context.Background(), index+"-missing", "one", nil)
+	require.ErrorContains(t, err, "index_not_found_exception")
 }
 
 // TestSearchRanksByRelevanceWhenNoSortIsGiven pins that a request without a
@@ -82,6 +89,24 @@ func TestSearchRanksByRelevanceWhenNoSortIsGiven(t *testing.T) {
 	for _, hit := range res.Hits {
 		require.NotNil(t, hit.Score, "hit %s carries no score", hit.ID)
 	}
+}
+
+// TestSearchTakesANilRequestAsTheEmptyOne pins that every search entry reads
+// a nil request as the empty one: Search and SearchNext match every document,
+// and SearchPrev refuses it for want of a sort, as it does the empty request.
+func TestSearchTakesANilRequestAsTheEmptyOne(t *testing.T) {
+	index := newSampleIndex(t, seqDocuments(2)...)
+
+	res, err := elastic.Document.Search(context.Background(), index, nil)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"1", "2"}, ids(res))
+
+	res, err = elastic.Document.SearchNext(context.Background(), index, nil, 1)
+	require.NoError(t, err)
+	require.Len(t, res.Hits, 1)
+
+	_, err = elastic.Document.SearchPrev(context.Background(), index, nil, 1)
+	require.ErrorContains(t, err, "SearchPrev requires sort")
 }
 
 // TestSearchAfterRequiresSort pins that search_after without a sort is

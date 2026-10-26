@@ -25,7 +25,9 @@ type GetResult struct {
 	Source map[string]any `json:"_source,omitempty"`
 }
 
-// Get retrieves a document from elasticsearch by index name and id
+// Get retrieves the document id from the index indexName. A document the
+// index does not hold answers Found false; an index that does not exist is an
+// error, as is every other answer the cluster refuses the request with.
 func (*document) Get(ctx context.Context, indexName string, id string, req *GetRequest) (*GetResult, error) {
 	if err := _check(); err != nil {
 		return nil, errors.Wrap(err, "elasticsearch client check")
@@ -62,11 +64,18 @@ func (*document) Get(ctx context.Context, indexName string, id string, req *GetR
 		logger.Errorw("failed to read response body", "error", err)
 		return nil, errors.Wrap(err, "failed to read response body")
 	}
+	// A missing document and a missing index both answer 404, and the body
+	// alone tells them apart: found false names the document.
 	if res.StatusCode == http.StatusNotFound {
-		return &GetResult{
-			ID:    id,
-			Found: false,
-		}, nil
+		var missing struct {
+			Found *bool `json:"found"`
+		}
+		if json.Unmarshal(body, &missing) == nil && missing.Found != nil && !*missing.Found {
+			return &GetResult{
+				ID:    id,
+				Found: false,
+			}, nil
+		}
 	}
 	if res.IsError() {
 		logger.Errorz(
