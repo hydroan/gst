@@ -30,9 +30,9 @@ type Column = modelschema.Column
 // ColumnClass describes the aggregate capability of a column type.
 type ColumnClass = modelschema.ColumnClass
 
-// The column classes gg gen maps to the generated column reference types.
+// The column classes gg gen writes a numeric or a time column reference for;
+// a column of any other class takes the plain one.
 const (
-	ColumnClassOther   = modelschema.ColumnClassOther
 	ColumnClassNumeric = modelschema.ColumnClassNumeric
 	ColumnClassTime    = modelschema.ColumnClassTime
 )
