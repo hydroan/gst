@@ -366,30 +366,14 @@ func schemaFromTypeVisiting(dataType reflect.Type, visiting map[reflect.Type]boo
 		arraySchema.Items = itemRef
 		return &openapi3.SchemaRef{Value: arraySchema}
 	default:
-		return &openapi3.SchemaRef{Value: fieldToOpenAPISchema(reflect.StructField{Type: dataType})}
+		return &openapi3.SchemaRef{Value: &openapi3.Schema{Type: openAPIType(dataType)}}
 	}
 }
 
-func fieldToOpenAPISchema(field reflect.StructField) *openapi3.Schema {
-	typ := field.Type
-	for typ.Kind() == reflect.Pointer {
-		typ = typ.Elem()
-	}
-
-	if typ == timeType {
-		return dateTimeSchema()
-	}
-
-	return &openapi3.Schema{Type: fieldToOpenAPIType(field)}
-}
-
-func fieldToOpenAPIType(field reflect.StructField) *openapi3.Types {
-	typ := field.Type
-
-	for typ.Kind() == reflect.Pointer {
-		typ = typ.Elem()
-	}
-
+// openAPIType returns the OpenAPI type of a value of the Go type typ, a
+// scalar or a map: schemaFromTypeVisiting answers a pointer, a time, a
+// struct, a slice and an array itself.
+func openAPIType(typ reflect.Type) *openapi3.Types {
 	switch typ.Kind() {
 	case reflect.String:
 		return &openapi3.Types{openapi3.TypeString}
@@ -399,9 +383,7 @@ func fieldToOpenAPIType(field reflect.StructField) *openapi3.Types {
 		return &openapi3.Types{openapi3.TypeNumber}
 	case reflect.Bool:
 		return &openapi3.Types{openapi3.TypeBoolean}
-	case reflect.Array, reflect.Slice:
-		return &openapi3.Types{openapi3.TypeArray}
-	case reflect.Struct, reflect.Map:
+	case reflect.Map:
 		return &openapi3.Types{openapi3.TypeObject}
 	default:
 		// An unmapped kind, eg. an interface, constrains nothing. Leaving the

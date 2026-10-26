@@ -27,9 +27,9 @@ func TestSetDocInfoAlwaysDeclaresAVersion(t *testing.T) {
 }
 
 // TestSetDocSecurityDeclaresTheRegisteredSchemes pins that the document
-// declares the schemes the project's middleware registered and no other: a
-// project registering none declares none and requires nothing, and once a
-// cookie and a bearer scheme are registered both are declared, each a
+// declares the schemes registered through apidoc.RegisterSecurityScheme and
+// no other: with none registered it declares none and requires nothing, and
+// once a cookie and a bearer scheme are registered both are declared, each a
 // requirement of its own, in name order.
 func TestSetDocSecurityDeclaresTheRegisteredSchemes(t *testing.T) {
 	bare := &openapi3.T{Components: &openapi3.Components{}}
@@ -60,7 +60,7 @@ func TestSetDocSecurityDeclaresTheRegisteredSchemes(t *testing.T) {
 	}
 }
 
-func TestMarkPublic(t *testing.T) {
+func TestMarkPublicOverridesTheDocumentSecurity(t *testing.T) {
 	op := &openapi3.Operation{}
 	markPublic(op)
 	if op.Security == nil || len(*op.Security) != 0 {

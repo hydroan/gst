@@ -64,6 +64,8 @@ func openAPIDocComment(symbol, comment string) string {
 	return rest
 }
 
+// trimOpenAPIDocCopula strips copula, is or are, from the start of comment
+// together with the space after it, and reports whether it did.
 func trimOpenAPIDocCopula(comment, copula string) (string, bool) {
 	rest, ok := strings.CutPrefix(comment, copula)
 	if !ok || rest == "" {
@@ -76,18 +78,13 @@ func trimOpenAPIDocCopula(comment, copula string) (string, bool) {
 	return strings.TrimLeftFunc(rest, unicode.IsSpace), true
 }
 
-// openAPIStructComment returns the API-facing doc comment of a model type.
+// openAPIStructComment returns the API-facing doc comment of a model type, of
+// its element type for a slice.
 func openAPIStructComment(typ reflect.Type) string {
-	instance := elemInstance(typ)
+	if typ.Kind() == reflect.Slice {
+		typ = typ.Elem()
+	}
+	instance := reflect.New(typ).Interface()
 	_, typeName := typeIdentity(instance)
 	return openAPIDocComment(typeName, modelStructComment(instance))
-}
-
-// elemInstance creates a model instance for comment parsing, unwrapping
-// slice types to their element type.
-func elemInstance(typ reflect.Type) any {
-	if typ.Kind() == reflect.Slice {
-		return reflect.New(typ.Elem()).Interface()
-	}
-	return reflect.New(typ).Interface()
 }

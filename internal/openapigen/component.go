@@ -172,7 +172,7 @@ func registerSchema[M types.Model, REQ types.Request, RSP types.Response](reqKey
 			doc.Components.RequestBodies[reqKey] = &openapi3.RequestBodyRef{
 				Value: &openapi3.RequestBody{
 					Description: name + " Payload",
-					Required:    !modelregistry.IsEmpty[REQ](),
+					Required:    true,
 					Content:     openapi3.NewContentWithJSONSchemaRef(reqSchemaRef),
 				},
 			}

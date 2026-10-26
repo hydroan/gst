@@ -59,12 +59,11 @@ func setDocInfo(doc *openapi3.T) {
 	setDocSecurity(doc)
 }
 
-// setDocSecurity declares the authentication schemes the project's
-// middleware registered (see apidoc.RegisterSecurityScheme), by name, and
-// requires any one of them of every operation by default; public operations
-// override this with an empty requirement (see markPublic). A project that
-// registered none, serving no authentication, declares none and requires
-// nothing.
+// setDocSecurity declares the authentication schemes registered through
+// apidoc.RegisterSecurityScheme, by name, and requires any one of them of
+// every operation by default; public operations override this with an empty
+// requirement (see markPublic). With none registered it declares none and
+// requires nothing.
 func setDocSecurity(doc *openapi3.T) {
 	schemes := apidoc.SecuritySchemes()
 	if len(schemes) == 0 {

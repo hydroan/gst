@@ -4,9 +4,26 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/hydroan/gst/apidoc"
 	"github.com/hydroan/gst/internal/consts"
 )
+
+// newOperation documents the operation the route path serves for phase on
+// the model type typ, all but its request body and its responses, which the
+// caller adds: the id, summary, description and tags the path and the model
+// give it, and the parameters the path declares. custom reports whether the
+// action declares its own request or response type instead of the model (see
+// apidoc.Operation.CustomTypes).
+func newOperation(path string, phase consts.Phase, typ reflect.Type, custom bool) *openapi3.Operation {
+	return &openapi3.Operation{
+		OperationID: operationID(path, phase),
+		Summary:     summary(path, phase, typ, custom),
+		Description: description(path, phase, typ, custom),
+		Tags:        tags(path, phase, typ),
+		Parameters:  parseParametersFromPath(path),
+	}
+}
 
 // operationID derives a unique, stable operation id from the route path and
 // the action, eg. PATCH /api/sample/records/{id} -> "sample_records_patch".

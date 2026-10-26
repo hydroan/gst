@@ -32,7 +32,8 @@ func TestSetExportDocumentsFileDownload(t *testing.T) {
 		t.Fatalf("export tags = %v, want [exports]", op.Tags)
 	}
 
-	// The 200 response advertises binary file downloads instead of a JSON envelope.
+	// The 200 response advertises binary file downloads instead of a JSON
+	// envelope.
 	if op.Responses == nil || op.Responses.Value("200") == nil || op.Responses.Value("200").Value == nil {
 		t.Fatalf("export responses = %v, want an inline status 200", op.Responses)
 	}
@@ -135,7 +136,8 @@ func TestSetImportDocumentsMultipartUpload(t *testing.T) {
 		t.Fatalf("import tags = %v, want [imports]", op.Tags)
 	}
 
-	// The request body is a required multipart/form-data upload with a binary "file" field.
+	// The request body is a required multipart/form-data upload with a binary
+	// "file" field.
 	if op.RequestBody == nil || op.RequestBody.Value == nil {
 		t.Fatal("import operation is missing a request body")
 	}

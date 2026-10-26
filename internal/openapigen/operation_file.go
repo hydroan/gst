@@ -33,6 +33,7 @@ const (
 // standard success envelope returned by the controller.
 func setImport[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeFor[M]()
+	custom := !modelregistry.AreTypesEqual[M, REQ, RSP]()
 	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, consts.Import)
 	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, consts.Import)
 	rspSchemaRef := newSchemaRefWithDocs(apiResponse[RSP]{})
@@ -40,15 +41,10 @@ func setImport[M types.Model, REQ types.Request, RSP types.Response](path string
 	// JSON request component, so no request schema is registered under reqKey.
 	registerSchema[M, REQ, RSP](reqKey, rspKey, nil, rspSchemaRef)
 
-	pathItem.Post = &openapi3.Operation{
-		OperationID: operationID(path, consts.Import),
-		Summary:     summary(path, consts.Import, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
-		Description: description(path, consts.Import, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
-		Tags:        tags(path, consts.Import, typ),
-		Parameters:  parseParametersFromPath(path),
-		RequestBody: importFileRequestBody(),
-		Responses:   newResponses(rspKey, consts.Import, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
-	}
+	op := newOperation(path, consts.Import, typ, custom)
+	op.RequestBody = importFileRequestBody()
+	op.Responses = newResponses(rspKey, consts.Import, custom)
+	pathItem.Post = op
 }
 
 // importFileRequestBody documents the multipart/form-data upload consumed by
@@ -87,20 +83,15 @@ func importFileRequestBody() *openapi3.RequestBodyRef {
 // cap on the records listed where the controller lists them: a virtual
 // resource's export service lists its records itself.
 func setExport[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
-	typ := reflect.TypeFor[M]()
+	custom := !modelregistry.AreTypesEqual[M, REQ, RSP]()
 
-	params := append(parseParametersFromPath(path), exportFormatParameter())
+	op := newOperation(path, consts.Export, reflect.TypeFor[M](), custom)
+	op.Parameters = append(op.Parameters, exportFormatParameter())
 	if !modelregistry.IsVirtual(*new(M)) {
-		params = append(params, exportLimitParameter())
+		op.Parameters = append(op.Parameters, exportLimitParameter())
 	}
-	pathItem.Get = &openapi3.Operation{
-		OperationID: operationID(path, consts.Export),
-		Summary:     summary(path, consts.Export, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
-		Description: description(path, consts.Export, typ, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
-		Tags:        tags(path, consts.Export, typ),
-		Parameters:  params,
-		Responses:   exportFileResponses(!modelregistry.AreTypesEqual[M, REQ, RSP]()),
-	}
+	op.Responses = exportFileResponses(custom)
+	pathItem.Get = op
 	addQueryParameters[M, REQ, RSP](pathItem.Get, false)
 }
 
