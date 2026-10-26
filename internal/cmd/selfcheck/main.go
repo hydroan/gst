@@ -96,6 +96,18 @@
 // alone too, as are the module sources and the test support written as
 // project code.
 //
+// # Test directory listing
+//
+// go test keys a cached result on every entry of every directory a test
+// lists, so a test listing the directory of another package, or the
+// repository's, reruns whenever anything there moves, an editor saving a file
+// or git writing .git, and its result is never reused. checkTestListing
+// reports a listing in a test file, os.ReadDir, os.DirFS, filepath.WalkDir,
+// filepath.Walk or filepath.Glob, unless it can follow the path back to the
+// package's own directory or to a directory the test made; a test reads the
+// files of another package through golist.Packages of
+// internal/testutil/golist, which lists no directory.
+//
 // # Layout
 //
 // Each check lives in the file named after it, testplacement.go for the
@@ -139,6 +151,7 @@ var checks = []check{
 	{name: "testdoc", run: checkTestDoc},
 	{name: "logfields", run: checkLogFields},
 	{name: "testseams", run: checkTestSeams},
+	{name: "testlisting", run: checkTestListing},
 }
 
 func main() {

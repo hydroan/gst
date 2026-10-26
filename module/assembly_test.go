@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hydroan/gst/internal/testutil/golist"
 	"github.com/stretchr/testify/require"
 )
 
@@ -66,29 +67,27 @@ func copyableModuleManifests(t *testing.T) map[string]moduleManifest {
 	return manifests
 }
 
-// parseModulePackage parses the non-test sources of one directory.
-func parseModulePackage(t *testing.T, dir string) []*ast.File {
+// parseModulePackages parses the non-test sources of the packages pattern
+// matches, keyed by path.
+func parseModulePackages(t *testing.T, pattern string) map[string]*ast.File {
 	t.Helper()
 
-	entries, err := os.ReadDir(dir)
-	require.NoError(t, err)
-
-	files := make([]*ast.File, 0, len(entries))
-	for _, entry := range entries {
-		name := entry.Name()
-		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-			continue
+	files := make(map[string]*ast.File)
+	for _, pkg := range golist.Packages(t, pattern) {
+		for _, name := range pkg.GoFiles(t) {
+			path := filepath.Join(pkg.Dir, name)
+			file, parseErr := parser.ParseFile(token.NewFileSet(), path, nil, parser.SkipObjectResolution)
+			require.NoError(t, parseErr)
+			files[path] = file
 		}
-		file, parseErr := parser.ParseFile(token.NewFileSet(), filepath.Join(dir, name), nil, parser.SkipObjectResolution)
-		require.NoError(t, parseErr)
-		files = append(files, file)
 	}
 
 	return files
 }
 
-// TestCopyableModuleServicesInstallNoHookFromInit pins the assembly rule that a
-// copied module's service package must not install framework hooks from init.
+// TestCopyableModuleServicesInstallNoHookFromInit pins the assembly rule that
+// the service packages of a copied module, internal/service/<name> and every
+// package below it, must not install framework hooks from init.
 //
 // Package init only runs when the package is linked, and on the copy path the
 // only import of service/<name> comes from the generated route registrations —
@@ -102,11 +101,11 @@ func TestCopyableModuleServicesInstallNoHookFromInit(t *testing.T) {
 			if _, err := os.Stat(dir); os.IsNotExist(err) {
 				return
 			}
-			for _, file := range parseModulePackage(t, dir) {
+			for path, file := range parseModulePackages(t, frameworkImportPrefix+"internal/service/"+name+"/...") {
 				for _, decl := range file.Decls {
 					fn, ok := decl.(*ast.FuncDecl)
 					require.Falsef(t, ok && fn.Recv == nil && fn.Name != nil && fn.Name.Name == "init",
-						"internal/service/%s declares init(): export the hook implementation and install it from Register instead", name)
+						"%s declares init(): export the hook implementation and install it from Register instead", path)
 				}
 			}
 		})
@@ -114,15 +113,15 @@ func TestCopyableModuleServicesInstallNoHookFromInit(t *testing.T) {
 }
 
 // TestModuleRegistersMountNoHandlers pins add/copy parity for middleware and
-// interceptors: the project mounts the handlers module.json declares itself, in the order
-// it wants, on the add path as on the copy path, so Register mounts none —
-// a registration in Register would mount the handler a second time behind
-// the project's on the add path, and be absent on the copy path.
+// interceptors: the project mounts the handlers module.json declares itself,
+// in the order it wants, on the add path as on the copy path, so Register
+// mounts none — a registration in Register would mount the handler a second
+// time behind the project's on the add path, and be absent on the copy path.
 func TestModuleRegistersMountNoHandlers(t *testing.T) {
 	for name := range copyableModuleManifests(t) {
 		t.Run(name, func(t *testing.T) {
 			registered := make([]string, 0)
-			for _, file := range parseModulePackage(t, name) {
+			for _, file := range parseModulePackages(t, frameworkImportPrefix+"module/"+name) {
 				registered = append(registered, handlerRegistrations(t, name, file)...)
 			}
 			require.Empty(t, registered, "module %s mounts %v from Register; the project mounts the handlers module.json declares", name, registered)
@@ -251,17 +250,7 @@ func TestCopyableModuleServiceTreesAreSelfContained(t *testing.T) {
 				return
 			}
 
-			require.NoError(t, filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
-				if err != nil {
-					return err
-				}
-				if entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-					return nil
-				}
-				file, parseErr := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
-				if parseErr != nil {
-					return parseErr
-				}
+			for path, file := range parseModulePackages(t, frameworkImportPrefix+"internal/service/"+name+"/...") {
 				for _, spec := range file.Imports {
 					if spec.Path == nil {
 						continue
@@ -275,9 +264,7 @@ func TestCopyableModuleServiceTreesAreSelfContained(t *testing.T) {
 						"%s imports %q, which belongs to module %s; cross-module access belongs in module/%s",
 						path, importPath, owner, name)
 				}
-
-				return nil
-			}))
+			}
 		})
 	}
 }

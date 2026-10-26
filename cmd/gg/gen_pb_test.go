@@ -70,7 +70,7 @@ func TestGenRunWritesTheProtobufDefinitionsOfGRPCModels(t *testing.T) {
 	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
 
 	got := readGenerated(t, filepath.Join(projectDir, "pb"))
-	golden := filepath.Join(frameworkRepoRoot(t), "cmd", "gg", "testdata", "pb", "golden")
+	golden := filepath.Join(packageDir(t), "testdata", "pb", "golden")
 	if *update {
 		require.NoError(t, os.RemoveAll(golden))
 		for path, content := range got {

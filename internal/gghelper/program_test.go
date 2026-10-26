@@ -8,7 +8,6 @@ import (
 	"go/token"
 	"maps"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"slices"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
+	"github.com/hydroan/gst/internal/testutil/golist"
 	"github.com/stretchr/testify/require"
 )
 
@@ -50,7 +50,7 @@ func TestEmbeddedProgramsAreMainPackages(t *testing.T) {
 // name, or named in nonColumnTypes, by itself or by its package, with what
 // it is that no model stores.
 func TestInspectWritesTheForwardedInternalTypesUnderTheirPublicPaths(t *testing.T) {
-	forwarded := forwardedInternalTypes(t, filepath.Join("..", ".."))
+	forwarded := forwardedInternalTypes(t)
 	for _, problem := range inspectRewriteProblems(forwarded, inspectRewrites(t, gghelper.InspectProgram()["main.go"])) {
 		t.Error(problem)
 	}
@@ -63,59 +63,28 @@ type forwardedType struct {
 	public, name, target string
 }
 
-// forwardedInternalTypes reads, from the framework's source under root, the
-// type aliases its public packages declare for types of internal packages,
-// keyed by the internal package's import path. The public packages are the
-// framework's own, those outside internal/, cmd/, examples/ and module/, the
-// last holding the business modules, whose types typeExpr leaves to its
-// default; test files are left out. An alias with type parameters, or of an
-// instantiation, is left out as well: it stands for instantiations, whose
-// names reflection prints with their type arguments in brackets, and typeExpr
-// writes none of those back, generating the column as Column[any].
-//
-// The packages come from go list in a child process, whose reads go test does
-// not record. Of every public package, the directory and the ones above it up
-// to root are stat'ed, which notices a package or a file added or removed,
-// and every Go file is opened. No directory is listed: go test hashes a
-// listed directory by the name, size and modification time of every entry,
-// so listing root would take every git operation, which touches .git, for a
-// change to the framework and rerun the package's tests.
-func forwardedInternalTypes(t *testing.T, root string) map[string][]forwardedType {
+// forwardedInternalTypes reads, from the framework's source, the type aliases
+// its public packages declare for types of internal packages, keyed by the
+// internal package's import path. The public packages are the framework's
+// own, those outside internal/, cmd/, examples/ and module/, the last holding
+// the business modules, whose types typeExpr leaves to its default; test
+// files are left out. An alias with type parameters, or of an instantiation,
+// is left out as well: it stands for instantiations, whose names reflection
+// prints with their type arguments in brackets, and typeExpr writes none of
+// those back, generating the column as Column[any]. Only the files of the
+// public packages are asked for, so a change to any other package leaves the
+// result cached (see golist).
+func forwardedInternalTypes(t *testing.T) map[string][]forwardedType {
 	t.Helper()
 	internalPrefix := ggconst.ImportPathGst + "/internal/"
-	top, err := filepath.Abs(root)
-	require.NoError(t, err)
-	list := exec.Command("go", "list", "-e", "-f",
-		`{{.ImportPath}}{{"\t"}}{{.Dir}}{{range .GoFiles}}{{"\t"}}{{.}}{{end}}{{range .CgoFiles}}{{"\t"}}{{.}}{{end}}{{range .IgnoredGoFiles}}{{"\t"}}{{.}}{{end}}`,
-		"./...")
-	list.Dir = top
-	var stderr bytes.Buffer
-	list.Stderr = &stderr
-	output, err := list.Output()
-	require.NoError(t, err, "go list: %s", stderr.String())
-
-	stated := make(map[string]bool)
 	forwarded := make(map[string][]forwardedType)
-	for line := range strings.Lines(string(output)) {
-		fields := strings.Split(strings.TrimSuffix(line, "\n"), "\t")
-		public, dir := fields[0], fields[1]
-		rel := strings.TrimPrefix(strings.TrimPrefix(public, ggconst.ImportPathGst), "/")
+	for _, pkg := range golist.Packages(t, ggconst.ImportPathGst+"/...") {
+		rel := strings.TrimPrefix(strings.TrimPrefix(pkg.ImportPath, ggconst.ImportPathGst), "/")
 		if slices.Contains([]string{"internal", "cmd", "examples", "module"}, strings.Split(rel, "/")[0]) {
 			continue
 		}
-		for above := dir; !stated[above]; above = filepath.Dir(above) {
-			stated[above] = true
-			_, statErr := os.Stat(above)
-			require.NoError(t, statErr)
-			if above == top {
-				break
-			}
-		}
-		for _, file := range fields[2:] {
-			if strings.HasSuffix(file, "_test.go") {
-				continue
-			}
-			parsed, parseErr := parser.ParseFile(token.NewFileSet(), filepath.Join(dir, file), nil, parser.SkipObjectResolution)
+		for _, file := range pkg.GoFiles(t) {
+			parsed, parseErr := parser.ParseFile(token.NewFileSet(), filepath.Join(pkg.Dir, file), nil, parser.SkipObjectResolution)
 			require.NoError(t, parseErr)
 			imports := make(map[string]string, len(parsed.Imports))
 			for _, spec := range parsed.Imports {
@@ -146,7 +115,7 @@ func forwardedInternalTypes(t *testing.T, root string) map[string][]forwardedTyp
 						continue
 					}
 					internal := imports[qualifier.Name]
-					forwarded[internal] = append(forwarded[internal], forwardedType{public: public, name: typeSpec.Name.Name, target: selector.Sel.Name})
+					forwarded[internal] = append(forwarded[internal], forwardedType{public: pkg.ImportPath, name: typeSpec.Name.Name, target: selector.Sel.Name})
 				}
 			}
 		}

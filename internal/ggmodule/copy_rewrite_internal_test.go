@@ -1,11 +1,12 @@
 package ggmodule
 
 import (
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/hydroan/gst/internal/testutil/golist"
 )
 
 func TestNormalizeModuleModelSourceUsesTargetPackage(t *testing.T) {
@@ -268,15 +269,11 @@ func loadSession(id string) string {
 	}
 }
 
-// TestNormalizeModuleCopySourceAcceptsShippedModuleSources keeps the module tree
-// itself copy-clean: a declaration shadowing a copied import only surfaces when a
-// project runs gg module copy, so the framework asserts it up front instead of
-// shipping a module that cannot be copied.
+// TestNormalizeModuleCopySourceAcceptsShippedModuleSources keeps the module
+// tree itself copy-clean: a declaration shadowing a copied import only
+// surfaces when a project runs gg module copy, so the framework asserts it up
+// front instead of shipping a module that cannot be copied.
 func TestNormalizeModuleCopySourceAcceptsShippedModuleSources(t *testing.T) {
-	frameworkRoot, err := findFrameworkRoot()
-	if err != nil {
-		t.Fatalf("findFrameworkRoot() error = %v", err)
-	}
 	modules, err := ListModules()
 	if err != nil {
 		t.Fatalf("ListModules() error = %v", err)
@@ -287,39 +284,35 @@ func TestNormalizeModuleCopySourceAcceptsShippedModuleSources(t *testing.T) {
 			continue
 		}
 		t.Run(module.Name, func(t *testing.T) {
-			normalizeSourceTree(t, filepath.Join(frameworkRoot, "internal", "model", module.Name), module.Name, normalizeModuleModelSource)
-			normalizeSourceTree(t, filepath.Join(frameworkRoot, "internal", "service", module.Name), module.Name, normalizeModuleServiceSource)
+			normalizeSourceTree(t, frameworkModulePath+"/internal/model/"+module.Name+"/...", module.Name, normalizeModuleModelSource)
+			normalizeSourceTree(t, frameworkModulePath+"/internal/service/"+module.Name+"/...", module.Name, normalizeModuleServiceSource)
 		})
 	}
 }
 
-func normalizeSourceTree(t *testing.T, root string, moduleName string, normalize func(string, []byte, moduleCopyRewriteConfig) ([]byte, error)) {
+// normalizeSourceTree normalizes the source files of the packages pattern
+// matches, test files left out, the way gg module copy does, and fails the
+// test for each one that is not copy-clean.
+func normalizeSourceTree(t *testing.T, pattern string, moduleName string, normalize func(string, []byte, moduleCopyRewriteConfig) ([]byte, error)) {
 	t.Helper()
 
-	walkErr := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
+	for _, pkg := range golist.Packages(t, pattern) {
+		for _, name := range pkg.GoFiles(t) {
+			path := filepath.Join(pkg.Dir, name)
+			src, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := normalize(path, src, moduleCopyRewriteConfig{
+				ModuleName:        moduleName,
+				ProjectModulePath: "tmpapp",
+				ModelDir:          "model",
+				ServiceDir:        "service",
+				TargetPackage:     moduleCopyPackageName(pkg.Dir),
+			}); err != nil {
+				t.Errorf("module source is not copy-clean: %v", err)
+			}
 		}
-		if entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		src, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		if _, err := normalize(path, src, moduleCopyRewriteConfig{
-			ModuleName:        moduleName,
-			ProjectModulePath: "tmpapp",
-			ModelDir:          "model",
-			ServiceDir:        "service",
-			TargetPackage:     moduleCopyPackageName(filepath.Dir(path)),
-		}); err != nil {
-			t.Errorf("module source is not copy-clean: %v", err)
-		}
-		return nil
-	})
-	if walkErr != nil {
-		t.Fatalf("walk %s error = %v", root, walkErr)
 	}
 }
 

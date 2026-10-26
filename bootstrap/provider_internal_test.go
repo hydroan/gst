@@ -1,14 +1,15 @@
 package bootstrap
 
 import (
-	"os"
 	"path/filepath"
 	"reflect"
-	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/internal/testutil/golist"
 	"github.com/stretchr/testify/require"
 
 	// Every provider package registers itself from init. Importing them all
@@ -32,17 +33,16 @@ import (
 	_ "github.com/hydroan/gst/provider/scylla"
 )
 
-// TestEveryProviderPackageSelfRegisters walks the provider/ directory and
-// requires a registration for each package: a provider that forgot its init
-// registration would never start, and its first use would fail in production
-// instead of here.
+// TestEveryProviderPackageSelfRegisters requires a registration for each
+// package under provider/: a provider that forgot its init registration would
+// never start, and its first use would fail in production instead of here.
 func TestEveryProviderPackageSelfRegisters(t *testing.T) {
 	registered := make(map[string]bool)
 	for _, c := range lifecycle.Components(lifecycle.StageProvider) {
 		registered[c.Name] = true
 	}
 
-	for name := range providerDirectories(t) {
+	for name := range providerPackageNames(t) {
 		require.True(t, registered[name], "provider package %q must self-register under its package name", name)
 	}
 }
@@ -84,7 +84,7 @@ func TestEveryProviderHasAConfigurationSwitch(t *testing.T) {
 	for _, name := range enabledProviders() {
 		enabled[name] = true
 	}
-	require.Equal(t, providerDirectories(t), enabled, "the switch list must name exactly the packages under provider/")
+	require.Equal(t, providerPackageNames(t), enabled, "the switch list must name exactly the packages under provider/")
 }
 
 // TestEnabledProvidersNamesTheEnabledSections proves the names come from the
@@ -139,22 +139,18 @@ func enableEverySwitch(cfg reflect.Value) {
 	}
 }
 
-// providerDirectories returns the names of the packages under provider/.
-func providerDirectories(t *testing.T) map[string]bool {
+// providerPackageNames returns the names of the packages under provider/, the
+// directory each sits in right below it.
+func providerPackageNames(t *testing.T) map[string]bool {
 	t.Helper()
 
-	_, file, _, ok := runtime.Caller(0)
-	require.True(t, ok)
-	entries, err := os.ReadDir(filepath.Join(filepath.Dir(file), "..", "provider"))
-	require.NoError(t, err)
-
-	dirs := make(map[string]bool)
-	for _, entry := range entries {
-		if entry.IsDir() {
-			dirs[entry.Name()] = true
-		}
+	prefix := ggconst.ImportPathGst + "/provider/"
+	names := make(map[string]bool)
+	for _, pkg := range golist.Packages(t, prefix+"...") {
+		name, _, _ := strings.Cut(strings.TrimPrefix(pkg.ImportPath, prefix), "/")
+		names[name] = true
 	}
-	return dirs
+	return names
 }
 
 // TestUnlinkedProvidersAreTheEnabledOnesTheBinaryLacks proves the warning

@@ -4,11 +4,12 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
+
+	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/testutil/golist"
 )
 
 // TestKeywordsMatchThePublicPackage pins that the keywords the parser knows
@@ -16,20 +17,13 @@ import (
 // package, the ones a model file can call: a keyword on one side alone
 // would be declarable but never read, or read but never declarable.
 func TestKeywordsMatchThePublicPackage(t *testing.T) {
-	dir := filepath.Join("..", "..", "dsl")
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatalf("read the public dsl package: %v", err)
-	}
+	pkg := golist.Packages(t, ggconst.ImportPathGst+"/dsl")[0]
 	fset := token.NewFileSet()
 	var exported []string
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
-			continue
-		}
-		file, err := parser.ParseFile(fset, filepath.Join(dir, entry.Name()), nil, 0)
+	for _, name := range pkg.GoFiles(t) {
+		file, err := parser.ParseFile(fset, filepath.Join(pkg.Dir, name), nil, 0)
 		if err != nil {
-			t.Fatalf("parse %s: %v", entry.Name(), err)
+			t.Fatalf("parse %s: %v", name, err)
 		}
 		for _, decl := range file.Decls {
 			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil && fn.Name.IsExported() {

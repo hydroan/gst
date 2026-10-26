@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hydroan/gst/internal/testutil/golist"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/mod/modfile"
 )
@@ -218,15 +219,12 @@ func requireFrameworkPackageFunc(t *testing.T, frameworkRoot, manifestPath, impo
 	require.True(t, ast.IsExported(name), "%s requiredAssembly function %s must be exported", manifestPath, name)
 
 	dir := filepath.Join(frameworkRoot, filepath.FromSlash(strings.TrimPrefix(importPath, frameworkImportPrefix)))
-	entries, err := os.ReadDir(dir)
+	_, err := os.Stat(dir)
 	require.NoErrorf(t, err, "%s requiredAssembly names package %q, which has no directory", manifestPath, importPath)
 
-	for _, entry := range entries {
-		name0 := entry.Name()
-		if entry.IsDir() || !strings.HasSuffix(name0, ".go") || strings.HasSuffix(name0, "_test.go") {
-			continue
-		}
-		file, parseErr := parser.ParseFile(token.NewFileSet(), filepath.Join(dir, name0), nil, parser.SkipObjectResolution)
+	pkg := golist.Packages(t, importPath)[0]
+	for _, fileName := range pkg.GoFiles(t) {
+		file, parseErr := parser.ParseFile(token.NewFileSet(), filepath.Join(pkg.Dir, fileName), nil, parser.SkipObjectResolution)
 		require.NoError(t, parseErr)
 		for _, decl := range file.Decls {
 			fn, ok := decl.(*ast.FuncDecl)

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/testutil/golist"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,10 +27,10 @@ var pbDocExampleFuncs = []string{
 	"elementFromProto", "conversionFuncs", "registrationFiles",
 }
 
-// pbDocExampleDirs are the packages pbDocExampleFuncs are declared in.
-var pbDocExampleDirs = []string{
-	filepath.Join("..", "..", "internal", "pbschema"),
-	filepath.Join("..", "..", "internal", "gggen", "pb"),
+// pbDocExamplePackages are the packages pbDocExampleFuncs are declared in.
+var pbDocExamplePackages = []string{
+	ggconst.ImportPathGst + "/internal/pbschema",
+	ggconst.ImportPathGst + "/internal/gggen/pb",
 }
 
 // TestPBDocExamplesComeFromTheGoldenFiles pins every indented code block in
@@ -46,14 +48,9 @@ func TestPBDocExamplesComeFromTheGoldenFiles(t *testing.T) {
 	golden["gen_pb_test.go"] = trimmedLines(strings.Split(strings.ReplaceAll(string(fixture), "'", "`"), "\n"))
 	fset := token.NewFileSet()
 	found := make(map[string]bool, len(pbDocExampleFuncs))
-	for _, dir := range pbDocExampleDirs {
-		entries, err := os.ReadDir(dir)
-		require.NoError(t, err)
-		for _, entry := range entries {
-			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
-				continue
-			}
-			file, err := parser.ParseFile(fset, filepath.Join(dir, entry.Name()), nil, parser.ParseComments)
+	for _, pkg := range golist.Packages(t, pbDocExamplePackages...) {
+		for _, name := range pkg.GoFiles(t) {
+			file, err := parser.ParseFile(fset, filepath.Join(pkg.Dir, name), nil, parser.ParseComments)
 			require.NoError(t, err)
 			for _, decl := range file.Decls {
 				fn, ok := decl.(*ast.FuncDecl)

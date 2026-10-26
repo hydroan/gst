@@ -534,11 +534,19 @@ func requireProjectCompiles(t *testing.T) {
 func frameworkRepoRoot(t *testing.T) string {
 	t.Helper()
 
+	return filepath.Dir(filepath.Dir(packageDir(t)))
+}
+
+// packageDir returns the absolute path of this package's directory, which a
+// test that changed its working directory reaches its testdata from.
+func packageDir(t *testing.T) string {
+	t.Helper()
+
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("runtime.Caller failed")
 	}
-	return filepath.Dir(filepath.Dir(filepath.Dir(file)))
+	return filepath.Dir(file)
 }
 
 // initWorkspace makes projectDir a go workspace of its own module, the way
