@@ -59,15 +59,9 @@ func New(cfg config.Clickhouse) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	// It will fix error: "Cannot create column with type 'FixedString(10240)'
-	// because fixed string with size > 256 is suspicious. Set setting
-	// allow_suspicious_fixed_string_types = 1 in order to allow it"
 	sqlDB, err := db.DB()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get clickhouse db")
-	}
-	if _, err = sqlDB.Exec("SET allow_suspicious_fixed_string_types = 1"); err != nil {
-		return nil, err
 	}
 	dbruntime.ConfigurePool(sqlDB)
 	dbruntime.InstallTracing(db)
