@@ -249,9 +249,8 @@ func (finding VersionFieldFinding) TagInsertions() []TagInsertion {
 }
 
 // versionJSONName renders the wire name a healed json section uses, the
-// snake_case of the field name, as URL parameters and the json tag naming
-// check derive it too (see modelschema.QueryColumnName): version for the
-// field Version, https_version for HTTPSVersion.
+// snake_case of the field name, as the json tag naming check derives it too:
+// version for the field Version, https_version for HTTPSVersion.
 func versionJSONName(fieldName string) string {
 	return strcase.SnakeCase(fieldName)
 }

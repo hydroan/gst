@@ -188,10 +188,10 @@ func (s *exportFormatSampleService) Filter(_ *types.ServiceContext, m *exportFor
 	return m, opts, errors.New("stop before the database stage")
 }
 
-// TestExportHandlerKeepsFormatParamFromModelBind pins that _format, the
-// export controller's own parameter, never reaches the bind of the model,
-// which refuses a key the model does not declare.
-func TestExportHandlerKeepsFormatParamFromModelBind(t *testing.T) {
+// TestExportHandlerKeepsItsOwnParamsFromModelBind pins that _format and
+// _limit, the export controller's own parameters, never reach the bind of the
+// model, which refuses a key the model does not declare.
+func TestExportHandlerKeepsItsOwnParamsFromModelBind(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	const route = "test/export_format_samples/export"
@@ -201,7 +201,7 @@ func TestExportHandlerKeepsFormatParamFromModelBind(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
-	c.Request = httptest.NewRequest(http.MethodGet, "/api/"+route+"?name=sample&_format=csv", nil)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/"+route+"?name=sample&_format=csv&_limit=10", nil)
 
 	handler := ExportHandler[*exportFormatSample, *exportFormatSample, *exportFormatSample](
 		&types.ControllerConfig[*exportFormatSample]{Route: route},
@@ -209,5 +209,5 @@ func TestExportHandlerKeepsFormatParamFromModelBind(t *testing.T) {
 	handler(c)
 
 	require.True(t, svc.filterReached,
-		"QUERY_FORMAT is the export controller's own parameter and must not reach the model bind")
+		"QUERY_FORMAT and QUERY_LIMIT are the export controller's own parameters and must not reach the model bind")
 }

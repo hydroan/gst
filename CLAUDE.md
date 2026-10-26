@@ -82,7 +82,7 @@ gst 是强约定框架（Apple 风格），不是自由框架（Windows 风格�
 数据库列名一律由 `internal/modelschema` 解析，它底层调用 gorm 自己的 schema 解析，因此 `column` tag、`-`/`-:all`/`-:migration` 三种忽略标记、嵌入结构体展开、gorm 的 commonInitialisms 规则全部与运行时一致。
 
 - 禁止在任何地方重新实现「gorm tag 解析 + snake case」推导列名，包括 controller、database 和生成器。
-- URL 参数名与数据库列名是两件事：URL 参数名由 `query` tag → `json` tag → 字段名推导（前后端契约），列名只来自 gorm。`Column.QueryName` 与 `Column.DBName` 分别承载它们，不要混用。
+- URL 参数名与数据库列名是两件事：URL 参数名只来自 `query` tag（前后端契约），没写 `query` tag 的字段不是前端查询参数；`json` tag 只管序列化，列名只来自 gorm。`Column.QueryName` 与 `Column.DBName` 分别承载它们，不要混用。
 - `json:"-"` 的字段仍是数据库列，但不可被客户端过滤（`Column.Filterable` 为 false），软删除时间戳属于这一类。
 
 ### 包的归属与 internal 引用方向

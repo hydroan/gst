@@ -20,24 +20,22 @@ import (
 // query value WithQuery takes as its first argument.
 //
 // Decoding runs on a per-type field plan compiled once and cached. A field's
-// URL name follows modelschema.QueryColumnName — the query tag wins over the
-// json tag, which wins over the field name, snake-cased — the same rule that
-// names filter columns, so a field's bare key and its operator-filter key
-// always agree; a field of a struct the model embeds by name decodes under
-// its path, first.label, as its column is filtered. A field carrying
-// query:"-" is not decodable, and a field whose type no setter exists for
-// (structs such as time.Time, slices, maps) is left out of the plan, so its
-// key reports as unsupported. A column
-// hidden from clients (json:"-") is left out too: it is not the client's to
-// filter, by a bare key no more than by the operator keys Filters refuses
-// for it. A field that is no column (gorm:"-") decodes like any other: it
-// is the service's parameter, which the framework's own conditions leave
-// alone.
+// URL name is its query tag (see modelschema.QueryColumnName), the same rule
+// that names filter columns, so a field's bare key and its operator-filter
+// key always agree; a field of a struct the model embeds by name decodes
+// under its path, first.label, as its column is filtered. A field without a
+// query tag, or tagged query:"-", is no URL parameter, and a field whose type
+// no setter exists for (structs such as time.Time, slices, maps) is left out
+// of the plan, so their keys report as unsupported. A column hidden from
+// clients (json:"-") is left out too: it is not the client's to filter, by a
+// bare key no more than by the operator keys Filters refuses for it. A field
+// that is no column (gorm:"-") decodes like any other: it is the service's
+// parameter, which the framework's own conditions leave alone.
 //
 // The keys Filters owns never reach the plan, so the "field[op]" bracket
-// syntax and the bare framework timestamp keys stay with Filters. _format
-// belongs to the export action and is dropped for every caller. _size is
-// dropped when the model cannot carry it: a model embedding only Cursor
+// syntax and the bare framework timestamp keys stay with Filters. _format and
+// _limit belong to the export action and are dropped for every caller. _size
+// is dropped when the model cannot carry it: a model embedding only Cursor
 // accepts the parameter as its batch size, but the Size field lives in
 // Pagination.
 //
@@ -55,7 +53,7 @@ func Decode(q url.Values, m types.Model) error {
 
 	var unsupported, invalid []string
 	for key, values := range q {
-		if isFilterQueryKey(key) || key == consts.QUERY_FORMAT {
+		if isFilterQueryKey(key) || key == consts.QUERY_FORMAT || key == consts.QUERY_LIMIT {
 			continue
 		}
 		field, ok := plan[key]
@@ -91,9 +89,12 @@ func Decode(q url.Values, m types.Model) error {
 	return errors.New(strings.Join(parts, "; "))
 }
 
-// decodableField assigns one URL value into its struct field; assign returns
-// the client-facing message when the value does not parse, empty on success.
+// decodableField is one field the URL fills: index is its path in the model,
+// as reflect.Value.FieldByIndex takes it, and assign sets a URL value into it,
+// returning the client-facing message when the value does not parse, empty
+// on success.
 type decodableField struct {
+	index  []int
 	assign func(dst reflect.Value, raw string) string
 }
 
@@ -115,11 +116,11 @@ func decodePlanOf(typ reflect.Type) (map[string]decodableField, error) {
 
 	plan := make(map[string]decodableField)
 	if typ != nil && typ.Kind() == reflect.Struct {
-		hidden, err := hiddenColumnFields(typ)
+		unfilterable, err := unfilterableColumnFields(typ)
 		if err != nil {
 			return nil, err
 		}
-		collectDecodableFields(typ, nil, 0, hidden, plan, make(map[string]int))
+		collectDecodableFields(typ, nil, 0, unfilterable, plan, make(map[string]int))
 		if err = collectEmbeddedColumns(typ, plan); err != nil {
 			return nil, err
 		}
@@ -131,11 +132,11 @@ func decodePlanOf(typ reflect.Type) (map[string]decodableField, error) {
 // collectEmbeddedColumns adds to the plan the columns of the structs the
 // model embeds by name, which gorm lifts into columns of the model's table
 // and the walk below does not look into: each under its URL name, the path
-// the field takes in JSON (first.label, see modelschema.Column), so a bare
-// key reaches the column the operator keys reach. A column hidden from
-// clients, a field carrying query:"-" and a field no setter exists for stay
-// out, as the model's own do, and a name the walk already took keeps its
-// field.
+// of query tags the field takes (first.label, see modelschema.Column), so a
+// bare key reaches the column the operator keys reach. A column clients may
+// not filter on, without a URL name or hidden from them, and a field no
+// setter exists for stay out, as the model's own do, and a name the walk
+// already took keeps its field.
 func collectEmbeddedColumns(typ reflect.Type, plan map[string]decodableField) error {
 	columns, err := modelschema.Columns(typ)
 	if err != nil {
@@ -149,11 +150,8 @@ func collectEmbeddedColumns(typ reflect.Type, plan map[string]decodableField) er
 			continue
 		}
 		field := structFieldAlong(typ, col.Index)
-		if strings.TrimSpace(field.Tag.Get("query")) == "-" {
-			continue
-		}
 		if setter, ok := fieldSetter(field.Type, col.QueryName); ok {
-			plan[col.QueryName] = decodableField{assign: makeAssign(col.Index, field.Type, setter)}
+			plan[col.QueryName] = decodableField{index: col.Index, assign: makeAssign(col.Index, field.Type, setter)}
 		}
 	}
 	return nil
@@ -173,50 +171,55 @@ func structFieldAlong(typ reflect.Type, index []int) reflect.StructField {
 	return field
 }
 
-// hiddenColumnFields returns the fields of the model type's columns hidden
-// from clients, keyed by the field's index path rendered as text, so the
-// plan walk below can tell them apart from the fields it may decode.
-func hiddenColumnFields(typ reflect.Type) (map[string]struct{}, error) {
+// unfilterableColumnFields returns the fields of the model type's columns
+// clients may not filter on, keyed by the field's index path rendered as
+// text, so the plan walk below can tell them apart from the fields it may
+// decode: a column hidden from JSON keeps its query tag out of the plan.
+func unfilterableColumnFields(typ reflect.Type) (map[string]struct{}, error) {
 	columns, err := modelschema.Columns(typ)
 	if err != nil {
 		return nil, errors.Wrap(err, "urlquery: resolve the model's columns")
 	}
-	hidden := make(map[string]struct{})
+	unfilterable := make(map[string]struct{})
 	for _, col := range columns {
 		if !col.Filterable {
-			hidden[fmt.Sprint(col.Index)] = struct{}{}
+			unfilterable[fmt.Sprint(col.Index)] = struct{}{}
 		}
 	}
-	return hidden, nil
+	return unfilterable, nil
 }
 
-// collectDecodableFields walks a struct type, recursing into exported
-// embedded structs, and records one decodable field per URL name, skipping
-// the fields of the columns in hidden. When two fields resolve to the same
-// name, the shallower one wins, matching Go's own field promotion; at equal
-// depth the first declaration wins.
-func collectDecodableFields(typ reflect.Type, prefix []int, depth int, hidden map[string]struct{}, plan map[string]decodableField, depths map[string]int) {
+// collectDecodableFields walks a struct type, recursing into the exported
+// structs it embeds, by value or through a pointer, whose fields Go promotes,
+// and records one decodable field per URL name, skipping the fields of the
+// columns in unfilterable. When two fields resolve to the same name, the
+// shallower one wins, matching Go's own field promotion; at equal depth the
+// first declaration wins.
+func collectDecodableFields(typ reflect.Type, prefix []int, depth int, unfilterable map[string]struct{}, plan map[string]decodableField, depths map[string]int) {
 	for i := range typ.NumField() {
 		field := typ.Field(i)
 		index := append(append([]int(nil), prefix...), i)
 
-		if field.Anonymous && field.IsExported() && field.Type.Kind() == reflect.Struct {
-			collectDecodableFields(field.Type, index, depth+1, hidden, plan, depths)
-			continue
+		if field.Anonymous && field.IsExported() {
+			embedded := field.Type
+			if embedded.Kind() == reflect.Pointer {
+				embedded = embedded.Elem()
+			}
+			if embedded.Kind() == reflect.Struct {
+				collectDecodableFields(embedded, index, depth+1, unfilterable, plan, depths)
+				continue
+			}
 		}
 		if !field.IsExported() {
 			continue
 		}
-		if _, ok := hidden[fmt.Sprint(index)]; ok {
+		if _, ok := unfilterable[fmt.Sprint(index)]; ok {
 			continue
 		}
-		// query:"-" opts the field out of bare-key decoding entirely; the name
-		// resolution below would fall through to the json tag instead.
-		if strings.TrimSpace(field.Tag.Get("query")) == "-" {
-			continue
-		}
-
 		name := modelschema.QueryColumnName(field)
+		if name == "" {
+			continue
+		}
 		setter, ok := fieldSetter(field.Type, name)
 		if !ok {
 			continue
@@ -225,7 +228,7 @@ func collectDecodableFields(typ reflect.Type, prefix []int, depth int, hidden ma
 			continue
 		}
 		depths[name] = depth
-		plan[name] = decodableField{assign: makeAssign(index, field.Type, setter)}
+		plan[name] = decodableField{index: index, assign: makeAssign(index, field.Type, setter)}
 	}
 }
 

@@ -32,13 +32,14 @@ import (
 // sampleRecord is the table model the handler tests read and write, keyed by
 // a string id; the note is a second field for a patch to leave alone. Secret
 // is a column hidden from clients: json:"-" keeps it out of responses and
-// out of every query. Virtual is no column: a bare key fills it for the
-// service's own use, and the listing leaves it alone.
+// out of every query, its query tag notwithstanding. Virtual is no column: a
+// bare key fills it for the service's own use, and the listing leaves it
+// alone.
 type sampleRecord struct {
-	Name    string `json:"name"`
-	Note    string `json:"note"`
-	Secret  string `json:"-"`
-	Virtual string `json:"virtual,omitempty" gorm:"-"`
+	Name    string `json:"name" query:"name"`
+	Note    string `json:"note" query:"note"`
+	Secret  string `json:"-" query:"secret"`
+	Virtual string `json:"virtual,omitempty" query:"virtual" gorm:"-"`
 
 	modelregistry.Query
 	modelregistry.Base
@@ -124,13 +125,13 @@ func (nestedSample) TableName() string { return "controller_nested_samples" }
 // compares, a number, which a filter matches by its text as well, and a time
 // of day, which a body sends in time.TimeOnly.
 type datedSample struct {
-	Name     string            `json:"name"`
-	Day      datatypes.Date    `json:"day"`
-	Due      *time.Time        `json:"due" gorm:"type:date"`
-	ClosedAt *time.Time        `json:"closed_at"`
-	Meta     datatypes.JSONMap `json:"meta"`
-	Count    int               `json:"count"`
-	Clock    datatypes.Time    `json:"clock"`
+	Name     string            `json:"name" query:"name"`
+	Day      datatypes.Date    `json:"day" query:"day"`
+	Due      *time.Time        `json:"due" query:"due" gorm:"type:date"`
+	ClosedAt *time.Time        `json:"closed_at" query:"closed_at"`
+	Meta     datatypes.JSONMap `json:"meta" query:"meta"`
+	Count    int               `json:"count" query:"count"`
+	Clock    datatypes.Time    `json:"clock" query:"clock"`
 
 	modelregistry.Query
 	modelregistry.Base
@@ -176,6 +177,7 @@ const (
 	hangingRoute       = "controller-hanging-samples"
 	importRoute        = "controller-imports"
 	refusedImportRoute = "controller-refused-imports"
+	exportRoute        = "controller-exports"
 	counterRoute       = "controller-counters"
 	versionedRoute     = "controller-versioned-samples"
 	validatedRoute     = "controller-validated-samples"
@@ -208,6 +210,7 @@ func registerFixtureServices() {
 	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](consts.List, hangingRoute, &hangingService{})
 	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](consts.Import, importRoute, &importingService{})
 	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](consts.Import, refusedImportRoute, &refusingService{})
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](consts.Export, exportRoute, &exportingService{})
 	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](consts.Create, observedRoute, &observingService{})
 	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](consts.Create, cookieBeforeRoute, &cookieBeforeService{})
 	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](consts.Create, cookieAfterRoute, &cookieAfterService{})
@@ -309,6 +312,20 @@ func (*importingService) Import(_ *types.ServiceContext, r io.Reader) ([]*sample
 		return nil, types.NewError(http.StatusBadRequest, "malformed sample file")
 	}
 	return records, nil
+}
+
+// exportingService writes the name of every record an export hands it, a
+// line each, so a test reads off the file which records the export listed.
+type exportingService struct {
+	serviceregistry.Base[*sampleRecord, *sampleRecord, *sampleRecord]
+}
+
+func (*exportingService) Export(_ *types.ServiceContext, records ...*sampleRecord) ([]byte, error) {
+	var lines strings.Builder
+	for _, record := range records {
+		lines.WriteString(record.Name + "\n")
+	}
+	return []byte(lines.String()), nil
 }
 
 // observedCall is what a service saw on its service context: the box route

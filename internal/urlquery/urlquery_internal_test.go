@@ -16,29 +16,32 @@ import (
 
 type filterTestModel struct {
 	Name      string    `query:"name"`
-	Age       int       `json:"age"`
-	Remark    string    `json:"remark"`
-	ItemCount int       `json:"item_count"`
-	Enabled   bool      `json:"enabled"`
-	ExpiredAt time.Time `json:"expired_at"`
+	Age       int       `json:"age" query:"age"`
+	Remark    string    `json:"remark" query:"remark"`
+	ItemCount int       `json:"item_count" query:"item_count"`
+	Enabled   bool      `json:"enabled" query:"enabled"`
+	ExpiredAt time.Time `json:"expired_at" query:"expired_at"`
 	// Day is a calendar day; ClosedAt, Retries and Archived are optional
 	// values behind pointers, checked like the values they point to.
-	Day      datatypes.Date `json:"day"`
-	ClosedAt *time.Time     `json:"closed_at"`
-	Retries  *int           `json:"retries"`
-	Archived *bool          `json:"archived"`
+	Day      datatypes.Date `json:"day" query:"day"`
+	ClosedAt *time.Time     `json:"closed_at" query:"closed_at"`
+	Retries  *int           `json:"retries" query:"retries"`
+	Archived *bool          `json:"archived" query:"archived"`
 	// GroupIDs and Renamed anchor the column resolution: gorm renders the
 	// former as group_ids (a plain snake case conversion would not) and the
-	// latter through its column tag, while the URL keeps the json name.
-	GroupIDs string `json:"group_ids"`
-	Renamed  string `json:"renamed" gorm:"column:custom_column"`
+	// latter through its column tag, while the URL keeps the query name.
+	GroupIDs string `json:"group_ids" query:"group_ids"`
+	Renamed  string `json:"renamed" gorm:"column:custom_column" query:"renamed"`
 	// Secret is a column hidden from clients: json:"-" keeps it out of
-	// responses and out of every query. Virtual is no column at all: a bare
-	// key fills it for the service's own use.
-	Secret  string `json:"-"`
-	Virtual string `json:"virtual" gorm:"-"`
+	// responses and out of every query, its query tag notwithstanding.
+	// Virtual is no column at all: a bare key fills it for the service's own
+	// use. Note carries no query tag, so it is no URL parameter: its json
+	// name only serializes it.
+	Secret  string `json:"-" query:"secret"`
+	Virtual string `json:"virtual" gorm:"-" query:"virtual"`
+	Note    string `json:"note"`
 	// Meta is a JSON document, matched by its text and never compared.
-	Meta datatypes.JSONMap `json:"meta"`
+	Meta datatypes.JSONMap `json:"meta" query:"meta"`
 
 	modelregistry.Query
 	modelregistry.Base
@@ -49,12 +52,12 @@ type filterTestModel struct {
 // its type tag declares a JSON column, and datatypes.Time, a time of day
 // gorm gives the time data type of an instant.
 type gormTypedTestModel struct {
-	Settled sql.NullTime    `json:"settled"`
-	Tally   sql.NullInt64   `json:"tally"`
-	Ratio   sql.NullFloat64 `json:"ratio"`
-	Active  sql.NullBool    `json:"active"`
-	Payload string          `json:"payload" gorm:"type:json"`
-	Clock   datatypes.Time  `json:"clock"`
+	Settled sql.NullTime    `json:"settled" query:"settled"`
+	Tally   sql.NullInt64   `json:"tally" query:"tally"`
+	Ratio   sql.NullFloat64 `json:"ratio" query:"ratio"`
+	Active  sql.NullBool    `json:"active" query:"active"`
+	Payload string          `json:"payload" gorm:"type:json" query:"payload"`
+	Clock   datatypes.Time  `json:"clock" query:"clock"`
 
 	modelregistry.Query
 	modelregistry.Base
@@ -63,17 +66,17 @@ type gormTypedTestModel struct {
 // namedPart is embedded by name twice in namedEmbeddingTestModel, beside a
 // top-level field of the same name.
 type namedPart struct {
-	Label string `json:"label"`
+	Label string `json:"label" query:"label"`
 }
 
 // namedEmbeddingTestModel holds four columns behind one field name: its own
 // Label and the Label of each struct it embeds by name, Third through a
-// pointer, which the URL names by the path the field takes in JSON.
+// pointer, which the URL names by the path of query tags the field takes.
 type namedEmbeddingTestModel struct {
-	Label  string     `json:"label"`
-	First  namedPart  `json:"first" gorm:"embedded;embeddedPrefix:first_"`
-	Second namedPart  `json:"second" gorm:"embedded;embeddedPrefix:second_"`
-	Third  *namedPart `json:"third" gorm:"embedded;embeddedPrefix:third_"`
+	Label  string     `json:"label" query:"label"`
+	First  namedPart  `json:"first" gorm:"embedded;embeddedPrefix:first_" query:"first"`
+	Second namedPart  `json:"second" gorm:"embedded;embeddedPrefix:second_" query:"second"`
+	Third  *namedPart `json:"third" gorm:"embedded;embeddedPrefix:third_" query:"third"`
 
 	modelregistry.Query
 	modelregistry.Base
@@ -83,17 +86,41 @@ type namedEmbeddingTestModel struct {
 // from clients from inside an embedded struct, where the field's index path
 // is the one gorm composes.
 type HiddenCredentials struct {
-	Token string `json:"-"`
+	Token string `json:"-" query:"token"`
 }
 
 type embeddingTestModel struct {
 	HiddenCredentials
-	Name string `json:"name"`
+	Name string `json:"name" query:"name"`
 
 	modelregistry.Base
 }
 
 func (*embeddingTestModel) TableName() string { return "embedding_test_models" }
+
+// PointerExtra is embedded through a pointer by pointerEmbeddingTestModel,
+// which promotes its column the way a struct embedded by value does.
+type PointerExtra struct {
+	Code string `json:"code" query:"code"`
+}
+
+type pointerEmbeddingTestModel struct {
+	*PointerExtra
+
+	modelregistry.Query
+	modelregistry.Base
+}
+
+// hiddenNamedEmbeddingTestModel embeds namedPart by name twice, once hidden
+// from clients: json:"-" on the struct keeps its column out of every query,
+// the query tags along the path notwithstanding.
+type hiddenNamedEmbeddingTestModel struct {
+	Shown  namedPart `json:"shown" gorm:"embedded;embeddedPrefix:shown_" query:"shown"`
+	Hidden namedPart `json:"-" gorm:"embedded;embeddedPrefix:hidden_" query:"hidden"`
+
+	modelregistry.Query
+	modelregistry.Base
+}
 
 func TestFilters(t *testing.T) {
 	t.Run("MatchesAJSONColumnByItsTextAndRefusesComparingIt", func(t *testing.T) {
@@ -171,7 +198,7 @@ func TestFilters(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, []types.Filter{
 			types.NewFilter("", "custom_column", types.FilterOpEq, "x"),
-		}, conds, "the URL keeps the json name while SQL uses the column tag")
+		}, conds, "the URL keeps the query name while SQL uses the column tag")
 	})
 
 	t.Run("SkipsEmptyValues", func(t *testing.T) {
@@ -556,19 +583,47 @@ func TestFieldNamesAreTakenAsTheContractSpellsThem(t *testing.T) {
 	}
 }
 
+// TestFieldsClientsCannotNameAreNoParameters pins that a field names a URL
+// parameter through its query tag alone, and only while clients see it: a
+// field carrying only a json tag, which serializes it, is refused under its
+// json name by every parameter that names a field, its Go name refused
+// alike, and so is a column hidden from JSON under its query name, its own or
+// one of a struct embedded by name.
+func TestFieldsClientsCannotNameAreNoParameters(t *testing.T) {
+	tests := []struct {
+		name  string
+		model func() types.Model
+	}{
+		{name: "note", model: func() types.Model { return &filterTestModel{} }},
+		{name: "Note", model: func() types.Model { return &filterTestModel{} }},
+		{name: "secret", model: func() types.Model { return &filterTestModel{} }},
+		{name: "hidden.label", model: func() types.Model { return &hiddenNamedEmbeddingTestModel{} }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.ErrorContains(t, Decode(url.Values{tt.name: {"x"}}, tt.model()), "unsupported")
+			_, err := Filters(url.Values{tt.name + "[eq]": {"x"}}, tt.model())
+			require.ErrorContains(t, err, "unknown field")
+			_, err = Orders(url.Values{"_sort_by": {tt.name}}, tt.model())
+			require.ErrorContains(t, err, "unknown sort column")
+			_, err = Cursor(url.Values{"_cursor_field": {tt.name}}, tt.model())
+			require.ErrorContains(t, err, "unknown cursor column")
+		})
+	}
+}
+
 func TestDecode(t *testing.T) {
 	t.Run("FillsModelFieldsByQueryTag", func(t *testing.T) {
 		var m filterTestModel
 		require.NoError(t, Decode(url.Values{"name": {"alice"}, "age": {"10"}}, &m))
 		require.Equal(t, "alice", m.Name)
-		require.Equal(t, 10, m.Age, "fields are mapped by the query tag, falling back to the json tag and the field name")
+		require.Equal(t, 10, m.Age, "fields are mapped by their query tag")
 	})
 
-	t.Run("FillsMultiWordJSONNamedFields", func(t *testing.T) {
+	t.Run("FillsMultiWordNamedFields", func(t *testing.T) {
 		var m filterTestModel
 		require.NoError(t, Decode(url.Values{"item_count": {"7"}, "group_ids": {"g1"}}, &m))
-		require.Equal(t, 7, m.ItemCount,
-			"a multi-word json name is a legal bare key; the streaming decoder silently rejected it")
+		require.Equal(t, 7, m.ItemCount, "a multi-word query name is a legal bare key")
 		require.Equal(t, "g1", m.GroupIDs)
 	})
 
@@ -580,6 +635,13 @@ func TestDecode(t *testing.T) {
 		require.Empty(t, m.Second.Label)
 		require.NotNil(t, m.Third, "the struct embedded through a pointer is allocated to hold the value")
 		require.Equal(t, "t", m.Third.Label)
+	})
+
+	t.Run("FillsColumnsOfAStructEmbeddedThroughAPointer", func(t *testing.T) {
+		var m pointerEmbeddingTestModel
+		require.NoError(t, Decode(url.Values{"code": {"c"}}, &m))
+		require.NotNil(t, m.PointerExtra, "the struct embedded through a pointer is allocated to hold the value")
+		require.Equal(t, "c", m.Code, "a bare key reaches the column a struct embedded through a pointer promotes, as its operator keys do")
 	})
 
 	t.Run("RejectsCaseVariantKeys", func(t *testing.T) {
@@ -631,6 +693,14 @@ func TestDecode(t *testing.T) {
 		require.Equal(t, "n", m.Name)
 	})
 
+	t.Run("RejectsHiddenColumnsOfStructsEmbeddedByName", func(t *testing.T) {
+		var m hiddenNamedEmbeddingTestModel
+		require.EqualError(t, Decode(url.Values{"hidden.label": {"h"}}, &m),
+			`unsupported query parameter "hidden.label"`)
+		require.NoError(t, Decode(url.Values{"shown.label": {"s"}}, &m))
+		require.Equal(t, "s", m.Shown.Label)
+	})
+
 	t.Run("FillsFieldsThatAreNotColumns", func(t *testing.T) {
 		var m filterTestModel
 		require.NoError(t, Decode(url.Values{"virtual": {"v"}}, &m))
@@ -664,11 +734,11 @@ func TestDecode(t *testing.T) {
 			"a cursor-only model accepts _size as its batch size but has no Size field to decode it into")
 	})
 
-	t.Run("DropsExportFormatKey", func(t *testing.T) {
+	t.Run("DropsTheExportKeys", func(t *testing.T) {
 		var m filterTestModel
-		require.NoError(t, Decode(url.Values{"_format": {"csv"}, "name": {"alice"}}, &m),
-			"the export format parameter belongs to the export action, not to any model field; "+
-				"a virtual-resource export service parses the raw query itself and must not see it rejected")
+		require.NoError(t, Decode(url.Values{"_format": {"csv"}, "_limit": {"10"}, "name": {"alice"}}, &m),
+			"the export format and limit belong to the export action, not to any model field; "+
+				"a virtual-resource export service parses the raw query itself and must not see them rejected")
 		require.Equal(t, "alice", m.Name)
 	})
 
@@ -680,6 +750,13 @@ func TestDecode(t *testing.T) {
 		require.EqualError(t, Decode(url.Values{"_bogus": {"1"}}, &m),
 			`unsupported query parameter "_bogus"`,
 			"a mistyped framework parameter must be reported too")
+	})
+
+	t.Run("RejectsAnEmptyKey", func(t *testing.T) {
+		var m filterTestModel
+		require.EqualError(t, Decode(url.Values{"": {"x"}}, &m),
+			`unsupported query parameter ""`,
+			"a field without a query tag has no URL name, so the empty key names none")
 	})
 
 	t.Run("ListsEveryUnsupportedKey", func(t *testing.T) {
@@ -790,12 +867,13 @@ func TestOrders(t *testing.T) {
 		orders, err := Orders(url.Values{"_sort_by": {"created_at desc"}}, &filterTestModel{})
 		require.NoError(t, err)
 		require.Equal(t, []types.Order{types.NewOrder("", "created_at", types.OrderDesc)}, orders,
-			`query:"-" only opts the timestamp out of exact filtering, the json name still resolves it`)
+			"the framework timestamps carry their query tags, so a list sorts by them")
 	})
 
 	t.Run("NonFilterableColumnFails", func(t *testing.T) {
-		_, err := Orders(url.Values{"_sort_by": {"deleted_at"}}, &filterTestModel{})
-		require.Error(t, err, "a column hidden from JSON is framework bookkeeping and is not sortable either")
+		_, err := Orders(url.Values{"_sort_by": {"secret"}}, &filterTestModel{})
+		require.EqualError(t, err, `unknown sort column "secret"`,
+			"a column hidden from JSON is not sortable, its query tag notwithstanding")
 	})
 
 	t.Run("UnknownColumnFails", func(t *testing.T) {
@@ -912,13 +990,14 @@ func (cursorUniqueTestModel) Indexes() []modelschema.Index {
 }
 
 // cursorTypedTestModel pages by columns whose Go shape does not tell what
-// gorm stores: a time held in sql.NullTime, an integer held in sql.NullInt64
-// and a time of day. Each is NOT NULL under a unique index of its own, so a
-// cursor may page by it.
+// gorm stores: a time held in sql.NullTime, an integer held in sql.NullInt64,
+// a bool held in sql.NullBool and a time of day. Each is NOT NULL under a
+// unique index of its own, so a cursor may page by it.
 type cursorTypedTestModel struct {
-	Settled sql.NullTime   `json:"settled" gorm:"not null"`
-	Tally   sql.NullInt64  `json:"tally" gorm:"not null"`
-	Clock   datatypes.Time `json:"clock"`
+	Settled sql.NullTime   `json:"settled" gorm:"not null" query:"settled"`
+	Tally   sql.NullInt64  `json:"tally" gorm:"not null" query:"tally"`
+	Active  sql.NullBool   `json:"active" gorm:"not null" query:"active"`
+	Clock   datatypes.Time `json:"clock" query:"clock"`
 
 	modelregistry.Cursor
 	modelregistry.Base
@@ -930,6 +1009,7 @@ func (cursorTypedTestModel) Indexes() []modelschema.Index {
 	return []modelschema.Index{
 		{Fields: []string{"Settled"}, Unique: true},
 		{Fields: []string{"Tally"}, Unique: true},
+		{Fields: []string{"Active"}, Unique: true},
 		{Fields: []string{"Clock"}, Unique: true},
 	}
 }
@@ -1108,25 +1188,25 @@ func TestCursor(t *testing.T) {
 	t.Run("MistypedValueOnNumericColumnFails", func(t *testing.T) {
 		_, err := Cursor(url.Values{
 			"_cursor_value": {"abc"},
-			"_cursor_field": {"age"},
-		}, &filterTestModel{})
-		require.Error(t, err, "a value the numeric cursor column cannot represent is a client error, matching filter semantics")
+			"_cursor_field": {"tally"},
+		}, &cursorTypedTestModel{})
+		require.ErrorContains(t, err, "invalid cursor value", "a value the numeric cursor column cannot represent is a client error, matching filter semantics")
 	})
 
 	t.Run("MistypedValueOnTimeColumnFails", func(t *testing.T) {
 		_, err := Cursor(url.Values{
 			"_cursor_value": {"abc"},
-			"_cursor_field": {"created_at"},
-		}, &cursorTestModel{})
-		require.Error(t, err, "a value the time cursor column cannot represent is a client error, matching filter semantics")
+			"_cursor_field": {"settled"},
+		}, &cursorTypedTestModel{})
+		require.ErrorContains(t, err, "invalid cursor value", "a value the time cursor column cannot represent is a client error, matching filter semantics")
 	})
 
 	t.Run("MistypedValueOnBoolColumnFails", func(t *testing.T) {
 		_, err := Cursor(url.Values{
 			"_cursor_value": {"abc"},
-			"_cursor_field": {"enabled"},
-		}, &filterTestModel{})
-		require.Error(t, err, "a value the bool cursor column cannot represent is a client error, matching filter semantics")
+			"_cursor_field": {"active"},
+		}, &cursorTypedTestModel{})
+		require.ErrorContains(t, err, "invalid cursor value", "a value the bool cursor column cannot represent is a client error, matching filter semantics")
 	})
 
 	t.Run("MissingValueIsTheFirstPage", func(t *testing.T) {

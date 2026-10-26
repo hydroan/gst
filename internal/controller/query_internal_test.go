@@ -106,7 +106,7 @@ func TestDecodeListQueryPageSizeGating(t *testing.T) {
 
 type filterKeyTestModel struct {
 	Name string `query:"name"`
-	Age  int    `json:"age"`
+	Age  int    `json:"age" query:"age"`
 
 	modelregistry.Query
 	modelregistry.Base

@@ -16,8 +16,8 @@ import (
 
 type querySample struct {
 	Name   string `query:"name"`
-	Age    int    `json:"age"`
-	Active bool   `json:"active"`
+	Age    int    `json:"age" query:"age"`
+	Active bool   `json:"active" query:"active"`
 
 	modelregistry.Query
 	modelregistry.Base

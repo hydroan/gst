@@ -48,11 +48,14 @@ type valuedQueryItem struct {
 	modelregistry.Base
 }
 
+// presenceQueryItem carries the zero values presence makes conditions of;
+// Rank carries no query tag, so no URL names it.
 type presenceQueryItem struct {
-	Enabled bool    `json:"enabled"`
-	Count   int     `json:"count"`
-	Note    *string `json:"note"`
+	Enabled bool    `json:"enabled" query:"enabled"`
+	Count   int     `json:"count" query:"count"`
+	Note    *string `json:"note" query:"note"`
 	Legacy  bool    `json:"legacy_json" query:"flag"`
+	Rank    int     `json:"rank"`
 
 	modelregistry.Base
 }
@@ -170,6 +173,11 @@ func TestStructConditionsMapTheQueriedFieldsToTheirColumns(t *testing.T) {
 		require.Equal(t, false, q["legacy"])
 		require.NotContains(t, q, "flag")
 		require.NotContains(t, q, "legacy_json")
+	})
+
+	t.Run("a field without a query tag is never present", func(t *testing.T) {
+		require.NotContains(t, conditions(&presenceQueryItem{}, map[string]struct{}{"": {}}), "rank",
+			"a column without a query tag has no URL name, so not even the empty key names it")
 	})
 
 	t.Run("present nil pointer stays ignored", func(t *testing.T) {

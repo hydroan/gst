@@ -2,21 +2,24 @@ package modelschema
 
 import (
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
 
 	"github.com/cockroachdb/errors"
-	"github.com/stoewer/go-strcase"
+	"github.com/hydroan/gst/internal/consts"
 	gormschema "gorm.io/gorm/schema"
 )
 
 // Column is one database column of a model.
 //
 // QueryName and DBName are deliberately separate: QueryName is the URL
-// parameter clients filter by and stays a front-end contract, while DBName is
-// whatever gorm writes into SQL. They are usually equal, and diverge when a
-// model carries a column tag or a field name gorm renders differently.
+// parameter clients filter by, named by the field's query tag, and stays a
+// front-end contract, while DBName is whatever gorm writes into SQL. A field
+// without a query tag has no QueryName; a tagged one usually names the
+// parameter as its column, and the two diverge when a model carries a column
+// tag or a field name gorm renders differently.
 //
 // dataType and gormDataType are the data types gorm resolved for the field,
 // which tell what the column stores where the Go type does not: the value a
@@ -26,15 +29,16 @@ import (
 // IsJSONColumn answer from them.
 type Column struct {
 	GoName       string              // Go selector path of the field: its name, or First.Label inside a struct embedded by name.
-	QueryName    string              // URL parameter name: query tag, else json tag, else field name, in snake case, per step of the JSON path.
+	QueryName    string              // URL parameter name: the query tags along the field's path, empty when a step carries none.
 	DBName       string              // Database column name resolved by gorm.
 	Type         reflect.Type        // Go type of the underlying struct field.
 	dataType     gormschema.DataType // Column type gorm resolved: the type tag when the field carries one, else gormDataType.
 	gormDataType gormschema.DataType // Data type gorm reads from the Go type, a Valuer through the value it holds.
 	Index        []int               // Struct field index path, usable with reflect.Value.FieldByIndex.
-	Filterable   bool                // Whether clients may filter on the column through the URL.
+	Filterable   bool                // Whether clients may filter on the column through the URL: it has a URL name and is not hidden from JSON.
 	NotNull      bool                // Whether the schema forbids NULL: a NOT NULL tag or the primary key.
 	PrimaryKey   bool                // Whether the column is part of the model's primary key.
+	Creatable    bool                // Whether an insert writes the column: gorm writes none it writes on update only (<-:update) or never.
 	Updatable    bool                // Whether an update writes the column: gorm writes none it writes on insert only (<-:create) or never.
 }
 
@@ -84,12 +88,14 @@ func Columns(typ reflect.Type) ([]Column, error) {
 			dataType:     field.DataType,
 			gormDataType: field.GORMDataType,
 			Index:        index,
-			// A field hidden from JSON is framework-managed bookkeeping such
-			// as the soft-delete timestamp: it stays a real column, but
-			// clients must not filter on it.
-			Filterable: !hidden,
+			// A field without a URL name is no client parameter, and one
+			// hidden from JSON, framework-managed bookkeeping such as the
+			// soft-delete timestamp, stays a real column clients must not
+			// filter on, a query tag on it notwithstanding.
+			Filterable: queryName != "" && !hidden,
 			NotNull:    field.NotNull || field.PrimaryKey,
 			PrimaryKey: field.PrimaryKey,
+			Creatable:  field.Creatable,
 			Updatable:  field.Updatable,
 		})
 	}
@@ -103,18 +109,18 @@ func Columns(typ reflect.Type) ([]Column, error) {
 // model type. index is the path reflect follows, Value.FieldByIndex among
 // others, where gorm records a step through an embedded pointer as -i-1. The
 // names spell the path: for the Label of a struct the model embeds by the
-// name First, under the json name first, the Go name is First.Label and the
-// URL name first.label, each step named by its own rule (see
-// QueryColumnName). An anonymous embedded struct adds no step, its fields
-// promoted in Go, so the fields of model.Base keep their own names. hidden
-// reports a field kept out of JSON, by a json:"-" on the field or on a
-// struct holding it.
+// name First, both tagged query:"first" and query:"label", the Go name is
+// First.Label and the URL name first.label, each step named by its query tag
+// (see QueryColumnName); a step without one leaves the field no URL name. An
+// anonymous embedded struct adds no step, its fields promoted in Go, so the
+// fields of model.Base keep their own names. hidden reports a field kept out
+// of JSON, by a json:"-" on the field or on a struct holding it.
 //
 // gorm keeps the path as the field's bind names, but with every embedded
-// struct in it, Base.ID for the ID Go promotes, and with no JSON spelling, so
+// struct in it, Base.ID for the ID Go promotes, and with no query tags, so
 // the path is walked here, along the field index gorm records.
 func fieldPath(model reflect.Type, field reflect.StructField) (index []int, goName, queryName string, hidden bool) {
-	hiddenFromJSON := func(f reflect.StructField) bool { return strings.TrimSpace(f.Tag.Get("json")) == "-" }
+	hiddenFromJSON := func(f reflect.StructField) bool { return strings.TrimSpace(f.Tag.Get(consts.TAG_JSON)) == "-" }
 	index = make([]int, 0, len(field.Index))
 	goNames := make([]string, 0, len(field.Index))
 	queryNames := make([]string, 0, len(field.Index))
@@ -138,28 +144,23 @@ func fieldPath(model reflect.Type, field reflect.StructField) (index []int, goNa
 	index = append(index, field.Index[len(field.Index)-1])
 	goNames = append(goNames, field.Name)
 	queryNames = append(queryNames, QueryColumnName(field))
+	if slices.Contains(queryNames, "") {
+		queryNames = nil
+	}
 	return index, strings.Join(goNames, "."), strings.Join(queryNames, "."), hidden || hiddenFromJSON(field)
 }
 
-// QueryColumnName resolves the URL parameter name of a struct field: the
-// query tag wins over the json tag, which wins over the field name, and the
-// result is converted to snake case. A "-" tag is skipped rather than used
-// as a name, so the next source decides.
+// QueryColumnName returns the URL parameter name of a struct field, its query
+// tag as written, or "" when the field carries none or query:"-": the json
+// tag serializes a field and never names a URL parameter.
 //
 // This is the client-facing name only. It never decides the database column
 // name, which comes from gorm (see Column). Column resolution above, which
-// names each step of a field's path by it, and the urlquery decode plan are
-// its two consumers, which is what keeps a field's bare key and its
-// operator-filter key on one naming rule.
+// names each step of a field's path by it, the urlquery decode plan and the
+// OpenAPI query parameters are its consumers, which is what keeps a field's
+// bare key, its operator-filter key and its documentation on one naming rule.
 func QueryColumnName(field reflect.StructField) string {
-	name := tagName(field, "query")
-	if name == "" {
-		name = tagName(field, "json")
-	}
-	if name == "" {
-		name = field.Name
-	}
-	return strcase.SnakeCase(name)
+	return tagName(field, consts.TAG_QUERY)
 }
 
 // tagName reads a struct tag and strips its options suffix.

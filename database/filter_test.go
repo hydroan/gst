@@ -932,11 +932,11 @@ func TestDatabaseFiltersFollowTheStoredType(t *testing.T) {
 }
 
 // TestURLFiltersReachEmbeddedColumnsByPath pins, on every dialect, that a URL
-// filter names a column of a struct embedded by name by the path the field
-// takes in JSON: first.label filters the first part's label and label the
-// model's own, however the three share a field name. A bare key, the exact
-// match a model takes without embedding Query, reaches the same columns by
-// the same names.
+// filter names a column of a struct embedded by name by the path of query
+// tags the field takes: first.label filters the first part's label and label
+// the model's own, however the three share a field name. A bare key, the
+// exact match a model takes without embedding Query, reaches the same columns
+// by the same names.
 func TestURLFiltersReachEmbeddedColumnsByPath(t *testing.T) {
 	ctx := context.Background()
 	require.NoError(t, database.DB().AutoMigrate(&TestPairedRecord{}))

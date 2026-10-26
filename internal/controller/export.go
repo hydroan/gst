@@ -4,6 +4,7 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/filetype"
@@ -87,9 +88,20 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		// query parameters itself.
 		data := make([]M, 0)
 		if !modelregistry.IsVirtual(m) {
+			// QUERY_LIMIT caps the records exported, none or a value of zero or
+			// less exporting every record; urlquery.Decode drops it as it
+			// drops QUERY_FORMAT. A value that is no integer is refused rather
+			// than read as no cap.
 			var limit int
-			if limitStr, ok := c.GetQuery(consts.QUERY_LIMIT); ok {
-				limit, _ = strconv.Atoi(limitStr)
+			if raw := c.Query(consts.QUERY_LIMIT); raw != "" {
+				var err error
+				if limit, err = strconv.Atoi(raw); err != nil {
+					err = errors.Newf("invalid query parameter %q: expect a numeric value, got %q", consts.QUERY_LIMIT, raw)
+					log.Errorz("parse query parameter failed", zap.Error(err))
+					response.Error(c, invalidArgument(err))
+					gstotel.RecordError(span, err)
+					return
+				}
 			}
 			// The request's memoized query parse, shared by every parser below
 			// and by each metadata construction of this request; the parsers

@@ -209,7 +209,7 @@ func findUsersByID(users []*TestUser) (u11, u22, u33 *TestUser) {
 type TestUser struct {
 	Name     string                      `json:"name"`
 	Email    string                      `json:"email"`
-	Age      int                         `json:"age"`
+	Age      int                         `json:"age" query:"age"`
 	Addr     datatypes.JSONSlice[string] `json:"addr"`
 	IsActive *bool                       `json:"is_active"`
 	Remark   *string                     `json:"remark,omitempty" gorm:"size:10240" query:"remark"`
@@ -1253,7 +1253,7 @@ func (*TestZeroValueRecord) TableName() string { return "test_zero_value_records
 // a top-level field of the same Go name: each of the three is a column of its
 // own.
 type TestPart struct {
-	Label string `json:"label" gorm:"size:191"`
+	Label string `json:"label" query:"label" gorm:"size:191"`
 }
 
 // TestTaggedCode stores itself behind a prefix, the form its column holds,
@@ -1278,9 +1278,9 @@ func (c *TestTaggedCode) Scan(src any) error {
 // whose stored form is not its Go value. It embeds Query, so URL filters
 // reach it. Its table is migrated on demand and dropped by the test.
 type TestPairedRecord struct {
-	Label  string         `json:"label" gorm:"size:191"`
-	First  TestPart       `json:"first" gorm:"embedded;embeddedPrefix:first_"`
-	Second TestPart       `json:"second" gorm:"embedded;embeddedPrefix:second_"`
+	Label  string         `json:"label" query:"label" gorm:"size:191"`
+	First  TestPart       `json:"first" query:"first" gorm:"embedded;embeddedPrefix:first_"`
+	Second TestPart       `json:"second" query:"second" gorm:"embedded;embeddedPrefix:second_"`
 	Code   TestTaggedCode `json:"code" gorm:"size:191"`
 
 	modelregistry.Query

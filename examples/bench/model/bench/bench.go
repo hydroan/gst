@@ -6,11 +6,11 @@ import (
 )
 
 type Bench struct {
-	Field1 string  `json:"field1"`
-	Field2 int     `json:"field2"`
-	Field3 *string `json:"field3"`
-	Field4 *int    `json:"field4"`
-	Field5 bool    `json:"field5"`
+	Field1 string  `json:"field1" query:"field1"`
+	Field2 int     `json:"field2" query:"field2"`
+	Field3 *string `json:"field3" query:"field3"`
+	Field4 *int    `json:"field4" query:"field4"`
+	Field5 bool    `json:"field5" query:"field5"`
 
 	DryRun bool `json:"dry_run" query:"dry_run" gorm:"-"`
 

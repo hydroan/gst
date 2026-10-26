@@ -252,8 +252,9 @@ var timestampColumns = []string{"created_at", "updated_at", "deleted_at"}
 //
 //   - A zero value is a condition when present lists the field's URL
 //     parameter name, kept the way gorm keeps one, by naming its column as
-//     in Where(&query, "column"). The columns every model carries are never
-//     named so (see frameworkColumns).
+//     in Where(&query, "column"). A field without a query tag has no such
+//     name, and the columns every model carries are never named so (see
+//     frameworkColumns).
 //   - Of those columns, the timestamps are no condition at all (see
 //     timestampColumns).
 //   - A nil pointer names no value, and an instant or a day binds in UTC
@@ -266,7 +267,7 @@ func structConditions(stmt *gorm.Statement, query any, columns []modelschema.Col
 	var named []any
 	days := make(map[string]struct{})
 	for _, column := range columns {
-		if _, ok := present[column.QueryName]; ok && !slices.Contains(frameworkColumns, column.DBName) {
+		if _, ok := present[column.QueryName]; ok && column.QueryName != "" && !slices.Contains(frameworkColumns, column.DBName) {
 			named = append(named, column.DBName)
 		}
 		if modelschema.IsDateColumn(column) {

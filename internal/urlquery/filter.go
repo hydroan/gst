@@ -3,6 +3,7 @@ package urlquery
 import (
 	"net/url"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 
@@ -81,10 +82,9 @@ func Filters(q url.Values, m types.Model) ([]types.Filter, error) {
 }
 
 // bareTimeFilterColumns are the framework-managed Base/AutoBase timestamp
-// columns. They carry query:"-" on the model, so their bare keys are not
-// schema-decodable and are handled by Filters instead: the bare key is an
-// exact-match (eq) filter, keeping the "bare name filters exactly" contract
-// uniform across every documented parameter.
+// columns. A time decodes into no model field (see fieldSetter), so their
+// bare keys are handled by Filters instead, as the exact-match (eq) filter a
+// bare key is.
 var bareTimeFilterColumns = map[string]struct{}{
 	"created_at": {},
 	"updated_at": {},
@@ -122,33 +122,64 @@ func splitFilterKey(key string) (field, op string, ok bool) {
 	return field, op, true
 }
 
+// filterOps returns the operators a filter on col takes, in types.FilterOps
+// order, read from the data types gorm resolved for the column (see
+// modelschema.Column), and the kind of field the others are refused on.
+// isnull takes any column; besides it, a time or a time of day (see
+// modelschema.IsTimeColumn and modelschema.IsTimeOfDayColumn) takes the
+// comparisons alone, a "time" field, a bool eq and ne, a "bool" field, and a
+// JSON document (see modelschema.IsJSONColumn) the like family, a "JSON"
+// field: whether two documents compare equal or order is the dialect's own
+// affair. A number (see modelschema.IsNumericColumn), a string or any other
+// column takes every operator.
+func filterOps(col modelschema.Column) (ops []types.FilterOp, kind string) {
+	switch {
+	case modelschema.IsTimeColumn(col), modelschema.IsTimeOfDayColumn(col):
+		return []types.FilterOp{
+			types.FilterOpEq, types.FilterOpNe,
+			types.FilterOpGt, types.FilterOpGte, types.FilterOpLt, types.FilterOpLte,
+			types.FilterOpIsNull,
+		}, "time"
+	case modelschema.IsBoolColumn(col):
+		return []types.FilterOp{types.FilterOpEq, types.FilterOpNe, types.FilterOpIsNull}, "bool"
+	case modelschema.IsNumericColumn(col):
+		return types.FilterOps(), ""
+	case modelschema.IsJSONColumn(col):
+		return []types.FilterOp{
+			types.FilterOpLike, types.FilterOpNotLike, types.FilterOpStartsWith, types.FilterOpEndsWith,
+			types.FilterOpIsNull,
+		}, "JSON"
+	default:
+		return types.FilterOps(), ""
+	}
+}
+
 // normalizeFilterValue validates a filter value against what the column
 // stores, read from the data types gorm resolved for it (see
 // modelschema.Column), and rewrites it into the canonical typed value bound
 // to the statement, so a malformed value is rejected with an error instead
 // of being passed to the database where implicit conversion could silently
 // match the wrong rows. A pointer column, or a Valuer such as sql.NullInt64,
-// is checked as the value gorm reads through it.
+// is checked as the value gorm reads through it. An operator the column
+// takes no filter with (see filterOps) is refused first.
 //
-//   - isnull applies to any column and requires a boolean value, carried as
-//     a bool; it is handled before the type dispatch below.
-//   - time columns (see modelschema.IsTimeColumn) and time of day columns
-//     (see modelschema.IsTimeOfDayColumn) accept the comparison operators
-//     only; the value travels as timeBound renders it.
-//   - bool columns accept eq/ne with a boolean value, carried as a bool.
-//   - numeric columns (see modelschema.IsNumericColumn) require numeric
-//     values; in/notin validate every comma-separated member.
-//   - JSON columns (see modelschema.IsJSONColumn) accept the like family
-//     only, matching the document's text; a comparison on a document is
-//     refused, since whether two documents compare equal or order is the
-//     dialect's own affair.
+//   - isnull requires a boolean value, carried as a bool, whatever the
+//     column.
+//   - time columns and time of day columns travel as timeBound renders the
+//     value.
+//   - bool columns carry the boolean value as a bool.
+//   - numeric columns require numeric values; in/notin validate every
+//     comma-separated member.
+//   - JSON columns match the document's text.
 //   - in/notin values split on commas here, so the members travel as a real
 //     slice: the URL list encoding never reaches the database layer.
 //   - string and other scalar values pass through unchanged.
 func normalizeFilterValue(col modelschema.Column, op types.FilterOp, value string) (any, error) {
+	if ops, kind := filterOps(col); !slices.Contains(ops, op) {
+		return nil, errors.Newf("operator %q is not supported on a %s field", op, kind)
+	}
 	// isnull is the only operator whose value type is independent of the
-	// column type: it always carries a boolean and applies to any nullable
-	// column, including time columns the comparison gating below would block.
+	// column type: it always carries a boolean.
 	if op == types.FilterOpIsNull {
 		b, err := modelschema.ParseBool(value)
 		if err != nil {
@@ -158,23 +189,13 @@ func normalizeFilterValue(col modelschema.Column, op types.FilterOp, value strin
 	}
 	switch {
 	case modelschema.IsTimeColumn(col), modelschema.IsTimeOfDayColumn(col):
-		switch op {
-		case types.FilterOpEq, types.FilterOpNe, types.FilterOpGt, types.FilterOpGte, types.FilterOpLt, types.FilterOpLte:
-			return timeBound(col, value)
-		default:
-			return nil, errors.Newf("operator %q is not supported on a time field", op)
-		}
+		return timeBound(col, value)
 	case modelschema.IsBoolColumn(col):
-		switch op {
-		case types.FilterOpEq, types.FilterOpNe:
-			b, err := modelschema.ParseBool(value)
-			if err != nil {
-				return nil, err
-			}
-			return b, nil
-		default:
-			return nil, errors.Newf("operator %q is not supported on a bool field", op)
+		b, err := modelschema.ParseBool(value)
+		if err != nil {
+			return nil, err
 		}
+		return b, nil
 	case modelschema.IsNumericColumn(col):
 		switch op {
 		case types.FilterOpIn, types.FilterOpNotIn:
@@ -196,12 +217,7 @@ func normalizeFilterValue(col modelschema.Column, op types.FilterOp, value strin
 			return value, nil
 		}
 	case modelschema.IsJSONColumn(col):
-		switch op {
-		case types.FilterOpLike, types.FilterOpNotLike, types.FilterOpStartsWith, types.FilterOpEndsWith:
-			return value, nil
-		default:
-			return nil, errors.Newf("operator %q is not supported on a JSON field", op)
-		}
+		return value, nil
 	default:
 		switch op {
 		case types.FilterOpIn, types.FilterOpNotIn:

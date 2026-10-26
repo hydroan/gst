@@ -14,7 +14,7 @@ import (
 // an anonymous field of an unexported type is unexported itself, and gorm
 // then skips the whole embedded struct.
 type SampleBase struct {
-	ID        string    `json:"id" gorm:"primaryKey"`
+	ID        string    `json:"id" gorm:"primaryKey" query:"id"`
 	CreatedAt time.Time `json:"created_at" query:"-"`
 }
 
@@ -42,25 +42,26 @@ func (sampleAssociating) TableName() string { return "sample_associating" }
 type sampleRecord struct {
 	SampleBase
 
-	Name        string `json:"name"`
-	GroupIDs    string `json:"group_ids"`
-	MD5Hash     string `json:"md5_hash"`
-	Renamed     string `json:"renamed" gorm:"column:custom_column"`
-	QueryTagged string `json:"query_tagged" query:"alias"`
-	Hidden      string `json:"-"`
-	Skipped     string `json:"skipped" gorm:"-"`
-	SkippedAll  string `json:"skipped_all" gorm:"-:all"`
-	NoMigration string `json:"no_migration" gorm:"-:migration"`
-	unexported  string //nolint:unused
+	Name         string `json:"name" query:"name"`
+	GroupIDs     string `json:"group_ids"`
+	MD5Hash      string `json:"md5_hash"`
+	Renamed      string `json:"renamed" gorm:"column:custom_column"`
+	QueryTagged  string `json:"query_tagged" query:"alias"`
+	Hidden       string `json:"-"`
+	HiddenTagged string `json:"-" query:"hidden_tagged"`
+	Skipped      string `json:"skipped" gorm:"-"`
+	SkippedAll   string `json:"skipped_all" gorm:"-:all"`
+	NoMigration  string `json:"no_migration" gorm:"-:migration"`
+	unexported   string //nolint:unused
 }
 
 func (sampleRecord) TableName() string { return "sample_records" }
 
-// indexByQueryName indexes columns by URL parameter name for assertions.
-func indexByQueryName(columns []Column) map[string]Column {
+// indexByDBName indexes columns by database column name for assertions.
+func indexByDBName(columns []Column) map[string]Column {
 	indexed := make(map[string]Column, len(columns))
 	for _, col := range columns {
-		indexed[col.QueryName] = col
+		indexed[col.DBName] = col
 	}
 	return indexed
 }
@@ -68,26 +69,40 @@ func indexByQueryName(columns []Column) map[string]Column {
 func TestColumns(t *testing.T) {
 	parsed, err := Columns(reflect.TypeFor[sampleRecord]())
 	require.NoError(t, err)
-	cols := indexByQueryName(parsed)
+	cols := indexByDBName(parsed)
 
 	t.Run("ResolvesDBNameThroughGorm", func(t *testing.T) {
 		// gorm's commonInitialisms handling differs from a plain snake case
 		// conversion, so these two names are the regression anchors.
-		require.Equal(t, "group_ids", cols["group_ids"].DBName)
-		require.Equal(t, "md5_hash", cols["md5_hash"].DBName)
+		require.Contains(t, cols, "group_ids")
+		require.Contains(t, cols, "md5_hash")
 	})
 
 	t.Run("ExplicitColumnTagWins", func(t *testing.T) {
-		require.Equal(t, "custom_column", cols["renamed"].DBName,
+		require.Equal(t, "Renamed", cols["custom_column"].GoName,
 			"the column tag decides the database name")
-		require.Equal(t, "renamed", cols["renamed"].QueryName,
-			"the URL parameter name still comes from the json tag")
 	})
 
-	t.Run("QueryTagWinsForQueryName", func(t *testing.T) {
-		col, ok := cols["alias"]
-		require.True(t, ok, "the query tag names the URL parameter")
-		require.Equal(t, "query_tagged", col.DBName)
+	t.Run("QueryTagNamesTheURLParameter", func(t *testing.T) {
+		col := cols["query_tagged"]
+		require.Equal(t, "alias", col.QueryName, "the query tag names the URL parameter")
+		require.True(t, col.Filterable)
+	})
+
+	t.Run("FieldWithoutAQueryTagIsNoURLParameter", func(t *testing.T) {
+		// The json tag serializes a field and nothing more: without a query
+		// tag the field is no URL parameter, and so is one tagged query:"-".
+		for _, dbName := range []string{"custom_column", "group_ids", "created_at"} {
+			require.Empty(t, cols[dbName].QueryName, dbName)
+			require.False(t, cols[dbName].Filterable, dbName)
+		}
+	})
+
+	t.Run("FieldHiddenFromJSONStaysUnfilterable", func(t *testing.T) {
+		// A field kept out of JSON is invisible to clients, a query tag on it
+		// notwithstanding.
+		require.False(t, cols["hidden_tagged"].Filterable)
+		require.False(t, cols["hidden"].Filterable)
 	})
 
 	t.Run("SkipsIgnoredAndUnexportedFields", func(t *testing.T) {
@@ -104,8 +119,8 @@ func TestColumns(t *testing.T) {
 	})
 
 	t.Run("LiftsEmbeddedBaseFields", func(t *testing.T) {
-		require.Equal(t, "id", cols["id"].DBName)
-		require.Equal(t, "created_at", cols["created_at"].DBName)
+		require.Equal(t, "ID", cols["id"].GoName)
+		require.Equal(t, "id", cols["id"].QueryName)
 		require.Equal(t, reflect.TypeFor[time.Time](), cols["created_at"].Type)
 	})
 
@@ -114,24 +129,25 @@ func TestColumns(t *testing.T) {
 	})
 }
 
-// samplePart is embedded by name three times in sampleEmbedding, beside a
+// samplePart is embedded by name four times in sampleEmbedding, beside a
 // top-level field of the same name.
 type samplePart struct {
-	Label string `json:"label"`
+	Label string `json:"label" query:"label"`
 }
 
 // sampleEmbedding embeds samplePart by name: gorm lifts the field of each into
 // a column of its own, and only the path that reaches it tells them apart.
-// Third is reached through a pointer, and Hidden is kept out of JSON as a
-// whole.
+// Third is reached through a pointer, Hidden is kept out of JSON as a whole,
+// and Untagged carries no query tag, so no step of a URL name stands for it.
 type sampleEmbedding struct {
 	SampleBase
 
-	Label  string      `json:"label"`
-	First  samplePart  `json:"first" gorm:"embedded;embeddedPrefix:first_"`
-	Second samplePart  `json:"second_part" gorm:"embedded;embeddedPrefix:second_"`
-	Third  *samplePart `json:"third" gorm:"embedded;embeddedPrefix:third_"`
-	Hidden samplePart  `json:"-" gorm:"embedded;embeddedPrefix:hidden_"`
+	Label    string      `json:"label" query:"label"`
+	First    samplePart  `json:"first" gorm:"embedded;embeddedPrefix:first_" query:"first"`
+	Second   samplePart  `json:"second_part" gorm:"embedded;embeddedPrefix:second_" query:"second_part"`
+	Third    *samplePart `json:"third" gorm:"embedded;embeddedPrefix:third_" query:"third"`
+	Hidden   samplePart  `json:"-" gorm:"embedded;embeddedPrefix:hidden_" query:"hidden"`
+	Untagged samplePart  `json:"untagged" gorm:"embedded;embeddedPrefix:untagged_"`
 }
 
 func (sampleEmbedding) TableName() string { return "sample_embeddings" }
@@ -144,9 +160,8 @@ func TestColumnsNameEmbeddedFieldsByPath(t *testing.T) {
 		byDBName[col.DBName] = col
 	}
 
-	// The Go name is the selector path Go writes, the URL name the path the
-	// field takes in JSON, each step named by its own rule; an anonymous
-	// embedded struct adds no step.
+	// The Go name is the selector path Go writes, the URL name the path of the
+	// query tags along it; an anonymous embedded struct adds no step.
 	for dbName, want := range map[string]struct{ goName, queryName string }{
 		"label":        {"Label", "label"},
 		"first_label":  {"First.Label", "first.label"},
@@ -162,6 +177,11 @@ func TestColumnsNameEmbeddedFieldsByPath(t *testing.T) {
 	hidden := byDBName["hidden_label"]
 	require.Equal(t, "Hidden.Label", hidden.GoName)
 	require.False(t, hidden.Filterable, "json:\"-\" on the struct holding a field keeps the field out of JSON too")
+
+	untagged := byDBName["untagged_label"]
+	require.Equal(t, "Untagged.Label", untagged.GoName)
+	require.Empty(t, untagged.QueryName, "a step without a query tag leaves the path no URL name")
+	require.False(t, untagged.Filterable)
 
 	// The index path is the one reflect follows, a step through the embedded
 	// pointer Third included, where gorm records -i-1.
@@ -179,7 +199,7 @@ func TestColumnsCarryGormDataTypes(t *testing.T) {
 	}
 	parsed, err := Columns(reflect.TypeFor[typed]())
 	require.NoError(t, err)
-	cols := indexByQueryName(parsed)
+	cols := indexByDBName(parsed)
 	require.Equal(t, gormschema.String, cols["id"].dataType)
 	require.Equal(t, gormschema.String, cols["id"].gormDataType)
 	require.Equal(t, gormschema.DataType("datetime(6)"), cols["at"].dataType)
@@ -188,9 +208,10 @@ func TestColumnsCarryGormDataTypes(t *testing.T) {
 	require.Equal(t, gormschema.String, cols["doc"].gormDataType)
 }
 
-func TestColumnsReportUpdatable(t *testing.T) {
-	// An update writes the columns gorm writes on update: not one written on
-	// insert only, nor a read-only one.
+func TestColumnsReportCreatableAndUpdatable(t *testing.T) {
+	// An insert writes the columns gorm writes on insert, an update those it
+	// writes on update: neither writes a read-only column, and each leaves out
+	// the one gorm writes on the other alone.
 	type sealed struct {
 		ID    string `gorm:"primaryKey"`
 		Name  string
@@ -200,7 +221,11 @@ func TestColumnsReportUpdatable(t *testing.T) {
 	}
 	parsed, err := Columns(reflect.TypeFor[sealed]())
 	require.NoError(t, err)
-	cols := indexByQueryName(parsed)
+	cols := indexByDBName(parsed)
+	require.True(t, cols["name"].Creatable)
+	require.True(t, cols["code"].Creatable)
+	require.False(t, cols["mark"].Creatable)
+	require.False(t, cols["stamp"].Creatable)
 	require.True(t, cols["name"].Updatable)
 	require.False(t, cols["code"].Updatable)
 	require.False(t, cols["mark"].Updatable)
@@ -217,7 +242,7 @@ func TestColumnsReportNotNull(t *testing.T) {
 	}
 	parsed, err := Columns(reflect.TypeFor[constrained]())
 	require.NoError(t, err)
-	cols := indexByQueryName(parsed)
+	cols := indexByDBName(parsed)
 	require.True(t, cols["id"].NotNull)
 	require.True(t, cols["code"].NotNull)
 	require.False(t, cols["note"].NotNull)
@@ -226,7 +251,7 @@ func TestColumnsReportNotNull(t *testing.T) {
 func TestColumnsSkipsAssociationFields(t *testing.T) {
 	parsed, err := Columns(reflect.TypeFor[sampleAssociating]())
 	require.NoError(t, err)
-	cols := indexByQueryName(parsed)
+	cols := indexByDBName(parsed)
 
 	require.Contains(t, cols, "id")
 	require.Contains(t, cols, "name")

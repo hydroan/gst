@@ -153,10 +153,12 @@ type QueryOptions struct {
 	AllowEmpty bool
 
 	// PresentFields marks columns whose filter values were explicitly provided
-	// by the caller, keyed by snake case column name. Query construction treats
-	// zero values (false, 0) of these columns as real conditions instead of
-	// dropping them as unset, so a filter like "enabled=false" works. Columns
-	// not listed here keep the default zero-value skip.
+	// by the caller, keyed by the URL name of the field, the value of its query
+	// tag, as a list request spells it. Query construction treats zero values
+	// (false, 0) of these columns as real conditions instead of dropping them
+	// as unset, so a filter like "enabled=false" works. Columns not listed
+	// here, a field without a query tag among them, keep the default
+	// zero-value skip.
 	PresentFields map[string]struct{}
 
 	// Filters are field-level operator filters ("field[op]=value"). They
