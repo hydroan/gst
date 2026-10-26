@@ -665,6 +665,7 @@ func TestDatabaseScalarFiltersOnBytesAndValuers(t *testing.T) {
 // the regex operators match a numeric column by the number's text form on
 // every dialect: the same request answers the same rows whether the dialect
 // reads a number in a string context by itself or needs the column cast.
+// ClickHouse runs apart from the dialect matrix, in TestClickhouse.
 func TestDatabasePatternFiltersOnNumericColumns(t *testing.T) {
 	defer cleanupTestData()
 	setupTestData(t)

@@ -80,12 +80,22 @@ func (db *database[M]) timeComparableExpr(operand string) string {
 // textPatternColumn renders a column so the text pattern operators (LIKE and
 // the regex operator) accept it. PostgreSQL is strict about operand types:
 // json, jsonb and the numeric types carry no text operators, so a column of
-// those types, which cast marks, is cast to text there. MySQL and SQLite
-// already read such a value in its text form in a string context, and
-// skipping the cast keeps their SQL unchanged.
+// those types, which cast marks, is cast to text there. ClickHouse's LIKE
+// and match take a string alone, so such a column goes through toString
+// there: a CAST to String refuses the NULL of a Nullable column, while
+// toString keeps it NULL, and the row then matches neither LIKE nor NOT
+// LIKE, as on every other dialect. MySQL and SQLite already read such a
+// value in its text form in a string context, and skipping the cast keeps
+// their SQL unchanged.
 func (db *database[M]) textPatternColumn(quotedColumn string, cast bool) string {
-	if cast && db.dialect() == dialectPostgres {
+	if !cast {
+		return quotedColumn
+	}
+	switch db.dialect() {
+	case dialectPostgres:
 		return "CAST(" + quotedColumn + " AS TEXT)"
+	case dialectClickHouse:
+		return "toString(" + quotedColumn + ")"
 	}
 	return quotedColumn
 }

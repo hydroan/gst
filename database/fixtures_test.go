@@ -566,6 +566,17 @@ type TestAggregateRecord struct {
 
 func (*TestAggregateRecord) TableName() string { return "test_aggregate_records" }
 
+// TestReadingRecord holds an optional number, so its column can hold NULL:
+// the value a pattern filter matching a number by its text form has to pass
+// over rather than fail on.
+type TestReadingRecord struct {
+	Reading *int64 `json:"reading"`
+
+	modelregistry.Base
+}
+
+func (*TestReadingRecord) TableName() string { return "test_reading_records" }
+
 // TestCursorSnapshot is the model the time-column cursor walk pages through:
 // its instant carries a unique index of its own, which is what a cursor
 // column must have — on a column two rows can share, the rows on a page
