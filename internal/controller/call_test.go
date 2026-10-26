@@ -21,6 +21,7 @@ import (
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/modelschema"
+	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
@@ -763,8 +764,13 @@ var (
 	errSampleServer  error
 )
 
-// sampleCredential is the authorization a call presents to be named alice.
-const sampleCredential = "Bearer alice"
+// sampleCredential is the authorization a call presents to be named alice,
+// and sampleAcrossCredential the one presenting alice acting across tenants
+// (see tenant.Across).
+const (
+	sampleCredential       = "Bearer alice"
+	sampleAcrossCredential = "Bearer alice across tenants"
+)
 
 // publicPrefix names the standard rpcs of publicRoute, the sample service's
 // public methods: no auth interceptor runs on them, so they serve anonymous
@@ -778,8 +784,14 @@ func sampleServer(t *testing.T) *grpc.ClientConn {
 	sampleServerOnce.Do(func() {
 		grpcserver.UseAuth(func(ctx context.Context) (context.Context, error) {
 			md, _ := metadata.FromIncomingContext(ctx)
-			if values := md.Get("authorization"); len(values) == 1 && values[0] == sampleCredential {
-				return grpcserver.WithCaller(ctx, grpcserver.Caller{Username: "alice", UserID: "u-1"}), nil
+			if values := md.Get("authorization"); len(values) == 1 {
+				alice := grpcserver.WithCaller(ctx, grpcserver.Caller{Username: "alice", UserID: "u-1"})
+				switch values[0] {
+				case sampleCredential:
+					return alice, nil
+				case sampleAcrossCredential:
+					return tenant.Across(alice), nil
+				}
 			}
 			return nil, status.Error(codes.Unauthenticated, "who are you")
 		})

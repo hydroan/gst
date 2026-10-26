@@ -56,6 +56,8 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 	validated := standardFixture[*validatedSample](validatedRoute, "Validated")
 	dated := standardFixture[*datedSample](datedRoute, "Dated")
 	scoped := standardFixture[*scopedSample](scopedRoute, "Scoped")
+	scopedAcross := scoped
+	scopedAcross.across = true
 	public := standardFixture[*sampleRecord](publicRoute, publicPrefix)
 	public.anonymous = true
 	shaped := standardFixture[*shapedSample](shapedRoute, "Shaped")
@@ -172,6 +174,23 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				data := dataMap(t, got)
 				require.Equal(t, tenant.Default, data["tenant_id"])
 				require.Equal(t, tenant.Default, storedScoped(t, stringOf(data["id"])).GetTenantID())
+			},
+		},
+		{
+			// A caller acting across tenants files the record under the
+			// tenant the record names, which HTTP alone reads: a generated
+			// FromProto never reads tenant_id, so over gRPC the record names
+			// none, and a call naming no tenant of its own has none to file it
+			// under (see TRANSPORTS.md, section 9).
+			name: "Create by a caller acting across tenants files the record under the tenant it names over HTTP alone", fixture: scopedAcross, phase: consts.Create,
+			input: contractInput{record: map[string]any{"name": uniqueName("contract-scoped-across"), "tenant_id": "contract-other-tenant"}},
+			want:  contractWant{status: http.StatusOK, grpc: &grpcAnswer{code: codes.InvalidArgument, msg: invalidArgumentMsg}},
+			check: func(t *testing.T, _ contractInput, got contractAnswer) {
+				t.Helper()
+				if got.status != http.StatusOK {
+					return
+				}
+				require.Equal(t, "contract-other-tenant", storedScoped(t, stringOf(dataMap(t, got)["id"])).GetTenantID())
 			},
 		},
 		{
@@ -1366,12 +1385,15 @@ type grpcAnswer struct {
 // the handler of each action and the name of each action's rpc on the
 // sample service. An anonymous fixture is sent with no caller: an HTTP
 // request no identity names, a gRPC call presenting no credential to a
-// public rpc.
+// public rpc. An across fixture is sent by a caller acting across tenants
+// (see tenant.Across): an HTTP request in a context so scoped, a gRPC call
+// presenting the credential the sample service scopes so.
 type contractFixture struct {
 	route     string
 	handler   func(phase consts.Phase) gin.HandlerFunc
 	rpc       func(phase consts.Phase) string
 	anonymous bool
+	across    bool
 }
 
 // standardFixture is the fixture of the standard actions of M on route,
@@ -1455,10 +1477,11 @@ var contractTransports = []contractTransport{
 }
 
 // overHTTP sends in as the HTTP request of the action, as alice unless the
-// fixture is anonymous, and decodes the envelope answered: the method and
-// path of the action, the id in the path, the query rendered as the query
-// string, the record, the items, the ids or the payload as the JSON body,
-// and the forwarding headers as headers of the request.
+// fixture is anonymous, acting across tenants when the fixture is across, and
+// decodes the envelope answered: the method and path of the action, the id in
+// the path, the query rendered as the query string, the record, the items,
+// the ids or the payload as the JSON body, and the forwarding headers as
+// headers of the request.
 func overHTTP(t *testing.T, f contractFixture, phase consts.Phase, in contractInput) contractAnswer {
 	t.Helper()
 	pattern, target := "/"+f.route, "/"+routePath(f.route, in.params)
@@ -1488,6 +1511,9 @@ func overHTTP(t *testing.T, f contractFixture, phase consts.Phase, in contractIn
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	if f.across {
+		ctx = tenant.Across(ctx)
+	}
 	username := "alice"
 	if f.anonymous {
 		username = ""
@@ -1505,12 +1531,13 @@ func overHTTP(t *testing.T, f contractFixture, phase consts.Phase, in contractIn
 }
 
 // overGRPC sends in as the rpc of the action on the sample service, as
-// alice unless the fixture is anonymous, and returns the status answered,
-// or the response message: the route parameters, the id, the record with
-// the mask of a Patch, the items, each with its id, its record and its mask
-// in a PatchMany, the ids, the query and the payload, as the rpcs of the
-// sample service read them (see standardRPCs), and the forwarding headers
-// as metadata of the call.
+// alice unless the fixture is anonymous, acting across tenants when the
+// fixture is across, and returns the status answered, or the response
+// message: the route parameters, the id, the record with the mask of a
+// Patch, the items, each with its id, its record and its mask in a
+// PatchMany, the ids, the query and the payload, as the rpcs of the sample
+// service read them (see standardRPCs), and the forwarding headers as
+// metadata of the call.
 func overGRPC(t *testing.T, f contractFixture, phase consts.Phase, in contractInput) contractAnswer {
 	t.Helper()
 	message := map[string]any{}
@@ -1561,8 +1588,11 @@ func overGRPC(t *testing.T, f contractFixture, phase consts.Phase, in contractIn
 		ctx = metadata.AppendToOutgoingContext(ctx, pairs...)
 	}
 	credential := sampleCredential
-	if f.anonymous {
+	switch {
+	case f.anonymous:
 		credential = ""
+	case f.across:
+		credential = sampleAcrossCredential
 	}
 	out, err := invokeIn(ctx, t, sampleServer(t), f.rpc(phase), message, credential)
 	if err != nil {
