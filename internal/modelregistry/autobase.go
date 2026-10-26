@@ -25,6 +25,9 @@ var _ types.Model = (*AutoBase)(nil)
 // database.ErrIDRequired; use database.Upsert for insert-or-update
 // semantics.
 //
+// A model declaring an ID of its own over AutoBase's declares its own GetID,
+// SetID and ClearID too, as on Base.
+//
 // created_at/updated_at follow the same NOT NULL, no-database-default
 // contract as Base: every writer provides both explicitly, in UTC. created_at
 // and created_by are create-only, as on Base.

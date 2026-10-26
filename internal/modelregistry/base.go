@@ -14,6 +14,11 @@ var _ types.Model = (*Base)(nil)
 // Base implements types.Model for database-backed resources.
 // Custom models can override these default methods when needed.
 //
+// A model may declare an ID of its own, a wider key say, which shadows
+// Base's. Base's GetID, SetID and ClearID read and write the shadowed field,
+// which no column maps, so such a model declares its own three, and Register
+// refuses one that does not.
+//
 // Indexes are not declared through gorm tags; models declare them through
 // the optional Indexes() []Index method instead.
 //

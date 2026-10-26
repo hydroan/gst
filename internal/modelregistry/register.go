@@ -3,9 +3,11 @@ package modelregistry
 import (
 	"fmt"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 
+	"github.com/hydroan/gst/internal/hookoverride"
 	"github.com/hydroan/gst/internal/types"
 )
 
@@ -66,7 +68,10 @@ var (
 // embedding a base type through a pointer — *Base, *AutoBase or *Empty —
 // panics, telling the author to embed it by value: the framework recognizes
 // the base types embedded by value only, and gg gen rejects the pointer form
-// as well (see dsl.Validate).
+// as well (see dsl.Validate). So does a model declaring an ID of its own over
+// its base's, a wider key say, that takes any of GetID, SetID and ClearID
+// from the base: the base's read and write the shadowed ID, which no column
+// maps, while the framework reads and writes a record's ID through them.
 //
 // It is the single entry point for both steps, and the one place a model
 // takes TableChan, so the recorded set and the queue can never disagree
@@ -94,6 +99,14 @@ func Register[M types.Model]() {
 	if !IsTableModel[M]() {
 		return
 	}
+	if base, missing := shadowedIDAccessors(typ); len(missing) > 0 {
+		names := strings.Join(missing[:len(missing)-1], ", ")
+		if names != "" {
+			names += " and "
+		}
+		names += missing[len(missing)-1]
+		panic(fmt.Sprintf("model %s declares its own ID, shadowing model.%s's; declare its own %s too: model.%[2]s's read and write the shadowed field, which no column maps", typ, base.Name(), names))
+	}
 	table := newModel[M]()
 
 	registeredMu.Lock()
@@ -102,6 +115,41 @@ func Register[M types.Model]() {
 
 	tablesPending.Add(1)
 	TableChan <- table
+}
+
+// shadowedIDAccessors reports which of the ID accessors the struct type typ
+// takes from base, the framework base it embeds, while the ID Go resolves on
+// typ is not the base's: a field of the model's own, or of a struct it
+// embeds, shadows the base's ID, which the accessors base declares read and
+// write. For a model embedding Base beside an ID of its own that declares
+// GetID alone it reports Base, [SetID ClearID]; for a model whose ID is
+// Base's, or one declaring all three, it reports none.
+func shadowedIDAccessors(typ reflect.Type) (base reflect.Type, missing []string) {
+	for _, candidate := range []reflect.Type{reflect.TypeFor[Base](), reflect.TypeFor[AutoBase]()} {
+		if field, ok := typ.FieldByName(candidate.Name()); ok && field.Anonymous && field.Type == candidate {
+			base = candidate
+		}
+	}
+	id, ok := typ.FieldByName("ID")
+	if base == nil || !ok {
+		return nil, nil
+	}
+	owner := typ
+	for _, i := range id.Index[:len(id.Index)-1] {
+		owner = owner.Field(i).Type
+		for owner.Kind() == reflect.Pointer {
+			owner = owner.Elem()
+		}
+	}
+	if IsFrameworkBase(owner) {
+		return nil, nil
+	}
+	for _, name := range []string{"GetID", "SetID", "ClearID"} {
+		if !hookoverride.Overridden(reflect.PointerTo(typ), name, IsFrameworkBase) {
+			missing = append(missing, name)
+		}
+	}
+	return base, missing
 }
 
 // RegisteredModels returns independent values of the models registered
