@@ -1,12 +1,13 @@
 // The inspection program reports the project models' columns, what their
-// index declarations violate on MySQL, and the framework columns they rename,
-// as JSON written to the file its argument names: it is what gg gen and gg
-// check build and run inside the project. gg embeds it (see
-// gghelper.InspectProgram), writes it next to a generated project.go that
-// imports the project's model packages and sets the models beyond the
-// registry, and builds it with the project's dependency versions, so it
-// resolves exactly the columns the framework resolves at run time. It is
-// written as project code: it imports the framework's public packages only.
+// index declarations violate on MySQL, the framework columns they rename and
+// the query names they declare ambiguously, as JSON written to the file its
+// argument names: it is what gg gen and gg check build and run inside the
+// project. gg embeds it (see gghelper.InspectProgram), writes it next to a
+// generated project.go that imports the project's model packages and sets
+// the models beyond the registry, and builds it with the project's
+// dependency versions, so it resolves exactly the columns the framework
+// resolves at run time. It is written as project code: it imports the
+// framework's public packages only.
 package main
 
 import (
@@ -20,8 +21,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	gstmysql "github.com/hydroan/gst/database/mysql"
+	"github.com/hydroan/gst/inspect"
 	"github.com/hydroan/gst/model"
-	"github.com/hydroan/gst/modelschema"
 )
 
 type columnInfo struct {
@@ -42,6 +43,7 @@ type modelColumns struct {
 	Columns                  []columnInfo `json:"columns"`
 	IndexViolation           string       `json:"index_violation"`
 	FrameworkColumnViolation string       `json:"framework_column_violation"`
+	QueryNameViolation       string       `json:"query_name_violation"`
 }
 
 // The project's models beyond the registry, set by the generated project.go
@@ -78,7 +80,7 @@ func main() {
 	// Their query columns resolve the same way, so those that opted in to
 	// framework query parameters are inspected alongside the registered ones.
 	for _, m := range unregisteredModels {
-		if !modelschema.IsQueryable(m) {
+		if !inspect.IsQueryable(m) {
 			continue
 		}
 		models = append(models, m)
@@ -106,7 +108,7 @@ func main() {
 		}
 		seen[key] = struct{}{}
 
-		cols, colsErr := modelschema.Columns(typ)
+		cols, colsErr := inspect.Columns(typ)
 		if colsErr != nil {
 			fail(errors.Wrapf(colsErr, "resolve columns of %s", key))
 		}
@@ -114,21 +116,24 @@ func main() {
 		if validateErr := model.ValidateIndexes(schemaDB, m); validateErr != nil {
 			entry.IndexViolation = validateErr.Error()
 		}
-		if validateErr := modelschema.ValidateFrameworkColumns(typ); validateErr != nil {
+		if validateErr := inspect.ValidateFrameworkColumns(typ); validateErr != nil {
 			entry.FrameworkColumnViolation = validateErr.Error()
+		}
+		if validateErr := inspect.ValidateQueryNames(typ); validateErr != nil {
+			entry.QueryNameViolation = validateErr.Error()
 		}
 		for _, col := range cols {
 			expr, imports := describeType(col.Type, typ.PkgPath())
-			class := modelschema.ClassifyColumn(col)
+			class := inspect.ClassifyColumn(col)
 			entry.Columns = append(entry.Columns, columnInfo{
 				GoName:      col.GoName,
 				DBName:      col.DBName,
 				TypeExpr:    expr,
 				TypeImports: imports,
 				TypeName:    col.Type.String(),
-				Numeric:     class == modelschema.ColumnClassNumeric,
-				Time:        class == modelschema.ColumnClassTime,
-				JSONStrings: modelschema.IsJSONStringsType(col.Type),
+				Numeric:     class == inspect.ColumnClassNumeric,
+				Time:        class == inspect.ColumnClassTime,
+				JSONStrings: inspect.IsJSONStringsType(col.Type),
 			})
 		}
 		out = append(out, entry)

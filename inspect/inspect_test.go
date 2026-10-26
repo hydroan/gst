@@ -1,10 +1,10 @@
-package modelschema_test
+package inspect_test
 
 import (
 	"testing"
 
+	"github.com/hydroan/gst/inspect"
 	"github.com/hydroan/gst/internal/modelregistry"
-	"github.com/hydroan/gst/modelschema"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,6 +19,6 @@ type plainRecord struct {
 }
 
 func TestIsQueryable(t *testing.T) {
-	require.True(t, modelschema.IsQueryable(&queryRecord{}))
-	require.False(t, modelschema.IsQueryable(&plainRecord{}))
+	require.True(t, inspect.IsQueryable(&queryRecord{}))
+	require.False(t, inspect.IsQueryable(&plainRecord{}))
 }

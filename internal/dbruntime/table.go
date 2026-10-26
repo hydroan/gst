@@ -13,6 +13,7 @@ import (
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -90,10 +91,11 @@ func preparationFailed() error {
 
 // ensureTable prepares the backing table for a registered model.
 //
-// A model has to declare its table name and keep the columns the framework
-// fixes under their names (see modelschema.ValidateFrameworkColumns); a model
-// failing either is refused before anything touches the database, whatever
-// the database.
+// A model has to declare its table name, keep the columns the framework fixes
+// under their names (see modelschema.ValidateFrameworkColumns) and name its
+// URL query parameters unambiguously (see urlquery.ValidateQueryNames); a
+// model failing any of them is refused before anything touches the database,
+// whatever the database.
 //
 // With database.auto_migrate enabled it runs gorm AutoMigrate and creates
 // custom indexes, which suits local development and tests. With the option
@@ -113,6 +115,9 @@ func ensureTable(handler *gorm.DB, m types.Model) error {
 		return err
 	}
 	if err = modelschema.ValidateFrameworkColumns(reflect.TypeOf(m)); err != nil {
+		return err
+	}
+	if err = urlquery.ValidateQueryNames(reflect.TypeOf(m)); err != nil {
 		return err
 	}
 

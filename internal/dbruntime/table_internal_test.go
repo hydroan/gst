@@ -129,6 +129,27 @@ func TestEnsureTableRejectsARenamedFrameworkColumn(t *testing.T) {
 	require.False(t, db.Migrator().HasTable("renamed_column_records"))
 }
 
+// clashingQueryRecord declares one query name on two columns, which the
+// parsers would each resolve their own way; table preparation must refuse it
+// before the table exists, whatever the database.
+type clashingQueryRecord struct {
+	Name  string `json:"name" query:"title"`
+	Title string `json:"title" query:"title"`
+
+	modelregistry.Base
+}
+
+func (*clashingQueryRecord) TableName() string { return "clashing_query_records" }
+
+func TestEnsureTableRejectsAQueryNameDeclaredTwice(t *testing.T) {
+	db := newSQLiteDB(t)
+	withAutoMigrate(t, true)
+
+	err := ensureTable(db, &clashingQueryRecord{})
+	require.ErrorContains(t, err, `query name "title" is declared by Name and Title`)
+	require.False(t, db.Migrator().HasTable("clashing_query_records"))
+}
+
 // raceRecord is the model several processes prepare at once; its index makes
 // the custom index step part of the race. The indexed column carries a size:
 // without one gorm maps it to TEXT on MySQL, which cannot be indexed whole.

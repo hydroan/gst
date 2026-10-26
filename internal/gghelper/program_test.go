@@ -268,8 +268,8 @@ func inspectRewriteProblems(forwarded map[string][]forwardedType, rewrites map[s
 // types, or by a qualified type, standing for that one alone; each value
 // says what the types are, which no model stores.
 var nonColumnTypes = map[string]string{
-	ggconst.ImportPathGst + "/internal/modelschema.Column":      "forwarded by modelschema to gg's own programs, which describe a model's columns with it",
-	ggconst.ImportPathGst + "/internal/modelschema.ColumnClass": "forwarded by modelschema to gg's own programs, which classify a model's columns with it",
+	ggconst.ImportPathGst + "/internal/modelschema.Column":      "forwarded by inspect to gg's own programs, which describe a model's columns with it",
+	ggconst.ImportPathGst + "/internal/modelschema.ColumnClass": "forwarded by inspect to gg's own programs, which classify a model's columns with it",
 }
 
 func TestProjectProgramRunsAgainstTheProjectModuleWithOverlay(t *testing.T) {

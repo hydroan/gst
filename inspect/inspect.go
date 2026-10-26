@@ -1,23 +1,27 @@
-// Package modelschema exposes the model column resolution used by the
-// framework.
+// Package inspect forwards the framework's model rules to the program gg
+// builds to inspect a project's models.
 //
-// It exists for the toolchain, not for application code: gg gen compiles a
-// short program inside the project's own module to inspect the project's
-// models, and that program cannot reach the internal packages where the
-// resolution lives. Forwarding it here lets the generated program resolve
-// exactly the columns the framework resolves at runtime, instead of carrying
-// a second copy of the rules that would drift from it.
+// It exists for the toolchain, not for application code: gg gen and gg check
+// compile a short program inside the project's own module to inspect the
+// project's models, and that program cannot reach the internal packages the
+// rules live in. This package forwards the ones it asks: the column
+// resolution and the framework column check of internal/modelschema, the
+// query name check of internal/urlquery and the query opt-in of
+// internal/modelregistry. The program therefore resolves and refuses exactly
+// what the framework resolves and refuses at runtime, instead of carrying a
+// second copy of the rules that would drift from it.
 //
 // Application code never needs this package: filters name their columns
 // through the typed column references gg gen writes next to each model.
-// Framework code imports internal/modelschema directly.
-package modelschema
+// Framework code imports the internal packages directly.
+package inspect
 
 import (
 	"reflect"
 
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
+	"github.com/hydroan/gst/internal/urlquery"
 )
 
 // Column describes one database column of a model.
@@ -45,6 +49,15 @@ func Columns(typ reflect.Type) ([]Column, error) {
 // it inspects, so gg check refuses what table preparation refuses at startup.
 func ValidateFrameworkColumns(typ reflect.Type) error {
 	return modelschema.ValidateFrameworkColumns(typ)
+}
+
+// ValidateQueryNames refuses a model whose query tags name its URL query
+// parameters ambiguously: a name two fields declare, a business field's name
+// in the "_" namespace of the framework's own parameters, or a tag holding
+// "[", "]" or ".". The inspection program asks it of every model it inspects,
+// so gg check refuses what table preparation refuses at startup.
+func ValidateQueryNames(typ reflect.Type) error {
+	return urlquery.ValidateQueryNames(typ)
 }
 
 // ClassifyColumn reports the aggregate capability of a column, which decides
