@@ -3,6 +3,7 @@ package serviceregistry
 import (
 	"reflect"
 
+	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
@@ -74,13 +75,18 @@ import (
 // request, ready to be passed to Database.WithQuery.
 //
 // The keys QueryFilters owns never reach the decoder, and neither do framework
-// parameters the model cannot carry; every other key must map to a field of
-// the model, so a mistyped filter name is reported instead of silently
-// widening the result set. The model is returned even when decoding fails, so
-// a caller that tolerates partial input can still use it.
+// parameters the model cannot carry, nor, in an export, the export's own
+// _format and _limit; every other key must map to a field of the model, so a
+// mistyped filter name is reported instead of silently widening the result
+// set. The model is returned even when decoding fails, so a caller that
+// tolerates partial input can still use it.
 func (Base[M, REQ, RSP]) QueryModel(ctx *types.ServiceContext) (M, error) {
 	m := reflect.New(reflect.TypeFor[M]().Elem()).Interface().(M) //nolint:errcheck
-	return m, urlquery.Decode(requestctx.QueryValues(ctx), m)
+	query := requestctx.QueryValues(ctx)
+	if ctx.Phase() == consts.Export {
+		query = urlquery.WithoutExportKeys(query)
+	}
+	return m, urlquery.Decode(query, m)
 }
 
 // QueryFilters returns the field-level operator filters ("field[op]=value") of

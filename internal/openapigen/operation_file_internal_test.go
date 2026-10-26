@@ -64,6 +64,34 @@ func TestSetExportDocumentsFileDownload(t *testing.T) {
 	}
 }
 
+// TestSetExportDocumentsNoPagingParameters pins that an export, which lists
+// every record the query matches, documents none of the paging and cursor
+// parameters a List of the same model takes, the _size a model paging by
+// cursor alone takes included, while the parameters it reads stay.
+func TestSetExportDocumentsNoPagingParameters(t *testing.T) {
+	paging := []string{consts.QUERY_PAGE, consts.QUERY_SIZE, consts.QUERY_CURSOR_VALUE, consts.QUERY_CURSOR_FIELD, consts.QUERY_CURSOR_NEXT}
+	for name, set := range map[string]func(*openapi3.PathItem){
+		"model.Query": func(p *openapi3.PathItem) {
+			setExport[*openapiFilterQueryModel, *openapiFilterQueryModel, *openapiFilterQueryModel]("/api/query-exports/export", p)
+		},
+		"model.Cursor alone": func(p *openapi3.PathItem) {
+			setExport[*openapiCursorQueryModel, *openapiCursorQueryModel, *openapiCursorQueryModel]("/api/cursor-exports/export", p)
+		},
+	} {
+		pathItem := &openapi3.PathItem{}
+		set(pathItem)
+		params := queryParametersByName(t, pathItem.Get)
+		for _, key := range paging {
+			if params[key] != nil {
+				t.Fatalf("%s export query parameters = %v, want no %q", name, parameterNames(params), key)
+			}
+		}
+		if name == "model.Query" && params[consts.QUERY_SORT_BY] == nil {
+			t.Fatalf("%s export query parameters = %v, want %q, which the export reads", name, parameterNames(params), consts.QUERY_SORT_BY)
+		}
+	}
+}
+
 // openapiVirtualExportModel is a virtual resource: its export service lists
 // the records itself, so the controller reads no cap on them.
 type openapiVirtualExportModel struct {

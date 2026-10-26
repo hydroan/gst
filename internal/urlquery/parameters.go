@@ -34,10 +34,9 @@ type Parameter struct {
 // field Decode fills, the framework's own parameters among them, each with
 // the operators Filters takes on its column, and the columns Filters alone
 // reads, one no bare key decodes into under its operators alone and a
-// framework timestamp under its bare key too. Three parameters the parsers
-// take are left out: the _size a model paging by cursor alone takes, which
-// is no field's (see Decode), and the export's _format and _limit, which
-// Decode lets through for the export to read and document itself.
+// framework timestamp under its bare key too. The _size a model paging by
+// cursor alone takes is no field's (see Decode) and is left out. A document
+// listing them names every other parameter the parsers take.
 //
 // For a model embedding model.Query beside Title string `query:"title"` and
 // ExpiresAt time.Time `query:"expires_at"`, it returns title, bare and under

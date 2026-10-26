@@ -118,7 +118,7 @@ func setList[M types.Model, REQ types.Request, RSP types.Response](path string, 
 		Parameters:  parseParametersFromPath(path),
 		Responses:   newResponses(rspKey, consts.List, !modelregistry.AreTypesEqual[M, REQ, RSP]()),
 	}
-	addQueryParameters[M, REQ, RSP](pathItem.Get)
+	addQueryParameters[M, REQ, RSP](pathItem.Get, true)
 }
 
 func setGet[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {

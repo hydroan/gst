@@ -34,7 +34,8 @@ import (
 //
 // The keys Filters owns never reach the plan, so the "field[op]" bracket
 // syntax and the bare framework timestamp keys stay with Filters. _format and
-// _limit belong to the export action and are dropped for every caller. _size
+// _limit are the export action's own, which it takes off the query before
+// decoding (see WithoutExportKeys), so any other action is refused them. _size
 // is dropped when the model cannot carry it: a model embedding only Cursor
 // accepts the parameter as its batch size, but the Size field lives in
 // Pagination.
@@ -53,7 +54,7 @@ func Decode(q url.Values, m types.Model) error {
 
 	var unsupported, invalid []string
 	for key, values := range q {
-		if isFilterQueryKey(key) || key == consts.QUERY_FORMAT || key == consts.QUERY_LIMIT {
+		if isFilterQueryKey(key) {
 			continue
 		}
 		field, ok := plan[key]

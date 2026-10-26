@@ -734,12 +734,11 @@ func TestDecode(t *testing.T) {
 			"a cursor-only model accepts _size as its batch size but has no Size field to decode it into")
 	})
 
-	t.Run("DropsTheExportKeys", func(t *testing.T) {
+	t.Run("RefusesTheExportKeys", func(t *testing.T) {
 		var m filterTestModel
-		require.NoError(t, Decode(url.Values{"_format": {"csv"}, "_limit": {"10"}, "name": {"alice"}}, &m),
-			"the export format and limit belong to the export action, not to any model field; "+
-				"a virtual-resource export service parses the raw query itself and must not see them rejected")
-		require.Equal(t, "alice", m.Name)
+		require.EqualError(t, Decode(url.Values{"_format": {"csv"}, "_limit": {"10"}, "name": {"alice"}}, &m),
+			`unsupported query parameters "_format", "_limit"`,
+			"the export's format and cap are its own: the export takes them off the query before decoding (see WithoutExportKeys)")
 	})
 
 	t.Run("RejectsUnknownKeys", func(t *testing.T) {

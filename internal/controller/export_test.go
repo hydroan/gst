@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
@@ -26,9 +27,22 @@ func TestExportAnswersAClientThatWentAwayAsCanceled(t *testing.T) {
 	require.Equal(t, types.StatusClientClosedRequest, rsp.Code, rsp.Body.String())
 }
 
+// TestExportRefusesThePagingParameters pins that an export, which lists every
+// record the query matches, refuses the paging and cursor parameters a List
+// of the same model takes rather than ignoring them.
+func TestExportRefusesThePagingParameters(t *testing.T) {
+	for _, key := range []string{consts.QUERY_PAGE, consts.QUERY_SIZE, consts.QUERY_CURSOR_VALUE, consts.QUERY_CURSOR_FIELD, consts.QUERY_CURSOR_NEXT} {
+		rsp := serveAs(context.Background(), t, http.MethodGet, "/controller-exports/export",
+			controller.ExportHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](exportRoute)),
+			"/controller-exports/export?"+key+"=1", "", "alice", nil)
+		require.Equal(t, http.StatusBadRequest, rsp.Code, rsp.Body.String())
+		require.Contains(t, rsp.Body.String(), `"msg":"unsupported query parameter \"`+key+`\""`)
+	}
+}
+
 // TestExportTakesALimit pins _limit, the export action's own parameter: it
-// caps the records exported, and a value that is no integer is refused rather
-// than read as no cap at all.
+// caps the records exported, zero or less exporting every one, and a value
+// that is no integer is refused rather than read as no cap at all.
 func TestExportTakesALimit(t *testing.T) {
 	prefix := uniqueName("export-limit")
 	for _, suffix := range []string{"-a", "-b", "-c"} {

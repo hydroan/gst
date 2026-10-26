@@ -132,7 +132,8 @@ func (s *exportVirtualSampleService) Export(_ *types.ServiceContext, ms ...*expo
 // TestExportHandlerVirtualModelSkipsListing pins that a virtual model, which
 // has no table behind it, is exported by its service alone: the handler
 // lists nothing and reads no cap on the records, not even one that is no
-// integer, and the exporter receives no rows.
+// integer, and the exporter receives no rows. The paging parameters are
+// refused before the service runs, as for any export.
 func TestExportHandlerVirtualModelSkipsListing(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -157,6 +158,12 @@ func TestExportHandlerVirtualModelSkipsListing(t *testing.T) {
 	require.Contains(t, rec.Header().Get("Content-Disposition"), csvTestName,
 		"non-xlsx bytes must resolve to the csv attachment")
 	require.Zero(t, svc.gotModels, "a virtual model export must not receive controller-listed rows")
+
+	rec = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/"+route+"?_page=2", nil)
+	handler(c)
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
 }
 
 // exportFormatSample is a plain table-backed resource for pinning that the

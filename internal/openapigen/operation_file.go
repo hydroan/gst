@@ -101,7 +101,7 @@ func setExport[M types.Model, REQ types.Request, RSP types.Response](path string
 		Parameters:  params,
 		Responses:   exportFileResponses(!modelregistry.AreTypesEqual[M, REQ, RSP]()),
 	}
-	addQueryParameters[M, REQ, RSP](pathItem.Get)
+	addQueryParameters[M, REQ, RSP](pathItem.Get, false)
 }
 
 // exportFormatParameter documents the file-format query parameter accepted by

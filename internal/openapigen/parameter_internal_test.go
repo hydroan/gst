@@ -32,7 +32,7 @@ func init() {
 
 func TestAddQueryParametersUsesDateTimeFormatForTimeFields(t *testing.T) {
 	op := &openapi3.Operation{}
-	addQueryParameters[*openapiTimeFilterModel, *openapiTimeFilterModel, *openapiTimeFilterModel](op)
+	addQueryParameters[*openapiTimeFilterModel, *openapiTimeFilterModel, *openapiTimeFilterModel](op, true)
 	parameters := queryParametersByName(t, op)
 
 	for _, name := range []string{"expires_at[gte]", "expires_at[lt]", "created_at"} {
@@ -87,7 +87,7 @@ func TestAddQueryParametersIncludesEmbeddedFrameworkParameters(t *testing.T) {
 		{
 			name: "query",
 			add: func(op *openapi3.Operation) {
-				addQueryParameters[*openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel](op)
+				addQueryParameters[*openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel](op, true)
 			},
 			parameters: []string{
 				"page",
@@ -101,14 +101,14 @@ func TestAddQueryParametersIncludesEmbeddedFrameworkParameters(t *testing.T) {
 		{
 			name: "pagination",
 			add: func(op *openapi3.Operation) {
-				addQueryParameters[*openapiPaginationQueryModel, *openapiPaginationQueryModel, *openapiPaginationQueryModel](op)
+				addQueryParameters[*openapiPaginationQueryModel, *openapiPaginationQueryModel, *openapiPaginationQueryModel](op, true)
 			},
 			parameters: []string{"_page", "_size", "id", "created_by", "updated_by"},
 		},
 		{
 			name: "cursor",
 			add: func(op *openapi3.Operation) {
-				addQueryParameters[*openapiCursorQueryModel, *openapiCursorQueryModel, *openapiCursorQueryModel](op)
+				addQueryParameters[*openapiCursorQueryModel, *openapiCursorQueryModel, *openapiCursorQueryModel](op, true)
 			},
 			parameters: []string{"_size", "_cursor_value", "_cursor_field", "_cursor_next", "id", "created_by", "updated_by"},
 		},
@@ -145,14 +145,14 @@ func TestAddQueryParametersIncludesEmbeddedFrameworkParameters(t *testing.T) {
 	}
 
 	op := &openapi3.Operation{}
-	addQueryParameters[*openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel](op)
+	addQueryParameters[*openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel](op, true)
 	page := queryParametersByName(t, op)["page"]
 	if page.Schema == nil || page.Schema.Value == nil || page.Schema.Value.Type == nil || !page.Schema.Value.Type.Is(openapi3.TypeString) {
 		t.Fatalf("page schema = %#v, want the bare business field to keep its own string schema alongside the framework _page parameter", page.Schema)
 	}
 
 	op = &openapi3.Operation{}
-	addQueryParameters[*openapiShallowQueryModel, *openapiShallowQueryModel, *openapiShallowQueryModel](op)
+	addQueryParameters[*openapiShallowQueryModel, *openapiShallowQueryModel, *openapiShallowQueryModel](op, true)
 	shared := queryParametersByName(t, op)["shared"]
 	if shared == nil || shared.Schema == nil || shared.Schema.Value == nil || shared.Schema.Value.Type == nil || !shared.Schema.Value.Type.Is(openapi3.TypeString) {
 		t.Fatalf("shared = %#v, want the shallower embedded string field to override the earlier deeper field", shared)
@@ -225,7 +225,7 @@ func TestAddQueryParametersDocumentsWhatTheURLQueryTakes(t *testing.T) {
 
 func TestAddQueryParametersOrdersBusinessFieldsBeforeFrameworkParameters(t *testing.T) {
 	op := &openapi3.Operation{}
-	addQueryParameters[*openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel](op)
+	addQueryParameters[*openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel](op, true)
 
 	names := make([]string, 0, len(op.Parameters))
 	for _, parameterRef := range op.Parameters {
@@ -264,7 +264,7 @@ func (*openapiExpandableQueryModel) Expands() []string { return []string{"Childr
 
 func TestAddQueryParametersDocumentsExpandableFields(t *testing.T) {
 	op := &openapi3.Operation{}
-	addQueryParameters[*openapiExpandableQueryModel, *openapiExpandableQueryModel, *openapiExpandableQueryModel](op)
+	addQueryParameters[*openapiExpandableQueryModel, *openapiExpandableQueryModel, *openapiExpandableQueryModel](op, true)
 	parameters := queryParametersByName(t, op)
 
 	expand := parameters["_expand"]
@@ -284,7 +284,7 @@ func TestAddQueryParametersDocumentsExpandableFields(t *testing.T) {
 // a field that is no column or a model without model.Query.
 func TestAddQueryParametersDocumentsFieldOperatorFilters(t *testing.T) {
 	op := &openapi3.Operation{}
-	addQueryParameters[*openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel](op)
+	addQueryParameters[*openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel](op, true)
 	parameters := queryParametersByName(t, op)
 
 	if !strings.Contains(parameters["page"].Description, "page[op]=value") {
@@ -298,13 +298,13 @@ func TestAddQueryParametersDocumentsFieldOperatorFilters(t *testing.T) {
 	}
 
 	op = &openapi3.Operation{}
-	addQueryParameters[*openapiFilterQueryModel, *openapiFilterQueryModel, *openapiFilterQueryModel](op)
+	addQueryParameters[*openapiFilterQueryModel, *openapiFilterQueryModel, *openapiFilterQueryModel](op, true)
 	parameters = queryParametersByName(t, op)
 	require.Contains(t, parameters["active"].Description, "op: eq/ne/isnull.", "a bool column takes eq, ne and isnull alone")
 	require.NotContains(t, parameters["scope"].Description, "[op]=value", "a field that is no column takes no operator")
 
 	op = &openapi3.Operation{}
-	addQueryParameters[*openapiPaginationQueryModel, *openapiPaginationQueryModel, *openapiPaginationQueryModel](op)
+	addQueryParameters[*openapiPaginationQueryModel, *openapiPaginationQueryModel, *openapiPaginationQueryModel](op, true)
 	parameters = queryParametersByName(t, op)
 	if strings.Contains(parameters["id"].Description, "[op]=value") {
 		t.Fatalf("id description = %q, models without modelregistry.Query must not advertise operator filters", parameters["id"].Description)
@@ -326,7 +326,7 @@ type openapiTagsFilterModel struct {
 // it: the text the like family matches and the boolean isnull takes.
 func TestAddQueryParametersDocumentsEachOperatorOfAColumnWithoutABareKey(t *testing.T) {
 	op := &openapi3.Operation{}
-	addQueryParameters[*openapiTagsFilterModel, *openapiTagsFilterModel, *openapiTagsFilterModel](op)
+	addQueryParameters[*openapiTagsFilterModel, *openapiTagsFilterModel, *openapiTagsFilterModel](op, true)
 	parameters := queryParametersByName(t, op)
 
 	for _, name := range []string{"tags[like]", "tags[notlike]", "tags[startswith]", "tags[endswith]"} {
@@ -347,7 +347,7 @@ func TestAddQueryParametersSetsEnumValues(t *testing.T) {
 	registerEnumFieldStatus()
 
 	op := &openapi3.Operation{}
-	addQueryParameters[*enumQueryModel, *enumQueryModel, *enumQueryModel](op)
+	addQueryParameters[*enumQueryModel, *enumQueryModel, *enumQueryModel](op, true)
 
 	for _, parameter := range op.Parameters {
 		if parameter.Value == nil || parameter.Value.Name != "status" {
@@ -377,7 +377,7 @@ func TestAddQueryParametersSetsEnumValues(t *testing.T) {
 func requireDocumentedAsTaken[M types.Model](t *testing.T) {
 	t.Helper()
 	op := &openapi3.Operation{}
-	addQueryParameters[M, M, M](op)
+	addQueryParameters[M, M, M](op, true)
 	parameters := queryParametersByName(t, op)
 	documented := func(key string) bool {
 		if parameters[key] != nil {

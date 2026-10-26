@@ -78,6 +78,22 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 
 		log := logger.Controller.WithContext(c.Request.Context(), consts.Export)
 
+		// An export lists every record the query matches, capped by its own
+		// _limit alone, so the paging and cursor parameters a List of the
+		// model takes are read by nothing here, a virtual resource's service
+		// included, and are refused rather than ignored.
+		query := requestctx.GinQuery(c)
+		paging := matchQueryKeys(query, listPageQueryKey)
+		paging = append(paging, matchQueryKeys(query, listSizeQueryKey)...)
+		paging = append(paging, matchQueryKeys(query, listCursorQueryKeys)...)
+		if len(paging) > 0 {
+			err := urlquery.UnsupportedParameterError(paging)
+			log.Errorz("parse query parameter failed", zap.Error(err))
+			response.Error(c, invalidArgument(err))
+			gstotel.RecordError(span, err)
+			return
+		}
+
 		m := a.newModel()
 		svc := a.service()
 
@@ -89,9 +105,8 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		data := make([]M, 0)
 		if !modelregistry.IsVirtual(m) {
 			// QUERY_LIMIT caps the records exported, none or a value of zero or
-			// less exporting every record; urlquery.Decode drops it as it
-			// drops QUERY_FORMAT. A value that is no integer is refused rather
-			// than read as no cap.
+			// less exporting every record. A value that is no integer is
+			// refused rather than read as no cap.
 			var limit int
 			if raw := c.Query(consts.QUERY_LIMIT); raw != "" {
 				var err error
@@ -103,14 +118,12 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 					return
 				}
 			}
-			// The request's memoized query parse, shared by every parser below
-			// and by each metadata construction of this request; the parsers
-			// only read the values.
-			//
-			// QUERY_FORMAT is this controller's own parameter, resolved after
-			// the export bytes exist; urlquery.Decode drops it for every
-			// caller, including virtual-resource services parsing on their own.
-			query := requestctx.GinQuery(c)
+			// The parsers below read the request's query without the export's
+			// own QUERY_FORMAT, resolved after the export bytes exist, and
+			// QUERY_LIMIT, read above: they refuse both from any other action.
+			// A virtual resource's service parsing on its own gets them taken
+			// off the same way (see serviceregistry's QueryModel).
+			query = urlquery.WithoutExportKeys(query)
 
 			var err error
 			// A query that cannot decode is a client error, same as on the List

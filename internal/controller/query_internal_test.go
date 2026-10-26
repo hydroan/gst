@@ -56,11 +56,11 @@ func TestDecodeListQueryGatesQueryKeys(t *testing.T) {
 			"framework keys rejected by different capability gates are still reported together")
 	})
 
-	t.Run("TheExportLimitIsRejected", func(t *testing.T) {
+	t.Run("TheExportKeysAreRejected", func(t *testing.T) {
 		var m listQueryableTestModel
-		require.EqualError(t, decodeListQuery(&m, map[string][]string{"_limit": {"10"}}),
-			`unsupported query parameter "_limit"`,
-			"a List pages by _size, and one that dropped the export's cap would answer a page the client did not ask for")
+		require.EqualError(t, decodeListQuery(&m, map[string][]string{"_format": {"csv"}, "_limit": {"10"}}),
+			`unsupported query parameters "_format", "_limit"`,
+			"the export's format and cap are its own, and a List pages by _size")
 	})
 
 	t.Run("UnknownFrameworkKeysAreRejected", func(t *testing.T) {

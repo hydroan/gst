@@ -46,14 +46,16 @@ func parseParametersFromPath(path string) []*openapi3.ParameterRef {
 	return parameterRefList
 }
 
-// addQueryParameters documents the URL query parameters the List operation
-// of the framework's own flow takes, those the parsers take (see
+// addQueryParameters documents the URL query parameters the List or Export
+// operation of the framework's own flow takes, those the parsers take (see
 // urlquery.Parameters), each described by the doc comment of the field it
 // reads. A parameter taking its bare key is documented under it, the
 // operators its column takes listed in its description; a column taking its
 // operators alone is documented under each of them, the key as the URL spells
-// it, expires_at[gte].
-func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op *openapi3.Operation) {
+// it, expires_at[gte]. An operation that pages its records, a List, takes the
+// parameters of model.Pagination and model.Cursor too; an export, which lists
+// every record the query matches, refuses them and documents none.
+func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op *openapi3.Operation, paged bool) {
 	// Model-field query filters are available only to the default CRUD path.
 	if !modelregistry.AreTypesEqual[M, REQ, RSP]() {
 		return
@@ -74,6 +76,9 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 	queries := make([]*openapi3.ParameterRef, 0, len(params))
 	for _, param := range params {
 		field, owner := structFieldAt(typ, param.Index)
+		if !paged && (owner == reflect.TypeFor[modelregistry.Pagination]() || owner == reflect.TypeFor[modelregistry.Cursor]()) {
+			continue
+		}
 		description := openAPIDocComment(field.Name, modelFieldDocs(reflect.New(owner).Interface())[field.Name])
 		if !param.Bare {
 			for _, filterOp := range param.Ops {
@@ -100,7 +105,7 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 
 	// Cursor-only models accept _size as the batch size, but the field with
 	// its query tag lives in Pagination, so the parameter is synthesized.
-	if modelregistry.IsCursorable(m) && !modelregistry.IsPaginatable(m) {
+	if paged && modelregistry.IsCursorable(m) && !modelregistry.IsPaginatable(m) {
 		queries = append(queries, queryParameter(consts.QUERY_SIZE,
 			&openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeInteger}}},
 			"Batch size for cursor pagination."))
