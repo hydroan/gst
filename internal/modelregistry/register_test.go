@@ -118,55 +118,6 @@ type PointerAutoBaseSample struct {
 
 func (*PointerAutoBaseSample) TableName() string { return "pointer_auto_base_samples" }
 
-// ShadowedIDSample and ShadowedAutoIDSample declare an ID of their own over
-// the base's while taking the base's ID accessors, which read and write the
-// shadowed field; PartialIDAccessorsSample declares GetID alone.
-type ShadowedIDSample struct {
-	ID string `gorm:"primaryKey;size:191"`
-
-	modelregistry.Base
-}
-
-func (*ShadowedIDSample) TableName() string { return "shadowed_id_samples" }
-
-type ShadowedAutoIDSample struct {
-	ID int64 `gorm:"primaryKey;autoIncrement"`
-
-	modelregistry.AutoBase
-}
-
-func (*ShadowedAutoIDSample) TableName() string { return "shadowed_auto_id_samples" }
-
-type PartialIDAccessorsSample struct {
-	ID string `gorm:"primaryKey;size:191"`
-
-	modelregistry.Base
-}
-
-func (*PartialIDAccessorsSample) TableName() string { return "partial_id_accessors_samples" }
-
-func (m *PartialIDAccessorsSample) GetID() string { return m.ID }
-
-// OwnIDAccessorsSample declares an ID of its own and the accessors that go
-// with it, the way a model widening its key does.
-type OwnIDAccessorsSample struct {
-	ID string `gorm:"primaryKey;size:191"`
-
-	modelregistry.Base
-}
-
-func (*OwnIDAccessorsSample) TableName() string { return "own_id_accessors_samples" }
-
-func (m *OwnIDAccessorsSample) GetID() string { return m.ID }
-
-func (m *OwnIDAccessorsSample) SetID(id ...string) {
-	if len(m.ID) == 0 && len(id) > 0 {
-		m.ID = id[0]
-	}
-}
-
-func (m *OwnIDAccessorsSample) ClearID() { m.ID = "" }
-
 func TestRegister(t *testing.T) {
 	registered := func() bool {
 		return slices.ContainsFunc(modelregistry.RegisteredModels(), func(m any) bool {
@@ -214,34 +165,6 @@ func TestRegister(t *testing.T) {
 		})
 		require.Len(t, modelregistry.RegisteredModels(), before)
 		require.Empty(t, modelregistry.TableChan)
-	})
-
-	t.Run("a model shadowing the base's ID without its own ID accessors is rejected", func(t *testing.T) {
-		before := len(modelregistry.RegisteredModels())
-
-		require.PanicsWithValue(t, "model modelregistry_test.ShadowedIDSample declares its own ID, shadowing model.Base's; declare its own GetID, SetID and ClearID too: model.Base's read and write the shadowed field, which no column maps", func() {
-			modelregistry.Register[*ShadowedIDSample]()
-		})
-		require.PanicsWithValue(t, "model modelregistry_test.ShadowedAutoIDSample declares its own ID, shadowing model.AutoBase's; declare its own GetID, SetID and ClearID too: model.AutoBase's read and write the shadowed field, which no column maps", func() {
-			modelregistry.Register[*ShadowedAutoIDSample]()
-		})
-		require.PanicsWithValue(t, "model modelregistry_test.PartialIDAccessorsSample declares its own ID, shadowing model.Base's; declare its own SetID and ClearID too: model.Base's read and write the shadowed field, which no column maps", func() {
-			modelregistry.Register[*PartialIDAccessorsSample]()
-		})
-		require.Len(t, modelregistry.RegisteredModels(), before)
-		require.Empty(t, modelregistry.TableChan)
-	})
-
-	t.Run("a model shadowing the base's ID with its own ID accessors is recorded and queued", func(t *testing.T) {
-		before := len(modelregistry.RegisteredModels())
-
-		modelregistry.Register[*OwnIDAccessorsSample]()
-
-		require.Len(t, modelregistry.RegisteredModels(), before+1)
-		require.IsType(t, &OwnIDAccessorsSample{}, <-modelregistry.TableChan)
-		// Report the model done so the pending count returns to where the
-		// subtest found it.
-		modelregistry.TableDone()
 	})
 
 	t.Run("recorded models are handed out independently", func(t *testing.T) {

@@ -150,6 +150,26 @@ func TestEnsureTableRejectsAQueryNameDeclaredTwice(t *testing.T) {
 	require.False(t, db.Migrator().HasTable("clashing_query_records"))
 }
 
+// shadowedIDRecord declares an ID of its own over Base's and keeps Base's ID
+// accessors, which read and write the shadowed field; table preparation must
+// refuse it before the table exists, whatever the database.
+type shadowedIDRecord struct {
+	ID string `json:"id" gorm:"primaryKey;size:191"`
+
+	modelregistry.Base
+}
+
+func (*shadowedIDRecord) TableName() string { return "shadowed_id_records" }
+
+func TestEnsureTableRejectsAShadowedIDWithoutItsAccessors(t *testing.T) {
+	db := newSQLiteDB(t)
+	withAutoMigrate(t, true)
+
+	err := ensureTable(db, &shadowedIDRecord{})
+	require.ErrorContains(t, err, `its ID shadows model.Base's; declare its own GetID, SetID and ClearID too`)
+	require.False(t, db.Migrator().HasTable("shadowed_id_records"))
+}
+
 // raceRecord is the model several processes prepare at once; its index makes
 // the custom index step part of the race. The indexed column carries a size:
 // without one gorm maps it to TEXT on MySQL, which cannot be indexed whole.

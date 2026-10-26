@@ -1,13 +1,13 @@
-// The inspection program reports the project models' columns, what their
-// index declarations violate on MySQL, the framework columns they rename and
-// the query names they declare ambiguously, as JSON written to the file its
-// argument names: it is what gg gen and gg check build and run inside the
-// project. gg embeds it (see gghelper.InspectProgram), writes it next to a
-// generated project.go that imports the project's model packages and sets
-// the models beyond the registry, and builds it with the project's
-// dependency versions, so it resolves exactly the columns the framework
-// resolves at run time. It is written as project code: it imports the
-// framework's public packages only.
+// The inspection program reports the project models' columns, what their index
+// declarations violate on MySQL, the framework columns they rename, the query
+// names they declare ambiguously and the ID accessors they lack for an ID of
+// their own, as JSON written to the file its argument names: it is what gg gen
+// and gg check build and run inside the project. gg embeds it (see
+// gghelper.InspectProgram), writes it next to a generated project.go that
+// imports the project's model packages and sets the models beyond the registry,
+// and builds it with the project's dependency versions, so it resolves exactly
+// the columns the framework resolves at run time. It is written as project
+// code: it imports the framework's public packages only.
 package main
 
 import (
@@ -44,6 +44,7 @@ type modelColumns struct {
 	IndexViolation           string       `json:"index_violation"`
 	FrameworkColumnViolation string       `json:"framework_column_violation"`
 	QueryNameViolation       string       `json:"query_name_violation"`
+	IDAccessorViolation      string       `json:"id_accessor_violation"`
 }
 
 // The project's models beyond the registry, set by the generated project.go
@@ -121,6 +122,9 @@ func main() {
 		}
 		if validateErr := inspect.ValidateQueryNames(typ); validateErr != nil {
 			entry.QueryNameViolation = validateErr.Error()
+		}
+		if validateErr := inspect.ValidateIDAccessors(typ); validateErr != nil {
+			entry.IDAccessorViolation = validateErr.Error()
 		}
 		for _, col := range cols {
 			expr, imports := describeType(col.Type, typ.PkgPath())

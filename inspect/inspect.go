@@ -4,9 +4,9 @@
 // It exists for the toolchain, not for application code: gg gen and gg check
 // compile a short program inside the project's own module to inspect the
 // project's models, and that program cannot reach the internal packages the
-// rules live in. This package forwards the ones it asks: the column
-// resolution and the framework column check of internal/modelschema, the
-// query name check of internal/urlquery and the query opt-in of
+// rules live in. This package forwards the ones it asks: the column resolution
+// and the framework column check of internal/modelschema, the query name check
+// of internal/urlquery, and the query opt-in and the ID accessor check of
 // internal/modelregistry. The program therefore resolves and refuses exactly
 // what the framework resolves and refuses at runtime, instead of carrying a
 // second copy of the rules that would drift from it.
@@ -58,6 +58,15 @@ func ValidateFrameworkColumns(typ reflect.Type) error {
 // so gg check refuses what table preparation refuses at startup.
 func ValidateQueryNames(typ reflect.Type) error {
 	return urlquery.ValidateQueryNames(typ)
+}
+
+// ValidateIDAccessors refuses a model declaring an ID of its own over the one
+// of the framework base it embeds that takes any of GetID, SetID and ClearID
+// from the base, which read and write the shadowed ID. The inspection program
+// asks it of every model it inspects, so gg check refuses what table
+// preparation refuses at startup.
+func ValidateIDAccessors(typ reflect.Type) error {
+	return modelregistry.ValidateIDAccessors(typ)
 }
 
 // ClassifyColumn reports the aggregate capability of a column, which decides

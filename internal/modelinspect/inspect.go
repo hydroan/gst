@@ -29,8 +29,10 @@ type ColumnInfo struct {
 
 // ModelColumns is one model as the inspection program reports it: its columns,
 // what model.ValidateIndexes refused in its index declarations on MySQL, what
-// modelschema.ValidateFrameworkColumns refused in its columns and what
-// urlquery.ValidateQueryNames refused in its query tags, each "" when nothing.
+// modelschema.ValidateFrameworkColumns refused in its columns, what
+// urlquery.ValidateQueryNames refused in its query tags and what
+// modelregistry.ValidateIDAccessors refused in its ID accessors, each "" when
+// nothing.
 type ModelColumns struct {
 	PkgPath                  string       `json:"pkg_path"`
 	PkgName                  string       `json:"pkg_name"`
@@ -39,21 +41,23 @@ type ModelColumns struct {
 	IndexViolation           string       `json:"index_violation"`
 	FrameworkColumnViolation string       `json:"framework_column_violation"`
 	QueryNameViolation       string       `json:"query_name_violation"`
+	IDAccessorViolation      string       `json:"id_accessor_violation"`
 }
 
-// Inspect inspects the project's models by running them: the inspection
-// program (see buildProgram) is built into the project's module and reports
-// every model's columns, what model.ValidateIndexes refused in its index
-// declarations on MySQL, what modelschema.ValidateFrameworkColumns refused in
-// its columns and what urlquery.ValidateQueryNames refused in its query
-// tags. The result comes from the cache when every input of the inspection
-// is unchanged, otherwise from a build and run of the program. The build
-// takes the files overlay returns in place of the project's own, which gg gen
-// uses to stub out the column files it is about to rewrite; a nil overlay
-// builds the project as it is. A project that does not depend on the
-// framework yet cannot be inspected and reports inspected false: the program
-// imports the project's models against the framework, and such a project
-// cannot hold column references either.
+// Inspect inspects the project's models by running them: the inspection program
+// (see buildProgram) is built into the project's module and reports every
+// model's columns, what model.ValidateIndexes refused in its index declarations
+// on MySQL, what modelschema.ValidateFrameworkColumns refused in its columns,
+// what urlquery.ValidateQueryNames refused in its query tags and what
+// modelregistry.ValidateIDAccessors refused in its ID accessors. The result
+// comes from the cache when every input of the inspection is unchanged,
+// otherwise from a build and run of the program. The build takes the files
+// overlay returns in place of the project's own, which gg gen uses to stub out
+// the column files it is about to rewrite; a nil overlay builds the project as
+// it is. A project that does not depend on the framework yet cannot be
+// inspected and reports inspected false: the program imports the project's
+// models against the framework, and such a project cannot hold column
+// references either.
 func Inspect(module string, modelDir string, models []*modelinfo.Model, ignore gghelper.ProjectIgnore, overlay func() (map[string]string, error)) ([]ModelColumns, bool, error) {
 	dependsOnGst, err := gghelper.RequiresFramework(".")
 	if err != nil || !dependsOnGst {

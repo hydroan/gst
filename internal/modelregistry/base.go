@@ -16,8 +16,8 @@ var _ types.Model = (*Base)(nil)
 //
 // A model may declare an ID of its own, a wider key say, which shadows
 // Base's. Base's GetID, SetID and ClearID read and write the shadowed field,
-// which no column maps, so such a model declares its own three, and Register
-// refuses one that does not.
+// which no column maps, so such a model declares its own three: table
+// preparation refuses one that does not at startup, and gg check reports it.
 //
 // Indexes are not declared through gorm tags; models declare them through
 // the optional Indexes() []Index method instead.
