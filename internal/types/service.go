@@ -11,9 +11,9 @@ type (
 	Response any
 )
 
-// Service defines the controller-facing business operation contract for a model.
-// Generated controllers call these methods for CRUD, batch CRUD, lifecycle hooks,
-// import/export, filtering, and logging.
+// Service defines the controller-facing business operation contract for a
+// model. Generated controllers call these methods for CRUD, batch CRUD,
+// lifecycle hooks, import/export, filtering, and logging.
 //
 // Type Parameters:
 //   - M: Model type that implements Model interface
@@ -101,22 +101,25 @@ type Service[M Model, REQ Request, RSP Response] interface {
 //   - REQ: Request type for API operations
 //   - RSP: Response type for API operations
 type Module[M Model, REQ Request, RSP Response] interface {
-	// Service returns the service instance that handles business logic for this module.
+	// Service returns the service instance that handles business logic for this
+	// module.
 	Service() Service[M, REQ, RSP]
 
 	// Route returns the base API path for this module's endpoints.
 	Route() string
 
-	// Pub determines whether the API endpoints are public or require authentication.
+	// Pub determines whether the API endpoints are public or require
+	// authentication.
 	Pub() bool
 
 	// Param returns the URL parameter name used for resource identification.
 	Param() string
 }
 
-// ControllerConfig customizes how router.Register builds an internal handler for
-// a route. It is the public configuration surface for controller behavior; the
-// concrete controller handlers and their runtime state remain framework-owned.
+// ControllerConfig customizes how router.Register builds an internal handler
+// for a route. It is the public configuration surface for controller behavior;
+// the concrete controller handlers and their runtime state remain
+// framework-owned.
 type ControllerConfig[M Model] struct {
 	// ParamName names the route parameter that carries the resource ID.
 	ParamName string

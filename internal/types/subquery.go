@@ -68,12 +68,18 @@ func FilterNotExists[C Model](filters ...Filter) Filter {
 // related model is allocated here rather than at render time so the database
 // layer needs no type parameter of its own to reach the child table.
 func subqueryFilter[C Model](filters []Filter, negate bool) Filter {
-	sub := Subquery{Filters: append([]Filter(nil), filters...), Negate: negate}
+	sub := Subquery{Model: newModel[C](), Filters: append([]Filter(nil), filters...), Negate: negate}
+	return Filter{op: FilterOpExists, value: sub}
+}
+
+// newModel allocates an instance of the model C names, for a subquery or a
+// join to carry: a pointer type, as every model is, or nil for any other.
+func newModel[C Model]() Model {
 	typ := reflect.TypeFor[C]()
 	if typ.Kind() == reflect.Pointer {
 		if m, ok := reflect.TypeAssert[C](reflect.New(typ.Elem())); ok {
-			sub.Model = m
+			return m
 		}
 	}
-	return Filter{op: FilterOpExists, value: sub}
+	return nil
 }

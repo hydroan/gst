@@ -65,9 +65,11 @@ func (f Filter) Op() FilterOp { return f.op }
 func (f Filter) Value() any { return f.value }
 
 // NewFilter builds a filter from its parts, without the shape checks the
-// other constructors lock in at compile time. It serves the framework's own
-// tests, which exercise how the database layer treats a malformed filter;
-// the public gst package does not forward it.
+// other constructors lock in at compile time. It serves the URL parser, which
+// learns the operator of a filter only at run time and has checked its value
+// against it already, and the framework's own tests, which exercise how the
+// database layer treats a malformed filter; the public gst package does not
+// forward it.
 func NewFilter(table, column string, op FilterOp, value any) Filter {
 	return Filter{table: table, column: column, op: op, value: value}
 }
@@ -85,15 +87,15 @@ func NewFilter(table, column string, op FilterOp, value any) Filter {
 const FilterTimeLayout = "2006-01-02 15:04:05.999999999"
 
 // The Filter constructors below build one Filter per operator from a plain
-// column name. They serve code that learns the column only at run time, such
-// as framework internals reading it from a request; code on a concrete model
+// column name. They serve code that learns the column only at run time, such as
+// framework internals reading it from a request; code on a concrete model
 // reaches the same operators through the generated column references, and
 // generic code through a reference minted for its type parameter, see Column.
 // The grouping, subquery and constant constructors have no column-reference
-// form and serve every caller. Each signature locks the value shape its operator
-// expects, so a malformed filter cannot be expressed without bypassing the
-// constructors. Column is a snake case column name; validating it against the
-// model's queryable columns remains the caller's responsibility.
+// form and serve every caller. Each signature locks the value shape its
+// operator expects, so a malformed filter cannot be expressed without bypassing
+// the constructors. Column is a snake case column name; validating it against
+// the model's queryable columns remains the caller's responsibility.
 
 // FilterEq matches rows where column equals value.
 //

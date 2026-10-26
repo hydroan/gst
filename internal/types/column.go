@@ -459,6 +459,11 @@ func (c JSONStringsColumn) Bounds(filters []Filter) (lower, upper Bound[[]string
 	return arrayBound(documentLower), arrayBound(documentUpper), err
 }
 
+// JSONContains matches rows whose array contains value as a member.
+func (c JSONStringsColumn) JSONContains(value string) Filter {
+	return c.filter(FilterOpJSONContains, value)
+}
+
 // documents converts arrays of strings to the values binding them as JSON
 // documents.
 func documents(values [][]string) []datatypes.JSONSlice[string] {
@@ -484,9 +489,4 @@ func arrays(values []datatypes.JSONSlice[string]) [][]string {
 // arrayBound converts a bound over documents to one over arrays of strings.
 func arrayBound(bound Bound[datatypes.JSONSlice[string]]) Bound[[]string] {
 	return Bound[[]string]{Value: bound.Value, Inclusive: bound.Inclusive, Present: bound.Present}
-}
-
-// JSONContains matches rows whose array contains value as a member.
-func (c JSONStringsColumn) JSONContains(value string) Filter {
-	return c.filter(FilterOpJSONContains, value)
 }

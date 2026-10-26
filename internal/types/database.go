@@ -13,10 +13,11 @@ import "github.com/hydroan/gst/internal/consts"
 // A chain is expected to end with one terminal operation, such as Create, List,
 // Get, or Count.
 //
-// Implementations share an underlying GORM session. Call database.Database[M](ctx)
-// again for each independent operation chain. Keeping the returned value in a
-// variable and running another independent operation on it (for example, List
-// then Get or Update) is incorrect usage; see database.Database.
+// Implementations share an underlying GORM session. Call
+// database.Database[M](ctx) again for each independent operation chain. Keeping
+// the returned value in a variable and running another independent operation on
+// it (for example, List then Get or Update) is incorrect usage; see
+// database.Database.
 //
 // Transactions are started with the package-level database.Transaction
 // function; the context it passes to fn makes every chain started from that
@@ -91,9 +92,10 @@ type Database[M Model] interface {
 	DatabaseOption[M]
 }
 
-// DatabaseOption provides chainable options for a single Database operation chain.
-// Options apply to the next terminal operation and are reset afterward. Start a
-// new chain with database.Database[M](ctx) for each independent operation.
+// DatabaseOption provides chainable options for a single Database operation
+// chain. Options apply to the next terminal operation and are reset afterward.
+// Start a new chain with database.Database[M](ctx) for each independent
+// operation.
 type DatabaseOption[M Model] interface {
 	// WithQuery adds query conditions from the model's non-zero fields and
 	// the operator filters carried by opts.
@@ -103,7 +105,8 @@ type DatabaseOption[M Model] interface {
 	// WithSelect specifies columns for SELECT and Update column selection
 	// where supported, through the generated column references.
 	WithSelect(columns ...AnyColumnRef) Database[M]
-	// WithLock adds row-level locking to SELECT queries (must be used within a transaction).
+	// WithLock adds row-level locking to SELECT queries (must be used within a
+	// transaction).
 	WithLock(mode ...consts.LockMode) Database[M]
 	// WithBatchSize sets the batch size for Create, Update, and Delete.
 	WithBatchSize(size int) Database[M]
@@ -115,7 +118,8 @@ type DatabaseOption[M Model] interface {
 	WithOrder(orders ...Order) Database[M]
 	// WithExpand enables eager loading of specified associations.
 	WithExpand(expand []string, orders ...Order) Database[M]
-	// WithPurge controls whether Delete permanently removes records instead of soft deleting them.
+	// WithPurge controls whether Delete permanently removes records instead of
+	// soft deleting them.
 	WithPurge(...bool) Database[M]
 	// WithAllowMissing lets Delete skip the records that are already gone
 	// instead of failing with database.ErrRecordNotFound. A versioned record
@@ -170,12 +174,14 @@ type QueryOptions struct {
 	Filters []Filter
 }
 
-// SQLStatement contains a generated SQL statement in executable and rendered forms.
+// SQLStatement contains a generated SQL statement in executable and rendered
+// forms.
 type SQLStatement struct {
 	// Query is the parameterized SQL with placeholders.
 	Query string
 	// Args contains the values bound to Query.
 	Args []any
-	// RenderedSQL is dialect-rendered SQL for logging, inspection, and manual debugging.
+	// RenderedSQL is dialect-rendered SQL for logging, inspection, and manual
+	// debugging.
 	RenderedSQL string
 }

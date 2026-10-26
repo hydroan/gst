@@ -41,11 +41,10 @@ type SelectBranch[R any] interface {
 //	err := feed.Scan(&rows)
 //	err = feed.Count(&total)
 //
-// Rendered, with the ordering and the page pushed into every branch — the
-// bound limit is the rows before the page plus the page, 60 here — so each
-// branch reads its first
-// sixty rows by its own index and the union sorts a hundred and twenty rows at
-// most:
+// Rendered, with the ordering and the page pushed into every branch — the bound
+// limit is the rows before the page plus the page, 60 here — so each branch
+// reads its first sixty rows by its own index and the union sorts a hundred and
+// twenty rows at most:
 //
 //	SELECT * FROM (
 //	  SELECT * FROM (SELECT 'payment' AS `kind`, `id` AS `id`, `amount` AS `amount`, `paid_at` AS `at`

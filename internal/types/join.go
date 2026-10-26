@@ -1,7 +1,5 @@
 package types
 
-import "reflect"
-
 // JoinSource is a source a select joins to its model. The set is closed to
 // this package: a ModelJoin, built by Join and LeftJoin, joins a model on a
 // unique key; a SelectJoin, built by JoinSelect and LeftJoinSelect, joins a
@@ -129,44 +127,40 @@ func (SelectJoin) sealedJoinSource() {}
 //
 // Only the select's terms are readable this way, passed as they are: its
 // model's other columns are not columns of the derived table, and the term
-// altered — under another alias, or with a window or conditions of its own
-// — is not the term. A term the query could compute
-// itself — one carrying no table, Count() say, or one of the queried table
-// or of a model the query joins — is one spelling whether the query or the
-// select wrote it. Under its default alias, the one its constructor gave it
-// and two authors write independently, it is refused when the select
-// projects it too, since the query's own reading of it would silently
-// become the select's; an alias is written on purpose, so the select's
-// aliased term passed to the query reads it through, and the query's own
-// term keeps apart under an alias different from the select's. A constant,
-// Literal, is the query's own under any alias, so a select's constant is
-// never read through; whether a row of the select matched is read from one
-// of its keys, NULL where none did. A term read through may also key a
-// window's partition or order it. In a grouped query a joined select's term
-// is projected as a group key of the query, which is exact only when the
-// query groups by the columns the select is joined on — the term is then
-// constant within a group — and the framework requires it; a query with no
-// measure of its own reads row-level, every row beside the select's terms.
-// A condition on a joined select's measure belongs to that select's Having,
-// and a condition on its rows to its Where: the ON names its keys, and an
-// EXISTS subquery there has no row of the select's model to correlate with,
-// so it is refused. The select carries no OrderBy, Limit or Page of its
-// own: a derived table has no use for them.
+// altered — under another alias, or with a window or conditions of its own — is
+// not the term. A term the query could compute itself — one carrying no table,
+// Count() say, or one of the queried table or of a model the query joins — is
+// one spelling whether the query or the select wrote it. Under its default
+// alias, the one its constructor gave it and two authors write independently,
+// it is refused when the select projects it too, since the query's own reading
+// of it would silently become the select's; an alias is written on purpose, so
+// the select's aliased term passed to the query reads it through, and the
+// query's own term keeps apart under an alias different from the select's. A
+// constant, Literal, is the query's own under any alias, so a select's constant
+// is never read through; whether a row of the select matched is read from one
+// of its keys, NULL where none did. A term read through may also key a window's
+// partition or order it. In a grouped query a joined select's term is projected
+// as a group key of the query, which is exact only when the query groups by the
+// columns the select is joined on — the term is then constant within a group —
+// and the framework requires it; a query with no measure of its own reads
+// row-level, every row beside the select's terms. A condition on a joined
+// select's measure belongs to that select's Having, and a condition on its rows
+// to its Where: the ON names its keys, and an EXISTS subquery there has no row
+// of the select's model to correlate with, so it is refused. The select carries
+// no OrderBy, Limit or Page of its own: a derived table has no use for them.
 //
-// One table backs at most one source of a query. A joined select is
-// addressed through its model's column references, so a select over the
-// queried table, or a second select over a table that already backs a
-// source of the query, could not be told apart and is refused; the tables a
-// select reads through joins of its own are its own to read, and a select
-// never joins itself, directly or through the selects it joins. A per-row
-// total over the queried table's own groups is a window instead,
-// Sum().Over(PartitionBy(key)).
-// A select grouped by a time bucket cannot be joined either: the bucket is a
-// label of the column, not a value a column of the query equals. The select
-// is tied by its own model's group keys, each column once: a key of a table
-// the select joins has no spelling from outside and is refused, while a term
-// the select reads from a select of its own is a column of the derived
-// table, not a key.
+// One table backs at most one source of a query. A joined select is addressed
+// through its model's column references, so a select over the queried table, or
+// a second select over a table that already backs a source of the query, could
+// not be told apart and is refused; the tables a select reads through joins of
+// its own are its own to read, and a select never joins itself, directly or
+// through the selects it joins. A per-row total over the queried table's own
+// groups is a window instead, Sum().Over(PartitionBy(key)). A select grouped by
+// a time bucket cannot be joined either: the bucket is a label of the column,
+// not a value a column of the query equals. The select is tied by its own
+// model's group keys, each column once: a key of a table the select joins has
+// no spelling from outside and is refused, while a term the select reads from a
+// select of its own is a column of the derived table, not a key.
 //
 // The derived table is materialized by the database, its rows being the
 // groups of the select: a select narrowed by Where materializes fewer of
@@ -189,12 +183,5 @@ func LeftJoinSelect[R any](sub SelectBranch[R], on ...Filter) JoinSource {
 // The predicates are copied: a caller appending to the slice it passed for
 // a second join must not change the first one's ON.
 func modelJoin[C Model](on []Filter, left bool) JoinSource {
-	source := ModelJoin{On: append([]Filter(nil), on...), Left: left}
-	typ := reflect.TypeFor[C]()
-	if typ.Kind() == reflect.Pointer {
-		if m, ok := reflect.TypeAssert[C](reflect.New(typ.Elem())); ok {
-			source.Model = m
-		}
-	}
-	return source
+	return ModelJoin{Model: newModel[C](), On: append([]Filter(nil), on...), Left: left}
 }

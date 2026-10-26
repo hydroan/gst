@@ -8,8 +8,8 @@ import (
 )
 
 func TestNewAssignment(t *testing.T) {
-	// The parts read back unchanged; an empty table is how framework code
-	// names a column of the chain's own model.
+	// The parts read back unchanged; an empty table names a column of the
+	// chain's own model.
 	named := types.NewAssignment("samples", "status", "active")
 	require.Equal(t, "samples", named.Table())
 	require.Equal(t, "status", named.Column())

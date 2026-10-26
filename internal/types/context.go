@@ -209,29 +209,6 @@ func (sc *ServiceContext) SetCookie(cookie *http.Cookie) {
 	http.SetCookie(sc.responseWriter, cookie)
 }
 
-// recordHTTPOnlyMethodCall marks that a service called a method only an HTTP
-// request can serve while the context carried none; a nil context has
-// nothing to mark.
-func (sc *ServiceContext) recordHTTPOnlyMethodCall() {
-	if sc != nil {
-		sc.httpOnlyMethodCalled = true
-	}
-}
-
-// HTTPOnlyMethodCalled reports whether a service called a method of sc only
-// an HTTP request can serve (see HTTPOnlyMethods) -- wrote a body, a stream
-// or a cookie, or read a cookie, a form value or a file -- while sc carried
-// no HTTP request or response. The call itself does nothing, answering the
-// zero value where it reads; the transport behind such a context reads the
-// flag once the hook or the service method returns and refuses the request,
-// because what the service meant to send cannot be carried and what it
-// meant to read was never there. It is a package function rather than a
-// method so it stays out of the public alias of ServiceContext: only the
-// framework's transports read it.
-func HTTPOnlyMethodCalled(sc *ServiceContext) bool {
-	return sc != nil && sc.httpOnlyMethodCalled
-}
-
 // Cookie returns the value of the named request cookie. Without a request
 // to read it answers an error and records the call for
 // HTTPOnlyMethodCalled.
@@ -265,6 +242,29 @@ func (sc *ServiceContext) FormFile(name string) (*multipart.FileHeader, error) {
 	return sc.ginCtx.FormFile(name)
 }
 
+// recordHTTPOnlyMethodCall marks that a service called a method only an HTTP
+// request can serve while the context carried none; a nil context has
+// nothing to mark.
+func (sc *ServiceContext) recordHTTPOnlyMethodCall() {
+	if sc != nil {
+		sc.httpOnlyMethodCalled = true
+	}
+}
+
+// HTTPOnlyMethodCalled reports whether a service called a method of sc only
+// an HTTP request can serve (see HTTPOnlyMethods) -- wrote a body, a stream
+// or a cookie, or read a cookie, a form value or a file -- while sc carried
+// no HTTP request or response. The call itself does nothing, answering the
+// zero value where it reads; the transport behind such a context reads the
+// flag once the hook or the service method returns and refuses the request,
+// because what the service meant to send cannot be carried and what it
+// meant to read was never there. It is a package function rather than a
+// method so it stays out of the public alias of ServiceContext: only the
+// framework's transports read it.
+func HTTPOnlyMethodCalled(sc *ServiceContext) bool {
+	return sc != nil && sc.httpOnlyMethodCalled
+}
+
 // RequestUserID reports the authenticated subject of the request ctx descends
 // from, or "" when no request is behind it.
 //
@@ -272,8 +272,8 @@ func (sc *ServiceContext) FormFile(name string) (*multipart.FileHeader, error) {
 // is acting — a model hook guarding an operation, like tenant.From for a model
 // deriving its key. An empty answer means machinery rather than a person:
 // seeding, a scheduled job, framework code; or a request nothing
-// authenticated, a public action's or one of a project that mounts no
-// session check (see iam.Register).
+// authenticated, a public action's or one a project serves without a session
+// check.
 func RequestUserID(ctx context.Context) string {
 	return requestctx.FromContext(ctx).UserID()
 }

@@ -12,7 +12,8 @@ import (
 //
 // Type Requirements:
 //   - Must be a pointer to struct (e.g., *User)
-//   - Database resources should expose an ID primary key through GetID/SetID/ClearID
+//   - Database resources should expose an ID primary key through
+//     GetID/SetID/ClearID
 //   - Database resources must override TableName with an explicit non-empty
 //     name: gorm's Tabler reads the same method, and the base default "" is
 //     rejected at table preparation and inside gg migrate
