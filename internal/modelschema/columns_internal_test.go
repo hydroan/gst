@@ -25,12 +25,8 @@ type sampleRelated struct {
 	RecordID string
 }
 
-// sampleAssociating declares its primary key directly rather than through an
-// embedded struct. That is required here: gorm cannot resolve an association
-// foreign key when the primary key is lifted from an embedded struct, and
-// rejects the whole model instead. Models that embed a framework base
-// therefore cannot carry association fields at all, which is why the
-// embedded-base fixture below has none.
+// sampleAssociating holds sampleRelated rows through a has-many beside its
+// own columns.
 type sampleAssociating struct {
 	ID      string          `json:"id" gorm:"primaryKey"`
 	Name    string          `json:"name"`

@@ -107,14 +107,14 @@ type fingerprintSpanSample struct {
 
 func (*fingerprintSpanSample) TableName() string { return "fingerprint_span_samples" }
 
-func TestModelDeclaration(t *testing.T) {
+func TestModelDeclarationCoversEveryTableDeclaration(t *testing.T) {
 	baseline := modelDeclaration(&fingerprintSample{})
 
-	t.Run("the_same_model_declares_the_same_thing_every_time", func(t *testing.T) {
+	t.Run("TheSameModelDeclaresTheSameThingEveryTime", func(t *testing.T) {
 		require.Equal(t, baseline, modelDeclaration(&fingerprintSample{}))
 	})
 
-	t.Run("every_declaration_a_migration_cannot_repair_shows_up", func(t *testing.T) {
+	t.Run("EveryDeclarationAMigrationCannotRepairShowsUp", func(t *testing.T) {
 		for name, model := range map[string]any{
 			"a dropped field":      &fingerprintSampleWithoutField{},
 			"a dropped index":      &fingerprintSampleWithoutIndex{},
@@ -126,7 +126,7 @@ func TestModelDeclaration(t *testing.T) {
 		}
 	})
 
-	t.Run("every_field_gorm_expands_into_a_column_is_declared", func(t *testing.T) {
+	t.Run("EveryFieldGormExpandsIntoAColumnIsDeclared", func(t *testing.T) {
 		// gorm promotes the columns of a struct it expands, embedded
 		// anonymously like SampleBase, which carries the primary key and a
 		// timestamp, or by the embedded tag like the span; a declaration
@@ -141,7 +141,7 @@ func TestModelDeclaration(t *testing.T) {
 		}
 	})
 
-	t.Run("the_table_name_is_declared", func(t *testing.T) {
+	t.Run("TheTableNameIsDeclared", func(t *testing.T) {
 		require.Contains(t, baseline, "table=fingerprint_samples")
 	})
 }

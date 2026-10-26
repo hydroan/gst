@@ -151,8 +151,9 @@ func fieldPath(model reflect.Type, field reflect.StructField) (index []int, goNa
 }
 
 // QueryColumnName returns the URL parameter name of a struct field, its query
-// tag as written, or "" when the field carries none or query:"-": the json
-// tag serializes a field and never names a URL parameter.
+// tag as written up to any options after a comma, or "" when the field
+// carries none or query:"-": the json tag serializes a field and never names
+// a URL parameter.
 //
 // This is the client-facing name only. It never decides the database column
 // name, which comes from gorm (see Column). Column resolution above, which
@@ -162,12 +163,7 @@ func fieldPath(model reflect.Type, field reflect.StructField) (index []int, goNa
 // keeps a field's bare key, its operator-filter key and its documentation on
 // one naming rule.
 func QueryColumnName(field reflect.StructField) string {
-	return tagName(field, consts.TAG_QUERY)
-}
-
-// tagName reads a struct tag and strips its options suffix.
-func tagName(field reflect.StructField, key string) string {
-	value := strings.TrimSpace(field.Tag.Get(key))
+	value := strings.TrimSpace(field.Tag.Get(consts.TAG_QUERY))
 	if idx := strings.IndexByte(value, ','); idx >= 0 {
 		value = value[:idx]
 	}

@@ -42,6 +42,7 @@ var tenantColumnType = reflect.TypeFor[tenant.ID]()
 // two rows written at once the one with the smaller id may commit second. A
 // feed read while those writes are in flight can therefore pass over the
 // later commit; a feed of rows already committed reads them all.
+//
 // The database layer applies the fallback when building the boundary
 // comparison, and URL parsing resolves the same column to type-check the
 // cursor value, so every consumer reads this single definition.

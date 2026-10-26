@@ -48,11 +48,11 @@ func (*fingerprintSampleOtherTable) Indexes() []modelschema.Index {
 }
 
 func TestFingerprint(t *testing.T) {
-	t.Run("no_models_have_no_fingerprint", func(t *testing.T) {
+	t.Run("NoModelsHaveNoFingerprint", func(t *testing.T) {
 		require.Empty(t, modelschema.Fingerprint(nil))
 	})
 
-	t.Run("the_same_models_fingerprint_the_same_however_they_arrived", func(t *testing.T) {
+	t.Run("TheSameModelsFingerprintTheSameHoweverTheyArrived", func(t *testing.T) {
 		inOrder := modelschema.Fingerprint([]any{&fingerprintSample{}, &fingerprintSampleOtherTable{}})
 		require.NotEmpty(t, inOrder)
 		require.Len(t, strings.TrimSpace(inOrder), len(inOrder), "the fingerprint goes into a database name")
@@ -60,7 +60,7 @@ func TestFingerprint(t *testing.T) {
 		require.Equal(t, inOrder, modelschema.Fingerprint([]any{&fingerprintSampleOtherTable{}, &fingerprintSample{}}))
 	})
 
-	t.Run("a_changed_model_changes_the_fingerprint", func(t *testing.T) {
+	t.Run("AChangedModelChangesTheFingerprint", func(t *testing.T) {
 		before := modelschema.Fingerprint([]any{&fingerprintSample{}})
 
 		require.NotEqual(t, before, modelschema.Fingerprint([]any{&fingerprintSampleWithoutField{}}))

@@ -323,28 +323,26 @@ type ModelIndexPlans struct {
 //   - two plans generating the same name for different definitions, which the
 //     deterministic naming only produces through truncation-hash collisions.
 func CheckCrossModelIndexPlanConflicts(sets []ModelIndexPlans) error {
-	type owner struct {
-		model   string
-		columns string
-	}
-	byColumns := make(map[string]owner)
-	byName := make(map[string]owner)
+	// The model that declared each column sequence and generated each name,
+	// keyed by its table.
+	byColumns := make(map[string]string)
+	byName := make(map[string]string)
 	for _, set := range sets {
 		for _, plan := range set.Plans {
 			columns := strings.Join(plan.Columns, ",")
 			columnsKey := plan.Table + "\x00" + columns
 			if prev, ok := byColumns[columnsKey]; ok {
 				return errors.Newf("index plans conflict on table %q: %s and %s both declare columns (%s)",
-					plan.Table, prev.model, set.Model, columns)
+					plan.Table, prev, set.Model, columns)
 			}
-			byColumns[columnsKey] = owner{model: set.Model, columns: columns}
+			byColumns[columnsKey] = set.Model
 
 			nameKey := plan.Table + "\x00" + plan.Name
 			if prev, ok := byName[nameKey]; ok {
 				return errors.Newf("index plans conflict on table %q: %s and %s generate the same index name %q for different definitions",
-					plan.Table, prev.model, set.Model, plan.Name)
+					plan.Table, prev, set.Model, plan.Name)
 			}
-			byName[nameKey] = owner{model: set.Model, columns: columns}
+			byName[nameKey] = set.Model
 		}
 	}
 	return nil

@@ -16,7 +16,7 @@ type pointerDataType struct{}
 
 func (*pointerDataType) GormDataType() string { return "JSONB" }
 
-func TestIsJSONType(t *testing.T) {
+func TestIsJSONTypeReadsTheTypesOwnDeclaration(t *testing.T) {
 	t.Run("JSON", func(t *testing.T) {
 		for _, typ := range []reflect.Type{
 			reflect.TypeFor[datatypes.JSON](),
