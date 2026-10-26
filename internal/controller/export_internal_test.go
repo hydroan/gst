@@ -131,7 +131,8 @@ func (s *exportVirtualSampleService) Export(_ *types.ServiceContext, ms ...*expo
 
 // TestExportHandlerVirtualModelSkipsListing pins that a virtual model, which
 // has no table behind it, is exported by its service alone: the handler
-// lists nothing, and the exporter receives no rows.
+// lists nothing and reads no cap on the records, not even one that is no
+// integer, and the exporter receives no rows.
 func TestExportHandlerVirtualModelSkipsListing(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -144,7 +145,7 @@ func TestExportHandlerVirtualModelSkipsListing(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
-	c.Request = httptest.NewRequest(http.MethodGet, "/api/"+route+"?name=sample", nil)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/"+route+"?name=sample&_limit=abc", nil)
 
 	handler := ExportHandler[*exportVirtualSample, *exportVirtualSample, *exportVirtualSample](
 		&types.ControllerConfig[*exportVirtualSample]{Route: route},

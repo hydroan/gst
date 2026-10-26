@@ -44,6 +44,12 @@ func TestExportTakesALimit(t *testing.T) {
 	require.Equal(t, http.StatusOK, rsp.Code, rsp.Body.String())
 	require.Equal(t, 2, strings.Count(rsp.Body.String(), prefix), rsp.Body.String())
 
+	for _, limit := range []string{"0", "-1"} {
+		rsp = export("name[startswith]=" + prefix + "&_limit=" + limit)
+		require.Equal(t, http.StatusOK, rsp.Code, rsp.Body.String())
+		require.Equal(t, 3, strings.Count(rsp.Body.String(), prefix), "a cap of %s exports every record the query matches", limit)
+	}
+
 	rsp = export("name[startswith]=" + prefix + "&_limit=abc")
 	require.Equal(t, http.StatusBadRequest, rsp.Code, rsp.Body.String())
 	require.Contains(t, rsp.Body.String(), `"msg":"invalid query parameter \"_limit\": expect a numeric value, got \"abc\""`)

@@ -56,6 +56,13 @@ func TestDecodeListQueryGatesQueryKeys(t *testing.T) {
 			"framework keys rejected by different capability gates are still reported together")
 	})
 
+	t.Run("TheExportLimitIsRejected", func(t *testing.T) {
+		var m listQueryableTestModel
+		require.EqualError(t, decodeListQuery(&m, map[string][]string{"_limit": {"10"}}),
+			`unsupported query parameter "_limit"`,
+			"a List pages by _size, and one that dropped the export's cap would answer a page the client did not ask for")
+	})
+
 	t.Run("UnknownFrameworkKeysAreRejected", func(t *testing.T) {
 		for _, key := range []string{"_or", "_index", "_select", "_no_total"} {
 			var m listQueryableTestModel

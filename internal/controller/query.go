@@ -45,14 +45,21 @@ var listCursorQueryKeys = map[string]struct{}{
 	consts.QUERY_CURSOR_NEXT:  {},
 }
 
+// exportLimitQueryKey is the export's cap on the records it lists, which no
+// List reads: a List pages by _size.
+var exportLimitQueryKey = map[string]struct{}{
+	consts.QUERY_LIMIT: {},
+}
+
 // decodeListQuery rejects the framework query keys the model has not opted in
-// to via model.Query, model.Pagination, or model.Cursor, then decodes the
-// remaining URL query parameters into the model's own query fields. The
-// explicit gate keeps the rejection uniform: it reports every non-opted
-// capability key in one error, including _size, which urlquery.Decode would
-// silently drop for a model that cannot carry it.
+// to via model.Query, model.Pagination, or model.Cursor, and the export's
+// _limit, then decodes the remaining URL query parameters into the model's
+// own query fields. The explicit gate keeps the rejection uniform: it reports
+// every such key in one error, including the two urlquery.Decode would
+// silently drop, _size for a model that cannot carry it and _limit, which it
+// lets through for the export.
 func decodeListQuery[M types.Model](m M, query map[string][]string) error {
-	rejected := make([]string, 0)
+	rejected := matchQueryKeys(query, exportLimitQueryKey)
 	if !modelregistry.IsQueryable(m) {
 		rejected = append(rejected, matchQueryKeys(query, listQueryKeys)...)
 	}
