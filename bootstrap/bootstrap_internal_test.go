@@ -38,9 +38,8 @@ func TestMain(m *testing.M) {
 }
 
 // TestTeardownStopsTheLogWritersLast proves the cleanups Bootstrap registers
-// unwind with the log writers going last and the temp directory right before
-// them: every other cleanup logs what it did, and a line written after the
-// writers stopped never reaches its file.
+// unwind with the log writers going last: every other cleanup logs what it
+// did, and a line written after the writers stopped never reaches its file.
 func TestTeardownStopsTheLogWritersLast(t *testing.T) {
 	bootstrapProcess(t)
 
@@ -48,10 +47,8 @@ func TestTeardownStopsTheLogWritersLast(t *testing.T) {
 	for _, cleanup := range slices.Backward(cleanups) {
 		teardown = append(teardown, runtime.FuncForPC(reflect.ValueOf(cleanup).Pointer()).Name())
 	}
-	require.Equal(t,
-		[]string{"github.com/hydroan/gst/config.Clean", "github.com/hydroan/gst/logger.Clean"},
-		teardown[len(teardown)-2:],
-		"the temp directory and then the log writers must be the last things torn down")
+	require.Equal(t, "github.com/hydroan/gst/logger.Clean", teardown[len(teardown)-1],
+		"the log writers must be the last thing torn down")
 }
 
 // TestRunDrainsBeforeTeardownWhenAListenerFails proves the order Run keeps

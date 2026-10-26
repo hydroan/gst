@@ -85,12 +85,10 @@ func Bootstrap() error {
 	if err := startup.Init(); err != nil {
 		return err
 	}
-	// Registered first so they run last: every cleanup after them logs what
-	// it did, and a line written once the log writers have stopped never
-	// reaches the output. The temp directory goes right before the writers,
-	// for the same reason.
+	// Registered first so it runs last: every cleanup after it logs what it
+	// did, and a line written once the log writers have stopped never
+	// reaches the output.
 	registerCleanup(logger.Clean)
-	registerCleanup(config.Clean)
 	warnUnlinkedProviders()
 	// First database drain: create the tables registered before the clients
 	// and modules initialize, typically by model package init functions.

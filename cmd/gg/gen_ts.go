@@ -120,8 +120,6 @@ func genTypeScriptRun() error {
 // migrate does; a project that configured no name falls back to the framework
 // name inside the generator.
 func applicationName() (string, error) {
-	defer config.Clean()
-
 	if err := config.Init(); err != nil {
 		return "", errors.Wrap(err, "read the project configuration")
 	}

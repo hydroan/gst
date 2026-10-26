@@ -195,6 +195,42 @@ func TestMigrateProgramMigratesTheSqliteFileThePathNames(t *testing.T) {
 	}
 }
 
+// TestMigrateProgramLeavesNoTemporaryDirectoryBehind pins that the migration
+// program leaves the system's temporary directory as it found it, a run that
+// fails included: here the configuration file cannot be read, which ends the
+// run before anything is migrated.
+func TestMigrateProgramLeavesNoTemporaryDirectoryBehind(t *testing.T) {
+	if !newMigrateSampleProject(t) {
+		return
+	}
+	writeProjectFile(t, "config.yaml", "database:\n  type: [\n")
+	temporary := t.TempDir()
+	t.Setenv("TMPDIR", temporary)
+
+	oldDryRun := migrateDryRun
+	migrateDryRun = true
+	defer func() { migrateDryRun = oldDryRun }()
+	program, err := buildMigrateProgramForMode("tmpapp", false, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = program.Run(); err == nil {
+		t.Fatal("expected the migration program to fail on a configuration file it cannot read")
+	}
+
+	entries, err := os.ReadDir(temporary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) > 0 {
+		names := make([]string, 0, len(entries))
+		for _, entry := range entries {
+			names = append(names, entry.Name())
+		}
+		t.Fatalf("expected the temporary directory left empty, found %v", names)
+	}
+}
+
 // TestMigrateSourceFiles pins the files gg migrate schema reads model types
 // from. Below a directory, every Go file that is not a test, a model package
 // named generated among them, and none the go command leaves out: files and

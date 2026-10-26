@@ -67,8 +67,6 @@ func main() {
 	// stdout suppressed during initialization to avoid cluttering the
 	// migration output.
 	initConfigRouterAndModules()
-	// Ensure config resources are cleaned up when the program exits.
-	defer config.Clean()
 
 	// Collect all registered models.
 	models := deduplicateModels(model.RegisteredModels())

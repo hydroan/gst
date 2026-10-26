@@ -62,7 +62,6 @@ func main() {
 	if err := config.Init(); err != nil {
 		fail(err)
 	}
-	defer config.Clean()
 
 	// The index declarations are validated against the MySQL dialect whatever
 	// database the configuration names: the handle never connects, and gg

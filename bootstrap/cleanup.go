@@ -62,7 +62,7 @@ func registerCleanup(cleanup func()) {
 // teardown mirrors setup the way a defer stack unwinds, so whatever was
 // brought up last (the HTTP listener draining in-flight requests) is torn
 // down first, and what everything else depends on (connections, log
-// writers, the temp directory) is torn down after the drain finished.
+// writers) is torn down after the drain finished.
 func runCleanups() {
 	for _, cleanup := range slices.Backward(cleanups) {
 		runSafe(cleanup)

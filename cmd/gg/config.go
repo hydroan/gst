@@ -213,7 +213,6 @@ func defaultConfigData() (map[string]any, error) {
 			if err := config.Init(); err != nil {
 				return errors.Wrap(err, "failed to initialize default config")
 			}
-			defer config.Clean()
 			if err := config.Save(&content); err != nil {
 				return errors.Wrap(err, "failed to collect default config")
 			}

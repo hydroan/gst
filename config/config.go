@@ -52,11 +52,9 @@ package config
 import (
 	"encoding"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"reflect"
 	"slices"
 	"strconv"
@@ -164,9 +162,6 @@ var (
 	// configFile is the configuration file SetConfigFile names; when empty,
 	// Init looks for one in the working directory.
 	configFile = ""
-	// tempdir is the directory Init creates for the process outside tests,
-	// which Clean removes.
-	tempdir string
 )
 
 // Init initializes the application configuration: App and every section
@@ -174,13 +169,6 @@ var (
 // defaults in that order. It fails on the configuration it cannot honor; the
 // package documentation lists the rules and the failures.
 func Init() (err error) {
-	// Create temp directory if not in test.
-	if flag.Lookup("test.v") == nil {
-		if tempdir, err = os.MkdirTemp("", "gst_"); err != nil {
-			return errors.Wrap(err, "failed to create temp dir")
-		}
-	}
-
 	if cv, err = newViper(); err != nil {
 		return err
 	}
@@ -196,16 +184,11 @@ func Init() (err error) {
 
 	cv.AddConfigPath(".")
 
+	// Without a configuration file every key resolves from the environment
+	// and the defaults.
 	if err = readConfigFile(); err != nil {
 		var configFileNotFoundError viper.ConfigFileNotFoundError
-		if errors.As(err, &configFileNotFoundError) {
-			// Only create config file if not in test.
-			if flag.Lookup("test.v") == nil {
-				if err = os.WriteFile(filepath.Join(tempdir, fmt.Sprintf("%s.%s", defaultConfigName, defaultConfigTypes()[0])), nil, 0o600); err != nil {
-					return errors.Wrap(err, "failed to create config file")
-				}
-			}
-		} else {
+		if !errors.As(err, &configFileNotFoundError) {
 			return errors.Wrap(err, "failed to read config file")
 		}
 	}
@@ -271,8 +254,7 @@ func readConfigFile() error {
 	return cv.ReadInConfig()
 }
 
-// defaultConfigTypes lists the config file types Init looks for, in order;
-// the first is the type of the empty config file it writes when there is none.
+// defaultConfigTypes lists the config file types Init looks for, in order.
 func defaultConfigTypes() []string {
 	return []string{"ini", "yaml", "yml", "json", "toml"}
 }
@@ -281,22 +263,6 @@ func defaultConfigTypes() []string {
 // in the config file's format.
 func Save(out io.Writer) error {
 	return cv.WriteConfigTo(out)
-}
-
-// TempDir returns the directory Init created for the process, empty in tests
-// and before Init.
-func TempDir() string {
-	return tempdir
-}
-
-// Clean removes the directory Init created for the process and logs the
-// outcome.
-func Clean() {
-	if err := os.RemoveAll(tempdir); err != nil {
-		zap.S().Errorw("failed to remove temp dir", "error", err, "dir", tempdir)
-	} else {
-		zap.S().Infow("successfully remove temp dir", "dir", tempdir)
-	}
 }
 
 var (

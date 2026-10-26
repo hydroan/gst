@@ -2,6 +2,7 @@ package gops
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"sync"
 
@@ -11,7 +12,6 @@ import (
 )
 
 var (
-	tempDir string
 	running bool
 	mu      sync.Mutex
 )
@@ -23,18 +23,11 @@ func Run() error {
 		return nil
 	}
 
-	tempDir = config.TempDir()
-	if len(tempDir) == 0 {
-		tempDir = "/tmp/gops"
-	} else {
-		tempDir = filepath.Join(tempDir, "gops")
-	}
-
 	if err := agent.Listen(agent.Options{
 		Addr: fmt.Sprintf("%s:%d", config.App.GopsListen, config.App.GopsPort),
 		// Never set ShutdownCleanup to true: gops then traps termination signals and calls os.Exit(1) itself.
 		ShutdownCleanup: false,
-		ConfigDir:       tempDir,
+		ConfigDir:       filepath.Join(os.TempDir(), "gops"),
 	}); err != nil {
 		zap.S().Errorw("gops agent startup failed", "err", err)
 		return err

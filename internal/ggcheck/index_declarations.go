@@ -33,7 +33,6 @@ func checkIndexDeclarations(ignore gghelper.ProjectIgnore) []string {
 	if err := config.Init(); err != nil {
 		return []string{fmt.Sprintf("index declarations could not be checked: loading the configuration: %v", err)}
 	}
-	defer config.Clean()
 	if config.App.Database.Type != config.DBMySQL {
 		return nil
 	}
