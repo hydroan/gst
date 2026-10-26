@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -117,32 +118,91 @@ func decodePlanOf(typ reflect.Type) (map[string]decodableField, error) {
 
 	plan := make(map[string]decodableField)
 	if typ != nil && typ.Kind() == reflect.Struct {
-		unfilterable, err := unfilterableColumnFields(typ)
+		columns, err := modelschema.Columns(typ)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "urlquery: resolve the model's columns")
 		}
-		collectDecodableFields(typ, nil, 0, unfilterable, plan, make(map[string]int))
-		if err = collectEmbeddedColumns(typ, plan); err != nil {
-			return nil, err
-		}
+		collectDecodableFields(typ, columns, plan)
+		collectEmbeddedColumns(typ, columns, plan)
 	}
 	decodePlans.Store(typ, plan)
 	return plan, nil
 }
 
+// collectDecodableFields records one decodable field per URL name among the
+// fields walkQueryFields reaches in typ, skipping the fields of the columns
+// clients may not filter on: a column hidden from JSON keeps its query tag
+// out of the plan. When two fields resolve to the same name, the shallower
+// one wins, matching Go's own field promotion; at equal depth the first
+// declaration wins.
+func collectDecodableFields(typ reflect.Type, columns []modelschema.Column, plan map[string]decodableField) {
+	unfilterable := make(map[string]bool)
+	for _, col := range columns {
+		if !col.Filterable {
+			unfilterable[fmt.Sprint(col.Index)] = true
+		}
+	}
+	depths := make(map[string]int)
+	walkQueryFields(typ, func(_ reflect.Type, field reflect.StructField, index []int, depth int) {
+		if unfilterable[fmt.Sprint(index)] {
+			return
+		}
+		name := modelschema.QueryColumnName(field)
+		if name == "" {
+			return
+		}
+		setter, ok := fieldSetter(field.Type, name)
+		if !ok {
+			return
+		}
+		if seen, exists := depths[name]; exists && seen <= depth {
+			return
+		}
+		depths[name] = depth
+		plan[name] = decodableField{index: index, assign: makeAssign(index, field.Type, setter)}
+	})
+}
+
+// walkQueryFields calls visit for every exported field of the struct type
+// typ, recursing into the exported structs it embeds, by value or through a
+// pointer, whose fields Go promotes, in place of visiting them: owner is the
+// struct declaring the field, index its path from typ, as
+// reflect.Value.FieldByIndex takes it, and depth the number of structs
+// embedded on the way. A field an outer one shadows is visited too, for the
+// caller to resolve.
+func walkQueryFields(typ reflect.Type, visit func(owner reflect.Type, field reflect.StructField, index []int, depth int)) {
+	var walk func(owner reflect.Type, prefix []int, depth int)
+	walk = func(owner reflect.Type, prefix []int, depth int) {
+		for i := range owner.NumField() {
+			field := owner.Field(i)
+			index := append(slices.Clone(prefix), i)
+			if field.Anonymous && field.IsExported() {
+				embedded := field.Type
+				if embedded.Kind() == reflect.Pointer {
+					embedded = embedded.Elem()
+				}
+				if embedded.Kind() == reflect.Struct {
+					walk(embedded, index, depth+1)
+					continue
+				}
+			}
+			if field.IsExported() {
+				visit(owner, field, index, depth)
+			}
+		}
+	}
+	walk(typ, nil, 0)
+}
+
 // collectEmbeddedColumns adds to the plan the columns of the structs the
 // model embeds by name, which gorm lifts into columns of the model's table
-// and the walk below does not look into: each under its URL name, the path
+// and walkQueryFields does not look into: each under its URL name, the path
 // of query tags the field takes (first.label, see modelschema.Column), so a
 // bare key reaches the column the operator keys reach. A column clients may
 // not filter on, without a URL name or hidden from them, and a field no
-// setter exists for stay out, as the model's own do, and a name the walk
-// already took keeps its field.
-func collectEmbeddedColumns(typ reflect.Type, plan map[string]decodableField) error {
-	columns, err := modelschema.Columns(typ)
-	if err != nil {
-		return errors.Wrap(err, "urlquery: resolve the model's columns")
-	}
+// setter exists for stay out, as the model's own do, and a name
+// collectDecodableFields already took keeps its field.
+func collectEmbeddedColumns(typ reflect.Type, columns []modelschema.Column, plan map[string]decodableField) {
 	for _, col := range columns {
 		if !col.Filterable || !strings.Contains(col.GoName, ".") {
 			continue
@@ -155,7 +215,6 @@ func collectEmbeddedColumns(typ reflect.Type, plan map[string]decodableField) er
 			plan[col.QueryName] = decodableField{index: col.Index, assign: makeAssign(col.Index, field.Type, setter)}
 		}
 	}
-	return nil
 }
 
 // structFieldAlong returns the struct field an index path reaches in typ,
@@ -170,67 +229,6 @@ func structFieldAlong(typ reflect.Type, index []int) reflect.StructField {
 		typ = field.Type
 	}
 	return field
-}
-
-// unfilterableColumnFields returns the fields of the model type's columns
-// clients may not filter on, keyed by the field's index path rendered as
-// text, so the plan walk below can tell them apart from the fields it may
-// decode: a column hidden from JSON keeps its query tag out of the plan.
-func unfilterableColumnFields(typ reflect.Type) (map[string]struct{}, error) {
-	columns, err := modelschema.Columns(typ)
-	if err != nil {
-		return nil, errors.Wrap(err, "urlquery: resolve the model's columns")
-	}
-	unfilterable := make(map[string]struct{})
-	for _, col := range columns {
-		if !col.Filterable {
-			unfilterable[fmt.Sprint(col.Index)] = struct{}{}
-		}
-	}
-	return unfilterable, nil
-}
-
-// collectDecodableFields walks a struct type, recursing into the exported
-// structs it embeds, by value or through a pointer, whose fields Go promotes,
-// and records one decodable field per URL name, skipping the fields of the
-// columns in unfilterable. When two fields resolve to the same name, the
-// shallower one wins, matching Go's own field promotion; at equal depth the
-// first declaration wins.
-func collectDecodableFields(typ reflect.Type, prefix []int, depth int, unfilterable map[string]struct{}, plan map[string]decodableField, depths map[string]int) {
-	for i := range typ.NumField() {
-		field := typ.Field(i)
-		index := append(append([]int(nil), prefix...), i)
-
-		if field.Anonymous && field.IsExported() {
-			embedded := field.Type
-			if embedded.Kind() == reflect.Pointer {
-				embedded = embedded.Elem()
-			}
-			if embedded.Kind() == reflect.Struct {
-				collectDecodableFields(embedded, index, depth+1, unfilterable, plan, depths)
-				continue
-			}
-		}
-		if !field.IsExported() {
-			continue
-		}
-		if _, ok := unfilterable[fmt.Sprint(index)]; ok {
-			continue
-		}
-		name := modelschema.QueryColumnName(field)
-		if name == "" {
-			continue
-		}
-		setter, ok := fieldSetter(field.Type, name)
-		if !ok {
-			continue
-		}
-		if seen, exists := depths[name]; exists && seen <= depth {
-			continue
-		}
-		depths[name] = depth
-		plan[name] = decodableField{index: index, assign: makeAssign(index, field.Type, setter)}
-	}
 }
 
 // makeAssign binds a setter to its field position, allocating pointer fields

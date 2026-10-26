@@ -223,9 +223,8 @@ func TestFilters(t *testing.T) {
 		require.Error(t, err)
 	})
 
-	// Filter groups are a service-side capability: letting a client build them
-	// would hand back the ability to combine conditions with OR, which is what
-	// the removed _or parameter got wrong.
+	// Filter groups are a service-side capability: the URL has no way to
+	// combine conditions with OR.
 	t.Run("RejectsGroupOperators", func(t *testing.T) {
 		for _, key := range []string{"age[or]", "age[and]"} {
 			_, err := Filters(url.Values{key: {"1"}}, &filterTestModel{})
@@ -531,7 +530,7 @@ func TestFilters(t *testing.T) {
 	})
 }
 
-func TestFilterQueryKeyOwnership(t *testing.T) {
+func TestFiltersOwnOperatorKeysAndBareTimestamps(t *testing.T) {
 	// The decoder steps around exactly the keys Filters owns: operator keys
 	// and the bare framework timestamps. Underscore keys never count, with or
 	// without brackets — a bracketed underscore key stays a framework

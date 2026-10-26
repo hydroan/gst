@@ -20,8 +20,9 @@ var gorillaDecoder = func() *schema.Decoder {
 	return decoder
 }()
 
-// decodeGorilla runs the reference pipeline: copy the query without filter
-// keys, drop the controller-owned parameters, and stream-decode the rest.
+// decodeGorilla runs the reference pipeline: copy the query without the keys
+// Filters owns, drop _format and, for a model without Pagination, _size, and
+// stream-decode the rest.
 func decodeGorilla(q url.Values, m types.Model) error {
 	values := make(url.Values, len(q))
 	for key, entry := range q {

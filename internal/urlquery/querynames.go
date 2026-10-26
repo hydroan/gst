@@ -104,41 +104,25 @@ func ValidateQueryNames(typ reflect.Type) error {
 		}
 	}
 
-	// The fields no column holds are walked the way Decode walks them,
-	// through the structs embedded by value or through a pointer.
-	var walk func(owner reflect.Type, prefix []int)
-	walk = func(owner reflect.Type, prefix []int) {
-		for i := range owner.NumField() {
-			field := owner.Field(i)
-			index := append(slices.Clone(prefix), i)
-			if field.Anonymous && field.IsExported() {
-				embedded := field.Type
-				if embedded.Kind() == reflect.Pointer {
-					embedded = embedded.Elem()
-				}
-				if embedded.Kind() == reflect.Struct {
-					walk(embedded, index)
-					continue
-				}
-			}
-			if !field.IsExported() || columnFields[fmt.Sprint(index)] {
-				continue
-			}
-			if promoted, ok := typ.FieldByName(field.Name); !ok || !slices.Equal(promoted.Index, index) {
-				continue
-			}
-			name := modelschema.QueryColumnName(field)
-			if name == "" {
-				continue
-			}
-			checkTag(field, field.Name)
-			declare(name, field.Name)
-			if strings.HasPrefix(name, "_") && !frameworkQueryStructs[owner] {
-				report(fmt.Sprintf("query name %q of %s takes the \"_\" namespace of the framework's own parameters", name, field.Name))
-			}
+	// The fields no column holds are walked the way Decode walks them (see
+	// walkQueryFields); a field a shallower one shadows declares nothing.
+	walkQueryFields(typ, func(owner reflect.Type, field reflect.StructField, index []int, _ int) {
+		if columnFields[fmt.Sprint(index)] {
+			return
 		}
-	}
-	walk(typ, nil)
+		if promoted, ok := typ.FieldByName(field.Name); !ok || !slices.Equal(promoted.Index, index) {
+			return
+		}
+		name := modelschema.QueryColumnName(field)
+		if name == "" {
+			return
+		}
+		checkTag(field, field.Name)
+		declare(name, field.Name)
+		if strings.HasPrefix(name, "_") && !frameworkQueryStructs[owner] {
+			report(fmt.Sprintf("query name %q of %s takes the \"_\" namespace of the framework's own parameters", name, field.Name))
+		}
+	})
 
 	for _, name := range names {
 		if paths := declared[name]; len(paths) > 1 {
