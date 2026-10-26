@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"reflect"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/consts"
@@ -153,20 +154,7 @@ func (db *database[M]) Create(objs ...M) (err error) {
 				return err
 			}
 		}
-		for i := range objs {
-			objs[i].SetID() // set id when id is empty.
-		}
-		clearAssociations(objs)
-
-		// Force created_at/updated_at to now; see the timestamp note in the doc
-		// comment. dbruntime.NowUTC owns the time base (UTC, millisecond
-		// precision) so the values handed back equal what a later read returns.
-		now := dbruntime.NowUTC()
-		for i := range objs {
-			objs[i].SetCreatedAt(now)
-			objs[i].SetUpdatedAt(now)
-		}
-		initializeVersions(objs)
+		fillForInsert(objs)
 		for i := 0; i < len(objs); i += batchSize {
 			end := min(i+batchSize, len(objs))
 			if err = db.ins.Session(&gorm.Session{}).Omit(clause.Associations).Create(objs[i:end]).Error; err != nil {
@@ -741,6 +729,28 @@ func (db *database[M]) updateRowStatement(session *gorm.DB, obj M) *gorm.DB {
 		tx = tx.Select("*")
 	}
 	return tx.Omit("deleted_at", clause.Associations)
+}
+
+// fillForInsert fills objects in for an INSERT, through Create and Upsert
+// alike and on every dialect: an id is generated where one is missing
+// (SetID), the association fields are zeroed (see clearAssociations),
+// created_at and updated_at are forced to the current time whatever the
+// objects hold, and a zero version is raised to 1 (see initializeVersions).
+// dbruntime.NowUTC owns the time base (UTC, millisecond precision), so the
+// timestamps handed back equal what a later read returns. It returns the time
+// it forced, for a statement whose own clock has to agree with it.
+func fillForInsert[M types.Model](objs []M) time.Time {
+	for i := range objs {
+		objs[i].SetID() // set id when id is empty.
+	}
+	clearAssociations(objs)
+	now := dbruntime.NowUTC()
+	for i := range objs {
+		objs[i].SetCreatedAt(now)
+		objs[i].SetUpdatedAt(now)
+	}
+	initializeVersions(objs)
+	return now
 }
 
 // clearAssociations zeroes the association fields of every object, the

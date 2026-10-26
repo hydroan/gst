@@ -14,8 +14,9 @@ import (
 )
 
 // TestClickhouse covers the contract of an application-held clickhouse
-// instance: the read and select paths work, and the write path, the
-// transaction boundary and row locks fail fast per the capability-miss rule.
+// instance: the read and select paths work, the write path keeps its weaker
+// contract, and what the dialect does not carry, the transaction boundary
+// and row locks among it, fails fast per the capability-miss rule.
 //
 // The container, the table and the seed are prepared once for all subtests.
 // The table is created with native DDL: clickhouse schema (engine, ORDER BY)
@@ -330,6 +331,50 @@ func TestClickhouse(t *testing.T) {
 		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).Delete(row))
 	})
 
+	t.Run("WritesLeaveAssociationsAlone", func(t *testing.T) {
+		// Create and Update write the model's own table alone here as on the
+		// transactional path (see TestDatabaseWritesLeaveAssociationsAlone):
+		// the entries an owner carries are neither written to their table nor
+		// handed back as if they were.
+		require.NoError(t, ins.Exec(`CREATE TABLE test_owner_records (
+			id         String,
+			created_by String,
+			updated_by String,
+			created_at DateTime64(3),
+			updated_at DateTime64(3),
+			deleted_at Nullable(DateTime64(3)),
+			name       String
+		) ENGINE = MergeTree ORDER BY (id)`).Error)
+		require.NoError(t, ins.Exec(`CREATE TABLE test_owned_entries (
+			id         String,
+			created_by String,
+			updated_by String,
+			created_at DateTime64(3),
+			updated_at DateTime64(3),
+			deleted_at Nullable(DateTime64(3)),
+			owner_id   String,
+			name       String
+		) ENGINE = MergeTree ORDER BY (id)`).Error)
+		storedEntries := func() int {
+			var count int
+			require.NoError(t, database.DatabaseOn[*TestOwnedEntry](ctx, ins).Count(&count))
+			return count
+		}
+
+		owner := &TestOwnerRecord{Name: "owner", Entries: []*TestOwnedEntry{{Name: "entry"}}}
+		require.NoError(t, database.DatabaseOn[*TestOwnerRecord](ctx, ins).Create(owner))
+		require.Nil(t, owner.Entries, "the entries are not handed back as written")
+		require.Zero(t, storedEntries(), "the record alone is inserted")
+
+		// The table orders by id, which a mutation cannot rewrite, so the
+		// update narrows to the column it corrects.
+		owner.Entries = []*TestOwnedEntry{{Name: "entry"}}
+		require.NoError(t, database.DatabaseOn[*TestOwnerRecord](ctx, ins).
+			WithSelect(types.NewColumn[*TestOwnerRecord, string]("name")).Update(owner))
+		require.Nil(t, owner.Entries, "an update hands back no entry either")
+		require.Zero(t, storedEntries(), "an update inserts no entry")
+	})
+
 	t.Run("WriteDryRunBuildsSQL", func(t *testing.T) {
 		// Create refuses dry-run on clickhouse: the dialect driver executes
 		// the INSERT it builds without consulting DryRun, so a "dry" run
@@ -408,6 +453,50 @@ func TestClickhouse(t *testing.T) {
 		// ClickHouse parses the REGEXP operator natively, so the regex filters
 		// need no special arm.
 		require.Equal(t, []string{"a1", "a2", "a3"}, listIDs(t, types.FilterRegex("category", "^al.*")))
+	})
+
+	t.Run("PatternFiltersOnNumericColumns", func(t *testing.T) {
+		// A number matches by its text form here as on every other dialect
+		// (see TestDatabasePatternFiltersOnNumericColumns), though LIKE and
+		// match take a string alone on ClickHouse.
+		require.Equal(t, []string{"a1"}, listIDs(t, types.NewFilter("", "amount", types.FilterOpLike, "1")))
+		require.Equal(t, []string{"a2", "a3", "a4", "a5", "a6"}, listIDs(t, types.NewFilter("", "amount", types.FilterOpNotLike, "1")))
+		require.Equal(t, []string{"a2"}, listIDs(t, types.NewFilter("", "amount", types.FilterOpStartsWith, "2")))
+		require.Equal(t, []string{"a4"}, listIDs(t, types.NewFilter("", "score", types.FilterOpEndsWith, "4.5")))
+		require.Equal(t, []string{"a1", "a2"}, listIDs(t, types.NewFilter("", "amount", types.FilterOpRegex, "^[12]")))
+		require.Equal(t, []string{"a3", "a4", "a5", "a6"}, listIDs(t, types.NewFilter("", "amount", types.FilterOpNotRegex, "^[12]")))
+
+		// An optional number lands in a Nullable column. A row holding NULL
+		// matches neither LIKE nor NOT LIKE, as on every other dialect,
+		// rather than failing the read.
+		require.NoError(t, ins.Exec(`CREATE TABLE test_reading_records (
+			id         String,
+			created_by String,
+			updated_by String,
+			created_at DateTime64(3),
+			updated_at DateTime64(3),
+			deleted_at Nullable(DateTime64(3)),
+			reading    Nullable(Int64)
+		) ENGINE = MergeTree ORDER BY (id)`).Error)
+		require.NoError(t, ins.Exec(`INSERT INTO test_reading_records (id, reading, created_at, updated_at) VALUES
+			('r1', 10,   '2024-01-01 00:00:00', '2024-01-01 00:00:00'),
+			('r2', NULL, '2024-01-01 00:00:00', '2024-01-01 00:00:00'),
+			('r3', 20,   '2024-01-01 00:00:00', '2024-01-01 00:00:00')`).Error)
+		readings := func(op types.FilterOp, value string) []string {
+			t.Helper()
+			records := make([]*TestReadingRecord, 0)
+			require.NoError(t, database.DatabaseOn[*TestReadingRecord](ctx, ins).
+				WithQuery(nil, types.QueryOptions{Filters: []types.Filter{types.NewFilter("", "reading", op, value)}}).
+				WithOrder(types.Asc("id")).
+				List(&records))
+			ids := make([]string, 0, len(records))
+			for _, r := range records {
+				ids = append(ids, r.ID)
+			}
+			return ids
+		}
+		require.Equal(t, []string{"r1"}, readings(types.FilterOpLike, "1"))
+		require.Equal(t, []string{"r3"}, readings(types.FilterOpNotLike, "1"))
 	})
 
 	t.Run("ExistsSubqueryIsRefused", func(t *testing.T) {

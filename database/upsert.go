@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/tenant"
 	"gorm.io/gorm"
@@ -179,21 +178,10 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 	}
 
 	return db.withWriteTransaction(func() error {
-		for i := range objs {
-			objs[i].SetID() // set id when id is empty.
-		}
-		clearAssociations(objs)
-		// Force created_at/updated_at like Create (dbruntime.NowUTC, the same
-		// one-time-base reason): the values only land on inserted rows,
-		// conflict updates keep the existing created_at.
-		now := dbruntime.NowUTC()
-		for i := range objs {
-			objs[i].SetCreatedAt(now)
-			objs[i].SetUpdatedAt(now)
-		}
-		// Insert candidates start at version 1; a conflict never reads the
-		// object's version (the pre-set clause bumps the row's own instead).
-		initializeVersions(objs)
+		// The created_at and the version filled in here land on inserted rows
+		// alone: a conflict update keeps the row's created_at and never reads
+		// the object's version, the pre-set clause bumping the row's own.
+		now := fillForInsert(objs)
 		if len(db.selectColumns) > 0 {
 			db.ins = db.ins.Select(db.selectColumns)
 		}

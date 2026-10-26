@@ -3,7 +3,6 @@ package database
 import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/consts"
-	"github.com/hydroan/gst/internal/dbruntime"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -15,10 +14,13 @@ import (
 // The contract is deliberately weaker than the transactional write path and
 // each entry point's doc spells it out: no model hooks, no transaction
 // boundary, no unique-key or matched-rows semantics. What stays identical:
-// id and timestamp filling, the caller named as creator and updater, which
-// Create and Update stamp before they dispatch, batch splitting, dry-run SQL
-// building, tracing and SQL logging, and the clauses a column type attaches
-// to a statement, the tenant predicate among them (see tenant.ID).
+// what an inserted record is filled in with (see fillForInsert); the caller
+// named as creator and updater, which Create and Update stamp before they
+// dispatch; the model's own table written alone, the associations an object
+// carries zeroed rather than written (see clearAssociations); batch
+// splitting, dry-run SQL building, tracing and SQL logging; and the clauses
+// a column type attaches to a statement, the tenant predicate among them
+// (see tenant.ID).
 
 // clickhouseCreate is Create on a ClickHouse instance: plain batch INSERTs.
 // A single INSERT statement lands atomically (within one partition and the
@@ -42,19 +44,10 @@ func (db *database[M]) clickhouseCreate(objs []M) (err error) {
 		return errors.Wrap(ErrUnsupportedOnDialect, "dry-run Create on clickhouse")
 	}
 
-	for i := range objs {
-		objs[i].SetID() // set id when id is empty.
-	}
-	// Force created_at/updated_at to now (dbruntime.NowUTC), exactly like the
-	// transactional Create; see the timestamp note there.
-	now := dbruntime.NowUTC()
-	for i := range objs {
-		objs[i].SetCreatedAt(now)
-		objs[i].SetUpdatedAt(now)
-	}
+	fillForInsert(objs)
 	for i := 0; i < len(objs); i += batchSize {
 		end := min(i+batchSize, len(objs))
-		if err = db.ins.Session(&gorm.Session{}).Create(objs[i:end]).Error; err != nil {
+		if err = db.ins.Session(&gorm.Session{}).Omit(clause.Associations).Create(objs[i:end]).Error; err != nil {
 			// First-hand exit of a stack-less GORM/driver error; see the
 			// error-stack contract in doc.go.
 			return errors.WithStack(err)
@@ -248,6 +241,7 @@ func (db *database[M]) clickhouseUpdate(objs []M) (err error) {
 		return nil
 	}
 
+	clearAssociations(objs)
 	for i := range objs {
 		if err = db.updateRowStatement(db.ins.Session(&gorm.Session{}), objs[i]).Updates(objs[i]).Error; err != nil {
 			return errors.WithStack(err)
