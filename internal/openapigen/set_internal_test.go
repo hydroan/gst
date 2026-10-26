@@ -483,13 +483,14 @@ type openapiItemsLine struct {
 
 // TestSetBuildsExampleOfEveryFieldBesideAnItemsArray asserts that the example
 // of a single record holding an items array illustrates every field the body
-// documents, the id of each line included: the array is a field like any
-// other, not the records of a batch.
+// documents, the record's own optional id and the id of each line included:
+// the array is a field like any other, not the records of a batch.
 func TestSetBuildsExampleOfEveryFieldBesideAnItemsArray(t *testing.T) {
 	set[*openapiItemsModel, *openapiItemsModel, *openapiItemsModel]("/api/openapi-items-examples", true, consts.Create)
 
 	schema := registeredRequestBodySchema(t, operationForPath(t, "/api/openapi-items-examples").RequestBody)
 	want := map[string]any{
+		"id":    "string",
 		"name":  "string",
 		"items": []any{map[string]any{"id": "string"}},
 	}

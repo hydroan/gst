@@ -8,6 +8,7 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/tenant"
 	"github.com/stretchr/testify/require"
 )
 
@@ -317,6 +318,62 @@ type openapiOwnKeyModel struct {
 	modelregistry.Base
 }
 
+// openapiRequiredModel requires Name and Code by its binding rules, Code
+// written on insert alone, beside a Note no rule requires and Tags, whose
+// elements the rules after dive require rather than the field itself.
+type openapiRequiredModel struct {
+	Name string   `json:"name" binding:"required"`
+	Code string   `json:"code" gorm:"<-:create" binding:"required,max=8"`
+	Note string   `json:"note"`
+	Tags []string `json:"tags" gorm:"serializer:json" binding:"dive,required"`
+
+	modelregistry.Base
+}
+
+// TestSetMarksTheFieldsABindingRequires pins that a field the binding rules
+// require, which a request without it is refused for, is a required property
+// of the body documented, and that a field the body leaves out is required
+// by none. A patch checks the fields it names alone, so it requires none of
+// them, an item of a batch patch requiring its id alone.
+func TestSetMarksTheFieldsABindingRequires(t *testing.T) {
+	create := &openapi3.PathItem{}
+	setCreate[*openapiRequiredModel, *openapiRequiredModel, *openapiRequiredModel]("/api/required/create", create)
+	require.ElementsMatch(t, []string{"code", "name"}, registeredRequestBodySchema(t, create.Post.RequestBody).Required)
+
+	update := &openapi3.PathItem{}
+	setUpdate[*openapiRequiredModel, *openapiRequiredModel, *openapiRequiredModel]("/api/required/update/{id}", update)
+	require.ElementsMatch(t, []string{"name"}, registeredRequestBodySchema(t, update.Put.RequestBody).Required)
+
+	patch := &openapi3.PathItem{}
+	setPatch[*openapiRequiredModel, *openapiRequiredModel, *openapiRequiredModel]("/api/required/patch/{id}", patch)
+	require.Empty(t, registeredRequestBodySchema(t, patch.Patch.RequestBody).Required)
+
+	patchMany := &openapi3.PathItem{}
+	setPatchMany[*openapiRequiredModel, *openapiRequiredModel, *openapiRequiredModel]("/api/required/patch-many", patchMany)
+	item := batchItemSchema(registeredRequestBodySchema(t, patchMany.Patch.RequestBody))
+	require.NotNil(t, item)
+	require.ElementsMatch(t, []string{"id"}, item.Required)
+}
+
+// openapiScopedModel's records each belong to one tenant.
+type openapiScopedModel struct {
+	Name string `json:"name"`
+
+	tenant.Scope
+	modelregistry.Base
+}
+
+// TestSetDocumentsWhoNamesTheTenant pins that the tenant_id a create body
+// documents says who sets it: the record is filed under the caller's tenant,
+// a caller acting across tenants alone naming another.
+func TestSetDocumentsWhoNamesTheTenant(t *testing.T) {
+	create := &openapi3.PathItem{}
+	setCreate[*openapiScopedModel, *openapiScopedModel, *openapiScopedModel]("/api/scoped/create", create)
+	property := registeredRequestBodySchema(t, create.Post.RequestBody).Properties["tenant_id"]
+	require.NotNil(t, property)
+	require.Contains(t, property.Value.Description, "acts across tenants")
+}
+
 // openapiWriteRequest is a custom payload whose fields carry the names of
 // the framework base's: they are the service's own to read.
 type openapiWriteRequest struct {
@@ -328,11 +385,13 @@ type openapiWriteRequest struct {
 // TestSetDocumentsTheFieldsAWriteTakes pins the request body of each write to
 // the fields it takes from the client, and its example to the same fields.
 // The framework's own flow takes none of the framework base's, which it writes
-// itself, and no column gorm leaves out of the write: an insert none written
-// on update only or never, an update none written on insert only or never. An
-// item of a batch update names its record by its id, which it must carry. A
-// custom payload is the service's to read, every field of it, a batch's
-// included, which is the payload itself rather than a list of items.
+// itself, but the primary key a create may name, the insert generating one
+// otherwise, and no column gorm leaves out of the write: an insert none
+// written on update only or never, an update none written on insert only or
+// never. An item of a batch update names its record by its id, which it must
+// carry, not optional as on a create. A custom payload is the service's to
+// read, every field of it, a batch's included, which is the payload itself
+// rather than a list of items.
 func TestSetDocumentsTheFieldsAWriteTakes(t *testing.T) {
 	type model = openapiWriteModel
 	tests := []struct {
@@ -348,7 +407,7 @@ func TestSetDocumentsTheFieldsAWriteTakes(t *testing.T) {
 				setCreate[*model, *model, *model]("/api/writes/create", p)
 				return p.Post
 			},
-			fields: []string{"code", "name"},
+			fields: []string{"code", "id", "name"},
 		},
 		{
 			name: "update",
@@ -373,7 +432,7 @@ func TestSetDocumentsTheFieldsAWriteTakes(t *testing.T) {
 				return p.Post
 			},
 			batch:  true,
-			fields: []string{"code", "name"},
+			fields: []string{"code", "id", "name"},
 		},
 		{
 			name: "update many",
@@ -449,7 +508,7 @@ func TestSetDocumentsTheFieldsAWriteTakes(t *testing.T) {
 				setCreate[*openapiOwnKeyModel, *openapiOwnKeyModel, *openapiOwnKeyModel]("/api/writes/own-key", p)
 				return p.Post
 			},
-			fields: []string{"name"},
+			fields: []string{"id", "name"},
 		},
 		{
 			name: "update with a key of its own",

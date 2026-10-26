@@ -3,6 +3,7 @@ package openapigen
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -18,6 +19,9 @@ var (
 
 	idFormat = "" // eg: "uuid"
 )
+
+// bindingTag is the struct tag gin validates a request by.
+const bindingTag = "binding"
 
 // jsonName returns the name a struct field's json tag gives it, or "" for a
 // field the tag leaves unnamed or out (json:"-").
@@ -60,12 +64,16 @@ func newSchemaRefWithDocs(value any) *openapi3.SchemaRef {
 }
 
 // addSchemaDocsForType decorates schemaRef with the doc comments and enum
-// values registered for typ. Field comments become descriptions without being
-// copied into titles, so documentation renderers do not display the same text
-// twice and independent schema titles remain intact. It walks the generated
-// schema tree and the Go type tree in parallel, so nested request and response
-// structs are decorated at every depth. visiting holds the struct types on the
-// current descent path so self-referential types terminate; callers pass nil.
+// values registered for typ, and marks required the properties whose field's
+// own binding rules hold required, binding:"required,max=8" among them, as a
+// request without one is refused; binding:"dive,required" requires the
+// elements, not the field. Field comments become descriptions without
+// being copied into titles, so documentation renderers do not display the
+// same text twice and independent schema titles remain intact. It walks the
+// generated schema tree and the Go type tree in parallel, so nested request
+// and response structs are decorated at every depth. visiting holds the
+// struct types on the current descent path so self-referential types
+// terminate; callers pass nil.
 func addSchemaDocsForType(typ reflect.Type, schemaRef *openapi3.SchemaRef, visiting map[reflect.Type]bool) {
 	if typ == nil || schemaRef == nil || schemaRef.Value == nil {
 		return
@@ -105,6 +113,15 @@ func addSchemaDocsForType(typ reflect.Type, schemaRef *openapi3.SchemaRef, visit
 		if !hasField {
 			continue
 		}
+		// The rules before the first dive are the field's own; those after
+		// it are the elements' of a slice or a map.
+		rules := strings.Split(docField.field.Tag.Get(bindingTag), ",")
+		if dive := slices.Index(rules, "dive"); dive >= 0 {
+			rules = rules[:dive]
+		}
+		if slices.Contains(rules, "required") && !slices.Contains(schemaRef.Value.Required, propName) {
+			schemaRef.Value.Required = append(schemaRef.Value.Required, propName)
+		}
 
 		description := openAPIDocComment(docField.field.Name, docField.docs[docField.field.Name])
 
@@ -134,6 +151,9 @@ func addSchemaDocsForType(typ reflect.Type, schemaRef *openapi3.SchemaRef, visit
 
 		addSchemaDocsForType(fieldType, propRef, visiting)
 	}
+	// The properties come in map order; the document lists the required ones
+	// in a stable one.
+	slices.Sort(schemaRef.Value.Required)
 }
 
 // schemaDocField pairs one JSON-visible struct field with the doc comments of

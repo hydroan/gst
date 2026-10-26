@@ -79,6 +79,9 @@ func (ID) CreateClauses(f *gormschema.Field) []clause.Interface {
 // framework fixes id, created_at and deleted_at on the same reasoning, and
 // modelschema.ValidateFrameworkColumns refuses a model renaming any of them.
 type Scope struct {
+	// TenantID is the tenant the record belongs to, set when the record is
+	// created: the caller's tenant, whatever tenant the request names, unless
+	// the caller acts across tenants, which may name the tenant itself.
 	TenantID ID `json:"tenant_id,omitempty" gorm:"column:tenant_id;size:191;not null;default:default;<-:create" query:"tenant_id" url:"-"`
 }
 

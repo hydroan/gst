@@ -27,7 +27,7 @@ import (
 //     read the project's code through Ignores and Walk, leaving out what
 //     either set of rules covers. So does apidocgen, the framework's own
 //     program that registers the struct doc comments of internal/modelregistry
-//     for the OpenAPI generator.
+//     and internal/tenant for the OpenAPI generator.
 //   - gg migrate schema reads a path the user names, so the Git rules do not
 //     apply there; below that path it leaves out what the go command leaves
 //     out, through ExcludedByGo.
