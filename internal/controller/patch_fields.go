@@ -94,13 +94,6 @@ func (fields patchFieldSet) covers(name string) bool {
 // them, so it is computed once per type and read-only from then on.
 var patchFieldTables sync.Map // reflect.Type -> *patchFieldTable
 
-// frameworkBases are the framework's base types, whose fields the framework
-// manages and no patch applies.
-var frameworkBases = map[reflect.Type]struct{}{
-	reflect.TypeFor[modelregistry.Base]():     {},
-	reflect.TypeFor[modelregistry.AutoBase](): {},
-}
-
 // patchFieldsOf returns the table of the fields of typ a patch may apply,
 // computing it on the first call for the type: the fields the type encodes
 // to JSON, under the keys it encodes them to, the fields of an embedded
@@ -170,7 +163,7 @@ func patchFieldsOf(typ reflect.Type) *patchFieldTable {
 						// A framework base type is not looked into: its
 						// fields are the framework's to write, their keys
 						// kept as the managed ones.
-						if _, base := frameworkBases[structType]; base {
+						if modelregistry.IsFrameworkBase(structType) {
 							for baseField := range structType.Fields() {
 								if key := jsonKey(baseField); key != "" {
 									managed[key] = struct{}{}

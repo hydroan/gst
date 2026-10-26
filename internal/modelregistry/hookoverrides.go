@@ -22,22 +22,22 @@ import (
 // to the trace.
 //
 // The walk that resolves an override lives in hookoverride; this file says
-// which types are the framework bases, which hooks are tracked, and caches
+// which types declare the no-op hooks, which hooks are tracked, and caches
 // the answers per model type.
 
-// frameworkHookBases are the embeddable framework types whose hooks are the
-// canonical no-ops. A hook whose declaration resolves to one of them is not
-// an override. Keyed by the struct type, which is what hookoverride reports a
-// declarer as.
-var frameworkHookBases = map[reflect.Type]struct{}{
+// noOpHookDeclarers are the embeddable framework types declaring the
+// canonical no-op hooks: the model bases and the Empty marker. A hook whose
+// declaration resolves to one of them is not an override. Keyed by the struct
+// type, which is what hookoverride reports a declarer as.
+var noOpHookDeclarers = map[reflect.Type]struct{}{
 	reflect.TypeFor[Base]():     {},
 	reflect.TypeFor[AutoBase](): {},
 	reflect.TypeFor[Empty]():    {},
 }
 
-// isFrameworkBase reports whether typ is one of the framework bases.
-func isFrameworkBase(typ reflect.Type) bool {
-	_, ok := frameworkHookBases[typ]
+// isNoOpHookDeclarer reports whether typ is one of noOpHookDeclarers.
+func isNoOpHookDeclarer(typ reflect.Type) bool {
+	_, ok := noOpHookDeclarers[typ]
 	return ok
 }
 
@@ -167,7 +167,7 @@ func hookOverridesOf(m any) hookOverrides {
 
 	var overrides hookOverrides
 	for i, name := range hookMethodNames {
-		overrides[i] = hookoverride.Overridden(typ, name, isFrameworkBase)
+		overrides[i] = hookoverride.Overridden(typ, name, isNoOpHookDeclarer)
 	}
 	hookOverridesCache.Store(typ, overrides)
 	return overrides

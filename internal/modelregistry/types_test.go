@@ -1,6 +1,7 @@
 package modelregistry_test
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/hydroan/gst/internal/modelregistry"
@@ -204,6 +205,15 @@ func TestIsTableModel(t *testing.T) {
 	require.False(t, modelregistry.IsTableModel[t5]())
 	require.False(t, modelregistry.IsTableModel[*t5]())
 	require.False(t, modelregistry.IsTableModel[*t6]())
+}
+
+func TestIsFrameworkBase(t *testing.T) {
+	require.True(t, modelregistry.IsFrameworkBase(reflect.TypeFor[modelregistry.Base]()))
+	require.True(t, modelregistry.IsFrameworkBase(reflect.TypeFor[modelregistry.AutoBase]()))
+
+	require.False(t, modelregistry.IsFrameworkBase(reflect.TypeFor[modelregistry.Empty]()), "the virtual marker carries no fields to write")
+	require.False(t, modelregistry.IsFrameworkBase(reflect.TypeFor[*modelregistry.Base]()), "a base is embedded by value")
+	require.False(t, modelregistry.IsFrameworkBase(reflect.TypeFor[User]()))
 }
 
 func BenchmarkIsModelEmpty(b *testing.B) {

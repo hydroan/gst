@@ -115,6 +115,15 @@ func IsTableModel[T any]() bool {
 	return true
 }
 
+// IsFrameworkBase reports whether typ is one of the framework's model bases,
+// Base and AutoBase, whose fields the framework writes itself: the primary
+// key, the audit columns and the timestamps. A patch applies none of them,
+// and the request body a write documents holds none but the primary key a
+// create may name. The bases are embedded by value, so *Base is none.
+func IsFrameworkBase(typ reflect.Type) bool {
+	return typ == reflect.TypeFor[Base]() || typ == reflect.TypeFor[AutoBase]()
+}
+
 // isEmptyMarker reports whether a field of type typ is an Empty marker: Empty
 // itself, or a pointer to it.
 func isEmptyMarker(typ reflect.Type) bool {
