@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/serviceregistry"
@@ -107,7 +108,7 @@ func newAction[M types.Model, REQ types.Request, RSP types.Response](route strin
 		reqTyp:         reqTyp,
 		controllerSpan: newPhaseSpan("controller", name, phase),
 		serviceSpans:   serviceSpans,
-		idColumn:       types.NewColumn[M, string](modelregistry.KeyID),
+		idColumn:       types.NewColumn[M, string](modelschema.IDColumn),
 		itemParam:      itemParam,
 	}
 }

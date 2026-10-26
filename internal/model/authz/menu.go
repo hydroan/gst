@@ -18,16 +18,17 @@ import (
 	"gorm.io/datatypes"
 )
 
-var (
-	RootID      = model.RootID
-	RootName    = model.RootName
-	UnknownID   = model.UnknownID
-	UnknownName = model.UnknownName
-	NoneID      = model.NoneID
-	NoneName    = model.NoneName
+// The sentinel menus of the tree and the column menus and roles are found by.
+// RootID is the root a top-level menu hangs from; UnknownID and NoneID are the
+// parents a menu points at when its parent is unknown or absent. The tree
+// keeps the three for bookkeeping, and the menu list leaves them out. KeyID is
+// the id column.
+const (
+	RootID    = "root"
+	UnknownID = "unknown"
+	NoneID    = "none"
 
-	KeyName = model.KeyName
-	KeyID   = model.KeyID
+	KeyID = "id"
 )
 
 type Menu struct {
@@ -35,18 +36,19 @@ type Menu struct {
 	//
 	// Menu identifiers are stable keys chosen by the application, not generated
 	// UUIDs: Role.MenuIDs and every policy row derived from a menu reference
-	// them, so they have to survive re-seeding and are therefore written by hand,
-	// typically as a hierarchical page key. The inherited column is sized for
-	// UUIDv7 and silently truncates anything longer, and ParentID already stores
-	// these very same values at size 191 — a primary key narrower than the column
-	// pointing at it is a contradiction within one table.
+	// them, so they have to survive re-seeding and are therefore written by
+	// hand, typically as a hierarchical page key. The inherited column is sized
+	// for UUIDv7 and silently truncates anything longer, and ParentID already
+	// stores these very same values at size 191 — a primary key narrower than
+	// the column pointing at it is a contradiction within one table.
 	//
 	// Shadowing model.Base.ID makes the ID accessors below mandatory: they are
-	// declared on Base and would otherwise read and write the hidden field while
-	// GORM maps this one.
+	// declared on Base and would otherwise read and write the hidden field
+	// while GORM maps this one.
 	ID string `json:"id" gorm:"primaryKey;size:191" query:"id" url:"-"`
 
-	// Frontend route path. The empty value means default route in React Router 6.x.
+	// Frontend route path. The empty value means default route in
+	// React Router 6.x.
 	Path    string `json:"path" query:"path"`
 	Default string `json:"default,omitempty" query:"default"` // Default child route when the menu has children.
 
@@ -61,11 +63,12 @@ type Menu struct {
 	Visible *bool `json:"visible,omitempty" query:"visible" gorm:"default:1"`
 	Enabled *bool `json:"enabled,omitempty" query:"enabled" gorm:"default:1"`
 
-	// Self-referencing tree. The associations exist so Expands can preload Parent
-	// and Children; constraint:- keeps AutoMigrate from emitting a physical foreign
-	// key, because preloading resolves the relation in Go and never relies on one.
-	// Without that constraint the database does not reject deleting a menu that
-	// still has children, so callers own the referential integrity of the tree.
+	// Self-referencing tree. The associations exist so Expands can preload
+	// Parent and Children; constraint:- keeps AutoMigrate from emitting a
+	// physical foreign key, because preloading resolves the relation in Go and
+	// never relies on one. Without that constraint the database does not reject
+	// deleting a menu that still has children, so callers own the referential
+	// integrity of the tree.
 	ParentID string  `json:"parent_id,omitempty" gorm:"size:191" query:"parent_id"`
 	Children []*Menu `json:"children,omitempty" gorm:"foreignKey:ParentID;constraint:-"`             // Child menus.
 	Parent   *Menu   `json:"parent,omitempty" gorm:"foreignKey:ParentID;references:ID;constraint:-"` // Parent menu.

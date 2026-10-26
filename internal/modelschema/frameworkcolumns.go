@@ -12,7 +12,7 @@ import (
 // fixedColumns maps the Go name of each field model.Base and model.AutoBase
 // declare to the column the framework names it by.
 var fixedColumns = map[string]string{
-	"ID":        fixedIDColumn,
+	"ID":        IDColumn,
 	"CreatedBy": "created_by",
 	"UpdatedBy": "updated_by",
 	"CreatedAt": "created_at",
@@ -20,9 +20,10 @@ var fixedColumns = map[string]string{
 	"DeletedAt": "deleted_at",
 }
 
-// fixedIDColumn is the column the framework names the primary key of
-// model.Base and model.AutoBase by.
-const fixedIDColumn = "id"
+// IDColumn is the column the framework names the primary key of model.Base
+// and model.AutoBase by. ValidateFrameworkColumns holds every model to it, so
+// the framework reads a record by its id through this column.
+const IDColumn = "id"
 
 // fixedTenantColumn is the column the framework names the tenant by, the one
 // tenant.Scope declares.
@@ -46,7 +47,7 @@ var tenantColumnType = reflect.TypeFor[tenant.ID]()
 // The database layer applies the fallback when building the boundary
 // comparison, and URL parsing resolves the same column to type-check the
 // cursor value, so every consumer reads this single definition.
-const DefaultCursorColumn = fixedIDColumn
+const DefaultCursorColumn = IDColumn
 
 // ValidateFrameworkColumns refuses a model mapping a framework field to a
 // column other than the one the framework fixes for it. The framework names
