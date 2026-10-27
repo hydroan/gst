@@ -30,7 +30,7 @@ func TestModulePath(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			got, err := gghelper.ModulePath()
+			got, err := gghelper.ModulePath(".")
 
 			if tt.wantErr {
 				if err == nil {
@@ -50,7 +50,7 @@ func TestModulePath(t *testing.T) {
 	t.Run("without a go.mod", func(t *testing.T) {
 		t.Chdir(t.TempDir())
 
-		if got, err := gghelper.ModulePath(); err == nil {
+		if got, err := gghelper.ModulePath("."); err == nil {
 			t.Fatalf("ModulePath() = %q, want an error", got)
 		}
 	})
@@ -78,7 +78,7 @@ func TestModulePathInWorkspaceReturnsCurrentModuleOnly(t *testing.T) {
 	t.Chdir(appDir)
 	t.Setenv("GOWORK", goWork)
 
-	got, err := gghelper.ModulePath()
+	got, err := gghelper.ModulePath(".")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/ggconst"
-	"github.com/hydroan/gst/internal/gggen"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
 	"github.com/spf13/cobra"
@@ -30,7 +29,7 @@ migrate: the application creates its tables from the models every time it
 starts.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// 1. Get module name
-		moduleName, err := gghelper.ModulePath()
+		moduleName, err := gghelper.ModulePath(".")
 		if err != nil {
 			return errors.Wrap(err, "failed to get module path")
 		}
@@ -49,7 +48,7 @@ var migrateSchemaCmd = &cobra.Command{
 	Long:  "Print target schema SQL for all registered models, or only registered models declared in a file or directory",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		moduleName, err := gghelper.ModulePath()
+		moduleName, err := gghelper.ModulePath(".")
 		if err != nil {
 			return errors.Wrap(err, "failed to get module path")
 		}
@@ -150,7 +149,7 @@ func buildMigrateProjectFile(moduleName string) (string, error) {
 		Decls: []ast.Decl{&ast.GenDecl{Tok: token.IMPORT, Specs: specs}},
 	}
 	fset := goast.GeneratedHeader(f)
-	return gggen.FormatNodeExtraWithFileSet(f, fset, false)
+	return gghelper.FormatNodeExtraWithFileSet(f, fset, moduleName)
 }
 
 // migrateProjectImports lists the project packages the migration program

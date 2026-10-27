@@ -15,7 +15,7 @@ import (
 // registers, with the HTTP method of each action: export and SSE routes are
 // served over GET like the rest of the reads.
 func TestParseRouteTreeFromFileReadsGeneratedRoutes(t *testing.T) {
-	code, err := gggen.BuildRouterFile("router", "model", map[string]string{"tmpapp/model": ""},
+	code, err := gggen.BuildRouterFile("tmpapp", "router", "model", map[string]string{"tmpapp/model": ""},
 		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", "/api/records", "", "Create"),
 		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", "/api/records", "", "List"),
 		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", "/api/records/:rec", "rec", "Get"),

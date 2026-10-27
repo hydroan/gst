@@ -260,7 +260,7 @@ func TestRemoveManagedFilesRewritesTheInterceptorRegistration(t *testing.T) {
 	}
 
 	var reported []string
-	err := RemoveManagedFiles("interceptor", []string{oldAuth}, func(status CopyWriteStatus, path string) {
+	err := RemoveManagedFiles("interceptor", []string{oldAuth}, "tmpapp", func(status CopyWriteStatus, path string) {
 		reported = append(reported, string(status)+" "+path)
 	})
 	if err != nil {

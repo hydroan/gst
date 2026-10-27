@@ -9,6 +9,7 @@ import (
 
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/dsl"
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/modelinfo"
 	"github.com/kr/pretty"
 )
@@ -110,7 +111,7 @@ func TestImports(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := FormatNode(importDecl(tt.modulePath, tt.modelFileDir, tt.modelQualifier, tt.phase, tt.otherPkgs...))
+			got, err := gghelper.FormatNode(importDecl(tt.modulePath, tt.modelFileDir, tt.modelQualifier, tt.phase, tt.otherPkgs...))
 			if err != nil {
 				t.Error(err)
 				return
@@ -343,7 +344,7 @@ func TestServiceMethod1(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := FormatNode(serviceMethod1(tt.recvName, tt.modelName, tt.modelPkgName, tt.phase, tt.phase.RoleName()))
+			got, err := gghelper.FormatNode(serviceMethod1(tt.recvName, tt.modelName, tt.modelPkgName, tt.phase, tt.phase.RoleName()))
 			if err != nil {
 				t.Error(err)
 				return
@@ -385,7 +386,7 @@ func TestServiceMethod2(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			res := serviceMethod2(tt.recvName, tt.modelName, tt.modelPkgName, tt.phase, tt.phase.RoleName())
-			got, err := FormatNode(res)
+			got, err := gghelper.FormatNode(res)
 			if err != nil {
 				t.Error(err)
 				return
@@ -427,7 +428,7 @@ func TestServiceMethod3(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			res := serviceMethod3(tt.recvName, tt.modelName, tt.modelPkgName, tt.phase, tt.phase.RoleName())
-			got, err := FormatNode(res)
+			got, err := gghelper.FormatNode(res)
 			if err != nil {
 				t.Error(err)
 				return
@@ -510,7 +511,7 @@ func TestServiceMethod4(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			res := serviceMethod4(tt.recvName, tt.modelPkgName, tt.reqName, tt.rspName, tt.phase, tt.phase.RoleName())
-			got, err := FormatNode(res)
+			got, err := gghelper.FormatNode(res)
 			if err != nil {
 				t.Error(err)
 				return
@@ -545,7 +546,7 @@ func TestServiceMethod5(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			res := serviceMethod5(tt.recvName, tt.modelName, tt.modelPkgName, tt.phase.RoleName())
-			got, err := FormatNode(res)
+			got, err := gghelper.FormatNode(res)
 			if err != nil {
 				t.Error(err)
 				return
@@ -580,7 +581,7 @@ func TestServiceMethod6(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			res := serviceMethod6(tt.recvName, tt.modelName, tt.modelPkgName, tt.phase.RoleName())
-			got, err := FormatNode(res)
+			got, err := gghelper.FormatNode(res)
 			if err != nil {
 				t.Error(err)
 				return
@@ -610,7 +611,7 @@ func TestServiceMethod7(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			res := serviceMethod7(tt.recvName, tt.phase.RoleName())
-			got, err := FormatNode(res)
+			got, err := gghelper.FormatNode(res)
 			if err != nil {
 				t.Error(err)
 				return
@@ -644,7 +645,7 @@ func TestServiceMethod8(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			res := serviceMethod8(tt.recvName, tt.modelName, tt.modelQualifier, tt.roleName)
-			got, err := FormatNode(res)
+			got, err := gghelper.FormatNode(res)
 			if err != nil {
 				t.Error(err)
 				return
@@ -680,7 +681,7 @@ func TestServiceMethod9(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := FormatNode(serviceMethod9(tt.recvName, "model", tt.req, tt.rsp, tt.streamingPayload, tt.streamingResult, tt.roleName))
+			got, err := gghelper.FormatNode(serviceMethod9(tt.recvName, "model", tt.req, tt.rsp, tt.streamingPayload, tt.streamingResult, tt.roleName))
 			if err != nil {
 				t.Fatal(err)
 			}

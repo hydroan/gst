@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/gghelper"
 	"golang.org/x/tools/go/ast/astutil"
 )
 
@@ -56,7 +57,11 @@ func AddModule(projectDir string, name string) (ChangeResult, error) {
 	if !changed {
 		return ChangeResult{Module: module, Status: ChangeSkipped, Path: path}, nil
 	}
-	if err := writeGoFile(path, fset, file); err != nil {
+	modulePath, err := gghelper.ModulePath(projectDir)
+	if err != nil {
+		return ChangeResult{}, err
+	}
+	if err := writeGoFile(path, fset, file, modulePath); err != nil {
 		return ChangeResult{}, err
 	}
 	return ChangeResult{Module: module, Status: ChangeCreated, Path: path}, nil

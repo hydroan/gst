@@ -14,7 +14,7 @@ import (
 // main.go imports has a scaffold file: gg new creates it and gg gen restores
 // it, so the import never dangles.
 func TestScaffoldCoversEveryImportedDirectory(t *testing.T) {
-	files, err := scaffoldFiles()
+	files, err := scaffoldFiles("helloworld")
 	require.NoError(t, err)
 	for _, dir := range ggconst.ProjectImportDirs {
 		found := false

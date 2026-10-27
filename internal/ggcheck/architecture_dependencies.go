@@ -27,7 +27,7 @@ var ArchitectureDependencies = Check{
 func checkArchitectureDependencies(ignore gghelper.ProjectIgnore) []string {
 	//nolint:prealloc
 	var violations []string
-	modulePath, err := gghelper.ModulePath()
+	modulePath, err := gghelper.ModulePath(".")
 	if err != nil {
 		return []string{fmt.Sprintf("reading the module path: %v", err)}
 	}

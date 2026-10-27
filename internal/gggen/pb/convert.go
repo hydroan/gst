@@ -38,7 +38,7 @@ type fileWriter struct {
 }
 
 func (g *generator) newFileWriter(f *pbschema.ProtoFile) *fileWriter {
-	return &fileWriter{g: g, file: f, out: newGoFile(f.GoPackageName()), temps: make(map[string]int), funcTemps: make(map[string]int)}
+	return &fileWriter{g: g, file: f, out: newGoFile(f.GoPackageName(), g.modulePath), temps: make(map[string]int), funcTemps: make(map[string]int)}
 }
 
 // temp returns the name of a temporary of the scope being written: base

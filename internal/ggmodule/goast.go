@@ -1,15 +1,12 @@
 package ggmodule
 
 import (
-	"bytes"
 	"go/ast"
-	"go/format"
 	"go/parser"
 	"go/token"
 	"os"
 
 	"github.com/hydroan/gst/internal/gghelper"
-	gofumpt "mvdan.cc/gofumpt/format"
 )
 
 func parseGoFile(path string) (*token.FileSet, *ast.File, error) {
@@ -18,16 +15,8 @@ func parseGoFile(path string) (*token.FileSet, *ast.File, error) {
 	return fset, file, err
 }
 
-func formatGoFile(fset *token.FileSet, file *ast.File) ([]byte, error) {
-	var buf bytes.Buffer
-	if err := format.Node(&buf, fset, file); err != nil {
-		return nil, err
-	}
-	return gofumpt.Source(buf.Bytes(), gofumpt.Options{})
-}
-
-func writeGoFile(path string, fset *token.FileSet, file *ast.File) error {
-	formatted, err := formatGoFile(fset, file)
+func writeGoFile(path string, fset *token.FileSet, file *ast.File, modulePath string) error {
+	formatted, err := gghelper.FormatNodeExtraWithFileSet(file, fset, modulePath)
 	if err != nil {
 		return err
 	}
@@ -36,8 +25,8 @@ func writeGoFile(path string, fset *token.FileSet, file *ast.File) error {
 	}
 	// #nosec G703 -- every caller passes a path joined from the project
 	// middleware directory and a constant filename, validated by
-	// requirePathUnderRoot where plan data is involved.
-	return os.WriteFile(path, formatted, 0o600)
+	// gghelper.PathUnderRoot where plan data is involved.
+	return os.WriteFile(path, []byte(formatted), 0o600)
 }
 
 func identName(ident *ast.Ident) string {

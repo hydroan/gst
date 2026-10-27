@@ -100,7 +100,7 @@ func (g *generator) registrationFiles() ([]File, error) {
 	dirs := slices.Sorted(maps.Keys(byDir))
 	var files []File
 	for _, dir := range dirs {
-		out := newGoFile(byDir[dir][0].GoPackageName())
+		out := newGoFile(byDir[dir][0].GoPackageName(), g.modulePath)
 		if dir == "." {
 			for _, below := range dirs {
 				if below != "." {
@@ -118,7 +118,7 @@ func (g *generator) registrationFiles() ([]File, error) {
 	if _, root := byDir["."]; !root {
 		// Nothing at the root: main.go imports the root package all the
 		// same, so it exists to import the packages below it.
-		out := newGoFile(ggconst.DirPB)
+		out := newGoFile(ggconst.DirPB, g.modulePath)
 		for _, dir := range dirs {
 			out.imports.blankImport(byDir[dir][0].GoImportPath())
 		}

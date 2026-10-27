@@ -4,6 +4,7 @@ import (
 	"golang.org/x/tools/go/ast/astutil"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 // RemoveModule unregisters a built-in framework module from module/module.go.
@@ -36,7 +37,11 @@ func RemoveModule(projectDir string, name string) (ChangeResult, error) {
 		return ChangeResult{}, errors.Newf("module %q is registered with a Register call that takes arguments; remove the call and its import from %s manually", name, path)
 	}
 	astutil.DeleteImport(fset, file, module.ImportPath)
-	if err := writeGoFile(path, fset, file); err != nil {
+	modulePath, err := gghelper.ModulePath(projectDir)
+	if err != nil {
+		return ChangeResult{}, err
+	}
+	if err := writeGoFile(path, fset, file, modulePath); err != nil {
 		return ChangeResult{}, err
 	}
 	return ChangeResult{Module: module, Status: ChangeRemoved, Path: path}, nil

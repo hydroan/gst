@@ -9,6 +9,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 func requireDir(path string) error {
@@ -98,33 +99,12 @@ func isGeneratedFile(path string) (bool, error) {
 	return false, nil
 }
 
-// requirePathUnderRoot returns path cleaned and verified to be under root (no path traversal).
-func requirePathUnderRoot(path, root string) (string, error) {
-	path = filepath.Clean(path)
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		return "", err
-	}
-	absRoot, err := filepath.Abs(root)
-	if err != nil {
-		return "", err
-	}
-	rel, err := filepath.Rel(absRoot, absPath)
-	if err != nil {
-		return "", err
-	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", errors.Newf("path %s is not under root %s", path, root)
-	}
-	return path, nil
-}
-
 // removeUnderRoot deletes path after checking that it lies under root, the
 // check every write goes through too, and returns the checked path. A file
 // that is already gone is no error but reports removed as false: the desired
 // state is absence, and a parallel cleanup must not fail the run.
 func removeUnderRoot(path, root string) (safePath string, removed bool, err error) {
-	safePath, err = requirePathUnderRoot(path, root)
+	safePath, err = gghelper.PathUnderRoot(path, root)
 	if err != nil {
 		return "", false, err
 	}

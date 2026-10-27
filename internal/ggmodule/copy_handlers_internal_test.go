@@ -637,7 +637,7 @@ func TestRemoveManagedFiles(t *testing.T) {
 	}
 
 	var reported []string
-	err := RemoveManagedFiles("middleware", []string{oldAuth, filepath.Join("middleware", "gone.go")}, func(status CopyWriteStatus, path string) {
+	err := RemoveManagedFiles("middleware", []string{oldAuth, filepath.Join("middleware", "gone.go")}, "tmpapp", func(status CopyWriteStatus, path string) {
 		reported = append(reported, string(status)+" "+path)
 	})
 	if err != nil {

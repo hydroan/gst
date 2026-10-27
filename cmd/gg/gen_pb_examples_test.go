@@ -35,10 +35,10 @@ var pbDocExamplePackages = []string{
 
 // TestPBDocExamplesComeFromTheGoldenFiles pins every indented code block in
 // the doc comments of pbDocExampleFuncs to the golden files and the model
-// sources behind them: each block, its lines trimmed and blank lines
-// dropped, must appear as a contiguous run of lines in one of them, so an
-// example that drifts from what the generator writes fails here instead of
-// misleading a reader.
+// sources behind them: each block, its lines trimmed, must appear as a
+// contiguous run of lines in one of them, blank lines included, so an example
+// that drifts from what the generator writes, down to the blank line between
+// two import groups, fails here instead of misleading a reader.
 func TestPBDocExamplesComeFromTheGoldenFiles(t *testing.T) {
 	golden := goldenFileLines(t, filepath.Join("testdata", "pb", "golden"))
 	fixture, err := os.ReadFile("gen_pb_test.go")
@@ -73,8 +73,8 @@ func TestPBDocExamplesComeFromTheGoldenFiles(t *testing.T) {
 	}
 }
 
-// goldenFileLines reads every file under dir into its trimmed, non-blank
-// lines, keyed by path.
+// goldenFileLines reads every file under dir into its trimmed lines (see
+// trimmedLines), keyed by path.
 func goldenFileLines(t *testing.T, dir string) map[string][]string {
 	t.Helper()
 	files := make(map[string][]string)
@@ -94,8 +94,8 @@ func goldenFileLines(t *testing.T, dir string) map[string][]string {
 }
 
 // docCodeBlocks returns the code blocks of a doc comment text, the runs of
-// tab-indented lines, each as its trimmed, non-blank lines. A blank line
-// inside a run keeps the run going, as it does inside a generated file.
+// tab-indented lines, each as its trimmed lines (see trimmedLines). A blank
+// line inside a run keeps the run going, as it does inside a generated file.
 func docCodeBlocks(text string) [][]string {
 	var blocks [][]string
 	var current []string
@@ -121,13 +121,19 @@ func docCodeBlocks(text string) [][]string {
 }
 
 // trimmedLines returns lines trimmed of surrounding whitespace, the blank
-// ones dropped.
+// lines at either end dropped and every run of blank lines inside kept as
+// one: "a", "", "", "b", "" gives "a", "", "b".
 func trimmedLines(lines []string) []string {
 	out := make([]string, 0, len(lines))
 	for _, line := range lines {
-		if trimmed := strings.TrimSpace(line); trimmed != "" {
-			out = append(out, trimmed)
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" && (len(out) == 0 || out[len(out)-1] == "") {
+			continue
 		}
+		out = append(out, trimmed)
+	}
+	if len(out) > 0 && out[len(out)-1] == "" {
+		out = out[:len(out)-1]
 	}
 	return out
 }

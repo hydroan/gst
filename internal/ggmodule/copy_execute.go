@@ -190,12 +190,12 @@ func (e *CopyExecution) pruneStaleFiles() error {
 		}
 	}
 	if len(staleMiddlewareFiles) > 0 {
-		if err := RemoveManagedFiles(e.Plan.TargetMiddlewareDir, staleMiddlewareFiles, e.recordPrune); err != nil {
+		if err := RemoveManagedFiles(e.Plan.TargetMiddlewareDir, staleMiddlewareFiles, e.Plan.ProjectModulePath, e.recordPrune); err != nil {
 			return err
 		}
 	}
 	if len(staleInterceptorFiles) > 0 {
-		if err := RemoveManagedFiles(e.Plan.TargetInterceptorDir, staleInterceptorFiles, e.recordPrune); err != nil {
+		if err := RemoveManagedFiles(e.Plan.TargetInterceptorDir, staleInterceptorFiles, e.Plan.ProjectModulePath, e.recordPrune); err != nil {
 			return err
 		}
 		if !e.Plan.ServesGRPC {
@@ -270,28 +270,28 @@ func (e *CopyExecution) recordPrune(status CopyWriteStatus, path string) {
 
 func (e *CopyExecution) write(file moduleCopyFile) error {
 	if file.Kind == moduleCopyFileService || file.Kind == moduleCopyFileHelper {
-		safePath, err := requirePathUnderRoot(file.TargetPath, e.Plan.ServiceDir)
+		safePath, err := gghelper.PathUnderRoot(file.TargetPath, e.Plan.ServiceDir)
 		if err != nil {
 			return err
 		}
 		file.TargetPath = safePath
 	}
 	if file.Kind == moduleCopyFileModel {
-		safePath, err := requirePathUnderRoot(file.TargetPath, e.Plan.ModelDir)
+		safePath, err := gghelper.PathUnderRoot(file.TargetPath, e.Plan.ModelDir)
 		if err != nil {
 			return err
 		}
 		file.TargetPath = safePath
 	}
 	if file.Kind == moduleCopyFileMiddleware {
-		safePath, err := requirePathUnderRoot(file.TargetPath, e.Plan.TargetMiddlewareDir)
+		safePath, err := gghelper.PathUnderRoot(file.TargetPath, e.Plan.TargetMiddlewareDir)
 		if err != nil {
 			return err
 		}
 		file.TargetPath = safePath
 	}
 	if file.Kind == moduleCopyFileInterceptor {
-		safePath, err := requirePathUnderRoot(file.TargetPath, e.Plan.TargetInterceptorDir)
+		safePath, err := gghelper.PathUnderRoot(file.TargetPath, e.Plan.TargetInterceptorDir)
 		if err != nil {
 			return err
 		}

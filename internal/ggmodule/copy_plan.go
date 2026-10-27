@@ -130,7 +130,7 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 		return nil, errors.Wrap(err, "gg module copy must run from the project root")
 	}
 
-	projectModule, err := gghelper.ModulePath()
+	projectModule, err := gghelper.ModulePath(".")
 	if err != nil {
 		return nil, err
 	}

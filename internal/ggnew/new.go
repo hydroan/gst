@@ -25,7 +25,7 @@ import (
 // first generation, so the generators build those with nothing to register
 // and gg gen later overwrites the same files; built by the same code, the
 // scaffold and the generated version cannot drift.
-func scaffoldFiles() (map[string]string, error) {
+func scaffoldFiles(modulePath string) (map[string]string, error) {
 	files := map[string]string{
 		"component/component.go":   componentContent,
 		"configx/configx.go":       configxContent,
@@ -38,16 +38,16 @@ func scaffoldFiles() (map[string]string, error) {
 		"provider/.gitkeep":        "",
 	}
 	var err error
-	if files["model/"+ggconst.FileModelGen], err = gggen.BuildModelFile(ggconst.PkgModel, nil); err != nil {
+	if files["model/"+ggconst.FileModelGen], err = gggen.BuildModelFile(modulePath, ggconst.PkgModel, nil); err != nil {
 		return nil, errors.Wrap(err, "build model/model.gen.go")
 	}
-	if files["model/"+ggconst.FileAPIDocGen], err = gggen.BuildAPIDocFile(ggconst.PkgModel, modelinfo.APIDocEntries{}); err != nil {
+	if files["model/"+ggconst.FileAPIDocGen], err = gggen.BuildAPIDocFile(modulePath, ggconst.PkgModel, modelinfo.APIDocEntries{}); err != nil {
 		return nil, errors.Wrap(err, "build model/apidoc.gen.go")
 	}
-	if files["service/"+ggconst.FileServiceGen], err = gggen.BuildServiceFile(ggconst.PkgService, nil); err != nil {
+	if files["service/"+ggconst.FileServiceGen], err = gggen.BuildServiceFile(modulePath, ggconst.PkgService, nil); err != nil {
 		return nil, errors.Wrap(err, "build service/service.gen.go")
 	}
-	if files["router/"+ggconst.FileRouterGen], err = gggen.BuildRouterFile(ggconst.PkgRouter, "", nil); err != nil {
+	if files["router/"+ggconst.FileRouterGen], err = gggen.BuildRouterFile(modulePath, ggconst.PkgRouter, "", nil); err != nil {
 		return nil, errors.Wrap(err, "build router/router.gen.go")
 	}
 	return files, nil
@@ -66,7 +66,7 @@ type ProjectFile struct {
 // created under; its last element names the application in the example
 // configuration, as sampleapp does for example.com/sampleapp.
 func ProjectFiles(projectName string) ([]ProjectFile, error) {
-	scaffold, err := scaffoldFiles()
+	scaffold, err := scaffoldFiles(projectName)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +97,11 @@ func ProjectFiles(projectName string) ([]ProjectFile, error) {
 // working directory, among them the empty first versions of the files gg gen
 // owns, and returns the paths it created, sorted.
 func EnsureFileExists() ([]string, error) {
-	scaffold, err := scaffoldFiles()
+	modulePath, err := gghelper.ModulePath(".")
+	if err != nil {
+		return nil, err
+	}
+	scaffold, err := scaffoldFiles(modulePath)
 	if err != nil {
 		return nil, err
 	}

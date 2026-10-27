@@ -86,10 +86,11 @@ func (c *Creator) CreateAfter(ctx *gst.ServiceContext, req *copytest.CopyTest) e
 `)
 
 	got, err := mergeModuleServiceSource(moduleServiceMergeInput{
-		SourcePath: "action.go",
-		Source:     source,
-		TargetPath: "service/copytest/action.go",
-		Target:     target,
+		ProjectModulePath: "tmpapp",
+		SourcePath:        "action.go",
+		Source:            source,
+		TargetPath:        "service/copytest/action.go",
+		Target:            target,
 		Rewrite: moduleCopyRewriteConfig{
 			ModuleName:        "copytest",
 			ProjectModulePath: "tmpapp",
@@ -193,10 +194,11 @@ func (c *Creator) Create(ctx *gst.ServiceContext, req *copytest.ActionReq) (rsp 
 `)
 
 	got, err := mergeModuleServiceSource(moduleServiceMergeInput{
-		SourcePath: "action.go",
-		Source:     source,
-		TargetPath: "service/copytest/action.go",
-		Target:     target,
+		ProjectModulePath: "tmpapp",
+		SourcePath:        "action.go",
+		Source:            source,
+		TargetPath:        "service/copytest/action.go",
+		Target:            target,
 		Rewrite: moduleCopyRewriteConfig{
 			ModuleName:        "copytest",
 			ProjectModulePath: "tmpapp",
@@ -264,10 +266,11 @@ func (l *Lister) List(ctx *gst.ServiceContext, req *copytest.CopyTest) (rsp *cop
 `)
 
 	got, err := mergeModuleServiceSource(moduleServiceMergeInput{
-		SourcePath: "list.go",
-		Source:     source,
-		TargetPath: "service/copytest/list.go",
-		Target:     target,
+		ProjectModulePath: "tmpapp",
+		SourcePath:        "list.go",
+		Source:            source,
+		TargetPath:        "service/copytest/list.go",
+		Target:            target,
 		Rewrite: moduleCopyRewriteConfig{
 			ModuleName:        "copytest",
 			ProjectModulePath: "tmpapp",
@@ -337,10 +340,11 @@ func (b *Binding) ListAfter(ctx *gst.ServiceContext, bindings *[]*copytest.Bindi
 `)
 
 	got, err := mergeModuleServiceSource(moduleServiceMergeInput{
-		SourcePath: "binding.go",
-		Source:     source,
-		TargetPath: "service/copytest/binding.go",
-		Target:     target,
+		ProjectModulePath: "tmpapp",
+		SourcePath:        "binding.go",
+		Source:            source,
+		TargetPath:        "service/copytest/binding.go",
+		Target:            target,
 		Rewrite: moduleCopyRewriteConfig{
 			ModuleName:        "copytest",
 			ProjectModulePath: "tmpapp",
@@ -403,10 +407,11 @@ func (b *Binding) ListAfter(ctx *gst.ServiceContext, bindings *[]*copytest.Bindi
 `)
 
 	got, err := mergeModuleServiceSource(moduleServiceMergeInput{
-		SourcePath: "binding.go",
-		Source:     source,
-		TargetPath: "service/copytest/binding.go",
-		Target:     target,
+		ProjectModulePath: "tmpapp",
+		SourcePath:        "binding.go",
+		Source:            source,
+		TargetPath:        "service/copytest/binding.go",
+		Target:            target,
 		Rewrite: moduleCopyRewriteConfig{
 			ModuleName:        "copytest",
 			ProjectModulePath: "tmpapp",
@@ -466,10 +471,11 @@ func (b *Binding) ListAfter(ctx *gst.ServiceContext, bindings *[]*copytest.Bindi
 `)
 
 	_, err := mergeModuleServiceSource(moduleServiceMergeInput{
-		SourcePath: "binding.go",
-		Source:     source,
-		TargetPath: "service/copytest/binding.go",
-		Target:     target,
+		ProjectModulePath: "tmpapp",
+		SourcePath:        "binding.go",
+		Source:            source,
+		TargetPath:        "service/copytest/binding.go",
+		Target:            target,
 		Rewrite: moduleCopyRewriteConfig{
 			ModuleName:        "copytest",
 			ProjectModulePath: "tmpapp",
@@ -527,10 +533,11 @@ func (c *Creator) Create(ctx *gst.ServiceContext, req *copytest.CopyTest) (rsp *
 `)
 
 	_, err := mergeModuleServiceSource(moduleServiceMergeInput{
-		SourcePath: "create.go",
-		Source:     source,
-		TargetPath: "service/copytest/create.go",
-		Target:     target,
+		ProjectModulePath: "tmpapp",
+		SourcePath:        "create.go",
+		Source:            source,
+		TargetPath:        "service/copytest/create.go",
+		Target:            target,
 		Rewrite: moduleCopyRewriteConfig{
 			ModuleName:        "copytest",
 			ProjectModulePath: "tmpapp",
@@ -590,10 +597,11 @@ func (c *Creator) Create(ctx *gst.ServiceContext, req *copytest.CopyTest) (rsp *
 `)
 
 	got, err := mergeModuleServiceSource(moduleServiceMergeInput{
-		SourcePath: "create.go",
-		Source:     source,
-		TargetPath: "service/copytest/create.go",
-		Target:     target,
+		ProjectModulePath: "tmpapp",
+		SourcePath:        "create.go",
+		Source:            source,
+		TargetPath:        "service/copytest/create.go",
+		Target:            target,
 		Rewrite: moduleCopyRewriteConfig{
 			ModuleName:        "copytest",
 			ProjectModulePath: "tmpapp",
@@ -798,7 +806,7 @@ func TestGenerateTargetServiceShellCarriesNoHookPlaceholders(t *testing.T) {
 		Action:     action,
 		TargetPath: filepath.Join("service", "copytest", "create.go"),
 		ModelInfo:  modelInfo,
-	}})
+	}}, "tmpapp")
 	if err != nil {
 		t.Fatalf("generateTargetServiceShell() error = %v", err)
 	}
@@ -811,5 +819,60 @@ func TestGenerateTargetServiceShellCarriesNoHookPlaceholders(t *testing.T) {
 		if strings.Contains(string(shell), placeholder) {
 			t.Fatalf("the shell must carry no %s placeholder:\n%s", placeholder, shell)
 		}
+	}
+}
+
+// TestFindServiceStructNameRecognizesTheFrameworkServiceBase finds the
+// service struct the way the framework recognizes its service base: under an
+// aliased import of the framework's service package, and never for another
+// package named service or a base without its three type arguments.
+func TestFindServiceStructNameRecognizesTheFrameworkServiceBase(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "aliased import",
+			src: `package sample
+
+import svc "github.com/hydroan/gst/service"
+
+type Creator struct {
+	svc.Base[*model.Record, *model.Record, *model.Record]
+}`,
+			want: "Creator",
+		},
+		{
+			name: "another package named service",
+			src: `package sample
+
+import "example.com/app/service"
+
+type Creator struct {
+	service.Base[*model.Record, *model.Record, *model.Record]
+}`,
+		},
+		{
+			name: "one type argument",
+			src: `package sample
+
+import "github.com/hydroan/gst/service"
+
+type Creator struct {
+	service.Base[*model.Record]
+}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			file, err := parser.ParseFile(token.NewFileSet(), "sample.go", tt.src, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := findServiceStructName(file); got != tt.want {
+				t.Errorf("findServiceStructName() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

@@ -32,6 +32,7 @@ import (
 // files serving them and the registration files.
 type generator struct {
 	*pbschema.Schema
+	modulePath string // the project's, which the Go files are printed for
 }
 
 // File is one generated file under pb/: a .proto definition, the Go file
@@ -162,7 +163,7 @@ func Generate(cfg pbschema.Config) ([]File, error) {
 	if err != nil || len(schema.Files) == 0 {
 		return nil, err
 	}
-	g := &generator{Schema: schema}
+	g := &generator{Schema: schema, modulePath: cfg.ModulePath}
 	files, err := g.print()
 	if err != nil {
 		return nil, err

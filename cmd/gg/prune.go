@@ -48,7 +48,7 @@ var pruneCmd = &cobra.Command{
 func pruneRun() error {
 	if len(module) == 0 {
 		var err error
-		module, err = gghelper.ModulePath()
+		module, err = gghelper.ModulePath(".")
 		if err != nil {
 			return err
 		}
@@ -338,7 +338,7 @@ func deleteLeftovers(disabledFiles []string, orphans []ggprune.OrphanDir, orphan
 	ggprune.RemoveFiles(disabledFiles, report)
 	disabledKept := len(kept) > 0
 	if len(orphanHandlers) > 0 {
-		if err := cleanOrphanModuleFiles(orphanHandlers); err != nil {
+		if err := cleanOrphanModuleFiles(orphanHandlers, module); err != nil {
 			clioutput.Error("", "Failed to delete orphan module middleware or interceptor files, so orphan service directories are kept: %v", err)
 			orphans = nil
 			errs = append(errs, err)
@@ -434,7 +434,7 @@ func reportOrphanModuleFiles(orphans []ggmodule.OrphanManagedFile) {
 // cleanOrphanModuleFiles deletes the orphan middleware and interceptor files
 // and their register calls, directory by directory, printing each file it
 // changes.
-func cleanOrphanModuleFiles(orphans []ggmodule.OrphanManagedFile) error {
+func cleanOrphanModuleFiles(orphans []ggmodule.OrphanManagedFile, modulePath string) error {
 	for _, dir := range []string{ggconst.DirMiddleware, ggconst.DirInterceptor} {
 		var files []string
 		for _, orphan := range orphans {
@@ -445,7 +445,7 @@ func cleanOrphanModuleFiles(orphans []ggmodule.OrphanManagedFile) error {
 		if len(files) == 0 {
 			continue
 		}
-		err := ggmodule.RemoveManagedFiles(dir, files, func(status ggmodule.CopyWriteStatus, path string) {
+		err := ggmodule.RemoveManagedFiles(dir, files, modulePath, func(status ggmodule.CopyWriteStatus, path string) {
 			if status == ggmodule.CopyWriteDelete {
 				clioutput.Success("", "Deleted %s", path)
 				return

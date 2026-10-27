@@ -32,7 +32,7 @@ func TestParseModelRoutesReadsTheRuntimeMethodOfEveryPhase(t *testing.T) {
 		stmts = append(stmts, gggen.StmtRouterRegister("model", "Sample", "*Sample", "*Sample", "model", "Auth", path, "", phase.Name()))
 		want[path] = phase.HTTPMethod()
 	}
-	code, err := gggen.BuildRouterFile("router", "model", map[string]string{"tmpapp/model": ""}, stmts...)
+	code, err := gggen.BuildRouterFile("tmpapp", "router", "model", map[string]string{"tmpapp/model": ""}, stmts...)
 	require.NoError(t, err)
 	routerFile := filepath.Join(t.TempDir(), ggconst.FileRouterGen)
 	require.NoError(t, os.WriteFile(routerFile, []byte(code), 0o600))

@@ -13,6 +13,7 @@ import (
 
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen"
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
 )
 
@@ -195,13 +196,14 @@ type goDecl struct {
 
 // goFile is one generated Go file being assembled.
 type goFile struct {
-	pkgName string
-	imports *goImports
-	decls   []*goDecl
+	pkgName    string
+	modulePath string
+	imports    *goImports
+	decls      []*goDecl
 }
 
-func newGoFile(pkgName string) *goFile {
-	return &goFile{pkgName: pkgName, imports: newGoImports()}
+func newGoFile(pkgName, modulePath string) *goFile {
+	return &goFile{pkgName: pkgName, modulePath: modulePath, imports: newGoImports()}
 }
 
 // add appends a declaration under doc, wrapped into comment lines, laid
@@ -252,7 +254,7 @@ func (f *goFile) source() (string, error) {
 		skipLines(lines, printed.Len()/lineSetWidth+2)
 		file.Decls = append(file.Decls, d.decl)
 	}
-	return gggen.FormatNodeExtraWithFileSet(file, fset)
+	return gghelper.FormatNodeExtraWithFileSet(file, fset, f.modulePath)
 }
 
 // lineSetWidth is the width of a line of a goast.LineSet in bytes, the

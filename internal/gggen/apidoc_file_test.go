@@ -46,7 +46,7 @@ func TestBuildAPIDocFile(t *testing.T) {
 		},
 	}
 
-	code, err := gggen.BuildAPIDocFile("model", entries)
+	code, err := gggen.BuildAPIDocFile("example.com/proj", "model", entries)
 	if err != nil {
 		t.Fatalf("BuildAPIDocFile() error = %v", err)
 	}
@@ -73,7 +73,7 @@ func TestBuildAPIDocFile(t *testing.T) {
 // TestBuildAPIDocFileRegistersStructsAndEnums compares the whole file
 // BuildAPIDocFile generates for the example of its doc comment.
 func TestBuildAPIDocFileRegistersStructsAndEnums(t *testing.T) {
-	code, err := gggen.BuildAPIDocFile("model", modelinfo.APIDocEntries{
+	code, err := gggen.BuildAPIDocFile("helloworld", "model", modelinfo.APIDocEntries{
 		Structs: []modelinfo.StructDocEntry{{
 			PkgPath:  "helloworld/model",
 			TypeName: "User",
@@ -127,7 +127,7 @@ func init() {
 // TestBuildAPIDocFileWithoutEntries compares the whole file BuildAPIDocFile
 // generates when the models document nothing: an empty init and no import.
 func TestBuildAPIDocFileWithoutEntries(t *testing.T) {
-	code, err := gggen.BuildAPIDocFile("model", modelinfo.APIDocEntries{})
+	code, err := gggen.BuildAPIDocFile("helloworld", "model", modelinfo.APIDocEntries{})
 	if err != nil {
 		t.Fatalf("BuildAPIDocFile() error = %v", err)
 	}

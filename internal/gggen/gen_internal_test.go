@@ -6,6 +6,7 @@ import (
 
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/dsl"
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/modelinfo"
 	"github.com/kr/pretty"
 )
@@ -55,7 +56,7 @@ func TestGenServiceMethod1(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := FormatNode(genServiceMethod1(tt.info, tt.info.ModelPkgName, nil, tt.phase, tt.phase.RoleName()))
+			got, err := gghelper.FormatNode(genServiceMethod1(tt.info, tt.info.ModelPkgName, nil, tt.phase, tt.phase.RoleName()))
 			if err != nil {
 				t.Error(err)
 				return
@@ -95,7 +96,7 @@ func TestGenServiceMethod2(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := FormatNode(genServiceMethod2(tt.info, tt.info.ModelPkgName, nil, tt.phase, tt.phase.RoleName()))
+			got, err := gghelper.FormatNode(genServiceMethod2(tt.info, tt.info.ModelPkgName, nil, tt.phase, tt.phase.RoleName()))
 			if err != nil {
 				t.Error(err)
 				return
@@ -135,7 +136,7 @@ func TestGenServiceMethod3(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := FormatNode(genServiceMethod3(tt.info, tt.info.ModelPkgName, nil, tt.phase, tt.phase.RoleName()))
+			got, err := gghelper.FormatNode(genServiceMethod3(tt.info, tt.info.ModelPkgName, nil, tt.phase, tt.phase.RoleName()))
 			if err != nil {
 				t.Error(err)
 				return
@@ -220,7 +221,7 @@ func TestGenServiceMethod4(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			res := genServiceMethod4(tt.info, tt.info.ModelPkgName, nil, tt.reqName, tt.rspName, tt.phase, tt.phase.RoleName())
-			got, err := FormatNode(res)
+			got, err := gghelper.FormatNode(res)
 			if err != nil {
 				t.Error(err)
 				return
@@ -260,7 +261,7 @@ func TestGenServiceMethod5(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := FormatNode(genServiceMethod5(tt.info, tt.info.ModelPkgName, nil, tt.phase, tt.phase.RoleName()))
+			got, err := gghelper.FormatNode(genServiceMethod5(tt.info, tt.info.ModelPkgName, nil, tt.phase, tt.phase.RoleName()))
 			if err != nil {
 				t.Error(err)
 				return
@@ -300,7 +301,7 @@ func TestGenServiceMethod6(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := FormatNode(genServiceMethod6(tt.info, tt.info.ModelPkgName, nil, tt.phase, tt.phase.RoleName()))
+			got, err := gghelper.FormatNode(genServiceMethod6(tt.info, tt.info.ModelPkgName, nil, tt.phase, tt.phase.RoleName()))
 			if err != nil {
 				t.Error(err)
 				return
@@ -340,7 +341,7 @@ func TestGenServiceMethod7(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := FormatNode(genServiceMethod7(tt.info, nil, tt.phase, tt.phase.RoleName()))
+			got, err := gghelper.FormatNode(genServiceMethod7(tt.info, nil, tt.phase, tt.phase.RoleName()))
 			if err != nil {
 				t.Error(err)
 				return
@@ -422,7 +423,7 @@ func TestGenServiceMethod8(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := FormatNode(genServiceMethod8(tt.info, tt.info.ModelPkgName, tt.action, tt.phase, tt.role))
+			got, err := gghelper.FormatNode(genServiceMethod8(tt.info, tt.info.ModelPkgName, tt.action, tt.phase, tt.role))
 			if err != nil {
 				t.Error(err)
 				return
@@ -468,7 +469,7 @@ func TestGenServiceMethod9(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			info := *feed
 			info.ModelVarName = strings.ToLower(tt.action.RoleName()[:1])
-			got, err := FormatNode(genServiceMethod9(&info, "model", tt.action, consts.Stream, tt.action.RoleName()))
+			got, err := gghelper.FormatNode(genServiceMethod9(&info, "model", tt.action, consts.Stream, tt.action.RoleName()))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -502,7 +503,7 @@ func TestGenerateServiceCreate(t *testing.T) {
 	if file == nil {
 		t.Fatal("GenerateService returned nil")
 	}
-	got, err := FormatNodeExtra(file)
+	got, err := gghelper.FormatNodeExtra(file, "helloworld")
 	if err != nil {
 		t.Fatalf("format generated service failed: %v", err)
 	}
@@ -569,7 +570,7 @@ func TestGenerateServiceShellOmitsTheHookPlaceholders(t *testing.T) {
 	if file == nil {
 		t.Fatal("GenerateServiceShell returned nil")
 	}
-	got, err := FormatNodeExtra(file)
+	got, err := gghelper.FormatNodeExtra(file, "helloworld")
 	if err != nil {
 		t.Fatalf("format generated service failed: %v", err)
 	}
@@ -622,7 +623,7 @@ func TestGenerateServiceList(t *testing.T) {
 	if file == nil {
 		t.Fatal("GenerateService returned nil")
 	}
-	got, err := FormatNodeExtra(file)
+	got, err := gghelper.FormatNodeExtra(file, "helloworld")
 	if err != nil {
 		t.Fatalf("format generated service failed: %v", err)
 	}
@@ -724,7 +725,7 @@ func TestGenerateServiceListEmptyPayload(t *testing.T) {
 			if file == nil {
 				t.Fatal("GenerateService returned nil")
 			}
-			got, err := FormatNodeExtra(file)
+			got, err := gghelper.FormatNodeExtra(file, "helloworld")
 			if err != nil {
 				t.Fatalf("format generated service failed: %v", err)
 			}
@@ -770,7 +771,7 @@ func TestGenerateServiceExport(t *testing.T) {
 		if file == nil {
 			t.Fatal("GenerateService returned nil")
 		}
-		got, err := FormatNodeExtra(file)
+		got, err := gghelper.FormatNodeExtra(file, "helloworld")
 		if err != nil {
 			t.Fatalf("format generated service failed: %v", err)
 		}
@@ -792,7 +793,7 @@ func TestGenerateServiceExport(t *testing.T) {
 		if file == nil {
 			t.Fatal("GenerateService returned nil")
 		}
-		got, err := FormatNodeExtra(file)
+		got, err := gghelper.FormatNodeExtra(file, "helloworld")
 		if err != nil {
 			t.Fatalf("format generated service failed: %v", err)
 		}
@@ -828,7 +829,7 @@ func TestGenerateServiceSSE(t *testing.T) {
 	if file == nil {
 		t.Fatal("GenerateService returned nil")
 	}
-	got, err := FormatNodeExtra(file)
+	got, err := gghelper.FormatNodeExtra(file, "helloworld")
 	if err != nil {
 		t.Fatalf("format generated service failed: %v", err)
 	}
@@ -866,7 +867,7 @@ func TestGenerateServiceStream(t *testing.T) {
 	if file == nil {
 		t.Fatal("GenerateService returned nil")
 	}
-	got, err := FormatNodeExtra(file)
+	got, err := gghelper.FormatNodeExtra(file, "helloworld")
 	if err != nil {
 		t.Fatalf("format generated service failed: %v", err)
 	}

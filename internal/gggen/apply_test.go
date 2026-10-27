@@ -11,6 +11,7 @@ import (
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen"
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/modelinfo"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
@@ -690,7 +691,7 @@ func (s *Archive) Create(ctx *gst.ServiceContext, req *sample.RecordReq) (rsp *s
 				return
 			}
 			require.NoError(t, err)
-			got, err := gggen.FormatNodeExtra(file)
+			got, err := gghelper.FormatNodeExtra(file, "helloworld")
 			if err != nil {
 				t.Error(err)
 				return
@@ -736,7 +737,7 @@ func (w *Watch) Stream(ctx *gst.ServiceContext, req *model.FeedWatchReq, stream 
 	changed, err := gggen.ApplyServiceFile(file, action, "feed")
 	require.NoError(t, err)
 	require.True(t, changed)
-	got, err := gggen.FormatNodeExtraWithFileSet(file, fset)
+	got, err := gghelper.FormatNodeExtraWithFileSet(file, fset, "helloworld")
 	require.NoError(t, err)
 	require.Contains(t, got, "service.Base[*model.Feed, *model.FeedEvent, *model.FeedEvent]")
 	require.Contains(t, got, "func (w *Watch) Stream(ctx *gst.ServiceContext, stream *grpc.BidiStream[*model.FeedEvent, *model.FeedEvent]) (err error) {\n\tlog := w.WithContext(ctx, ctx.Phase())\n\tlog.Info(\"feed: watch\")\n\n\treturn nil\n}")
@@ -802,7 +803,7 @@ func (w *Watch) Stream(ctx *gst.ServiceContext, r *model.FeedWatchReq, s *grpc.S
 	changed, err := gggen.ApplyServiceFile(file, action, "feed")
 	require.NoError(t, err)
 	require.True(t, changed)
-	got, err := gggen.FormatNodeExtraWithFileSet(file, fset)
+	got, err := gghelper.FormatNodeExtraWithFileSet(file, fset, "helloworld")
 	require.NoError(t, err)
 	require.Contains(t, got, "func (w *Watch) Stream(ctx *gst.ServiceContext, r *model.FeedWatchReq, s *grpc.ServerStream[*model.FeedTick]) error {\n\treturn s.Send(nil)\n}")
 }
@@ -961,7 +962,7 @@ func (g *Lister) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *group.Gro
 				t.Fatal(err)
 			}
 
-			got, err := gggen.FormatNodeExtraWithFileSet(file, fset)
+			got, err := gghelper.FormatNodeExtraWithFileSet(file, fset, "helloworld")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1730,7 +1731,7 @@ func (u *Creator) Create(ctx *gstfw.ServiceContext, req *model_gst.UserReq) (rsp
 			case tt.wantErr == "" && err != nil:
 				t.Fatalf("ApplyServiceFileWithModelSync() error = %v", err)
 			}
-			got, err := gggen.FormatNodeExtra(file)
+			got, err := gghelper.FormatNodeExtra(file, "helloworld")
 			if err != nil {
 				t.Error(err)
 				return
@@ -1992,7 +1993,7 @@ func (c *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.U
 				t.Errorf("ApplyServiceFileWithModelSync changed = %v, want %v", changed, tt.wantChanged)
 			}
 
-			got, err := gggen.FormatNodeExtra(file)
+			got, err := gghelper.FormatNodeExtra(file, "helloworld")
 			if err != nil {
 				t.Fatal(err)
 			}

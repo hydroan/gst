@@ -80,7 +80,7 @@ var hookMethods = func() map[string]bool {
 // another package or an interface, whose method bodies the checker cannot
 // see.
 func checkErrorDiscipline(ignore gghelper.ProjectIgnore) []string {
-	modulePath, err := gghelper.ModulePath()
+	modulePath, err := gghelper.ModulePath(".")
 	if err != nil {
 		return []string{fmt.Sprintf("reading the module path: %v", err)}
 	}

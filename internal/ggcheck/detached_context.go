@@ -59,7 +59,7 @@ var DetachedContext = Check{
 // Code of copyable framework modules under the service directory is skipped:
 // it is checked inside the framework.
 func checkDetachedContext(ignore gghelper.ProjectIgnore) []string {
-	modulePath, err := gghelper.ModulePath()
+	modulePath, err := gghelper.ModulePath(".")
 	if err != nil {
 		return []string{fmt.Sprintf("reading the module path: %v", err)}
 	}

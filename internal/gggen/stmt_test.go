@@ -10,6 +10,7 @@ import (
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/gggen"
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 func TestStmtLogInfo(t *testing.T) {
@@ -56,7 +57,7 @@ func TestEmptyLine(t *testing.T) {
 			gggen.Returns(ast.NewIdent("nil")),
 		}},
 	}
-	got, err := gggen.FormatNode(fn)
+	got, err := gghelper.FormatNode(fn)
 	if err != nil {
 		t.Fatalf("FormatNode() error = %v", err)
 	}
@@ -102,7 +103,7 @@ func TestReturns(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			res := gggen.Returns(tt.exprs...)
-			got, err := gggen.FormatNode(res)
+			got, err := gghelper.FormatNode(res)
 			if err != nil {
 				t.Error(err)
 				return
@@ -134,7 +135,7 @@ func TestStmtLogWithContext(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			res := gggen.StmtLogWithContext(tt.modelVarName)
-			got, err := gggen.FormatNode(res)
+			got, err := gghelper.FormatNode(res)
 			if err != nil {
 				t.Error(err)
 				return
@@ -207,7 +208,7 @@ func TestStmtServiceRegister(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			res := gggen.StmtServiceRegister(tt.structName, tt.phase, tt.route)
-			got, err := gggen.FormatNode(res)
+			got, err := gghelper.FormatNode(res)
 			if err != nil {
 				t.Error(err)
 				return
@@ -331,7 +332,7 @@ func TestStmtRouterRegister(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			res := gggen.StmtRouterRegister(tt.modelPkgName, tt.modelName, tt.reqName, tt.rspName, tt.gstModelPkg, tt.routerGroup, tt.route, tt.paramName, tt.phase)
-			got, err := gggen.FormatNode(res)
+			got, err := gghelper.FormatNode(res)
 			if err != nil {
 				t.Error(err)
 				return

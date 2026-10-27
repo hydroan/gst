@@ -2,8 +2,9 @@
 // project gg runs in: the module path its go.mod declares, the paths gg leaves
 // out of it, the ones its Git ignore rules exclude and the ones the go command
 // leaves out, programs and package listings run against its module, and the
-// small file and path helpers the commands share. Code a single package uses
-// stays in that package.
+// small file and path helpers the commands share. It also holds the printing
+// path of the Go code gg generates (see FormatNodeExtraWithFileSet). Code a
+// single package uses stays in that package.
 package gghelper
 
 import (
@@ -18,12 +19,13 @@ import (
 	"golang.org/x/mod/modfile"
 )
 
-// ModulePath returns the module path the go.mod of the working directory
-// declares: example.com/app for a go.mod starting with module example.com/app,
-// and for one whose module directive carries the deprecation comment go
-// documents or a quoted path, both of which go itself accepts.
-func ModulePath() (string, error) {
-	content, err := os.ReadFile("go.mod")
+// ModulePath returns the module path the go.mod in dir declares:
+// example.com/app for a go.mod starting with module example.com/app, and for
+// one whose module directive carries the deprecation comment go documents or
+// a quoted path, both of which go itself accepts. gg runs in the project, so
+// its commands pass ".".
+func ModulePath(dir string) (string, error) {
+	content, err := os.ReadFile(filepath.Join(dir, "go.mod"))
 	if err != nil {
 		return "", errors.Wrap(err, "failed to read go.mod")
 	}

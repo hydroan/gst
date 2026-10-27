@@ -235,7 +235,7 @@ func scanModels(ignore gghelper.ProjectIgnore) (modelinfo.ScannedModels, error) 
 	if err != nil {
 		return modelinfo.ScannedModels{}, errors.Wrap(err, "loading gst.yaml")
 	}
-	modulePath, err := gghelper.ModulePath()
+	modulePath, err := gghelper.ModulePath(".")
 	if err != nil {
 		return modelinfo.ScannedModels{}, errors.Wrap(err, "reading the module path")
 	}

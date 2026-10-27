@@ -166,16 +166,17 @@ func (p *CopyPlan) addServiceFiles(helperFiles []string) error {
 		if err != nil {
 			return err
 		}
-		target, err := generateTargetServiceShell(actions)
+		target, err := generateTargetServiceShell(actions, p.ProjectModulePath)
 		if err != nil {
 			return err
 		}
 		content, err := mergeModuleServiceSource(moduleServiceMergeInput{
-			SourcePath: first.SourcePath,
-			Source:     source,
-			TargetPath: first.TargetPath,
-			Target:     target,
-			Rewrite:    p.rewriteConfig(first.TargetPath),
+			ProjectModulePath: p.ProjectModulePath,
+			SourcePath:        first.SourcePath,
+			Source:            source,
+			TargetPath:        first.TargetPath,
+			Target:            target,
+			Rewrite:           p.rewriteConfig(first.TargetPath),
 		})
 		if err != nil {
 			return err

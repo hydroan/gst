@@ -194,7 +194,7 @@ func applyServiceFile(file *ast.File, action *dsl.Action, servicePkgName, correc
 			for _, spec := range genDecl.Specs {
 				if typeSpec, ok := spec.(*ast.TypeSpec); ok {
 					if isServiceType(file, typeSpec) {
-						if applyServiceType(typeSpec, action, correctModelName) {
+						if applyServiceType(file, typeSpec, action, correctModelName) {
 							changed = true
 						}
 					}
@@ -472,8 +472,9 @@ func applyTypeRef(expr ast.Expr, targetPkg, actionType string) (ast.Expr, bool) 
 // into:          type Creator struct { service.Base[*model.User, *model.UserReq, *model.UserRsp] }
 // transcribing the declared form of the action's Payload/Result. When
 // correctModelName is provided, it also corrects the first generic parameter
-// to the current model.
-func applyServiceType(spec *ast.TypeSpec, action *dsl.Action, correctModelName ...string) bool {
+// to the current model. file is the file declaring spec, whose imports name
+// the framework's service package (see goast.IsServiceBase).
+func applyServiceType(file *ast.File, spec *ast.TypeSpec, action *dsl.Action, correctModelName ...string) bool {
 	if spec == nil || action == nil {
 		return false
 	}
@@ -485,41 +486,32 @@ func applyServiceType(spec *ast.TypeSpec, action *dsl.Action, correctModelName .
 	var changed bool
 
 	for _, field := range structType.Fields.List {
-		if len(field.Names) == 0 { // Embedded field
-			indexListExpr, ok := field.Type.(*ast.IndexListExpr)
-			if !ok {
-				continue
+		indexListExpr, ok := field.Type.(*ast.IndexListExpr)
+		if !ok || !goast.IsServiceBase(file, field) {
+			continue
+		}
+		if len(correctModelName) > 0 && correctModelName[0] != "" {
+			if changed1 := applyServiceTypeParam(indexListExpr, 0, "", "*"+correctModelName[0]); changed1 {
+				changed = true
 			}
-			// ensure service.Base
-			if sel, ok := indexListExpr.X.(*ast.SelectorExpr); ok {
-				if pkgIdent, ok := sel.X.(*ast.Ident); ok && pkgIdent.Name == "service" && sel.Sel.Name == "Base" {
-					if len(indexListExpr.Indices) == 3 {
-						if len(correctModelName) > 0 && correctModelName[0] != "" {
-							if changed1 := applyServiceTypeParam(indexListExpr, 0, "", "*"+correctModelName[0]); changed1 {
-								changed = true
-							}
-						}
-						// The first generic parameter always references the
-						// business model package, so it provides the target
-						// qualifier for the payload and result parameters.
-						modelPkg := goast.TypeQualifier(indexListExpr.Indices[0])
-						// Handle second parameter (Payload)
-						if action.Payload != "" {
-							targetPkg, targetType := payloadTypeTarget(action.Payload, modelPkg)
-							if changed2 := applyServiceTypeParam(indexListExpr, 1, targetPkg, targetType); changed2 {
-								changed = true
-							}
-						}
-						// Handle third parameter (Result), resolving the
-						// dsl.PayloadEmpty sentinel the same way as Payload.
-						if action.Result != "" {
-							targetPkg, targetType := payloadTypeTarget(action.Result, modelPkg)
-							if changed3 := applyServiceTypeParam(indexListExpr, 2, targetPkg, targetType); changed3 {
-								changed = true
-							}
-						}
-					}
-				}
+		}
+		// The first generic parameter always references the
+		// business model package, so it provides the target
+		// qualifier for the payload and result parameters.
+		modelPkg := goast.TypeQualifier(indexListExpr.Indices[0])
+		// Handle second parameter (Payload)
+		if action.Payload != "" {
+			targetPkg, targetType := payloadTypeTarget(action.Payload, modelPkg)
+			if changed2 := applyServiceTypeParam(indexListExpr, 1, targetPkg, targetType); changed2 {
+				changed = true
+			}
+		}
+		// Handle third parameter (Result), resolving the
+		// dsl.PayloadEmpty sentinel the same way as Payload.
+		if action.Result != "" {
+			targetPkg, targetType := payloadTypeTarget(action.Result, modelPkg)
+			if changed3 := applyServiceTypeParam(indexListExpr, 2, targetPkg, targetType); changed3 {
+				changed = true
 			}
 		}
 	}
@@ -910,22 +902,8 @@ func serviceModelPackageName(file *ast.File) string {
 			}
 
 			for _, field := range structType.Fields.List {
-				if len(field.Names) != 0 {
-					continue
-				}
 				indexListExpr, ok := field.Type.(*ast.IndexListExpr)
-				if !ok {
-					continue
-				}
-				sel, ok := indexListExpr.X.(*ast.SelectorExpr)
-				if !ok {
-					continue
-				}
-				pkgIdent, ok := sel.X.(*ast.Ident)
-				if !ok || pkgIdent.Name != "service" || sel.Sel == nil || sel.Sel.Name != "Base" {
-					continue
-				}
-				if len(indexListExpr.Indices) != 3 {
+				if !ok || !goast.IsServiceBase(file, field) {
 					continue
 				}
 

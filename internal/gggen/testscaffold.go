@@ -84,8 +84,9 @@ var serviceStreamTestDoc = []string{
 //	package record_test
 //
 //	import (
-//		"helloworld/model"
 //		"testing"
+//
+//		"helloworld/model"
 //
 //		"github.com/hydroan/gst/client"
 //		"github.com/hydroan/gst/testutil"
@@ -184,7 +185,7 @@ func GenerateServiceTest(info *modelinfo.Model, target modelinfo.ServiceTargetIn
 			},
 		},
 	}
-	return FormatNodeExtra(file)
+	return gghelper.FormatNodeExtra(file, info.ModulePath)
 }
 
 // serviceTestName returns the name of the test scaffolded for action: Test
@@ -587,7 +588,7 @@ func GenerateServiceTestMain(modulePath, servicePkgName string, extraDirs ...str
 			},
 		},
 	}
-	return FormatNodeExtraWithFileSet(file, fset)
+	return gghelper.FormatNodeExtraWithFileSet(file, fset, modulePath)
 }
 
 // TestMainFile returns the path of the test file in dir declaring TestMain

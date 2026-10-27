@@ -398,7 +398,7 @@ func (e *CopyExecution) reconcileRegistrations(md managedDir, targetDir string, 
 		return CopyWriteSkip, targetPath, nil
 	}
 
-	if err := writeGoFile(targetPath, fset, file); err != nil {
+	if err := writeGoFile(targetPath, fset, file, e.Plan.ProjectModulePath); err != nil {
 		return "", "", err
 	}
 	e.WrittenFiles = append(e.WrittenFiles, targetPath)
@@ -438,7 +438,7 @@ func topLevelFunctionNames(path string) ([]string, error) {
 // to report as CopyWriteDelete, and the rewritten registration file as
 // CopyWriteUpdate. A file that is already gone counts as deleted,
 // unreported. The first failure stops it.
-func RemoveManagedFiles(dir string, paths []string, report func(status CopyWriteStatus, path string)) error {
+func RemoveManagedFiles(dir string, paths []string, modulePath string, report func(status CopyWriteStatus, path string)) error {
 	md, err := managedDirOf(dir)
 	if err != nil {
 		return err
@@ -460,7 +460,7 @@ func RemoveManagedFiles(dir string, paths []string, report func(status CopyWrite
 			report(CopyWriteDelete, safePath)
 		}
 	}
-	registration, changed, err := removeRegistrations(md, dir, handlerNames)
+	registration, changed, err := removeRegistrations(md, dir, handlerNames, modulePath)
 	if err != nil || !changed {
 		return err
 	}
@@ -476,7 +476,7 @@ func RemoveManagedFiles(dir string, paths []string, report func(status CopyWrite
 // leaves the registration file untouched when nothing matches. When the
 // dropped calls were the framework import's last use, the import goes with
 // them, so the file still compiles.
-func removeRegistrations(md managedDir, dir string, handlerNames map[string]bool) (path string, changed bool, err error) {
+func removeRegistrations(md managedDir, dir string, handlerNames map[string]bool, modulePath string) (path string, changed bool, err error) {
 	if len(handlerNames) == 0 {
 		return "", false, nil
 	}
@@ -517,11 +517,11 @@ func removeRegistrations(md managedDir, dir string, handlerNames map[string]bool
 		return "", false, nil
 	}
 	dropUnusedFrameworkImport(fset, file, md)
-	safePath, err := requirePathUnderRoot(targetPath, dir)
+	safePath, err := gghelper.PathUnderRoot(targetPath, dir)
 	if err != nil {
 		return "", false, err
 	}
-	if err = writeGoFile(safePath, fset, file); err != nil { // #nosec G703 -- safePath validated under the managed dir by requirePathUnderRoot
+	if err = writeGoFile(safePath, fset, file, modulePath); err != nil { // #nosec G703 -- safePath validated under the managed dir by gghelper.PathUnderRoot
 		return "", false, err
 	}
 	return safePath, true, nil

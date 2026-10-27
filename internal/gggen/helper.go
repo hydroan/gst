@@ -1,98 +1,13 @@
 package gggen
 
 import (
-	"bytes"
-	"go/ast"
-	"go/format"
 	"go/token"
 	"maps"
 	"slices"
 	"strconv"
 	"strings"
 	"unicode"
-
-	"golang.org/x/tools/imports"
-	gofumpt "mvdan.cc/gofumpt/format"
 )
-
-// formatOnlyImports runs goimports as an import formatter only. Its import
-// fixing resolves unknown qualifiers by scanning the whole module cache for a
-// package that could supply them, which costs seconds per file and cannot tell
-// a package qualifier from any other selector in a single file. Every caller
-// here builds its own import set, so there is nothing left for it to fix.
-var formatOnlyImports = &imports.Options{Comments: true, TabIndent: true, TabWidth: 8, FormatOnly: true}
-
-// FormatNode prints node as Go source in the go/format style. With
-// processImport set, goimports then regroups and sorts the imports, adding or
-// removing none (see formatOnlyImports).
-//
-//gst:api the counterpart of FormatNodeExtra in the plain go/format style
-func FormatNode(node ast.Node, processImport ...bool) (string, error) {
-	var buf bytes.Buffer
-	fset := token.NewFileSet()
-
-	if err := format.Node(&buf, fset, node); err != nil {
-		return "", err
-	}
-
-	formatted, err := format.Source(buf.Bytes())
-	if err != nil {
-		return "", err
-	}
-
-	if len(processImport) > 0 && processImport[0] {
-		result, err := imports.Process("", formatted, formatOnlyImports)
-		if err != nil {
-			return "", err
-		}
-		return string(result), nil
-	}
-
-	return string(formatted), nil
-}
-
-// FormatNodeExtra prints node like FormatNode, but in the stricter gofumpt
-// style (https://github.com/mvdan/gofumpt) with its GroupParams,
-// ClotheReturns and BalanceCalls rules. The generated registration and
-// service files are printed through it.
-func FormatNodeExtra(node ast.Node, processImport ...bool) (string, error) {
-	return FormatNodeExtraWithFileSet(node, nil, processImport...)
-}
-
-// FormatNodeExtraWithFileSet is FormatNodeExtra printing node through fset,
-// the FileSet the positions of node refer to, which lays it out by them: the
-// comments of a parsed file stay in place, and a file built from scratch
-// breaks lines where its fabricated positions say (see goast.LineSet). A nil
-// fset stands for a new one.
-func FormatNodeExtraWithFileSet(node ast.Node, fset *token.FileSet, processImport ...bool) (string, error) {
-	var buf bytes.Buffer
-	// create a new FileSet if none was provided
-	if fset == nil {
-		fset = token.NewFileSet()
-	}
-
-	if err := format.Node(&buf, fset, node); err != nil {
-		return "", err
-	}
-
-	formatted, err := gofumpt.Source(buf.Bytes(), gofumpt.Options{
-		LangVersion: "",
-		Extra:       gofumpt.Extra{GroupParams: true, ClotheReturns: true, BalanceCalls: true},
-	})
-	if err != nil {
-		return "", err
-	}
-
-	if len(processImport) > 0 && processImport[0] {
-		var result []byte
-		if result, err = imports.Process("", formatted, formatOnlyImports); err != nil {
-			return "", err
-		}
-		return string(result), nil
-	}
-
-	return string(formatted), nil
-}
 
 // ResolveImportConflicts picks the alias each project import of a generated
 // file needs. declared maps every import path to the name of the package it

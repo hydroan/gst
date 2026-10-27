@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/goast"
 )
 
 // moduleServiceClosureConfig parameterizes helper discovery over one module's
@@ -97,7 +98,7 @@ func moduleServiceHelperClosure(seeds []string, config moduleServiceClosureConfi
 				config.describe(from), config.describe(declFile),
 			)
 		}
-		if len(serviceStructNames(tree.files[declFile].syntax)) > 0 {
+		if len(goast.ServiceStructNames(tree.files[declFile].syntax)) > 0 {
 			return errors.Newf(
 				"module copy: %s references %s, which declares a service struct but is copied by no DSL action; move the shared code into a helper file",
 				config.describe(from), config.describe(declFile),
@@ -138,7 +139,7 @@ func moduleServiceHelperClosure(seeds []string, config moduleServiceClosureConfi
 				if selected[packageFile] || config.actionFiles[packageFile] || config.isExcluded(packageFile) {
 					continue
 				}
-				if len(serviceStructNames(tree.files[packageFile].syntax)) > 0 {
+				if len(goast.ServiceStructNames(tree.files[packageFile].syntax)) > 0 {
 					continue
 				}
 				addHelper(packageFile)

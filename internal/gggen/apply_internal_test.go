@@ -9,6 +9,7 @@ import (
 
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/dsl"
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 func TestApplyServiceMethod4PointerConversion(t *testing.T) {
@@ -114,7 +115,7 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req model.User) (rsp model.Use
 				}
 			}
 
-			got, err := FormatNodeExtra(file)
+			got, err := gghelper.FormatNodeExtra(file, "helloworld")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -234,7 +235,7 @@ func (g *Creator) Create(ctx *gst.ServiceContext, req *group.GroupCreateReq) (rs
 				}
 			}
 
-			got, err := FormatNodeExtra(file)
+			got, err := gghelper.FormatNodeExtra(file, "helloworld")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -343,6 +344,24 @@ type user struct {
 			},
 			want: "service.Base[*model.User, model.UserReq, *model.UserRsp]",
 		},
+		{
+			name: "aliased_service_import",
+			code: `package service
+
+import (
+	"helloworld/model"
+	svc "github.com/hydroan/gst/service"
+)
+
+type user struct {
+	svc.Base[*model.User, *model.User, *model.User]
+}`,
+			action: &dsl.Action{
+				Payload: "*UserReq",
+				Result:  "*UserRsp",
+			},
+			want: "svc.Base[*model.User, *model.UserReq, *model.UserRsp]",
+		},
 	}
 
 	for _, tt := range tests {
@@ -361,7 +380,7 @@ type user struct {
 						if typeSpec, ok := spec.(*ast.TypeSpec); ok {
 							if isServiceType(file, typeSpec) {
 								found = true
-								changed := applyServiceType(typeSpec, tt.action)
+								changed := applyServiceType(file, typeSpec, tt.action)
 								if !changed {
 									t.Errorf("applyServiceType returned false, expected true")
 								}
@@ -374,13 +393,45 @@ type user struct {
 				t.Errorf("No service type found in the code")
 			}
 
-			got, err := FormatNodeExtra(file)
+			got, err := gghelper.FormatNodeExtra(file, "helloworld")
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			if !strings.Contains(got, tt.want) {
 				t.Errorf("Expected to find %q in generated code, but got:\n%s", tt.want, got)
+			}
+		})
+	}
+}
+
+// TestServiceModelPackageName reads the model package of a service struct
+// off the first type argument of its service base, under whatever name the
+// file imports the framework's service package by.
+func TestServiceModelPackageName(t *testing.T) {
+	for name, src := range map[string]string{
+		"plain import": `package sample
+
+import "github.com/hydroan/gst/service"
+
+type Creator struct {
+	service.Base[*sample.User, *sample.UserReq, *sample.UserRsp]
+}`,
+		"aliased import": `package sample
+
+import svc "github.com/hydroan/gst/service"
+
+type Creator struct {
+	svc.Base[*sample.User, *sample.UserReq, *sample.UserRsp]
+}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			file, err := parser.ParseFile(token.NewFileSet(), "", src, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := serviceModelPackageName(file); got != "sample" {
+				t.Errorf("serviceModelPackageName() = %q, want sample", got)
 			}
 		})
 	}

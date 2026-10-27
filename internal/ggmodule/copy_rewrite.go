@@ -13,7 +13,7 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/gggen"
+	"github.com/hydroan/gst/internal/gghelper"
 )
 
 type moduleCopyRewriteConfig struct {
@@ -68,7 +68,7 @@ func normalizeModuleCopySource(filename string, src []byte, config moduleCopyRew
 		return nil, err
 	}
 
-	code, err := gggen.FormatNodeExtraWithFileSet(file, fset, true)
+	code, err := gghelper.FormatNodeExtraWithFileSet(file, fset, config.ProjectModulePath)
 	if err != nil {
 		return nil, err
 	}

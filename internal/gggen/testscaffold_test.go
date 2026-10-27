@@ -53,8 +53,9 @@ func TestGenerateServiceTest(t *testing.T) {
 	want := `package record_test
 
 import (
-	"helloworld/model"
 	"testing"
+
+	"helloworld/model"
 
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/testutil"

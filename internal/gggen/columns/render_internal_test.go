@@ -185,7 +185,9 @@ func TestRenderColumnsFileKeepsImportsUsedByTypeArguments(t *testing.T) {
 
 // TestRenderColumnsFileImportsEveryPackageACompositeTypeNames pins a column
 // of a composite type naming types of two packages: the reference carries
-// the type as the inspection wrote it and the file imports both.
+// the type as the inspection wrote it and the file imports both, the
+// project's package in a group of its own before the others, as gopls
+// groups them.
 func TestRenderColumnsFileImportsEveryPackageACompositeTypeNames(t *testing.T) {
 	models := []modelinspect.ModelColumns{{
 		PkgPath: "tmpapp/model/sample",
@@ -200,8 +202,7 @@ func TestRenderColumnsFileImportsEveryPackageACompositeTypeNames(t *testing.T) {
 	rendered, err := renderColumnsFile("tmpapp", "sample", "model/sample/record.go", models)
 	require.NoError(t, err)
 	require.Contains(t, rendered, `gst.NewColumn[*Record, map[shared.Kind][]uuid.UUID]("by_kind")`)
-	require.Contains(t, rendered, "\tuuid \"github.com/gofrs/uuid/v5\"\n")
-	require.Contains(t, rendered, "\t\"tmpapp/shared\"\n")
+	require.Contains(t, rendered, "import (\n\t\"tmpapp/shared\"\n\n\tuuid \"github.com/gofrs/uuid/v5\"\n\t\"github.com/hydroan/gst\"\n)\n")
 }
 
 // TestRenderColumnsFileNamesEmbeddedColumnsByPath pins that the reference of

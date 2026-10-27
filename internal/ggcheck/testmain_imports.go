@@ -26,7 +26,7 @@ var TestMainImports = Check{
 // pass over them or dial a listener that is not there; with the import of a
 // package the project holds no more, the test binary does not build.
 func checkTestMainImports(ignore gghelper.ProjectIgnore) []string {
-	modulePath, err := gghelper.ModulePath()
+	modulePath, err := gghelper.ModulePath(".")
 	if err != nil {
 		return []string{fmt.Sprintf("reading the module path: %v", err)}
 	}

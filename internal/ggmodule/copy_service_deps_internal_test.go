@@ -172,8 +172,11 @@ func TestModuleServiceHelperClosureCopiesBlankImportedPackageWholesale(t *testin
 		}
 	}
 
-	write("go.mod", "module example.com/source\n\ngo 1.26\n")
-	write("service/service.go", `package service
+	// The framework's service package stands in at its own import path: a copy
+	// recognizes a service struct by the framework's service base alone.
+	write("go.mod", "module example.com/source\n\ngo 1.26\n\nrequire github.com/hydroan/gst v0.0.0\n\nreplace github.com/hydroan/gst => ./gst\n")
+	write("gst/go.mod", "module github.com/hydroan/gst\n\ngo 1.26\n")
+	write("gst/service/service.go", `package service
 
 type Base[M any, REQ any, RSP any] struct{}
 `)
@@ -197,7 +200,7 @@ func Extra() string {
 `)
 	write("sidefx/svc.go", `package sidefx
 
-import "example.com/source/service"
+import "github.com/hydroan/gst/service"
 
 type SideService struct {
 	service.Base[any, any, any]
@@ -244,8 +247,11 @@ func TestModuleServiceHelperClosureRejectsReferencedServiceStructFile(t *testing
 		}
 	}
 
-	write("go.mod", "module example.com/source\n\ngo 1.26\n")
-	write("service/service.go", `package service
+	// The framework's service package stands in at its own import path: a copy
+	// recognizes a service struct by the framework's service base alone.
+	write("go.mod", "module example.com/source\n\ngo 1.26\n\nrequire github.com/hydroan/gst v0.0.0\n\nreplace github.com/hydroan/gst => ./gst\n")
+	write("gst/go.mod", "module github.com/hydroan/gst\n\ngo 1.26\n")
+	write("gst/service/service.go", `package service
 
 type Base[M any, REQ any, RSP any] struct{}
 `)
@@ -259,7 +265,7 @@ func Action() string {
 	// this plan, so the shared function inside it is unreachable for the copy.
 	write("orphan_action.go", `package source
 
-import "example.com/source/service"
+import "github.com/hydroan/gst/service"
 
 type OrphanService struct {
 	service.Base[any, any, any]

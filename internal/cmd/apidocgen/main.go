@@ -68,7 +68,7 @@ func buildAPIDoc(pkg documentedPackage) (string, error) {
 		return "", errors.Wrapf(err, "extract %s api docs", pkg.dir)
 	}
 
-	code, err := gggen.BuildAPIDocFile(pkg.name, entries)
+	code, err := gggen.BuildAPIDocFile(ggconst.ImportPathGst, pkg.name, entries)
 	if err != nil {
 		return "", errors.Wrapf(err, "build %s api doc file", pkg.dir)
 	}

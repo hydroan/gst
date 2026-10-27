@@ -15,7 +15,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/ggconst"
-	"github.com/hydroan/gst/internal/gggen"
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
 	"github.com/hydroan/gst/internal/modelinspect"
 )
@@ -85,8 +85,9 @@ func renderColumnsFile(module string, pkgName string, source string, models []mo
 	// Standard library imports go in their own group, as gofmt convention
 	// expects. A path is standard library only when its first segment carries
 	// no dot and it does not belong to the project module, whose name may
-	// also be dotless; the gofumpt printing below sets a dotless project
-	// import apart from the dotted ones in the same way.
+	// also be dotless. The printing below then sets a dotless project import
+	// apart from the dotted ones, as gopls groups them (see
+	// gghelper.FormatNodeExtraWithFileSet).
 	stdlib := make([]string, 0, len(imports))
 	external := make([]string, 0, len(imports))
 	for path := range imports {
@@ -196,7 +197,7 @@ func renderColumnsFile(module string, pkgName string, source string, models []mo
 	}
 	f.Comments = comments
 
-	rendered, err := gggen.FormatNodeExtraWithFileSet(f, fset)
+	rendered, err := gghelper.FormatNodeExtraWithFileSet(f, fset, module)
 	if err != nil {
 		return "", errors.Wrapf(err, "format generated columns for %s", source)
 	}
@@ -280,9 +281,9 @@ func columnRefType(col modelinspect.ColumnInfo) (ast.Expr, error) {
 // reference cannot be repointed at another column at run time. The model is
 // the first type argument: the constructor reads TableName from a fresh value
 // of it at package initialization, so the table name is never restated as a
-// literal that could drift from the model. In the example of
-// renderColumnsFile, Amount gets gst.NewNumericColumn[*Record, int64]("amount"),
-// CreatedAt gst.NewTimeColumn[*Record]("created_at"), ID
+// literal that could drift from the model. In the example of renderColumnsFile,
+// Amount gets gst.NewNumericColumn[*Record, int64]("amount"), CreatedAt
+// gst.NewTimeColumn[*Record]("created_at"), ID
 // gst.NewColumn[*Record, uuid.UUID]("id"), Tags
 // gst.NewJSONStringsColumn[*Record]("tags") and Weights
 // gst.NewColumn[*Record, any]("weights").

@@ -79,7 +79,7 @@ func genRun() error {
 func genRunWithOptions(opts genRunOptions) error {
 	if len(module) == 0 {
 		var err error
-		module, err = gghelper.ModulePath()
+		module, err = gghelper.ModulePath(".")
 		if err != nil {
 			return err
 		}
@@ -245,7 +245,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	if !opts.Quiet {
 		clioutput.Section("Generate Files")
 	}
-	modelCode, err := gggen.BuildModelFile("model", modelAliases, modelStmts...)
+	modelCode, err := gggen.BuildModelFile(module, "model", modelAliases, modelStmts...)
 	if err != nil {
 		return errors.Wrap(err, "build model/model.gen.go")
 	}
@@ -260,7 +260,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	if err != nil {
 		return errors.Wrap(err, "extract api docs")
 	}
-	apidocCode, err := gggen.BuildAPIDocFile("model", docEntries)
+	apidocCode, err := gggen.BuildAPIDocFile(module, "model", docEntries)
 	if err != nil {
 		return errors.Wrap(err, "build model/apidoc.gen.go")
 	}
@@ -269,7 +269,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	}
 
 	// generate service/service.gen.go
-	serviceCode, err := gggen.BuildServiceFile("service", serviceAliases, serviceStmts...)
+	serviceCode, err := gggen.BuildServiceFile(module, "service", serviceAliases, serviceStmts...)
 	if err != nil {
 		return errors.Wrap(err, "build service/service.gen.go")
 	}
@@ -278,7 +278,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	}
 
 	// generate router/router.gen.go
-	routerCode, err := gggen.BuildRouterFile("router", routerGstModelPkg, routerAliases, routerStmts...)
+	routerCode, err := gggen.BuildRouterFile(module, "router", routerGstModelPkg, routerAliases, routerStmts...)
 	if err != nil {
 		return errors.Wrap(err, "build router/router.gen.go")
 	}
@@ -378,7 +378,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	// the action under.
 	applyFile := func(target modelinfo.ServiceTargetInfo, route string, code string, action *dsl.Action, modelInfo *modelinfo.Model) error {
 		servicePkgName := target.PackageName
-		safePath, err := pathUnderRoot(target.FilePath, ggconst.DirService)
+		safePath, err := gghelper.PathUnderRoot(target.FilePath, ggconst.DirService)
 		if err != nil {
 			return err
 		}
@@ -403,7 +403,7 @@ func genRunWithOptions(opts genRunOptions) error {
 			if changed {
 				// Only reformat and write file when there are changes
 				// Use original FileSet to preserve comment positions
-				code, err = gggen.FormatNodeExtraWithFileSet(f, fset)
+				code, err = gghelper.FormatNodeExtraWithFileSet(f, fset, module)
 				if err != nil {
 					return err
 				}
@@ -414,7 +414,7 @@ func genRunWithOptions(opts genRunOptions) error {
 					return err
 				}
 				// #nosec G703 -- safePath validated under serviceDir by
-				// pathUnderRoot
+				// gghelper.PathUnderRoot
 				if err := os.WriteFile(safePath, []byte(code), ggconst.FileModeGenerated); err != nil {
 					return err
 				}
@@ -429,7 +429,7 @@ func genRunWithOptions(opts genRunOptions) error {
 				return err
 			}
 			// #nosec G703 -- safePath validated under serviceDir by
-			// pathUnderRoot
+			// gghelper.PathUnderRoot
 			if err := os.WriteFile(safePath, []byte(code), ggconst.FileModeGenerated); err != nil {
 				return err
 			}
@@ -456,7 +456,7 @@ func genRunWithOptions(opts genRunOptions) error {
 			}
 			if file := generate(m, act, act.Phase, target.PackageName); file != nil {
 				fset := token.NewFileSet()
-				code, err := gggen.FormatNodeExtraWithFileSet(file, fset)
+				code, err := gghelper.FormatNodeExtraWithFileSet(file, fset, module)
 				if err != nil {
 					applyErr = err
 					return
@@ -528,14 +528,15 @@ func scaffoldServiceTests(modelInfo *modelinfo.Model, target modelinfo.ServiceTa
 	return writeGeneratedFile(stem+ggconst.PatternTestFile, code, !quiet)
 }
 
-// syncTestMainImports makes every test file of the project declaring
-// TestMain in an external test package import the optional project packages
-// the way main.go does, extraDirs being the ones main.go imports (see
+// syncTestMainImports makes every test file of the project declaring TestMain
+// in an external test package import the optional project packages the way
+// main.go does, extraDirs being the ones main.go imports (see
 // gggen.SyncTestMainImports), and prints the files it rewrites. A rewritten
-// file is printed by go/format, which keeps the import groups its positions
-// lay out; the gofumpt printer of the generated files (see
-// gggen.FormatNodeExtraWithFileSet) takes an unnamed import of a module
-// path without a dot for one of the standard library and moves it up.
+// file is the project's own and only its imports change, so it is printed by
+// go/format, which leaves the rest of a gofmt-formatted file as it is; the
+// gofumpt printer of the generated files (see
+// gghelper.FormatNodeExtraWithFileSet) would apply its stricter rules to the
+// whole file.
 func syncTestMainImports(extraDirs []string, ignore gghelper.ProjectIgnore, quiet bool) error {
 	files, err := gghelper.TestMainFiles(ignore)
 	if err != nil {
@@ -728,27 +729,4 @@ func importQualifier(aliases map[string]string, importPath, pkgName string) stri
 		return alias
 	}
 	return pkgName
-}
-
-// pathUnderRoot returns path cleaned and verified to be under root (no path
-// traversal). It satisfies gosec G703 by ensuring the write path is constrained
-// to the output directory.
-func pathUnderRoot(path, root string) (string, error) {
-	path = filepath.Clean(path)
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		return "", err
-	}
-	absRoot, err := filepath.Abs(root)
-	if err != nil {
-		return "", err
-	}
-	rel, err := filepath.Rel(absRoot, absPath)
-	if err != nil {
-		return "", err
-	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", errors.Newf("path %s is not under root %s", path, root)
-	}
-	return path, nil
 }

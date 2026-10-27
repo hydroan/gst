@@ -4,20 +4,23 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/gggen"
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
 )
 
 type moduleServiceMergeInput struct {
-	SourcePath string
-	Source     []byte
-	TargetPath string
-	Target     []byte
-	Rewrite    moduleCopyRewriteConfig
+	ProjectModulePath string
+	SourcePath        string
+	Source            []byte
+	TargetPath        string
+	Target            []byte
+	Rewrite           moduleCopyRewriteConfig
 }
 
 // mergeModuleServiceSource overlays the framework service source onto a generated
@@ -40,7 +43,7 @@ func mergeModuleServiceSource(input moduleServiceMergeInput) ([]byte, error) {
 		return nil, err
 	}
 
-	sourceStructs := serviceStructNames(sourceFile)
+	sourceStructs := goast.ServiceStructNames(sourceFile)
 	if len(sourceStructs) == 0 {
 		return nil, errors.Newf("source action service file %s has no service struct", input.SourcePath)
 	}
@@ -70,7 +73,7 @@ func mergeModuleServiceSource(input moduleServiceMergeInput) ([]byte, error) {
 		return nil, err
 	}
 
-	code, err := gggen.FormatNodeExtraWithFileSet(targetFile, fset, true)
+	code, err := gghelper.FormatNodeExtraWithFileSet(targetFile, fset, input.ProjectModulePath)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +137,7 @@ func mergeSourceServiceDecls(
 			if d.Tok == token.IMPORT {
 				continue
 			}
-			filtered := filterSourceSpecs(d, sourceStructSet)
+			filtered := filterSourceSpecs(sourceFile, d, sourceStructSet)
 			if filtered != nil {
 				docInserts.decls = append(docInserts.decls, declDocInsert{
 					kind: d.Tok,
@@ -196,14 +199,15 @@ func mergeSourceServiceDecls(
 	return docInserts, nil
 }
 
-func filterSourceSpecs(decl *ast.GenDecl, sourceStructSet map[string]bool) *ast.GenDecl {
+func filterSourceSpecs(file *ast.File, decl *ast.GenDecl, sourceStructSet map[string]bool) *ast.GenDecl {
 	if decl.Tok != token.TYPE {
 		return decl
 	}
+	services := goast.ServiceStructNames(file)
 	specs := make([]ast.Spec, 0, len(decl.Specs))
 	for _, spec := range decl.Specs {
 		typeSpec, ok := spec.(*ast.TypeSpec)
-		if ok && sourceStructSet[typeSpec.Name.Name] && isServiceTypeSpec(typeSpec) {
+		if ok && sourceStructSet[typeSpec.Name.Name] && slices.Contains(services, typeSpec.Name.Name) {
 			continue
 		}
 		specs = append(specs, spec)
@@ -525,7 +529,7 @@ func cloneImportSpec(imp *ast.ImportSpec) *ast.ImportSpec {
 // struct and the action methods, the shell the gen run of the copy creates in
 // the project as well, without the hook placeholders gg gen writes for a
 // service a project writes by hand (see gggen.GenerateServiceShell).
-func generateTargetServiceShell(actions []moduleCopyAction) ([]byte, error) {
+func generateTargetServiceShell(actions []moduleCopyAction, modulePath string) ([]byte, error) {
 	if len(actions) == 0 {
 		return nil, errors.New("failed to generate service shell: no actions")
 	}
@@ -543,7 +547,7 @@ func generateTargetServiceShell(actions []moduleCopyAction) ([]byte, error) {
 		appendGeneratedServiceDecls(file, next)
 	}
 	fset := token.NewFileSet()
-	code, err := gggen.FormatNodeExtraWithFileSet(file, fset, true)
+	code, err := gghelper.FormatNodeExtraWithFileSet(file, fset, modulePath)
 	if err != nil {
 		return nil, err
 	}
@@ -569,7 +573,7 @@ func appendGeneratedServiceDecls(targetFile *ast.File, generatedFile *ast.File) 
 			if d.Tok == token.IMPORT {
 				continue
 			}
-			filtered := filterSourceSpecs(d, targetStructSet)
+			filtered := filterSourceSpecs(generatedFile, d, targetStructSet)
 			if filtered != nil {
 				targetFile.Decls = append(targetFile.Decls, filtered)
 			}
@@ -584,26 +588,8 @@ func appendGeneratedServiceDecls(targetFile *ast.File, generatedFile *ast.File) 
 	}
 }
 
-func serviceStructNames(file *ast.File) []string {
-	names := make([]string, 0)
-	for _, decl := range file.Decls {
-		genDecl, ok := decl.(*ast.GenDecl)
-		if !ok || genDecl.Tok != token.TYPE {
-			continue
-		}
-		for _, spec := range genDecl.Specs {
-			typeSpec, ok := spec.(*ast.TypeSpec)
-			if !ok || !isServiceTypeSpec(typeSpec) {
-				continue
-			}
-			names = append(names, typeSpec.Name.Name)
-		}
-	}
-	return names
-}
-
 func findServiceStructName(file *ast.File) string {
-	names := serviceStructNames(file)
+	names := goast.ServiceStructNames(file)
 	if len(names) > 0 {
 		return names[0]
 	}
@@ -611,6 +597,9 @@ func findServiceStructName(file *ast.File) string {
 }
 
 func serviceStructDoc(file *ast.File, structName string) *ast.CommentGroup {
+	if !slices.Contains(goast.ServiceStructNames(file), structName) {
+		return nil
+	}
 	for _, decl := range file.Decls {
 		genDecl, ok := decl.(*ast.GenDecl)
 		if !ok || genDecl.Tok != token.TYPE {
@@ -618,7 +607,7 @@ func serviceStructDoc(file *ast.File, structName string) *ast.CommentGroup {
 		}
 		for _, spec := range genDecl.Specs {
 			typeSpec, ok := spec.(*ast.TypeSpec)
-			if !ok || typeSpec.Name == nil || typeSpec.Name.Name != structName || !isServiceTypeSpec(typeSpec) {
+			if !ok || typeSpec.Name == nil || typeSpec.Name.Name != structName {
 				continue
 			}
 			if typeSpec.Doc != nil {
@@ -636,39 +625,5 @@ func countServiceStructsInFile(path string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return len(serviceStructNames(file)), nil
-}
-
-func isServiceTypeSpec(typeSpec *ast.TypeSpec) bool {
-	structType, ok := typeSpec.Type.(*ast.StructType)
-	if !ok || structType.Fields == nil {
-		return false
-	}
-	for _, field := range structType.Fields.List {
-		if len(field.Names) > 0 {
-			continue
-		}
-		if isServiceBaseExpr(field.Type) {
-			return true
-		}
-	}
-	return false
-}
-
-func isServiceBaseExpr(expr ast.Expr) bool {
-	var x ast.Expr
-	switch e := expr.(type) {
-	case *ast.IndexExpr:
-		x = e.X
-	case *ast.IndexListExpr:
-		x = e.X
-	default:
-		return false
-	}
-	sel, ok := x.(*ast.SelectorExpr)
-	if !ok || sel.Sel.Name != "Base" {
-		return false
-	}
-	ident, ok := sel.X.(*ast.Ident)
-	return ok && ident.Name == "service"
+	return len(goast.ServiceStructNames(file)), nil
 }
