@@ -1,4 +1,4 @@
-package gggen
+package gghelper
 
 import "go/format"
 

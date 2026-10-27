@@ -20,12 +20,12 @@ var sourceFormatters = map[[2]string]bool{
 }
 
 // sourceFormatScope lists the directories under the root whose packages
-// generate Go code, and sourceFormatHome names the one file among them that
-// may format source text: the printing path every generator's syntax tree
-// goes through.
+// generate or print Go code, and sourceFormatHome names the one file among
+// them that may format source text: the printing path every generator's
+// syntax tree goes through.
 var (
-	sourceFormatScope = []string{"internal/gggen", "internal/ggnew", "cmd/gg"}
-	sourceFormatHome  = "internal/gggen/helper.go"
+	sourceFormatScope = []string{"internal/gggen", "internal/gghelper", "internal/ggmodule", "internal/ggnew", "cmd/gg"}
+	sourceFormatHome  = "internal/gghelper/format.go"
 )
 
 // templatePackage is the package that renders text from templates, which no
