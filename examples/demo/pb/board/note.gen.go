@@ -4,8 +4,9 @@ package board
 
 import (
 	"context"
-	"demo/model/board"
 	"time"
+
+	"demo/model/board"
 
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/grpc"

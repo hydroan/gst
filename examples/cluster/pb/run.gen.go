@@ -3,9 +3,10 @@
 package pb
 
 import (
-	"cluster/model"
 	"context"
 	"time"
+
+	"cluster/model"
 
 	"github.com/hydroan/gst/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"

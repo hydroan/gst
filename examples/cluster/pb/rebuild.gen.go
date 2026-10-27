@@ -3,8 +3,9 @@
 package pb
 
 import (
-	"cluster/model"
 	"context"
+
+	"cluster/model"
 
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/grpc"
