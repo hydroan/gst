@@ -92,6 +92,14 @@ func TestGet(t *testing.T) {
 		require.NotEmpty(t, info.ETag)
 		require.NotEmpty(t, info.LastModified)
 	})
+
+	t.Run("missing bucket", func(t *testing.T) {
+		// The store answers 404 for an object whose bucket it lacks, which
+		// counts as the object not being there, as Exists has it.
+		_, info, err := minio.Get(context.TODO(), "hello.txt", &minio.GetOptions{Bucket: bucketNamed("missing")})
+		require.ErrorIs(t, err, minio.ErrObjectNotFound)
+		require.Nil(t, info)
+	})
 }
 
 func TestRemove(t *testing.T) {
@@ -103,7 +111,7 @@ func TestRemove(t *testing.T) {
 		require.NoError(t, err)
 
 		_, info, err := minio.Get(context.TODO(), "hello.txt")
-		require.Error(t, err)
+		require.ErrorIs(t, err, minio.ErrObjectNotFound)
 		require.Nil(t, info)
 	})
 
@@ -115,7 +123,7 @@ func TestRemove(t *testing.T) {
 		require.NoError(t, err)
 
 		_, info, err := minio.Get(context.TODO(), "hello.txt")
-		require.Error(t, err)
+		require.ErrorIs(t, err, minio.ErrObjectNotFound)
 		require.Nil(t, info)
 	})
 }
@@ -141,6 +149,15 @@ func TestExistsAndStat(t *testing.T) {
 	exists, err = minio.Exists(context.TODO(), "exists.txt", &minio.ExistsOptions{Bucket: bucket})
 	require.NoError(t, err)
 	require.False(t, exists)
+	_, err = minio.Stat(context.TODO(), "exists.txt", &minio.StatOptions{Bucket: bucket})
+	require.ErrorIs(t, err, minio.ErrObjectNotFound)
+
+	// A bucket the store lacks answers as the object would.
+	exists, err = minio.Exists(context.TODO(), "exists.txt", &minio.ExistsOptions{Bucket: bucketNamed("missing")})
+	require.NoError(t, err)
+	require.False(t, exists)
+	_, err = minio.Stat(context.TODO(), "exists.txt", &minio.StatOptions{Bucket: bucketNamed("missing")})
+	require.ErrorIs(t, err, minio.ErrObjectNotFound)
 }
 
 func TestPresignedURL(t *testing.T) {

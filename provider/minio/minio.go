@@ -29,6 +29,40 @@ var (
 	mu     sync.RWMutex
 )
 
+// ErrObjectNotFound is the error Get and Stat answer, wrapped, when the store
+// answers 404 for the object, the object or the bucket named for it missing,
+// as Exists answers false for both; tell it with errors.Is. The provider
+// creates the buckets the configuration lists when it starts (see
+// config.Minio.Bucket), so a missing bucket is one removed since, or one an
+// option names that EnsureBucket never created.
+var ErrObjectNotFound = errors.New("object not found")
+
+// objectNotFoundError is an error the store answered 404 with: it reads as
+// that error and is ErrObjectNotFound to errors.Is, the standard library's and
+// cockroachdb's alike. errors.Mark would mark it for cockroachdb's errors.Is
+// alone, which a project using the standard library's would not see.
+type objectNotFoundError struct{ cause error }
+
+func (e objectNotFoundError) Error() string        { return e.cause.Error() }
+func (e objectNotFoundError) Unwrap() error        { return e.cause }
+func (e objectNotFoundError) Is(target error) bool { return target == ErrObjectNotFound }
+
+// objectMissing reports whether err is the store answering 404 for the
+// object, whatever the code: a store tells a missing bucket by a code of its
+// own or not at all.
+func objectMissing(err error) bool {
+	return minio.ToErrorResponse(err).StatusCode == http.StatusNotFound
+}
+
+// markMissing returns err, as an objectNotFoundError when it says the object
+// does not exist (see objectMissing).
+func markMissing(err error) error {
+	if objectMissing(err) {
+		return objectNotFoundError{cause: err}
+	}
+	return err
+}
+
 // PutOptions represents upload options.
 type PutOptions struct {
 	ContentType     string            // MIME type, auto-detected if empty
@@ -99,9 +133,9 @@ func init() {
 	})
 }
 
-// start initializes the global MinIO client.
-// It reads MinIO configuration from config.App.Minio.
-// The function is thread-safe and ensures the client is initialized only once.
+// start initializes the global MinIO client from config.App.Minio and creates
+// each bucket the configuration lists that does not exist yet. The function is
+// thread-safe and ensures the client is initialized only once.
 func start(_ context.Context) (err error) {
 	cfg := config.App.Minio
 	mu.Lock()
@@ -221,7 +255,9 @@ func Client() (*minio.Client, error) {
 	return client, nil
 }
 
-// EnsureBucket ensures that the bucket exists, creates it if not exists.
+// EnsureBucket creates each of the buckets that does not exist yet, skipping
+// empty names. The provider does so for the buckets the configuration lists
+// when it starts; EnsureBucket is for another bucket an option names.
 func EnsureBucket(ctx context.Context, buckets ...string) error {
 	cli, err := Client()
 	if err != nil {
@@ -317,7 +353,9 @@ func Put(ctx context.Context, objectKey string, reader io.Reader, opts ...*PutOp
 	}, nil
 }
 
-// Get downloads an object and returns a reader plus metadata.
+// Get downloads an object and returns a reader plus metadata. An object the
+// store does not hold answers an error that is ErrObjectNotFound to
+// errors.Is, as a missing bucket does (see ErrObjectNotFound).
 func Get(ctx context.Context, objectKey string, opts ...*GetOptions) (io.ReadCloser, *ObjectInfo, error) {
 	if objectKey == "" {
 		return nil, nil, errors.New("objectKey cannot be empty")
@@ -359,7 +397,7 @@ func Get(ctx context.Context, objectKey string, opts ...*GetOptions) (io.ReadClo
 	stat, err := obj.Stat()
 	if err != nil {
 		obj.Close()
-		return nil, nil, errors.Wrapf(err, "failed to stat object %s", objectKey)
+		return nil, nil, errors.Wrapf(markMissing(err), "failed to stat object %s", objectKey)
 	}
 
 	info := &ObjectInfo{
@@ -408,7 +446,8 @@ func Remove(ctx context.Context, objectKey string, opts ...*RemoveOptions) error
 	return nil
 }
 
-// Exists checks whether an object exists.
+// Exists checks whether an object exists: false for an object the store does
+// not hold, and for a missing bucket alike (see ErrObjectNotFound).
 func Exists(ctx context.Context, objectKey string, opts ...*ExistsOptions) (bool, error) {
 	opt := minio.StatObjectOptions{}
 	bucket := defaultBucket()
@@ -427,8 +466,7 @@ func Exists(ctx context.Context, objectKey string, opts ...*ExistsOptions) (bool
 
 	_, err = cli.StatObject(ctx, bucket, objectKey, opt)
 	if err != nil {
-		errResp := minio.ToErrorResponse(err)
-		if errResp.StatusCode == http.StatusNotFound {
+		if objectMissing(err) {
 			return false, nil
 		}
 
@@ -437,7 +475,9 @@ func Exists(ctx context.Context, objectKey string, opts ...*ExistsOptions) (bool
 	return true, nil
 }
 
-// Stat returns object metadata.
+// Stat returns object metadata. An object the store does not hold answers an
+// error that is ErrObjectNotFound to errors.Is, as a missing bucket does (see
+// ErrObjectNotFound).
 func Stat(ctx context.Context, objectKey string, opts ...*StatOptions) (*ObjectInfo, error) {
 	if objectKey == "" {
 		return nil, errors.New("objectKey cannot be empty")
@@ -463,7 +503,7 @@ func Stat(ctx context.Context, objectKey string, opts ...*StatOptions) (*ObjectI
 
 	stat, statErr := cli.StatObject(ctx, bucket, objectKey, statOpts)
 	if statErr != nil {
-		return nil, errors.Wrapf(statErr, "failed to stat object %s", objectKey)
+		return nil, errors.Wrapf(markMissing(statErr), "failed to stat object %s", objectKey)
 	}
 
 	return &ObjectInfo{
@@ -476,7 +516,8 @@ func Stat(ctx context.Context, objectKey string, opts ...*StatOptions) (*ObjectI
 	}, nil
 }
 
-// PresignedGetURL generates a presigned GET URL with expiration capped at 7 days.
+// PresignedGetURL generates a presigned GET URL with expiration capped at 7
+// days.
 func PresignedGetURL(ctx context.Context, objectKey string, expires time.Duration, opts ...*GetOptions) (string, error) {
 	if objectKey == "" {
 		return "", errors.New("objectKey cannot be empty")
