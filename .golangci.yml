@@ -468,6 +468,17 @@ linters:
           - gosec
         text: "G101"
 
+formatters:
+  # goimports holds every file to the imports gopls organizes on save: grouped
+  # and sorted, and named wherever the package name differs from the name its
+  # import path suggests. gofumpt is left to make format: its command reads
+  # the module path of each file from the go.mod above it, where the formatter
+  # here would take one module path from this file.
+  enable:
+    - goimports
+  exclusions:
+    generated: strict
+
 issues:
   # Increase max issues to avoid truncation
   max-same-issues: 100

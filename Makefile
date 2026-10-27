@@ -68,7 +68,7 @@ help:
 	@echo "  build          - Build the project"
 	@echo "  format         - Format code with gofumpt"
 	@echo "  vet            - Run go vet"
-	@echo "  lint           - Run golangci-lint (includes modernize, nilness and shadow)"
+	@echo "  lint           - Run golangci-lint (includes modernize, nilness, shadow and goimports)"
 	@echo "  selfcheck      - Check the framework's source against the rules golangci-lint cannot express"
 	@echo "  ggcheck        - Run gg gen and gg check on the example projects with the gg built from the tree"
 	@echo "  test           - Run unit tests, a line per package"
@@ -76,14 +76,15 @@ help:
 	@echo "  testv          - Run unit tests, a line per test"
 	@echo "  testvv         - Run unit tests with the full go test -v output"
 	@echo "  generate       - Regenerate the framework's own generated sources"
-	@echo "  fix            - Auto-fix code issues (gofumpt, golangci-lint)"
+	@echo "  fix            - Auto-fix code issues (golangci-lint, then gofumpt)"
 	@echo "  install        - Install gg command and development tools"
 	@echo "  uninstall      - Uninstall gg command and development tools"
 	@echo "  help           - Show this help message"
 
 # Run all code quality checks
-# Order matches make install tool installation order
-check: build lint selfcheck format vet ggcheck
+# format runs before lint: gofumpt rewrites what it can, and lint, goimports
+# among its checks, then judges the code gofumpt leaves.
+check: build format lint selfcheck vet ggcheck
 	@echo "All checks passed successfully!"
 
 # Build the project, then build it again with cgo off, the way a project
@@ -117,7 +118,8 @@ vet:
 	go -C examples/cluster vet ./...
 	go -C examples/bench vet ./...
 
-# Run golangci-lint (modernize, nilness and shadow run inside it, see .golangci.yml)
+# Run golangci-lint: modernize, nilness and shadow run inside it, and goimports
+# checks the imports are organized the way gopls saves them (see .golangci.yml).
 # The example modules are linted too (see vet), each against the .golangci.yml
 # gg new writes into a project, so the rules a generated project is held to are
 # the rules the examples demonstrate.
@@ -277,21 +279,23 @@ generate:
 	go run ./internal/cmd/apidocgen
 
 # Auto-fix code issues
-# The example modules are fixed too (see lint): golangci-lint reaches only the
-# module it runs in, so each example is fixed from inside it, against its own
+# golangci-lint runs first, its goimports organizing the imports the way gopls
+# does on save, and gofumpt last, the order gopls saves a file in. The example
+# modules are fixed too (see lint): golangci-lint reaches only the module it
+# runs in, so each example is fixed from inside it, against its own
 # .golangci.yml. gofumpt walks paths rather than modules, so the run at the
 # root already covers them.
 fix:
 	@echo "Running auto-fix tools..."
-	$(call install_tool,$(GOFUMPT),$(GOFUMPT_PKG),$(GOFUMPT_VERSION))
-	@echo "Running gofumpt..."
-	$(call run_tool,$(GOFUMPT),-l -w .)
 	$(call install_tool,$(GOLANGCI_LINT),$(GOLANGCI_LINT_PKG),$(GOLANGCI_LINT_VERSION))
 	@echo "Running golangci-lint --fix..."
 	$(call run_tool,$(GOLANGCI_LINT),run --fix ./...)
 	$(call run_tool_in,$(GOLANGCI_LINT),examples/demo,run --fix ./...)
 	$(call run_tool_in,$(GOLANGCI_LINT),examples/cluster,run --fix ./...)
 	$(call run_tool_in,$(GOLANGCI_LINT),examples/bench,run --fix ./...)
+	$(call install_tool,$(GOFUMPT),$(GOFUMPT_PKG),$(GOFUMPT_VERSION))
+	@echo "Running gofumpt..."
+	$(call run_tool,$(GOFUMPT),-l -w .)
 	@echo "All auto-fix operations completed!"
 
 # Install gg and the tools make runs, at the versions go.mod pins (see
