@@ -8,7 +8,7 @@ import (
 
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_model/go"
+	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )

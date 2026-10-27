@@ -8,7 +8,7 @@ import (
 	"github.com/hydroan/gst/internal/consts"
 	prommetrics "github.com/hydroan/gst/metrics"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_model/go"
+	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
 // TestAuthorizeNamesTheGrantingRule covers one case per branch a decision can

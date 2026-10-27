@@ -6,7 +6,7 @@ import (
 	"math"
 	"net/netip"
 
-	"github.com/hydroan/gst/internal/gggen/jsonshape/fixture/a-b"
+	ab "github.com/hydroan/gst/internal/gggen/jsonshape/fixture/a-b"
 	underscored "github.com/hydroan/gst/internal/gggen/jsonshape/fixture/a_b"
 	"github.com/hydroan/gst/internal/gggen/jsonshape/fixture/gst"
 	"github.com/hydroan/gst/internal/gggen/jsonshape/fixture/mode"
