@@ -98,7 +98,7 @@ func fillVersionFieldTags(quiet bool) error {
 //		Version model.Version `json:"version,omitempty" gorm:"not null;default:1"`
 //	}
 func rewriteVersionFieldTags(path string, findings []ggcheck.VersionFieldFinding) error {
-	safePath, err := pathUnderRoot(path, ggconst.DirModel)
+	safePath, err := gghelper.PathUnderRoot(path, ggconst.DirModel)
 	if err != nil {
 		return err
 	}

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/ggconst"
 )
 
@@ -40,6 +41,30 @@ func RelativePath(filePath string) string {
 		return filePath
 	}
 	return relPath
+}
+
+// PathUnderRoot returns path cleaned and verified to lie under root, refusing
+// one that climbs out of it: service/record/create.go under service is
+// service/record/create.go, while service/../main.go is refused. A write
+// constrained to its output directory this way satisfies gosec G703.
+func PathUnderRoot(path, root string) (string, error) {
+	path = filepath.Clean(path)
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(absRoot, absPath)
+	if err != nil {
+		return "", err
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", errors.Newf("path %s is not under root %s", path, root)
+	}
+	return path, nil
 }
 
 // PairedTestFiles returns the test files on disk that pair with the service

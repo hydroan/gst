@@ -63,6 +63,27 @@ func TestRelativePath(t *testing.T) {
 	}
 }
 
+// TestPathUnderRoot pins the examples of PathUnderRoot: a path under the root
+// comes back cleaned, and one climbing out of it is refused.
+func TestPathUnderRoot(t *testing.T) {
+	under := []struct{ path, want string }{
+		{"service/record/create.go", "service/record/create.go"},
+		{"service/./record/create.go", "service/record/create.go"},
+		{"service", "service"},
+	}
+	for _, tt := range under {
+		got, err := gghelper.PathUnderRoot(filepath.FromSlash(tt.path), "service")
+		if want := filepath.FromSlash(tt.want); err != nil || got != want {
+			t.Fatalf("PathUnderRoot(%q, service) = %q, %v; want %q", tt.path, got, err, want)
+		}
+	}
+	for _, path := range []string{"service/../main.go", "../service/record.go", "model/record.go"} {
+		if got, err := gghelper.PathUnderRoot(filepath.FromSlash(path), "service"); err == nil {
+			t.Fatalf("PathUnderRoot(%q, service) = %q, want an error", path, got)
+		}
+	}
+}
+
 // TestPairedTestFilesListsTheTestsBesideAServiceFile pins the pairing rule
 // prune and module copy share: the external and the internal test file
 // beside a service file, in that order, only those on disk, and no test file

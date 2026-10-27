@@ -156,7 +156,7 @@ func oneTagPerField(tags []pbschema.MissingTag) ([]pbschema.MissingTag, error) {
 //		model.Base
 //	}
 func rewritePBTags(path string, tags []pbschema.MissingTag) error {
-	safePath, err := pathUnderRoot(path, ".")
+	safePath, err := gghelper.PathUnderRoot(path, ".")
 	if err != nil {
 		return err
 	}
