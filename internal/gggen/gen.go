@@ -16,13 +16,13 @@ import (
 	"github.com/stoewer/go-strcase"
 )
 
-// serviceActionLogQuoted returns a Go string literal (as used in ast.BasicLit.Value) for
-// log.Info in generated service methods: "{model} {phase}", as in
-// "user create" and "user create before". When the action names its service, uses
-// "{model}: {name}" with the underscores of the name as spaces and an optional
-// hook suffix (before/after/filter/...), as in "user: archive before" for
-// Service("archive") and "record: archive sample items" for
-// Service("archive_sample_items").
+// serviceActionLogQuoted returns a Go string literal (as used in
+// ast.BasicLit.Value) for log.Info in generated service methods:
+// "{model} {phase}", as in "user create" and "user create before". When the
+// action names its service, uses "{model}: {name}" with the underscores of the
+// name as spaces and an optional hook suffix (before/after/filter/...), as in
+// "user: archive before" for Service("archive") and
+// "record: archive sample items" for Service("archive_sample_items").
 func serviceActionLogQuoted(modelName string, phase consts.Phase, action *dsl.Action) string {
 	modelLower := strings.ToLower(modelName)
 	phaseSnake := strings.ReplaceAll(strcase.SnakeCase(phase.Name()), "_", " ")
@@ -54,10 +54,11 @@ func serviceFilterLogQuoted(modelName string, phase consts.Phase, action *dsl.Ac
 	return strconv.Quote(msg + " filter")
 }
 
-// genServiceMethod1 uses AST to generate CreateBefore,CreateAfter,UpdateBefore,UpdateAfter,
-// DeleteBefore,DeleteAfter,GetBefore,GetAfter,PatchBefore,PatchAfter methods. modelQualifier is
-// the name the file refers to the model package by (see serviceModelQualifier). For the model
-// User and phase consts.CreateBefore it generates
+// genServiceMethod1 uses AST to generate CreateBefore, CreateAfter,
+// UpdateBefore, UpdateAfter, DeleteBefore, DeleteAfter, GetBefore, GetAfter,
+// PatchBefore, PatchAfter methods. modelQualifier is the name the file refers
+// to the model package by (see serviceModelQualifier). For the model User and
+// phase consts.CreateBefore it generates
 //
 //	func (u *Creator) CreateBefore(ctx *gst.ServiceContext, user *model.User) error {
 //		log := u.WithContext(ctx, ctx.Phase())
@@ -75,9 +76,9 @@ func genServiceMethod1(info *modelinfo.Model, modelQualifier string, action *dsl
 	)
 }
 
-// genServiceMethod2 uses AST to generate ListBefore, ListAfter methods, referring to the
-// model package by modelQualifier (see genServiceMethod1). For the model User and phase
-// consts.ListBefore it generates
+// genServiceMethod2 uses AST to generate ListBefore, ListAfter methods,
+// referring to the model package by modelQualifier (see genServiceMethod1). For
+// the model User and phase consts.ListBefore it generates
 //
 //	func (u *Lister) ListBefore(ctx *gst.ServiceContext, users *[]*model.User) error {
 //		log := u.WithContext(ctx, ctx.Phase())
@@ -96,9 +97,10 @@ func genServiceMethod2(info *modelinfo.Model, modelQualifier string, action *dsl
 }
 
 // genServiceMethod3 uses AST to generate CreateManyBefore, CreateManyAfter,
-// DeleteManyBefore, DeleteManyAfter, UpdateManyBefore, UpdateManyAfter, PatchManyBefore, PatchManyAfter,
-// referring to the model package by modelQualifier (see genServiceMethod1). For the model User
-// and phase consts.CreateManyBefore it generates
+// DeleteManyBefore, DeleteManyAfter, UpdateManyBefore, UpdateManyAfter,
+// PatchManyBefore, PatchManyAfter, referring to the model package by
+// modelQualifier (see genServiceMethod1). For the model User and phase
+// consts.CreateManyBefore it generates
 //
 //	func (u *ManyCreator) CreateManyBefore(ctx *gst.ServiceContext, users ...*model.User) error {
 //		log := u.WithContext(ctx, ctx.Phase())
@@ -116,8 +118,9 @@ func genServiceMethod3(info *modelinfo.Model, modelQualifier string, action *dsl
 	)
 }
 
-// genServiceMethod4 uses AST to generate Create,Delete,Update,Patch,List,Get,CreateMany,DeleteMany,UpdateMany,PatchMany methods,
-// referring to the model package by modelQualifier (see genServiceMethod1). For the model User,
+// genServiceMethod4 uses AST to generate Create, Delete, Update, Patch, List,
+// Get, CreateMany, DeleteMany, UpdateMany, PatchMany methods, referring to the
+// model package by modelQualifier (see genServiceMethod1). For the model User,
 // the request and result types *User and phase consts.Create it generates
 //
 //	func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {
@@ -353,8 +356,9 @@ func generateService(info *modelinfo.Model, action *dsl.Action, phase consts.Pha
 
 	roleName := action.RoleName()
 
-	// When the service is named, derive the receiver variable name from RoleName
-	// (e.g., Archive → "a") instead of the model name (e.g., Record → "r").
+	// When the service is named, derive the receiver variable name from
+	// RoleName (e.g., Archive → "a") instead of the model name
+	// (e.g., Record → "r").
 	if action.ServiceName != "" && len(roleName) > 0 {
 		copied := *info
 		copied.ModelVarName = strings.ToLower(roleName[:1])
