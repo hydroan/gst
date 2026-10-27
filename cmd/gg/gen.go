@@ -136,6 +136,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	if err != nil {
 		return err
 	}
+	reportIgnoreWarnings(scanned)
 	allModels, ignoreResult := scanned.models, scanned.routeIgnores
 
 	// Record the service files present before generating (if prune option
@@ -252,9 +253,9 @@ func genRunWithOptions(opts genRunOptions) error {
 		return writeErr
 	}
 
-	// generate model/apidoc.gen.go, which registers struct and field doc comments
-	// so the OpenAPI document keeps schema descriptions in binaries deployed
-	// without Go source files.
+	// generate model/apidoc.gen.go, which registers struct and field doc
+	// comments so the OpenAPI document keeps schema descriptions in binaries
+	// deployed without Go source files.
 	docEntries, err := modelinfo.ExtractAPIDocs(module, ggconst.DirModel, ignore, nil)
 	if err != nil {
 		return errors.Wrap(err, "extract api docs")
@@ -393,7 +394,8 @@ func genRunWithOptions(opts genRunOptions) error {
 				return err
 			}
 
-			// Apply changes and sync model imports to handle import path and package name updates
+			// Apply changes and sync model imports to handle import path and
+			// package name updates
 			changed, err := gggen.ApplyServiceFileWithModelSync(f, action, servicePkgName, ggconst.DirModel, modelInfo)
 			if err != nil {
 				return errors.Wrapf(err, "service file %s", safePath)
@@ -411,7 +413,8 @@ func genRunWithOptions(opts genRunOptions) error {
 				if err := gghelper.EnsureParentDir(safePath); err != nil {
 					return err
 				}
-				// #nosec G703 -- safePath validated under serviceDir by pathUnderRoot
+				// #nosec G703 -- safePath validated under serviceDir by
+				// pathUnderRoot
 				if err := os.WriteFile(safePath, []byte(code), ggconst.FileModeGenerated); err != nil {
 					return err
 				}
@@ -425,7 +428,8 @@ func genRunWithOptions(opts genRunOptions) error {
 			if err := gghelper.EnsureParentDir(safePath); err != nil {
 				return err
 			}
-			// #nosec G703 -- safePath validated under serviceDir by pathUnderRoot
+			// #nosec G703 -- safePath validated under serviceDir by
+			// pathUnderRoot
 			if err := os.WriteFile(safePath, []byte(code), ggconst.FileModeGenerated); err != nil {
 				return err
 			}
@@ -566,6 +570,9 @@ type scannedModels struct {
 	// routeIgnores records the actions the gst.yaml route ignores disabled,
 	// with the service files pruning must keep for them.
 	routeIgnores modelinfo.RouteIgnoreResult
+	// modelIgnores records the models the gst.yaml model ignores dropped from
+	// registration, with the rules reportIgnoreWarnings warns about.
+	modelIgnores modelinfo.ModelIgnoreResult
 }
 
 // protobufFiles renders the .proto files of the models declaring GRPC() and
@@ -641,11 +648,12 @@ func protobufDefinitions(models []*modelinfo.Model, ignore gghelper.ProjectIgnor
 // scanModels reads the models of the model directory the way every command
 // and check reads them (see modelinfo.ScanModels): their routes resolved,
 // then the gst.yaml route and model ignores of projectCfg applied, so a
-// matched action behaves exactly like an action that was never declared,
-// and reports what the ignores matched. gg gen and gg gen ts both start from
-// here, which keeps the TypeScript declarations on the routes the generated
-// router registers. The command reads gst.yaml (see loadProjectConfig) once
-// for every scan it makes.
+// matched action behaves exactly like an action that was never declared.
+// Unless quiet, it lists what the ignores matched; the warnings about the
+// rules are its caller's to print (see reportIgnoreWarnings). gg gen and gg
+// gen ts both start from here, which keeps the TypeScript declarations on the
+// routes the generated router registers. The command reads gst.yaml (see
+// loadProjectConfig) once for every scan it makes.
 func scanModels(quiet bool, ignore gghelper.ProjectIgnore, projectCfg *ggconfig.Config) (scannedModels, error) {
 	if !gghelper.FileExists(ggconst.DirModel) {
 		return scannedModels{}, errors.Newf("model dir not found: %s", ggconst.DirModel)
@@ -676,53 +684,39 @@ func scanModels(quiet bool, ignore gghelper.ProjectIgnore, projectCfg *ggconfig.
 			clioutput.Item("IGNORE", "%s %s (%s)", match.Method, match.Path, match.Model)
 		}
 	}
-	// The warnings keep quiet with the rest of the scan: fillPBTags scans
-	// quietly before the scan that reports, which would otherwise print
-	// each warning twice.
-	if !quiet {
-		reportRouteIgnoreWarnings(scanned.RouteIgnores)
-	}
 	if !quiet && len(scanned.ModelIgnores.Matches) > 0 {
 		clioutput.Section("Ignore Models")
 		for _, match := range scanned.ModelIgnores.Matches {
 			clioutput.Item("IGNORE", "model %s (%s)", match.Model, match.File)
 		}
 	}
-	if !quiet {
-		reportModelIgnoreWarnings(scanned.ModelIgnores)
-	}
 
-	return scannedModels{models: scanned.Models, routeIgnores: scanned.RouteIgnores}, nil
+	return scannedModels{models: scanned.Models, routeIgnores: scanned.RouteIgnores, modelIgnores: scanned.ModelIgnores}, nil
 }
 
-// reportModelIgnoreWarnings warns about model ignore rules that matched no
-// migrating model (a stale rule means a previously removed table silently
-// comes back), about From-less rules matching models under several
-// directories, and about ignored models whose routes are still enabled.
-// Warnings are emitted even in quiet mode.
-func reportModelIgnoreWarnings(result modelinfo.ModelIgnoreResult) {
-	for _, rule := range result.Unmatched {
-		clioutput.Warn("", "gst.yaml model ignore rule matched no migrating model: %s", rule.Raw)
-	}
-	for _, rule := range result.MultiSourceRules {
-		clioutput.Warn("", "gst.yaml model ignore rule %q matched models under %s; add \"from\" to scope it to one directory", rule.Raw, strings.Join(rule.Dirs, ", "))
-	}
-	for _, match := range result.LiveActionModels {
-		clioutput.Warn("", "gst.yaml ignores registration of model %s (%s) but its routes stay enabled; add gen.routes.ignore entries or ensure another model owns its table", match.Model, match.File)
-	}
-}
-
-// reportRouteIgnoreWarnings warns about ignore rules that matched no
-// generated route (a stale rule means a previously ignored route may have
-// silently come back) and about From-less rules matching models under
-// several directories (likely swallowing the project's own re-declaration).
-// Warnings are emitted even in quiet mode.
-func reportRouteIgnoreWarnings(result modelinfo.RouteIgnoreResult) {
-	for _, rule := range result.Unmatched {
+// reportIgnoreWarnings warns about the gst.yaml ignore rules of a scan that
+// matched nothing, a stale rule letting a route or a table it once dropped
+// silently come back; about rules without "from" matching models under
+// several directories, likely swallowing the project's own re-declaration;
+// and about ignored models whose routes stay enabled. gg gen prints them
+// after its scan whether or not it runs quietly, as gg module copy runs it,
+// and gg gen ts after its own; the scans that only fill protobuf tags or
+// prune print none, so a command prints each warning once.
+func reportIgnoreWarnings(scanned scannedModels) {
+	for _, rule := range scanned.routeIgnores.Unmatched {
 		clioutput.Warn("", "gst.yaml ignore rule matched no route: %s", rule.Raw)
 	}
-	for _, rule := range result.MultiSourceRules {
+	for _, rule := range scanned.routeIgnores.MultiSourceRules {
 		clioutput.Warn("", "gst.yaml ignore rule %q matched models under %s; add \"from\" to scope it to one directory", rule.Raw, strings.Join(rule.Dirs, ", "))
+	}
+	for _, rule := range scanned.modelIgnores.Unmatched {
+		clioutput.Warn("", "gst.yaml model ignore rule matched no migrating model: %s", rule.Raw)
+	}
+	for _, rule := range scanned.modelIgnores.MultiSourceRules {
+		clioutput.Warn("", "gst.yaml model ignore rule %q matched models under %s; add \"from\" to scope it to one directory", rule.Raw, strings.Join(rule.Dirs, ", "))
+	}
+	for _, match := range scanned.modelIgnores.LiveActionModels {
+		clioutput.Warn("", "gst.yaml ignores registration of model %s (%s) but its routes stay enabled; add gen.routes.ignore entries or ensure another model owns its table", match.Model, match.File)
 	}
 }
 
@@ -736,8 +730,9 @@ func importQualifier(aliases map[string]string, importPath, pkgName string) stri
 	return pkgName
 }
 
-// pathUnderRoot returns path cleaned and verified to be under root (no path traversal).
-// It satisfies gosec G703 by ensuring the write path is constrained to the output directory.
+// pathUnderRoot returns path cleaned and verified to be under root (no path
+// traversal). It satisfies gosec G703 by ensuring the write path is constrained
+// to the output directory.
 func pathUnderRoot(path, root string) (string, error) {
 	path = filepath.Clean(path)
 	absPath, err := filepath.Abs(path)

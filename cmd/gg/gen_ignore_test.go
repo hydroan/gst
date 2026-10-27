@@ -196,7 +196,50 @@ func (Sample) Design() {
 	}
 }
 
-// parseRules builds RouteRules from raw entries, failing the test on parse errors.
+// TestGenRunWarnsOnceAboutStaleIgnoreRules pins the warnings about gst.yaml
+// ignore rules that match nothing: a quiet run, the one gg module copy makes,
+// prints each of them as a plain run does, and either run prints it once,
+// though the protobuf tags are filled from a scan of their own first.
+func TestGenRunWarnsOnceAboutStaleIgnoreRules(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	writeProjectFile(t, filepath.Join(projectDir, "gst.yaml"), "gen:\n  routes:\n    ignore:\n      /api/missing: [GET]\n  models:\n    ignore:\n      Missing:\n")
+	writeProjectFile(t, filepath.Join(projectDir, "model", "sample.go"), `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Sample struct {
+	model.Empty
+}
+
+func (Sample) Design() {
+	dsl.Route("samples", func() {
+		dsl.Create(func() {})
+	})
+}
+`)
+
+	for _, quiet := range []bool{true, false} {
+		var err error
+		output := captureStdout(t, func() { err = genRunWithOptions(genRunOptions{Quiet: quiet}) })
+		if err != nil {
+			t.Fatalf("genRunWithOptions(Quiet: %v) error = %v", quiet, err)
+		}
+		for _, warning := range []string{"gst.yaml ignore rule matched no route: ", "gst.yaml model ignore rule matched no migrating model: "} {
+			if got := strings.Count(output, warning); got != 1 {
+				t.Errorf("a run with Quiet %v prints %q %d times, want once:\n%s", quiet, warning, got, output)
+			}
+		}
+	}
+}
+
+// parseRules builds RouteRules from raw entries, failing the test on parse
+// errors.
 func parseRules(t *testing.T, raws ...string) []ggconfig.RouteRule {
 	t.Helper()
 	rules := make([]ggconfig.RouteRule, 0, len(raws))

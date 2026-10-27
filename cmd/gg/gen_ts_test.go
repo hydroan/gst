@@ -16,8 +16,13 @@ func TestGenTypeScriptRunWritesTheDeclarationsOfTheRoutes(t *testing.T) {
 	}
 	writeTypeScriptProject(t, projectDir, typeScriptSampleModel)
 
-	runGenTypeScript(t)
+	output := runGenTypeScript(t)
 
+	// The rule for the route no model declares is stale, which the run
+	// warns about once.
+	if got := strings.Count(output, "gst.yaml ignore rule matched no route: "); got != 1 {
+		t.Errorf("gg gen ts warns about the stale ignore rule %d times, want once:\n%s", got, output)
+	}
 	if _, err := os.Stat(filepath.Join(projectDir, "generated", "typescript", "gst.ts")); err != nil {
 		t.Fatalf("gst.ts was not generated: %v", err)
 	}
@@ -211,11 +216,12 @@ func (Sample) Design() {
 `
 
 // writeTypeScriptProject writes the model file modelSource describes and a
-// gst.yaml ignoring the List route of the samples.
+// gst.yaml ignoring the List route of the samples and a route no model
+// declares.
 func writeTypeScriptProject(t *testing.T, projectDir, modelSource string) {
 	t.Helper()
 
-	writeProjectFile(t, filepath.Join(projectDir, "gst.yaml"), "gen:\n  routes:\n    ignore:\n      /api/samples: [GET]\n")
+	writeProjectFile(t, filepath.Join(projectDir, "gst.yaml"), "gen:\n  routes:\n    ignore:\n      /api/samples: [GET]\n      /api/missing: [GET]\n")
 	writeProjectFile(t, filepath.Join(projectDir, "model", "sample.go"), strings.ReplaceAll(modelSource, "'", "`"))
 }
 

@@ -80,6 +80,7 @@ func genTypeScriptRun() error {
 		if err != nil {
 			return err
 		}
+		reportIgnoreWarnings(scanned)
 		models = scanned.models
 	}
 	appName, err := applicationName()
@@ -159,8 +160,8 @@ func typeScriptRoots(models []*modelinfo.Model) []ts.TypeRef {
 
 // writeTypeScriptFiles writes files under dir, skipping the unchanged ones, and
 // removes what an earlier run generated that no route needs any more, so the
-// directory mirrors the models. A file gg did not generate is never touched: one
-// in the way of an output file stops the run, one anywhere else is kept and
+// directory mirrors the models. A file gg did not generate is never touched:
+// one in the way of an output file stops the run, one anywhere else is kept and
 // reported.
 func writeTypeScriptFiles(dir string, files []ts.File) error {
 	header := consts.CodeGeneratedComment()
