@@ -2,7 +2,6 @@ package ggcheck
 
 import (
 	"fmt"
-	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
@@ -59,7 +58,7 @@ func checkFileServiceBoundary(filePath string) []string {
 		return violations
 	}
 
-	serviceNames := serviceStructNames(node)
+	serviceNames := goast.ServiceStructNames(node)
 	if len(serviceNames) <= 1 {
 		return violations
 	}
@@ -68,36 +67,4 @@ func checkFileServiceBoundary(filePath string) []string {
 	violations = append(violations, fmt.Sprintf("Service file '%s' should contain at most one service struct (found: %s)", relPath, strings.Join(serviceNames, ", ")))
 
 	return violations
-}
-
-// serviceStructNames returns structs that embed service.Base with three type parameters.
-func serviceStructNames(node *ast.File) []string {
-	var names []string
-
-	for _, decl := range node.Decls {
-		genDecl, ok := decl.(*ast.GenDecl)
-		if !ok || genDecl.Tok != token.TYPE {
-			continue
-		}
-		for _, spec := range genDecl.Specs {
-			typeSpec, ok := spec.(*ast.TypeSpec)
-			if !ok {
-				continue
-			}
-
-			structType, ok := typeSpec.Type.(*ast.StructType)
-			if !ok || structType.Fields == nil {
-				continue
-			}
-
-			for _, field := range structType.Fields.List {
-				if goast.IsServiceBase(node, field) {
-					names = append(names, typeSpec.Name.Name)
-					break
-				}
-			}
-		}
-	}
-
-	return names
 }

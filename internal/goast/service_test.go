@@ -86,6 +86,63 @@ type Creator struct {
 	}
 }
 
+// TestServiceStructNames pins the example in the ServiceStructNames
+// documentation: of the struct types a file declares, the ones embedding the
+// framework's service base, in declaration order, and none for a file without.
+func TestServiceStructNames(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want []string
+	}{
+		{
+			name: "one service struct beside another struct",
+			src: `package sample
+
+import "github.com/hydroan/gst/service"
+
+type Creator struct {
+	service.Base[*model.User, *model.UserReq, *model.UserRsp]
+}
+
+type options struct{ verbose bool }
+`,
+			want: []string{"Creator"},
+		},
+		{
+			name: "two service structs under an aliased import",
+			src: `package sample
+
+import svc "github.com/hydroan/gst/service"
+
+type Lister struct {
+	svc.Base[*model.User, *model.UserReq, *model.UserRsp]
+}
+
+type Getter struct {
+	svc.Base[*model.User, *model.UserReq, *model.UserRsp]
+}
+`,
+			want: []string{"Lister", "Getter"},
+		},
+		{
+			name: "none",
+			src: `package sample
+
+type options struct{ verbose bool }
+`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			file, err := parser.ParseFile(token.NewFileSet(), "sample.go", tt.src, 0)
+			require.NoError(t, err)
+
+			require.Equal(t, tt.want, goast.ServiceStructNames(file))
+		})
+	}
+}
+
 // firstStructField returns the first field of the first struct file declares.
 func firstStructField(t *testing.T, file *ast.File) *ast.Field {
 	t.Helper()
