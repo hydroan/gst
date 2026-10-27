@@ -110,7 +110,12 @@ linters:
         - pattern: '^.*\.AbortWithStatusJSON$'
           msg: "write the envelope through response.Abort instead of building it by hand"
         - pattern: '^.*\.AbortWithStatus$'
-          msg: "an empty body carries neither a code nor a trace id; refuse through response.Abort"
+          msg: "an empty body carries no envelope and no trace id; refuse through response.Abort"
+        # depguard keeps the standard errors package out, but fmt.Errorf builds
+        # an error without a stack just as well; every error of the application
+        # comes from github.com/cockroachdb/errors.
+        - pattern: '^fmt\.Errorf$'
+          msg: "build errors with github.com/cockroachdb/errors: Newf for a new error, Wrap or Wrapf around a cause"
 
     godoclint:
       # Default set of rules to enable.

@@ -14,9 +14,9 @@ import (
 // TestUnmatchedRequestsAnswerInTheEnvelope pins what this server answers when a
 // request reaches no handler.
 //
-// gin's own default is plain text carrying neither a code nor a trace id, so a
-// client reading the documented envelope could not tell it from a malformed
-// response — and mistyping a path is the most common way to reach it.
+// gin's own default is plain text carrying neither the envelope nor a trace id,
+// so a client reading the documented envelope could not tell it from a
+// malformed response — and mistyping a path is the most common way to reach it.
 //
 // The ways to match nothing are answered apart: a path no route serves is not
 // found, while a path that is served under another method is method not
