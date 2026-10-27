@@ -65,8 +65,10 @@ import (
 //
 // The request goes through the framework client against the test server
 // TestMain starts, so the route, the service and the database are exercised
-// together; a login is a plain cli.Post to the login route, whose session the
-// client's cookie jar keeps for the requests that follow. A rejection is
+// together. A route not declared Public() goes through the auth middleware the
+// project registers, which reads the credentials the client carries: a token
+// set with client.WithToken, headers set with client.WithHeader, and the
+// cookies earlier responses set, kept in its cookie jar. A rejection is
 // asserted with testutil.RequireError, and rows with the testutil.Require*
 // helpers.
 func TestCreate(t *testing.T) {
@@ -98,6 +100,43 @@ var feedInfo = &modelinfo.Model{
 
 func feedTarget(file string) modelinfo.ServiceTargetInfo {
 	return modelinfo.ServiceTargetInfo{Dir: "service/feed", FilePath: "service/feed/" + file, ImportPath: "helloworld/service/feed", PackageName: "feed"}
+}
+
+// TestGenerateServiceTestOfAStream compares the test GenerateServiceTest
+// builds for the stream example of its doc comment: the Stream action
+// declaring Service("watch"), Payload and StreamingResult on the model Feed of
+// the root model package, whose rpc is WatchFeed.
+func TestGenerateServiceTestOfAStream(t *testing.T) {
+	action := &dsl.Action{Service: true, Payload: "*FeedWatchReq", Result: "*FeedEvent", StreamingResult: true, Phase: consts.Stream, ServiceName: "watch"}
+	got, err := gggen.GenerateServiceTest(feedInfo, feedTarget("watch.go"), action, "/api/feeds/watch")
+	require.NoError(t, err)
+	want := `// TestWatch covers the WatchFeed rpc, served by Watch in watch.go.
+//
+// The call goes through a grpc-go client against the gRPC listener of the
+// test server TestMain starts, so the rpc, the service and the database are
+// exercised together. A method not declared Public() goes through the auth
+// interceptors the project registers, which read the credentials the call
+// carries in its outgoing metadata, set with metadata.AppendToOutgoingContext.
+// A refusal is asserted on its status code, and rows with the testutil.Require*
+// helpers.
+func TestWatch(t *testing.T) {
+	t.Fatal("TestWatch is a scaffold: delete this line and finish the test below")
+
+	conn, err := grpc.NewClient(testutil.GRPCTarget(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = conn.Close()
+	})
+	client := pb.NewFeedServiceClient(conn)
+
+	stream, err := client.WatchFeed(t.Context(), &pb.WatchFeedRequest{})
+	require.NoError(t, err)
+	rsp, err := stream.Recv()
+	require.NoError(t, err)
+	require.NotNil(t, rsp)
+}
+`
+	require.Contains(t, got, want)
 }
 
 // TestGenerateServiceTestExamples pins the example request of every action
@@ -456,9 +495,8 @@ import (
 // registered, and the server serves the tests until they are done. Database
 // is the database the tests run against: config.DBSqlite needs no container,
 // config.DBMySQL and config.DBPostgres run in one. Redis serves the modules
-// that keep sessions or cache entries in it. Seed plants baseline rows
-// through database.Database before the server serves, such as the account
-// the tests log in with.
+// that keep sessions or cache entries in it. Seed plants the baseline rows the
+// tests start from through database.Database before the server serves.
 func TestMain(m *testing.M) {
 	testutil.Run(m, testutil.Server{
 		Database: config.DBSqlite,

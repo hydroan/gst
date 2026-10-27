@@ -910,8 +910,10 @@ import (
 //
 // The request goes through the framework client against the test server
 // TestMain starts, so the route, the service and the database are exercised
-// together; a login is a plain cli.Post to the login route, whose session the
-// client's cookie jar keeps for the requests that follow. A rejection is
+// together. A route not declared Public() goes through the auth middleware the
+// project registers, which reads the credentials the client carries: a token
+// set with client.WithToken, headers set with client.WithHeader, and the
+// cookies earlier responses set, kept in its cookie jar. A rejection is
 // asserted with testutil.RequireError, and rows with the testutil.Require*
 // helpers.
 func TestCreate(t *testing.T) {
@@ -940,8 +942,10 @@ import (
 //
 // The request goes through the framework client against the test server
 // TestMain starts, so the route, the service and the database are exercised
-// together; a login is a plain cli.Post to the login route, whose session the
-// client's cookie jar keeps for the requests that follow. A rejection is
+// together. A route not declared Public() goes through the auth middleware the
+// project registers, which reads the credentials the client carries: a token
+// set with client.WithToken, headers set with client.WithHeader, and the
+// cookies earlier responses set, kept in its cookie jar. A rejection is
 // asserted with testutil.RequireError, and rows with the testutil.Require*
 // helpers.
 func TestGet(t *testing.T) {
@@ -984,9 +988,8 @@ import (
 // registered, and the server serves the tests until they are done. Database
 // is the database the tests run against: config.DBSqlite needs no container,
 // config.DBMySQL and config.DBPostgres run in one. Redis serves the modules
-// that keep sessions or cache entries in it. Seed plants baseline rows
-// through database.Database before the server serves, such as the account
-// the tests log in with.
+// that keep sessions or cache entries in it. Seed plants the baseline rows the
+// tests start from through database.Database before the server serves.
 func TestMain(m *testing.M) {
 	testutil.Run(m, testutil.Server{
 		Database: config.DBSqlite,

@@ -25,10 +25,12 @@
 //		require.NotNil(t, rsp)
 //	}
 //
-// A login is a plain client.Post: the client's cookie jar holds the session
-// cookie, so every later request through the same client is authenticated.
-// Rejections are asserted with RequireError. A project serving gRPC dials
-// GRPCTarget with the client the protobuf plugin generated.
+// A route on router.Auth, where every model action not declared Public() is
+// registered, goes through the auth middleware the project registers, which
+// reads the credentials the client carries: a token set with client.WithToken,
+// headers set with client.WithHeader, and the cookies earlier responses set,
+// kept in its cookie jar. Rejections are asserted with RequireError. A project
+// serving gRPC dials GRPCTarget with the client the protobuf plugin generated.
 //
 // Database state is asserted with the Require* family, which reads rows back
 // through the framework query chain and fails the test when the state does

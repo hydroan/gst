@@ -113,6 +113,17 @@ func TestWithHeaderMergesIntoDefaultHeaders(t *testing.T) {
 	require.Equal(t, "application/json", captured.Header.Get("Content-Type"))
 }
 
+func TestWithTokenSendsABearerAuthorization(t *testing.T) {
+	srv, captured := newEnvelopeServer(t, http.StatusOK, `{"msg":"success"}`)
+
+	cli, err := client.New(srv.URL, client.WithToken("sample-token"))
+	require.NoError(t, err)
+
+	_, err = cli.Do(t.Context(), http.MethodGet, "/api/records", nil)
+	require.NoError(t, err)
+	require.Equal(t, "Bearer sample-token", captured.Header.Get("Authorization"))
+}
+
 func TestDoEndsWhenContextEnds(t *testing.T) {
 	// The handler holds its answer until the client goes away, so the only
 	// thing that can end the call is its context.
