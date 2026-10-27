@@ -16,7 +16,7 @@ func parseGoFile(path string) (*token.FileSet, *ast.File, error) {
 }
 
 func writeGoFile(path string, fset *token.FileSet, file *ast.File, modulePath string) error {
-	formatted, err := gghelper.FormatNodeExtraWithFileSet(file, fset, modulePath)
+	formatted, err := gghelper.FormatFile(file, fset, modulePath)
 	if err != nil {
 		return err
 	}

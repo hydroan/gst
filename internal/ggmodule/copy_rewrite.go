@@ -68,7 +68,7 @@ func normalizeModuleCopySource(filename string, src []byte, config moduleCopyRew
 		return nil, err
 	}
 
-	code, err := gghelper.FormatNodeExtraWithFileSet(file, fset, config.ProjectModulePath)
+	code, err := gghelper.FormatFile(file, fset, config.ProjectModulePath)
 	if err != nil {
 		return nil, err
 	}

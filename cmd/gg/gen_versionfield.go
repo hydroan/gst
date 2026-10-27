@@ -1,9 +1,7 @@
 package main
 
 import (
-	"bytes"
 	"go/ast"
-	"go/format"
 	"go/parser"
 	"go/token"
 	"os"
@@ -77,8 +75,8 @@ func fillVersionFieldTags(quiet bool) error {
 
 // rewriteVersionFieldTags heals the tags of the findings of one file: it
 // parses the file, gives each found field its healed tag literal, and prints
-// the file back through go/format, which keeps its comments and layout. For
-// the findings of
+// the file back the way gopls saves it (see gghelper.FormatFile), its comments
+// in place. For the findings of
 //
 //	type Bare struct {
 //		Version model.Version // trailing comment
@@ -124,11 +122,11 @@ func rewriteVersionFieldTags(path string, findings []ggcheck.VersionFieldFinding
 		field.Tag = tag
 	}
 
-	var buf bytes.Buffer
-	if err := format.Node(&buf, fset, file); err != nil {
-		return errors.Wrapf(err, "%s: version tag rewrite produced unparsable code", gghelper.RelativePath(path))
+	code, formatErr := gghelper.FormatFile(file, fset, module)
+	if formatErr != nil {
+		return errors.Wrapf(formatErr, "%s: version tag rewrite produced unparsable code", gghelper.RelativePath(path))
 	}
-	return os.WriteFile(safePath, buf.Bytes(), stat.Mode().Perm())
+	return os.WriteFile(safePath, []byte(code), stat.Mode().Perm())
 }
 
 // versionField returns the field of file the finding names, the field

@@ -503,7 +503,7 @@ func TestGenerateServiceCreate(t *testing.T) {
 	if file == nil {
 		t.Fatal("GenerateService returned nil")
 	}
-	got, err := gghelper.FormatNodeExtra(file, "helloworld")
+	got, err := gghelper.FormatFile(file, nil, "helloworld")
 	if err != nil {
 		t.Fatalf("format generated service failed: %v", err)
 	}
@@ -570,7 +570,7 @@ func TestGenerateServiceShellOmitsTheHookPlaceholders(t *testing.T) {
 	if file == nil {
 		t.Fatal("GenerateServiceShell returned nil")
 	}
-	got, err := gghelper.FormatNodeExtra(file, "helloworld")
+	got, err := gghelper.FormatFile(file, nil, "helloworld")
 	if err != nil {
 		t.Fatalf("format generated service failed: %v", err)
 	}
@@ -623,7 +623,7 @@ func TestGenerateServiceList(t *testing.T) {
 	if file == nil {
 		t.Fatal("GenerateService returned nil")
 	}
-	got, err := gghelper.FormatNodeExtra(file, "helloworld")
+	got, err := gghelper.FormatFile(file, nil, "helloworld")
 	if err != nil {
 		t.Fatalf("format generated service failed: %v", err)
 	}
@@ -725,7 +725,7 @@ func TestGenerateServiceListEmptyPayload(t *testing.T) {
 			if file == nil {
 				t.Fatal("GenerateService returned nil")
 			}
-			got, err := gghelper.FormatNodeExtra(file, "helloworld")
+			got, err := gghelper.FormatFile(file, nil, "helloworld")
 			if err != nil {
 				t.Fatalf("format generated service failed: %v", err)
 			}
@@ -771,7 +771,7 @@ func TestGenerateServiceExport(t *testing.T) {
 		if file == nil {
 			t.Fatal("GenerateService returned nil")
 		}
-		got, err := gghelper.FormatNodeExtra(file, "helloworld")
+		got, err := gghelper.FormatFile(file, nil, "helloworld")
 		if err != nil {
 			t.Fatalf("format generated service failed: %v", err)
 		}
@@ -793,7 +793,7 @@ func TestGenerateServiceExport(t *testing.T) {
 		if file == nil {
 			t.Fatal("GenerateService returned nil")
 		}
-		got, err := gghelper.FormatNodeExtra(file, "helloworld")
+		got, err := gghelper.FormatFile(file, nil, "helloworld")
 		if err != nil {
 			t.Fatalf("format generated service failed: %v", err)
 		}
@@ -829,7 +829,7 @@ func TestGenerateServiceSSE(t *testing.T) {
 	if file == nil {
 		t.Fatal("GenerateService returned nil")
 	}
-	got, err := gghelper.FormatNodeExtra(file, "helloworld")
+	got, err := gghelper.FormatFile(file, nil, "helloworld")
 	if err != nil {
 		t.Fatalf("format generated service failed: %v", err)
 	}
@@ -867,7 +867,7 @@ func TestGenerateServiceStream(t *testing.T) {
 	if file == nil {
 		t.Fatal("GenerateService returned nil")
 	}
-	got, err := gghelper.FormatNodeExtra(file, "helloworld")
+	got, err := gghelper.FormatFile(file, nil, "helloworld")
 	if err != nil {
 		t.Fatalf("format generated service failed: %v", err)
 	}

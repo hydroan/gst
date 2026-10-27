@@ -3,8 +3,8 @@
 // out of it, the ones its Git ignore rules exclude and the ones the go command
 // leaves out, programs and package listings run against its module, and the
 // small file and path helpers the commands share. It also holds the printing
-// path of the Go code gg generates (see FormatNodeExtraWithFileSet). Code a
-// single package uses stays in that package.
+// path of the Go files gg prints itself (see FormatFile). Code a single
+// package uses stays in that package.
 package gghelper
 
 import (

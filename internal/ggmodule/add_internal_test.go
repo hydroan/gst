@@ -98,6 +98,39 @@ func init() {
 	}
 }
 
+// TestAddModuleKeepsTheOwnCodeOfModuleGo pins how gg module add writes
+// module/module.go back: the way gopls saves it, so the project's own code
+// keeps the form it was written in, two parameters of one type with both
+// types and a bare return.
+func TestAddModuleKeepsTheOwnCodeOfModuleGo(t *testing.T) {
+	projectDir := newModuleCommandProjectWithFramework(t)
+	moduleFile := filepath.Join(projectDir, "module", "module.go")
+	if err := os.WriteFile(moduleFile, []byte(`package module
+
+func init() {
+}
+
+func join(a string, b string) (s string) {
+	s = a + b
+	return
+}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := AddModule(projectDir, "copytest"); err != nil {
+		t.Fatalf("AddModule(copytest) error = %v", err)
+	}
+
+	content := readProjectModuleFile(t, projectDir)
+	if !strings.Contains(content, "copytest.Register()") {
+		t.Fatalf("module.go missing the copytest.Register call:\n%s", content)
+	}
+	if want := "func join(a string, b string) (s string) {\n\ts = a + b\n\treturn\n}\n"; !strings.Contains(content, want) {
+		t.Fatalf("module.go rewrote the project's own code:\n%s", content)
+	}
+}
+
 func TestAddModuleReusesExistingImportAlias(t *testing.T) {
 	projectDir := newModuleCommandProjectWithFramework(t)
 	moduleFile := filepath.Join(projectDir, "module", "module.go")

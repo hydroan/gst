@@ -148,7 +148,7 @@ func BuildModelFile(modulePath, pkgName string, aliases map[string]string, stmts
 	// Add init function
 	f.Decls = append(f.Decls, initDecl)
 
-	return gghelper.FormatNodeExtraWithFileSet(f, fset, modulePath)
+	return gghelper.FormatFile(f, fset, modulePath)
 }
 
 // BuildServiceFile generates the service registration file, service.gen.go, of
@@ -213,7 +213,7 @@ func BuildServiceFile(modulePath, pkgName string, aliases map[string]string, stm
 	// init() declarations.
 	f.Decls = append(f.Decls, initDecl)
 
-	return gghelper.FormatNodeExtraWithFileSet(f, fset, modulePath)
+	return gghelper.FormatFile(f, fset, modulePath)
 }
 
 // BuildRouterFile generates the router registration file, router.gen.go, of the
@@ -269,8 +269,8 @@ func BuildRouterFile(modulePath, pkgName, gstModelPkg string, aliases map[string
 	// Every import after the lead ones is ordered by its entry: the import
 	// path, or "gstmodel path" for the gst model package imported under the
 	// gstmodel alias. The printing then groups the imports and sorts each
-	// group by path (see gghelper.FormatNodeExtraWithFileSet), so the entry
-	// order only has to be deterministic for the printed file to be.
+	// group by path (see gghelper.FormatFile), so the entry order only has to
+	// be deterministic for the printed file to be.
 	entries := slices.Concat(slices.Collect(maps.Keys(aliases)), routerFileSortedImports)
 	if gstModelPkg != "" {
 		entries = append(entries, GstModelImportEntry(gstModelPkg))
@@ -310,7 +310,7 @@ func BuildRouterFile(modulePath, pkgName, gstModelPkg string, aliases map[string
 	// Init() declarations.
 	f.Decls = append(f.Decls, initDecl)
 
-	return gghelper.FormatNodeExtraWithFileSet(f, fset, modulePath)
+	return gghelper.FormatFile(f, fset, modulePath)
 }
 
 // mainImportSpecs builds the imports of a generated main.go: every project
@@ -422,5 +422,5 @@ func BuildMainFile(projectName string, extraDirs ...string) (string, error) {
 
 	fset := goast.GeneratedHeader(f)
 
-	return gghelper.FormatNodeExtraWithFileSet(f, fset, projectName)
+	return gghelper.FormatFile(f, fset, projectName)
 }

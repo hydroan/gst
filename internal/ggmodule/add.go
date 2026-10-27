@@ -40,10 +40,10 @@ func AddModule(projectDir string, name string) (ChangeResult, error) {
 	alias, hasImport := existingModuleAlias(file, module)
 	changed := false
 	if !hasImport {
-		// Use the Go parser/printer path instead of string replacement because
-		// module/module.go may already contain grouped imports, aliases, comments,
-		// or additional init statements. astutil keeps the import block valid, and
-		// the final go/format pass normalizes spacing.
+		// Use the Go parser and printer instead of string replacement, because
+		// module/module.go may already hold grouped imports, aliases, comments
+		// or other init statements: astutil keeps the import block valid, and
+		// writeGoFile prints the file back the way gopls saves it.
 		importName := importAliasForModule(module)
 		changed = astutil.AddNamedImport(fset, file, identName(importName), module.ImportPath)
 		alias = module.PackageName

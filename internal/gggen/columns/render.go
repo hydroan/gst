@@ -87,7 +87,7 @@ func renderColumnsFile(module string, pkgName string, source string, models []mo
 	// no dot and it does not belong to the project module, whose name may
 	// also be dotless. The printing below then sets a dotless project import
 	// apart from the dotted ones, as gopls groups them (see
-	// gghelper.FormatNodeExtraWithFileSet).
+	// gghelper.FormatFile).
 	stdlib := make([]string, 0, len(imports))
 	external := make([]string, 0, len(imports))
 	for path := range imports {
@@ -197,7 +197,7 @@ func renderColumnsFile(module string, pkgName string, source string, models []mo
 	}
 	f.Comments = comments
 
-	rendered, err := gghelper.FormatNodeExtraWithFileSet(f, fset, module)
+	rendered, err := gghelper.FormatFile(f, fset, module)
 	if err != nil {
 		return "", errors.Wrapf(err, "format generated columns for %s", source)
 	}
@@ -223,15 +223,12 @@ func isStdlibImport(path string, module string) bool {
 	return !strings.Contains(strings.SplitN(path, "/", 2)[0], ".")
 }
 
-// columnsImportSpec builds one import of a generated file, positioned at
-// pos. The package name is written only when it cannot be inferred from the
-// path: gofmt never spells a name it can read off the last segment, and a
-// redundant one reads as if the package were called something else. A
-// versioned path such as .../v2, or a package whose name differs from its
-// directory, keeps the name, without which the generated file would not
-// compile. In the example of renderColumnsFile, the package time of the path
-// time is written as "time", while the package uuid of
-// github.com/gofrs/uuid/v5 is written as uuid "github.com/gofrs/uuid/v5".
+// columnsImportSpec builds one import of a generated file, positioned at pos,
+// the package name written only when it is not the last segment of the path, so
+// the import shows the name the code refers to the package by. In the example
+// of renderColumnsFile, the package time of the path time is written as "time",
+// while the package uuid of github.com/gofrs/uuid/v5 is written as uuid
+// "github.com/gofrs/uuid/v5".
 func columnsImportSpec(name, path string, pos token.Pos) *ast.ImportSpec {
 	spec := &ast.ImportSpec{Path: &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(path), ValuePos: pos}}
 	if name != path[strings.LastIndex(path, "/")+1:] {

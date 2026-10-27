@@ -185,7 +185,7 @@ func GenerateServiceTest(info *modelinfo.Model, target modelinfo.ServiceTargetIn
 			},
 		},
 	}
-	return gghelper.FormatNodeExtra(file, info.ModulePath)
+	return gghelper.FormatFile(file, nil, info.ModulePath)
 }
 
 // serviceTestName returns the name of the test scaffolded for action: Test
@@ -206,21 +206,21 @@ func serviceTestName(action *dsl.Action) string {
 type serviceTestExample struct {
 	setup []ast.Stmt
 	stmts []ast.Stmt
-	// imports maps the import path of each extra package to the name it is
-	// imported under, "" for its package name.
+	// imports maps the import path of each extra package to the name its
+	// import is written with, "" for none.
 	imports map[string]string
 }
 
 // newServiceTestExample builds the example request of action on the model
 // info, registered under route: every request passes t.Context() first, an
 // item route reads the row's id from a placeholder variable, a batch route
-// sends client.BatchItems or
-// client.BatchIDs, a List without a declared result decodes
-// client.ListResult, Import uploads a file, Export downloads the attachment
-// and SSE consumes the stream, all through the framework client; a Stream
-// calls its rpc through a grpc-go client, see newStreamTestExample. The
+// sends client.BatchItems or client.BatchIDs, a List without a declared result
+// decodes client.ListResult, Import uploads a file, Export downloads the
+// attachment and SSE consumes the stream, all through the framework client; a
+// Stream calls its rpc through a grpc-go client, see newStreamTestExample. The
 // model package is imported when the example refers to it, under an alias
-// when its name is one a scaffold import takes.
+// when its name is one a scaffold import takes, and under its name when that
+// is not the last segment of its path.
 func newServiceTestExample(info *modelinfo.Model, action *dsl.Action, route string) *serviceTestExample {
 	if action.Phase == consts.Stream {
 		return newStreamTestExample(info, action, route)
@@ -233,17 +233,15 @@ func newServiceTestExample(info *modelinfo.Model, action *dsl.Action, route stri
 		imports: map[string]string{scaffoldImportClient: ""},
 	}
 	modelImportPath := info.ImportPath()
+	modelImportName := ResolveImportConflicts(map[string]string{modelImportPath: info.ModelPkgName}, scaffoldImportNames...)[modelImportPath]
 	modelQualifier := info.ModelPkgName
-	if alias := ResolveImportConflicts(map[string]string{modelImportPath: info.ModelPkgName}, scaffoldImportNames...)[modelImportPath]; alias != "" {
-		modelQualifier = alias
+	if modelImportName != "" {
+		modelQualifier = modelImportName
 	}
 	// modelType returns the model package type typeName declares, as the
 	// scaffold refers to it, and records the import the reference needs.
 	modelType := func(typeName string) ast.Expr {
-		example.imports[modelImportPath] = ""
-		if modelQualifier != info.ModelPkgName {
-			example.imports[modelImportPath] = modelQualifier
-		}
+		example.imports[modelImportPath] = modelImportName
 		return actionTypeExpr(modelQualifier, typeName)
 	}
 	// valueType returns the response type of the action in the value form
@@ -365,18 +363,17 @@ func newServiceTestExample(info *modelinfo.Model, action *dsl.Action, route stri
 // the request and reads the first answer, a client stream sends a request
 // and reads the answer with CloseAndRecv, a bidirectional stream sends,
 // reads and closes its side. The stubs' package is imported under an alias
-// when its name is one the scaffold takes.
+// when its name is one the scaffold takes, and under its name when the name
+// is not the last segment of its path.
 func newStreamTestExample(info *modelinfo.Model, action *dsl.Action, route string) *serviceTestExample {
 	pbImportPath, pbName := modelinfo.PBPackage(info.ModulePath, info.PBDir())
 	example := &serviceTestExample{imports: map[string]string{scaffoldImportGRPC: "", scaffoldImportInsecure: ""}}
+	pbImportName := ResolveImportConflicts(map[string]string{pbImportPath: pbName}, scaffoldImportNames...)[pbImportPath]
 	qualifier := pbName
-	if alias := ResolveImportConflicts(map[string]string{pbImportPath: pbName}, scaffoldImportNames...)[pbImportPath]; alias != "" {
-		qualifier = alias
+	if pbImportName != "" {
+		qualifier = pbImportName
 	}
-	example.imports[pbImportPath] = ""
-	if qualifier != pbName {
-		example.imports[pbImportPath] = qualifier
-	}
+	example.imports[pbImportPath] = pbImportName
 
 	rpc := modelinfo.RPCName(info, route, action)
 	request := &ast.UnaryExpr{Op: token.AND, X: &ast.CompositeLit{Type: sel(ident(qualifier), rpc+"Request")}}
@@ -588,7 +585,7 @@ func GenerateServiceTestMain(modulePath, servicePkgName string, extraDirs ...str
 			},
 		},
 	}
-	return gghelper.FormatNodeExtraWithFileSet(file, fset, modulePath)
+	return gghelper.FormatFile(file, fset, modulePath)
 }
 
 // TestMainFile returns the path of the test file in dir declaring TestMain

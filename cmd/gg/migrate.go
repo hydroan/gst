@@ -149,7 +149,7 @@ func buildMigrateProjectFile(moduleName string) (string, error) {
 		Decls: []ast.Decl{&ast.GenDecl{Tok: token.IMPORT, Specs: specs}},
 	}
 	fset := goast.GeneratedHeader(f)
-	return gghelper.FormatNodeExtraWithFileSet(f, fset, moduleName)
+	return gghelper.FormatFile(f, fset, moduleName)
 }
 
 // migrateProjectImports lists the project packages the migration program

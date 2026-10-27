@@ -254,7 +254,7 @@ func (f *goFile) source() (string, error) {
 		skipLines(lines, printed.Len()/lineSetWidth+2)
 		file.Decls = append(file.Decls, d.decl)
 	}
-	return gghelper.FormatNodeExtraWithFileSet(file, fset, f.modulePath)
+	return gghelper.FormatFile(file, fset, f.modulePath)
 }
 
 // lineSetWidth is the width of a line of a goast.LineSet in bytes, the

@@ -70,7 +70,7 @@
 2. `model/<name>/` 或 `service/<name>/` 下有任何非测试的 Go 文件时报错：项目里已经有这个模块的源码，再登记框架版本就成了两份实现。
 3. 读 `module/module.go`，文件不存在时报错。
 4. 已经登记过——导入了这个模块，并且某个 `init` 函数里调用了它的 `Register`——就打印 `SKIP <name> already registered in module/module.go`，文件不动。
-5. 否则：还没有导入就加上导入，包名和目录名不同时带上别名；在第一个 `init` 函数末尾追加 `<包名>.Register()`，没有 `init` 函数就新建一个。用 gg 生成文件的同一套格式写回：import 照 gopls 保存时的样子分组，再用 gofumpt 格式化，另开它的 GroupParams、ClotheReturns、BalanceCalls 三条额外规则；打印 `ADD <name> registered in module/module.go`。
+5. 否则：还没有导入就加上导入，包名和目录名不同时带上别名；在第一个 `init` 函数末尾追加 `<包名>.Register()`，没有 `init` 函数就新建一个。与 gg 自己打印的其他 Go 文件同一套格式写回：import 照 gopls 保存时的样子分组，再用 gofumpt 格式化；打印 `ADD <name> registered in module/module.go`。
 
 ## gg module remove
 

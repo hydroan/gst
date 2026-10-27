@@ -17,9 +17,11 @@ import (
 // itself.
 var formatOnlyImports = &imports.Options{Comments: true, TabIndent: true, TabWidth: 8, FormatOnly: true}
 
-// FormatNode prints node as Go source in the go/format style.
+// FormatNode prints node, a declaration or another fragment of a file, as Go
+// source in the go/format style; gofumpt and the grouping of imports work on
+// whole files only (see FormatFile).
 //
-//gst:api the counterpart of FormatNodeExtra in the plain go/format style
+//gst:api the counterpart of FormatFile for a fragment of a file
 func FormatNode(node ast.Node) (string, error) {
 	var buf bytes.Buffer
 	fset := token.NewFileSet()
@@ -35,45 +37,32 @@ func FormatNode(node ast.Node) (string, error) {
 	return string(formatted), nil
 }
 
-// FormatNodeExtra prints node like FormatNode, but in the stricter gofumpt
-// style (https://github.com/mvdan/gofumpt) with its GroupParams,
-// ClotheReturns and BalanceCalls rules, as a file of the module modulePath
-// (see FormatNodeExtraWithFileSet). The generated registration and service
-// files are printed through it.
-func FormatNodeExtra(node ast.Node, modulePath string) (string, error) {
-	return FormatNodeExtraWithFileSet(node, nil, modulePath)
-}
-
-// FormatNodeExtraWithFileSet is FormatNodeExtra printing node through fset,
-// the FileSet the positions of node refer to, which lays it out by them: the
-// comments of a parsed file stay in place, and a file built from scratch
-// breaks lines where its fabricated positions say (see goast.LineSet). A nil
-// fset stands for a new one. The imports are grouped the way gopls organizes
-// them on save and gofumpt then formats the file for the module modulePath,
-// the order a gopls running gofumpt saves a file in, so saving a file gg
-// wrote leaves its import groups and its layout as they are: for the module
-// demo, demo/model/tool and github.com/hydroan/gst are two groups, and with
-// fmt imported too, fmt leads in a group of its own.
-func FormatNodeExtraWithFileSet(node ast.Node, fset *token.FileSet, modulePath string) (string, error) {
+// FormatFile prints file as Go source, the way a gopls running gofumpt saves a
+// file of the module modulePath: its imports grouped as gopls organizes them on
+// save, then gofumpt, with none of its extra rules, as gopls runs it. The Go
+// files gg prints itself go through it, the ones it generates and the project's
+// own files it rewrites, so saving one leaves its import groups and its layout
+// as they are; the files the protobuf plugins compile are written as the
+// plugins print them. For the module demo, the imports fmt, demo/model/tool and
+// github.com/hydroan/gst of a single group come out in three, in that order,
+// and func join(a string, b string) keeps both types. file is printed through
+// fset, the FileSet its positions refer to, which lays it out by them: the
+// comments of a parsed file stay in place, and a file built from scratch breaks
+// lines where its fabricated positions say (see goast.LineSet). A nil fset
+// stands for a new one.
+func FormatFile(file *ast.File, fset *token.FileSet, modulePath string) (string, error) {
 	var buf bytes.Buffer
-	// create a new FileSet if none was provided
 	if fset == nil {
 		fset = token.NewFileSet()
 	}
-
-	if err := format.Node(&buf, fset, node); err != nil {
+	if err := format.Node(&buf, fset, file); err != nil {
 		return "", err
 	}
 	grouped, err := imports.Process("", buf.Bytes(), formatOnlyImports)
 	if err != nil {
 		return "", err
 	}
-
-	formatted, err := gofumpt.Source(grouped, gofumpt.Options{
-		LangVersion: "",
-		ModulePath:  modulePath,
-		Extra:       gofumpt.Extra{GroupParams: true, ClotheReturns: true, BalanceCalls: true},
-	})
+	formatted, err := gofumpt.Source(grouped, gofumpt.Options{LangVersion: "", ModulePath: modulePath})
 	if err != nil {
 		return "", err
 	}

@@ -73,7 +73,7 @@ func mergeModuleServiceSource(input moduleServiceMergeInput) ([]byte, error) {
 		return nil, err
 	}
 
-	code, err := gghelper.FormatNodeExtraWithFileSet(targetFile, fset, input.ProjectModulePath)
+	code, err := gghelper.FormatFile(targetFile, fset, input.ProjectModulePath)
 	if err != nil {
 		return nil, err
 	}
@@ -547,7 +547,7 @@ func generateTargetServiceShell(actions []moduleCopyAction, modulePath string) (
 		appendGeneratedServiceDecls(file, next)
 	}
 	fset := token.NewFileSet()
-	code, err := gghelper.FormatNodeExtraWithFileSet(file, fset, modulePath)
+	code, err := gghelper.FormatFile(file, fset, modulePath)
 	if err != nil {
 		return nil, err
 	}

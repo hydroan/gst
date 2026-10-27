@@ -115,7 +115,7 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req model.User) (rsp model.Use
 				}
 			}
 
-			got, err := gghelper.FormatNodeExtra(file, "helloworld")
+			got, err := gghelper.FormatFile(file, nil, "helloworld")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -235,7 +235,7 @@ func (g *Creator) Create(ctx *gst.ServiceContext, req *group.GroupCreateReq) (rs
 				}
 			}
 
-			got, err := gghelper.FormatNodeExtra(file, "helloworld")
+			got, err := gghelper.FormatFile(file, nil, "helloworld")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -393,7 +393,7 @@ type user struct {
 				t.Errorf("No service type found in the code")
 			}
 
-			got, err := gghelper.FormatNodeExtra(file, "helloworld")
+			got, err := gghelper.FormatFile(file, nil, "helloworld")
 			if err != nil {
 				t.Fatal(err)
 			}

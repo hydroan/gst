@@ -76,7 +76,7 @@ func BuildAPIDocFile(modulePath, pkgName string, entries modelinfo.APIDocEntries
 		Body: body,
 	})
 
-	return gghelper.FormatNodeExtraWithFileSet(f, fset, modulePath)
+	return gghelper.FormatFile(f, fset, modulePath)
 }
 
 // apidocRegisterStmt builds the registration of one struct's docs, taking

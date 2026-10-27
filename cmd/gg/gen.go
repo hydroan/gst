@@ -1,9 +1,7 @@
 package main
 
 import (
-	"bytes"
 	"go/ast"
-	"go/format"
 	"go/parser"
 	"go/token"
 	"os"
@@ -401,9 +399,10 @@ func genRunWithOptions(opts genRunOptions) error {
 				return errors.Wrapf(err, "service file %s", safePath)
 			}
 			if changed {
-				// Only reformat and write file when there are changes
-				// Use original FileSet to preserve comment positions
-				code, err = gghelper.FormatNodeExtraWithFileSet(f, fset, module)
+				// The file is the project's own: it is written back only
+				// when it changed, through the FileSet it was parsed with so
+				// its comments stay in place, the way gopls saves it.
+				code, err = gghelper.FormatFile(f, fset, module)
 				if err != nil {
 					return err
 				}
@@ -456,7 +455,7 @@ func genRunWithOptions(opts genRunOptions) error {
 			}
 			if file := generate(m, act, act.Phase, target.PackageName); file != nil {
 				fset := token.NewFileSet()
-				code, err := gghelper.FormatNodeExtraWithFileSet(file, fset, module)
+				code, err := gghelper.FormatFile(file, fset, module)
 				if err != nil {
 					applyErr = err
 					return
@@ -531,12 +530,9 @@ func scaffoldServiceTests(modelInfo *modelinfo.Model, target modelinfo.ServiceTa
 // syncTestMainImports makes every test file of the project declaring TestMain
 // in an external test package import the optional project packages the way
 // main.go does, extraDirs being the ones main.go imports (see
-// gggen.SyncTestMainImports), and prints the files it rewrites. A rewritten
-// file is the project's own and only its imports change, so it is printed by
-// go/format, which leaves the rest of a gofmt-formatted file as it is; the
-// gofumpt printer of the generated files (see
-// gghelper.FormatNodeExtraWithFileSet) would apply its stricter rules to the
-// whole file.
+// gggen.SyncTestMainImports), and prints the files it rewrites the way gopls
+// saves them (see gghelper.FormatFile), so an import a file gains lands in the
+// group gopls puts it in.
 func syncTestMainImports(extraDirs []string, ignore gghelper.ProjectIgnore, quiet bool) error {
 	files, err := gghelper.TestMainFiles(ignore)
 	if err != nil {
@@ -551,14 +547,14 @@ func syncTestMainImports(extraDirs []string, ignore gghelper.ProjectIgnore, quie
 		if !gggen.SyncTestMainImports(fset, file, module, extraDirs) {
 			continue
 		}
-		var code bytes.Buffer
-		if err := format.Node(&code, fset, file); err != nil {
+		code, err := gghelper.FormatFile(file, fset, module)
+		if err != nil {
 			return errors.Wrapf(err, "formatting %s", path)
 		}
 		if !quiet {
 			clioutput.Status(clioutput.StyleWarn, clioutput.SymbolSuccess, "UPDATE", "%s", path)
 		}
-		if err := os.WriteFile(path, code.Bytes(), ggconst.FileModeGenerated); err != nil {
+		if err := os.WriteFile(path, []byte(code), ggconst.FileModeGenerated); err != nil {
 			return err
 		}
 	}

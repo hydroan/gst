@@ -1,10 +1,8 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"go/ast"
-	"go/format"
 	"go/parser"
 	"go/token"
 	"maps"
@@ -124,9 +122,9 @@ func oneTagPerField(tags []pbschema.MissingTag) ([]pbschema.MissingTag, error) {
 
 // rewritePBTags writes the numbers of tags into the fields of the file at
 // path: it parses the file, finds every field by its line and name, adds
-// pb:"N" to its tag (see withPBTag) and prints the file back through
-// go/format, which keeps its comments and layout. A field sharing its
-// declaration with another, X, Y int32, is refused, since one tag would
+// pb:"N" to its tag (see withPBTag) and prints the file back the way gopls
+// saves it (see gghelper.FormatFile), its comments in place. A field sharing
+// its declaration with another, X, Y int32, is refused, since one tag would
 // number both. For the tags numbering Body 12, Tags 13, Window 14, From 1
 // and To 2 in
 //
@@ -183,11 +181,11 @@ func rewritePBTags(path string, tags []pbschema.MissingTag) error {
 		}
 		field.Tag = withPBTag(field.Tag, tag.Number)
 	}
-	var buf bytes.Buffer
-	if err := format.Node(&buf, fset, file); err != nil {
+	code, err := gghelper.FormatFile(file, fset, module)
+	if err != nil {
 		return errors.Wrapf(err, "%s: pb tag rewrite produced unparsable code", path)
 	}
-	return os.WriteFile(safePath, buf.Bytes(), stat.Mode().Perm())
+	return os.WriteFile(safePath, []byte(code), stat.Mode().Perm())
 }
 
 // fieldAtLine returns the field of file declared under name on line, nil

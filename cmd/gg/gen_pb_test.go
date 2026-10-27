@@ -765,6 +765,50 @@ func TestGenRunNumbersTheFieldsWithoutPBTags(t *testing.T) {
 	require.Equal(t, string(healed), string(again))
 }
 
+// TestGenRunNumbersTheFieldsAndPrintsTheModelFileAsGoplsSaves pins how gg gen
+// writes back the model file it numbers: the way gopls saves it, so a
+// standard library import sharing a group with the framework's comes out in a
+// group of its own.
+func TestGenRunNumbersTheFieldsAndPrintsTheModelFileAsGoplsSaves(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	writeProtobufProject(t, projectDir, map[string]string{"model/note.go": `package model
+
+import (
+	"github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+	"time"
+)
+
+// Note is numbered by gg gen.
+type Note struct {
+	Title string    'json:"title"'
+	At    time.Time 'json:"at"'
+
+	model.Base
+}
+
+func (Note) TableName() string { return "notes" }
+
+func (Note) Design() {
+	dsl.GRPC()
+	dsl.Migrate()
+	dsl.Endpoint("notes")
+	dsl.Create(func() {})
+}
+`})
+
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+
+	healed, err := os.ReadFile(filepath.Join(projectDir, "model", "note.go"))
+	require.NoError(t, err)
+	require.Contains(t, string(healed), "import (\n\t\"time\"\n\n\t\"github.com/hydroan/gst/dsl\"\n\t\"github.com/hydroan/gst/model\"\n)\n")
+	require.Contains(t, string(healed), `json:"title" pb:"11"`)
+	require.Contains(t, string(healed), `json:"at" pb:"12"`)
+}
+
 // TestGenRunNumbersTheFieldsWithoutPBTagsAfterTheCommittedDefinition pins
 // the numbers gg gen gives against the definition already under pb/: a
 // field the committed definition holds gets its number back, and a new

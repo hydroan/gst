@@ -110,6 +110,44 @@ func (Partial) TableName() string { return "partials" }
 	}
 }
 
+// TestFillVersionFieldTagsPrintsTheFileAsGoplsSaves pins how the heal writes a
+// model file back: the way gopls saves it, so a standard library import
+// sharing a group with the framework's comes out in a group of its own.
+func TestFillVersionFieldTagsPrintsTheFileAsGoplsSaves(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+	writeProjectGoMod(t, projectDir)
+
+	path := filepath.Join(projectDir, "model", "document", "document.go")
+	writeProjectFile(t, path, `package document
+
+import (
+	"github.com/hydroan/gst/model"
+	"time"
+)
+
+type Bare struct {
+	Version model.Version
+	At      time.Time
+
+	model.Base
+}
+
+func (Bare) TableName() string { return "bares" }
+`)
+
+	if err := fillVersionFieldTags(true); err != nil {
+		t.Fatal(err)
+	}
+	healed, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "import (\n\t\"time\"\n\n\t\"github.com/hydroan/gst/model\"\n)\n"; !strings.Contains(string(healed), want) {
+		t.Fatalf("healed file =\n%s\nwant it to import\n%s", healed, want)
+	}
+}
+
 func TestFillVersionFieldTagsRejectsEmbedded(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
