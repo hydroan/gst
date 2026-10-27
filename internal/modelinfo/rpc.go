@@ -2,7 +2,6 @@ package modelinfo
 
 import (
 	"path"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -31,7 +30,8 @@ func RPCName(m *Model, route string, action *dsl.Action) string {
 	return rpcBase(action) + m.ModelName + rpcSuffix(m, route)
 }
 
-// rpcBase is the name of the action itself, the service name aside (see RPCName).
+// rpcBase is the name of the action itself, the service name aside (see
+// RPCName).
 func rpcBase(action *dsl.Action) string {
 	if action.ServiceName != "" {
 		return action.RoleName()
@@ -60,8 +60,8 @@ func rpcSuffix(m *Model, route string) string {
 	return "By" + strings.Join(extra, "And")
 }
 
-// RouteParams returns the names of the path parameters of route, written
-// :name, in order: box and shelf for archive/boxes/:box/shelves/:shelf/documents.
+// RouteParams returns the names of the path parameters of route, written :name,
+// in order: box and shelf for archive/boxes/:box/shelves/:shelf/documents.
 func RouteParams(route string) []string {
 	var params []string
 	for part := range strings.SplitSeq(route, "/") {
@@ -98,5 +98,5 @@ func PBPackage(modulePath, dir string) (importPath, name string) {
 // pb/, which mirrors the model file's directory under model/: "." for
 // model/feed.go and board for model/board/feed.go.
 func (m *Model) PBDir() string {
-	return path.Dir(filepath.ToSlash(strings.TrimPrefix(m.ModelFilePath, ggconst.DirModel+"/")))
+	return path.Dir(m.pathInModelDir())
 }

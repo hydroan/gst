@@ -5,7 +5,6 @@ import (
 	"go/ast"
 	"go/token"
 	"path"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -92,7 +91,7 @@ func modelImportSpec(importPath, modelQualifier string) *ast.ImportSpec {
 func importDecl(modulePath, modelFileDir, modelQualifier string, phase consts.Phase, otherPkg ...string) *ast.GenDecl {
 	genDecl := &ast.GenDecl{
 		Tok:   token.IMPORT,
-		Specs: []ast.Spec{modelImportSpec(filepath.Join(modulePath, modelFileDir), modelQualifier)},
+		Specs: []ast.Spec{modelImportSpec(modelinfo.PackageImportPath(modulePath, modelFileDir), modelQualifier)},
 	}
 	for _, importPath := range serviceScaffoldImports(phase) {
 		genDecl.Specs = append(genDecl.Specs, &ast.ImportSpec{Path: &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(importPath)}})

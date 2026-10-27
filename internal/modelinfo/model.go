@@ -232,6 +232,13 @@ func (m *Model) InModelRoot(modelDir string) bool {
 	return filepath.Clean(m.ModelFileDir) == filepath.Clean(modelDir)
 }
 
+// pathInModelDir returns the path of the model file under the model
+// directory, slash-separated on every platform: board/feed.go for
+// model/board/feed.go, and for model\board\feed.go on Windows.
+func (m *Model) pathInModelDir() string {
+	return strings.TrimPrefix(filepath.ToSlash(m.ModelFilePath), ggconst.DirModel+"/")
+}
+
 // ModelPackageName returns the name a model package in the directory named
 // dirName declares, as gg check requires: the directory name with its
 // underscores stripped, as in record_item holding package recorditem and

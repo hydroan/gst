@@ -1,6 +1,7 @@
 package modelinfo_test
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/hydroan/gst/internal/consts"
@@ -57,6 +58,8 @@ func TestPBPackageMirrorsTheDirectoryUnderPB(t *testing.T) {
 	require.Equal(t, "example.com/app/pb/record_item", importPath)
 	require.Equal(t, "recorditem", name)
 
-	require.Equal(t, ".", (&modelinfo.Model{ModelFilePath: "model/feed.go"}).PBDir())
-	require.Equal(t, "board", (&modelinfo.Model{ModelFilePath: "model/board/feed.go"}).PBDir())
+	// The scan names the model file with the platform's separator, a
+	// backslash on Windows.
+	require.Equal(t, ".", (&modelinfo.Model{ModelFilePath: filepath.Join("model", "feed.go")}).PBDir())
+	require.Equal(t, "board", (&modelinfo.Model{ModelFilePath: filepath.Join("model", "board", "feed.go")}).PBDir())
 }

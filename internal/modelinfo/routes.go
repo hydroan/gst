@@ -2,7 +2,7 @@ package modelinfo
 
 import (
 	"fmt"
-	"path/filepath"
+	"path"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -156,7 +156,7 @@ func RouterTargetForAction(route string, design *dsl.Design, action *dsl.Action)
 	paramName := ""
 	item := ItemParam(design)
 	if suffix := consts.RouteSuffix(action.Phase, item); suffix != "" {
-		route = filepath.Join(route, suffix)
+		route = path.Join(route, suffix)
 		if suffix == item {
 			paramName = consts.LastRouteParam(route)
 		}
@@ -185,14 +185,14 @@ func buildHierarchicalEndpoints(allModels []*Model) {
 		}
 
 		// Extract directory from model file path
-		modelFilePath := strings.TrimPrefix(m.ModelFilePath, "model/")
-		fileDir := filepath.Dir(modelFilePath)
+		modelFilePath := m.pathInModelDir()
+		fileDir := path.Dir(modelFilePath)
 		if fileDir == "." {
 			fileDir = ""
 		}
 
 		// Get the filename without extension
-		fileName := strings.TrimSuffix(filepath.Base(modelFilePath), ".go")
+		fileName := strings.TrimSuffix(path.Base(modelFilePath), ".go")
 
 		// Determine the directory path that this model defines endpoint for
 		// The rule is: model file defines endpoint for the directory path formed by modelDir + fileName
@@ -200,7 +200,7 @@ func buildHierarchicalEndpoints(allModels []*Model) {
 		if fileDir == "" {
 			targetDir = fileName
 		} else {
-			targetDir = filepath.Join(fileDir, fileName)
+			targetDir = path.Join(fileDir, fileName)
 		}
 
 		// Store the endpoint mapping for the target directory
@@ -216,8 +216,7 @@ func buildHierarchicalEndpoints(allModels []*Model) {
 		}
 
 		// Extract directory from model file path
-		modelFilePath := strings.TrimPrefix(m.ModelFilePath, "model/")
-		fileDir := filepath.Dir(modelFilePath)
+		fileDir := path.Dir(m.pathInModelDir())
 		if fileDir == "." {
 			fileDir = ""
 		}
