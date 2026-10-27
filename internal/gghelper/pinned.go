@@ -54,11 +54,16 @@ func PinnedCommand(module, version, pkg string, args ...string) (*exec.Cmd, erro
 	if err = writePinnedModFile(dir, module, version, toolchain); err != nil {
 		return nil, err
 	}
+	// go build writes the program into dir under the last element of pkg,
+	// with the platform's executable suffix, .exe on Windows. It is started by
+	// that path without the suffix, which finds it on every platform: on
+	// Windows exec.Command tries the PATHEXT extensions of an absolute path
+	// that has none.
 	program := filepath.Join(dir, path.Base(pkg))
 	// #nosec G204 -- the arguments are literal flags, a path under the module
 	// directory gg itself wrote in the user cache directory, and the package
 	// the callers spell out in constants.
-	build := exec.Command("go", "build", "-mod=mod", "-o", program, pkg)
+	build := exec.Command("go", "build", "-mod=mod", "-o", dir+string(filepath.Separator), pkg)
 	build.Dir = dir
 	// The program runs on this host, whatever platform the caller builds
 	// its project for, so GOOS and GOARCH name the host after whatever the
