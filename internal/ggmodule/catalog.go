@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+
+	"github.com/hydroan/gst/internal/gggen"
 )
 
 // Module describes one built-in framework module that gg can manage.
@@ -163,15 +165,18 @@ func moduleByName(name string) (Module, error) {
 	return Module{}, os.ErrNotExist
 }
 
-// importAliasForModule returns the explicit import name a module's import takes
-// when the module directory name and declared package name differ, so the
-// import shows the name the code refers to the package by. Returning nil lets
-// astutil add a normal import for the common case.
+// importAliasForModule returns the explicit import name a module's import
+// takes, the one gggen.ResolveImportConflicts gives an import nothing clashes
+// with: the declared package name when it is not the module's directory name,
+// the last segment of the import path, so the import shows the name the code
+// refers to the package by. Returning nil lets astutil add a normal import for
+// the common case.
 func importAliasForModule(module Module) *ast.Ident {
-	if module.PackageName == "" || module.PackageName == module.Name {
-		return nil
+	imports := map[string]string{module.ImportPath: module.PackageName}
+	if name := gggen.ResolveImportConflicts(imports)[module.ImportPath]; name != "" {
+		return ast.NewIdent(name)
 	}
-	return ast.NewIdent(module.PackageName)
+	return nil
 }
 
 // moduleAliasFromImportSpec maps a project's import spec back to the identifier

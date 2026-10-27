@@ -387,6 +387,22 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			wantCode: []string{`	model_client "helloworld/model/client"`, `	rsp, err := cli.Post[model_client.Session](t.Context(), "/api/client/sessions", &model_client.Session{})`},
 		},
 		{
+			name: "model_package_unlike_its_directory_is_imported_under_its_name",
+			info: &modelinfo.Model{
+				ModulePath:   "helloworld",
+				ModelPkgName: "recorditem",
+				ModelName:    "RecordItem",
+				ModelVarName: "r",
+				ModelFileDir: "model/record_item",
+				Design:       &dsl.Design{},
+			},
+			target:   modelinfo.ServiceTargetInfo{Dir: "service/record_item", FilePath: "service/record_item/create.go", ImportPath: "helloworld/service/record_item", PackageName: "recorditem"},
+			action:   &dsl.Action{Service: true, Payload: "*RecordItem", Result: "*RecordItem", Phase: consts.Create},
+			route:    "/api/record-items",
+			wantDoc:  "// TestCreate covers POST /api/record-items, served by Creator in create.go.",
+			wantCode: []string{`	recorditem "helloworld/model/record_item"`, `	rsp, err := cli.Post[recorditem.RecordItem](t.Context(), "/api/record-items", &recorditem.RecordItem{})`},
+		},
+		{
 			name:    "server_stream_reads_the_first_answer",
 			info:    feedInfo,
 			target:  feedTarget("watch.go"),
@@ -448,6 +464,23 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			route:    "/api/stream/feeds/watch",
 			wantDoc:  "// TestWatch covers the WatchFeed rpc, served by Watch in watch.go.",
 			wantCode: []string{`	pb_stream "helloworld/pb/stream"`, `	client := pb_stream.NewFeedServiceClient(conn)`},
+		},
+		{
+			name: "stubs_package_unlike_its_directory_is_imported_under_its_name",
+			info: &modelinfo.Model{
+				ModulePath:    "helloworld",
+				ModelPkgName:  "livefeed",
+				ModelName:     "Feed",
+				ModelVarName:  "f",
+				ModelFileDir:  "model/live_feed",
+				ModelFilePath: "model/live_feed/feed.go",
+				Design:        &dsl.Design{Endpoint: "live-feed/feeds"},
+			},
+			target:   modelinfo.ServiceTargetInfo{Dir: "service/live_feed/feed", FilePath: "service/live_feed/feed/watch.go", ImportPath: "helloworld/service/live_feed/feed", PackageName: "feed"},
+			action:   &dsl.Action{Service: true, Payload: "*FeedWatchReq", Result: "*FeedEvent", StreamingResult: true, Phase: consts.Stream, ServiceName: "watch"},
+			route:    "/api/live-feed/feeds/watch",
+			wantDoc:  "// TestWatch covers the WatchFeed rpc, served by Watch in watch.go.",
+			wantCode: []string{`	livefeed "helloworld/pb/live_feed"`, `	client := livefeed.NewFeedServiceClient(conn)`},
 		},
 	}
 	for _, tt := range tests {

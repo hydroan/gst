@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
-	"path"
 	"strconv"
 	"strings"
 
@@ -70,8 +69,8 @@ func serviceModelQualifier(info *modelinfo.Model, phase consts.Phase) string {
 //	model_service "helloworld/model/service"      // qualifier model_service, an alias
 func modelImportSpec(importPath, modelQualifier string) *ast.ImportSpec {
 	spec := &ast.ImportSpec{Path: &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(importPath)}}
-	if path.Base(importPath) != modelQualifier {
-		spec.Name = ast.NewIdent(modelQualifier)
+	if name := importSpecName(importPath, modelQualifier); name != "" {
+		spec.Name = ast.NewIdent(name)
 	}
 	return spec
 }

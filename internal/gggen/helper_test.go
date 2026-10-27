@@ -157,21 +157,32 @@ func TestResolveImportConflicts(t *testing.T) {
 			},
 		},
 		{
-			name: "distinct_names_under_a_shared_last_segment_need_no_alias",
+			name: "distinct_names_under_a_shared_last_segment_do_not_clash",
 			imports: map[string]string{
 				"helloworld/service/sample/item":  "record",
 				"helloworld/service/archive/item": "entry",
 			},
 			want: map[string]string{
-				"helloworld/service/sample/item":  "",
-				"helloworld/service/archive/item": "",
+				"helloworld/service/sample/item":  "record",
+				"helloworld/service/archive/item": "entry",
 			},
+		},
+		{
+			name:    "package_name_unlike_the_last_segment_is_written_out",
+			imports: map[string]string{"helloworld/service/sample/record_item": "recorditem"},
+			want:    map[string]string{"helloworld/service/sample/record_item": "recorditem"},
+		},
+		{
+			name:    "versioned_path_is_written_with_its_package_name",
+			imports: map[string]string{"example.com/sample/v2": "sample"},
+			want:    map[string]string{"example.com/sample/v2": "sample"},
 		},
 		{
 			// The example of the ResolveImportConflicts doc comment.
 			name: "documented_example",
 			imports: map[string]string{
 				"helloworld/service/account/recorditem": "recorditem",
+				"helloworld/service/sample/entry_item":  "entryitem",
 				"helloworld/service/sample/item":        "item",
 				"helloworld/service/sample/record_item": "recorditem",
 				"helloworld/service/sample/service":     "service",
@@ -179,6 +190,7 @@ func TestResolveImportConflicts(t *testing.T) {
 			reserved: []string{"service", "consts"},
 			want: map[string]string{
 				"helloworld/service/account/recorditem": "account_recorditem",
+				"helloworld/service/sample/entry_item":  "entryitem",
 				"helloworld/service/sample/item":        "",
 				"helloworld/service/sample/record_item": "sample_record_item",
 				"helloworld/service/sample/service":     "sample_service",

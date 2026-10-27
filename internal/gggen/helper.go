@@ -3,6 +3,7 @@ package gggen
 import (
 	"go/token"
 	"maps"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -11,23 +12,26 @@ import (
 
 // ResolveImportConflicts picks the alias each project import of a generated
 // file needs. declared maps every import path to the name of the package it
-// declares, and reserved lists the names the file's framework imports take.
-// An import keeps its package name when no reserved name and no other import
-// claims it; otherwise it is aliased with its last two path segments joined by
-// an underscore ("svc/pkg1/user" becomes "pkg1_user"). Every import in a clash
-// is aliased, not all but one: which import kept the name would depend on the
+// declares, and reserved lists the names the file's framework imports take. An
+// import keeps its package name when no reserved name and no other import
+// claims it, and spells the name out when it is not the last segment of its
+// path, so the import shows the name the code refers to the package by;
+// otherwise it is aliased with its last two path segments joined by an
+// underscore ("svc/pkg1/user" becomes "pkg1_user"). Every import in a clash is
+// aliased, not all but one: which import kept the name would depend on the
 // others, and a new import sharing the name could take it away. An alias that
-// still clashes with another name takes one more leading segment at a time,
-// and one that runs out of segments gets a numeric suffix, so no two imports
-// share a name and none takes a framework import's. Every alias is a Go
-// identifier: characters an identifier cannot hold become underscores, and one
-// that would start with a digit gets an underscore in front. The result maps
-// each import path to its alias, or to "" when it needs none.
+// still clashes with another name takes one more leading segment at a time, and
+// one that runs out of segments gets a numeric suffix, so no two imports share
+// a name and none takes a framework import's. Every alias is a Go identifier:
+// characters an identifier cannot hold become underscores, and one that would
+// start with a digit gets an underscore in front. The result maps each import
+// path to the name it is written with, or to "" when it is written without one.
 //
 // For example, the service registration file reserves service and consts for
 // its framework imports, so the imports
 //
 //	"helloworld/service/account/recorditem" // package recorditem
+//	"helloworld/service/sample/entry_item"  // package entryitem
 //	"helloworld/service/sample/item"        // package item
 //	"helloworld/service/sample/record_item" // package recorditem
 //	"helloworld/service/sample/service"     // package service
@@ -35,6 +39,7 @@ import (
 // are written as
 //
 //	account_recorditem "helloworld/service/account/recorditem"
+//	entryitem "helloworld/service/sample/entry_item"
 //	"helloworld/service/sample/item"
 //	sample_record_item "helloworld/service/sample/record_item"
 //	sample_service "helloworld/service/sample/service"
@@ -97,7 +102,7 @@ func ResolveImportConflicts(declared map[string]string, reserved ...string) map[
 	}
 	for _, importPath := range paths {
 		if depth[importPath] == 0 {
-			aliases[importPath] = ""
+			aliases[importPath] = importSpecName(importPath, declared[importPath])
 			taken[declared[importPath]] = true
 		}
 	}
@@ -113,6 +118,19 @@ func ResolveImportConflicts(declared map[string]string, reserved ...string) map[
 		taken[alias] = true
 	}
 	return aliases
+}
+
+// importSpecName returns the name an import of importPath is written with
+// when its file refers to the package as name: none when name is the last
+// segment of the path, name otherwise. "helloworld/model/sample" referred to
+// as sample is written without one; "helloworld/model/record_item" referred
+// to as recorditem, and "example.com/sample/v2" referred to as sample, are
+// written with it.
+func importSpecName(importPath, name string) string {
+	if name == path.Base(importPath) {
+		return ""
+	}
+	return name
 }
 
 // importName joins the last depth segments of importPath with underscores, or
