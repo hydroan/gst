@@ -167,10 +167,9 @@ func moduleByName(name string) (Module, error) {
 
 // importAliasForModule returns the explicit import name a module's import
 // takes, the one gggen.ResolveImportConflicts gives an import nothing clashes
-// with: the declared package name when it is not the module's directory name,
-// the last segment of the import path, so the import shows the name the code
-// refers to the package by. Returning nil lets astutil add a normal import for
-// the common case.
+// with: the declared package name wherever the import path does not tell it, so
+// the import shows the name the code refers to the package by. Returning nil
+// lets astutil add a normal import for the common case.
 func importAliasForModule(module Module) *ast.Ident {
 	imports := map[string]string{module.ImportPath: module.PackageName}
 	if name := gggen.ResolveImportConflicts(imports)[module.ImportPath]; name != "" {

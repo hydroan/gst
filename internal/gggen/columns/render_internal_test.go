@@ -1,6 +1,7 @@
 package columns
 
 import (
+	"go/token"
 	"strings"
 	"testing"
 
@@ -11,7 +12,7 @@ import (
 // TestRenderColumnsFileWritesATypedReferencePerColumn holds the whole file
 // renderColumnsFile writes for one model: it is the example of its doc
 // comment, and its columns are the examples of the doc comments of
-// importSpec, columnRefType and columnRefLiteral.
+// columnsImportSpec, columnRefType and columnRefLiteral.
 func TestRenderColumnsFileWritesATypedReferencePerColumn(t *testing.T) {
 	models := []modelinspect.ModelColumns{{
 		PkgPath: "tmpapp/model/sample",
@@ -258,4 +259,24 @@ func TestRenderColumnsFileRejectsImportAliasCollision(t *testing.T) {
 
 	_, err := renderColumnsFile("tmpapp", "sample", "model/sample/record.go", models)
 	require.Error(t, err, "two packages cannot share one import alias")
+}
+
+// TestColumnsImportSpecNamesThePackageWhereThePathDoesNotTellIt pins the
+// example of columnsImportSpec, the time and uuid imports, with a package
+// named after the major version its path ends in, which gopls names on save,
+// and one that matches its path.
+func TestColumnsImportSpecNamesThePackageWhereThePathDoesNotTellIt(t *testing.T) {
+	tests := []struct{ name, path, want string }{
+		{"time", "time", ""},
+		{"uuid", "github.com/gofrs/uuid/v5", "uuid"},
+		{"v2", "tmpapp/api/v2", "v2"},
+		{"shared", "tmpapp/shared", ""},
+	}
+	for _, tt := range tests {
+		got := ""
+		if spec := columnsImportSpec(tt.name, tt.path, token.NoPos); spec.Name != nil {
+			got = spec.Name.Name
+		}
+		require.Equal(t, tt.want, got, "columnsImportSpec(%q, %q)", tt.name, tt.path)
+	}
 }

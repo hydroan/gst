@@ -219,8 +219,8 @@ type serviceTestExample struct {
 // attachment and SSE consumes the stream, all through the framework client; a
 // Stream calls its rpc through a grpc-go client, see newStreamTestExample. The
 // model package is imported when the example refers to it, under an alias
-// when its name is one a scaffold import takes, and under its name when that
-// is not the last segment of its path.
+// when its name is one a scaffold import takes, and under its name when the
+// path does not tell it (see importSpecName).
 func newServiceTestExample(info *modelinfo.Model, action *dsl.Action, route string) *serviceTestExample {
 	if action.Phase == consts.Stream {
 		return newStreamTestExample(info, action, route)
@@ -363,8 +363,8 @@ func newServiceTestExample(info *modelinfo.Model, action *dsl.Action, route stri
 // the request and reads the first answer, a client stream sends a request
 // and reads the answer with CloseAndRecv, a bidirectional stream sends,
 // reads and closes its side. The stubs' package is imported under an alias
-// when its name is one the scaffold takes, and under its name when the name
-// is not the last segment of its path.
+// when its name is one the scaffold takes, and under its name when the path
+// does not tell it (see importSpecName).
 func newStreamTestExample(info *modelinfo.Model, action *dsl.Action, route string) *serviceTestExample {
 	pbImportPath, pbName := modelinfo.PBPackage(info.ModulePath, info.PBDir())
 	example := &serviceTestExample{imports: map[string]string{scaffoldImportGRPC: "", scaffoldImportInsecure: ""}}

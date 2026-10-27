@@ -14,9 +14,9 @@ import (
 // file needs. declared maps every import path to the name of the package it
 // declares, and reserved lists the names the file's framework imports take. An
 // import keeps its package name when no reserved name and no other import
-// claims it, and spells the name out when it is not the last segment of its
-// path, so the import shows the name the code refers to the package by;
-// otherwise it is aliased with its last two path segments joined by an
+// claims it, and spells the name out when the path does not tell it (see
+// importSpecName), so the import shows the name the code refers to the package
+// by; otherwise it is aliased with its last two path segments joined by an
 // underscore ("svc/pkg1/user" becomes "pkg1_user"). Every import in a clash is
 // aliased, not all but one: which import kept the name would depend on the
 // others, and a new import sharing the name could take it away. An alias that
@@ -31,6 +31,7 @@ import (
 // its framework imports, so the imports
 //
 //	"helloworld/service/account/recorditem" // package recorditem
+//	"helloworld/service/api/v2"             // package v2
 //	"helloworld/service/sample/entry_item"  // package entryitem
 //	"helloworld/service/sample/item"        // package item
 //	"helloworld/service/sample/record_item" // package recorditem
@@ -39,6 +40,7 @@ import (
 // are written as
 //
 //	account_recorditem "helloworld/service/account/recorditem"
+//	v2 "helloworld/service/api/v2"
 //	entryitem "helloworld/service/sample/entry_item"
 //	"helloworld/service/sample/item"
 //	sample_record_item "helloworld/service/sample/record_item"
@@ -120,17 +122,29 @@ func ResolveImportConflicts(declared map[string]string, reserved ...string) map[
 	return aliases
 }
 
-// importSpecName returns the name an import of importPath is written with
-// when its file refers to the package as name: none when name is the last
-// segment of the path, name otherwise. "helloworld/model/sample" referred to
-// as sample is written without one; "helloworld/model/record_item" referred
-// to as recorditem, and "example.com/sample/v2" referred to as sample, are
-// written with it.
+// importSpecName returns the name an import of importPath is written with when
+// its file refers to the package as name: none when name is the last segment of
+// the path, name otherwise, and name as well when that segment is a major
+// version such as v2, which gopls skips for the segment before it when it
+// assumes a name, and so names such an import on save.
+// "helloworld/model/sample" referred to as sample is written without one;
+// "helloworld/model/record_item" referred to as recorditem,
+// "example.com/sample/v2" referred to as sample and "helloworld/model/api/v2"
+// referred to as v2 are written with it.
 func importSpecName(importPath, name string) string {
-	if name == path.Base(importPath) {
-		return ""
+	base := path.Base(importPath)
+	if name != base {
+		return name
 	}
-	return name
+	// gopls assumes the name with ImportPathToAssumedName, in a package
+	// internal to x/tools (golang.org/x/tools/internal/imports), which takes
+	// a v followed by what strconv.Atoi reads as a number for a major version.
+	if rest, ok := strings.CutPrefix(base, "v"); ok {
+		if _, err := strconv.Atoi(rest); err == nil {
+			return name
+		}
+	}
+	return ""
 }
 
 // importName joins the last depth segments of importPath with underscores, or

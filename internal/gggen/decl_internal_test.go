@@ -79,6 +79,21 @@ func TestImports(t *testing.T) {
 )`,
 		},
 		{
+			// The package in model/api/v2 is named v2, the last segment of
+			// its path, which the import states all the same: gopls takes
+			// the segment before a major version for the name it assumes.
+			name:           "package_named_after_a_major_version",
+			modulePath:     "codegen",
+			modelFileDir:   "model/api/v2",
+			modelQualifier: "v2",
+			phase:          consts.Create,
+			want: `import (
+	v2 "codegen/model/api/v2"
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst"
+)`,
+		},
+		{
 			// A model package named service takes an alias in the file, which
 			// imports the gst service package as service.
 			name:           "aliased_model_package",

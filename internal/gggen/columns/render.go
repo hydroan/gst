@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gggen"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
 	"github.com/hydroan/gst/internal/modelinspect"
@@ -224,15 +225,15 @@ func isStdlibImport(path string, module string) bool {
 }
 
 // columnsImportSpec builds one import of a generated file, positioned at pos,
-// the package name written only when it is not the last segment of the path, so
-// the import shows the name the code refers to the package by. In the example
-// of renderColumnsFile, the package time of the path time is written as "time",
-// while the package uuid of github.com/gofrs/uuid/v5 is written as uuid
+// the package name written wherever the path does not tell it, the way
+// gggen.ResolveImportConflicts names an import nothing clashes with. In the
+// example of renderColumnsFile, the package time of the path time is written as
+// "time", while the package uuid of github.com/gofrs/uuid/v5 is written as uuid
 // "github.com/gofrs/uuid/v5".
 func columnsImportSpec(name, path string, pos token.Pos) *ast.ImportSpec {
 	spec := &ast.ImportSpec{Path: &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(path), ValuePos: pos}}
-	if name != path[strings.LastIndex(path, "/")+1:] {
-		spec.Name = &ast.Ident{Name: name, NamePos: pos}
+	if written := gggen.ResolveImportConflicts(map[string]string{path: name})[path]; written != "" {
+		spec.Name = &ast.Ident{Name: written, NamePos: pos}
 	}
 	return spec
 }

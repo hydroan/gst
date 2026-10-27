@@ -61,11 +61,12 @@ func serviceModelQualifier(info *modelinfo.Model, phase consts.Phase) string {
 }
 
 // modelImportSpec builds the import of the model package at importPath that a
-// service file refers to by modelQualifier, named after the qualifier when
-// the qualifier is not the last segment of the path:
+// service file refers to by modelQualifier, named after the qualifier where
+// the path does not tell it (see importSpecName):
 //
 //	"helloworld/model/sample"                     // qualifier sample
 //	recorditem "helloworld/model/record_item"     // qualifier recorditem, the package name
+//	v2 "helloworld/model/api/v2"                  // qualifier v2, the package name, on a major version
 //	model_service "helloworld/model/service"      // qualifier model_service, an alias
 func modelImportSpec(importPath, modelQualifier string) *ast.ImportSpec {
 	spec := &ast.ImportSpec{Path: &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(importPath)}}

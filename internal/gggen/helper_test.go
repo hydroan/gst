@@ -173,6 +173,11 @@ func TestResolveImportConflicts(t *testing.T) {
 			want:    map[string]string{"helloworld/service/sample/record_item": "recorditem"},
 		},
 		{
+			name:    "package_named_after_a_major_version_is_written_out",
+			imports: map[string]string{"helloworld/model/api/v2": "v2"},
+			want:    map[string]string{"helloworld/model/api/v2": "v2"},
+		},
+		{
 			name:    "versioned_path_is_written_with_its_package_name",
 			imports: map[string]string{"example.com/sample/v2": "sample"},
 			want:    map[string]string{"example.com/sample/v2": "sample"},
@@ -182,6 +187,7 @@ func TestResolveImportConflicts(t *testing.T) {
 			name: "documented_example",
 			imports: map[string]string{
 				"helloworld/service/account/recorditem": "recorditem",
+				"helloworld/service/api/v2":             "v2",
 				"helloworld/service/sample/entry_item":  "entryitem",
 				"helloworld/service/sample/item":        "item",
 				"helloworld/service/sample/record_item": "recorditem",
@@ -190,6 +196,7 @@ func TestResolveImportConflicts(t *testing.T) {
 			reserved: []string{"service", "consts"},
 			want: map[string]string{
 				"helloworld/service/account/recorditem": "account_recorditem",
+				"helloworld/service/api/v2":             "v2",
 				"helloworld/service/sample/entry_item":  "entryitem",
 				"helloworld/service/sample/item":        "",
 				"helloworld/service/sample/record_item": "sample_record_item",
