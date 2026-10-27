@@ -139,14 +139,3 @@ func stop(_ context.Context) error {
 	zap.S().Infow("successfully closed rethinkdb session")
 	return nil
 }
-
-// Health checks if the RethinkDB connection is healthy
-func Health() error {
-	s, err := Client()
-	if err != nil {
-		return err
-	}
-
-	_, err = rethinkdb.Expr("ping").Run(s)
-	return err
-}

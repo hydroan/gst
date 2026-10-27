@@ -222,18 +222,3 @@ func stop(_ context.Context) error {
 
 	return nil
 }
-
-// Health checks the current health of the InfluxDB server
-func Health() (*domain.HealthCheck, error) {
-	mu.RLock()
-	defer mu.RUnlock()
-
-	if client == nil {
-		return nil, errors.New("influxdb client not initialized")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	return client.Health(ctx)
-}

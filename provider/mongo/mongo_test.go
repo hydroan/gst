@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
 )
 
 var RunOrDie = util.RunOrDie
@@ -31,7 +32,9 @@ func TestMongo(t *testing.T) {
 			}
 		}
 	}()
-	require.NoError(t, mongo.Health())
+	client, err := mongo.Client()
+	require.NoError(t, err)
+	require.NoError(t, client.Ping(context.Background(), readpref.Primary()))
 
 	dbName := "test"
 	collName := "users"

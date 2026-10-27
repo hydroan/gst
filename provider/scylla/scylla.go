@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"sync"
-	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gocql/gocql"
@@ -216,25 +215,5 @@ func stop(_ context.Context) error {
 		zap.S().Infow("successfully closed ScyllaDB session")
 		session = gocqlx.Session{}
 	}
-	return nil
-}
-
-// Health checks if the ScyllaDB connection is healthy
-func Health() error {
-	sess, err := Client()
-	if err != nil {
-		return err
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	// Execute a simple query to check connectivity
-	q := sess.ContextQuery(ctx, "SELECT release_version FROM system.local", nil)
-	var version string
-	if err := q.Get(&version); err != nil {
-		return errors.Wrap(err, "ScyllaDB health check failed")
-	}
-
 	return nil
 }

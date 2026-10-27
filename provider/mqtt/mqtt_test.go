@@ -31,7 +31,9 @@ func TestMqtt(t *testing.T) {
 		}
 	}()
 
-	require.NoError(t, mqtt.Health())
+	client, err := mqtt.Client()
+	require.NoError(t, err)
+	require.True(t, client.IsConnected())
 
 	topic := "test/topic"
 	t.Run("PublishAndSubscribe", func(t *testing.T) {

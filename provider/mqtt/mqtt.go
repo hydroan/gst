@@ -185,20 +185,6 @@ func Client() (mqtt.Client, error) {
 	return client, nil
 }
 
-// Health checks if the MQTT client is connected
-func Health() error {
-	c, err := Client()
-	if err != nil {
-		return err
-	}
-
-	if !c.IsConnected() {
-		return errors.New("mqtt client is not connected")
-	}
-
-	return nil
-}
-
 // stop closes the MQTT client connection
 func stop(_ context.Context) error {
 	mu.Lock()

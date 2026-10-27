@@ -219,18 +219,3 @@ func stop(_ context.Context) error {
 	}
 	return nil
 }
-
-// Health checks if the MongoDB connection is healthy
-func Health() error {
-	c, err := Client()
-	if err != nil {
-		return err
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	// First-hand exit of a stack-less mongo-driver error; see the error-stack
-	// contract in the database package doc. WithStack passes nil through.
-	return errors.WithStack(c.Ping(ctx, readpref.Primary()))
-}
