@@ -4,10 +4,10 @@ package service
 
 import (
 	"cluster/service/cached"
-	"cluster/service/counter_step"
+	counterstep "cluster/service/counter_step"
 	"cluster/service/flag"
 	"cluster/service/rebuild"
-	"cluster/service/step_down"
+	stepdown "cluster/service/step_down"
 
 	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/service"
