@@ -257,13 +257,12 @@ func (s *SampleService) DeleteAfter(ctx *gst.ServiceContext, req *modelcopytest.
 		Phase:       consts.Delete,
 	}
 	plan := &CopyPlan{
-		Name:                  "copytest",
-		ProjectModulePath:     "tmpapp",
-		ModelDir:              "model",
-		ServiceDir:            "service",
-		SourceServiceDir:      sourceServiceDir,
-		TargetServiceDir:      filepath.Join("service", "copytest"),
-		TargetModelImportPath: filepath.Join("tmpapp", "model", "copytest"),
+		Name:              "copytest",
+		ProjectModulePath: "tmpapp",
+		ModelDir:          "model",
+		ServiceDir:        "service",
+		SourceServiceDir:  sourceServiceDir,
+		TargetServiceDir:  filepath.Join("service", "copytest"),
 		Actions: []moduleCopyAction{
 			{
 				Action:     createAction,
@@ -367,13 +366,12 @@ func itemPatchResult() *modelcopytest.Item {
 		Phase:       consts.Patch,
 	}
 	plan := &CopyPlan{
-		Name:                  "copytest",
-		ProjectModulePath:     "tmpapp",
-		ModelDir:              "model",
-		ServiceDir:            "service",
-		SourceServiceDir:      sourceServiceDir,
-		TargetServiceDir:      filepath.Join("service", "copytest"),
-		TargetModelImportPath: filepath.Join("tmpapp", "model", "copytest"),
+		Name:              "copytest",
+		ProjectModulePath: "tmpapp",
+		ModelDir:          "model",
+		ServiceDir:        "service",
+		SourceServiceDir:  sourceServiceDir,
+		TargetServiceDir:  filepath.Join("service", "copytest"),
 		Actions: []moduleCopyAction{
 			{
 				Action:     getAction,
@@ -461,13 +459,12 @@ func (s *ItemListService) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *
 		Phase:   consts.List,
 	}
 	plan := &CopyPlan{
-		Name:                  "copytest",
-		ProjectModulePath:     "tmpapp",
-		ModelDir:              "model",
-		ServiceDir:            "service",
-		SourceServiceDir:      sourceServiceDir,
-		TargetServiceDir:      filepath.Join("service", "copytest"),
-		TargetModelImportPath: filepath.Join("tmpapp", "model", "copytest"),
+		Name:              "copytest",
+		ProjectModulePath: "tmpapp",
+		ModelDir:          "model",
+		ServiceDir:        "service",
+		SourceServiceDir:  sourceServiceDir,
+		TargetServiceDir:  filepath.Join("service", "copytest"),
 		Actions: []moduleCopyAction{
 			{
 				Action:     listAction,
@@ -539,13 +536,12 @@ func (s *SampleService) CreateAfter(ctx *gst.ServiceContext, req *modelcopytest.
 		Phase:       consts.Create,
 	}
 	plan := &CopyPlan{
-		Name:                  "copytest",
-		ProjectModulePath:     "tmpapp",
-		ModelDir:              "model",
-		ServiceDir:            "service",
-		SourceServiceDir:      sourceServiceDir,
-		TargetServiceDir:      filepath.Join("service", "copytest"),
-		TargetModelImportPath: filepath.Join("tmpapp", "model", "copytest"),
+		Name:              "copytest",
+		ProjectModulePath: "tmpapp",
+		ModelDir:          "model",
+		ServiceDir:        "service",
+		SourceServiceDir:  sourceServiceDir,
+		TargetServiceDir:  filepath.Join("service", "copytest"),
 		Actions: []moduleCopyAction{
 			{
 				Action:     createAction,

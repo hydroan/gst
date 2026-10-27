@@ -40,11 +40,10 @@ type CopyPlan struct {
 	SourceModelDir   string
 	SourceServiceDir string
 
-	TargetModelDir        string
-	TargetServiceDir      string
-	TargetMiddlewareDir   string
-	TargetInterceptorDir  string
-	TargetModelImportPath string
+	TargetModelDir       string
+	TargetServiceDir     string
+	TargetMiddlewareDir  string
+	TargetInterceptorDir string
 
 	ExcludeSourceFiles []string
 	IncludeSourceFiles []string
@@ -142,18 +141,17 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 	}
 
 	plan := &CopyPlan{
-		Name:                  name,
-		ProjectModulePath:     projectModule,
-		FrameworkRoot:         frameworkRoot,
-		ModelDir:              defaultModelDir,
-		ServiceDir:            defaultServiceDir,
-		SourceModelDir:        filepath.Join(frameworkRoot, "internal", "model", name),
-		SourceServiceDir:      filepath.Join(frameworkRoot, "internal", "service", name),
-		TargetModelDir:        filepath.Join(defaultModelDir, name),
-		TargetServiceDir:      filepath.Join(defaultServiceDir, name),
-		TargetMiddlewareDir:   defaultMiddlewareDir,
-		TargetInterceptorDir:  defaultInterceptorDir,
-		TargetModelImportPath: filepath.Join(projectModule, defaultModelDir, name),
+		Name:                 name,
+		ProjectModulePath:    projectModule,
+		FrameworkRoot:        frameworkRoot,
+		ModelDir:             defaultModelDir,
+		ServiceDir:           defaultServiceDir,
+		SourceModelDir:       filepath.Join(frameworkRoot, "internal", "model", name),
+		SourceServiceDir:     filepath.Join(frameworkRoot, "internal", "service", name),
+		TargetModelDir:       filepath.Join(defaultModelDir, name),
+		TargetServiceDir:     filepath.Join(defaultServiceDir, name),
+		TargetMiddlewareDir:  defaultMiddlewareDir,
+		TargetInterceptorDir: defaultInterceptorDir,
 	}
 
 	if sourceDirErr := plan.checkSourceDirs(); sourceDirErr != nil {
