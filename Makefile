@@ -219,12 +219,14 @@ testcachefix:
 
 # run_test_suite runs one gotestsum suite, with the arguments after -- given,
 # records every test binary the run links and files the results under their
-# link keys afterwards, whatever the run's status, which it then reports.
+# link keys afterwards, whatever the run's status, which it then reports. The
+# write-back is given TEST_FLAGS too: the test flags among them, -short for
+# one, are part of the keys.
 define run_test_suite
 	@record="$$(mktemp -d)"; \
 		echo "gotestsum $(TEST_OUTPUT) -- $(TEST_FLAGS) $(1)"; \
 		$(TOOL_ENV) "$(GOTESTSUM)" $(TEST_OUTPUT) -- $(TEST_FLAGS) -toolexec "$(TESTCACHEFIX) record-link $$record" $(1); status=$$?; \
-		$(TOOL_ENV) "$(TESTCACHEFIX)" writeback "$$record"; rm -rf "$$record"; exit $$status
+		$(TOOL_ENV) "$(TESTCACHEFIX)" writeback "$$record" $(TEST_FLAGS); rm -rf "$$record"; exit $$status
 endef
 
 # run_test_suite_in runs a suite from another directory, the way run_tool_in
@@ -233,7 +235,7 @@ define run_test_suite_in
 	@record="$$(mktemp -d)"; \
 		echo "gotestsum $(TEST_OUTPUT) -- $(TEST_FLAGS) $(2) ($(1))"; \
 		cd $(1) && $(TOOL_ENV) "$(GOTESTSUM)" $(TEST_OUTPUT) -- $(TEST_FLAGS) -toolexec "$(TESTCACHEFIX) record-link $$record" $(2); status=$$?; \
-		$(TOOL_ENV) "$(TESTCACHEFIX)" writeback "$$record"; rm -rf "$$record"; exit $$status
+		$(TOOL_ENV) "$(TESTCACHEFIX)" writeback "$$record" $(TEST_FLAGS); rm -rf "$$record"; exit $$status
 endef
 
 test: TOOL_ENV = PATH="$(TEST_PATH)"

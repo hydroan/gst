@@ -68,6 +68,6 @@ func main() {
 func usage() {
 	fmt.Fprintln(os.Stderr, `usage:
   testcachefix record-link <record dir> <tool> [tool args...]   (go test -toolexec)
-  testcachefix writeback [-timeout duration] <record dir>`)
+  testcachefix writeback <record dir> [go test flags of the run...]`)
 	os.Exit(2)
 }

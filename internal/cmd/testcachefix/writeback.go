@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"hash"
 	"io/fs"
@@ -15,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,9 +29,9 @@ import (
 //     execcmd []", where id is the link action ID of the test binary for the
 //     first level and its content ID for the second, both as `go tool
 //     buildid` prints them (the wrapper computes the content ID itself, see
-//     contentID); the test args are the -test.* flags go passes
-//     the binary and keeps in the key, -test.v=test2json under -json and
-//     -test.timeout;
+//     contentID); the test args are the -test.* flags go passes the binary
+//     and keeps in the key, derived from the go test flags of the run (see
+//     keyedTestArgs);
 //   - the result ID keys the test's input list, and the subkey
 //     "inputs:<input ID>" of it keys the result for those inputs, where the
 //     input ID hashes the list's environment variables, directory changes
@@ -65,18 +65,18 @@ var testlogMagic = []byte("# test log\n")
 const modTimeCutoff = 2 * time.Second
 
 // writeback files the second-level result of every test binary the record
-// directory holds under its first-level keys. Its flag -timeout is the
-// -timeout go test ran with, part of the keys.
+// directory holds under its first-level keys. args are the record directory
+// and then the go test flags the run was given, whose test flags are part of
+// the keys (see keyedTestArgs).
 func writeback(args []string) error {
-	flags := flag.NewFlagSet("writeback", flag.ContinueOnError)
-	timeout := flags.String("timeout", "10m0s", "the -timeout go test ran with")
-	if err := flags.Parse(args); err != nil {
-		return errors.WithStack(err)
-	}
-	if flags.NArg() != 1 {
+	if len(args) == 0 {
 		usage()
 	}
-	records, err := readRecords(flags.Arg(0))
+	testArgs, err := keyedTestArgs(args[1:])
+	if err != nil {
+		return err
+	}
+	records, err := readRecords(args[0])
 	if err != nil || len(records) == 0 {
 		return err
 	}
@@ -95,7 +95,6 @@ func writeback(args []string) error {
 	if err != nil {
 		return err
 	}
-	testArgs := []string{"-test.v=test2json", "-test.timeout=" + *timeout}
 	// A run that linked binaries it then ran, or whose inputs moved, files
 	// nothing and says nothing: the count is reported when something was
 	// filed or a binary was skipped for a reason worth reading.
@@ -123,6 +122,102 @@ func writeback(args []string) error {
 		log.Printf("filed the results of %d of %d linked test binaries under their link keys", written, len(records))
 	}
 	return nil
+}
+
+// defaultTestTimeout is the -test.timeout go passes a test binary when the
+// run sets no -timeout.
+const defaultTestTimeout = "10m0s"
+
+// testFlagKind is how go writes the value of a test flag into a cache key.
+type testFlagKind int
+
+const (
+	// stringTestFlag values are written as given.
+	stringTestFlag testFlagKind = iota
+	// boolTestFlag values are parsed and printed back, true for a flag
+	// given without one.
+	boolTestFlag
+	// durationTestFlag values are written the way time.Duration prints them.
+	durationTestFlag
+)
+
+// keyedTestFlags are the go test flags keyedTestArgs puts into a key, among the
+// cacheable ones go help test lists; no make target runs with the others.
+// -benchtime, -cpu, -list and -parallel are left out: a run given one is keyed
+// by test args this program does not compute, so the write-back finds no
+// second-level entry for it and files nothing. -coverprofile and -outputdir go
+// keeps out of the key itself, and keyedTestArgs skips them as it skips a build
+// flag, so the keys match: a run given -outputdir is written back as usual,
+// while one given -coverprofile is linked again all the same, since go reads
+// the coverage profile it saved beside the result as well, which the write-back
+// does not file.
+var keyedTestFlags = map[string]testFlagKind{
+	"failfast": boolTestFlag,
+	"fullpath": boolTestFlag,
+	"run":      stringTestFlag,
+	"short":    boolTestFlag,
+	"skip":     stringTestFlag,
+	"timeout":  durationTestFlag,
+	"v":        boolTestFlag,
+}
+
+// keyedTestArgs returns the test args go keys the result of a go test -json
+// run given flags by, in the order go passes them to the test binary:
+// -test.v=test2json, which -json injects, then -test.timeout=10m0s when no
+// -timeout is given, then every flag of keyedTestFlags in the order given, as
+// -test.<name>=<value>. For -race -short it returns [-test.v=test2json
+// -test.timeout=10m0s -test.short=true], and for -short -timeout 5m
+// [-test.v=test2json -test.short=true -test.timeout=5m0s]. Any other flag, a
+// build flag such as -race or -gcflags among them, is left out, along with a
+// value given as the argument after it.
+func keyedTestArgs(flags []string) ([]string, error) {
+	var keyed []string
+	timeoutGiven := false
+	for i := 0; i < len(flags); i++ {
+		if !strings.HasPrefix(flags[i], "-") {
+			return nil, errors.Newf("go test flag expected, got %q", flags[i])
+		}
+		name, value, hasValue := strings.Cut(strings.TrimLeft(flags[i], "-"), "=")
+		name = strings.TrimPrefix(name, "test.")
+		kind, ok := keyedTestFlags[name]
+		if !ok {
+			if !hasValue && i+1 < len(flags) && !strings.HasPrefix(flags[i+1], "-") {
+				i++
+			}
+			continue
+		}
+		switch {
+		case hasValue:
+		case kind == boolTestFlag:
+			value = "true"
+		case i+1 < len(flags):
+			i++
+			value = flags[i]
+		default:
+			return nil, errors.Newf("go test flag -%s needs a value", name)
+		}
+		switch kind {
+		case boolTestFlag:
+			b, err := strconv.ParseBool(value)
+			if err != nil {
+				return nil, errors.Wrapf(err, "go test flag -%s", name)
+			}
+			value = strconv.FormatBool(b)
+		case durationTestFlag:
+			d, err := time.ParseDuration(value)
+			if err != nil {
+				return nil, errors.Wrapf(err, "go test flag -%s", name)
+			}
+			value = d.String()
+			timeoutGiven = true
+		}
+		keyed = append(keyed, "-test."+name+"="+value)
+	}
+	args := []string{"-test.v=test2json"}
+	if !timeoutGiven {
+		args = append(args, "-test.timeout="+defaultTestTimeout)
+	}
+	return append(args, keyed...), nil
 }
 
 // linkRecord is one line of the record: the package tested and the build ID

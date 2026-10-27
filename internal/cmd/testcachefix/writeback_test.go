@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -12,11 +13,13 @@ import (
 )
 
 // TestWritebackFilesTheResultUnderTheLinkKey pins the whole mechanism on the
-// toolchain at hand. A change the linker drops from a test binary leaves the
-// binary linked again on every cached run, since go files the result only
-// under the binary's content; after the write-back the run links nothing.
-// The steps that assert go's own behavior are what tells a toolchain that
-// writes the result back itself: the tool is then done for.
+// toolchain at hand, for a run without test flags and for one with -short,
+// whose result go keys by -test.short=true as well. A change the linker drops
+// from a test binary leaves the binary linked again on every cached run,
+// since go files the result only under the binary's content; after the
+// write-back the run links nothing. The steps that assert go's own behavior
+// are what tells a toolchain that writes the result back itself: the tool is
+// then done for.
 //
 // The test reads two environment variables go computes, one go sets in its
 // own process and one it does not, so the write-back has to hash them the
@@ -24,47 +27,101 @@ import (
 // it is.
 func TestWritebackFilesTheResultUnderTheLinkKey(t *testing.T) {
 	tool := buildTool(t)
-	t.Setenv("GOCACHE", t.TempDir())
-	module := writeOrphanModule(t)
-	t.Chdir(module)
+	tests := []struct {
+		name  string
+		flags []string
+	}{
+		{name: "without_test_flags"},
+		{name: "short", flags: []string{"-short"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("GOCACHE", t.TempDir())
+			module := writeOrphanModule(t)
+			t.Chdir(module)
+			// run runs go test with the flags of the case first.
+			run := func(args ...string) string {
+				return goTest(t, module, append(slices.Clone(tt.flags), args...)...)
+			}
 
-	// A first run runs the test and files its result under both keys.
-	record := t.TempDir()
-	out := goTest(t, module, "-toolexec", tool+" record-link "+record, "./pkg/")
-	require.NotContains(t, out, "(cached)")
-	records, err := readRecords(record)
-	require.NoError(t, err)
-	require.Len(t, records, 1, "the test binary was linked once")
-	require.Equal(t, "example.com/orphan/pkg", records[0].importPath)
-	require.Equal(t, []string{recordFile}, entryNames(t, record), "the record holds no binary, only their build IDs")
+			// A first run runs the test and files its result under both keys.
+			record := t.TempDir()
+			out := run("-toolexec", tool+" record-link "+record, "./pkg/")
+			require.NotContains(t, out, "(cached)")
+			records, err := readRecords(record)
+			require.NoError(t, err)
+			require.Len(t, records, 1, "the test binary was linked once")
+			require.Equal(t, "example.com/orphan/pkg", records[0].importPath)
+			require.Equal(t, []string{recordFile}, entryNames(t, record), "the record holds no binary, only their build IDs")
 
-	// A second run finds the result by the link key and links nothing.
-	record = t.TempDir()
-	out = goTest(t, module, "-toolexec", tool+" record-link "+record, "./pkg/")
-	require.Contains(t, out, "(cached)")
-	_, err = os.Stat(filepath.Join(record, recordFile))
-	require.ErrorIs(t, err, fs.ErrNotExist, "a result found by the link key skips the link")
+			// A second run finds the result by the link key and links nothing.
+			record = t.TempDir()
+			out = run("-toolexec", tool+" record-link "+record, "./pkg/")
+			require.Contains(t, out, "(cached)")
+			_, err = os.Stat(filepath.Join(record, recordFile))
+			require.ErrorIs(t, err, fs.ErrNotExist, "a result found by the link key skips the link")
 
-	// A function the test never reaches changes the link key and not the
-	// binary: the binary is linked, the result is found by its content, and
-	// go files nothing under the new link key, so the next run links again.
-	writeFile(t, filepath.Join(module, "dep", "unused.go"), "package dep\n\nfunc Unused() int { return 2 }\n")
-	record = t.TempDir()
-	out = goTest(t, module, "-toolexec", tool+" record-link "+record, "./pkg/")
-	require.Contains(t, out, "(cached)")
-	records, err = readRecords(record)
-	require.NoError(t, err)
-	require.Len(t, records, 1, "the orphaned binary was linked again")
-	require.Equal(t, 1, linksIn(goTest(t, module, "-x", "./pkg/")), "and is linked on every run until the result is filed under the link key")
+			// A function the test never reaches changes the link key and not
+			// the binary: the binary is linked, the result is found by its
+			// content, and go files nothing under the new link key, so the
+			// next run links again.
+			writeFile(t, filepath.Join(module, "dep", "unused.go"), "package dep\n\nfunc Unused() int { return 2 }\n")
+			record = t.TempDir()
+			out = run("-toolexec", tool+" record-link "+record, "./pkg/")
+			require.Contains(t, out, "(cached)")
+			records, err = readRecords(record)
+			require.NoError(t, err)
+			require.Len(t, records, 1, "the orphaned binary was linked again")
+			require.Equal(t, 1, linksIn(run("-x", "./pkg/")), "and is linked on every run until the result is filed under the link key")
 
-	cmd := exec.Command(tool, "writeback", record)
-	cmd.Dir = module
-	out2, err := cmd.CombinedOutput()
-	require.NoError(t, err, "%s", out2)
+			cmd := exec.Command(tool, append([]string{"writeback", record}, tt.flags...)...)
+			cmd.Dir = module
+			out2, err := cmd.CombinedOutput()
+			require.NoError(t, err, "%s", out2)
 
-	out = goTest(t, module, "-x", "./pkg/")
-	require.Contains(t, out, "(cached)")
-	require.Equal(t, 0, linksIn(out), "the written-back result is found by the link key")
+			out = run("-x", "./pkg/")
+			require.Contains(t, out, "(cached)")
+			require.Equal(t, 0, linksIn(out), "the written-back result is found by the link key")
+		})
+	}
+}
+
+// TestKeyedTestArgs pins the test args keyedTestArgs derives from the flags of
+// a run, the ones go 1.27 keyed the result of each run by (GODEBUG
+// gocachehash=1 prints them), the two examples of its doc comment first.
+func TestKeyedTestArgs(t *testing.T) {
+	tests := []struct {
+		name  string
+		flags []string
+		want  []string
+	}{
+		{"a_build_flag_and_short", []string{"-race", "-short"}, []string{"-test.v=test2json", "-test.timeout=10m0s", "-test.short=true"}},
+		{"short_then_timeout", []string{"-short", "-timeout", "5m"}, []string{"-test.v=test2json", "-test.short=true", "-test.timeout=5m0s"}},
+		{"no_flags", nil, []string{"-test.v=test2json", "-test.timeout=10m0s"}},
+		{"timeout_in_another_unit_first", []string{"-timeout=300s", "-short"}, []string{"-test.v=test2json", "-test.timeout=5m0s", "-test.short=true"}},
+		{"bool_value_printed_back", []string{"-short=0"}, []string{"-test.v=test2json", "-test.timeout=10m0s", "-test.short=false"}},
+		{"other_spellings_of_a_flag", []string{"--short", "-test.failfast"}, []string{"-test.v=test2json", "-test.timeout=10m0s", "-test.short=true", "-test.failfast=true"}},
+		{"strings_in_the_order_given", []string{"-skip=TestY", "-run", "TestX"}, []string{"-test.v=test2json", "-test.timeout=10m0s", "-test.skip=TestY", "-test.run=TestX"}},
+		{"v_beside_the_one_json_injects", []string{"-v", "-fullpath"}, []string{"-test.v=test2json", "-test.timeout=10m0s", "-test.v=true", "-test.fullpath=true"}},
+		{"build_flags_and_their_values_left_out", []string{"-gcflags=all=-dwarf=false", "-tags", "sample", "-short"}, []string{"-test.v=test2json", "-test.timeout=10m0s", "-test.short=true"}},
+		{"flags_go_keeps_out_of_the_key_left_out", []string{"-coverprofile=c.out", "-outputdir", "out", "-short"}, []string{"-test.v=test2json", "-test.timeout=10m0s", "-test.short=true"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := keyedTestArgs(tt.flags)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestKeyedTestArgsRefusesWhatItCannotRead pins the flags keyedTestArgs has
+// no key for: a key computed from them would match nothing go wrote.
+func TestKeyedTestArgsRefusesWhatItCannotRead(t *testing.T) {
+	for _, flags := range [][]string{{"-timeout=soon"}, {"-short=maybe"}, {"-run"}, {"./pkg/"}} {
+		_, err := keyedTestArgs(flags)
+		require.Error(t, err, "%q", flags)
+	}
 }
 
 // TestGoEnvLeavesOutWhatGoReportsWithoutSetting pins the environment the
