@@ -2,6 +2,7 @@ package middleware_test
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -96,6 +97,88 @@ func TestTimeoutHandsAPanicToRecovery(t *testing.T) {
 
 	w := serveTimeout(router, "/api/timeout/panic")
 	require.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+// TestTimeoutSettlesTheResponseOnTheCallThatStartsIt covers the calls other
+// than Write that start a response — WriteString, WriteHeaderNow, Flush and
+// Hijack: made before the deadline they go through, and made after it they
+// are dropped for the 504 envelope, a late WriteString and Hijack telling
+// the handler with http.ErrHandlerTimeout. A Hijack in time takes a
+// connection, which TestTimeoutHandsOverAConnectionHijackedInTime covers.
+func TestTimeoutSettlesTheResponseOnTheCallThatStartsIt(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		start   func(c *gin.Context) error
+		lateErr error
+		code    int
+		body    string
+	}{
+		{name: "WriteString", start: func(c *gin.Context) error {
+			_, err := c.Writer.WriteString("started")
+			return err
+		}, lateErr: http.ErrHandlerTimeout, code: http.StatusOK, body: "started"},
+		{name: "WriteHeaderNow", start: func(c *gin.Context) error {
+			c.Status(http.StatusAccepted)
+			c.Writer.WriteHeaderNow()
+			return nil
+		}, code: http.StatusAccepted},
+		{name: "Flush", start: func(c *gin.Context) error {
+			c.Status(http.StatusAccepted)
+			c.Writer.Flush()
+			return nil
+		}, code: http.StatusAccepted},
+		{name: "Hijack", start: func(c *gin.Context) error {
+			_, _, err := c.Writer.Hijack()
+			return err
+		}, lateErr: http.ErrHandlerTimeout},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.code != 0 {
+				router := newTimeoutRouter()
+				router.GET("/api/timeout/start", func(c *gin.Context) { require.NoError(t, tt.start(c)) })
+				w := serveTimeout(router, "/api/timeout/start")
+				require.Equal(t, tt.code, w.Code)
+				require.Equal(t, tt.body, w.Body.String())
+				require.Equal(t, tt.name == "Flush", w.Flushed)
+			}
+
+			router := newTimeoutRouter()
+			var err error
+			router.GET("/api/timeout/late-start", func(c *gin.Context) {
+				time.Sleep(4 * timeoutUnderTest)
+				err = tt.start(c)
+			})
+			w := serveTimeout(router, "/api/timeout/late-start")
+			requireGatewayTimeout(t, w)
+			require.False(t, w.Flushed)
+			require.ErrorIs(t, err, tt.lateErr)
+		})
+	}
+}
+
+// TestTimeoutHandsOverAConnectionHijackedInTime covers a handler taking over
+// the connection before the deadline, the way a WebSocket upgrade does: it
+// gets the connection and its answer on it reaches the client.
+func TestTimeoutHandsOverAConnectionHijackedInTime(t *testing.T) {
+	router := newTimeoutRouter()
+	router.GET("/api/timeout/hijack", func(c *gin.Context) {
+		conn, rw, err := c.Writer.Hijack()
+		require.NoError(t, err)
+		defer conn.Close()
+		_, err = rw.WriteString("HTTP/1.1 200 OK\r\nContent-Length: 8\r\nConnection: close\r\n\r\nhijacked")
+		require.NoError(t, err)
+		require.NoError(t, rw.Flush())
+	})
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	rsp, err := http.Get(server.URL + "/api/timeout/hijack")
+	require.NoError(t, err)
+	defer rsp.Body.Close()
+	body, err := io.ReadAll(rsp.Body)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rsp.StatusCode)
+	require.Equal(t, "hijacked", string(body))
 }
 
 // newTimeoutRouter mounts Timeout behind a middleware that sets a header of
