@@ -133,17 +133,14 @@ func (cb *CircularBuffer[E]) IsEmpty() bool {
 	return false
 }
 
-// IsFull reports whether the CircularBuffer is full.
+// IsFull reports whether the CircularBuffer holds as many elements as its size.
 func (cb *CircularBuffer[E]) IsFull() bool {
 	if cb.safe {
 		cb.mu.RLock()
 		defer cb.mu.RUnlock()
 	}
 
-	if cb.size == 0 {
-		return false
-	}
-	return true
+	return cb.size == cb.maxSize
 }
 
 // Len returns the number of elements in the CircularBuffer.

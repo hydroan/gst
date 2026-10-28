@@ -60,15 +60,18 @@ func TestCircularBuffer_EnqueueDequeue(t *testing.T) {
 
 		// Test Enqueue
 		assert.True(t, cb.Enqueue(1))
+		assert.False(t, cb.IsFull(), "a buffer holding fewer elements than its size is not full")
 		assert.True(t, cb.Enqueue(2))
 		assert.True(t, cb.Enqueue(3))
 		assert.Equal(t, 3, cb.Len())
+		assert.True(t, cb.IsFull())
 
 		// Test Dequeue
 		val, ok := cb.Dequeue()
 		assert.True(t, ok)
 		assert.Equal(t, 1, val)
 		assert.Equal(t, 2, cb.Len())
+		assert.False(t, cb.IsFull())
 	})
 
 	t.Run("drop mode when full", func(t *testing.T) {
