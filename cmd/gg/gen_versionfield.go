@@ -80,20 +80,28 @@ func fillVersionFieldTags(quiet bool) error {
 //
 //	type Bare struct {
 //		Version model.Version // trailing comment
+//
+//		model.Base
 //	}
 //
 //	type Partial struct {
 //		Version model.Version `json:"version" gorm:"not null"`
+//
+//		model.Base
 //	}
 //
 // it writes
 //
 //	type Bare struct {
 //		Version model.Version `json:"version,omitempty" gorm:"not null;default:1"` // trailing comment
+//
+//		model.Base
 //	}
 //
 //	type Partial struct {
 //		Version model.Version `json:"version,omitempty" gorm:"not null;default:1"`
+//
+//		model.Base
 //	}
 func rewriteVersionFieldTags(path string, findings []ggcheck.VersionFieldFinding) error {
 	safePath, err := gghelper.PathUnderRoot(path, ggconst.DirModel)

@@ -110,6 +110,67 @@ func (Partial) TableName() string { return "partials" }
 	}
 }
 
+// TestRewriteVersionFieldTagsHealsTheFindingsOfAFile holds the example of the
+// rewriteVersionFieldTags doc comment: the findings of Bare and Partial heal
+// into the full tag, the trailing comment kept.
+func TestRewriteVersionFieldTagsHealsTheFindingsOfAFile(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+	writeProjectGoMod(t, projectDir)
+
+	path := filepath.Join(projectDir, "model", "document", "document.go")
+	writeProjectFile(t, path, `package document
+
+import "github.com/hydroan/gst/model"
+
+type Bare struct {
+	Version model.Version // trailing comment
+
+	model.Base
+}
+
+type Partial struct {
+	Version model.Version `+"`json:\"version\" gorm:\"not null\"`"+`
+
+	model.Base
+}
+`)
+
+	findings, err := ggcheck.VersionFieldFindings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(findings) != 2 {
+		t.Fatalf("findings = %#v, want one for Bare and one for Partial", findings)
+	}
+	if err = rewriteVersionFieldTags(findings[0].Path, findings); err != nil {
+		t.Fatal(err)
+	}
+	healed, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `package document
+
+import "github.com/hydroan/gst/model"
+
+type Bare struct {
+	Version model.Version ` + "`json:\"version,omitempty\" gorm:\"not null;default:1\"`" + ` // trailing comment
+
+	model.Base
+}
+
+type Partial struct {
+	Version model.Version ` + "`json:\"version,omitempty\" gorm:\"not null;default:1\"`" + `
+
+	model.Base
+}
+`
+	if string(healed) != want {
+		t.Fatalf("healed file =\n%s\nwant\n%s", healed, want)
+	}
+}
+
 // TestFillVersionFieldTagsPrintsTheFileAsGoplsSaves pins how the heal writes a
 // model file back: the way gopls saves it, so a standard library import
 // sharing a group with the framework's comes out in a group of its own.

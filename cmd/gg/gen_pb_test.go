@@ -721,8 +721,7 @@ func TestGenRunWritesNoProtobufDefinitionWhenAShapeCannotBeDescribed(t *testing.
 // generator chose: the next number after every one the tagged fields hold,
 // starting past 10 in a model embedding the base and past 0 in any other
 // struct, the nested and the referenced ones included, the file keeping its
-// layout and comments (it holds the example of the rewritePBTags doc
-// comment); and that a second run leaves the file as it is.
+// layout and comments; and that a second run leaves the file as it is.
 func TestGenRunNumbersTheFieldsWithoutPBTags(t *testing.T) {
 	projectDir, ok := newGenProject(t)
 	if !ok {
