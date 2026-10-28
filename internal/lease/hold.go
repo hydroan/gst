@@ -7,7 +7,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/util"
+	"github.com/hydroan/gst/internal/util"
 )
 
 // Hold keeps h renewed on a goroutine of its own and returns a context that

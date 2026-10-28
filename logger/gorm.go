@@ -12,7 +12,7 @@ import (
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/util"
+	"github.com/hydroan/gst/internal/util"
 	"go.uber.org/zap"
 	gormlogger "gorm.io/gorm/logger"
 )

@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"example.com/module/internal/logfield"
-	"example.com/module/util"
+	"example.com/module/internal/util"
 	"go.uber.org/zap"
 )
 

@@ -13,8 +13,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/logfield"
+	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 )
 

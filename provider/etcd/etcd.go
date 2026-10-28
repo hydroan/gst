@@ -9,8 +9,8 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/util"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 )

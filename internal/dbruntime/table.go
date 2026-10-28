@@ -14,7 +14,7 @@ import (
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
-	"github.com/hydroan/gst/util"
+	"github.com/hydroan/gst/internal/util"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )

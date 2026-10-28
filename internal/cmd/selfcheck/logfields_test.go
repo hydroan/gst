@@ -44,7 +44,7 @@ func TestCheckLogFields(t *testing.T) {
 		},
 		{
 			File:    "sample/nested.go",
-			Message: "Log field 'sample/nested.go:13': zap.Object nests keys under the entry; internal/logfield and util alone, whose key sets are fixed, may nest",
+			Message: "Log field 'sample/nested.go:13': zap.Object nests keys under the entry; internal/logfield and internal/util alone, whose key sets are fixed, may nest",
 		},
 		{
 			File:    "sample/nested.go",

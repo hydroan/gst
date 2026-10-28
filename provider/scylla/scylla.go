@@ -11,8 +11,8 @@ import (
 	"github.com/hydroan/gst/internal/cqlpolicy"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/util"
 	"github.com/scylladb/gocqlx/v3"
 	"go.uber.org/zap"
 )

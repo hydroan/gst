@@ -10,7 +10,7 @@ import (
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/util"
+	"github.com/hydroan/gst/internal/util"
 	"go.uber.org/zap"
 )
 

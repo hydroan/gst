@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/util"
 )
 
 // Documenter is a value BulkIndex writes into an index: its fields and the id

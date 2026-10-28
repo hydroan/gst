@@ -11,7 +11,6 @@ import (
 	"github.com/hydroan/gst/internal/testutil/providertest"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
 	"github.com/hydroan/gst/provider/elastic"
-	"github.com/hydroan/gst/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -185,7 +184,7 @@ func TestQueryBuilderMatchPhraseOptionsAllowsASlop(t *testing.T) {
 		sampleDocument{id: "far", fields: map[string]any{"title": "hello big wide world"}},
 	)
 	req, err := elastic.NewQueryBuilder().
-		MatchPhraseOptions("title", elastic.MatchPhraseOptions{Query: "hello world", Slop: util.Pointer(1)}).
+		MatchPhraseOptions("title", elastic.MatchPhraseOptions{Query: "hello world", Slop: new(1)}).
 		Build()
 	require.NoError(t, err)
 

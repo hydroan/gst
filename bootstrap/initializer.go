@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hydroan/gst/util"
+	"github.com/hydroan/gst/internal/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )

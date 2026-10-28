@@ -11,8 +11,8 @@ import (
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
-	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 )
 

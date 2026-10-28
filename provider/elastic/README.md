@@ -159,7 +159,7 @@ req := &SearchRequest{
 
 ```go
 req := &SearchRequest{
-    Size: util.Pointer(0), // 只要聚合、不要命中时设为 0；不设 Size 就按集群默认返回 10 条
+    Size: new(0), // 只要聚合、不要命中时设为 0；不设 Size 就按集群默认返回 10 条
     Query: map[string]any{
         "match_all": map[string]any{},
     },
@@ -209,8 +209,8 @@ req := &SearchRequest{
     Query: map[string]any{
         "match_all": map[string]any{},
     },
-    From: 0,                // 起始位置
-    Size: util.Pointer(10), // 每页大小
+    From: 0,       // 起始位置
+    Size: new(10), // 每页大小
 }
 ```
 
@@ -276,7 +276,7 @@ req := &SearchRequest{
         },
     },
     From: 0,
-    Size: util.Pointer(20),
+    Size: new(20),
 }
 ```
 

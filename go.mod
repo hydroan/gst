@@ -25,7 +25,6 @@ require (
 	github.com/arl/statsviz v0.8.1
 	github.com/bufbuild/protocompile v0.14.1
 	github.com/casbin/casbin/v3 v3.11.0
-	github.com/cloverstd/tcping v0.1.1
 	github.com/cockroachdb/errors v1.14.0
 	github.com/coocood/freecache v1.2.7
 	github.com/creasty/defaults v1.8.0
@@ -77,7 +76,6 @@ require (
 	github.com/panjf2000/ants/v2 v2.12.1
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/pquerna/otp v1.5.0
-	github.com/prometheus-community/pro-bing v0.9.1
 	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/client_model v0.6.2
 	github.com/redis/go-redis/extra/redisotel/v9 v9.22.0

@@ -8,8 +8,8 @@ package operation
 import (
 	"context"
 
+	"github.com/hydroan/gst/internal/util"
 	gstotel "github.com/hydroan/gst/otel"
-	"github.com/hydroan/gst/util"
 	"go.opentelemetry.io/otel/trace"
 )
 

@@ -10,8 +10,8 @@ import (
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/util"
 	gstotel "github.com/hydroan/gst/otel"
-	"github.com/hydroan/gst/util"
 	"go.opentelemetry.io/otel/trace"
 )
 

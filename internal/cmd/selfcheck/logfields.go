@@ -21,7 +21,7 @@ const (
 	zapPath      = "go.uber.org/zap"
 	zapcorePath  = "go.uber.org/zap/zapcore"
 	logfieldPath = "internal/logfield"
-	utilPath     = "util"
+	utilPath     = "internal/util"
 )
 
 // keyValueMethod matches the logging methods taking their fields as key-value
@@ -91,11 +91,10 @@ type fieldWrite struct {
 // across the tree, which is why this check exists. The module sources under
 // internal/model and internal/service are copied into projects, which cannot
 // import internal/logfield, so they are held to the type rule alone, as a
-// project is. zap.Object, zap.Dict,
-// zap.Namespace and zap.Inline nest keys under the entry and are reported
-// outside internal/logfield and util, whose key sets are fixed; a zap
-// constructor constructorClasses does not know is reported so the table stays
-// complete.
+// project is. zap.Object, zap.Dict, zap.Namespace and zap.Inline nest keys
+// under the entry and are reported outside internal/logfield and internal/util,
+// whose key sets are fixed; a zap constructor constructorClasses does not know
+// is reported so the table stays complete.
 func checkLogFields(root string, pkgs []*packages.Package) ([]violation, error) {
 	checked := checkedPackages(pkgs)
 	module := ""
@@ -154,7 +153,7 @@ func checkLogFields(root string, pkgs []*packages.Package) ([]violation, error) 
 					case name == "Skip":
 					case nestingConstructors[name]:
 						if !nesting[p.PkgPath] {
-							report(call, "zap.%s nests keys under the entry; internal/logfield and util alone, whose key sets are fixed, may nest", name)
+							report(call, "zap.%s nests keys under the entry; internal/logfield and internal/util alone, whose key sets are fixed, may nest", name)
 						}
 					case name == "Any" || name == "Reflect":
 						if key, ok := constString(p.TypesInfo, call.Args[0]); ok {

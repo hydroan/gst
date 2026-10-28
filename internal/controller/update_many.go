@@ -13,9 +13,9 @@ import (
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
-	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 )
 

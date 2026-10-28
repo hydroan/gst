@@ -12,7 +12,7 @@ import (
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/util"
+	"github.com/hydroan/gst/internal/util"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )

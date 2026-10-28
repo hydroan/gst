@@ -9,9 +9,9 @@ import (
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/requestctx"
+	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	prommetrics "github.com/hydroan/gst/metrics"
-	"github.com/hydroan/gst/util"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )

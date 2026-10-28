@@ -3,7 +3,7 @@ package requestctx
 import (
 	"strings"
 
-	"github.com/hydroan/gst/util"
+	"github.com/hydroan/gst/internal/util"
 	"go.opentelemetry.io/otel/trace"
 )
 
