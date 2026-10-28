@@ -10,7 +10,6 @@ import (
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/internal/util"
 	"go.uber.org/zap"
 )
 
@@ -77,6 +76,11 @@ func IPBlacklist(blacklist []string) gin.HandlerFunc {
 // server.trusted_proxies, applied to the engine at startup — behind a proxy
 // that is not named there, every request filters as the proxy's own address.
 //
+// Entries match the way net.IP compares addresses: an IPv4-mapped IPv6
+// address, such as ::ffff:10.1.2.3, matches the IPv4 entries, while every
+// other IPv6 address, the loopback ::1 among them, matches IPv6 entries alone,
+// so letting local callers in over both families takes 127.0.0.1 and ::1.
+//
 // Parameters:
 //   - config: Configuration for IP filtering
 //
@@ -141,7 +145,7 @@ func IPFilter(config *IPFilterConfig) gin.HandlerFunc {
 		// the connection unless a trusted proxy forwarded another. Whether a
 		// forwarding header counts is decided once for the whole server by
 		// server.trusted_proxies, so this filter never has to judge it.
-		clientIP := util.IPv6ToIPv4(requestctx.GinClientIP(c))
+		clientIP := requestctx.GinClientIP(c)
 		ip := net.ParseIP(clientIP)
 		if ip == nil {
 			zap.S().Warnw("failed to parse client IP", "ip", clientIP)
