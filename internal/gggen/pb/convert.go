@@ -826,14 +826,14 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 //			return nil, err
 //		}
 //	}
-//		if p.GetWhen() != nil {
-//			var x time.Time
-//			x, err = grpc.Time("when", p.GetWhen())
-//			if err != nil {
-//				return nil, err
-//			}
-//			m.When = &x
+//	if p.GetWhen() != nil {
+//		var x time.Time
+//		x, err = grpc.Time("when", p.GetWhen())
+//		if err != nil {
+//			return nil, err
 //		}
+//		m.When = &x
+//	}
 func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft pbschema.FieldType, path ast.Expr) []ast.Stmt {
 	// declared is t as the model spells it, an alias kept, which is how the
 	// file spells it too; t itself decides the conversion.

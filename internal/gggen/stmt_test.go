@@ -84,6 +84,12 @@ func TestReturns(t *testing.T) {
 			want:  `return nil`,
 		},
 		{
+			// The example of the Returns doc comment.
+			name:  "return_rsp_and_nil",
+			exprs: []ast.Expr{ast.NewIdent("rsp"), ast.NewIdent("nil")},
+			want:  `return rsp, nil`,
+		},
+		{
 			name: "return_multiple_values",
 			exprs: []ast.Expr{
 				&ast.UnaryExpr{

@@ -21,10 +21,11 @@ import (
 // it writes it for a passage of the model sources gen_pb_test.go writes (see
 // TestGenRunWritesTheProtobufDefinitionsOfGRPCModels).
 var pbDocExampleFuncs = []string{
-	"Generate", "buildMessage", "declareService", "rpcMessages", "customRequest",
-	"customResponse", "queryFields", "fileDescriptor", "handlerFile", "serviceType",
-	"actionCalls", "handler", "streamHandler", "toProto", "fromProto",
-	"elementFromProto", "conversionFuncs", "registrationFiles",
+	"Generate", "buildMessage", "declareService", "rpcMessages", "patchRequest",
+	"customRequest", "customResponse", "queryFields", "fileDescriptor",
+	"handlerFile", "serviceType", "actionCalls", "handler", "streamHandler",
+	"toProto", "fromProto", "elementFromProto", "conversionFuncs",
+	"registrationFiles",
 }
 
 // pbDocExamplePackages are the packages pbDocExampleFuncs are declared in.
@@ -35,17 +36,19 @@ var pbDocExamplePackages = []string{
 
 // TestPBDocExamplesComeFromTheGoldenFiles pins every indented code block in
 // the doc comments of pbDocExampleFuncs to the golden files and the model
-// sources behind them: each block, its lines trimmed, must appear as a
-// contiguous run of lines in one of them, blank lines included, so an example
-// that drifts from what the generator writes, down to the blank line between
-// two import groups, fails here instead of misleading a reader.
+// sources behind them: each block must appear as a contiguous run of lines in
+// one of them, indented as a whole by any amount, its blank lines and the
+// indentation of each line against the others included, so an example that
+// drifts from what the generator writes, down to the blank line between two
+// import groups or a line a level too deep, fails here instead of misleading a
+// reader.
 func TestPBDocExamplesComeFromTheGoldenFiles(t *testing.T) {
 	golden := goldenFileLines(t, filepath.Join("testdata", "pb", "golden"))
 	fixture, err := os.ReadFile("gen_pb_test.go")
 	require.NoError(t, err)
 	// The model sources are raw string literals, so they spell a backtick as
 	// a single quote and the test writing them turns it back.
-	golden["gen_pb_test.go"] = trimmedLines(strings.Split(strings.ReplaceAll(string(fixture), "'", "`"), "\n"))
+	golden["gen_pb_test.go"] = sourceLines(strings.Split(strings.ReplaceAll(string(fixture), "'", "`"), "\n"))
 	fset := token.NewFileSet()
 	found := make(map[string]bool, len(pbDocExampleFuncs))
 	for _, pkg := range golist.Packages(t, pbDocExamplePackages...) {
@@ -73,8 +76,8 @@ func TestPBDocExamplesComeFromTheGoldenFiles(t *testing.T) {
 	}
 }
 
-// goldenFileLines reads every file under dir into its trimmed lines (see
-// trimmedLines), keyed by path.
+// goldenFileLines reads every file under dir into its lines (see
+// sourceLines), keyed by path.
 func goldenFileLines(t *testing.T, dir string) map[string][]string {
 	t.Helper()
 	files := make(map[string][]string)
@@ -86,7 +89,7 @@ func goldenFileLines(t *testing.T, dir string) map[string][]string {
 		if err != nil {
 			return err
 		}
-		files[path] = trimmedLines(strings.Split(string(data), "\n"))
+		files[path] = sourceLines(strings.Split(string(data), "\n"))
 		return nil
 	}))
 	require.NotEmpty(t, files)
@@ -94,8 +97,9 @@ func goldenFileLines(t *testing.T, dir string) map[string][]string {
 }
 
 // docCodeBlocks returns the code blocks of a doc comment text, the runs of
-// tab-indented lines, each as its trimmed lines (see trimmedLines). A blank
-// line inside a run keeps the run going, as it does inside a generated file.
+// tab-indented lines, each as its lines (see sourceLines) with the
+// indentation they share removed (see dedented). A blank line inside a run
+// keeps the run going, as it does inside a generated file.
 func docCodeBlocks(text string) [][]string {
 	var blocks [][]string
 	var current []string
@@ -108,25 +112,25 @@ func docCodeBlocks(text string) [][]string {
 				current = append(current, line)
 			}
 		default:
-			if block := trimmedLines(current); len(block) > 0 {
+			if block := dedented(sourceLines(current)); len(block) > 0 {
 				blocks = append(blocks, block)
 			}
 			current = nil
 		}
 	}
-	if block := trimmedLines(current); len(block) > 0 {
+	if block := dedented(sourceLines(current)); len(block) > 0 {
 		blocks = append(blocks, block)
 	}
 	return blocks
 }
 
-// trimmedLines returns lines trimmed of surrounding whitespace, the blank
-// lines at either end dropped and every run of blank lines inside kept as
-// one: "a", "", "", "b", "" gives "a", "", "b".
-func trimmedLines(lines []string) []string {
+// sourceLines returns lines trimmed of trailing whitespace, the blank lines at
+// either end dropped and every run of blank lines inside kept as one: "\ta",
+// "", "", "\t\tb", "" gives "\ta", "", "\t\tb".
+func sourceLines(lines []string) []string {
 	out := make([]string, 0, len(lines))
 	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
+		trimmed := strings.TrimRight(line, " \t")
 		if trimmed == "" && (len(out) == 0 || out[len(out)-1] == "") {
 			continue
 		}
@@ -138,15 +142,65 @@ func trimmedLines(lines []string) []string {
 	return out
 }
 
+// dedented returns lines with the indentation every line but a blank one
+// starts with removed: "\ta", "", "\t\tb" gives "a", "", "\tb".
+func dedented(lines []string) []string {
+	common, found := "", false
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+		if !found {
+			common, found = indent, true
+			continue
+		}
+		for !strings.HasPrefix(indent, common) {
+			common = common[:len(common)-1]
+		}
+	}
+	out := make([]string, len(lines))
+	for i, line := range lines {
+		out[i] = strings.TrimPrefix(line, common)
+	}
+	return out
+}
+
 // goldenHolds reports whether block appears as a contiguous run of lines in
-// one of the files.
+// one of the files, indented as a whole by any amount (see indentedRun).
 func goldenHolds(golden map[string][]string, block []string) bool {
 	for _, lines := range golden {
 		for start := 0; start+len(block) <= len(lines); start++ {
-			if slices.Equal(lines[start:start+len(block)], block) {
+			if indentedRun(lines[start:start+len(block)], block) {
 				return true
 			}
 		}
 	}
 	return false
+}
+
+// indentedRun reports whether run is block behind one shared indentation:
+// "\t\ta", "", "\t\t\tb" is "a", "", "\tb" behind two tabs, with a blank
+// line of block blank in run as well.
+func indentedRun(run, block []string) bool {
+	indent, found := "", false
+	for i, line := range block {
+		if line == "" {
+			if run[i] != "" {
+				return false
+			}
+			continue
+		}
+		if !found {
+			prefix, ok := strings.CutSuffix(run[i], line)
+			if !ok || strings.TrimLeft(prefix, " \t") != "" {
+				return false
+			}
+			indent, found = prefix, true
+		}
+		if run[i] != indent+line {
+			return false
+		}
+	}
+	return true
 }

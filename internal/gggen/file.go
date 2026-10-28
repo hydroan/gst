@@ -172,8 +172,8 @@ func BuildModelFile(modulePath, pkgName string, aliases map[string]string, stmts
 //	)
 //
 //	func init() {
-//		service.Register[*group.Updater](consts.Update, "groups/:id")
-//		service.Register[*user.Creator](consts.Create, "users")
+//		service.Register[*group.Updater](consts.Update, "/api/groups/:id")
+//		service.Register[*user.Creator](consts.Create, "/api/users")
 //	}
 func BuildServiceFile(modulePath, pkgName string, aliases map[string]string, stmts ...ast.Stmt) (string, error) {
 	body := make([]ast.Stmt, 0, len(stmts))
@@ -237,8 +237,8 @@ func BuildServiceFile(modulePath, pkgName string, aliases map[string]string, stm
 //	)
 //
 //	func Init() error {
-//		router.Register[*model.Group, *model.Group, *model.Group](router.Auth(), "groups", &gst.ControllerConfig[*model.Group]{}, consts.List)
-//		router.Register[*model.User, *model.User, *model.User](router.Pub(), "users", &gst.ControllerConfig[*model.User]{}, consts.Create)
+//		router.Register[*model.Group, *model.Group, *model.Group](router.Auth(), "/api/groups", &gst.ControllerConfig[*model.Group]{}, consts.List)
+//		router.Register[*model.User, *model.User, *model.User](router.Pub(), "/api/users", &gst.ControllerConfig[*model.User]{}, consts.Create)
 //		return nil
 //	}
 func BuildRouterFile(modulePath, pkgName, gstModelPkg string, aliases map[string]string, stmts ...ast.Stmt) (string, error) {

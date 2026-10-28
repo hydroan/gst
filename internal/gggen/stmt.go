@@ -90,10 +90,10 @@ func StmtLogWithContext(modelVarName string) *ast.AssignStmt {
 // StmtModelRegister builds the registration of a model in model.gen.go.
 // modelName is the model type as the file refers to it, qualified when the
 // model is declared outside the root model package: for User and
-// sample.Group it builds
+// sample.Record it builds
 //
 //	model.Register[*User]()
-//	model.Register[*sample.Group]()
+//	model.Register[*sample.Record]()
 func StmtModelRegister(modelName string) *ast.ExprStmt {
 	return &ast.ExprStmt{
 		X: &ast.CallExpr{
@@ -150,9 +150,9 @@ func StmtServiceRegister(serviceImport string, phase consts.Phase, route string)
 // rspName qualified by modelPkgName, the qualifier the file refers to the
 // model package by. For example, it builds
 //
-//	router.Register[*model.Group, *model.Group, *model.Group](router.Auth(), "/api/groups", &gst.ControllerConfig[*model.Group]{}, consts.Create)
-//	router.Register[*model.Group, *gstmodel.Empty, *model.GroupListRsp](router.Auth(), "/api/groups", &gst.ControllerConfig[*model.Group]{}, consts.List)
-//	router.Register[*group.Group, *group.Group, *group.Group](router.Auth(), "/api/groups/:id", &gst.ControllerConfig[*group.Group]{ParamName: "id"}, consts.Get)
+//	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records", &gst.ControllerConfig[*model.Record]{}, consts.Create)
+//	router.Register[*model.Record, *gstmodel.Empty, *model.GroupListRsp](router.Auth(), "/api/groups", &gst.ControllerConfig[*model.Record]{}, consts.List)
+//	router.Register[*group.Record, *group.Record, *group.Record](router.Auth(), "/api/groups/:id", &gst.ControllerConfig[*group.Record]{ParamName: "id"}, consts.Get)
 //
 // A dsl.PayloadEmpty side becomes *model.Empty under gstModelPkg, the
 // qualifier the router file uses for model.Empty, resolved once per file by
