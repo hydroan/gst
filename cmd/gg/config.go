@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -403,10 +404,12 @@ func encodeINIConfig(data map[string]any) []byte {
 	return buf.Bytes()
 }
 
+// setConfigSection puts the keys of the INI section named section into data
+// under its dotted path, beside what the sections read before it put there,
+// so that a nested section may come before its parent.
 func setConfigSection(data map[string]any, section string, values map[string]any) {
-	parts := strings.Split(section, ".")
 	current := data
-	for _, part := range parts[:len(parts)-1] {
+	for part := range strings.SplitSeq(section, ".") {
 		next, ok := current[part].(map[string]any)
 		if !ok {
 			next = make(map[string]any)
@@ -414,7 +417,7 @@ func setConfigSection(data map[string]any, section string, values map[string]any
 		}
 		current = next
 	}
-	current[parts[len(parts)-1]] = values
+	maps.Copy(current, values)
 }
 
 func flattenConfigSections(prefix string, value map[string]any, sections map[string]map[string]any) {
