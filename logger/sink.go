@@ -197,10 +197,9 @@ func syncBufferedLogWriters() {
 // buffered writer the constructors registered before syncing its own, so
 // syncing the global logger alone writes out what every stream buffered. A
 // process exiting on a failure syncs exactly that one logger (see
-// util.RunOrDie), the only one it reaches without importing this package;
-// zap's Logger.Sync reaches its own core alone, and a BufferedWriteSyncer
-// flushes on its own interval or size otherwise, so the entries a component
-// logged moments before the exit would stay in its buffer.
+// bootstrap.RunOrDie); zap's Logger.Sync reaches its own core alone, and a
+// BufferedWriteSyncer flushes on its own interval or size otherwise, so the
+// entries a component logged moments before the exit would stay in its buffer.
 type flushingCore struct {
 	zapcore.Core
 }

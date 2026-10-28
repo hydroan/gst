@@ -231,7 +231,7 @@ func restoreGlobalLoggers(t *testing.T) {
 
 // TestSyncingTheGlobalLoggerFlushesEveryStream pins that syncing the global
 // logger alone, what a process does before it exits on a failure (see
-// util.RunOrDie), writes out what every stream buffered in file mode: the
+// bootstrap.RunOrDie), writes out what every stream buffered in file mode: the
 // entries the components logged moments before the exit reach their files.
 func TestSyncingTheGlobalLoggerFlushesEveryStream(t *testing.T) {
 	dir := t.TempDir()
