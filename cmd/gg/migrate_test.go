@@ -17,12 +17,12 @@ import (
 
 // TestMigrateProgramLinksWhatMainLinks pins what the migration program links:
 // its model set is whatever the linked packages registered, so it has to link
-// the project packages a generated main.go links and the framework entry
+// the project packages every generated main.go links and the framework entry
 // point that links the rest, and it has to initialize the router and modules
 // through that entry point instead of guessing when module registration is
 // done. A scaffold package the project lacks — restored by gg gen, never by
-// migrate — is left out rather than failing the build, which is what a
-// project that has not run gen yet looks like.
+// migrate — is left out rather than failing the build, which is what a project
+// that has not run gen yet looks like.
 func TestMigrateProgramLinksWhatMainLinks(t *testing.T) {
 	projectDir := t.TempDir()
 	for _, dir := range ggconst.ProjectImportDirs {

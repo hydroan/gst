@@ -69,8 +69,8 @@ const (
 // TestMain: it declares TestMain and nothing else.
 const FileMainTest = "main_test.go"
 
-// Directory names. The project directories are spelled here alone: gg reads
-// and writes them, and ProjectImportDirs below lists the ones a generated
+// Directory names. The project directories are spelled here alone: gg reads and
+// writes them, and ProjectImportDirs below lists the ones every generated
 // main.go imports.
 const (
 	DirVendor   = "vendor"
@@ -122,12 +122,14 @@ const (
 	CacheFileName = ".gg_cache.json"
 )
 
-// ProjectImportDirs lists the project packages a generated main.go imports,
-// in import-path order. The migration program imports the same list: its
-// model set is whatever those packages' initialisers registered, so it has to
-// link exactly what the service links. Declared once so the two cannot drift.
-// Every directory here is a scaffold file gg new creates and gg gen restores
-// when missing, so a project always has the package main.go imports.
+// ProjectImportDirs lists the project packages every generated main.go imports,
+// in import-path order; a project serving gRPC has main.go import pb and
+// interceptor as well, packages that register no model. The migration program
+// imports the same list: its model set is whatever those packages' initialisers
+// registered, so it has to link what the service links for its models. Declared
+// once so the two cannot drift. Every directory here is a scaffold file gg new
+// creates and gg gen restores when missing, so a project always has the package
+// main.go imports.
 var ProjectImportDirs = []string{
 	DirComponent,
 	DirConfigx,
