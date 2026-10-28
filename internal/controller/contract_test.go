@@ -128,7 +128,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			// A time a model declares a date column by its type tag is a day
 			// the same way.
 			name: "Create stores a date declared on a time as the UTC day", fixture: dated, phase: consts.Create,
-			input: contractInput{record: map[string]any{"name": uniqueName("contract-due"), "due": "2026-01-02T00:00:00+08:00"}},
+			input: contractInput{record: map[string]any{"name": uniqueName("contract-due"), "day": "2026-01-01T00:00:00Z", "due": "2026-01-02T00:00:00+08:00"}},
 			want:  ok,
 			check: func(t *testing.T, _ contractInput, got contractAnswer) {
 				t.Helper()
@@ -144,7 +144,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			// 17:30, is HTTP's to refuse (see
 			// TestCreateReadsATimeOfDayAsWritten).
 			name: "Create stores a time of day with the fraction of a second it names", fixture: dated, phase: consts.Create,
-			input: contractInput{record: map[string]any{"name": uniqueName("contract-clock"), "clock": "17:30:00.5"}},
+			input: contractInput{record: map[string]any{"name": uniqueName("contract-clock"), "day": "2026-01-01T00:00:00Z", "clock": "17:30:00.5"}},
 			want:  ok,
 			check: func(t *testing.T, _ contractInput, got contractAnswer) {
 				t.Helper()

@@ -123,7 +123,8 @@ func (nestedSample) TableName() string { return "controller_nested_samples" }
 // is a time declared a date column by its type tag, a day the same way. It
 // also carries a JSON document, which a filter matches by its text and never
 // compares, a number, which a filter matches by its text as well, and a time
-// of day, which a body sends in time.TimeOnly.
+// of day, which a body sends in time.TimeOnly. Every record a test writes
+// names its day: MySQL refuses the zero date a record without one holds.
 type datedSample struct {
 	Name     string            `json:"name" query:"name"`
 	Day      datatypes.Date    `json:"day" query:"day"`

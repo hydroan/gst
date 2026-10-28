@@ -30,7 +30,7 @@ func TestCreateWritesNothingTheBeforeHookRefuses(t *testing.T) {
 func TestCreateReadsATimeOfDayAsWritten(t *testing.T) {
 	handler := controller.CreateHandler[*datedSample, *datedSample, *datedSample](configFor[*datedSample](datedRoute))
 
-	rsp := serve(t, http.MethodPost, "/controller-dated-samples", handler, "/controller-dated-samples", `{"name":"`+uniqueName("create-clock")+`","clock":"17:30:00.5"}`)
+	rsp := serve(t, http.MethodPost, "/controller-dated-samples", handler, "/controller-dated-samples", `{"name":"`+uniqueName("create-clock")+`","day":"2026-01-01T00:00:00Z","clock":"17:30:00.5"}`)
 	require.Equal(t, http.StatusOK, rsp.Code, rsp.Body.String())
 	require.Contains(t, rsp.Body.String(), `"clock":"17:30:00.500000000"`)
 

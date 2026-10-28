@@ -159,7 +159,8 @@ ggcheck:
 # this file. Tests bring up whatever they need in containers, so a container
 # runtime is the only thing the machine has to provide.
 # DIALECT_PACKAGES must behave the same on every supported dialect -- the
-# database package, and the capabilities built on its leases -- so their
+# database package, the capabilities built on its leases, and the controller,
+# whose answers must not depend on which dialect's error it maps -- so their
 # suites run once per dialect: the full run already covers MySQL (their
 # TestMain default), and the remaining dialects repeat them under the build
 # tag naming the dialect, which only internal/testutil reads -- the public
@@ -194,7 +195,7 @@ ggcheck:
 # with its totals and the output of the tests that failed, leaving the
 # expected skips to their count. A machine without gotestsum gets the version
 # go.mod pins installed on the first run.
-DIALECT_PACKAGES := ./database/... ./internal/lease/... ./cronjob/... ./leader/... ./lock/...
+DIALECT_PACKAGES := ./database/... ./internal/lease/... ./cronjob/... ./leader/... ./lock/... ./internal/controller/...
 TEST_FLAGS := -race -gcflags=all=-dwarf=false -gcflags='golang.org/x/crypto/blowfish=-race=false -dwarf=false'
 TEST_OUTPUT := --format pkgname --format-hide-empty-pkg --hide-summary=skipped
 

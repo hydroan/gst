@@ -82,9 +82,11 @@ func TestPatchAppliesAFieldAsAWhole(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, rsp.Code, "the address is checked as a whole, its city required")
 	require.Equal(t, sampleAddress{City: "new"}, loadShaped(t, record.GetID()).Address)
 
-	rsp = serve(t, http.MethodPatch, "/controller-shaped-samples/:id", handler, target, `{"due_at":null}`)
+	// MySQL refuses the zero time a cleared due_at would hold, so null clears
+	// the reviewer.
+	rsp = serve(t, http.MethodPatch, "/controller-shaped-samples/:id", handler, target, `{"reviewer":null}`)
 	require.Equal(t, http.StatusOK, rsp.Code, rsp.Body.String())
-	require.True(t, loadShaped(t, record.GetID()).DueAt.IsZero(), "null clears a value")
+	require.Equal(t, SampleAudit{Reviewed: true}, loadShaped(t, record.GetID()).SampleAudit, "null clears a value")
 }
 
 // TestPatchKeepsTheRecordTheBeforeHookRefuses pins that a PatchBefore
