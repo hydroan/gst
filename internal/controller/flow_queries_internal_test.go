@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"path/filepath"
 	"slices"
@@ -283,4 +284,71 @@ func TestDeleteManyFlowRecordsTheDeletedRecordsWhenAudited(t *testing.T) {
 			require.Contains(t, entries[0].Record, record.Name)
 		}
 	})
+}
+
+// TestBatchFlowsRecordTheirItemsWhenAudited pins the operation log of the
+// batch writes beside DeleteMany: CreateMany and UpdateMany log the batch as
+// written as its record, request and response alike, and PatchMany logs the
+// batch it was sent as the record and request and the records as patched as
+// the response.
+func TestBatchFlowsRecordTheirItemsWhenAudited(t *testing.T) {
+	useAudit(t, config.Audit{Enabled: true})
+	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "flow-user", UserID: "u-flow"}))
+
+	t.Run("CreateMany", func(t *testing.T) {
+		a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.CreateMany, consts.CreateManyBefore, consts.CreateManyAfter)
+		name := uniqueFlowName("create many audited")
+		req := batch[*flowSample]{Items: []*flowSample{{Name: name + " 0"}, {Name: name + " 1"}}}
+
+		require.NoError(t, a.createManyFlow(ctx, plainServiceContext, &req))
+
+		entries := operationLogEntries(ctx, t, a.name, consts.OP_CREATE_MANY, name)
+		require.Len(t, entries, 1)
+		requireLoggedAs(t, req, entries[0].Record)
+		require.Equal(t, entries[0].Record, entries[0].Request)
+		require.Equal(t, entries[0].Record, entries[0].Response)
+	})
+	t.Run("UpdateMany", func(t *testing.T) {
+		a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.UpdateMany, consts.UpdateManyBefore, consts.UpdateManyAfter)
+		name := uniqueFlowName("update many audited")
+		req := batch[*flowSample]{}
+		for _, record := range createFlowSamples(ctx, t, name, 2) {
+			req.Items = append(req.Items, flowItem(record.GetID(), record.Name+" updated"))
+		}
+
+		require.NoError(t, a.updateManyFlow(ctx, plainServiceContext, &req))
+
+		entries := operationLogEntries(ctx, t, a.name, consts.OP_UPDATE_MANY, name)
+		require.Len(t, entries, 1)
+		requireLoggedAs(t, req, entries[0].Record)
+		require.Equal(t, entries[0].Record, entries[0].Request)
+		require.Equal(t, entries[0].Record, entries[0].Response)
+	})
+	t.Run("PatchMany", func(t *testing.T) {
+		a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.PatchMany, consts.PatchManyBefore, consts.PatchManyAfter)
+		name := uniqueFlowName("patch many audited")
+		req := batch[*flowSample]{}
+		var fieldSets []patchFieldSet
+		for _, record := range createFlowSamples(ctx, t, name, 2) {
+			req.Items = append(req.Items, flowItem(record.GetID(), record.Name+" patched"))
+			fieldSets = append(fieldSets, patchFieldSet{"Name": {}})
+		}
+
+		patched, err := a.patchManyFlow(ctx, plainServiceContext, &req, fieldSets)
+		require.NoError(t, err)
+
+		entries := operationLogEntries(ctx, t, a.name, consts.OP_PATCH_MANY, name)
+		require.Len(t, entries, 1)
+		requireLoggedAs(t, req, entries[0].Record)
+		require.Equal(t, entries[0].Record, entries[0].Request)
+		requireLoggedAs(t, patched, entries[0].Response)
+	})
+}
+
+// requireLoggedAs requires the logged column to hold value as JSON.
+func requireLoggedAs(t *testing.T, value any, logged string) {
+	t.Helper()
+	want, err := json.Marshal(value)
+	require.NoError(t, err)
+	require.JSONEq(t, string(want), logged)
 }

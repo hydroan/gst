@@ -89,6 +89,24 @@ func TestPatchAppliesAFieldAsAWhole(t *testing.T) {
 	require.Equal(t, SampleAudit{Reviewed: true}, loadShaped(t, record.GetID()).SampleAudit, "null clears a value")
 }
 
+// TestPatchRefusesABodyThatIsNoObject pins that a body naming no fields as a
+// JSON object does — an array, a string, or JSON cut short — is answered 400
+// with what is wrong with it, and changes nothing.
+func TestPatchRefusesABodyThatIsNoObject(t *testing.T) {
+	record := createSample(t, "patch-shapeless")
+	handler := controller.PatchHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute))
+	for body, want := range map[string]string{
+		`[1]`:      "request body has an unexpected JSON type",
+		`"text"`:   "request body has an unexpected JSON type",
+		`{"name":`: "request body is not valid JSON",
+	} {
+		rsp := serve(t, http.MethodPatch, "/controller-samples/:id", handler, "/controller-samples/"+record.GetID(), body)
+		require.Equal(t, http.StatusBadRequest, rsp.Code, body)
+		require.Contains(t, rsp.Body.String(), `"msg":"`+want+`"`, body)
+	}
+	requireSampleName(t, record.GetID(), "patch-shapeless")
+}
+
 // TestPatchKeepsTheRecordTheBeforeHookRefuses pins that a PatchBefore
 // refusal answers with the hook's error and writes nothing.
 func TestPatchKeepsTheRecordTheBeforeHookRefuses(t *testing.T) {
