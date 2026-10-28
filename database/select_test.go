@@ -998,8 +998,8 @@ func TestSelectPageCompletesTheOrder(t *testing.T) {
 				Page(2, 2).
 				Scan(&rows)
 		})
-		require.Contains(t, sql, "ORDER BY "+quoteIdent("category")+" ASC,")
-		require.Contains(t, sql, quoteIdent("id")+" ASC", "rows sharing a category are told apart by the primary key")
+		require.Contains(t, sql, "ORDER BY "+quoteIdent("category")+" ASC,"+quoteIdent("id")+" ASC",
+			"rows sharing a category are told apart by the primary key, right after the ordering")
 	})
 
 	t.Run("LimitAloneGainsNothing", func(t *testing.T) {
@@ -1011,6 +1011,19 @@ func TestSelectPageCompletesTheOrder(t *testing.T) {
 				Limit(2).
 				Scan(&rows)
 		})
-		require.NotContains(t, sql, quoteIdent("category")+" ASC", "a cap on the rows is not a page")
+		require.Contains(t, sql, "ORDER BY "+quoteIdent("total")+" DESC LIMIT", "a cap on the rows is not a page")
+	})
+
+	t.Run("LimitAfterAPageGainsNothing", func(t *testing.T) {
+		sql := render(t, func(statements *[]types.SQLStatement) error {
+			rows := make([]group, 0)
+			return database.Select[*TestAggregateRecord, group](ctx, TestAggregateRecordCols.Category.Group(), total).
+				WithDryRun(statements).
+				OrderBy(total.Desc()).
+				Page(1, 2).
+				Limit(2).
+				Scan(&rows)
+		})
+		require.Contains(t, sql, "ORDER BY "+quoteIdent("total")+" DESC LIMIT", "a cap set after a page takes the page back")
 	})
 }
