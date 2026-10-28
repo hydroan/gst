@@ -2,6 +2,8 @@ package modelauthz
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 
 	"github.com/hydroan/gst"
@@ -10,7 +12,6 @@ import (
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/tenant"
-	"github.com/hydroan/gst/util"
 )
 
 type RoleBinding struct {
@@ -78,9 +79,17 @@ func (r *RoleBinding) CreateBefore(ctx context.Context) error {
 
 	// A subject holds a role at most once in a tenant, so the same three values
 	// always name the same row.
-	r.SetID(util.HashID(scoped, r.SubjectID, r.RoleID))
+	r.SetID(bindingID(scoped, r.SubjectID, r.RoleID))
 
 	return nil
+}
+
+// bindingID is the id of the binding of roleID to subjectID in scope, the
+// same for the same three values: the first 16 bytes of the SHA-256 of the
+// values joined by ":", in hex.
+func bindingID(scope, subjectID, roleID string) string {
+	hash := sha256.Sum256([]byte(scope + ":" + subjectID + ":" + roleID))
+	return hex.EncodeToString(hash[:16])
 }
 
 func (r *RoleBinding) CreateAfter(ctx context.Context) error {

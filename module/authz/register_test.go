@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/authz/rbac"
@@ -30,7 +31,6 @@ import (
 	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/module/authz"
 	"github.com/hydroan/gst/module/iam"
-	"github.com/hydroan/gst/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -357,7 +357,7 @@ func TestAuthzMenu(t *testing.T) {
 				TenantID:  tenant.Default,
 				SubjectID: userID,
 				RoleID:    missingRoleID,
-				ID:        util.HashID(userID, missingRoleID),
+				ID:        uuid.NewV7().String(),
 			}
 			require.NoError(t, database.Database[*authz.RoleBinding](context.Background()).WithoutHook().Create(invalidRoleBinding))
 			rbacPolicy := rbac.RBAC()
@@ -1051,7 +1051,7 @@ func authzCreateTenantRole(t *testing.T, tenantID, name string, menuIDs ...strin
 	// setting the column here would be overwritten by the stamp anyway.
 	ctx := tenant.In(context.Background(), tenantID)
 	role := &authz.Role{
-		ID:      util.HashID(tenantID, name),
+		ID:      uuid.NewV7().String(),
 		Name:    name,
 		MenuIDs: menuIDs,
 	}

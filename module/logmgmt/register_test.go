@@ -8,6 +8,7 @@ import (
 	"os"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/client"
@@ -26,7 +27,6 @@ import (
 	"github.com/hydroan/gst/module/authz"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/module/logmgmt"
-	"github.com/hydroan/gst/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -159,7 +159,7 @@ func TestOperationLogList(t *testing.T) {
 		Password: password,
 	})
 	roleName := logmgmtTestUsername("logmgmt_test_role")
-	roleID := util.HashID(roleName)
+	roleID := uuid.NewV7().String()
 	t.Run("before_operation", func(t *testing.T) {
 		cli := logmgmtSessionClient(t, sessionID)
 
