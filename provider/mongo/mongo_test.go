@@ -9,20 +9,17 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/provider/mongo"
-	"github.com/hydroan/gst/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
 )
 
-var RunOrDie = util.RunOrDie
-
 func TestMongo(t *testing.T) {
 	t.Skip("MongoDB provider integration is temporarily disabled: it needs a live server.")
 
 	config.SetConfigFile("../../examples/demo/config.ini")
-	RunOrDie(bootstrap.Bootstrap)
+	bootstrap.RunOrDie(bootstrap.Bootstrap)
 	// Close through the registry — the same exit the lifecycle takes at
 	// shutdown — instead of a test-only export of the unexported lifecycle.
 	defer func() {

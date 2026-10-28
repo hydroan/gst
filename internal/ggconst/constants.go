@@ -15,7 +15,6 @@ const (
 	ImportPathRouter    = "github.com/hydroan/gst/router"
 	ImportPathConsts    = "github.com/hydroan/gst/consts"
 	ImportPathBootstrap = "github.com/hydroan/gst/bootstrap"
-	ImportPathUtil      = "github.com/hydroan/gst/util"
 	ImportPathAPIDoc    = "github.com/hydroan/gst/apidoc"
 	ImportPathGRPC      = "github.com/hydroan/gst/grpc"
 
@@ -114,7 +113,6 @@ const (
 	FuncMain     = "main"
 	FuncInit2    = "Init"
 	FuncRegister = "Register"
-	FuncRunOrDie = "RunOrDie"
 )
 
 // Cache file
@@ -155,6 +153,7 @@ var OptionalImportDirs = []string{DirInterceptor, DirPB}
 const (
 	BootstrapBootstrap = "Bootstrap"
 	BootstrapRun       = "Run"
+	BootstrapRunOrDie  = "RunOrDie"
 	RouterInit         = "Init"
 	ModuleInit         = "Init"
 )

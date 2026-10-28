@@ -313,14 +313,14 @@ func BuildRouterFile(modulePath, pkgName, gstModelPkg string, aliases map[string
 	return gghelper.FormatFile(f, fset, modulePath)
 }
 
-// mainImportSpecs builds the imports of a generated main.go: every project
-// package in ggconst.ProjectImportDirs, then the framework packages main
-// calls into. The router package is the only project import with a name,
-// because main calls router.Init; the others are linked for their
-// initialisers alone.
+// mainImportSpecs builds the imports of a generated main.go: the project
+// packages in ggconst.ProjectImportDirs and extraDirs in one sorted list, then
+// bootstrap, the framework package main calls into. The router package is the
+// only project import with a name, because main calls router.Init; the others
+// are linked for their initialisers alone.
 func mainImportSpecs(projectName string, extraDirs []string) []ast.Spec {
 	dirs := slices.Sorted(slices.Values(slices.Concat(ggconst.ProjectImportDirs, extraDirs)))
-	specs := make([]ast.Spec, 0, len(dirs)+2)
+	specs := make([]ast.Spec, 0, len(dirs)+1)
 	for _, dir := range dirs {
 		spec := &ast.ImportSpec{Path: &ast.BasicLit{Value: fmt.Sprintf("%q", projectName+"/"+dir)}}
 		if dir != ggconst.DirRouter {
@@ -328,13 +328,7 @@ func mainImportSpecs(projectName string, extraDirs []string) []ast.Spec {
 		}
 		specs = append(specs, spec)
 	}
-	return append(specs,
-		&ast.ImportSpec{Path: &ast.BasicLit{Value: fmt.Sprintf("%q", ggconst.ImportPathBootstrap)}},
-		&ast.ImportSpec{
-			Path: &ast.BasicLit{Value: fmt.Sprintf("%q", ggconst.ImportPathUtil)},
-			Name: ast.NewIdent("."),
-		},
-	)
+	return append(specs, &ast.ImportSpec{Path: &ast.BasicLit{Value: fmt.Sprintf("%q", ggconst.ImportPathBootstrap)}})
 }
 
 // BuildMainFile generates the main.go file of the project at the module path
@@ -360,13 +354,12 @@ func mainImportSpecs(projectName string, extraDirs []string) []ast.Spec {
 //		_ "helloworld/service"
 //
 //		"github.com/hydroan/gst/bootstrap"
-//		. "github.com/hydroan/gst/util"
 //	)
 //
 //	func main() {
-//		RunOrDie(bootstrap.Bootstrap)
-//		RunOrDie(router.Init)
-//		RunOrDie(bootstrap.Run)
+//		bootstrap.RunOrDie(bootstrap.Bootstrap)
+//		bootstrap.RunOrDie(router.Init)
+//		bootstrap.RunOrDie(bootstrap.Run)
 //	}
 func BuildMainFile(projectName string, extraDirs ...string) (string, error) {
 	f := &ast.File{
@@ -383,7 +376,7 @@ func BuildMainFile(projectName string, extraDirs ...string) (string, error) {
 					List: []ast.Stmt{
 						&ast.ExprStmt{
 							X: &ast.CallExpr{
-								Fun: ast.NewIdent(ggconst.FuncRunOrDie),
+								Fun: &ast.SelectorExpr{X: ast.NewIdent(ggconst.PkgBootstrap), Sel: ast.NewIdent(ggconst.BootstrapRunOrDie)},
 								Args: []ast.Expr{
 									&ast.SelectorExpr{
 										X:   ast.NewIdent(ggconst.PkgBootstrap),
@@ -394,7 +387,7 @@ func BuildMainFile(projectName string, extraDirs ...string) (string, error) {
 						},
 						&ast.ExprStmt{
 							X: &ast.CallExpr{
-								Fun: ast.NewIdent(ggconst.FuncRunOrDie),
+								Fun: &ast.SelectorExpr{X: ast.NewIdent(ggconst.PkgBootstrap), Sel: ast.NewIdent(ggconst.BootstrapRunOrDie)},
 								Args: []ast.Expr{
 									&ast.SelectorExpr{
 										X:   ast.NewIdent(ggconst.PkgRouter),
@@ -405,7 +398,7 @@ func BuildMainFile(projectName string, extraDirs ...string) (string, error) {
 						},
 						&ast.ExprStmt{
 							X: &ast.CallExpr{
-								Fun: ast.NewIdent(ggconst.FuncRunOrDie),
+								Fun: &ast.SelectorExpr{X: ast.NewIdent(ggconst.PkgBootstrap), Sel: ast.NewIdent(ggconst.BootstrapRunOrDie)},
 								Args: []ast.Expr{
 									&ast.SelectorExpr{
 										X:   ast.NewIdent(ggconst.PkgBootstrap),

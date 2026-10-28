@@ -2,9 +2,11 @@ package bootstrap
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"reflect"
 	"runtime"
 	"slices"
@@ -20,6 +22,9 @@ import (
 	"github.com/hydroan/gst/internal/router"
 	"github.com/hydroan/gst/internal/testutil/testlog"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 // TestMain gives the bootstrapped process a scratch log directory, which keeps
@@ -212,4 +217,54 @@ func readyz() int {
 	}
 	resp.Body.Close()
 	return resp.StatusCode
+}
+
+// runOrDieHelper names the environment variable that turns
+// TestRunOrDieReportsTheCauseWithItsStack into the child process it starts.
+const runOrDieHelper = "GST_TEST_RUN_OR_DIE_CHILD"
+
+// TestRunOrDieReportsTheCauseWithItsStack runs RunOrDie on a failing start in
+// a child process of the test binary: the child exits with status 1, and its
+// report names the function that failed and carries the cause with the stack
+// of where it was created.
+func TestRunOrDieReportsTheCauseWithItsStack(t *testing.T) {
+	if os.Getenv(runOrDieHelper) == "1" {
+		// The start that fails, with a cause created where a listener would
+		// be opened.
+		RunOrDie(func() error { return errors.Wrap(errors.New("listen failed"), "start the listener") })
+		return
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=^TestRunOrDieReportsTheCauseWithItsStack$")
+	// The child exits from RunOrDie before its TestMain removes the log
+	// directory it made, so the child makes that directory under a temporary
+	// directory of this test, which goes away with the test.
+	cmd.Env = append(os.Environ(), runOrDieHelper+"=1", "TMPDIR="+t.TempDir())
+	out, err := cmd.CombinedOutput()
+
+	var exit *exec.ExitError
+	require.ErrorAs(t, err, &exit, "the child must exit on the error:\n%s", out)
+	require.Equal(t, 1, exit.ExitCode())
+	report := string(out)
+	require.Contains(t, report, "TestRunOrDieReportsTheCauseWithItsStack.func1 error: start the listener: listen failed")
+	require.Contains(t, report, "attached stack trace", "the report carries the stack of the cause")
+	require.Contains(t, report, "TestRunOrDieReportsTheCauseWithItsStack.func1\n", "the stack names where the cause was created")
+}
+
+// TestLogFatalFailure pins the entry logFatalFailure records before the
+// process exits: one error entry naming the function that failed and the
+// error it failed with.
+func TestLogFatalFailure(t *testing.T) {
+	core, logs := observer.New(zapcore.ErrorLevel)
+	restoreGlobals := zap.ReplaceGlobals(zap.New(core))
+	t.Cleanup(restoreGlobals)
+
+	logFatalFailure("main.run", errors.New("listen failed"))
+
+	entries := logs.All()
+	require.Len(t, entries, 1)
+	require.Equal(t, "exiting on error", entries[0].Message)
+	fields := entries[0].ContextMap()
+	require.Equal(t, "main.run", fields["func"])
+	require.Contains(t, fmt.Sprintf("%v", fields["error"]), "listen failed")
 }

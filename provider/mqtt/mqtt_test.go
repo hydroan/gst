@@ -11,7 +11,6 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/provider/mqtt"
-	"github.com/hydroan/gst/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,7 +19,7 @@ func TestMqtt(t *testing.T) {
 	t.Skip("MQTT provider integration is temporarily disabled: it needs a live broker.")
 
 	config.SetConfigFile("../../examples/demo/config.ini")
-	util.RunOrDie(bootstrap.Bootstrap)
+	bootstrap.RunOrDie(bootstrap.Bootstrap)
 	// Close through the registry — the same exit the lifecycle takes at
 	// shutdown — instead of a test-only export of the unexported lifecycle.
 	defer func() {

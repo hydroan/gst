@@ -7,14 +7,17 @@
 // the providers are up. Run starts the listeners and the components that
 // run alongside them, blocks until a termination signal or a listener
 // failure, and tears everything down in reverse. The generated entry point
-// drives both, with the project's route registration in between; a test
-// harness drives them the same way.
+// drives both through RunOrDie, with the project's route registration in
+// between; a test harness calls them directly, in the same order.
 package bootstrap
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
+	"reflect"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -366,4 +369,35 @@ func awaitDrain() {
 	case <-failedNow.Done():
 		zap.S().Infow("drain cut short", "err", context.Cause(failedNow))
 	}
+}
+
+// RunOrDie runs fn and terminates the process when it returns an error,
+// whether fn is a startup step or the run that serves until the process is
+// told to stop: the generated entry point runs Bootstrap, the route
+// registration and Run through it. The failure is recorded in the global zap
+// logger before the process exits, so it reaches file logs collected by log
+// shippers, to which a report on stdout alone is invisible; the stdout report
+// carries the cause with its stack, the one report of a failed start a
+// terminal shows.
+func RunOrDie(fn func() error) {
+	err := fn()
+	if err == nil {
+		return
+	}
+	name := runtime.FuncForPC(reflect.ValueOf(fn).Pointer()).Name()
+	logFatalFailure(name, err)
+	// %+w renders the cause with its stack into the message, and errors.Newf
+	// keeps the operand of %w as the cause it wraps.
+	fmt.Println(errors.Newf("%s error: %+w", name, err))
+	os.Exit(1)
+}
+
+// logFatalFailure records the error the process exits on in the global zap
+// logger and flushes it, because the process exits right after and buffered
+// entries would be lost. Before zap is initialized the global logger is a
+// no-op, so early failures still surface only through the stdout report of
+// RunOrDie.
+func logFatalFailure(name string, err error) {
+	zap.S().Errorw("exiting on error", "func", name, "error", err)
+	_ = zap.L().Sync()
 }

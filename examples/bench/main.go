@@ -15,11 +15,10 @@ import (
 	_ "bench/service"
 
 	"github.com/hydroan/gst/bootstrap"
-	. "github.com/hydroan/gst/util"
 )
 
 func main() {
-	RunOrDie(bootstrap.Bootstrap)
-	RunOrDie(router.Init)
-	RunOrDie(bootstrap.Run)
+	bootstrap.RunOrDie(bootstrap.Bootstrap)
+	bootstrap.RunOrDie(router.Init)
+	bootstrap.RunOrDie(bootstrap.Run)
 }
