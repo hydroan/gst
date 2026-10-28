@@ -34,14 +34,13 @@ var httpMethodConsts = map[string]string{
 // the type serving the service (see serviceType) under the server interface
 // the plugin generated, and describing each rpc by its full method name,
 // the constant the plugin generated for it, the HTTP method and route the
-// same action is served at, which the interceptors of the modules judge a
-// call by, and whether its action declares Public(). Every package
-// registers its own services through the type serving each (see
-// serviceTypeName), the way a package the protobuf plugin generates
-// registers its own descriptors; the root pb/pb.gen.go, the file main.go
-// imports, also imports every package below it for its registrations, and
-// is written with nothing but those imports when no definition sits at the
-// root.
+// same action is served at, which a call's request metadata carries, and
+// whether its action declares Public(). Every package registers its own
+// services through the type serving each (see serviceTypeName), the way a
+// package the protobuf plugin generates registers its own descriptors; the root
+// pb/pb.gen.go, the file main.go imports, also imports every package below it
+// for its registrations, and is written with nothing but those imports when no
+// definition sits at the root.
 //
 // The golden fixture, whose Note and Record models are declared in model/
 // and whose Item model in model/record/, gets pb/pb.gen.go, which begins

@@ -11,8 +11,7 @@ import (
 // Method describes one rpc of a registered service the way the generated
 // registration file declares it: its full name, whether its action declares
 // Public(), and the HTTP method and route the same action is served at over
-// HTTP, which an interceptor judges a call by the way its middleware
-// counterpart judges a request.
+// HTTP, which a call's request metadata carries and Route answers.
 type Method struct {
 	// Name is the full method name, "/app.RecordService/ListRecord".
 	Name string

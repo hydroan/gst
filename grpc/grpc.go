@@ -3,12 +3,12 @@
 // GRPC() with Register and runs their actions through the call functions,
 // CreateCall and its kind for the standard actions, ServiceCall for the
 // actions with a payload or result of their own (see call.go) and
-// ServerStreamCall and its kind for the Stream actions (see stream.go); an
-// interceptor (see Interceptor) reads and establishes what a call carries —
-// its caller, the HTTP action it maps to (see context.go) — and answers a
-// failure with the status it maps to (see status.go). The listener itself
-// and its chain of interceptors are the framework's own; the interceptors a
-// project mounts are registered through package interceptor, the
+// ServerStreamCall and its kind for the Stream actions (see stream.go); the
+// context functions read and establish what a call carries — its credential,
+// its caller and the HTTP action it maps to (see context.go) — and StatusError
+// maps a failure to the status the call answers with (see status.go). The
+// listener itself and its chain of interceptors are the framework's own; the
+// interceptors a project mounts are registered through package interceptor, the
 // counterpart of package middleware.
 package grpc
 
@@ -37,7 +37,7 @@ const MethodStream = grpcserver.MethodStream
 // Method describes one rpc of a registered service the way the generated
 // registration file declares it: its full name, whether its action declares
 // Public(), and the HTTP method and route the same action is served at over
-// HTTP, which Route answers and an interceptor judges a call by.
+// HTTP, which Route answers for a call of the rpc.
 type Method = grpcserver.Method
 
 // Register queues the service server serves to be registered on the

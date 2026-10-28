@@ -1,6 +1,5 @@
 // Package response exposes the response entry points that code outside the
-// framework's controller path needs: middleware, and the middleware a module
-// ships to the projects that copy it.
+// framework's controller path needs.
 //
 // The envelope itself is not exposed. What a refusal looks like on the wire —
 // which fields it carries, what is recorded alongside it — is the framework's

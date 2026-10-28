@@ -270,10 +270,9 @@ func HTTPOnlyMethodCalled(sc *ServiceContext) bool {
 //
 // It exists for code that receives a plain context and still has to know who
 // is acting — a model hook guarding an operation, like tenant.From for a model
-// deriving its key. An empty answer means machinery rather than a person:
-// seeding, a scheduled job, framework code; or a request nothing
-// authenticated, a public action's or one a project serves without a session
-// check.
+// deriving its key. An empty answer means machinery rather than a person —
+// seeding, a scheduled job, framework code — or a request that names no user,
+// such as one of a Public() action.
 func RequestUserID(ctx context.Context) string {
 	return requestctx.FromContext(ctx).UserID()
 }

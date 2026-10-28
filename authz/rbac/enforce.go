@@ -16,9 +16,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// Subject is who asks for an action, as the transport established it: the
-// HTTP middleware reads it off the gin context, the gRPC interceptor off the
-// call's caller.
+// Subject is who asks for an action: the authenticated user, by id and
+// name, and the tenant the user acts in.
 type Subject struct {
 	UserID   string
 	Username string
@@ -26,20 +25,18 @@ type Subject struct {
 }
 
 // Enforce decides whether subject may perform act on obj — the HTTP method
-// and the path or route the action is served at — the one decision path
-// both the HTTP middleware and the gRPC interceptor of the authz module
-// take, and logs the decision (see logGrant, logDeny and logFailure) under
-// the trace id ctx carries, the one both listeners stamp on it. An
-// anonymous subject is refused before any decision. The tenant is
-// subject's, tenant.Default when it has none, and comes back as the one the
-// decision was made in, for the transport to publish onward; it is trusted
-// twice over — the decision is made in it and every tenant-scoped row the
-// action then reads or writes is scoped to it — so a transport must only
-// ever establish it from something the deployment vouches for, never from
-// client input passed through as it stands. A subject allowed as
-// system_root was not authorized in any one tenant, so the returned context
-// reaches across tenants (see tenant.Across), which keeps the reach of the
-// data equal to the reach of the grant.
+// and the path or route the action is served at — and logs the decision (see
+// logGrant, logDeny and logFailure) under the trace id ctx carries, the one
+// both listeners stamp on it. An anonymous subject is refused before any
+// decision. The tenant is subject's, tenant.Default when it has none, and comes
+// back as the one the decision was made in, for the transport to publish
+// onward; it is trusted twice over — the decision is made in it and every
+// tenant-scoped row the action then reads or writes is scoped to it — so a
+// transport must only ever establish it from something the deployment vouches
+// for, never from client input passed through as it stands. A subject allowed
+// as system_root was not authorized in any one tenant, so the returned context
+// reaches across tenants (see tenant.Across), which keeps the reach of the data
+// equal to the reach of the grant.
 //
 // A refusal is a service error carrying the status and message the client
 // is answered with: 403 "permission denied" for an anonymous subject and a
@@ -96,10 +93,10 @@ func Enforce(ctx context.Context, subject Subject, obj, act string) (context.Con
 // the rule kind and is low-cardinality enough to aggregate over;
 // matched_rule carries the policy row and is present only when a policy is
 // what allowed the request. It is worth recording next to obj because the
-// two differ: obj is what the listener judges, the request's concrete path
-// over HTTP and the template of the route the rpc is registered under over
-// gRPC, /api/things/{id} (see interceptor.Authz), while the rule holds the
-// pattern that matched it, such as /api/things/{id} or /api/things/*.
+// two differ: obj is the path the decision was asked about, a concrete one such
+// as /api/things/42 or a route template such as /api/things/{id}, while the
+// rule holds the pattern that matched it, such as /api/things/{id} or
+// /api/things/*.
 func logGrant(ctx context.Context, subject Subject, tenantID, sub, obj, act string, source consts.GrantSource, matchedRule []string, elapsed time.Duration) {
 	if logger.Authz == nil {
 		return

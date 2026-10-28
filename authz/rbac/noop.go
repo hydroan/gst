@@ -23,10 +23,10 @@ import (
 // situation rather than hiding it.
 var ErrRBACDisabled = errors.New("rbac: authorization is not initialized")
 
-// noop implements RBAC behavior before a policy set is installed.
-// It answers reads and refuses writes with ErrRBACDisabled, and keeps the
-// built-in root subject as system_root so modules that do not register authz can
-// still use root-only administrative flows.
+// noop implements RBAC behavior before a policy set is installed. It answers
+// reads and refuses writes with ErrRBACDisabled; HasSystemRole still answers
+// true for the built-in root subject holding system_root, so a check for that
+// role passes without a policy set.
 type noop struct{}
 
 // Authorize denies, and says that it is the absence of a policy set doing it

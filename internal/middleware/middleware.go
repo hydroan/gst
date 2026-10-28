@@ -1,10 +1,9 @@
 // Package middleware holds the middleware the framework mounts itself and the
 // machinery that mounts the rest: the built-in chain ahead of every route,
-// the registry of the middlewares projects and modules register, and the
-// registries the router fills as routes register — route parameters and
-// streaming routes — together with the circuit breaker built from
-// configuration at startup. The public middleware package forwards the part a
-// project uses.
+// the registry Register and RegisterAuth fill, and the registries the router
+// fills as routes register — route parameters and streaming routes — together
+// with the circuit breaker built from configuration at startup. The public
+// middleware package forwards the part a project uses.
 package middleware
 
 import (
