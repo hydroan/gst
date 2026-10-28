@@ -447,8 +447,8 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 //
 //	Create(func() {
 //	    Service()
-//	    Payload[CreateUserRequest]()
-//	    Result[*User]()
+//	    Payload[*RecordCreateReq]()
+//	    Result[*RecordCreateRsp]()
 //	})
 func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, bool) {
 	var payload string

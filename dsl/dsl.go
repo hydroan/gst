@@ -7,24 +7,26 @@
 //
 // Basic Usage:
 //
-//	type User struct {
-//		Name string
-//		Email string
-//		model.Base  // Embeds base model fields
+//	type Record struct {
+//		Title string `json:"title"`
+//		Body  string `json:"body"`
+//		model.Base // Embeds base model fields
 //	}
 //
-//	func (User) Design() {
+//	func (Record) TableName() string { return "records" }
+//
+//	func (Record) Design() {
 //		// Enable database migration (default: disabled)
 //		Migrate()
 //
 //		// Set custom endpoint (default: pluralized snake_case model name)
-//		Endpoint("users")
+//		Endpoint("records")
 //
 //		// Add path parameter for dynamic routing
-//		Param("user")  // Creates routes like /api/users/:user
+//		Param("record") // Creates routes like /api/records/:record
 //
 //		// Define alternative routes for different access patterns
-//		Route("public/users", func() {
+//		Route("public/records", func() {
 //			List(func() { Public() })
 //			Get(func() { Public() })
 //		})
@@ -33,8 +35,8 @@
 //		Create(func() {
 //			Service() // Generate service code
 //			// Omit Public() for authenticated APIs.
-//			Payload[*CreateUserRequest]()
-//			Result[*User]()
+//			Payload[*RecordCreateReq]()
+//			Result[*RecordCreateRsp]()
 //		})
 //
 //		// Configure other operations...
@@ -43,6 +45,15 @@
 //		List(func() {})
 //		Get(func() {})
 //	}
+//
+//	type (
+//		RecordCreateReq struct {
+//			Title string `json:"title"`
+//		}
+//		RecordCreateRsp struct {
+//			ID string `json:"id"`
+//		}
+//	)
 //
 // Naming a service:
 //
@@ -312,7 +323,7 @@ func Exact() { dsl.Exact() }
 
 // Payload specifies the request payload type for the current action.
 // The type parameter T defines the structure of incoming request data.
-// Example: Payload[*CreateUserRequest]() or Payload[*User]()
+// Example: Payload[*RecordCreateReq]()
 //
 // Payload must not be declared on List and Get actions: they handle HTTP GET
 // requests, which carry no request body. Custom List/Get services declare
@@ -327,7 +338,7 @@ func Payload[T any]() { dsl.Payload[T]() }
 
 // Result specifies the response result type for the current action.
 // The type parameter T defines the structure of outgoing response data.
-// Example: Result[*User]() or Result[UserResponse]()
+// Example: Result[*RecordCreateRsp]()
 //
 // Result must not be declared on Import and Export actions: they delegate to
 // fixed service method signatures that never bind a response type.
@@ -336,7 +347,13 @@ func Result[T any]() { dsl.Result[T]() }
 // Create defines the configuration for the create operation.
 // The function parameter allows setting Service, Public, Payload, and Result.
 // Declaring the action enables it.
-// Example: Create(func() { Payload[*CreateUserRequest](); Result[*User]() })
+// Example:
+//
+//	Create(func() {
+//		Service()
+//		Payload[*RecordCreateReq]()
+//		Result[*RecordCreateRsp]()
+//	})
 func Create(fn func()) { dsl.Create(fn) }
 
 // Delete defines the configuration for the delete operation.

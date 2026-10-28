@@ -206,13 +206,13 @@ type Action struct {
 
 	// Payload specifies the type name for the request payload.
 	// This determines the structure of incoming request data.
-	// Example: "CreateUserRequest", "*User", "User"
+	// Example: "*RecordCreateReq", or "RecordCreateReq" for the value form.
 	// List and Get actions that declare Result carry PayloadEmpty here.
 	Payload string
 
 	// Result specifies the type name for the response result.
 	// This determines the structure of outgoing response data.
-	// Example: "*User", "UserResponse", "[]User"
+	// Example: "*RecordCreateRsp", or "RecordCreateRsp" for the value form.
 	Result string
 
 	// StreamingPayload marks the Payload of a Stream action as what each
