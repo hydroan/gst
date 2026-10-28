@@ -22,10 +22,6 @@ type node[K comparable, V any] struct {
 	Children [2]*node[K, V]
 }
 
-func (n *node[K, V]) String() string {
-	return fmt.Sprintf("%v", n.Key)
-}
-
 // Tree represents a generic splay tree.
 // It supports keys of any comparable type and values of any type.
 // The tree uses a custom comparison function to maintain order.

@@ -1,7 +1,5 @@
 package rbtree
 
-import "fmt"
-
 type color bool
 
 const (
@@ -14,17 +12,6 @@ const (
 	redBg   = "\033[41;37m"
 	blackBg = "\033[40;37m"
 )
-
-func (c color) String() string {
-	switch c {
-	case black:
-		return "black"
-	case red:
-		return "red"
-	default:
-		return "unknown"
-	}
-}
 
 func (c color) symbol() string {
 	switch c {
@@ -46,29 +33,6 @@ type node[K comparable, V any] struct {
 	Left   *node[K, V]
 	Right  *node[K, V]
 	Parent *node[K, V]
-}
-
-// Color returns a string representation of the node's color.
-func (n *node[K, V]) Color() string { return n.color.String() }
-
-// Size returns the number of elements in the subtree rooted at n.
-func (n *node[K, V]) Size() int {
-	if n == nil {
-		return 0
-	}
-	size := 1
-	if n.Left != nil {
-		size += n.Left.Size()
-	}
-	if n.Right != nil {
-		size += n.Right.Size()
-	}
-	return size
-}
-
-// String returns a string representation of the node's key.
-func (n *node[K, V]) String() string {
-	return fmt.Sprintf("%v", n.Key)
 }
 
 // grandparent returns the grandparent node of n.

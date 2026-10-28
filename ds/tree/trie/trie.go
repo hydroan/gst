@@ -805,8 +805,6 @@ func (t *Trie[K, V]) output(node *Node[K, V],
 func nodeString[V any](v V, _ int, hasValue bool) string {
 	if hasValue {
 		return fmt.Sprintf("● %v", v)
-		// return fmt.Sprintf("%v", n.value)
 	}
-	// return ""
 	return "○"
 }
