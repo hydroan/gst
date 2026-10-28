@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"testing/iotest"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
@@ -439,6 +440,56 @@ func TestHTTPBodyLoggerFieldsFitTheCapacityInTheWorstCase(t *testing.T) {
 	for _, key := range []string{"request", "request_size", "response", "response_size", "response_truncated"} {
 		require.Contains(t, ctx, key, "the worst case must carry every optional body field")
 	}
+}
+
+// TestHTTPBodyLoggerCapturesAResponseWrittenAsAString pins that a response
+// the handler writes through WriteString is logged the way one written
+// through Write is, and reaches the client whole.
+func TestHTTPBodyLoggerCapturesAResponseWrittenAsAString(t *testing.T) {
+	logs := setupHTTPBodyLoggerTest(t, config.HTTPBodyLogger{Enabled: true, MaxBodySize: 64_000})
+	router := gin.New()
+	router.Use(bodyLogger())
+	router.POST("/api/records", func(c *gin.Context) {
+		c.Header("Content-Type", "application/json")
+		c.Status(http.StatusBadRequest)
+		_, err := c.Writer.WriteString(`{"msg":"failure"}`)
+		require.NoError(t, err)
+	})
+
+	w := performHTTPBodyLoggerRequest(router, "/api/records", `{"a":1}`, "application/json")
+
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	require.JSONEq(t, `{"msg":"failure"}`, w.Body.String())
+	entries := logs.All()
+	require.Len(t, entries, 1)
+	require.JSONEq(t, `{"msg":"failure"}`, httpBodyLogStringField(t, entries[0].ContextMap(), "response"))
+}
+
+// TestHTTPBodyLoggerLeavesTheConnectionReachable pins that a handler behind
+// the body logger still reaches the connection through
+// http.ResponseController, the way a streaming response clears the
+// deadlines of its request.
+func TestHTTPBodyLoggerLeavesTheConnectionReachable(t *testing.T) {
+	setupHTTPBodyLoggerTest(t, config.HTTPBodyLogger{Enabled: true, MaxBodySize: 64_000})
+	router := gin.New()
+	router.Use(bodyLogger())
+	router.GET("/api/records", func(c *gin.Context) {
+		if err := http.NewResponseController(c.Writer).SetWriteDeadline(time.Time{}); err != nil {
+			c.String(http.StatusInternalServerError, err.Error())
+			return
+		}
+		c.String(http.StatusOK, "reached")
+	})
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	rsp, err := http.Get(server.URL + "/api/records")
+	require.NoError(t, err)
+	defer rsp.Body.Close()
+	body, err := io.ReadAll(rsp.Body)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rsp.StatusCode, string(body))
+	require.Equal(t, "reached", string(body))
 }
 
 func httpBodyLogStringField(t *testing.T, ctx map[string]any, key string) string {
