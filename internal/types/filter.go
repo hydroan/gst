@@ -222,7 +222,7 @@ func FilterNotRegex(column, expr string) Filter {
 // a member; on a column storing no JSON document the filter is unusable and
 // the query fails.
 //
-//gst:api string-form constructor of the Filter family, the counterpart of the JSON column's Contains
+//gst:api string-form constructor of the Filter family, the counterpart of JSONStringsColumn.JSONContains
 func FilterJSONContains(column, value string) Filter {
 	return Filter{column: column, op: FilterOpJSONContains, value: value}
 }

@@ -66,7 +66,7 @@ type ProjectProgram struct {
 
 	// Args are the program's command-line arguments. A value that differs from
 	// run to run, such as the path of a temporary file, belongs here rather
-	// than in Content: the build is keyed on the source, so a source that
+	// than in Files: the build is keyed on the source, so a source that
 	// changes on every run is compiled and linked again on every run.
 	Args []string
 

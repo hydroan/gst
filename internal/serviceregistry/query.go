@@ -23,8 +23,8 @@ import (
 // Each method maps to one database query argument:
 //
 //	QueryModel         -> the query value Database.WithQuery takes
-//	QueryFilters       -> QueryOptions.Filters, from "field[op]=value" parameters
-//	QueryPresentFields -> QueryOptions.PresentFields, so "enabled=false" filters
+//	QueryFilters       -> QueryOptions.Filters, from field[op]=value
+//	QueryPresentFields -> QueryOptions.PresentFields, so enabled=false filters
 //	QueryOrders        -> Database.WithOrder
 //	QueryPagination    -> Database.WithPagination
 //	QueryCursor        -> Database.WithCursor

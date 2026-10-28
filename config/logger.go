@@ -65,9 +65,8 @@ type Logger struct {
 	// when File is set to a real file path in file mode. It has no effect when
 	// File is empty or one of "/dev/stdout"/"/dev/stderr", since those already
 	// log to console, nor in stdout mode, where every stream already does.
-	// Only the global logger built by Init() reads this field; subsystem
-	// loggers stay file-only unless the caller opts in explicitly via
-	// zap.Option.Console.
+	// Only the global logger built by Init() reads this field; the other
+	// streams stay file-only unless built with a logger.Option setting Console.
 	// Default: true
 	Console bool `json:"console" ini:"console" yaml:"console" mapstructure:"console"`
 

@@ -15,12 +15,13 @@ import (
 
 // ScanPBFiles lists the files gg gen writes under pbDir, the directory the
 // protobuf definitions, the Go files serving them and the Go files compiled
-// from them go to, in walk order: pb/pb.gen.go, pb/record/item.proto,
-// pb/record.gen.go, pb/record.pb.go, pb/record.proto and
-// pb/record_grpc.pb.go for a project serving Record and Item over gRPC. Only
-// the .proto, .gen.go and .pb.go files are listed, the kinds gg gen writes.
-// Like ScanServiceFiles it reads the directory whole, the directory being
-// gg's: a file the project's Git ignore rules cover, or one below a
+// from them go to, in walk order: pb/pb.gen.go, pb/record/item.gen.go,
+// pb/record/item.pb.go, pb/record/item.proto, pb/record/item_grpc.pb.go,
+// pb/record/pb.gen.go, pb/record.gen.go, pb/record.pb.go, pb/record.proto and
+// pb/record_grpc.pb.go for a project serving Record and its child Item over
+// gRPC. Only the .proto, .gen.go and .pb.go files are listed, the kinds gg gen
+// writes. Like ScanServiceFiles it reads the directory whole, the directory
+// being gg's: a file the project's Git ignore rules cover, or one below a
 // directory the go command leaves out, is listed like any other. A missing
 // directory lists nothing.
 func ScanPBFiles(pbDir string) ([]string, error) {
