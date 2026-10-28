@@ -2,19 +2,20 @@ package main
 
 import (
 	"fmt"
-	"os"
+	"io"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/ds/tree/trie"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/spf13/cobra"
 )
 
-// routeTreeInfo represents route tree endpoint information.
+// routeTreeInfo holds what the URL route tree prints for a route: its HTTP
+// methods.
 type routeTreeInfo struct {
-	Path    string
 	Methods []string
 }
 
@@ -27,46 +28,46 @@ This command analyzes the registered routes and displays them as a URL-first tre
 Optional filter parameter can be used to show only routes matching the specified pattern.
 For example: 'gg route-tree samples/items' will show only routes under samples/items.`,
 	Args: cobra.MaximumNArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		var filter string
 		if len(args) > 0 {
 			filter = args[0]
 		}
-		routeTreeRun(filter)
+		return routeTreeRun(cmd.OutOrStdout(), filter)
 	},
 }
 
-func routeTreeRun(filter string) {
+// routeTreeRun prints to w the URL route tree of the generated router file,
+// keeping only the routes whose path holds filter when one is given.
+func routeTreeRun(w io.Writer, filter string) error {
 	routes, err := parseRouteTreeFromFile()
 	if err != nil {
-		fmt.Printf("Error parsing routes: %v\n", err)
-		os.Exit(1)
+		return errors.Wrap(err, "failed to parse routes")
 	}
 
 	if len(routes) == 0 {
-		fmt.Println("No routes found. Please run 'gg gen' first to generate routes.")
-		return
+		fmt.Fprintln(w, "No routes found. Please run 'gg gen' first to generate routes.")
+		return nil
 	}
 
 	if filter != "" {
 		routes = filterRouteTree(routes, filter)
 		if len(routes) == 0 {
-			fmt.Printf("No routes found matching filter: %s\n", filter)
-			return
+			fmt.Fprintf(w, "No routes found matching filter: %s\n", filter)
+			return nil
 		}
 	}
 
-	printRouteTree(routes)
+	return printRouteTree(w, routes)
 }
 
-// filterRouteTree filters URL route tree entries by path.
+// filterRouteTree keeps the URL route tree entries whose path holds filter.
 func filterRouteTree(routes map[string][]string, filter string) map[string][]string {
 	filteredRoutes := make(map[string][]string)
 	filter = strings.Trim(filter, "/")
 
 	for path, methods := range routes {
-		normalizedPath := strings.TrimPrefix(path, "/")
-		if strings.HasPrefix(normalizedPath, filter) || strings.Contains(normalizedPath, filter) {
+		if strings.Contains(strings.TrimPrefix(path, "/"), filter) {
 			filteredRoutes[path] = methods
 		}
 	}
@@ -91,12 +92,12 @@ func parseRouteTreeFromFile() (map[string][]string, error) {
 	return routes, nil
 }
 
-// printRouteTree builds and prints the URL route tree structure.
-func printRouteTree(routes map[string][]string) {
+// printRouteTree builds the URL route tree structure and prints it to w, the
+// methods colored the way gg routes colors them when w is a terminal.
+func printRouteTree(w io.Writer, routes map[string][]string) error {
 	trie, err := trie.New[string, *routeTreeInfo]()
 	if err != nil {
-		fmt.Printf("Error creating trie: %v\n", err)
-		return
+		return errors.Wrap(err, "failed to build the route tree")
 	}
 
 	for path, methods := range routes {
@@ -109,23 +110,21 @@ func printRouteTree(routes map[string][]string) {
 		}
 
 		sort.Strings(methods)
-		trie.Put(filteredSegments, &routeTreeInfo{
-			Path:    path,
-			Methods: methods,
-		})
+		trie.Put(filteredSegments, &routeTreeInfo{Methods: methods})
 	}
 
-	fmt.Println("Route Tree Structure:")
-	fmt.Println("=====================")
+	fmt.Fprintln(w, "Route Tree Structure:")
+	fmt.Fprintln(w, "=====================")
 	if trie.IsEmpty() {
-		fmt.Println("No routes found.")
-		return
+		fmt.Fprintln(w, "No routes found.")
+		return nil
 	}
 
-	printRouteTreeNode(trie.Root(), "", "")
+	printRouteTreeNode(w, trie.Root(), "", routeColorEnabled(w))
+	return nil
 }
 
-func printRouteTreeNode(node *trie.Node[string, *routeTreeInfo], _ string, childPrefix string) {
+func printRouteTreeNode(w io.Writer, node *trie.Node[string, *routeTreeInfo], childPrefix string, colorize bool) {
 	if node == nil {
 		return
 	}
@@ -151,54 +150,41 @@ func printRouteTreeNode(node *trie.Node[string, *routeTreeInfo], _ string, child
 
 		if hasRoute && !hasChildren {
 			route := child.node.Value()
-			methodsStr := formatRouteTreeMethods(route.Methods)
+			methodsStr := formatRouteTreeMethods(route.Methods, colorize)
 			if isLast {
-				fmt.Printf("%s└─ %s %s\n", childPrefix, child.key, methodsStr)
+				fmt.Fprintf(w, "%s└─ %s %s\n", childPrefix, child.key, methodsStr)
 			} else {
-				fmt.Printf("%s├─ %s %s\n", childPrefix, child.key, methodsStr)
+				fmt.Fprintf(w, "%s├─ %s %s\n", childPrefix, child.key, methodsStr)
 			}
 			continue
 		}
 
 		if isLast {
-			fmt.Printf("%s└─ %s/\n", childPrefix, child.key)
+			fmt.Fprintf(w, "%s└─ %s/\n", childPrefix, child.key)
 			newPrefix += "   "
 		} else {
-			fmt.Printf("%s├─ %s/\n", childPrefix, child.key)
+			fmt.Fprintf(w, "%s├─ %s/\n", childPrefix, child.key)
 			newPrefix += "│  "
 		}
 
 		if hasRoute {
 			route := child.node.Value()
-			methodsStr := formatRouteTreeMethods(route.Methods)
+			methodsStr := formatRouteTreeMethods(route.Methods, colorize)
 			if isLast {
-				fmt.Printf("%s   ● %s\n", childPrefix, methodsStr)
+				fmt.Fprintf(w, "%s   ● %s\n", childPrefix, methodsStr)
 			} else {
-				fmt.Printf("%s│  ● %s\n", childPrefix, methodsStr)
+				fmt.Fprintf(w, "%s│  ● %s\n", childPrefix, methodsStr)
 			}
 		}
 
-		printRouteTreeNode(child.node, "", newPrefix)
+		printRouteTreeNode(w, child.node, newPrefix, colorize)
 	}
 }
 
-func formatRouteTreeMethods(methods []string) string {
-	var formatted []string
+func formatRouteTreeMethods(methods []string, colorize bool) string {
+	formatted := make([]string, 0, len(methods))
 	for _, method := range methods {
-		switch method {
-		case "GET":
-			formatted = append(formatted, "\033[32mGET\033[0m")
-		case "POST":
-			formatted = append(formatted, "\033[34mPOST\033[0m")
-		case "PUT":
-			formatted = append(formatted, "\033[33mPUT\033[0m")
-		case "PATCH":
-			formatted = append(formatted, "\033[35mPATCH\033[0m")
-		case "DELETE":
-			formatted = append(formatted, "\033[31mDELETE\033[0m")
-		default:
-			formatted = append(formatted, method)
-		}
+		formatted = append(formatted, routeText(colorize, routeMethodStyle(method), "%s", method))
 	}
 	return "[" + strings.Join(formatted, ", ") + "]"
 }

@@ -1,11 +1,10 @@
 package main
 
 import (
-	"os"
-	"path/filepath"
+	"bytes"
 	"testing"
 
-	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/gggen"
 	"github.com/stretchr/testify/require"
 )
@@ -15,7 +14,7 @@ import (
 // registers, with the HTTP method of each action: export and SSE routes are
 // served over GET like the rest of the reads.
 func TestParseRouteTreeFromFileReadsGeneratedRoutes(t *testing.T) {
-	code, err := gggen.BuildRouterFile("tmpapp", "router", "model", map[string]string{"tmpapp/model": ""},
+	chdirToRoutedProject(t,
 		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", "/api/records", "", "Create"),
 		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", "/api/records", "", "List"),
 		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", "/api/records/:rec", "rec", "Get"),
@@ -23,12 +22,6 @@ func TestParseRouteTreeFromFileReadsGeneratedRoutes(t *testing.T) {
 		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", "/api/records/export", "", "Export"),
 		gggen.StmtRouterRegister("model", "Notice", "*Notice", "*Notice", "model", "Auth", "/api/notices", "", "SSE"),
 	)
-	require.NoError(t, err)
-
-	t.Chdir(t.TempDir())
-	require.NoError(t, os.Mkdir(ggconst.DirModel, 0o755))
-	require.NoError(t, os.Mkdir(ggconst.DirRouter, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(ggconst.DirRouter, ggconst.FileRouterGen), []byte(code), 0o600))
 
 	routes, err := parseRouteTreeFromFile()
 	require.NoError(t, err)
@@ -38,4 +31,30 @@ func TestParseRouteTreeFromFileReadsGeneratedRoutes(t *testing.T) {
 		"/api/records/export": {"GET"},
 		"/api/notices":        {"GET"},
 	}, routes)
+}
+
+// TestRouteTreeRunPrintsTheRoutesAsAURLTree pins gg route-tree over the
+// router file of a project: the routes as a tree of their path segments,
+// each route with its methods sorted, and a route with routes under it
+// marked on a line of its own; a filter keeps the routes whose path holds
+// it, and one keeping nothing says which it was.
+func TestRouteTreeRunPrintsTheRoutesAsAURLTree(t *testing.T) {
+	chdirToRoutedProject(t,
+		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", consts.APIPath("records"), "", consts.Create.Name()),
+		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", consts.APIPath("records"), "", consts.List.Name()),
+		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", consts.APIPath("records/:id"), "id", consts.Get.Name()),
+		gggen.StmtRouterRegister("model", "Item", "*Item", "*Item", "model", "Pub", consts.APIPath("items"), "", consts.List.Name()),
+	)
+
+	var out bytes.Buffer
+	require.NoError(t, routeTreeRun(&out, ""))
+	require.Equal(t, "Route Tree Structure:\n=====================\n└─ api/\n   ├─ items [GET]\n   └─ records/\n      ● [GET, POST]\n      └─ :id [GET]\n", out.String())
+
+	out.Reset()
+	require.NoError(t, routeTreeRun(&out, "/items"))
+	require.Equal(t, "Route Tree Structure:\n=====================\n└─ api/\n   └─ items [GET]\n", out.String())
+
+	out.Reset()
+	require.NoError(t, routeTreeRun(&out, "nosuch"))
+	require.Equal(t, "No routes found matching filter: nosuch\n", out.String())
 }

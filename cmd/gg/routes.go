@@ -120,7 +120,8 @@ func runModelRoutes(w io.Writer, filter string, opts *modelRoutesCommandOptions)
 	return nil
 }
 
-// parseModelRoutesFromProject parses generated router registrations and links them to model files.
+// parseModelRoutesFromProject parses generated router registrations and links
+// them to model files.
 func parseModelRoutesFromProject(routerFile, modelRoot string) ([]modelRoute, error) {
 	if !gghelper.FileExists(routerFile) {
 		return nil, errors.Newf("router file not found: %s. Please run 'gg gen' first", routerFile)
@@ -498,7 +499,7 @@ func printRouteLines(w io.Writer, routes []modelRoute, prefix string, opts model
 			routeConnector = "└─"
 			routeChildPrefix = prefix + "   "
 		}
-		fmt.Fprintf(w, "%s%s %s %s", prefix, routeConnector, routeMethodColumn(route.Method, opts.color), route.Path)
+		fmt.Fprintf(w, "%s%s %s %s", prefix, routeConnector, routeText(opts.color, routeMethodStyle(route.Method), "%-6s", route.Method), route.Path)
 		if !opts.Detail {
 			fmt.Fprintln(w)
 			continue
@@ -521,19 +522,20 @@ func modelRouteLabel(model orderedModelRoutes, colorize bool) string {
 	return fmt.Sprintf("%s %s", model.model, routeScopeBadge(modelRouteScope(model.routes), colorize))
 }
 
-func routeMethodColumn(method string, colorize bool) string {
-	style := clioutput.StylePlain
+// routeMethodStyle is the style the route views of gg, gg routes and gg
+// route-tree, print an HTTP method in.
+func routeMethodStyle(method string) clioutput.Style {
 	switch method {
 	case "GET":
-		style = clioutput.StyleInfo
+		return clioutput.StyleInfo
 	case "POST":
-		style = clioutput.StyleBlue
+		return clioutput.StyleBlue
 	case "PUT", "PATCH":
-		style = clioutput.StyleMagenta
+		return clioutput.StyleMagenta
 	case "DELETE":
-		style = clioutput.StyleError
+		return clioutput.StyleError
 	}
-	return routeText(colorize, style, "%-6s", method)
+	return clioutput.StylePlain
 }
 
 func routeScopeBadge(scope string, colorize bool) string {
