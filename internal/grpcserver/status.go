@@ -14,13 +14,13 @@ import (
 // StatusError returns the status error a call answers err with: a service
 // error, anywhere in the wrap chain, answers with the gRPC code its HTTP
 // status maps to (see codeOf) and the client-safe message it was constructed
-// with, the answer the HTTP envelope would carry, and, for the fields a
-// validator refused (see types.FieldViolations), a google.rpc.BadRequest
+// with, the answer the HTTP envelope would carry, and, for the fields the
+// request was refused on (see types.FieldViolations), a google.rpc.BadRequest
 // detail listing each field and its description; any other error answers
 // Internal with types.FailureMsg, the message the HTTP envelope answers the
-// server's own failure with, its text kept out of the answer for the caller
-// to log before mapping; nil stays nil. The public grpc.StatusError forwards
-// to it.
+// server's own failure with, its text kept out of the answer for the caller to
+// log before mapping; nil stays nil. The public grpc.StatusError forwards to
+// it.
 func StatusError(err error) error {
 	if err == nil {
 		return nil

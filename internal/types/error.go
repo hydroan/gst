@@ -36,10 +36,12 @@ type Error struct {
 	status int
 	msg    string
 	cause  error
-	// violations are the fields a request the validator refused failed on,
-	// set by NewInvalidFields alone and read through FieldViolations; the
-	// gRPC answer lists them as its details, the HTTP answer carries them
-	// joined in msg.
+	// violations are the fields the request was refused on, set by
+	// NewInvalidFields, one per field the validator refused, and by
+	// NewInvalidValue, the one field holding a value it cannot hold, and read
+	// through FieldViolations; the gRPC answer lists them as its details, while
+	// the HTTP answer carries msg, which NewInvalidFields joins from their
+	// descriptions.
 	violations []FieldViolation
 	// stack holds the program counters captured at the construction site,
 	// exposed through StackTrace so error-stack consumers such as
@@ -47,10 +49,9 @@ type Error struct {
 	stack []uintptr
 }
 
-// FieldViolation is one field of a request the validator refused: the field
-// by its JSON key path, address.city or items[1].name, and the client-safe
-// description of what it failed, the shape of google.rpc.BadRequest's
-// FieldViolation.
+// FieldViolation is one field a request was refused on: the field by its JSON
+// key path, address.city or items[1].name, and the client-safe description of
+// what it failed, the shape of google.rpc.BadRequest's FieldViolation.
 type FieldViolation struct {
 	Field       string
 	Description string
@@ -166,11 +167,11 @@ func (e *Error) Unwrap() error {
 }
 
 // FieldViolations returns the fields the request err answers for failed on,
-// which only an error NewInvalidFields created carries; nil for any other
-// error, and for nil. It is a package function rather than a method so it
-// stays out of the public alias of Error: only the framework's gRPC answer
-// reads the fields, to list them as its details, and the type they come as
-// is the framework's own.
+// which only an error NewInvalidFields or NewInvalidValue created carries; nil
+// for any other error, and for nil. It is a package function rather than a
+// method so it stays out of the public alias of Error: only the framework's
+// gRPC answer reads the fields, to list them as its details, and the type they
+// come as is the framework's own.
 func FieldViolations(err *Error) []FieldViolation {
 	if err == nil {
 		return nil
