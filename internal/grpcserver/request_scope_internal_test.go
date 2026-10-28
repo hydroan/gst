@@ -107,15 +107,18 @@ func TestCallsCarryTheRequestMetadataAndTraceID(t *testing.T) {
 // the action's, /api/records/:id and GET, what a hook, a log or a span
 // reads whichever listener served the action; the path and request URI
 // stay the full method, the call's target on the wire; and the access-log
-// entry names the route and method the same way. A Stream action carries
-// STREAM as its method.
+// entry names the route and method the same way. The rpc of a Stream action,
+// described with MethodStream, carries STREAM as its method.
 func TestCallsDescribedByAnActionCarryItsRouteAndMethod(t *testing.T) {
 	reset(t)
 	seen := make(chan observed, 1)
-	serve(map[string]func(context.Context) error{"Look": func(ctx context.Context) error {
+	report := func(ctx context.Context) error {
 		seen <- observed{meta: requestctx.FromContext(ctx), identity: execctx.FromContext(ctx)}
 		return nil
-	}}, Method{Name: "/gst.test.Echo/Look", HTTPMethod: http.MethodGet, Route: "/api/records/:id"})
+	}
+	serve(map[string]func(context.Context) error{"Look": report, "Tail": report},
+		Method{Name: "/gst.test.Echo/Look", HTTPMethod: http.MethodGet, Route: "/api/records/:id"},
+		Method{Name: "/gst.test.Echo/Tail", HTTPMethod: MethodStream, Route: "/api/records/:id/tail"})
 	conn := dial(t, start(t), nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -133,6 +136,12 @@ func TestCallsDescribedByAnActionCarryItsRouteAndMethod(t *testing.T) {
 	require.Equal(t, "/api/records/:id", fields[consts.CTX_ROUTE])
 	require.Equal(t, http.MethodGet, fields[consts.CTX_METHOD])
 	require.Equal(t, "/gst.test.Echo/Look", fields[consts.CTX_PATH])
+
+	require.NoError(t, call(ctx, conn, "Tail"))
+	require.Equal(t, MethodStream, (<-seen).meta.Method())
+	entries = accessLog.All()
+	require.Len(t, entries, 2)
+	require.Equal(t, MethodStream, entries[1].ContextMap()[consts.CTX_METHOD])
 }
 
 // TestCallsCarryWhetherTheirMethodRequiresAuth pins the RequiresAuth of the
