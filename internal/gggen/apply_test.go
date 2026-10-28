@@ -674,7 +674,7 @@ func (s *Archive) Create(ctx *gst.ServiceContext, req *sample.RecordReq) (rsp *s
 				Phase:       consts.Create,
 			},
 			servicePkgName: "record",
-			wantErr:        "a",
+			wantErr:        "cannot rename s to a: a already names something else there",
 		},
 	}
 	for _, tt := range tests {

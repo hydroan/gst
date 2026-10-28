@@ -78,7 +78,7 @@ func (s *Creator) Note(names []string) {
 	require.Equal(t, "func (c *Creator) Create() error {\n\tif u := c.other(); u != nil {\n\t\treturn u\n\t}\n\treturn c.check()\n}", printNode(t, fset, shadowing))
 
 	err = goast.RenameIdent(clashing, clashing.Recv.List[0].Names[0], "a")
-	require.ErrorContains(t, err, "a")
+	require.ErrorContains(t, err, "cannot rename s to a: a already names something else there")
 	require.Equal(t, "s", clashing.Recv.List[0].Names[0].Name, "a refused rename changes nothing")
 }
 
