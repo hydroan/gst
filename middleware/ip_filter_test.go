@@ -101,8 +101,8 @@ func TestIPFilterMatchesIPv4MappedAddressesAsIPv4(t *testing.T) {
 
 // TestIPFilterTellsTheIPv6LoopbackFromTheIPv4One pins that the IPv6 loopback
 // ::1 matches IPv6 entries alone, an entry naming it or a range covering it,
-// and no IPv4 entry, and so does every other IPv6 address that begins with ::,
-// an IPv4-compatible one such as ::8.8.8.8 among them.
+// and no IPv4 entry, and so does every IPv6 address other than an IPv4-mapped
+// one, an IPv4-compatible one such as ::8.8.8.8 among them.
 func TestIPFilterTellsTheIPv6LoopbackFromTheIPv4One(t *testing.T) {
 	ipv4Loopback := middleware.IPWhitelist([]string{"127.0.0.1"})
 	require.Equal(t, http.StatusForbidden, filterStatus(t, ipv4Loopback, "[::1]:41000", ""), "the IPv6 loopback")
