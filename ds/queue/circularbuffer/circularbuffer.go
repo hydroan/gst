@@ -56,8 +56,9 @@ func NewFromSlice[E any](slice []E, ops ...Option[E]) (*CircularBuffer[E], error
 	return cb, nil
 }
 
-// Enqueue adds an element to the CircularBuffer.
-// Returns false if the buffer is full, otherwise true.
+// Enqueue adds an element to the CircularBuffer. A full buffer overwrites
+// its oldest element, or, built WithDrop, refuses the new one and returns
+// false; Enqueue returns true otherwise.
 func (cb *CircularBuffer[E]) Enqueue(e E) bool {
 	if cb.safe {
 		cb.mu.Lock()
