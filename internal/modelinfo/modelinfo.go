@@ -72,9 +72,9 @@ func FindModels(module, modelDir string, ignore gghelper.ProjectIgnore) ([]*Mode
 
 // ExtractAPIDocs extracts the struct doc comments and enum declarations of
 // every exported type declared under modelDir, including custom request and
-// response types; unexported types never reach the API surface and are
-// skipped. Each entry is keyed by the import path of its package, module
-// followed by the directory, as in helloworld/model/sample for
+// response types; unexported types never reach the API surface and are skipped.
+// Each entry is keyed by the import path of its package, the module followed by
+// the directory (see PackageImportPath), as in helloworld/model/sample for
 // model/sample/record.go in module helloworld. Enum constants may live in a
 // different file than their type declaration; entries of the same package are
 // merged, so a type Status declared in status.go gathers the values its
@@ -91,7 +91,7 @@ func ExtractAPIDocs(module, modelDir string, ignore gghelper.ProjectIgnore, excl
 			return err
 		}
 
-		pkgPath := module + "/" + filepath.ToSlash(filepath.Dir(path))
+		pkgPath := PackageImportPath(module, filepath.Dir(path))
 		for typeName, doc := range docs.Structs {
 			entries.Structs = append(entries.Structs, StructDocEntry{
 				PkgPath:  pkgPath,
