@@ -1,11 +1,12 @@
-// Package logfield declares the log fields more than one stream of the
-// framework writes, each as one constructor fixing the field's key and its
-// type. A log store that maps fields as they arrive types a key by the first
-// entry carrying it and rejects every later entry carrying the key with
-// another type, so a key two streams render differently loses one stream's
-// entries without a word from either; the constructor is the one place the
-// type of a shared key is decided, and every stream writes the key through
-// it.
+// Package logfield declares log fields more than one stream of the framework
+// writes, each as one constructor fixing the field's key and its type. A log
+// store that maps fields as they arrive types a key by the first entry carrying
+// it and rejects every later entry carrying the key with another type, so a key
+// two streams render differently loses one stream's entries without a word from
+// either; for a key declared here the constructor is the one place its type is
+// decided, and selfcheck holds the framework's own packages to it. A key
+// several streams write as a literal, such as ip, is held to one type by the
+// same check instead.
 package logfield
 
 import (
@@ -29,8 +30,9 @@ func Route(route string) zap.Field { return zap.String(consts.CTX_ROUTE, route) 
 // Path is the path of the one request, /api/records/42.
 func Path(path string) zap.Field { return zap.String(consts.CTX_PATH, path) }
 
-// Method is the HTTP method of the request; a gRPC call carries POST, the
-// method every call arrives by.
+// Method is the HTTP method of the request; a gRPC call carries the method its
+// rpc was registered with, STREAM for a Stream action's, and POST when the
+// registration names none, as for the health and reflection services.
 func Method(method string) zap.Field { return zap.String(consts.CTX_METHOD, method) }
 
 // Username is the name of the authenticated caller, "" for an anonymous

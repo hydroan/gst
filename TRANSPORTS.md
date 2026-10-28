@@ -246,7 +246,7 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 
 观测两边对齐：
 
-- 访问日志：HTTP 写 access.log，gRPC 由 requestScope 写 grpc.log，每次请求一条，共用的字段都经 internal/logfield 的构造函数写出，键与类型一致；HTTP 的 status 是数字状态码，gRPC 的状态码名记在 grpc_code（两套码不共用一个键），失败再加 error 字段。拦截器以非 status 错误拒绝时，原因连同 trace_id 记在框架日志（全局 logger），不进 grpc.log。
+- 访问日志：HTTP 写 access.log，gRPC 由 requestScope 写 grpc.log，每次请求一条；两条线共用的键里，internal/logfield 声明过的经它的构造函数写出，ip、user_agent、error 写的是字面量，每个键只有一种类型由 selfcheck 守住；HTTP 的 status 是数字状态码，gRPC 的状态码名记在 grpc_code（两套码不共用一个键），失败再加 error 字段。拦截器以非 status 错误拒绝时，原因连同 trace_id 记在框架日志（全局 logger），不进 grpc.log。
 - 客户端地址：两边对同名的转发头部都把多行（gRPC 是多个元数据值）用逗号合起来读，再按 server.trusted_proxies 从右往左认。
 - 指标：HTTP 是 `gst_backend_*`，gRPC 保持库默认 `grpc_server_*`，方便现成看板。
 - 追踪：HTTP 的 tracing 中间件与 gRPC 的 otelgrpc 各起服务端 span，trace id 都盖进 ctx；没带 W3C 头时两边都认 X-Trace-ID，但只认 W3C trace id 形态的值、其他值另生成（`requestctx.TraceIDOf`，开关 OTel 都是这一条），并都把 trace id 回写给客户端（HTTP 的 `X-Trace-ID` 头、gRPC 的 `x-trace-id` 元数据）。服务端 span 的状态两边同口径（OTel HTTP 语义约定，otelgrpc 也照它）：成功和 4xx 留 Unset，5xx 或处理器在 ctx 上报了错设 Error，不设 Ok。

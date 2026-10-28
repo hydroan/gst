@@ -15,7 +15,7 @@ import (
 
 // The import paths the check reads log field writes by: zap, whose
 // constructors build the fields, and zapcore, whose Field they return; and,
-// relative to the module, the package declaring the keys more than one stream
+// relative to the module, the package declaring keys more than one stream
 // writes and the two packages allowed to nest keys under an entry.
 const (
 	zapPath      = "go.uber.org/zap"
