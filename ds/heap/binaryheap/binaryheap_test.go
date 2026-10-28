@@ -180,7 +180,7 @@ func TestBinaryHeap_String(t *testing.T) {
 	fmt.Println(h.Values())
 }
 
-func TestBInaryHeap_Encoding(t *testing.T) {
+func TestBinaryHeap_Encoding(t *testing.T) {
 	h, err := binaryheap.NewFromOrderedSlice([]int{5, 3, 7, 1, 4, 8, 9, 2}, binaryheap.WithSafe[int]())
 	require.NoError(t, err)
 
@@ -192,4 +192,30 @@ func TestBInaryHeap_Encoding(t *testing.T) {
 	err = json.Unmarshal(bytesData, &h2)
 	require.NoError(t, err)
 	assert.Equal(t, h.Values(), h2.Values())
+}
+
+// TestBinaryHeap_NewFromCollections pins the min-heaps built from a slice and
+// from the keys or the values of a map, each giving its elements in order, and
+// a clone, which pops the same elements while the heap it was cloned from keeps
+// its own.
+func TestBinaryHeap_NewFromCollections(t *testing.T) {
+	ascending := func(a, b int) int { return a - b }
+	fromSlice, err := binaryheap.NewFromSlice([]int{3, 1, 2}, ascending)
+	require.NoError(t, err)
+	assert.Equal(t, []int{1, 2, 3}, fromSlice.Values())
+
+	fromKeys, err := binaryheap.NewFromMapKeys(map[int]any{5: "e", 4: "d"}, ascending)
+	require.NoError(t, err)
+	assert.Equal(t, []int{4, 5}, fromKeys.Values())
+
+	fromValues, err := binaryheap.NewFromMapValues(map[string]int{"a": 9, "b": 7}, ascending)
+	require.NoError(t, err)
+	assert.Equal(t, []int{7, 9}, fromValues.Values())
+
+	clone := fromSlice.Clone()
+	top, ok := clone.Pop()
+	require.True(t, ok)
+	assert.Equal(t, 1, top)
+	assert.Equal(t, []int{2, 3}, clone.Values())
+	assert.Equal(t, []int{1, 2, 3}, fromSlice.Values(), "popping the clone leaves the heap whole")
 }

@@ -537,3 +537,81 @@ func TestList_NodeHandles(t *testing.T) {
 		assert.Equal(t, 1, l.Len())
 	})
 }
+
+// TestList_Iterator walks a list both ways through iterators at its ends:
+// Value reads the element, SetValue writes it through to the list, a step
+// past either end leaves an iterator that is not valid and reads the zero
+// value, Clone gives a position of its own, Equal compares positions, and a
+// node of another list gives an iterator that is not valid.
+func TestList_Iterator(t *testing.T) {
+	l, err := linkedlist.NewFromSlice([]int{1, 2, 3})
+	require.NoError(t, err)
+
+	var forward []int
+	it := l.NewIterator(l.Front())
+	for ; it.IsValid(); it.Next() {
+		forward = append(forward, it.Value())
+	}
+	assert.Equal(t, []int{1, 2, 3}, forward)
+	assert.Zero(t, it.Value())
+
+	var backward []int
+	back := l.NewIterator(l.Back())
+	for ; back.IsValid(); back.Prev() {
+		backward = append(backward, back.Value())
+	}
+	assert.Equal(t, []int{3, 2, 1}, backward)
+
+	second := l.NewIterator(l.Front().Next())
+	second.SetValue(20)
+	assert.Equal(t, []int{1, 20, 3}, l.Slice())
+	it.SetValue(9)
+	assert.Equal(t, []int{1, 20, 3}, l.Slice(), "an iterator past the end writes nothing")
+
+	clone := second.Clone()
+	assert.True(t, second.Equal(clone))
+	clone.Next()
+	assert.False(t, second.Equal(clone))
+	assert.Equal(t, 20, second.Value(), "moving the clone leaves the original where it was")
+	assert.False(t, second.Equal(otherIterator{}))
+
+	other, err := linkedlist.NewFromSlice([]int{7})
+	require.NoError(t, err)
+	assert.False(t, l.NewIterator(other.Front()).IsValid())
+}
+
+// TestNode_Each walks a list from a node in its middle, onward and
+// backward, by value and by node.
+func TestNode_Each(t *testing.T) {
+	l, err := linkedlist.NewFromSlice([]int{1, 2, 3})
+	require.NoError(t, err)
+	middle := l.Front().Next()
+
+	var values []int
+	middle.Each(func(v int) { values = append(values, v) })
+	assert.Equal(t, []int{2, 3}, values)
+	values = nil
+	middle.EachReverse(func(v int) { values = append(values, v) })
+	assert.Equal(t, []int{2, 1}, values)
+
+	var nodes []*linkedlist.Node[int]
+	middle.EachNode(func(n *linkedlist.Node[int]) { nodes = append(nodes, n) })
+	require.Len(t, nodes, 2)
+	assert.Same(t, middle, nodes[0])
+	assert.Same(t, l.Back(), nodes[1])
+	nodes = nil
+	middle.EachReverseNode(func(n *linkedlist.Node[int]) { nodes = append(nodes, n) })
+	require.Len(t, nodes, 2)
+	assert.Same(t, middle, nodes[0])
+	assert.Same(t, l.Front(), nodes[1])
+}
+
+// otherIterator is an iterator of another kind, which no list iterator
+// equals.
+type otherIterator struct{}
+
+func (otherIterator) IsValid() bool                  { return false }
+func (o otherIterator) Next() types.Iterator[int]    { return o }
+func (otherIterator) Value() int                     { return 0 }
+func (o otherIterator) Clone() types.Iterator[int]   { return o }
+func (otherIterator) Equal(types.Iterator[int]) bool { return false }

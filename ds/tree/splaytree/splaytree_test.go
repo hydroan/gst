@@ -399,3 +399,28 @@ func TestSplayTree_StringUsesTheNodeFormatter(t *testing.T) {
 	formatted.Put(1, "one")
 	assert.Equal(t, "SplayTree\n╰── 1:one\n", formatted.String())
 }
+
+// TestSplayTree_NewFromCollections pins the trees built from a slice, keyed by
+// the index of each element, from a map, ordered by the function given, and
+// from a map of ordered keys, ordered by the keys; Clear leaves a tree empty.
+func TestSplayTree_NewFromCollections(t *testing.T) {
+	fromSlice, err := splaytree.NewFromSlice([]string{"a", "b", "c"})
+	require.NoError(t, err)
+	assert.Equal(t, []int{0, 1, 2}, fromSlice.Keys())
+	assert.Equal(t, []string{"a", "b", "c"}, fromSlice.Values())
+
+	descending := func(a, b int) int { return b - a }
+	fromMap, err := splaytree.NewFromMap(map[int]string{1: "x", 2: "y", 3: "z"}, descending)
+	require.NoError(t, err)
+	assert.Equal(t, []int{3, 2, 1}, fromMap.Keys())
+
+	fromOrderedMap, err := splaytree.NewFromOrderedMap(map[string]int{"b": 2, "a": 1})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a", "b"}, fromOrderedMap.Keys())
+
+	fromSlice.Clear()
+	assert.True(t, fromSlice.IsEmpty())
+	assert.Zero(t, fromSlice.Size())
+	_, ok := fromSlice.Get(0)
+	assert.False(t, ok)
+}

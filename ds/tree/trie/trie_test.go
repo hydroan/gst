@@ -475,3 +475,17 @@ func TestTrie_RootIsSafeAlongsidePut(t *testing.T) {
 	}
 	<-done
 }
+
+// TestTrie_String pins the text of a trie: its elements as a tree, the
+// children of an element in descending order of their text, an element
+// shared by more than one key followed by the number of keys, ● and the
+// value where a key ends and ○ elsewhere; and the text of an empty trie.
+func TestTrie_String(t *testing.T) {
+	tr, err := trie.New[string, int]()
+	require.NoError(t, err)
+	assert.Equal(t, "Trie (empty)", tr.String())
+
+	tr.Put([]string{"a", "b"}, 1)
+	tr.Put([]string{"a", "c"}, 2)
+	assert.Equal(t, "Trie\n ○\n└─a(2) ○\n  ├─c ● 2\n  └─b ● 1\n", tr.String())
+}

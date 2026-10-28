@@ -251,3 +251,26 @@ func TestCircularBuffer_Encoding(t *testing.T) {
 	assert.Equal(t, []int{2, 3}, cb2.Slice())
 	assert.Equal(t, []int{1, 2}, cb3.Slice())
 }
+
+// TestCircularBuffer_NewFromSlice pins a buffer built from a slice: it holds
+// the slice in order and is full, String lists its elements from the oldest on,
+// also after a new element overwrote the oldest, and an empty slice makes no
+// buffer; an empty buffer is not full.
+func TestCircularBuffer_NewFromSlice(t *testing.T) {
+	cb, err := circularbuffer.NewFromSlice([]int{1, 2, 3})
+	require.NoError(t, err)
+	assert.Equal(t, []int{1, 2, 3}, cb.Slice())
+	assert.True(t, cb.IsFull())
+	assert.Equal(t, "CircularBuffer {1, 2, 3}", cb.String())
+
+	assert.True(t, cb.Enqueue(4))
+	assert.Equal(t, "CircularBuffer {2, 3, 4}", cb.String())
+
+	_, err = circularbuffer.NewFromSlice([]int{})
+	require.Error(t, err)
+
+	empty, err := circularbuffer.New[int](2)
+	require.NoError(t, err)
+	assert.False(t, empty.IsFull())
+	assert.Equal(t, "CircularBuffer (empty)", empty.String())
+}

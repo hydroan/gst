@@ -1,6 +1,7 @@
 package arraylist_test
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/hydroan/gst/ds/list/arraylist"
@@ -134,4 +135,65 @@ func TestLenIsEmpty(t *testing.T) {
 	list.Append(1)
 	assert.False(t, list.IsEmpty())
 	assert.Equal(t, 1, list.Len())
+}
+
+// TestNewOrdered pins the lists that compare their elements by their order,
+// cmp.Compare: sorting orders them and IndexOf finds them by it, from an
+// empty list or a slice alike; WithSafe gives one that takes concurrent
+// appends.
+func TestNewOrdered(t *testing.T) {
+	l, err := arraylist.NewOrdered[int]()
+	require.NoError(t, err)
+	l.Append(3, 1, 2)
+	l.Sort()
+	assert.Equal(t, []int{1, 2, 3}, l.Values())
+	assert.Equal(t, 2, l.IndexOf(3))
+
+	words, err := arraylist.NewFromOrderedSlice([]string{"b", "c", "a"})
+	require.NoError(t, err)
+	words.Sort()
+	assert.Equal(t, []string{"a", "b", "c"}, words.Values())
+
+	safe, err := arraylist.NewOrdered(arraylist.WithSafe[int]())
+	require.NoError(t, err)
+	var wg sync.WaitGroup
+	for i := range 8 {
+		wg.Go(func() { safe.Append(i) })
+	}
+	wg.Wait()
+	assert.Equal(t, 8, safe.Len())
+}
+
+// TestGetIndexOfSwapRange pins the reads and the swap by index: Get and
+// IndexOf report an index out of range and an element that is not there,
+// Swap leaves the list alone for an index out of range, and Range stops
+// where its function returns false and does nothing for a nil one.
+func TestGetIndexOfSwapRange(t *testing.T) {
+	l, err := arraylist.NewFromSlice(cmp, []int{10, 20, 30})
+	require.NoError(t, err)
+
+	v, ok := l.Get(1)
+	assert.True(t, ok)
+	assert.Equal(t, 20, v)
+	v, ok = l.Get(3)
+	assert.False(t, ok)
+	assert.Zero(t, v)
+	_, ok = l.Get(-1)
+	assert.False(t, ok)
+
+	assert.Equal(t, 2, l.IndexOf(30))
+	assert.Equal(t, -1, l.IndexOf(40))
+
+	l.Swap(0, 2)
+	assert.Equal(t, []int{30, 20, 10}, l.Values())
+	l.Swap(0, 3)
+	assert.Equal(t, []int{30, 20, 10}, l.Values())
+
+	var seen []int
+	l.Range(func(e int) bool {
+		seen = append(seen, e)
+		return e != 20
+	})
+	assert.Equal(t, []int{30, 20}, seen)
+	l.Range(nil)
 }

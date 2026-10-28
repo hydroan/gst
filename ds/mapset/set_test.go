@@ -404,3 +404,15 @@ func runConcurrentBinaryOp(t *testing.T, op func(a, b *mapset.Set[int])) {
 	}
 	wg.Wait()
 }
+
+// TestString pins the text of a set, its elements in the order WithSorted gives
+// them, and of an empty one.
+func TestString(t *testing.T) {
+	s, err := mapset.NewFromSlice([]int{3, 1, 2}, mapset.WithSorted(intCmp))
+	require.NoError(t, err)
+	assert.Equal(t, "Set{1, 2, 3}", s.String())
+
+	empty, err := mapset.New[int]()
+	require.NoError(t, err)
+	assert.Equal(t, "Set{}", empty.String())
+}

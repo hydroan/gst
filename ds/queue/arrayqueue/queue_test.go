@@ -1,6 +1,7 @@
 package arrayqueue_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/hydroan/gst/ds/queue/arrayqueue"
@@ -178,4 +179,14 @@ func TestUnmarshalJSONNullLeavesAnEmptyQueue(t *testing.T) {
 	assert.True(t, q.IsEmpty())
 	assert.NotNil(t, q.Values())
 	assert.Empty(t, q.Values())
+}
+
+// TestQueueMarshalJSON pins the JSON form of a queue, an array of its
+// elements from the head on.
+func TestQueueMarshalJSON(t *testing.T) {
+	q, err := arrayqueue.NewFromSlice([]string{"a", "b"})
+	require.NoError(t, err)
+	data, err := json.Marshal(q)
+	require.NoError(t, err)
+	assert.JSONEq(t, `["a","b"]`, string(data))
 }

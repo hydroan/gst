@@ -1,6 +1,7 @@
 package linkedqueue_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/hydroan/gst/ds/queue/linkedqueue"
@@ -167,4 +168,22 @@ func TestQueueTakesElementsWithoutAnOrder(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, []int{1}, e)
 	assert.Equal(t, [][]int{{2, 3}}, q.Values())
+}
+
+// TestQueueJSONRoundTrip pins the JSON form of a queue, an array of its
+// elements from the head on, and that unmarshaling one replaces what the
+// queue held; JSON that is no array is refused.
+func TestQueueJSONRoundTrip(t *testing.T) {
+	q, err := linkedqueue.NewFromSlice([]int{1, 2, 3})
+	require.NoError(t, err)
+	data, err := json.Marshal(q)
+	require.NoError(t, err)
+	assert.JSONEq(t, `[1,2,3]`, string(data))
+
+	into, err := linkedqueue.NewFromSlice([]int{9})
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(data, into))
+	assert.Equal(t, []int{1, 2, 3}, into.Values())
+
+	require.Error(t, json.Unmarshal([]byte(`{"a":1}`), into))
 }
