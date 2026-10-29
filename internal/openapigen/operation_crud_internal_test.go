@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/stretchr/testify/require"
@@ -213,6 +214,25 @@ func TestOperationsDocumentTheFailuresTheyAnswer(t *testing.T) {
 			require.Nil(t, data.Type)
 		})
 	}
+}
+
+// TestResponsesOfAnswersItsExample guards the example of responsesOf: the
+// create of a Record in the model root package, which the framework handles
+// itself, with success referring to its response component record_create,
+// answers 200 with that component and every failure with the failure envelope.
+func TestResponsesOfAnswersItsExample(t *testing.T) {
+	responses := responsesOf(&openapi3.ResponseRef{Ref: "#/components/responses/record_create"}, consts.Create, false)
+
+	refs := make(map[string]string)
+	for status, ref := range responses.Map() {
+		refs[status] = ref.Ref
+	}
+	require.Equal(t, map[string]string{
+		"200":     "#/components/responses/record_create",
+		"400":     "#/components/responses/Failure",
+		"409":     "#/components/responses/Failure",
+		"default": "#/components/responses/Failure",
+	}, refs)
 }
 
 type openapiCustomBatchModel struct {

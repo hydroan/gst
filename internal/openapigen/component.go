@@ -274,11 +274,13 @@ func newResponses(rspKey string, phase consts.Phase, custom bool) *openapi3.Resp
 }
 
 // responsesOf declares the responses of one action: success as its 200, the
-// statuses failureStatuses lists for the action, and the default response
-// for every other failure, each failure referring to the failure envelope
-// component. For the create of a Record, the framework's own:
+// statuses failureStatuses lists for the action, and the default response for
+// every other failure, each failure referring to the failure envelope
+// component. For the create of a Record in the model root package, which the
+// framework handles itself (custom false), with success referring to its
+// response component record_create:
 //
-//	200: #/components/responses/RecordCreateResponse
+//	200: #/components/responses/record_create
 //	400: #/components/responses/Failure
 //	409: #/components/responses/Failure
 //	default: #/components/responses/Failure
