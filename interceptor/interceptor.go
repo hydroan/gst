@@ -20,16 +20,17 @@ import (
 // Register adds interceptors that run on every call, unary or stream, in
 // registration order, after the framework's own chain and ahead of every
 // interceptor RegisterAuth adds. Call it from an init function: the server
-// takes the interceptors registered when it starts.
+// takes the interceptors registered when it starts, and a call once it runs
+// panics.
 func Register(interceptors ...gstgrpc.Interceptor) {
 	grpcserver.Use(interceptors...)
 }
 
 // RegisterAuth adds interceptors that run only on the calls to methods not
 // declared Public(): the place for authentication and authorization. Call
-// it from an init function: the server takes the interceptors registered
-// when it starts. They run in registration order, after every interceptor
-// Register adds.
+// it from an init function: the server takes the interceptors registered when
+// it starts, and a call once it runs panics. They run in registration order,
+// after every interceptor Register adds.
 func RegisterAuth(interceptors ...gstgrpc.Interceptor) {
 	grpcserver.UseAuth(interceptors...)
 }

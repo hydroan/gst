@@ -36,11 +36,10 @@ const middlewareOutcomeAttrCap = 5
 // Returns:
 //   - A new gin.HandlerFunc with tracing capabilities
 //
-// Example:
+// Register and RegisterAuth wrap every middleware they keep this way, under the
+// name of the function that built it:
 //
-//	wrappedLogger := middlewareWrapper("logger", Logger())
-//	wrappedAuth := middlewareWrapper("jwt-auth", JWT())
-//	router.Use(wrappedLogger, wrappedAuth)
+//	wrapped := middlewareWrapper(getFunctionName(middleware), middleware)
 func middlewareWrapper(name string, middleware gin.HandlerFunc) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Skip tracing if OTEL is not enabled
