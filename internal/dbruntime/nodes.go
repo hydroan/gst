@@ -92,9 +92,6 @@ func AttachResolver(db *gorm.DB, replicas []gorm.Dialector) (*gorm.DB, error) {
 	}
 
 	primaryPool := db.Config.ConnPool
-	if prepared, ok := primaryPool.(*gorm.PreparedStmtDB); ok {
-		primaryPool = prepared.ConnPool
-	}
 	if err := installRoleObserver(db, primaryPool); err != nil {
 		return nil, err
 	}
@@ -147,8 +144,9 @@ func installRoleObserver(db *gorm.DB, primaryPool gorm.ConnPool) error {
 // markStatementRole resolves which role serves the statement and stamps it
 // into the statement context, plus onto the active operation span. A
 // transaction connection always answers primary — transactions never leave
-// it — and everything else compares against the primary pool, unwrapping the
-// per-pool prepared-statement layer the resolver adds.
+// it — and everything else compares against the primary pool, unwrapped from
+// the prepared-statement layer the resolver puts around the pool it picks for
+// a session opened with PrepareStmt.
 func markStatementRole(stmt *gorm.DB, primaryPool gorm.ConnPool) {
 	pool := stmt.Statement.ConnPool
 	role := dbnode.RolePrimary

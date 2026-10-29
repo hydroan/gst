@@ -91,3 +91,40 @@ func TestAttachResolverReturnsAHandleSafeToReuse(t *testing.T) {
 	require.NoError(t, handle.Find(&all).Error)
 	require.Len(t, all, 2, "the condition of the chain before is no condition of this one")
 }
+
+// TestAttachResolverMarksThePrimaryUnderAPreparedSession pins the role a
+// statement of a session opened with PrepareStmt is marked with, a session a
+// project may open on the handle: the resolver hands such a session the pool
+// it picks wrapped in a prepared-statement layer, and a statement the primary
+// serves outside a transaction — a write skipping the default transaction, a
+// read under the handle's Write pin — is still marked primary.
+func TestAttachResolverMarksThePrimaryUnderAPreparedSession(t *testing.T) {
+	type preparedRecord struct {
+		ID   uint
+		Name string
+	}
+	dir := t.TempDir()
+	primary, err := gorm.Open(sqlite.Open(filepath.Join(dir, "primary.db")), &gorm.Config{})
+	require.NoError(t, err)
+	handle, err := dbruntime.AttachResolver(primary, []gorm.Dialector{sqlite.Open(filepath.Join(dir, "replica.db"))})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		for _, node := range dbruntime.NodesFor(handle) {
+			require.NoError(t, node.DB.Close())
+		}
+		dbruntime.AttachNodes(handle, nil)
+	})
+	require.NoError(t, handle.AutoMigrate(&preparedRecord{}))
+
+	var roles []string
+	record := func(stmt *gorm.DB) { roles = append(roles, dbnode.RoleFromContext(stmt.Statement.Context)) }
+	require.NoError(t, handle.Callback().Create().After("gst:db_role").Register("test:role", record))
+	require.NoError(t, handle.Callback().Query().After("gst:db_role").Register("test:role", record))
+
+	prepared := handle.Session(&gorm.Session{PrepareStmt: true, SkipDefaultTransaction: true})
+	require.NoError(t, prepared.Create(&preparedRecord{Name: "prepared"}).Error)
+	var found []preparedRecord
+	require.NoError(t, prepared.Find(&found).Error)
+	require.Len(t, found, 1, "the read is served by the primary, which holds the row")
+	require.Equal(t, []string{dbnode.RolePrimary, dbnode.RolePrimary}, roles)
+}
