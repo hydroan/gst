@@ -10,13 +10,13 @@ import (
 // each of what it reports: a key of internal/logfield written through a
 // constructor and through a key-value pair, a key written as a number and as
 // a string, a key-value pair whose value is of interface type, zap.Object
-// outside the packages allowed to nest keys, and a constructor the check
-// does not classify; left alone are a key of one type, a logfield
-// constructor, util's inlined duration, a reflected struct, a key only known
-// at run time, a field handed to a key-value method, and a module source
-// writing a logfield key with the key's type, which a project could not
-// route through logfield; a module source writing it as another type is
-// reported by the type rule like any package.
+// outside internal/logfield, and a constructor the check does not classify;
+// left alone are a key of one type, a logfield constructor, logfield's
+// inlined duration, a reflected struct, a key only known at run time, a
+// field handed to a key-value method, and a module source writing a logfield
+// key with the key's type, which a project could not route through logfield;
+// a module source writing it as another type is reported by the type rule
+// like any package.
 func TestCheckLogFields(t *testing.T) {
 	root, pkgs := loadFixture(t, "testdata/logfields/module")
 	violations, err := checkLogFields(root, pkgs)
@@ -44,7 +44,7 @@ func TestCheckLogFields(t *testing.T) {
 		},
 		{
 			File:    "sample/nested.go",
-			Message: "Log field 'sample/nested.go:13': zap.Object nests keys under the entry; internal/logfield and internal/util alone, whose key sets are fixed, may nest",
+			Message: "Log field 'sample/nested.go:13': zap.Object nests keys under the entry; internal/logfield alone, whose key set is fixed, may nest",
 		},
 		{
 			File:    "sample/nested.go",

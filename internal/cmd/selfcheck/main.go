@@ -69,10 +69,10 @@
 // is written with one type wherever it appears, a key-value pair typed the way
 // zap.Any types its value, and a value of interface type, typed at run time, is
 // refused; zap.Object, zap.Dict, zap.Namespace and zap.Inline, which nest keys
-// of their own under the entry, belong to logfield and internal/util alone,
-// whose key sets are fixed. golangci-lint's loggercheck reads the key-value
-// pairs for their shape alone, and no linter compares the type a key is given
-// across the tree.
+// of their own under the entry, belong to logfield alone, whose key set is
+// fixed. golangci-lint's loggercheck reads the key-value pairs for their
+// shape alone, and no linter compares the type a key is given across the
+// tree.
 //
 // # Test seams
 //
