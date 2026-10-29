@@ -34,8 +34,9 @@ partition "第 0 步：准备" {
   :列出现有的 gg 管的 service 文件
   和 pb/ 下现有的 protobuf 文件;
   note right
-    gg gen --prune 在生成代码之前列，
-    列完先生成代码，再进入第 1 步
+    gg gen --prune 在生成代码之前列 service 文件，
+    生成完、删掉不再走 gRPC 的 model 留下的 Go 文件之后，
+    才列 pb/ 下的文件，再进入第 1 步
   end note
 }
 partition "第 1 步：算出待删清单" {
@@ -90,7 +91,7 @@ stop
 | `gg prune` | 只清理，不生成代码 |
 | `gg gen --prune` | 先生成代码，再清理 |
 
-两个命令清理的范围和确认方式完全一样。`gg module copy` 在内部重新生成代码时不做任何清理。
+两个命令清理的范围和确认方式完全一样。`gg module copy` 在内部重新生成代码时不做 prune；`gg gen` 自己照常删的仍然会删：不再走 gRPC 的 model 在 `pb/` 下留下的 Go 文件，以及 model 源文件已经删掉的列引用文件。
 
 ## 几个说法
 
@@ -135,7 +136,7 @@ stop
 
 `gg prune` 对 service 文件不应用 gst.yaml 的 `gen.routes.ignore`：被屏蔽的 action 在这里仍算启用，它的 service 文件是当前应有的，所在目录属于 model。结果和 `gg gen --prune` 保留它们一样。对 `pb/` 下的文件则应用，因为它们的内容本来就是按屏蔽后的结果推导的。
 
-`gg gen --prune`：先跑项目检查，不通过就既不生成也不清理；再读 gst.yaml、扫描 model，并在生成代码之前列出现有的 gg 管的 service 文件和 `pb/` 下现有的 protobuf 文件；然后生成代码，最后进入第 1 步，这次写出的 `.proto` 和由它们编出来的 Go 文件就是「会写出的」清单。所以这次生成新建的文件不会进待删清单。
+`gg gen --prune`：先读 gst.yaml、跑项目检查，不通过就既不生成也不清理；再扫描 model，在生成代码之前列出现有的 gg 管的 service 文件；然后生成代码，其间删掉不再走 gRPC 的 model 在 `pb/` 下留下的 Go 文件；生成完再列出 `pb/` 下现有的文件，最后进入第 1 步。这次在 `pb/` 下写出的全部文件（`.proto`、处理器 `.gen.go`、注册文件 `pb.gen.go`，以及编出来的 `.pb.go`、`_grpc.pb.go`）就是「会写出的」清单，所以这次生成新建的文件不会进待删清单。
 
 ## 第 1 步：算出待删清单
 
@@ -273,7 +274,7 @@ stop
 | --- | --- |
 | `Scan Models` | `gg prune` 扫描 model |
 | `Prune Leftovers` | 开始清理，`gg prune` 和 `gg gen --prune` 都有 |
-| `Files Ignored By Config` | 有停用的 service 文件被 `prune.ignore` 保住 |
+| `Files Ignored By Config` | 有停用的 service 文件或 `pb/` 下的 `.proto` 被 `prune.ignore` 保住 |
 | `Service Helper Directories Kept` | 有被活代码 import 而保留的目录 |
 | `Disabled Service Files` | 有要删的停用 service 文件或它们的配对测试文件 |
 | `Unmanaged Orphan Service Directories` | 有孤儿目录 |

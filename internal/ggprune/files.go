@@ -1,20 +1,23 @@
-// Package ggprune works out what gg prune deletes from a project's service
-// directory, and deletes it: the service files of disabled actions, the
-// unmanaged files of service directories no model owns, and the directories
-// that leaves empty. Asking before deleting and printing what happened stay
-// with the gg command. cmd/gg/PRUNE.md lays out the whole cleanup, step by
-// step, with flowcharts.
+// Package ggprune works out what gg prune deletes from a project's service and
+// pb directories, and deletes it: the service files of disabled actions, the
+// unmanaged files of service directories no model owns, the files under pb/ gg
+// gen would not write now (see PlanPBFiles), and the directories that leaves
+// empty. Asking before deleting and printing what happened stay with the gg
+// command; gg gen plans with it, too, the Go files under pb/ it deletes as it
+// writes. cmd/gg/PRUNE.md lays out the whole cleanup, step by step, with
+// flowcharts.
 //
 // Of the ignore rules, only gst.yaml's prune.ignore keeps a path from being
-// deleted. The service directory belongs to gg and is kept clean: a file
-// there that nothing needs is litter even when the project's Git ignore rules
-// or the go command's ignores (testdata, vendor, names beginning with "." or
-// "_", nested modules, the directories go.mod ignores) cover it. So prune
-// reads what it deletes whole, and prune.ignore is the one way to keep a path
-// on purpose. Which code still uses a service directory, though, prune reads
-// the way gg check and gg gen read the project (see gghelper.ProjectIgnore):
-// code the project ignores is not its code and keeps no directory alive, so
-// prune leaves behind no directory it could never clean.
+// deleted, and under pb/ it keeps the definitions alone. The service directory
+// belongs to gg and is kept clean: a file there that nothing needs is litter
+// even when the project's Git ignore rules or the go command's ignores
+// (testdata, vendor, names beginning with "." or "_", nested modules, the
+// directories go.mod ignores) cover it. So prune reads what it deletes whole,
+// and prune.ignore is the one way to keep a path on purpose. Which code still
+// uses a service directory, though, prune reads the way gg check and gg gen
+// read the project (see gghelper.ProjectIgnore): code the project ignores is
+// not its code and keeps no directory alive, so prune leaves behind no
+// directory it could never clean.
 package ggprune
 
 import (

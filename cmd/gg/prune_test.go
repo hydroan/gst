@@ -402,8 +402,8 @@ func (Record) Design() {
 
 // TestPruneRunStopsOnABrokenConfig pins that gg prune reports what stops it
 // before it deletes anything, here a gst.yaml prune.ignore entry outside
-// service/, middleware/ and pb/, as an error the command prints, not as a
-// panic.
+// service/, middleware/, interceptor/ and pb/, as an error the command prints,
+// not as a panic.
 func TestPruneRunStopsOnABrokenConfig(t *testing.T) {
 	if _, ok := newGenProject(t); !ok {
 		return
