@@ -12,6 +12,7 @@ gst 的入门示例：一个用 `gg new` 生成、按框架推荐写法补齐的
 | `service/` | 业务实现和它的测试，目录镜像 `model/`；只有声明了 `Service()` 的动作才有文件 |
 | `pb/` | `gg gen` 从 `model/board/` 推导的 `.proto` 和 Go 代码，提交进仓库 |
 | `configx/` `cronjob/` `component/` `middleware/` `interceptor/` `module/` | 扩展点：每一项一个文件，在各自的 `xxx.go` 的 `init()` 里注册 |
+| `dao/` | service 之下共用的东西：这里是每进程定时任务刷新、ping 答出的记录计数 |
 | `internal/testsupport/` | 测试共用的一小段：注册并登录一个账号、拨 gRPC 连接 |
 | `config.ini` | 本地运行的配置。测试不靠它，testutil 自己起容器并指定端口 |
 | `main.go`、`*.gen.go` | `gg gen` 生成，不手改 |
@@ -26,6 +27,7 @@ gst 的入门示例：一个用 `gg new` 生成、按框架推荐写法补齐的
 6. `gg check`：检查目录、命名、tag、REQ/RSP、protobuf 契约等约定。
 7. 数据库字段有变化时 `gg migrate --dry-run` 看计划，再 `gg migrate` 执行；本地开发在 `config.ini` 里开了 `auto_migrate`，启动时会自动建表。
 8. `go run .` 启动，HTTP 在 8090、gRPC 在 8091，接口文档在 http://localhost:8090/docs/index.html 。
+9. 前端要类型时 `gg gen ts`：按 model 里的声明生成 TypeScript 类型。
 
 改了 DSL、路径、REQ/RSP 或 `Service()` 之后回到第 3 步。
 
@@ -34,6 +36,11 @@ gst 的入门示例：一个用 `gg new` 生成、按框架推荐写法补齐的
 | 关键字 | 文件 |
 | --- | --- |
 | `Migrate` `Endpoint` `Param` `Create` `Delete` `Update` `Patch` `List` `Get` `Route` `Service` `Result` | `model/record.go` |
+| 关联预加载 `Expands()`（请求带 `_expand=items`）、乐观锁 `model.Version`、`binding` 校验 tag | `model/record.go` |
+| 回收站：`WithDeleted` 读软删除的行 | `model/record.go` 的 trash 路由，`service/record/trash.go` |
+| 分析查询 `database.Select`：分组计数 | `service/record/summary.go` |
+| 连接查询 `Join`：按父记录的类型统计条目 | `model/record/item.go` 的 summary 路由，`service/record/item/summary.go` |
+| `Upsert`：同一个键再提交就是改值 | `model/preference.go`，`service/preference/set.go` |
 | 只建表、不出接口（只写 `Migrate()`） | `model/audit.go` |
 | 嵌套资源、`CreateMany` `DeleteMany` `UpdateMany` `PatchMany` | `model/record/item.go` |
 | 自定义路由、`Import` `Export` | `model/archive/document.go` |
@@ -49,18 +56,24 @@ gst 的入门示例：一个用 `gg new` 生成、按框架推荐写法补齐的
 ## 扩展点
 
 - 配置：`configx/notice.go`、`configx/cleanup.go` 各声明一节，`configx.go` 注册；每个键有对应的环境变量常量。
-- 定时任务：`cronjob/purge_audits.go`、`cronjob/report_audits.go`，函数和它的调度、名字放在一起，`cronjob.go` 注册。
-- 常驻组件：`component/record_count.go`、`component/runtime_report.go`，每个副本各跑一份，直到进程退出。
-- 中间件：`middleware/no_store.go` 挂在所有接口上，`middleware/actor.go` 只挂在需要认证的接口上；iam 模块的会话检查也在 `middleware.go` 里挂，排在读用户的中间件之前。
+- 定时任务：`cronjob/purge_audits.go`、`cronjob/report_audits.go` 全部署每个时刻只跑一次；`cronjob/count_records.go` 用 `RegisterPerInstance`，每个副本各刷新自己进程里的记录计数（计数放在 `dao/record_count.go`）。函数和它的调度、名字放在一起，`cronjob.go` 注册。
+- 常驻组件：`component/notice_watch.go` 是订阅 Redis 频道 `demo:notices` 的消费循环，`component/runtime_report.go` 定期记录本进程的运行指标；每个副本各跑一份，直到进程退出。
+- 中间件：`middleware/no_store.go` 挂在所有接口上，`middleware/actor.go` 只挂在需要认证的接口上；框架自带的 `RequestSizeLimit`、`Timeout`、`SecurityHeaders` 在 `middleware.go` 里直接挂；iam 模块的会话检查也在那里挂，排在读用户的中间件之前。
 - 拦截器：`interceptor/` 是中间件在 gRPC 上的对应物，`served_by.go` 和 `actor.go`，会话检查同样挂在这里。
-- 模块：`module/module.go` 注册内置的 iam（登录、注册、会话）和示例模块 helloworld。
+- 模块：`module/module.go` 注册内置的 iam（登录、注册、会话）和示例模块 helloworld；`module/login_audit.go` 是登录观察者，登录成功、失败和登出各写一条 Audit。
 - provider：`service/archive/document/attachment/` 用 MinIO 存文件，`config.ini` 的 `[minio]` 节配置连接。
-- 数据库：service 里用 `database.Database[T](ctx)` 链式查询，见 `service/record/summary.go` 和 `cronjob/purge_audits.go`。
+- 数据库：service 里用 `database.Database[T](ctx)` 链式查询，见 `service/record/search.go`、`service/record/trash.go`（`WithDeleted`）、`service/preference/set.go`（`Upsert`）和 `cronjob/purge_audits.go`；聚合用 `database.Select`，见 `service/record/summary.go`（分组）和 `service/record/item/summary.go`（连接）。
 
 ## 本地运行需要什么
 
 `config.ini` 指向本机的 MySQL（test/test）、Redis 和 MinIO（minioadmin/minioadmin，桶 demo）。
 只跑测试的话都不需要：testutil 自己起容器。
+
+服务起来后给组件发一条通知，日志里会多一行 `notice received`：
+
+```bash
+redis-cli PUBLISH demo:notices hello
+```
 
 ## 看一眼 gRPC
 
