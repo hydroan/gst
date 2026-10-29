@@ -32,3 +32,18 @@ func unsupportedParameterMessage(keys []string) string {
 	}
 	return fmt.Sprintf("unsupported query %s %s", noun, strings.Join(quoted, ", "))
 }
+
+// DuplicateParameterError reports query keys a request gives more than once:
+// the framework reads one value per key and refuses a key given twice rather
+// than pick one of its values. Both transports refuse with it, the HTTP
+// listener a repeated parameter and a gRPC call a filter given twice. Every
+// such key is listed, sorted, so the client sees the full set at once; given
+// []string{"name[eq]", "age[gt]"} it reports
+//
+//	duplicate query parameter: age[gt], name[eq]
+func DuplicateParameterError(keys []string) error {
+	sorted := make([]string, len(keys))
+	copy(sorted, keys)
+	sort.Strings(sorted)
+	return errors.New("duplicate query parameter: " + strings.Join(sorted, ", "))
+}

@@ -2,13 +2,12 @@ package middleware
 
 import (
 	"net/http"
-	"sort"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/urlquery"
 )
 
 // strictQuery returns a middleware that rejects ambiguous query strings before
@@ -50,11 +49,7 @@ func strictQuery() gin.HandlerFunc {
 			}
 		}
 		if len(duplicated) > 0 {
-			// Map iteration order is random; sorting keeps the refusal stable
-			// for clients and tests.
-			sort.Strings(duplicated)
-			response.Abort(c, types.NewError(http.StatusBadRequest,
-				"duplicate query parameter: "+strings.Join(duplicated, ", ")))
+			response.Abort(c, types.NewError(http.StatusBadRequest, urlquery.DuplicateParameterError(duplicated).Error()))
 			return
 		}
 	}
