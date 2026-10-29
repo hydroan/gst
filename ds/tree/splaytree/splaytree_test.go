@@ -294,29 +294,6 @@ func TestSplayTree_Traversal(t *testing.T) {
 		})
 		expected := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 		assert.Equal(t, expected, result)
-		// fmt.Println(tree)
-		// tree.Get(1)
-		// fmt.Println(tree)
-		// tree.Get(2)
-		// fmt.Println(tree)
-		// tree.Get(3)
-		// fmt.Println(tree)
-		// tree.Get(4)
-		// fmt.Println(tree)
-		// tree.Get(5)
-		// fmt.Println(tree)
-		// tree.Get(6)
-		// fmt.Println(tree)
-		// tree.Get(7)
-		// fmt.Println(tree)
-		// tree.Get(8)
-		// fmt.Println(tree)
-		// tree.Get(9)
-		// fmt.Println(tree)
-		// tree.Get(10)
-		// fmt.Println(tree)
-		// tree.Get(5)
-		// fmt.Println(tree)
 	})
 
 	t.Run("PreOrder", func(t *testing.T) {
@@ -364,7 +341,6 @@ func TestSplayTree_MarshalJSON(t *testing.T) {
 	}
 	jsonBytes, err := json.Marshal(tree)
 	require.NoError(t, err)
-	// fmt.Println(string(jsonBytes))
 
 	tree2 := newIntStringTree(t)
 	err = json.Unmarshal(jsonBytes, tree2)
@@ -372,16 +348,6 @@ func TestSplayTree_MarshalJSON(t *testing.T) {
 	assert.Equal(t, tree.Keys(), tree2.Keys())
 	assert.Equal(t, tree.Values(), tree2.Values())
 }
-
-// func TestSplayTree_String(t *testing.T) {
-// 	tree, err := splaytree.NewWithOrderedKeys(splaytree.WithSafe[int, string](), splaytree.WithNodeFormat[int, string]("%d(%s)"))
-// 	assert.NoError(t, err)
-//
-// 	for i := range 10 {
-// 		tree.Put(i, fmt.Sprintf("%d", i))
-// 		fmt.Println(tree)
-// 	}
-// }
 
 // TestSplayTree_StringUsesTheNodeFormatter pins how String prints a node: by
 // its key alone unless a formatter is given, and as the formatter renders the

@@ -323,9 +323,8 @@ func (l *List[E]) Swap(i, j int) {
 	}
 }
 
-// Range call function fn on each element in the list.
-// if `fn` returns false, the iteration stops.
-// if `fn` is nil, the method does nothing.
+// Range calls fn on each element in the list. If fn returns false, the
+// iteration stops; if fn is nil, the method does nothing.
 func (l *List[E]) Range(fn func(e E) bool) {
 	if fn == nil {
 		return
@@ -353,11 +352,6 @@ func (l *List[E]) growBy(n int) {
 	currCap := cap(l.elements)
 	newLen := len(l.elements) + n
 	if newLen > currCap {
-		// // method 1:
-		// newCap := int(growthFactor * float32(currCap+n))
-		// l.resize(newLen, newCap)
-
-		// method 2:
 		newCap := int(growthFactor * float32(currCap))
 		if newCap == 0 {
 			newCap = minCap

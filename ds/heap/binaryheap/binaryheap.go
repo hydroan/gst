@@ -292,10 +292,6 @@ func (h *Heap[E]) Range(fn func(e E) bool) {
 	}
 }
 
-// // String returns a string repesentation of the heap.
-// func (h *Heap[E]) String() string {
-// }
-
 // String returns a string representation of the heap in a tree-like format.
 func (h *Heap[E]) String() string {
 	if h.safe {

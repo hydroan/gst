@@ -63,16 +63,12 @@ func TestPriorityQueue_CustomStruct(t *testing.T) {
 	for _, u := range users {
 		q.Enqueue(u)
 	}
-	// fmt.Println(q.Values())
 	sorted1 := make([]*User, len(users))
 	sorted2 := make([]*User, len(users))
 	copy(sorted1, users)
 	copy(sorted2, users)
 	sort.Sort(Users(sorted1))
 	sort.Sort(sort.Reverse(Users(sorted2)))
-	// fmt.Println(sorted1)
-	// fmt.Println(sorted2)
-	// fmt.Println(users)
 	assert.Equal(t, sorted1, q.Values())
 
 	q, err = priorityqueue.New(userCmp, priorityqueue.WithMaxPriority[*User]())
@@ -81,7 +77,6 @@ func TestPriorityQueue_CustomStruct(t *testing.T) {
 		q.Enqueue(u)
 	}
 	assert.Equal(t, sorted2, q.Values())
-	// fmt.Println(q.Values())
 }
 
 func intCmp(a, b int) int {

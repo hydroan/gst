@@ -354,12 +354,6 @@ func TestSkipList_Clear(t *testing.T) {
 func TestSkipList_Clone(t *testing.T) {
 	sl, _ := skiplist.New[int, string](intCmp)
 
-	// t.Run("clone empty list", func(t *testing.T) {
-	// 	clone := sl.Clone()
-	// 	assert.Equal(t, sl.Len(), clone.Len())
-	// 	assert.True(t, clone.IsEmpty())
-	// })
-
 	t.Run("clone populated list", func(t *testing.T) {
 		sl.Put(1, "one")
 		sl.Put(2, "two")

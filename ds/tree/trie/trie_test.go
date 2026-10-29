@@ -32,7 +32,6 @@ var (
 )
 
 func TestTrie(t *testing.T) {
-	// t, err := trie.New(trie.WithSafe[rune, int]())
 	tt, err := trie.New(
 		trie.WithSafe[rune, string](),
 		trie.WithKeyFormatter(func(k rune, v string, count int, hasValue bool) string {

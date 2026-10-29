@@ -316,11 +316,6 @@ func (t *Trie[K, V]) Clone() *Trie[K, V] {
 		return clone
 	}
 
-	// path := make([]K, 0, t.size)
-	// t._range(t.root, path, func(k []K, v V) bool {
-	// 	clone.Put(k, v)
-	// 	return true
-	// })
 	clone.root = t.root.clone()
 	clone.size = t.size
 	return clone
@@ -393,18 +388,6 @@ func (t *Trie[K, V]) Values() []V {
 		}
 	}
 	fn(t.root)
-
-	// stack := []*Node[K, V]{t.root}
-	// for len(stack) > 0 {
-	// 	n := stack[len(stack)-1]
-	// 	stack = stack[:len(stack)-1]
-	// 	if n.hasValue {
-	// 		values = append(values, n.value)
-	// 	}
-	// 	for _, child := range n.children {
-	// 		stack = append(stack, child)
-	// 	}
-	// }
 
 	return values
 }

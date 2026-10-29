@@ -38,7 +38,6 @@ func TestBinaryHeap_New(t *testing.T) {
 	assert.Equal(t, len(slice), h.Size())
 	assert.False(t, h.IsEmpty())
 	assert.Equal(t, []int{1, 2, 3, 4, 5, 6}, h.Values())
-	// fmt.Println(h.String())
 
 	m := map[int]string{
 		2: "b",

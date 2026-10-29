@@ -12,10 +12,8 @@ func createSkipList(b *testing.B, size int, safe bool) *skiplist.SkipList[int64,
 	var sl *skiplist.SkipList[int64, int64]
 	var err error
 	if safe {
-		// sl, err = skiplist.NewOrdered(skiplist.WithSafe[int64, int64](), skiplist.WithProbability[int64, int64](0.33))
 		sl, err = skiplist.NewOrdered(skiplist.WithSafe[int64, int64]())
 	} else {
-		// sl, err = skiplist.NewOrdered[int64, int64](skiplist.WithProbability[int64, int64](0.33))
 		sl, err = skiplist.NewOrdered[int64, int64]()
 	}
 	if err != nil {
