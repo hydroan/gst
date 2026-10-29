@@ -98,6 +98,26 @@ linters:
               desc: "Use github.com/cockroachdb/errors instead"
             - pkg: "github.com/pkg/errors"
               desc: "Use github.com/cockroachdb/errors instead"
+        # internal/types is the bottom of the framework, the vocabulary every
+        # other package shares: it imports the standard library, the leaf
+        # packages under it and the third-party types it names, and never a
+        # functional package, so that every functional package can depend on
+        # it without a cycle. Its tests build fixtures and may import more.
+        types-leaf:
+          list-mode: strict
+          files:
+            - "**/internal/types/**"
+            - "!$test"
+          allow:
+            - "$gostd"
+            - "github.com/cockroachdb/errors"
+            - "github.com/gin-gonic/gin"
+            - "github.com/hydroan/gst/internal/consts"
+            - "github.com/hydroan/gst/internal/execctx"
+            - "github.com/hydroan/gst/internal/requestctx"
+            - "github.com/hydroan/gst/internal/sse"
+            - "go.uber.org/zap"
+            - "gorm.io/datatypes"
         # Framework code imports the internal packages behind the public
         # forwarding packages; the forwards serve projects (CLAUDE.md, package
         # ownership and internal import direction). The files left out are the
