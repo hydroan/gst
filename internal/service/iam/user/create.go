@@ -15,7 +15,7 @@ import (
 	"github.com/hydroan/gst/service"
 )
 
-// AdminUserCreateService handles POST /iam/admin/users for privileged
+// AdminUserCreateService handles POST /api/iam/admin/users for privileged
 // administrators.
 //
 // It is how an account comes into being in a deployment that does not offer
@@ -85,10 +85,10 @@ func (u *AdminUserCreateService) Create(ctx *gst.ServiceContext, req *modeliamus
 		}
 		return database.Database[*modeliamaccount.EmailIdentity](ctx).Create(identity)
 	}); err != nil {
-		// A rejected password is the caller's mistake, not the server's, and the
-		// hashing helper already said which rule it broke. Its status and message
-		// are rebuilt here rather than passed through, so this exit is one the
-		// service constructed and the cause keeps its stack.
+		// A rejected password is the caller's mistake, not the server's, and
+		// the hashing helper already said which rule it broke. Its status and
+		// message are rebuilt here rather than passed through, so this exit is
+		// one the service constructed and the cause keeps its stack.
 		var svcErr *gst.Error
 		if errors.As(err, &svcErr) {
 			return nil, gst.NewErrorWithCause(svcErr.Status(), svcErr.Msg(), err)

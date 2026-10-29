@@ -12,7 +12,8 @@ import (
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 )
 
-// AdminUserGetService handles GET /iam/admin/users/:id for privileged administrators.
+// AdminUserGetService handles GET /api/iam/admin/users/:id for privileged
+// administrators.
 //
 // The endpoint returns an IAM admin view only after the shared tenant-admin
 // authorization helper has validated both the actor's endpoint permission and
@@ -29,15 +30,15 @@ func (a *AdminUserGetService) Get(ctx *gst.ServiceContext, req *model.Empty) (rs
 	}
 
 	// Load the actor and target before authorization so EnsureTenantAdmin can
-	// reject system-root targets and verify tenant membership using the concrete
-	// target user ID.
+	// reject system-root targets and verify tenant membership using the
+	// concrete target user ID.
 	actor, target, err := serviceiamaccount.LoadActorAndTarget(ctx, targetUserID)
 	if err != nil {
 		return nil, err
 	}
-	// EnsureTenantAdmin grants system-root actors globally. For tenant admins it
-	// first checks route permission in the current tenant, then checks that the
-	// target user has a role binding in that same tenant.
+	// EnsureTenantAdmin grants system-root actors globally. For tenant admins
+	// it first checks route permission in the current tenant, then checks that
+	// the target user has a role binding in that same tenant.
 	if err = adminauth.EnsureTenantAdmin(ctx, actor, target); err != nil {
 		return nil, err
 	}

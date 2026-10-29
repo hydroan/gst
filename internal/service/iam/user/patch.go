@@ -23,8 +23,8 @@ var (
 	colUserStatus = gst.NewColumn[*modeliamuser.User, modeliamuser.UserStatus]("status")
 )
 
-// AdminUserPatchService handles PATCH /iam/admin/users/:id for privileged
-// administrators.
+// AdminUserPatchService handles PATCH /api/iam/admin/users/:id for
+// privileged administrators.
 //
 // It is the one route for updating a user, rather than a route per field. A
 // per-field route reads as finer-grained authorization but is not: authorizing
@@ -107,7 +107,8 @@ func (u *AdminUserPatchService) Patch(ctx *gst.ServiceContext, req *modeliamuser
 	return &modeliamuser.AdminUserPatchRsp{User: view}, nil
 }
 
-// revokeSessionsForStatus applies a status change to the target's live sessions.
+// revokeSessionsForStatus applies a status change to the target's live
+// sessions.
 //
 // The row is already written by the time this runs, so a storage failure is
 // logged rather than returned: failing the request would report a change that
