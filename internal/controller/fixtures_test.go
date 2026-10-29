@@ -506,7 +506,9 @@ func serve(t *testing.T, method, pattern string, handler gin.HandlerFunc, target
 // in ctx, which a test ending the request on the client's behalf cancels,
 // and arrives from the loopback, the peer the gRPC line's calls arrive
 // from, carrying the headers forwarded, which a proxy in front would set.
-func serveAs(ctx context.Context, t *testing.T, method, pattern string, handler gin.HandlerFunc, target, body, username string, forwarded http.Header) *httptest.ResponseRecorder {
+// The middleware of chain runs ahead of the handler, the built-in chain of
+// the HTTP listener for a request served the way the listener serves it.
+func serveAs(ctx context.Context, t *testing.T, method, pattern string, handler gin.HandlerFunc, target, body, username string, forwarded http.Header, chain ...gin.HandlerFunc) *httptest.ResponseRecorder {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -517,6 +519,7 @@ func serveAs(ctx context.Context, t *testing.T, method, pattern string, handler 
 	// The engine takes the stance the router takes, so a forwarded address
 	// is believed from the same peers the gRPC line believes it from.
 	require.NoError(t, requestctx.ApplyTrustedProxies(engine, config.App.Server.TrustedProxies))
+	engine.Use(chain...)
 	engine.Handle(method, pattern, func(c *gin.Context) {
 		c.Set(consts.PARAMS, middleware.RouteManager.Get(c.FullPath()))
 		if username != "" {

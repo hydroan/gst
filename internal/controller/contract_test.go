@@ -17,6 +17,7 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/controller"
+	"github.com/hydroan/gst/internal/middleware"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/types"
@@ -34,16 +35,17 @@ const (
 	staleObjectMsg     = "The resource was modified by another operation. Reload and retry."
 )
 
-// TestTransportsAnswerTheContractAlike pins the contract of the actions on
-// both transports at once: every scenario of the table is sent as the HTTP
-// request and as the gRPC call carrying the same input, through the handler
-// and the call function of the action, and both must answer the status the
-// scenario states — the HTTP status, and the gRPC code it maps to (see
-// TRANSPORTS.md, section 4) — the same msg, and leave the records the same.
-// The scenarios the transports answer differently on purpose state what
-// each answers (see TRANSPORTS.md, section 9): a change to one side alone
-// turns the table red, and a new difference has to be written into the
-// table and the document together.
+// TestTransportsAnswerTheContractAlike pins the contract of the actions on both
+// transports at once: every scenario of the table is sent as the HTTP request
+// and as the gRPC call carrying the same input, the request through the
+// built-in chain of the HTTP listener and the handler of the action, the call
+// through the server and the call function of the action, and both must answer
+// the status the scenario states — the HTTP status, and the gRPC code it maps
+// to (see TRANSPORTS.md, section 4) — the same msg, and leave the records the
+// same. The scenarios the transports answer differently on purpose state what
+// each answers (see TRANSPORTS.md, section 9): a change to one side alone turns
+// the table red, and a new difference has to be written into the table and the
+// document together.
 func TestTransportsAnswerTheContractAlike(t *testing.T) {
 	samples := standardFixture[*sampleRecord](sampleRoute, "")
 	refusals := standardFixture[*sampleRecord](refusalRoute, "Refused")
@@ -353,6 +355,41 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			name: "List refuses a bare key on a column hidden from clients", fixture: samples, phase: consts.List,
 			input: contractInput{query: controller.Query{Filters: []controller.Filter{{Field: "secret", Values: []string{"value"}}}}},
 			want:  contractWant{status: http.StatusBadRequest},
+		},
+		{
+			name: "List refuses a filter given twice, every key so given listed", fixture: samples, phase: consts.List,
+			input: contractInput{query: controller.Query{Filters: []controller.Filter{
+				{Field: "name", Op: "ne", Values: []string{"a"}},
+				{Field: "name", Op: "eq", Values: []string{"a"}},
+				{Field: "name", Op: "ne", Values: []string{"b"}},
+				{Field: "name", Op: "eq", Values: []string{"b"}},
+			}}},
+			want: contractWant{status: http.StatusBadRequest, msg: "duplicate query parameter: name[eq], name[ne]"},
+		},
+		{
+			name: "List filters by nothing on an empty value over HTTP and refuses it over gRPC", fixture: samples, phase: consts.List,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				createSample(t, uniqueName("contract-empty-filter"))
+				return contractInput{query: controller.Query{Filters: []controller.Filter{{Field: "name", Values: []string{""}}}}}
+			},
+			// A query string's empty parameter filters by nothing, while a
+			// filter a message spells out and leaves empty is a mistake to
+			// report (see TRANSPORTS.md, section 9).
+			want:  contractWant{status: http.StatusOK, grpc: &grpcAnswer{code: codes.InvalidArgument, msg: `filter "name" has an empty value`}},
+			check: filtersByNothingOverHTTP,
+		},
+		{
+			name: "List filters by nothing on a filter without a value over HTTP and refuses it over gRPC", fixture: samples, phase: consts.List,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				createSample(t, uniqueName("contract-valueless-filter"))
+				return contractInput{query: controller.Query{Filters: []controller.Filter{{Field: "name"}}}}
+			},
+			// A query string carries a parameter with a value, empty at the
+			// least, so a filter without one is the empty parameter there.
+			want:  contractWant{status: http.StatusOK, grpc: &grpcAnswer{code: codes.InvalidArgument, msg: `filter "name" has no value`}},
+			check: filtersByNothingOverHTTP,
 		},
 		{
 			name: "List accepts a bare key on a field that is not a column and leaves the records to the service", fixture: samples, phase: consts.List,
@@ -1476,7 +1513,8 @@ var contractTransports = []contractTransport{
 	{name: "gRPC", do: overGRPC, expect: requireGRPCAnswer},
 }
 
-// overHTTP sends in as the HTTP request of the action, as alice unless the
+// overHTTP sends in as the HTTP request of the action, through the built-in
+// chain of the HTTP listener (see middleware.Builtin), as alice unless the
 // fixture is anonymous, acting across tenants when the fixture is across, and
 // decodes the envelope answered: the method and path of the action, the id in
 // the path, the query rendered as the query string, the record, the items,
@@ -1518,7 +1556,7 @@ func overHTTP(t *testing.T, f contractFixture, phase consts.Phase, in contractIn
 	if f.anonymous {
 		username = ""
 	}
-	rsp := serveAs(ctx, t, phase.HTTPMethod(), pattern, f.handler(phase), target, body, username, in.forwarded)
+	rsp := serveAs(ctx, t, phase.HTTPMethod(), pattern, f.handler(phase), target, body, username, in.forwarded, middleware.Builtin()...)
 	answer := contractAnswer{status: rsp.Code}
 	var envelope struct {
 		Msg  string `json:"msg"`
@@ -1615,6 +1653,17 @@ func observedClientIP(want string) func(*testing.T, contractInput, contractAnswe
 	}
 }
 
+// filtersByNothingOverHTTP is the check of a row whose filter reaches the
+// HTTP request as an empty parameter, the row having stored a record first:
+// the HTTP answer counts that record at the least, the empty parameter
+// filtering by nothing rather than matching the empty text.
+func filtersByNothingOverHTTP(t *testing.T, _ contractInput, got contractAnswer) {
+	t.Helper()
+	if got.status == http.StatusOK {
+		require.Positive(t, dataMap(t, got)["total"], "an empty parameter filters by nothing")
+	}
+}
+
 // requireHTTPAnswer requires got, what HTTP answered, to carry the status
 // want states and its msg: the success msg of the envelope for 200, the
 // msg of the refusal otherwise, unless want leaves it to the comparison
@@ -1686,10 +1735,12 @@ func routePath(route string, params map[string]string) string {
 	return strings.Join(segments, "/")
 }
 
-// queryString renders q as the query string of the HTTP request: a filter
-// as field[op]=value, the members of an in joined by commas, the orderings
-// under _sort_by, the page and size and the cursor under their parameters,
-// the way the request message of the rpc carries them (see controller.Query).
+// queryString renders q as the query string of the HTTP request: each
+// filter as a parameter field[op]=value of its own, a filter given twice
+// repeating its parameter, the members of an in joined by commas, the
+// orderings under _sort_by, the page and size and the cursor under their
+// parameters, the way the request message of the rpc carries them (see
+// controller.Query).
 func queryString(q controller.Query) string {
 	values := url.Values{}
 	for _, f := range q.Filters {
@@ -1697,7 +1748,7 @@ func queryString(q controller.Query) string {
 		if f.Op != "" {
 			key += "[" + f.Op + "]"
 		}
-		values.Set(key, strings.Join(f.Values, ","))
+		values.Add(key, strings.Join(f.Values, ","))
 	}
 	if len(q.SortBy) > 0 {
 		values.Set(consts.QUERY_SORT_BY, strings.Join(q.SortBy, ","))

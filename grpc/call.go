@@ -24,12 +24,15 @@ import (
 // generated handlers read a batch item and name a refusal through:
 // PatchItem, ItemError, PathError, Element and Entry.
 
-// Query is what the request message of a List or Get rpc carries for the
-// query parameters of the same action over HTTP, as the generated messages
-// name them: the filters, orderings, pagination, cursor and expansion of a
-// List, the expansion of a Get. The call functions read it exactly as the
-// HTTP listener reads the query string, so both transports refuse the same
-// requests; the zero value of a field is the parameter not sent.
+// Query is what the request message of a List or Get rpc carries for the query
+// parameters of the same action over HTTP, as the generated messages name them:
+// the filters, orderings, pagination, cursor and expansion of a List, the
+// expansion of a Get. The call functions read it exactly as the HTTP listener
+// reads the query string, so both transports refuse the same requests alike, a
+// filter given twice with the listener's refusal of a repeated parameter, but
+// for a filter left without a value or with an empty one, which a call refuses
+// while an empty parameter of a query string filters by nothing; the zero value
+// of a field is the parameter not sent.
 //
 // gRPC has no URL, so what an HTTP request carries in its path and query
 // string the request message carries in its fields, the route parameters

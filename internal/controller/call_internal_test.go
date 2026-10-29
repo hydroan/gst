@@ -57,14 +57,15 @@ func TestQueryValuesRenderTheHTTPQuery(t *testing.T) {
 	require.Empty(t, empty)
 }
 
-// TestQueryValuesRefuseWhatTheHTTPQueryCannotCarry pins the queries refused
-// before any parsing: a filter given twice, which the HTTP listener refuses
-// as a repeated parameter; several values under an operator taking one; a
-// member of an in holding a comma, which the HTTP parser would split; a
-// filter without a value, or with an empty one, which filters by nothing;
-// a field named like the framework's own parameters; and a sort or expand
-// member holding a comma, which the HTTP parser would split too.
-func TestQueryValuesRefuseWhatTheHTTPQueryCannotCarry(t *testing.T) {
+// TestQueryValuesRefuseBeforeParsing pins the queries refused before any
+// parsing: a filter given twice, refused first and the way the HTTP listener
+// refuses a repeated parameter, every key so given listed; several values
+// under an operator taking one; a member of an in holding a comma, which the
+// HTTP parser would split; a filter without a value, or with an empty one,
+// which over HTTP would filter by nothing; a filter without a field, or with
+// one named like the framework's own parameters; and a sort or expand member
+// holding a comma, which the HTTP parser would split too.
+func TestQueryValuesRefuseBeforeParsing(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
 		query   Query
@@ -73,7 +74,26 @@ func TestQueryValuesRefuseWhatTheHTTPQueryCannotCarry(t *testing.T) {
 		{
 			name:    "a filter given twice",
 			query:   Query{Filters: []Filter{{Field: "name", Op: "eq", Values: []string{"a"}}, {Field: "name", Op: "eq", Values: []string{"b"}}}},
-			message: `filter "name[eq]" is given twice`,
+			message: `duplicate query parameter: name[eq]`,
+		},
+		{
+			name: "two filters each given twice",
+			query: Query{Filters: []Filter{
+				{Field: "name", Values: []string{"a"}},
+				{Field: "age", Op: "gt", Values: []string{"1"}},
+				{Field: "name", Values: []string{"b"}},
+				{Field: "age", Op: "gt", Values: []string{"2"}},
+			}},
+			message: `duplicate query parameter: age[gt], name`,
+		},
+		{
+			name: "a filter given twice refused ahead of an empty value before it",
+			query: Query{Filters: []Filter{
+				{Field: "age", Op: "gt", Values: []string{""}},
+				{Field: "name", Values: []string{"a"}},
+				{Field: "name", Values: []string{"b"}},
+			}},
+			message: `duplicate query parameter: name`,
 		},
 		{
 			name:    "several values under an operator taking one",

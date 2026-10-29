@@ -15,6 +15,7 @@ import (
 	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -36,15 +37,19 @@ import (
 // the controller span are shared, which is what keeps an action behaving the
 // same on both transports.
 
-// Query is what the request message of an rpc carries for the query
-// parameters of the same action over HTTP, as the List and Get requests the
-// generator derives name them: the filters, orderings, pagination, cursor
-// and expansion of a List, the expansion of a Get. It is rendered as the
-// query string the HTTP listener would have received (see values) and read
-// by the very same parsers, so both transports refuse the same requests
-// with the same messages. The zero value of a field is the parameter not
-// sent, proto3 having no presence for scalars: a Page of 0 is no _page, an
-// empty SortBy no _sort_by.
+// Query is what the request message of an rpc carries for the query parameters
+// of the same action over HTTP, as the List and Get requests the generator
+// derives name them: the filters, orderings, pagination, cursor and expansion
+// of a List, the expansion of a Get. It is rendered as the query string the
+// HTTP listener would have received (see values) and read by the very same
+// parsers, so both transports refuse the same requests with the same messages,
+// a filter given twice with the listener's own refusal of a repeated parameter.
+// Where they differ on purpose is a filter left without a value or with an
+// empty one: an empty parameter of a query string filters by nothing, while the
+// call refuses a filter its message spells out and leaves empty (see
+// Filter.value). The zero value of a field is the parameter not sent, proto3
+// having no presence for scalars: a Page of 0 is no _page, an empty SortBy no
+// _sort_by.
 //
 // gRPC has no URL, so what the HTTP request carries in its path and query
 // string the rpc's request message carries in its fields, the route
@@ -80,13 +85,16 @@ type Filter struct {
 
 // values renders q as the query string the HTTP listener parses into
 // url.Values: a filter with an operator as field[op]=value, one without as
-// field=value, the members of an in or notin joined by commas the way the
-// HTTP parser splits them; the orderings joined by commas under _sort_by;
-// page, size, the cursor and the expansion under their parameters when set.
-// It refuses what the HTTP query could not carry: a filter given twice,
-// since the HTTP listener refuses a repeated parameter; several values
-// under an operator taking one; a member of an in holding a comma; and a
-// filter without a value (see Filter.value).
+// field=value, the members of an in or notin joined by commas the way the HTTP
+// parser splits them; the orderings joined by commas under _sort_by; page,
+// size, the cursor and the expansion under their parameters when set. Before
+// anything else it refuses every filter given twice, each key so given listed,
+// the way the HTTP listener refuses a repeated parameter before any handler
+// runs (see urlquery.DuplicateParameterError). It refuses as well a filter
+// without a field, or with one named like the framework's own parameters;
+// several values under an operator taking one; a member of an in, a notin, a
+// sort or an expansion holding a comma, which the parsers would split; and a
+// filter without a value or with an empty one (see Filter.value).
 //
 // The query
 //
@@ -110,20 +118,26 @@ type Filter struct {
 //
 //	name=alice&age[gt]=20&status[in]=active,archived&_sort_by=name,created_at desc&_page=2&_size=50&_cursor_field=id&_cursor_value=r-1&_cursor_next=true&_expand=children,parent&_depth=3
 func (q Query) values() (url.Values, error) {
+	given := make(map[string]int)
+	var duplicated []string
+	for _, f := range q.Filters {
+		key := f.key()
+		given[key]++
+		if given[key] == 2 {
+			duplicated = append(duplicated, key)
+		}
+	}
+	if len(duplicated) > 0 {
+		return nil, urlquery.DuplicateParameterError(duplicated)
+	}
 	values := make(url.Values)
 	for _, f := range q.Filters {
-		key := f.Field
-		if f.Op != "" {
-			key = f.Field + "[" + f.Op + "]"
-		}
+		key := f.key()
 		if f.Field == "" {
 			return nil, errors.Newf("filter %q: a field is required", key)
 		}
 		if strings.HasPrefix(f.Field, "_") {
 			return nil, errors.Newf("filter %q: a field cannot start with an underscore, the framework's own parameters do", key)
-		}
-		if _, given := values[key]; given {
-			return nil, errors.Newf("filter %q is given twice", key)
 		}
 		value, err := f.value(key)
 		if err != nil {
@@ -166,6 +180,15 @@ func (q Query) values() (url.Values, error) {
 		values.Set(consts.QUERY_DEPTH, strconv.FormatUint(uint64(q.Depth), 10))
 	}
 	return values, nil
+}
+
+// key returns the query key f is given under, the parameter it renders as:
+// field[op] with an operator, the bare field without one.
+func (f Filter) key() string {
+	if f.Op == "" {
+		return f.Field
+	}
+	return f.Field + "[" + f.Op + "]"
 }
 
 // value renders the values of f as the one value of key: the members of an
@@ -248,9 +271,9 @@ func (a *action[M, REQ, RSP]) beginCall(ctx context.Context, params map[string]s
 
 // beginQueryCall is beginCall for an action reading a query, a List or a
 // Get: the query is rendered as the HTTP query string (see Query.values)
-// and attached with the parameters. A query the HTTP listener could not
-// carry is reported once the call began, like an empty parameter, so the
-// caller refuses it on the call.
+// and attached with the parameters. A query the rendering refuses is
+// reported once the call began, like an empty parameter, so the caller
+// refuses it on the call.
 func (a *action[M, REQ, RSP]) beginQueryCall(ctx context.Context, params map[string]string, query Query) (*call, error) {
 	values, queryErr := query.values()
 	c, err := a.beginCall(ctx, params, values)
@@ -272,11 +295,11 @@ func (c *call) serviceContext(ctx context.Context, phase consts.Phase) *types.Se
 // end ends the controller span.
 func (c *call) end() { c.span.End() }
 
-// refuse answers a request the action cannot run — a query the listener
-// could not carry, a model or payload failing validation, a message naming
-// no record — with the status answer maps to (see grpcserver.StatusError),
-// err logged and recorded on the span the way the HTTP handler treats a
-// bind failure.
+// refuse answers a request the action cannot run — a query its rendering
+// refuses (see Query.values), a model or payload failing validation, a message
+// naming no record — with the status answer maps to (see
+// grpcserver.StatusError), err logged and recorded on the span the way the HTTP
+// handler treats a bind failure.
 func (c *call) refuse(answer, err error) error {
 	c.log.Errorz("request message rejected", zap.Error(err))
 	gstotel.RecordError(c.span, err)
