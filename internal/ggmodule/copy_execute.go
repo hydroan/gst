@@ -41,10 +41,12 @@ type CopyExecution struct {
 }
 
 // Run applies the copy in the required order: model source first, stale-file
-// prune second, gg gen third, service/helper business logic fourth, and
+// prune second, gg gen third, service/helper business logic fourth, the
 // manifest-declared middleware files plus their registration in
-// middleware/middleware.go, and the interceptor files of a project serving
-// gRPC plus their registration in interceptor/interceptor.go, last.
+// middleware/middleware.go fifth, and the interceptor files of a project
+// serving gRPC plus their registration in interceptor/interceptor.go last, gg
+// gen running once more after them, since main.go imports the interceptor
+// package only once it exists. The command tidies the module once Run returns.
 // It does not roll back partial writes or deletes; the command prints the
 // cleanup path when a failure happens after the project was touched.
 func (e *CopyExecution) Run() error {

@@ -107,6 +107,7 @@ partition "第 1 步：规划（不写任何文件）" {
   :规划动作 service 文件、辅助文件
   和过期 service 文件;
   :规划中间件文件和过期中间件文件;
+  :规划拦截器文件和过期拦截器文件;
   :检查冲突：已存在且内容不同的文件
   要求 --force;
 }
@@ -124,9 +125,9 @@ partition "第 2 步：预览与确认" {
 partition "第 3 步：执行（出错不回滚）" {
   :记下项目当前的检查违规，作为基线;
   :写 model 文件;
-  :删过期文件：model、service、中间件，
-  以及过期中间件的注册调用;
-  :运行 gg gen：不清理，
+  :删过期文件：model、service、中间件、拦截器，
+  以及过期中间件、拦截器的注册调用;
+  :运行 gg gen：不做 prune，
   要合并的 service 文件只生成外壳
   （不写钩子占位和测试骨架），
   只拦本次新增的检查违规，
@@ -136,6 +137,8 @@ partition "第 3 步：执行（出错不回滚）" {
   核对 middleware/middleware.go 的注册调用;
   :项目用 gRPC 时写拦截器文件，
   核对 interceptor/interceptor.go 的注册调用;
+  :复制拦截器时再运行一次 gg gen，
+  让 main.go 导入拦截器包;
   :运行 go mod tidy（在 go.work 工作区里不跑），
   让 go.mod 和 go.sum 收下复制来的源码引用的依赖;
 }
@@ -152,12 +155,13 @@ stop
 1. 校验模块名，规则同 add。
 2. 当前目录必须有 `go.mod`，也就是要在项目根目录运行；读出项目的模块路径。
 3. 找到框架源码，见上文。框架里必须有 `module/<name>/`、`internal/model/<name>/`、`internal/service/<name>/` 三个目录。
-4. 读取并校验 `module/<name>/module.json`，没有这个文件就报错（模块不可 copy）。`includeSourceFiles` 和 `middleware` 的条目在这一步就逐条核对，规则见「module.json」。
+4. 读取并校验 `module/<name>/module.json`，没有这个文件就报错（模块不可 copy）。`includeSourceFiles`、`middleware` 和 `interceptors` 的条目在这一步就逐条核对，规则见「module.json」。
 5. 检查 `module/module.go`：导入了这个模块，并且文件里任何地方调用了它的 `Register`（带不带参数都算），就报 `framework module <name> is already registered; remove it before copying local source`；用 `.` 导入了这个模块也报错。这里的判断比 add 判断「已登记」更宽：只要像是登记，就拦下 copy。已经 add 的模块要先 remove。
 6. 规划 model 文件，见「model 文件」。
 7. 规划 service 文件，见「service 文件」。
 8. 规划中间件文件，见「中间件」。
-9. 检查冲突：目标位置已经有文件、内容又和要写的不同时，没加 `--force` 就报 `<path> already exists; use --force to overwrite`。内容相同的文件不需要 `--force`。
+9. 规划拦截器文件，见「拦截器」。
+10. 检查冲突：目标位置已经有文件、内容又和要写的不同时，没加 `--force` 就报 `<path> already exists; use --force to overwrite`。内容相同的文件不需要 `--force`。
 
 #### model 文件
 
@@ -217,19 +221,19 @@ service 目录不是镜像复制，分两类文件。
 
 ### 第 2 步：预览与确认
 
-先打印 `Module Copy Plan`，分组列出要写的文件：`Model files`、`Service files`、`Helper files`、`Middleware files`，空组不显示。有过期文件时，再分别在 `Stale Target Model Files`、`Stale Target Service Files`、`Stale Target Middleware Files` 下列出要删的文件。
+先打印 `Module Copy Plan`，分组列出要写的文件：`Model files`、`Service files`、`Helper files`、`Middleware files`、`Interceptor files`，空组不显示。有过期文件时，再分别在 `Stale Target Model Files`、`Stale Target Service Files`、`Stale Target Middleware Files`、`Stale Target Interceptor Files` 下列出要删的文件。
 
 然后问 `Copy module <name> into the current project? (y/N):`。回答 `y` 或 `yes`（不分大小写）才继续；其他回答，包括直接回车，打印 `Module copy canceled`，什么都不做。加了 `--yes` 就不问，直接执行。
 
-预览里列出的过期文件就是执行时要删的全部文件，回答 `y` 就是同意删除它们。`--force` 只管覆盖内容不同的文件，和删除无关。
+预览里列出的过期文件（中间件、拦截器文件连同它们在注册文件里的注册调用）就是 copy 要删的过期文件；此外，项目不再用 gRPC、拦截器文件删完后 `interceptor/interceptor.go` 里什么都不剩时，它随 `interceptor/` 目录一起删，预览不单列。回答 `y` 就是同意这些删除。`--force` 只管覆盖内容不同的文件，和删除无关。
 
 ### 第 3 步：执行
 
-写任何文件之前，先记下项目当前 gg check 的全部违规，作为基线。然后按顺序：
+写任何文件之前，先跑一遍 gg gen 生成前的项目检查，记下当前的全部违规，作为基线。然后按顺序：
 
 1. **写 model 文件**（`Copy Model Files`）。
 2. **删过期文件**（`Prune Stale Files`，有过期文件时才有这一段）：删过期的 model、service 文件；删过期的中间件文件，同时从 `middleware/middleware.go` 删掉调用这些文件里函数的 `Register`、`RegisterAuth` 语句，框架 middleware 包的导入没人用了也一并删掉；过期的拦截器文件同理，注册调用从 `interceptor/interceptor.go` 删。已经不在的文件算删过。这一步放在 `gg gen` 之前，因为过期的 model 文件还带着 DSL，`gg gen` 会照样为它生成注册代码。
-3. **运行 gg gen**：和 `gg gen` 同一套生成流程，但不打印生成文件的日志，不做 prune，也不整理依赖（第 10 步统一做）；生成前的项目检查只拦本次 copy 新引入的违规，基线里已有的不拦。
+3. **运行 gg gen**：和 `gg gen` 同一套生成流程，但不打印生成文件的日志，不做 prune，也不整理依赖（第 11 步统一做）；生成前的项目检查只拦本次 copy 新引入的违规，基线里已有的不拦。
 4. **写动作 service 文件**（`Copy Service Files`）。
 5. **写辅助文件**（`Copy Helper Files`，有辅助文件时才有）。
 6. **写中间件文件**（`Copy Middleware Files`，模块声明了中间件时才有）。
@@ -240,7 +244,8 @@ service 目录不是镜像复制，分两类文件。
    - 文件不存在时新建一个只有 `package middleware` 的文件；文件里已经导入了框架 middleware 包时沿用它的别名；没有任何变化时不写文件。
 8. **写拦截器文件**（`Copy Interceptor Files`，模块声明了拦截器且项目用 gRPC 时才有）。
 9. **核对拦截器注册**（`Register Interceptors`），规则同第 7 步，文件是 `interceptor/interceptor.go`，注册走框架 interceptor 包。
-10. **整理依赖**（`Run Go Mod Tidy`）：运行 `go mod tidy`，让 `go.mod` 和 `go.sum` 收下复制来的源码引用、项目还没有的依赖；项目在 go.work 工作区里时不跑，只打印一行说明（`go mod tidy` 不读 go.work）；失败就打印删除模块的提示后报错退出。
+10. **再运行一次 gg gen**（模块声明了拦截器且项目用 gRPC 时）：拦截器包可能是这次 copy 才建出来的，`main.go` 只在它存在时才导入它，所以再生成一次，规则同第 3 步。
+11. **整理依赖**（`Run Go Mod Tidy`）：运行 `go mod tidy`，让 `go.mod` 和 `go.sum` 收下复制来的源码引用、项目还没有的依赖；项目在 go.work 工作区里时不跑，只打印一行说明（`go mod tidy` 不读 go.work）；失败就打印删除模块的提示后报错退出。
 
 全部成功后打印 `Done`、`Module copied successfully`、删除模块的提示（见「删除复制来的模块」），接着逐条打印复制进项目的模块声明了、项目还没做的装配调用（`ASSEMBLY`，措辞同 gg check 的「Module assembly」检查项；copy 内嵌的 gg gen 不查这一项，因为消除它要引用 copy 这一步才写进来的 service 代码），最后逐行打印 `module.json` 的 `postNotes`。
 
@@ -253,7 +258,7 @@ service 目录不是镜像复制，分两类文件。
 | `CREATE` | 新建文件 |
 | `UPDATE` | 覆盖了内容不同的已有文件。copy 开始前就存在的文件，要加 `--force` 才会覆盖；动作 service 文件的外壳是本次第 3 步 `gg gen` 刚生成的，直接覆盖，所以首次 copy 时动作 service 文件显示的都是 `UPDATE` |
 | `SKIP` | 内容已经一样，没动 |
-| `DELETE` | 删掉了过期文件 |
+| `DELETE` | 删掉了过期文件，或随 `interceptor.go` 一起删空的 `interceptor/` 目录 |
 
 写每个文件之前会再核对一次冲突：规划之后文件被改了，没加 `--force` 仍然不会覆盖。
 
@@ -261,11 +266,11 @@ service 目录不是镜像复制，分两类文件。
 
 ### 过期文件
 
-copy 让复制来的目录和模块源码保持一致：copy 写过、这一次规划不写的文件就是过期文件，执行时删除。按目录分两种判断：
+copy 让复制来的目录和模块源码保持一致：copy 写过、这一次规划不写的文件就是过期文件，执行时删除。按目录分三种判断：
 
 - **`model/<name>/`、`service/<name>/`**：这两个目录镜像模块源码，这次规划不写的 Go 文件都算过期。例外：测试文件、以 `.` 开头的文件、`vendor/` 和 `testdata/` 目录下的文件，以及生成文件，不算过期；测试文件只有一种例外：过期 service 文件旁配对的 `_test.go` 与 `_internal_test.go` 随它一起删，和 `gg prune` 的规则相同。项目自己的代码应放在这两个目录以外。
 - **`middleware/`**：这个目录是共用的，只有带着本模块所有权标记、而 `module.json` 已经不再声明的文件才算过期；`middleware/middleware.go` 永远不算。
-- **`interceptor/`**：判断同 `middleware/`；此外项目不再有声明了 `GRPC()` 的 model 时，本模块标记的拦截器文件全部算过期；`interceptor/interceptor.go` 只在项目不再有 `GRPC()` 模型、它又什么都不再注册时随目录一起删，否则不算。
+- **`interceptor/`**：判断同 `middleware/`；此外项目不再有声明了 `GRPC()` 的 model 时，本模块标记的拦截器文件全部算过期；`interceptor/interceptor.go` 只在项目不再有 `GRPC()` 模型、它里面什么都不剩（没有注册调用、没有导入）、目录里也没有别的 Go 文件时随目录一起删，否则不算。
 
 ```plantuml
 @startuml
@@ -306,8 +311,23 @@ elseif (在 middleware/ 下？) then (是)
   else (否)
     :保留; <<keep>>
   endif
+elseif (在 interceptor/ 下？) then (是)
+  if (是 interceptor.go？) then (是)
+    if (项目不再用 gRPC，
+文件里什么都不剩？) then (是)
+      :随目录一起删; <<delete>>
+    else (否)
+      :保留，只增删本模块的注册调用; <<keep>>
+    endif
+  elseif (这次规划会写这个路径？) then (是)
+    :按规划写入;
+  elseif (带本模块的所有权标记？) then (是)
+    :过期，删除，连同它的注册调用; <<delete>>
+  else (否)
+    :保留; <<keep>>
+  endif
 else (否)
-  :copy 不碰（第 3 步 gg gen 照常生成的文件除外）; <<keep>>
+  :copy 不碰（第 3 步、第 10 步 gg gen 照常生成的文件除外）; <<keep>>
 endif
 stop
 @enduml
@@ -345,10 +365,12 @@ To remove copied module code, delete model/<name>, then run: gg gen --prune
 | `Stale Target Model Files`、`Stale Target Service Files`、`Stale Target Middleware Files`、`Stale Target Interceptor Files` | 预览中有对应的过期文件要删 |
 | `Copy Model Files` | 执行第 1 步 |
 | `Prune Stale Files` | 执行第 2 步，有过期文件时 |
+| `Project Checks` | 第 3 步或第 10 步的 gg gen 查出本次 copy 新引入的检查违规时，列出违规后报错退出 |
 | `Copy Service Files` | 执行第 4 步 |
 | `Copy Helper Files` | 执行第 5 步，有辅助文件时 |
 | `Copy Middleware Files` | 执行第 6 步，模块声明了中间件时 |
 | `Register Middleware` | 执行第 7 步，模块声明了中间件时 |
 | `Copy Interceptor Files` | 执行第 8 步，模块声明了拦截器且项目用 gRPC 时 |
 | `Register Interceptors` | 执行第 9 步，同上 |
+| `Run Go Mod Tidy` | 执行第 11 步 |
 | `Done` | copy 全部成功 |

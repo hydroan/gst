@@ -41,17 +41,25 @@
 //	        v
 //	CopyExecution.Run
 //	  1. write model files            SKIP | UPDATE | CREATE
-//	  2. prune stale files            DELETE (model, service, middleware
-//	                                  files + their register calls)
+//	  2. prune stale files            DELETE (model, service, middleware,
+//	                                  interceptor files + their register
+//	                                  calls)
 //	  3. run gg gen                   (see "gg gen during copy")
 //	  4. write action service files   (merged onto generated shells)
 //	  5. write helper service files
 //	  6. write middleware files       (ownership marker prepended)
 //	  7. reconcile middleware
 //	     registrations               (AST edit, middleware/middleware.go)
+//	  8. write interceptor files      (a project serving gRPC alone)
+//	  9. reconcile interceptor
+//	     registrations               (AST edit, interceptor/interceptor.go)
+//	 10. run gg gen once more         (when the plan copies interceptors)
 //	        |
 //	        v
-//	print module.json postNotes
+//	go mod tidy (not inside a go.work workspace)
+//	        |
+//	        v
+//	print the pending assembly calls, then module.json postNotes
 //
 // Write statuses: CREATE is a new file, UPDATE overwrote a differing file —
 // one that existed before the copy only with --force, or the action service
@@ -94,6 +102,8 @@
 //	        v
 //	HELPER DISCOVERY (type-informed closure, whole files)
 //	  seeds: action files + manifest includeSourceFiles
+//	  + what the copied middleware and interceptor files
+//	  reference in the tree
 //	  a referenced tree file joins the copy; a blank-imported
 //	  tree package joins wholesale
 //	  fail on references to excluded files or to orphan
@@ -111,6 +121,14 @@
 //	  validate middleware/*.go source and its handler
 //	  normalize, prepend ownership marker -----------> middleware files
 //	  marker-owned targets outside the manifest -----> stale middleware
+//	        |
+//	        v
+//	INTERCEPTOR PLANNING (manifest-declared only)
+//	  a project serving gRPC: validate interceptor/*.go
+//	  source and its handler, normalize, prepend
+//	  ownership marker ------------------------------> interceptor files
+//	  marker-owned targets outside the manifest, or
+//	  every one once no model declares GRPC() -------> stale interceptors
 //	        |
 //	        v
 //	CONFLICT CHECK
@@ -144,11 +162,13 @@
 //     copied through their DSL actions only.
 //   - middleware: manifest-declared middleware copies, see "Middleware copy
 //     rules".
+//   - interceptors: manifest-declared gRPC interceptor copies, copied into
+//     a project serving gRPC alone, see "Middleware copy rules".
 //   - requiredAssembly: the calls a copied module needs the project to make,
 //     each an import path, an exported function and the reason. Copy
-//     reproduces routes, models and middleware but not the rest of the
-//     module's Register body, so gg check's module assembly check holds the
-//     project's non-test code to these calls.
+//     reproduces routes, models, middleware and interceptors but not the
+//     rest of the module's Register body, so gg check's module assembly
+//     check holds the project's non-test code to these calls.
 //   - postNotes: free-form lines printed after a successful copy, for the
 //     manual follow-up steps the copy cannot automate.
 //
@@ -276,8 +296,8 @@
 // overwrite on the next copy, which brings it under prune management.
 // The marker also outlives the module: once the project deletes
 // model/<name>, the files carrying the module's marker are orphans
-// (OrphanMiddlewareFiles), and gg prune deletes them together with their
-// register calls (RemoveMiddlewareFiles).
+// (OrphanManagedFiles), and gg prune deletes them together with their
+// register calls (RemoveManagedFiles).
 //
 // Registration is a reconciliation of middleware/middleware.go against the
 // manifest, scoped to the handlers this module owns (the top-level functions
@@ -295,6 +315,11 @@
 // framework middleware import alias, preserves comments and existing init
 // work, creates a minimal package file when the project has none, and skips
 // the write when nothing changes.
+//
+// Interceptors follow the same rules under interceptor/, registered in
+// interceptor/interceptor.go through interceptor.Register and
+// interceptor.RegisterAuth, with one difference: they are copied only into
+// a project with a model declaring GRPC().
 //
 // # Stale-file prune rules
 //
@@ -320,32 +345,44 @@
 //     removed from middleware/middleware.go in the same step, and so is the
 //     framework middleware import once no remaining code uses it, because
 //     either would break the build the moment the file is gone.
+//   - interceptor/ is decided the same way, with interceptor.go its
+//     registration file; once no model declares GRPC(), every interceptor
+//     file carrying this module's marker is stale, and interceptor.go goes
+//     with the directory when nothing is left there: no register call, no
+//     import, no other Go file.
 //
-// The preview printed before the confirmation prompt lists exactly the files
-// the prune will delete, so answering yes consents to the deletions; --force
-// plays no role here, it only gates content overwrites. The prune runs after
-// the model writes and before gg gen: a stale model file still carries
+// The preview printed before the confirmation prompt lists the stale files the
+// prune will delete, the middleware and interceptor ones with their register
+// calls, so answering yes consents to the deletions; it does not list an
+// emptied interceptor/interceptor.go, deleted with its directory once the
+// listed interceptor files are gone in a project no longer serving gRPC.
+// --force plays no role here, it only gates content overwrites. The prune runs
+// after the model writes and before gg gen: a stale model file still carries
 // Design() DSL that gen would faithfully regenerate registrations for, and a
 // stale service file referencing a removed model would surface as a fresh
 // project-check violation during the copy-time gen run. Every deletion is
-// path-checked against its owning directory, and a listed file that is
-// already gone counts as pruned.
+// path-checked against its owning directory, and a listed file that is already
+// gone counts as pruned.
 //
 // # gg gen during copy
 //
 // Between the model writes and the service writes, the command runs the same
 // generator as gg gen with two adjustments: prune stays disabled, because a
 // copy must not become a cleanup pass over user service files, and project
-// checks are scoped to a baseline snapshot taken before
-// the copy, so pre-existing violations in the project do not block copying an
-// unrelated module while violations introduced by the copied module still
-// fail it.
+// checks are scoped to a baseline snapshot taken before the copy, so
+// pre-existing violations in the project do not block copying an unrelated
+// module while violations introduced by the copied module still fail it. Module
+// assembly, a violation the copy itself brings about until the project makes
+// the calls, is left out and printed once the copy is done. The generator runs
+// once more after the interceptor files are written: main.go imports the
+// interceptor package only once it exists, and the copy may have just created
+// it.
 //
 // # Path safety
 //
-// Module names must be bare catalog names, so commands cannot address
-// arbitrary filesystem paths. Manifest paths are cleaned and confined to the
-// framework root: absolute paths and ".." escapes are rejected. Every write
-// and every deletion re-verifies its target against the owning project
-// directory (model, service, or middleware) before touching the filesystem.
+// Module names must be bare catalog names, so commands cannot address arbitrary
+// filesystem paths. Manifest paths are cleaned and confined to the framework
+// root: absolute paths and ".." escapes are rejected. Every write and every
+// deletion re-verifies its target against the owning project directory (model,
+// service, middleware or interceptor) before touching the filesystem.
 package ggmodule
