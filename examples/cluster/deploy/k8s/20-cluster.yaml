@@ -31,6 +31,21 @@
 #     names the stream — leader, cronjob, lock, access and the rest — for the
 #     node's log collector to ship, and for kubectl logs to read.
 apiVersion: v1
+kind: Secret
+metadata:
+  name: cluster
+  namespace: gst-cluster
+  labels:
+    app.kubernetes.io/name: cluster
+    app.kubernetes.io/component: server
+    app.kubernetes.io/part-of: gst-cluster
+type: Opaque
+stringData:
+  # The password the startup seeds the built-in root account with; the
+  # scenarios log in as root and appoint the other accounts from there.
+  root-password: cluster-root
+---
+apiVersion: v1
 kind: ConfigMap
 metadata:
   name: cluster
@@ -149,6 +164,11 @@ spec:
                 secretKeyRef:
                   name: mysql
                   key: password
+            - name: SEED_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cluster
+                  key: root-password
             # A soft memory limit for the Go runtime a little under the
             # container's, so the garbage collector works harder before the
             # kernel would end the process.

@@ -11,5 +11,7 @@ import "github.com/hydroan/gst/interceptor"
 
 func init() {
 	interceptor.Register(servedBy)
-	interceptor.RegisterAuth(interceptor.IAMSession())
+	// The session check, then the authorization, the way middleware mounts
+	// them for the HTTP routes: one policy decides for both listeners.
+	interceptor.RegisterAuth(interceptor.IAMSession(), interceptor.Authz())
 }

@@ -41,6 +41,9 @@ import "github.com/hydroan/gst/middleware"
 
 func init() {
 	// The session check of the iam module: every API route not declared
-	// Public() names a session or is refused.
-	middleware.RegisterAuth(middleware.IAMSession())
+	// Public() names a session or is refused. Behind it the authorization
+	// of the authz module decides, from the roles the session's user holds,
+	// whether the route may be reached; the root account seeded at startup
+	// holds the system role that reaches everything.
+	middleware.RegisterAuth(middleware.IAMSession(), middleware.Authz())
 }

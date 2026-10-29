@@ -1,16 +1,15 @@
-// Package testsupport is what the test packages share: an account of their
-// own, signed up and logged in, to call the routes and rpcs behind the
-// session check with, and the connection the gRPC tests dial.
+// Package testsupport is what the test packages share: the root account the
+// startup seeds, logged in, to call the routes and rpcs behind the session
+// check and the authorization with, and the connection the gRPC tests dial.
 package testsupport
 
 import (
 	"context"
 	"net/http"
-	"strconv"
 	"testing"
-	"time"
 
 	"github.com/hydroan/gst/client"
+	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/testutil"
 	"github.com/stretchr/testify/require"
@@ -24,34 +23,35 @@ import (
 // logs in presenting this one.
 const GRPCUserAgent = "grpc-go/" + grpc.Version
 
-// Account is an account signed up for a test and logged in: Client holds
-// its session cookie, so every request through it is authenticated, and
-// SessionID is the session itself, for a gRPC call or a request made by
-// hand.
+// RootPassword is the password every test package's TestMain names for the
+// startup to seed the root account with, the one Login presents.
+const RootPassword = "root-for-tests"
+
+// Account is the root account logged in: Client holds its session cookie,
+// so every request through it is authenticated, and SessionID is the
+// session itself, for a gRPC call or a request made by hand.
 type Account struct {
 	Client    *client.Client
 	Username  string
 	SessionID string
 }
 
-// Login signs a fresh account up through the public signup route and logs
-// it in; opts go to the client.
+// Login logs the root account in and returns it; opts go to the client. The
+// authorization mounted behind the session check refuses a subject holding
+// no role, and root holds the system role that reaches every route, which
+// is what lets the tests call the routes without appointing anyone.
 func Login(t *testing.T, opts ...client.Option) *Account {
 	t.Helper()
 	cli, err := client.New(testutil.BaseURL(), opts...)
 	require.NoError(t, err)
-	username := "user_" + strconv.FormatInt(time.Now().UnixNano(), 36)
-	password := "12345678"
-	_, err = cli.Post[iam.SignupRsp](t.Context(), "/api/signup", iam.SignupReq{Username: username, Password: password, RePassword: password})
-	require.NoError(t, err)
-	envelope, err := cli.Do(t.Context(), http.MethodPost, "/api/login", iam.LoginReq{Username: username, Password: password})
+	envelope, err := cli.Do(t.Context(), http.MethodPost, "/api/login", iam.LoginReq{Username: consts.AUTHZ_USER_ROOT, Password: RootPassword})
 	require.NoError(t, err)
 	cookie := envelope.Cookie("session_id")
 	require.NotNil(t, cookie, "the login set no session cookie")
-	return &Account{Client: cli, Username: username, SessionID: cookie.Value}
+	return &Account{Client: cli, Username: consts.AUTHZ_USER_ROOT, SessionID: cookie.Value}
 }
 
-// Session logs a fresh account in presenting GRPCUserAgent and returns the
+// Session logs the root account in presenting GRPCUserAgent and returns the
 // session id its gRPC calls name, see Authorized.
 func Session(t *testing.T) string {
 	t.Helper()

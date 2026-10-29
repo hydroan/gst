@@ -1,10 +1,11 @@
 package stepdown_test
 
 import (
+	"os"
 	"testing"
 
 	_ "cluster/component"
-	_ "cluster/configx"
+	"cluster/configx"
 	_ "cluster/cronjob"
 	_ "cluster/interceptor"
 	"cluster/internal/testsupport"
@@ -23,6 +24,9 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	// The startup seeds the root account the tests log in as, with the
+	// password the environment names.
+	os.Setenv(configx.SEED_ROOT_PASSWORD, testsupport.RootPassword)
 	testutil.Run(m, testutil.Server{
 		Database: config.DBMySQL,
 		Redis:    true,

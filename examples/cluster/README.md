@@ -15,7 +15,7 @@
 | `model/run.go`、`dao/run.go` | 每一轮定时任务、每一次锁下的运行：开始时记一行，跑完时补上结束时间，都写在工作自己的事务里；被打断的没有结束时间。`GET /api/runs`，也是 gRPC 的 `ListRun` |
 | `model/counter_step.go`、`service/counter_step/` | 计数器的每个数字，和写它的那一任、那个副本。`GET /api/counter_steps`；`WatchCounterStep` 服务端流从某个数字之后一直推送，哪个副本都能服务，被切断的客户端换个副本从上次的数字接着读 |
 | `model/flag.go`、`service/flag/` | 功能开关，全部署共用一张表：十个标准动作全开，含批量和 Patch，HTTP 的 `/api/flags` 和 gRPC 的 `CreateFlag`、`PatchFlag`、`CreateManyFlag` 等一一对应，Create 钩子给打开了却没写 percent 的开关补成 100，两种传输都经过它 |
-| `module/module.go`、`middleware/middleware.go`、`interceptor/interceptor.go` | iam 模块的注册、登录和会话；会话检查在 HTTP 上挂 `middleware.IAMSession()`、在 gRPC 上挂 `interceptor.IAMSession()`，会话存在 Redis 里，三个副本共用，在哪个副本登录都算数 |
+| `module/module.go`、`module/seed.go`、`configx/seed.go`、`middleware/middleware.go`、`interceptor/interceptor.go` | iam 模块的登录和会话，authz 模块的角色、绑定和授权判定；会话检查和授权在 HTTP 上挂 `middleware.IAMSession()`、`middleware.Authz()`，在 gRPC 上挂 `interceptor.IAMSession()`、`interceptor.Authz()`。会话存在 Redis 里，三个副本共用，在哪个副本登录都算数；策略每个副本各存一份内存副本，一分钟从主库重载一次。启动时播种内置的 root 账号，口令来自 `SEED_ROOT_PASSWORD`，没配就不启动 |
 | `interceptor/served_by.go` | 项目自己的 gRPC 拦截器：每个经过项目拦截器的调用（健康与反射不经过）响应头带 `x-served-by`，写的是答话的副本，和行里的 `replica` 对得上 |
 | `pb/` | `gg gen` 从声明了 `GRPC()` 的模型推导的 `.proto` 和 Go 代码，提交进仓库 |
 | `Dockerfile` | 镜像：以非 root 用户运行，配置全部来自环境变量；PID 1 是 tini，方便从 Pod 里给进程发信号；带 curl 和 grpcurl，场景里在 Pod 里调本副本或集群内地址 |
@@ -62,13 +62,15 @@ holder() {
   i=$(echo "SELECT instance FROM gst_leases WHERE name = '$1' AND expires_at_ms > UNIX_TIMESTAMP() * 1000 + MICROSECOND(NOW(3)) DIV 1000 $2" | sqlv)
   [ -n "$i" ] && echo "${i%-*}"
 }
-# 业务接口都在 iam 模块的会话检查之后：HTTP 带 cookie，gRPC 带 authorization 元数据。会话绑定登录时的
-# User-Agent，框架只比对它的前两个名字；grpcurl 自报 grpcurl/<版本> grpc-go/<版本>，所以登录也用这个 UA。
+# 业务接口都在 iam 模块的会话检查和 authz 模块的授权之后：HTTP 带 cookie，gRPC 带 authorization 元数据。
+# 会话绑定登录时的 User-Agent，框架只比对它的前两个名字；grpcurl 自报 grpcurl/<版本> grpc-go/<版本>，所以登录也用这个 UA。
 UA='grpcurl/1.0 grpc-go/1.0'
-# login POD：在 POD 上注册账号 carol（已注册会报错，忽略）并登录，会话 id 放进 $SESSION。
+# 启动时播种的 root 账号，口令在 Secret cluster 里；root 持有系统角色，哪条路由都能调，场景都用它。
+ROOT_PASSWORD=$(kubectl -n $NS get secret cluster -o jsonpath='{.data.root-password}' | base64 --decode)
+# login POD [USER PASSWORD]：在 POD 上登录，默认是 root，会话 id 放进 $SESSION。
 login() {
-  kubectl -n $NS exec "$1" -c cluster -- curl -s -X POST localhost:8080/api/signup -H 'content-type: application/json' -d '{"username":"carol","password":"12345678","re_password":"12345678"}' >/dev/null
-  SESSION=$(kubectl -n $NS exec "$1" -c cluster -- curl -s -c - -A "$UA" -X POST localhost:8080/api/login -H 'content-type: application/json' -d '{"username":"carol","password":"12345678"}' | awk '$6 == "session_id" {print $7}')
+  local pod=$1 user=${2:-root} password=${3:-$ROOT_PASSWORD}
+  SESSION=$(kubectl -n $NS exec "$pod" -c cluster -- curl -s -c - -A "$UA" -X POST localhost:8080/api/login -H 'content-type: application/json' -d "{\"username\":\"$user\",\"password\":\"$password\"}" | awk '$6 == "session_id" {print $7}')
 }
 # api 路径 [curl 参数...]：经端口转发调 HTTP 接口，带上会话。
 api() { local path=$1; shift; curl -s -A "$UA" -b "session_id=$SESSION" -H 'content-type: application/json' "localhost:8080$path" "$@"; echo; }
@@ -516,7 +518,7 @@ rpc "$B" -v -d '{"flag":{"name":"dark_mode","on":true}}' localhost:8081 cluster.
 kubectl -n $NS exec "$C" -c cluster -- grpcurl -plaintext -d '{"flag":{"name":"night_mode"}}' localhost:8081 cluster.FlagService/CreateFlag
 ```
 
-`list` 靠反射列出六个业务服务，外加框架自带的健康服务和反射服务。会话是在 A 上登录的，B 照样认：它答 `x-served-by: <B>:8080`，开关的 `percent` 是 100，Create 钩子在 gRPC 这条路上一样跑。C 上不带会话的那次被拒，`Unauthenticated: no session`；会话检查在业务代码之前，service 根本没被调用。
+`list` 靠反射列出六个业务服务，外加框架自带的健康服务和反射服务。会话是在 A 上登录的，B 照样认：它答 `x-served-by: <B>:8080`，开关的 `percent` 是 100，Create 钩子在 gRPC 这条路上一样跑。C 上不带会话的那次被拒，`Unauthenticated: no session`；会话检查在业务代码之前，service 根本没被调用。带会话但没有角色的用户会在下一道被拒，`PermissionDenied: permission denied`，见第八组。
 
 #### 7.2 一张表、两种传输、三个副本
 
@@ -530,7 +532,7 @@ rpc "$C" -d "{\"id\":\"$ID\"}" localhost:8081 cluster.FlagService/DeleteFlag
 rpc "$B" -d "{\"id\":\"$ID\"}" localhost:8081 cluster.FlagService/GetFlag
 ```
 
-B 上建的开关，C 上经 gRPC、随便哪个副本经 HTTP 都读得到同一行，`created_by` 是 carol。gRPC 的列表请求就是 HTTP 的查询串换了个形状：`filters` 里的 `field`、`op`、`values` 对应 `field[op]=value`，`sort_by`、`page`、`size` 对应 `_sort_by`、`_page`、`_size`。Patch 只改 `update_mask` 点名的字段，`on` 还是 true；不给 mask 直接拒绝，`InvalidArgument: update_mask must name at least one field`。C 上删掉之后 B 上再取，`NotFound`。
+B 上建的开关，C 上经 gRPC、随便哪个副本经 HTTP 都读得到同一行，`created_by` 是 root。gRPC 的列表请求就是 HTTP 的查询串换了个形状：`filters` 里的 `field`、`op`、`values` 对应 `field[op]=value`，`sort_by`、`page`、`size` 对应 `_sort_by`、`_page`、`_size`。Patch 只改 `update_mask` 点名的字段，`on` 还是 true；不给 mask 直接拒绝，`InvalidArgument: update_mask must name at least one field`。C 上删掉之后 B 上再取，`NotFound`。
 
 #### 7.3 复制缓存走流
 
@@ -609,11 +611,58 @@ login "$A"; rpc "$A" -d '{"size":1}' localhost:8081 cluster.FlagService/ListFlag
 
 `shutdown` 让 Redis 落盘后退出，容器一两秒内重启，六次探测里落在这个窗口的那一两次被拒：`Unauthenticated: session invalid`，日志里 `iam session rejected` 的 `reason` 才说明是 Redis 连不上（`lookup redis ... no such host`，Pod 没就绪时 headless 名字解析不到）——会话存储不可达按拒绝处理，客户端看到的是 401，不是 5xx；重启快得没被探测碰上也正常。Redis 回来后原会话照用，数据落过盘。删掉 `redis-0` 则临时卷一起没了，会话也没了，再调就是 `Unauthenticated`，重新登录即可：会话丢失只是一次登录的事，副本自己不受影响。
 
+### 八、权限变更在副本间传播
+
+authz 模块把角色、绑定和由它们算出的策略存在主库里，判定却在每个副本自己的内存里做：一个副本写下的变更，其余副本最晚在下一次重载时看到，重载一分钟一次。root 在 A 上给新用户 dave 建角色和绑定，dave 在 B、C 上调接口，看放行什么时候到；root 再删绑定，看拒绝什么时候到。前三个副本记为 A、B、C，这一组的调用都指名副本：
+
+```bash
+A=$(pods | sed -n 1p); B=$(pods | sed -n 2p); C=$(pods | sed -n 3p)
+# on POD 路径 [curl 参数...]：在 POD 上调它自己的 HTTP 接口，带上 $SESSION；code 只打印状态码。
+on() { local pod=$1 path=$2; shift 2; kubectl -n $NS exec "$pod" -c cluster -- curl -s -A "$UA" -b "session_id=$SESSION" -H 'content-type: application/json' "localhost:8080$path" "$@"; echo; }
+code() { kubectl -n $NS exec "$1" -c cluster -- curl -s -o /dev/null -w '%{http_code}' -A "$UA" -b "session_id=$SESSION" "localhost:8080$2"; }
+```
+
+#### 8.1 建用户、角色和绑定，放行一分钟内到齐
+
+```bash
+login "$A"; ROOT_SESSION=$SESSION
+# 用户和角色重跑时已经在：建不成就从列表里取 id。
+DAVE=$(on "$A" /api/iam/admin/users -X POST -d '{"username":"dave","password":"12345678","must_change_password":false}' | jq -r '.data.user.id // empty')
+[ -n "$DAVE" ] || DAVE=$(on "$A" '/api/iam/admin/users?username=dave' | jq -r '.data.items[0].id')
+MENU=$(on "$A" /api/authz/menus -X POST -d '{"parent_id":"root","label":"Flags","path":"/flags","routes":[{"path":"/api/flags","methods":["GET"]}]}' | jq -r '.data.id')
+ROLE=$(on "$A" /api/authz/roles -X POST -d "{\"name\":\"flag_reader\",\"menu_ids\":[\"$MENU\"]}" | jq -r '.data.id // empty')
+[ -n "$ROLE" ] || ROLE=$(on "$A" '/api/authz/roles?name=flag_reader' | jq -r '.data.items[0].id')
+login "$B" dave 12345678; DAVE_SESSION=$SESSION
+for p in $A $B $C; do echo "$p $(code "$p" '/api/flags?_size=1')"; done
+SESSION=$ROOT_SESSION
+BINDING=$(on "$A" /api/authz/role-bindings -X POST -d "{\"subject_id\":\"$DAVE\",\"role_id\":\"$ROLE\"}" | jq -r '.data.id')
+SESSION=$DAVE_SESSION
+for i in $(seq 1 14); do echo "$(date +%T) A=$(code "$A" '/api/flags?_size=1') B=$(code "$B" '/api/flags?_size=1') C=$(code "$C" '/api/flags?_size=1')"; sleep 5; done
+rpc "$C" -d '{"size":1}' localhost:8081 cluster.FlagService/ListFlag
+```
+
+dave 刚登录时三个副本都答 403：会话在，角色没有。绑定在 A 上建好，A 立刻答 200，自己写的变更自己的内存里当场就有；B、C 继续答 403，直到各自下一次重载，最多一分钟（实测 16 秒，看各副本启动的时刻），之后也答 200。经 gRPC 走的是同一份策略：C 放行 HTTP 之后，`ListFlag` 也答开关列表，而不是 `PermissionDenied`。每个副本的 authz 日志记着每次判定，`denied_by: no_role` 变成 `allowed_by: role`：
+
+```bash
+kubectl -n $NS logs "$B" -c cluster | jq -c --arg sub "$DAVE" 'select(.logger == "authz" and .sub == $sub) | {ts, eft, allowed_by, denied_by}' | tail -4
+```
+
+#### 8.2 收回绑定，拒绝同样一分钟内到齐
+
+```bash
+SESSION=$ROOT_SESSION
+on "$A" "/api/authz/role-bindings/$BINDING" -X DELETE > /dev/null
+SESSION=$DAVE_SESSION
+for i in $(seq 1 14); do echo "$(date +%T) A=$(code "$A" '/api/flags?_size=1') B=$(code "$B" '/api/flags?_size=1') C=$(code "$C" '/api/flags?_size=1')"; sleep 5; done
+```
+
+A 当场答 403，B、C 最多一分钟后跟上（实测 55 秒和 60 秒）。这一分钟是框架的取舍：策略在内存里判定，每个请求不查库；跨副本的延迟由重载周期封顶，而不是靠副本之间互相通知。要立刻收回，就把会话一起吊销（`DELETE /api/iam/admin/users/:id/sessions`），会话存在 Redis 里，三个副本下一个请求就都看不到它了。
+
 ## 正式环境
 
 - 这里三个副本都开着 `DATABASE_AUTO_MIGRATE=true`，是为了演示同时建表。正式环境的做法是：先用 `gg migrate` 建表，副本一律设成 `DATABASE_AUTO_MIGRATE=false`，让表结构变更走评审，而不是作为启动的副作用。
 - 建表和播种用的启动锁绑定数据库会话，副本要直连主库，或者走会话级连接池；经过按事务复用连接的代理，这把锁会失效。
-- 多节点集群打开清单里注释掉的 `topologySpreadConstraints`，数据库换成真正的持久存储；口令这类 Secret 的生成和轮换由部署流程负责。
+- 多节点集群打开清单里注释掉的 `topologySpreadConstraints`，数据库换成真正的持久存储；口令这类 Secret 的生成和轮换由部署流程负责，root 的口令也在内：它只在第一次启动时写进库，之后改口令走 iam 的接口，换 Secret 不会改掉已经播种的账号。
 
 ```bash
 examples/cluster/scripts/down.sh
