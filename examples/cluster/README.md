@@ -14,7 +14,7 @@
 | `dao/cache.go`、`component/cache.go`、`service/cached/` | 复制缓存：每个副本在开始服务之前打开缓存，`POST /api/caches` 写一条、`GET /api/caches/:id` 只读本副本自己的那份、`DELETE /api/caches/:id` 删一条；这三个动作也是 gRPC 的 `CreateCached`、`GetCached`、`DeleteCached`，另有两条只在 gRPC 上有的流：`LoadCached` 客户端流一次灌一批，`ExchangeCached` 双向流逐个键问本副本的值 |
 | `model/run.go`、`dao/run.go` | 每一轮定时任务、每一次锁下的运行：开始时记一行，跑完时补上结束时间，都写在工作自己的事务里；被打断的没有结束时间。`GET /api/runs`，也是 gRPC 的 `ListRun` |
 | `model/counter_step.go`、`service/counter_step/` | 计数器的每个数字，和写它的那一任、那个副本。`GET /api/counter_steps`；`WatchCounterStep` 服务端流从某个数字之后一直推送，哪个副本都能服务，被切断的客户端换个副本从上次的数字接着读 |
-| `model/flag.go`、`service/flag/` | 功能开关，全部署共用一张表：十个标准动作全开，含批量和 Patch，HTTP 的 `/api/flags` 和 gRPC 的 `CreateFlag`、`PatchFlag`、`CreateManyFlag` 等一一对应，Create 钩子给没写 percent 的开关补成 100，两种传输都经过它 |
+| `model/flag.go`、`service/flag/` | 功能开关，全部署共用一张表：十个标准动作全开，含批量和 Patch，HTTP 的 `/api/flags` 和 gRPC 的 `CreateFlag`、`PatchFlag`、`CreateManyFlag` 等一一对应，Create 钩子给打开了却没写 percent 的开关补成 100，两种传输都经过它 |
 | `module/module.go`、`middleware/middleware.go`、`interceptor/interceptor.go` | iam 模块的注册、登录和会话；会话检查在 HTTP 上挂 `middleware.IAMSession()`、在 gRPC 上挂 `interceptor.IAMSession()`，会话存在 Redis 里，三个副本共用，在哪个副本登录都算数 |
 | `interceptor/served_by.go` | 项目自己的 gRPC 拦截器：每个经过项目拦截器的调用（健康与反射不经过）响应头带 `x-served-by`，写的是答话的副本，和行里的 `replica` 对得上 |
 | `pb/` | `gg gen` 从声明了 `GRPC()` 的模型推导的 `.proto` 和 Go 代码，提交进仓库 |
