@@ -39,10 +39,10 @@ import (
 	"github.com/hydroan/gst/internal/tenant"
 )
 
-// Default is the authorization domain everything acts in when nothing resolved
-// another one. A deployment that never configures a tenant resolver runs
-// entirely inside it, which is what makes single tenancy the case that needs no
-// configuration at all.
+// Default is the tenant everything acts in when the context names none. A
+// deployment in which nothing ever names a tenant runs entirely inside it,
+// which is what makes single tenancy the case that needs no configuration
+// at all.
 const Default = tenant.Default
 
 var (

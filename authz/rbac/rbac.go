@@ -65,16 +65,16 @@ func rebuildDerived(set *policySet) {
 	policyGraph = buildRoleGraph(set)
 }
 
-// normalizeTenant resolves the authorization domain an operation acts in.
+// normalizeTenant resolves the tenant an operation acts in.
 //
-// An unset tenant means the default domain. That is the whole arrangement in a
-// single-tenant deployment, where no resolver is configured and every rule is
-// stored against tenant.Default, so an empty argument is an ordinary way of
-// saying "here" rather than a mistake to refuse.
+// An unset tenant means the default tenant. That is the whole arrangement in
+// a single-tenant deployment, where nothing ever names a tenant and every
+// rule is stored against tenant.Default, so an empty argument is an ordinary
+// way of saying "here" rather than a mistake to refuse.
 //
-// Every entry point taking a tenant applies it, reads and writes alike. Reading
-// and writing under different names for one domain is how a rule ends up written
-// where nothing will look for it.
+// Every entry point taking a tenant applies it, reads and writes alike.
+// Reading and writing under different names for one tenant is how a rule ends
+// up written where nothing will look for it.
 func normalizeTenant(id string) string {
 	if id = strings.TrimSpace(id); id != "" {
 		return id

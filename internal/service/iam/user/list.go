@@ -22,11 +22,12 @@ var (
 	colUserCreatedAt = gst.NewTimeColumn[*modeliamuser.User]("created_at")
 )
 
-// AdminUserListService handles GET /iam/admin/users for privileged administrators.
+// AdminUserListService handles GET /api/iam/admin/users for privileged
+// administrators.
 //
-// Authorization is split into two steps: List first checks whether the actor may
-// call the admin users endpoint, then listUsers builds the tenant-visible user
-// visibility scope used by the database query.
+// Authorization is split into two steps: List first checks whether the actor
+// may call the admin users endpoint, then listUsers builds the tenant-visible
+// user visibility scope used by the database query.
 type AdminUserListService struct {
 	service.Base[*modeliamuser.User, *model.Empty, *modeliamuser.AdminUserListRsp]
 }
@@ -35,8 +36,8 @@ type AdminUserListService struct {
 //
 // Passing nil as the target to EnsureTenantAdmin means this call only verifies
 // endpoint-level permission. The visible user set is applied later by
-// userVisibilityQueryOptions because list requests do not have one concrete target
-// user to check.
+// userVisibilityQueryOptions because list requests do not have one concrete
+// target user to check.
 func (a *AdminUserListService) List(ctx *gst.ServiceContext, _ *model.Empty) (rsp *modeliamuser.AdminUserListRsp, err error) {
 	actor, err := serviceiamaccount.LoadActor(ctx)
 	if err != nil {
@@ -62,7 +63,8 @@ func (a *AdminUserListService) List(ctx *gst.ServiceContext, _ *model.Empty) (rs
 }
 
 // listUsers applies the authorization-derived scope and the request's own
-// query parameters, counts the full filtered set, then pages the returned slice.
+// query parameters, counts the full filtered set, then pages the returned
+// slice.
 //
 // The parameters are parsed by the service base, which is the same parsing the
 // framework list controller does; this action only reaches for it directly
@@ -118,7 +120,8 @@ func (a *AdminUserListService) listUsers(ctx *gst.ServiceContext, actor *modelia
 	return users, total, nil
 }
 
-// userVisibilityQueryOptions converts IAM admin visibility rules into a database query.
+// userVisibilityQueryOptions converts IAM admin visibility rules into a
+// database query.
 //
 // IAM users do not store tenant_id. Tenant membership comes from RBAC role
 // bindings, so tenant administrators are scoped by first reading all subjects
@@ -135,7 +138,7 @@ func userVisibilityQueryOptions(ctx *gst.ServiceContext, actor *modeliamuser.Use
 	}
 
 	// The current tenant comes from the request context and falls back to the
-	// default authorization domain when the application has no tenant resolver.
+	// default tenant when the request carries none.
 	subjectIDs, err := rbac.RBAC().SubjectsInTenant(ctx, currentTenant(ctx))
 	if err != nil {
 		return gst.QueryOptions{}, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to list tenant subjects", err)

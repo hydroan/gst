@@ -11,15 +11,14 @@ import (
 	"github.com/hydroan/gst/tenant"
 )
 
-// shouldInvalidateUserSessions returns whether a user status transition must revoke all active sessions.
+// shouldInvalidateUserSessions returns whether a user status transition must
+// revoke all active sessions.
 func shouldInvalidateUserSessions(status modeliamuser.UserStatus) bool {
 	return status == modeliamuser.UserStatusInactive || status == modeliamuser.UserStatusLocked
 }
 
-// currentTenant returns the authorization domain used by admin user list scopes.
-//
-// Tenant-aware applications populate TenantID through middleware. Applications
-// without tenant middleware operate in the default authorization domain.
+// currentTenant returns the tenant the admin user list is scoped to: the one
+// the request carries, or the default tenant when it carries none.
 func currentTenant(ctx *gst.ServiceContext) string {
 	if ctx != nil && strings.TrimSpace(ctx.TenantID()) != "" {
 		return strings.TrimSpace(ctx.TenantID())

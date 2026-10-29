@@ -45,7 +45,8 @@ func newDB(t *testing.T) *gorm.DB {
 }
 
 // seed writes one row per tenant straight through the scoping, so the rows a
-// test reads back were placed by the mechanism under test rather than around it.
+// test reads back were placed by the mechanism under test rather than around
+// it.
 func seed(t *testing.T, db *gorm.DB, rows map[string]string) {
 	t.Helper()
 	for id, tenantID := range rows {
@@ -105,8 +106,8 @@ func TestScopeStampsEveryRowOfABatch(t *testing.T) {
 	assert.Len(t, rows, 2, "every row of the batch has to be stamped, not just the first")
 }
 
-// TestScopeNarrowsUpdatesWithoutReadingFirst covers the write path that does not
-// read before it writes. The predicate is what makes a cross-tenant update
+// TestScopeNarrowsUpdatesWithoutReadingFirst covers the write path that does
+// not read before it writes. The predicate is what makes a cross-tenant update
 // match nothing, which the framework already renders as a 404.
 func TestScopeNarrowsUpdatesWithoutReadingFirst(t *testing.T) {
 	db := newDB(t)
@@ -138,8 +139,8 @@ func TestScopeRefusesAnUpdateThatNamesAnotherTenant(t *testing.T) {
 	err := db.WithContext(ctx).Save(&Record{ID: "a1", Name: "moved", TenantID: "beta"}).Error
 	require.ErrorIs(t, err, tenant.ErrTenantImmutable)
 
-	// Naming the tenant the row already belongs to is what every read-modify-write
-	// round trip does, so it has to go through.
+	// Naming the tenant the row already belongs to is what every
+	// read-modify-write round trip does, so it has to go through.
 	require.NoError(t, db.WithContext(ctx).
 		Save(&Record{ID: "a1", Name: "renamed", TenantID: "alpha"}).Error)
 	// Naming none is the other ordinary shape.
@@ -183,10 +184,10 @@ func TestAcrossSpansEveryTenant(t *testing.T) {
 	assert.Len(t, rows, 2)
 }
 
-// TestAcrossRefusesAnInsertThatNamesNoTenant covers the one caller the framework
-// cannot stamp for. Defaulting would file the row under whichever tenant the
-// framework picked, in the one situation where the caller had the reach to mean
-// any of them.
+// TestAcrossRefusesAnInsertThatNamesNoTenant covers the one caller the
+// framework cannot stamp for. Defaulting would file the row under whichever
+// tenant the framework picked, in the one situation where the caller had the
+// reach to mean any of them.
 func TestAcrossRefusesAnInsertThatNamesNoTenant(t *testing.T) {
 	db := newDB(t)
 	ctx := tenant.Across(context.Background())
@@ -201,9 +202,9 @@ func TestAcrossRefusesAnInsertThatNamesNoTenant(t *testing.T) {
 	assert.EqualValues(t, "beta", stored.TenantID, "a cross-tenant insert has to keep the tenant it named")
 }
 
-// TestContextWithoutAScopeActsInTheDefaultTenant covers the deployment that
-// never configures a resolver, and the caller that forgot to ask for one:
-// neither reaches nothing, and neither reaches everything.
+// TestContextWithoutAScopeActsInTheDefaultTenant covers the deployment in
+// which nothing ever names a tenant, and the caller that forgot to ask for
+// one: neither reaches nothing, and neither reaches everything.
 func TestContextWithoutAScopeActsInTheDefaultTenant(t *testing.T) {
 	db := newDB(t)
 	seed(t, db, map[string]string{"d1": tenant.Default, "b1": "beta"})

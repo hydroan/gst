@@ -67,10 +67,8 @@ func EnsureTenantAdmin(ctx *gst.ServiceContext, actor *modeliamuser.User, target
 	return nil
 }
 
-// currentTenant returns the authorization domain for an admin request.
-//
-// Tenant middleware writes TenantID into ServiceContext. If no tenant resolver is
-// installed, admin APIs operate in the default authorization domain.
+// currentTenant returns the tenant an admin request acts in: the one the
+// request carries, or the default tenant when it carries none.
 func currentTenant(ctx *gst.ServiceContext) string {
 	if ctx != nil && strings.TrimSpace(ctx.TenantID()) != "" {
 		return strings.TrimSpace(ctx.TenantID())
@@ -118,7 +116,8 @@ func operationAction(ctx *gst.ServiceContext) string {
 	return strings.TrimSpace(ctx.Method())
 }
 
-// targetBelongsToTenant reports whether the target has any role binding in tenant.
+// targetBelongsToTenant reports whether the target has any role binding in
+// tenant.
 //
 // User rows do not carry tenant_id, so target visibility is derived from RBAC
 // role bindings rather than from the IAM user table.
