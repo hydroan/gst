@@ -17,14 +17,14 @@ import (
 )
 
 // accessLogFieldCap is the most fields one access-log entry carries: the
-// eleven every request has — status, method, username, user id, trace id,
-// route, path, query, ip, user agent and the duration, whose two keys
-// util.LogDuration renders from one inlined field — plus the span id of a
-// request a recording span traces, plus the error of a request that
+// twelve every request has — status, method, username, user id, tenant id,
+// trace id, route, path, query, ip, user agent and the duration, whose two
+// keys util.LogDuration renders from one inlined field — plus the span id of
+// a request a recording span traces, plus the error of a request that
 // reported one. The logger runs on every request and sizes its field slice
 // to it once, so the hot path never regrows it; a field added to
 // accessLogger bumps it, which the worst-case test enforces.
-const accessLogFieldCap = 13
+const accessLogFieldCap = 14
 
 func accessLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -59,6 +59,7 @@ func accessLogger() gin.HandlerFunc {
 			logfield.Method(c.Request.Method),
 			logfield.Username(c.GetString(consts.CTX_USERNAME)),
 			logfield.UserID(c.GetString(consts.CTX_USER_ID)),
+			logfield.TenantID(c.GetString(consts.CTX_TENANT_ID)),
 			logfield.TraceID(traceID),
 			logfield.Route(route),
 			logfield.Path(path),

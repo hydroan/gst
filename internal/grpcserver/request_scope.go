@@ -41,11 +41,11 @@ const (
 // logfield.Status).
 const grpcCodeKey = "grpc_code"
 
-// accessLogFieldCap is the most fields an access-log entry carries, the ten
-// every entry has plus the error of a failed call, so the slice is allocated
-// once per call; a test holds the worst case to it, which is what keeps it
-// honest when a field is added.
-const accessLogFieldCap = 11
+// accessLogFieldCap is the most fields an access-log entry carries, the
+// eleven every entry has plus the error of a failed call, so the slice is
+// allocated once per call; a test holds the worst case to it, which is what
+// keeps it honest when a field is added.
+const accessLogFieldCap = 12
 
 // requestScope gives a unary call what the HTTP listener's tracing and
 // access-log middleware give a request (a stream gets the same from
@@ -180,6 +180,7 @@ func (s *callScope) leave(err error) {
 		logfield.Method(s.meta.Method()),
 		logfield.Username(s.record.caller.Username),
 		logfield.UserID(s.record.caller.UserID),
+		logfield.TenantID(s.record.caller.TenantID),
 		logfield.TraceID(s.traceID),
 		logfield.Route(s.meta.Route()),
 		logfield.Path(s.meta.Path()),

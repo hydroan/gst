@@ -8,6 +8,7 @@ import (
 	"github.com/cockroachdb/errors"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/logger"
 	prommetrics "github.com/hydroan/gst/metrics"
 	"github.com/prometheus/client_golang/prometheus"
@@ -30,16 +31,7 @@ func TestAccessLoggerFieldsFitTheCapacityInTheWorstCase(t *testing.T) {
 	logger.Gin = zap.New(core)
 	t.Cleanup(func() { logger.Gin = originalLogger })
 
-	// The request metrics are stood in for rather than built by
-	// prommetrics.Init, which registers with the default registry and so
-	// cannot run twice.
-	labels := []string{"method", "path", "status"}
-	originalTotal, originalDuration := prommetrics.HTTPRequestsTotal, prommetrics.HTTPRequestDuration
-	prommetrics.HTTPRequestsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{Name: "http_requests_probe"}, labels)
-	prommetrics.HTTPRequestDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: "http_request_duration_probe"}, labels)
-	t.Cleanup(func() {
-		prommetrics.HTTPRequestsTotal, prommetrics.HTTPRequestDuration = originalTotal, originalDuration
-	})
+	standInRequestMetrics(t)
 
 	router := gin.New()
 	router.Use(tracing(), accessLogger())
@@ -58,4 +50,49 @@ func TestAccessLoggerFieldsFitTheCapacityInTheWorstCase(t *testing.T) {
 		"the worst case must fill the capacity exactly: a new field bumps accessLogFieldCap, a dropped one lowers it")
 	require.Contains(t, entries[0].ContextMap(), "span_id", "the worst case must carry the optional span id")
 	require.Equal(t, "probe failed", entries[0].ContextMap()["error"], "the error the request reported travels in a field of its own")
+}
+
+// TestAccessLoggerCarriesTheTenantTheRequestActsIn pins the tenant field: the
+// entry carries the tenant the request context holds once the chain has run,
+// under the key the context stores it by, and "" for a request that
+// established none.
+func TestAccessLoggerCarriesTheTenantTheRequestActsIn(t *testing.T) {
+	core, logs := observer.New(zapcore.InfoLevel)
+	originalLogger := logger.Gin
+	logger.Gin = zap.New(core)
+	t.Cleanup(func() { logger.Gin = originalLogger })
+	standInRequestMetrics(t)
+
+	router := gin.New()
+	router.Use(accessLogger())
+	router.GET("/api/records", func(c *gin.Context) {
+		if tenantID := c.GetHeader("X-Probe-Tenant"); tenantID != "" {
+			c.Set(consts.CTX_TENANT_ID, tenantID)
+		}
+		c.Status(http.StatusNoContent)
+	})
+
+	scoped := httptest.NewRequest(http.MethodGet, "/api/records", nil)
+	scoped.Header.Set("X-Probe-Tenant", "alpha")
+	router.ServeHTTP(httptest.NewRecorder(), scoped)
+	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/records", nil))
+
+	entries := logs.All()
+	require.Len(t, entries, 2)
+	require.Equal(t, "alpha", entries[0].ContextMap()[consts.CTX_TENANT_ID])
+	require.Empty(t, entries[1].ContextMap()[consts.CTX_TENANT_ID], "a request that established no tenant logs the field empty")
+}
+
+// standInRequestMetrics replaces the request metrics for the test, rather
+// than building them with prommetrics.Init, which registers with the default
+// registry and so cannot run twice.
+func standInRequestMetrics(t *testing.T) {
+	t.Helper()
+	labels := []string{"method", "path", "status"}
+	originalTotal, originalDuration := prommetrics.HTTPRequestsTotal, prommetrics.HTTPRequestDuration
+	prommetrics.HTTPRequestsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{Name: "http_requests_probe"}, labels)
+	prommetrics.HTTPRequestDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: "http_request_duration_probe"}, labels)
+	t.Cleanup(func() {
+		prommetrics.HTTPRequestsTotal, prommetrics.HTTPRequestDuration = originalTotal, originalDuration
+	})
 }

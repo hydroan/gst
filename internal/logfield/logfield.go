@@ -42,6 +42,11 @@ func Username(username string) zap.Field { return zap.String(consts.CTX_USERNAME
 // UserID is the id of the authenticated caller, "" for an anonymous request.
 func UserID(id string) zap.Field { return zap.String(consts.CTX_USER_ID, id) }
 
+// TenantID is the tenant the request acts in, the value its context carries
+// under consts.CTX_TENANT_ID once the authenticated chain has run; "" for a
+// request that established none.
+func TenantID(id string) zap.Field { return zap.String(consts.CTX_TENANT_ID, id) }
+
 // TraceID is the trace id of the request.
 func TraceID(id string) zap.Field { return zap.String(consts.TRACE_ID, id) }
 

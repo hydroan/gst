@@ -82,6 +82,7 @@ func TestHTTPBodyLoggerLogsRequestAndResponseAsOneEntry(t *testing.T) {
 	router.POST("/api/records", func(c *gin.Context) {
 		c.Set(consts.CTX_USERNAME, "alice")
 		c.Set(consts.CTX_USER_ID, "u-1")
+		c.Set(consts.CTX_TENANT_ID, "alpha")
 		c.Set(consts.TRACE_ID, "trace-1")
 		body, err := io.ReadAll(c.Request.Body)
 		require.NoError(t, err)
@@ -102,6 +103,7 @@ func TestHTTPBodyLoggerLogsRequestAndResponseAsOneEntry(t *testing.T) {
 	require.Equal(t, "POST", ctx["method"])
 	require.Equal(t, "alice", ctx["username"])
 	require.Equal(t, "u-1", ctx["user_id"])
+	require.Equal(t, "alpha", ctx["tenant_id"])
 	require.Equal(t, "trace-1", ctx["trace_id"])
 	require.Equal(t, "verbose=true", ctx["query"])
 	require.Equal(t, int64(http.StatusOK), ctx["status"])

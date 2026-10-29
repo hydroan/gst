@@ -225,9 +225,9 @@ func (w *bodyLogWriter) capture(data []byte) {
 }
 
 // httpBodyLogFieldCap is the most fields one body log entry carries: the
-// ten every entry has — route, path, method, username, user id, trace id,
-// params, query, status and the duration, whose two keys util.LogDuration
-// renders from one inlined field — plus two for the request
+// eleven every entry has — route, path, method, username, user id, tenant
+// id, trace id, params, query, status and the duration, whose two keys
+// util.LogDuration renders from one inlined field — plus two for the request
 // body and three for the response body. A request body is captured whole or
 // not at all, so it carries its content and size, or its size beside the
 // truncation marker or the read error; a response body is teed from what the
@@ -236,7 +236,7 @@ func (w *bodyLogWriter) capture(data []byte) {
 // writeHTTPBodyLog sizes its field slice to it once, so the hot path never
 // regrows it; a field added to the entry bumps it, which the worst-case test
 // enforces.
-const httpBodyLogFieldCap = 15
+const httpBodyLogFieldCap = 16
 
 // writeHTTPBodyLog writes at most one log entry for the finished request,
 // carrying whichever captured bodies the configured modes admit. Requests
@@ -270,6 +270,7 @@ func writeHTTPBodyLog(
 		logfield.Method(c.Request.Method),
 		logfield.Username(c.GetString(consts.CTX_USERNAME)),
 		logfield.UserID(c.GetString(consts.CTX_USER_ID)),
+		logfield.TenantID(c.GetString(consts.CTX_TENANT_ID)),
 		logfield.TraceID(c.GetString(consts.TRACE_ID)),
 		logfield.Params(httpBodyLogParams(c.Params)),
 		logfield.Query(c.Request.URL.RawQuery),

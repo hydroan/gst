@@ -40,6 +40,7 @@ func TestWithCallerNamesTheCallerDownstreamAndInTheAccessLog(t *testing.T) {
 	fields := entries[0].ContextMap()
 	require.Equal(t, "alice", fields[consts.CTX_USERNAME])
 	require.Equal(t, "u-1", fields[consts.CTX_USER_ID])
+	require.Equal(t, "t-1", fields[consts.CTX_TENANT_ID])
 }
 
 // TestRouteAndCallerOfDescribeTheCall pins what an interceptor reads off a

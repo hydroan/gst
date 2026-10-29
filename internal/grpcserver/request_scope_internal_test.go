@@ -206,6 +206,7 @@ func TestCallsAreLoggedLikeHTTPRequests(t *testing.T) {
 	require.Equal(t, "/gst.test.Echo/Ping", ok[consts.CTX_PATH])
 	require.Contains(t, ok, consts.CTX_USERNAME)
 	require.Contains(t, ok, consts.CTX_USER_ID)
+	require.Contains(t, ok, consts.CTX_TENANT_ID)
 	require.Equal(t, "127.0.0.1", ok["ip"])
 	require.Contains(t, ok["user_agent"], "grpc-go/")
 	require.Equal(t, traceID, ok[consts.TRACE_ID])
