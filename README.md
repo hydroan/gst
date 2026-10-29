@@ -957,6 +957,21 @@ func init() {
 `iam.NewPasswordCredential` 生成后随账号一起写入（写法见它的文档），或者像
 `examples/demo` 的测试那样走公开的 `POST /api/signup` 注册。
 
+## 多租户
+
+模型嵌入 `tenant.Scope` 就按租户隔离行：建行时框架把请求所在的租户盖进 `tenant_id` 列，之后这张表的每条语句都只到这个租户，
+service 和 hook 不写租户条件，也到不了别的租户。请求所在的租户来自上下文里的 `CTX_TENANT_ID`：用 iam 模块时，登录选的租户由会话检查写进去，
+项目可以在它之后、`middleware.Authz()` 之前改写（可信网关的请求头、子域名），authz 在这个租户里判定，放行后把同一个租户交给行级隔离；
+没选租户就是默认租户 `default`，单租户项目什么都不用配。持系统角色 `system_root` 的调用者不在任何一个租户里判定，请求跨全部租户，
+建行时在 HTTP 请求体里点名租户（gRPC 消息里的 `tenant_id` 只出不进，点不了）。请求之外的代码（定时任务、启动钩子）没有授权来定租户，上下文默认在 `default` 租户里，
+`tenant.In(ctx, id)` 进一个租户，`tenant.Across(ctx)` 跨全部；建行钩子要知道行会盖上哪个租户时用 `tenant.From(ctx)`。
+
+写租户模型守住两条，`gg check` 和启动期都会拦：嵌入 `tenant.Scope` 不加前缀，列名固定是 `tenant_id`；唯一索引的字段里要有 `TenantID`，
+唯一性在租户内。这一列只在建行时写：整条更新（含批量）带了别的租户答 400，补丁跳过这个键。
+
+[examples/multitenant](./examples/multitenant/README.md) 把这些用法写成八组照着敲就能核对的场景：登录选租户、行级隔离、租户内的权限、
+system root、网关头、gRPC、请求之外、工具链。
+
 ## 多副本部署
 
 同一个项目可以起多个副本而不改代码。需要"整个部署只做一次"的能力都建在主库的一张租约表 `gst_leases`
@@ -1182,6 +1197,8 @@ prune 删什么、不删什么、按什么顺序删、什么时候问你，完�
 `examples/bench` 是压测专用项目（由 `gg new` 生成），提供 [BENCHMARK.md](./BENCHMARK.md) 中全部压测接口。
 
 `examples/cluster` 是多副本部署示例：纯 YAML 清单在 Kubernetes 里起三个副本，演示并检验定时任务、选主、锁和多副本同时建表，见[它的 README](./examples/cluster/README.md)。
+
+`examples/multitenant` 是多租户示例：两个租户、五个账号，演示并核对登录选租户、行级隔离、租户内的权限、system root、网关头、gRPC、请求之外的租户和工具链的检查，见[它的 README](./examples/multitenant/README.md)。
 
 ## 性能
 
