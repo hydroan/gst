@@ -167,7 +167,7 @@ const enforceLogFieldCount = 10
 func enforceLogFields(ctx context.Context, subject Subject, tenantID, sub, obj, act string, elapsed time.Duration) []zap.Field {
 	return append(
 		make([]zap.Field, 0, enforceLogFieldCount),
-		zap.String("tenant", tenantID),
+		logfield.TenantID(tenantID),
 		zap.String("sub", sub),
 		zap.String("obj", obj),
 		zap.String("act", act),
