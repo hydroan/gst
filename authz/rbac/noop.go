@@ -67,6 +67,8 @@ func (noop) RolesForSubject(ctx context.Context, tenant string, subject string) 
 
 func (noop) SubjectsInTenant(ctx context.Context, tenant string) ([]string, error) { return nil, nil }
 
+func (noop) TenantsForSubject(ctx context.Context, subject string) ([]string, error) { return nil, nil }
+
 func (noop) AssignSystemRole(ctx context.Context, subject string, role string) error {
 	return ErrRBACDisabled
 }

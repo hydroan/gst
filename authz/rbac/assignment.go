@@ -2,6 +2,7 @@ package rbac
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -102,6 +103,44 @@ func (r *rbac) SubjectsInTenant(ctx context.Context, tenant string) ([]string, e
 		subjects = append(subjects, subject)
 	}
 	return subjects, nil
+}
+
+// TenantsForSubject returns the tenants subject holds at least one role in,
+// each once and sorted.
+//
+// The grouping rules are (subject, role, tenant), so the subject's own rules
+// are read and their tenants collected. A rule naming no role is skipped the
+// way RolesForSubject skips it. Sorted because the rules arrive in no order
+// worth preserving and a client lists what comes back.
+func (r *rbac) TenantsForSubject(ctx context.Context, subject string) ([]string, error) {
+	subject = strings.TrimSpace(subject)
+	if subject == "" {
+		return nil, nil
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	groupingPolicies := policyRules.filtered(tenantRoleGrouping, 0, subject)
+
+	seen := make(map[string]struct{}, len(groupingPolicies))
+	tenants := make([]string, 0, len(groupingPolicies))
+	for _, policy := range groupingPolicies {
+		if len(policy) < 3 || strings.TrimSpace(policy[1]) == "" {
+			continue
+		}
+		tenant := strings.TrimSpace(policy[2])
+		if tenant == "" {
+			continue
+		}
+		if _, ok := seen[tenant]; ok {
+			continue
+		}
+		seen[tenant] = struct{}{}
+		tenants = append(tenants, tenant)
+	}
+	slices.Sort(tenants)
+	return tenants, nil
 }
 
 // AssignSystemRole assigns a subject to a system-level role outside any tenant.

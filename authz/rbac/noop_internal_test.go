@@ -76,6 +76,10 @@ func TestRBACWithoutAPolicySetAnswersReads(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, subjects)
 
+	tenants, err := r.TenantsForSubject(ctx, "u1")
+	require.NoError(t, err)
+	assert.Empty(t, tenants)
+
 	assert.NoError(t, r.ReloadPolicies(ctx), "there is no in-memory policy set to rebuild")
 }
 

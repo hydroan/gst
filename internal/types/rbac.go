@@ -117,13 +117,20 @@ type RBAC interface {
 	// It answers two questions at once: holding any role here is a non-empty
 	// result, and holding one particular role is that role being among them.
 	// Neither deserves an entry point of its own, and keeping the general one
-	// leaves this and SubjectsInTenant as the two directions of a single
-	// relation.
+	// leaves this, SubjectsInTenant and TenantsForSubject as the three
+	// readings of a single relation.
 	RolesForSubject(ctx context.Context, tenant string, subject string) ([]string, error)
 
 	// SubjectsInTenant returns subjects with at least one role assignment in
 	// tenant. It checks membership, not whether any specific route is authorized.
 	SubjectsInTenant(ctx context.Context, tenant string) ([]string, error)
+
+	// TenantsForSubject returns the tenants subject holds at least one role
+	// in, each once and sorted: what a client asks before it can act in a
+	// tenant, choosing the one to log in to or to switch to. The built-in
+	// tenant administrator role counts like any other; a system-level role
+	// is held in no tenant and names none.
+	TenantsForSubject(ctx context.Context, subject string) ([]string, error)
 
 	// AssignSystemRole assigns subject to a system-level role outside any tenant.
 	// System roles are intended for cross-tenant framework privileges and should
