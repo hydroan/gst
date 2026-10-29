@@ -158,6 +158,29 @@ func accountRequireLoginRejected(t *testing.T, username, password string) {
 	testutil.RequireError(t, err, http.StatusUnauthorized)
 }
 
+// TestAccountSeededCredentialLogsIn covers NewPasswordCredential, the way a
+// project writes the password of an account it seeds: a user row written
+// through the database chain beside the credential it returns logs in with
+// that password and no other, and the must-change flag the credential was
+// created with reaches the principal.
+func TestAccountSeededCredentialLogsIn(t *testing.T) {
+	ctx := context.Background()
+	username := fmt.Sprintf("acct_seeded_%d", time.Now().UnixNano())
+	user := &iam.User{Username: username, Status: iam.UserStatusActive}
+	require.NoError(t, database.Database[*iam.User](ctx).Create(user))
+	credential, err := iam.NewPasswordCredential(ctx, user.ID, "12345678", true)
+	require.NoError(t, err)
+	require.NoError(t, database.Database[*iam.PasswordCredential](ctx).Create(credential))
+
+	cli := accountNewClient(t)
+	rsp, err := cli.Post[iam.LoginRsp](t.Context(), loginPath, iam.LoginReq{Username: username, Password: "12345678"})
+	require.NoError(t, err)
+	require.Equal(t, user.ID, rsp.Principal.UserID)
+	require.True(t, rsp.Principal.MustChangePassword, "the flag the credential was created with has to reach the principal")
+
+	accountRequireLoginRejected(t, username, "87654321")
+}
+
 func TestAccountLogout(t *testing.T) {
 	user := accountSignupUser(t, "acct_logout", "12345678")
 	user.SessionID = accountLoginUser(t, &user, user.Password)

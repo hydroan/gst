@@ -120,9 +120,9 @@ func Register() {
 	// a deployment without authz still deletes cleanly.
 
 	// Register the backing IAM tables. Baseline accounts are application
-	// data: create them explicitly through the standard database chain in a
-	// startup hook such as router.OnRoutesReady, using
-	// serviceiamaccount.NewPasswordCredential for password hashing.
+	// data: a project creates them explicitly through the standard database
+	// chain in a startup hook such as router.OnRoutesReady, the password
+	// hashed by NewPasswordCredential.
 	modelregistry.Register[*modeliamuser.User]()
 	modelregistry.Register[*modeliamaccount.PasswordCredential]()
 	modelregistry.Register[*modeliamaccount.EmailIdentity]()
