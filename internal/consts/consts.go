@@ -437,8 +437,8 @@ const (
 	// membership or tenant, so they reach subjects that hold no role at all.
 	//
 	// Use it for routes that answer only about the caller and already narrow
-	// their result to what the caller may see. It is not "public": unauthenticated
-	// requests are rejected before authorization runs.
+	// their result to what the caller may see. It is not "public":
+	// unauthenticated requests are rejected before authorization runs.
 	AUTHZ_ROLE_AUTHENTICATED = "authenticated"
 )
 
