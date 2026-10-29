@@ -23,6 +23,6 @@ type (
 	// PingRsp is what a ping answers.
 	PingRsp struct {
 		Msg     string `json:"msg"`     // a word
-		Records int64  `json:"records"` // the record count the record_count component keeps
+		Records int64  `json:"records"` // the record count the count_records job keeps in dao
 	}
 )

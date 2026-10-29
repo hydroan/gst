@@ -1,7 +1,7 @@
 package ping
 
 import (
-	"demo/component"
+	"demo/dao"
 	"demo/model"
 
 	"github.com/hydroan/gst"
@@ -17,5 +17,5 @@ type Lister struct {
 }
 
 func (p *Lister) List(*gst.ServiceContext, *gstmodel.Empty) (*model.PingRsp, error) {
-	return &model.PingRsp{Msg: "pong", Records: component.RecordCount()}, nil
+	return &model.PingRsp{Msg: "pong", Records: dao.RecordCount()}, nil
 }

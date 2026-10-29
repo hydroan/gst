@@ -3,7 +3,7 @@ package ping_test
 import (
 	"testing"
 
-	"demo/component"
+	"demo/dao"
 	"demo/model"
 
 	"github.com/hydroan/gst/client"
@@ -21,5 +21,5 @@ func TestList(t *testing.T) {
 	rsp, err := cli.Get[model.PingRsp](t.Context(), "/api/pings")
 	require.NoError(t, err)
 	require.Equal(t, "pong", rsp.Msg)
-	require.Equal(t, component.RecordCount(), rsp.Records)
+	require.Equal(t, dao.RecordCount(), rsp.Records)
 }
