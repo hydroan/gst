@@ -59,13 +59,12 @@ type (
 // RegisteredModels returns independent model values registered through
 // Register. Mutating the returned values does not change what is registered.
 //
-// Searching this repository makes it look unused by anything but cmd/gg, and
-// makes the forwarder look like one the tool could skip by reading the
-// registry directly. It cannot. Those call sites sit inside the program
-// templates gg writes out and builds against the business project's own
-// go.mod, which makes them business-module code, and the internal registry
-// behind this forwarder is out of reach from there. What breaks if this goes
-// is "gg gen" and "gg migrate", not anything in this repository.
+// Its callers are the inspection and migration programs gg embeds, writes into
+// a temporary directory and builds against the business project's own go.mod:
+// built there, they are the project's code, which reaches the internal registry
+// behind this forwarder only through it. cmd/gg builds without the forwarder,
+// the programs being source it embeds, but the programs do not, here or in a
+// project, where gg gen, gg check and gg migrate run them.
 func RegisteredModels() []any {
 	return modelregistry.RegisteredModels()
 }
@@ -75,9 +74,10 @@ func RegisteredModels() []any {
 // unknown field, a repeated column, a duplicate of a struct tag index, and on
 // MySQL a column the database cannot index, such as the longtext a string
 // field without a size becomes. Like RegisteredModels it exists for the
-// program templates gg writes into a business project: the column inspection
-// asks it against a MySQL handle that never connects (see mysql.DryRun), which
-// is how gg check refuses such a declaration without a database.
+// inspection program gg embeds and builds against a business project: the
+// program asks it against a MySQL handle that never connects (see
+// mysql.DryRun), which is how gg check refuses such a declaration without a
+// database.
 func ValidateIndexes(db *gorm.DB, model any) error {
 	return modelschema.ValidateIndexes(db, model)
 }
