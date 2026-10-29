@@ -66,7 +66,7 @@ help:
 	@echo "Available commands:"
 	@echo "  check          - Run all code quality checks"
 	@echo "  build          - Build the project"
-	@echo "  format         - Format code with gofumpt"
+	@echo "  format         - Organize imports with goimports, then format code with gofumpt"
 	@echo "  vet            - Run go vet"
 	@echo "  lint           - Run golangci-lint (includes modernize, nilness, shadow and goimports)"
 	@echo "  selfcheck      - Check the framework's source against the rules golangci-lint cannot express"
@@ -82,8 +82,8 @@ help:
 	@echo "  help           - Show this help message"
 
 # Run all code quality checks
-# format runs before lint: gofumpt rewrites what it can, and lint, goimports
-# among its checks, then judges the code gofumpt leaves.
+# format runs before lint: it organizes the imports and formats the code, and
+# lint, goimports among its checks, then judges the code format leaves.
 check: build format lint selfcheck vet ggcheck
 	@echo "All checks passed successfully!"
 
@@ -103,7 +103,15 @@ build:
 	go build ./...
 	CGO_ENABLED=0 go build ./...
 
+# Organize the imports, then format the code: the two steps an editor running
+# gopls with gofumpt takes on save, in its order, so a file format leaves is
+# one saving leaves alone. goimports is the formatter .golangci.yml enables;
+# gofumpt reads the module path of each file from the go.mod above it. Run
+# from the root, both reach the example modules too.
 format:
+	$(call install_tool,$(GOLANGCI_LINT),$(GOLANGCI_LINT_PKG),$(GOLANGCI_LINT_VERSION))
+	@echo "Running goimports..."
+	$(call run_tool,$(GOLANGCI_LINT),fmt)
 	$(call install_tool,$(GOFUMPT),$(GOFUMPT_PKG),$(GOFUMPT_VERSION))
 	@echo "Running gofumpt..."
 	$(call run_tool,$(GOFUMPT),-l -w .)
