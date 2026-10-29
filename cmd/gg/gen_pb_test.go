@@ -1046,10 +1046,10 @@ func TestGenRunRefusesAGRPCModelWithNothingToServe(t *testing.T) {
 
 // TestGenRunHoldsTheCommittedDefinitionsToTheirNumbers pins that gg gen
 // reads the .proto already on disk as the contract in force: a field
-// changing number, or a number changing hands, is refused with the file to
-// delete named for accepting the break; the numbers and names of removed
-// fields are reserved and kept over later runs, so a new field cannot take
-// them.
+// changing number, or a number changing hands, is refused, the error naming the
+// committed file and the edit in it that accepts the break; the numbers and
+// names of removed fields are reserved and kept over later runs, so a new field
+// cannot take them.
 func TestGenRunHoldsTheCommittedDefinitionsToTheirNumbers(t *testing.T) { //nolint:tparallel // Each subtest goes parallel in newGenProject, a call deeper than tparallel looks.
 	parallelInParent(t)
 	proto := filepath.Join(ggconst.DirPB, "note.proto")
@@ -2812,8 +2812,8 @@ func TestGenRunReadsTheItemsOfAPatchManyWhateverTheirPosition(t *testing.T) {
 // contract the committed file holds, after Buf's breaking rules: a service,
 // an rpc and a message the committed file declares must still be declared,
 // and an rpc keeps its request and response messages and its streaming,
-// since a client was built against each; every breach names the file to
-// delete for accepting the break.
+// since a client was built against each; every breach names the committed file
+// and the edit in it that accepts the break.
 func TestGenRunHoldsTheCommittedServicesAndMessages(t *testing.T) { //nolint:tparallel // Each subtest goes parallel in newGenProject, a call deeper than tparallel looks.
 	parallelInParent(t)
 	proto := filepath.Join(ggconst.DirPB, "note.proto")

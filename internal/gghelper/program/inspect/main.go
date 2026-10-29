@@ -195,14 +195,15 @@ func describeType(typ reflect.Type, modelPkg string) (expr string, imports map[s
 // path, which a business project cannot import, so the reference is
 // rewritten to the alias the model source actually wrote: model.Base and
 // its siblings for internal/modelregistry, model.Version for
-// internal/modelschema, the root gst package, which forwards everything
-// internal/types defines under the same name, the consts package for
-// internal/consts, consts.Phase and consts.OP among them, and, for the
-// types a model stores as JSON, the grpc package for internal/controller
-// and internal/grpcserver, grpc.Filter and grpc.Caller among them, sse for
-// internal/sse and testutil for internal/testutil. The tenant column's type
-// is forwarded by no package, a model carrying it only through
-// tenant.Scope, so its reference is written as the type its values are,
+// internal/modelschema, the root gst package for internal/types, which forwards
+// under the same name every type of it a model can name and this function
+// writes back, the generic streams grpc forwards being instantiations it
+// declines, the consts package for internal/consts, consts.Phase and consts.OP
+// among them, and, for the types a model stores as JSON, the grpc package for
+// internal/controller and internal/grpcserver, grpc.Filter and grpc.Caller
+// among them, sse for internal/sse and testutil for internal/testutil. The
+// tenant column's type is forwarded by no package, a model carrying it only
+// through tenant.Scope, so its reference is written as the type its values are,
 // string.
 func typeExpr(typ reflect.Type, modelPkg string, imports map[string]string) (string, bool) {
 	if name := typ.Name(); name != "" {

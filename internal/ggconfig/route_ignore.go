@@ -146,7 +146,7 @@ func decodeRouteIgnoreRuleValue(path string, value *yaml.Node) ([]string, string
 
 // ParseRouteRule parses a "METHOD /api/path" entry into a RouteRule:
 // "get /api/iam/admin/users/{id}" gives the method GET and the segments
-// [iam admin users :id], and keeps the entry itself as Raw.
+// [api iam admin users :id], and keeps the entry itself as Raw.
 func ParseRouteRule(raw string) (RouteRule, error) {
 	fields := strings.Fields(raw)
 	if len(fields) != 2 {
@@ -245,7 +245,7 @@ func validateRouteIgnoreRules(rules []RouteRule) error {
 // dedupKey returns the rule identity used for duplicate detection: the HTTP
 // method plus the parameter-name-collapsed path. The rules of
 // "GET /api/users/:id" and "GET /users/{userId}" share the key
-// "GET /users/:".
+// "GET /api/users/:".
 func (r RouteRule) dedupKey() string {
 	return r.Method + " " + collapsedPathKey(r.Segments)
 }
@@ -253,7 +253,7 @@ func (r RouteRule) dedupKey() string {
 // collapsedPathKey returns the path identity with parameter segments
 // collapsed to ":", matching the parameter-name-insensitive Match semantics:
 // paths differing only in parameter names target the same routes:
-// [iam admin users :id] gives "/iam/admin/users/:". Segments are always
+// [api iam admin users :id] gives "/api/iam/admin/users/:". Segments are always
 // non-empty here: ParseRouteRule rejects empty segments before a RouteRule is
 // constructed.
 func collapsedPathKey(ruleSegments []string) string {

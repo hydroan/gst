@@ -151,9 +151,9 @@ func TestRenderColumnsFile(t *testing.T) {
 
 	t.Run("ImportsOnlyWhatItUses", func(t *testing.T) {
 		require.Contains(t, rendered, `"github.com/hydroan/gst"`)
-		// The time column renders as NewTimeColumn without a type argument,
-		// so the file no longer references time.Time; emitting the import
-		// anyway would be an unused import that fails to compile.
+		// The time column renders as gst.NewTimeColumn[*Record], which names no
+		// time.Time, so the file references nothing of package time; emitting
+		// the import anyway would be an unused import that fails to compile.
 		require.NotContains(t, rendered, "\n\t\"time\"\n")
 		require.NotContains(t, rendered, "gorm.io/datatypes")
 	})
