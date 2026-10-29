@@ -2,6 +2,8 @@ package serviceauthz
 
 import (
 	"net/http"
+	"slices"
+	"strings"
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/authz/rbac"
@@ -9,6 +11,7 @@ import (
 	"github.com/hydroan/gst/database"
 	modelauthz "github.com/hydroan/gst/internal/model/authz"
 	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/tenant"
 	"github.com/samber/lo"
 )
 
@@ -81,22 +84,30 @@ func (m *MenuService) ListAfter(ctx *gst.ServiceContext, data *[]*modelauthz.Men
 // visibleMenuIDs resolves the menu IDs the current subject may see. The flow
 // deliberately mirrors the RBAC data model:
 //   - system_root is a system-level role and bypasses menu filtering completely.
+//   - the built-in tenant administrator reaches every route of the request
+//     tenant without a policy, so it sees the whole catalog there.
 //   - RoleBinding maps the current subject ID to role IDs inside the request tenant.
-//   - when the subject has no RoleBinding records, default roles in the request
-//     tenant provide the fallback menu set.
 //   - Role.MenuIDs is the only source of visible menus. The same set grants the
 //     backend route permissions; this service is only shaping the frontend menu
 //     tree.
 //
-// restricted reports whether the caller has to narrow by the returned set. It is
-// false only for system_root. A subject whose roles select no menu at all yields
-// an empty set with restricted true, which the caller turns into an empty result.
+// restricted reports whether the caller has to narrow by the returned set. It
+// is false for system_root and the tenant administrator. A subject holding no
+// role here, or whose roles select no menu at all, yields an empty set with
+// restricted true, which the caller turns into an empty result.
 func visibleMenuIDs(ctx *gst.ServiceContext, log gst.Logger) ([]string, bool, error) {
 	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, ctx.UserID(), consts.AUTHZ_SYSTEM_ROLE_ROOT)
 	if err != nil {
 		return nil, false, gst.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
 	}
 	if systemRoot {
+		return nil, false, nil
+	}
+	held, err := rbac.RBAC().RolesForSubject(ctx, requestTenant(ctx), ctx.UserID())
+	if err != nil {
+		return nil, false, gst.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
+	}
+	if slices.Contains(held, consts.AUTHZ_ROLE_ADMIN) {
 		return nil, false, nil
 	}
 	// No tenant is named in the queries below: the rows they reach are already
@@ -107,37 +118,28 @@ func visibleMenuIDs(ctx *gst.ServiceContext, log gst.Logger) ([]string, bool, er
 		List(&roleBindings); err != nil {
 		return nil, false, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load role bindings", err)
 	}
+	if len(roleBindings) == 0 {
+		return nil, true, nil
+	}
 
-	roles := make([]*modelauthz.Role, 0)
-	if len(roleBindings) > 0 {
-		roleIDs := make([]string, 0, len(roleBindings))
-		for _, binding := range roleBindings {
-			if len(binding.RoleID) > 0 {
-				roleIDs = append(roleIDs, binding.RoleID)
-			}
-		}
-		if len(roleIDs) == 0 {
-			log.Warn("subject has role-binding records but no valid role ids")
-			return nil, true, nil
-		}
-		if err := database.Database[*modelauthz.Role](ctx).
-			WithQuery(nil, gst.QueryOptions{Filters: []gst.Filter{colRoleID.In(roleIDs...)}}).
-			List(&roles); err != nil {
-			return nil, false, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load roles", err)
-		}
-		if len(roles) == 0 {
-			log.Warn("subject has role-binding records but no matching roles")
-			return nil, true, nil
-		}
-	} else {
-		if err := database.Database[*modelauthz.Role](ctx).
-			WithQuery(&modelauthz.Role{Default: new(true)}).
-			List(&roles); err != nil {
-			return nil, false, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load roles", err)
+	roleIDs := make([]string, 0, len(roleBindings))
+	for _, binding := range roleBindings {
+		if len(binding.RoleID) > 0 {
+			roleIDs = append(roleIDs, binding.RoleID)
 		}
 	}
+	if len(roleIDs) == 0 {
+		log.Warn("subject has role-binding records but no valid role ids")
+		return nil, true, nil
+	}
+	roles := make([]*modelauthz.Role, 0)
+	if err := database.Database[*modelauthz.Role](ctx).
+		WithQuery(nil, gst.QueryOptions{Filters: []gst.Filter{colRoleID.In(roleIDs...)}}).
+		List(&roles); err != nil {
+		return nil, false, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load roles", err)
+	}
 	if len(roles) == 0 {
-		log.Warn("user has no roles and don't have default role")
+		log.Warn("subject has role-binding records but no matching roles")
 		return nil, true, nil
 	}
 	for _, r := range roles {
@@ -157,6 +159,16 @@ func visibleMenuIDs(ctx *gst.ServiceContext, log gst.Logger) ([]string, bool, er
 	}
 
 	return menuIDs, true, nil
+}
+
+// requestTenant is the tenant the request acts in, the one its authorization
+// was decided in; a request carrying none acts in the default tenant, the way
+// the authorization decided it.
+func requestTenant(ctx *gst.ServiceContext) string {
+	if id := strings.TrimSpace(ctx.TenantID()); id != "" {
+		return id
+	}
+	return tenant.Default
 }
 
 // filterChildren narrows preloaded children by the same rule as the top level,

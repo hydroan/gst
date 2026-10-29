@@ -28,8 +28,6 @@ type Role struct {
 	// never the name.
 	Name string `json:"name,omitempty" query:"name" gorm:"size:191"`
 
-	Default *bool `json:"default,omitempty" query:"default"`
-
 	// MenuIDs grants backend route permissions through each selected menu's
 	// Routes, and is the only source of frontend menu visibility.
 	MenuIDs datatypes.JSONSlice[string] `json:"menu_ids,omitempty"`

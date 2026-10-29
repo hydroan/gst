@@ -417,15 +417,19 @@ const (
 )
 
 const (
-	// AUTHZ_USER_ROOT is the built-in root user's ID (subject), not a role name.
+	// AUTHZ_USER_ROOT is the built-in root user's ID (subject), not a role
+	// name.
 	AUTHZ_USER_ROOT = "root"
 
-	// AUTHZ_ROLE_ADMIN is the tenant-scoped admin role, granted via g(subject, role, tenant).
-	// Authorization grants this role unconditional access to every object/action
-	// inside the tenant, bypassing explicit permission policies entirely.
+	// AUTHZ_ROLE_ADMIN is the tenant-scoped admin role, granted via
+	// g(subject, role, tenant) by a role binding naming it, since it has no
+	// row in the roles table. Authorization grants this role unconditional
+	// access to every object/action inside the tenant, bypassing explicit
+	// permission policies entirely.
 	AUTHZ_ROLE_ADMIN = "admin"
-	// AUTHZ_SYSTEM_ROLE_ROOT is the system-level super-admin role, granted via g2(subject, role)
-	// outside any tenant. AUTHZ_USER_ROOT is assigned this role by default during RBAC Init.
+	// AUTHZ_SYSTEM_ROLE_ROOT is the system-level super-admin role, granted via
+	// g2(subject, role) outside any tenant. AUTHZ_USER_ROOT is assigned this
+	// role by default during RBAC Init.
 	AUTHZ_SYSTEM_ROLE_ROOT = "system_root"
 	// AUTHZ_ROLE_AUTHENTICATED is the implicit role every authenticated subject
 	// carries. No grouping rule ever assigns it, and no role may claim it as an

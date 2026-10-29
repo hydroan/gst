@@ -177,11 +177,11 @@ func skipReconcile(rule *modelauthz.AuthzRule) bool {
 		// not derived from any role.
 		return rule.V1 == consts.AUTHZ_ROLE_AUTHENTICATED
 	case "g":
-		// The built-in tenant administrator role is granted by assignment
-		// alone: it has no row in the roles table, so no role binding can name
-		// it and nothing among the records derives it. Judging it against them
-		// reports the framework's own baseline as drift on every run.
-		return rule.V1 == consts.AUTHZ_ROLE_ADMIN
+		// A tenant role assignment is derived from a role binding, the
+		// built-in administrator's included: a binding names that role by
+		// its constant id, so an assignment of it with no binding behind it
+		// was made around the framework, which is what the report is for.
+		return false
 	default:
 		// g2 and anything else. A system-level assignment is written straight
 		// through AssignSystemRole by whatever bootstraps the deployment, so

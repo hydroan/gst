@@ -333,26 +333,20 @@ func TestAuthzMenu(t *testing.T) {
 			require.NoError(t, err)
 		})
 
-		t.Run("invalid_role_binding_does_not_fallback_to_default_role", func(t *testing.T) {
+		t.Run("invalid_role_binding_shows_no_menu", func(t *testing.T) {
+			// A menu of the catalog the subject's one binding does not reach:
+			// the binding names a role that does not exist, so it selects
+			// nothing.
 			created, err := cli.Post[authz.Menu](t.Context(), menuPath, &authz.Menu{
 				ParentID: "root",
-				Label:    "Default Fallback Menu",
-				Path:     "/default-fallback-menu",
+				Label:    "Unreached Menu",
+				Path:     "/unreached-menu",
 			})
 			require.NoError(t, err)
 			require.NotEmpty(t, created.ID)
-			defaultMenuID := created.ID
+			unreachedMenuID := created.ID
 
-			defaultRole := true
-			role, err := cli.Post[authz.Role](t.Context(), rolePath, &authz.Role{
-				Name:    "default_fallback_role",
-				Default: &defaultRole,
-				MenuIDs: []string{defaultMenuID},
-			})
-			require.NoError(t, err)
-			require.NotEmpty(t, role.ID)
-
-			missingRoleID := "missing_default_fallback_role"
+			missingRoleID := "missing_role"
 			invalidRoleBinding := &authz.RoleBinding{
 				TenantID:  tenant.Default,
 				SubjectID: userID,
@@ -370,7 +364,7 @@ func TestAuthzMenu(t *testing.T) {
 			userMenuCli := authzSessionClient(t, userSessionID)
 			list, err := userMenuCli.Get[client.ListResult[*authz.Menu]](t.Context(), menuPath)
 			require.NoError(t, err)
-			requireNoMenu(t, list.Items, defaultMenuID)
+			requireNoMenu(t, list.Items, unreachedMenuID)
 		})
 
 		t.Run("list_uses_current_tenant_roles", func(t *testing.T) {
@@ -1107,6 +1101,55 @@ func requireNoAdminUserView(t *testing.T, users []iam.AdminUserView, userID stri
 	for _, user := range users {
 		require.NotEqual(t, userID, user.ID)
 	}
+}
+
+// TestAuthzRoleBindingAppointsTheBuiltInAdministrator covers the one binding
+// that looks no role up: naming consts.AUTHZ_ROLE_ADMIN appoints the tenant's
+// built-in administrator, who reaches every route of that tenant on the
+// tenant_admin branch and sees the whole menu catalog there, and nothing in
+// any other tenant; deleting the binding takes it all back.
+func TestAuthzRoleBindingAppointsTheBuiltInAdministrator(t *testing.T) {
+	rootCli := authzSessionClient(t, authzAdminSessionID(t))
+	tenantID := authzTestUsername("tenant_admin_appointed")
+	userID, userSessionID := authzSignupAndLoginUserWithUserAgent(t, authzTestUsername("appointed_admin"), "12345678", tenantUserAgent)
+	userCli := authzTenantClient(t, userSessionID, tenantID)
+
+	// A menu of the global catalog the user holds no role for.
+	menu, err := rootCli.Post[authz.Menu](t.Context(), menuPath, &authz.Menu{ParentID: "root", Label: "Catalog Menu", Path: "/catalog-menu"})
+	require.NoError(t, err)
+	require.NotEmpty(t, menu.ID)
+
+	_, err = userCli.Get[client.ListResult[*authz.Role]](t.Context(), rolePath)
+	testutil.RequireError(t, err, http.StatusForbidden, "permission denied")
+
+	// The root subject acts across tenants, so the binding names its tenant.
+	binding, err := rootCli.Post[authz.RoleBinding](t.Context(), roleBindingPath, &authz.RoleBinding{
+		TenantID:  tenant.ID(tenantID),
+		SubjectID: userID,
+		RoleID:    consts.AUTHZ_ROLE_ADMIN,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, tenantID, binding.TenantID)
+	requireGroupingRule(t, userID, consts.AUTHZ_ROLE_ADMIN, tenantID)
+
+	_, err = userCli.Get[client.ListResult[*authz.Role]](t.Context(), rolePath)
+	require.NoError(t, err, "the administrator reaches every route of the tenant")
+	decision, err := rbac.RBAC().Authorize(context.Background(), tenantID, userID, rolePath, http.MethodGet)
+	require.NoError(t, err)
+	require.Equal(t, consts.GrantSourceTenantAdmin, decision.Source)
+
+	menus, err := userCli.Get[client.ListResult[*authz.Menu]](t.Context(), menuPath)
+	require.NoError(t, err)
+	requireMenu(t, menus.Items, menu.ID)
+
+	_, err = authzTenantClient(t, userSessionID, authzTestUsername("tenant_admin_elsewhere")).
+		Get[client.ListResult[*authz.Role]](t.Context(), rolePath)
+	testutil.RequireError(t, err, http.StatusForbidden, "permission denied")
+
+	_, err = rootCli.Delete[struct{}](t.Context(), roleBindingPath+"/"+binding.ID, nil)
+	require.NoError(t, err)
+	_, err = userCli.Get[client.ListResult[*authz.Role]](t.Context(), rolePath)
+	testutil.RequireError(t, err, http.StatusForbidden, "permission denied")
 }
 
 func requireRoute(t *testing.T, routes []authz.Route, path string, methods []string) {

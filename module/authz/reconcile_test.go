@@ -87,22 +87,38 @@ func TestReconcilePoliciesSkipsRulesNoRecordDerives(t *testing.T) {
 	}
 }
 
-// TestReconcilePoliciesSkipsTheBuiltInAdminAssignment covers the assignment that
-// grants the built-in tenant administrator role.
-//
-// That role has no row in the roles table, so no role binding can name it and
-// nothing among the records derives its assignment. Judged against them it is
-// reported as an orphaned binding every single run, which is how a drift report
-// becomes something nobody reads.
-func TestReconcilePoliciesSkipsTheBuiltInAdminAssignment(t *testing.T) {
+// TestReconcilePoliciesJudgesTheBuiltInAdminAssignmentByItsBinding covers the
+// assignment that grants the built-in tenant administrator role. The role has
+// no row in the roles table, so the binding naming it is the one record the
+// assignment is derived from: made through the binding it is in sync, made
+// around the framework it is an orphaned binding.
+func TestReconcilePoliciesJudgesTheBuiltInAdminAssignmentByItsBinding(t *testing.T) {
 	ctx := context.Background()
-	subject := uuid.NewV7().String()
 
-	require.NoError(t, rbac.RBAC().AssignRole(ctx, tenant.Default, subject, consts.AUTHZ_ROLE_ADMIN))
+	t.Run("made through a binding", func(t *testing.T) {
+		binding := &modelauthz.RoleBinding{SubjectID: uuid.NewV7().String(), RoleID: consts.AUTHZ_ROLE_ADMIN}
+		require.NoError(t, database.Database[*modelauthz.RoleBinding](ctx).Create(binding))
+		t.Cleanup(func() { require.NoError(t, database.Database[*modelauthz.RoleBinding](ctx).Delete(binding)) })
 
-	report, err := authz.ReconcilePolicies(ctx)
-	require.NoError(t, err)
-	require.True(t, report.InSync(), "unexpected drift: %+v", report.Drifts)
+		report, err := authz.ReconcilePolicies(ctx)
+		require.NoError(t, err)
+		require.True(t, report.InSync(), "unexpected drift: %+v", report.Drifts)
+	})
+
+	t.Run("made around the framework", func(t *testing.T) {
+		subject := uuid.NewV7().String()
+		require.NoError(t, rbac.RBAC().AssignRole(ctx, tenant.Default, subject, consts.AUTHZ_ROLE_ADMIN))
+		t.Cleanup(func() {
+			require.NoError(t, rbac.RBAC().UnassignRole(ctx, tenant.Default, subject, consts.AUTHZ_ROLE_ADMIN))
+		})
+
+		report, err := authz.ReconcilePolicies(ctx)
+		require.NoError(t, err)
+		require.Contains(t, report.Drifts, authz.PolicyDrift{
+			Kind: "binding", Direction: "orphaned",
+			Tenant: tenant.Default, Role: consts.AUTHZ_ROLE_ADMIN, Subject: subject,
+		}, "an assignment with no binding behind it should be reported")
+	})
 }
 
 // seedReconcilableBinding creates a role and a binding to it through the normal

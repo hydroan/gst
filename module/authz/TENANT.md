@@ -10,6 +10,7 @@
 - `Routes` 是全局后端路由快照，不属于某个 tenant。
 - `AuthzRule` 当前只注册内部存储表，不暴露公开 CRUD API。
 - `system_root` 是系统级角色，不通过 `RoleBinding` 管理。
+- 每个 tenant 内置的管理员角色 `admin` 没有 `Role` 行，经 `RoleBinding` 指派：`role_id` 写 `admin`，tenant 取自请求；跨 tenant 的调用者（`system_root`）在请求体里点名 `tenant_id`。
 
 ## 不属于 tenant 的接口
 
@@ -40,9 +41,9 @@
 
 - `GET /api/authz/menus`
 
-该接口的资源来源是全局 `Menu` 目录，但响应会根据当前 request tenant 下的 `RoleBinding`、默认 role 和 `Role.MenuIDs` 过滤。因此它不是 tenant 拥有菜单资源，而是全局菜单目录在当前 tenant 下的可见投影。
+该接口的资源来源是全局 `Menu` 目录，但响应会根据当前 request tenant 下的 `RoleBinding` 和 `Role.MenuIDs` 过滤。因此它不是 tenant 拥有菜单资源，而是全局菜单目录在当前 tenant 下的可见投影。
 
-`system_root` 用户绕过菜单过滤，可看到完整菜单目录。
+`system_root` 用户和当前 tenant 的内置管理员 `admin` 绕过菜单过滤，可看到完整菜单目录。
 
 ## 跨 tenant 的接口
 
