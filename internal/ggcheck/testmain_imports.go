@@ -17,14 +17,15 @@ var TestMainImports = Check{
 }
 
 // checkTestMainImports checks that every test file declaring TestMain in an
-// external test package (see gghelper.TestMainFiles), which starts the test
-// server of its package the way main.go starts the application, imports the
-// interceptor and pb packages exactly while the project holds them (see
-// gghelper.OptionalImportDrift), as gg gen keeps them: without the import of
-// a package the project holds, the test server registers nothing the
-// package registers, its interceptors or its gRPC services, and the tests
-// pass over them or dial a listener that is not there; with the import of a
-// package the project holds no more, the test binary does not build.
+// external test package (see gghelper.TestMainFiles) imports the interceptor
+// and pb packages exactly while the project holds them (see
+// gghelper.OptionalImportDrift), as gg gen keeps them, whether or not its
+// TestMain starts the test server, which it may do through a helper of its own.
+// Without the import of a package the project holds, a test server such a
+// TestMain starts the way main.go starts the application registers nothing the
+// package registers, its interceptors or its gRPC services, and the tests pass
+// over them or dial a listener that is not there; with the import of a package
+// the project holds no more, the test binary does not build.
 func checkTestMainImports(ignore gghelper.ProjectIgnore) []string {
 	modulePath, err := gghelper.ModulePath(".")
 	if err != nil {

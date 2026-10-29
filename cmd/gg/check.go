@@ -21,8 +21,9 @@ var checkCmd = &cobra.Command{
 }
 
 // projectChecks lists the checks gg check runs, in the order it runs them,
-// prints their results and numbers them in its help. gg gen and module copy
-// run the same list.
+// prints their results and numbers them in its help. gg gen ts runs it whole as
+// well; gg gen and gg module copy run subsets of it (see generationChecks and
+// moduleCopyChecks).
 var projectChecks = []ggcheck.Check{
 	ggcheck.ArchitectureDependencies,
 	ggcheck.ModelSingularNaming,
@@ -128,8 +129,9 @@ func checkRun() {
 	}
 }
 
-// runProjectChecks runs the given project checks, the full list for gg
-// check and generationChecks for gg gen.
+// runProjectChecks runs the given project checks: projectChecks for gg check
+// and gg gen ts, generationChecks for gg gen and moduleCopyChecks for the gg
+// gen run of gg module copy.
 //
 // quiet suppresses output when the project is clean; violations always
 // print. Violations recorded in baseline are treated as pre-existing and

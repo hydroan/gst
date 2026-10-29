@@ -37,16 +37,15 @@ func PresentOptionalImportDirs() []string {
 // TestMainFiles lists the test files of the project in the working
 // directory, among the paths ignore keeps (see ProjectIgnore), that declare
 // TestMain at package level in an external test package, in path order: the
-// files starting the test server of their package the way main.go starts the
-// application, which import the packages main.go imports (see
-// OptionalImportDrift). The TestMain of an internal test package is left
+// files whose TestMain may start the test server of their package the way
+// main.go starts the application, and so import the packages main.go imports
+// (see OptionalImportDrift). The TestMain of an internal test package is left
 // out: the packages main.go imports may import that package, which its own
 // tests cannot import back. For a project holding service/record/main_test.go
 // of package record_test and dao/entry/main_test.go of package entry, both
 // declaring TestMain, it lists service/record/main_test.go. A test file
-// mentioning TestMain that does not parse is an error, gg being unable to
-// tell what it declares; one mentioning no TestMain declares none and is
-// not parsed.
+// mentioning TestMain that does not parse is an error, gg being unable to tell
+// what it declares; one mentioning no TestMain declares none and is not parsed.
 func TestMainFiles(ignore ProjectIgnore) ([]string, error) {
 	var files []string
 	err := ignore.Walk(".", func(path string, info os.FileInfo) error {
