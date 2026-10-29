@@ -49,8 +49,6 @@ func newProducer(cfg config.Kafka, topic string) (*kgo.Client, error) {
 
 		// low latency tuning
 		kgo.ProducerLinger(1*time.Millisecond), // extremely short batching delay
-		// kgo.ProducerBatchMaxBytes(n),           // smaller batches
-		// kgo.MaxBufferedRecords(n),              // large buffer to absorb traffic bursts
 
 		// Idempotent dedup is not needed for correctness — every instance
 		// deduplicates through its per-key timestamp watermark — so the
@@ -103,7 +101,6 @@ func newConsumer(cfg config.Kafka, topic string, group string, onAssigned func()
 		// low latency consumption tuning
 		kgo.FetchMaxWait(10*time.Millisecond), // very short fetch wait
 		kgo.FetchMinBytes(1),                  // return as soon as any data is available
-		// kgo.FetchMaxBytes(n),           // larger maximum fetch size (10MB)
 
 		// TCP connection tuning
 		kgo.DialTimeout(300*time.Millisecond),

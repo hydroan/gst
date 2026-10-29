@@ -70,7 +70,6 @@ func New(cfg config.RethinkDB) (*rethinkdb.Session, error) {
 		DiscoverHosts: cfg.DiscoveryHost,
 	}
 	if cfg.MaxIdle > 0 {
-		// opts.MaxIdle = cfg.MaxIdle
 		opts.InitialCap = cfg.MaxIdle
 	}
 	if cfg.MaxOpen > 0 {
