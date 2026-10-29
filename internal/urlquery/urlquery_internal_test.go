@@ -27,11 +27,11 @@ type filterTestModel struct {
 	ClosedAt *time.Time     `json:"closed_at" query:"closed_at"`
 	Retries  *int           `json:"retries" query:"retries"`
 	Archived *bool          `json:"archived" query:"archived"`
-	// GroupIDs and Renamed anchor the column resolution: gorm renders the
-	// former as group_ids (a plain snake case conversion would not) and the
+	// BoxIDs and Renamed anchor the column resolution: gorm renders the
+	// former as box_ids (a plain snake case conversion would not) and the
 	// latter through its column tag, while the URL keeps the query name.
-	GroupIDs string `json:"group_ids" query:"group_ids"`
-	Renamed  string `json:"renamed" gorm:"column:custom_column" query:"renamed"`
+	BoxIDs  string `json:"box_ids" query:"box_ids"`
+	Renamed string `json:"renamed" gorm:"column:custom_column" query:"renamed"`
 	// Secret is a column hidden from clients: json:"-" keeps it out of
 	// responses and out of every query, its query tag notwithstanding.
 	// Virtual is no column at all: a bare key fills it for the service's own
@@ -185,12 +185,12 @@ func TestFilters(t *testing.T) {
 
 	t.Run("UsesGormColumnNames", func(t *testing.T) {
 		conds, err := Filters(url.Values{
-			"group_ids[in]": {"a,b"},
+			"box_ids[in]": {"a,b"},
 		}, &filterTestModel{})
 		require.NoError(t, err)
 		require.Equal(t, []types.Filter{
-			types.NewFilter("", "group_ids", types.FilterOpIn, []string{"a", "b"}),
-		}, conds, "gorm renders GroupIDs as group_ids, not group_i_ds")
+			types.NewFilter("", "box_ids", types.FilterOpIn, []string{"a", "b"}),
+		}, conds, "gorm renders BoxIDs as box_ids, not box_i_ds")
 
 		conds, err = Filters(url.Values{
 			"renamed[eq]": {"x"},
@@ -621,9 +621,9 @@ func TestDecode(t *testing.T) {
 
 	t.Run("FillsMultiWordNamedFields", func(t *testing.T) {
 		var m filterTestModel
-		require.NoError(t, Decode(url.Values{"item_count": {"7"}, "group_ids": {"g1"}}, &m))
+		require.NoError(t, Decode(url.Values{"item_count": {"7"}, "box_ids": {"g1"}}, &m))
 		require.Equal(t, 7, m.ItemCount, "a multi-word query name is a legal bare key")
-		require.Equal(t, "g1", m.GroupIDs)
+		require.Equal(t, "g1", m.BoxIDs)
 	})
 
 	t.Run("FillsEmbeddedColumnsByPath", func(t *testing.T) {

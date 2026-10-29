@@ -68,7 +68,7 @@ func TestMigrate(t *testing.T) {
 	t.Run("mysql", func(t *testing.T) {
 		dumper, err := dbmigrate.NewSchemaDumper()
 		require.NoError(t, err)
-		schema, err := dumper.Dump(config.DBMySQL, User{}, Group{}, Sample{}, DefaultedRecord{})
+		schema, err := dumper.Dump(config.DBMySQL, User{}, Box{}, Sample{}, DefaultedRecord{})
 		require.NoError(t, err)
 
 		database := fmt.Sprintf("gst_dbmigrate_test_%d", time.Now().UnixNano())
@@ -103,7 +103,7 @@ func TestMigrate(t *testing.T) {
 	t.Run("postgres", func(t *testing.T) {
 		dumper, err := dbmigrate.NewSchemaDumper()
 		require.NoError(t, err)
-		schema, err := dumper.Dump(config.DBPostgres, User{}, Group{}, Sample{}, DefaultedRecord{})
+		schema, err := dumper.Dump(config.DBPostgres, User{}, Box{}, Sample{}, DefaultedRecord{})
 		require.NoError(t, err)
 
 		database := fmt.Sprintf("gst_dbmigrate_test_%d", time.Now().UnixNano())
@@ -146,7 +146,7 @@ func TestMigrate(t *testing.T) {
 	t.Run("sqlite", func(t *testing.T) {
 		dumper, err := dbmigrate.NewSchemaDumper()
 		require.NoError(t, err)
-		schema, err := dumper.Dump(config.DBSqlite, User{}, Group{}, Sample{}, DefaultedRecord{})
+		schema, err := dumper.Dump(config.DBSqlite, User{}, Box{}, Sample{}, DefaultedRecord{})
 		require.NoError(t, err)
 
 		database := filepath.Join(t.TempDir(), "test.db")

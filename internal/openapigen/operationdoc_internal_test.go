@@ -15,9 +15,9 @@ func TestOperationIDDerivesFromPath(t *testing.T) {
 		want string
 	}{
 		{"/api/sample/records/{id}", consts.Patch, "sample_records_patch"},
-		{"/api/groups", consts.List, "groups_list"},
+		{"/api/boxes", consts.List, "boxes_list"},
 		{"/api/hello-world", consts.Create, "hello_world_create"},
-		{"/api/groups/{group}/items", consts.List, "groups_items_list"},
+		{"/api/boxes/{box}/items", consts.List, "boxes_items_list"},
 	}
 	for _, tt := range tests {
 		if got := operationID(tt.path, tt.op); got != tt.want {

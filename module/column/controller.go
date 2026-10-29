@@ -26,8 +26,8 @@ const deletedAtColumn = "deleted_at"
 // queryColumnsWithQuery answers which distinct values each of the named
 // columns has, narrowed by the filters the request carries:
 //
-//	SELECT `group_id` FROM `samples` WHERE `group_id` IS NOT NULL
-//	  AND `deleted_at` IS NULL AND `region` IN ('east') GROUP BY `group_id`
+//	SELECT `box_id` FROM `samples` WHERE `box_id` IS NOT NULL
+//	  AND `deleted_at` IS NULL AND `region` IN ('east') GROUP BY `box_id`
 //
 // The filters come from a URL query string, so none of it may reach the
 // statement as text: a filter may only name one of the columns the module was

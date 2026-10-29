@@ -20,13 +20,13 @@ type User struct {
 
 func (*User) TableName() string { return "users" }
 
-type Group struct {
+type Box struct {
 	Name string `json:"name"`
 
 	modelregistry.Base
 }
 
-func (*Group) TableName() string { return "groups" }
+func (*Box) TableName() string { return "boxes" }
 
 // Sample declares custom indexes through its Indexes method while also
 // carrying a plain struct tag column. The indexed columns carry a size:
@@ -94,31 +94,31 @@ func TestDumper(t *testing.T) {
 	defer dumper.Close()
 
 	t.Run("mysql", func(t *testing.T) {
-		schema, err := dumper.Dump(config.DBMySQL, User{}, &Group{})
+		schema, err := dumper.Dump(config.DBMySQL, User{}, &Box{})
 		require.NoError(t, err)
 		require.NotEmpty(t, schema)
-		require.Contains(t, schema, "-- Model: dbmigrate_test.Group\nCREATE TABLE `groups`")
+		require.Contains(t, schema, "-- Model: dbmigrate_test.Box\nCREATE TABLE `boxes`")
 		require.Contains(t, schema, "-- Model: dbmigrate_test.User\nCREATE TABLE `users`")
-		requireNoBaseSecondaryIndexes(t, schema, "groups")
+		requireNoBaseSecondaryIndexes(t, schema, "boxes")
 		requireNoBaseSecondaryIndexes(t, schema, "users")
 		require.NotContains(t, schema, "DROP TABLE IF EXISTS")
 	})
 
 	t.Run("postgres", func(t *testing.T) {
-		schema, err := dumper.Dump(config.DBPostgres, User{}, &Group{})
+		schema, err := dumper.Dump(config.DBPostgres, User{}, &Box{})
 		require.NoError(t, err)
 		require.NotEmpty(t, schema)
-		require.Contains(t, schema, "-- Model: dbmigrate_test.Group\nCREATE TABLE \"groups\"")
+		require.Contains(t, schema, "-- Model: dbmigrate_test.Box\nCREATE TABLE \"boxes\"")
 		require.Contains(t, schema, "-- Model: dbmigrate_test.User\nCREATE TABLE \"users\"")
-		require.NotContains(t, schema, "-- Model: dbmigrate_test.Group\nCREATE INDEX")
+		require.NotContains(t, schema, "-- Model: dbmigrate_test.Box\nCREATE INDEX")
 		require.NotContains(t, schema, "-- Model: dbmigrate_test.User\nCREATE INDEX")
-		require.Contains(t, schema, `CREATE TABLE "groups"`)
+		require.Contains(t, schema, `CREATE TABLE "boxes"`)
 		require.NotContains(t, schema, "ENGINE = InnoDB")
-		require.NotContains(t, schema, "CREATE TABLE `groups`")
+		require.NotContains(t, schema, "CREATE TABLE `boxes`")
 	})
 
 	t.Run("sqlite", func(t *testing.T) {
-		schema, err := dumper.Dump(config.DBSqlite, User{}, &Group{})
+		schema, err := dumper.Dump(config.DBSqlite, User{}, &Box{})
 		require.NoError(t, err)
 		require.NotEmpty(t, schema)
 	})
@@ -130,16 +130,16 @@ func TestDumperOrder(t *testing.T) {
 	defer dumper.Close()
 
 	// Models render sorted by type name, whatever order they arrive in:
-	// "*dbmigrate_test.Group" < "*dbmigrate_test.User".
-	schema, err := dumper.Dump(config.DBMySQL, &User{}, &Group{})
+	// "*dbmigrate_test.Box" < "*dbmigrate_test.User".
+	schema, err := dumper.Dump(config.DBMySQL, &User{}, &Box{})
 	require.NoError(t, err)
 
-	idxGroup := strings.Index(schema, "CREATE TABLE `groups`")
+	idxBox := strings.Index(schema, "CREATE TABLE `boxes`")
 	idxUser := strings.Index(schema, "CREATE TABLE `users`")
 
-	require.NotEqual(t, -1, idxGroup)
+	require.NotEqual(t, -1, idxBox)
 	require.NotEqual(t, -1, idxUser)
-	require.Less(t, idxGroup, idxUser, "Group should appear before User because *...Group < *...User")
+	require.Less(t, idxBox, idxUser, "Box should appear before User because *...Box < *...User")
 }
 
 func TestDumperCustomIndexes(t *testing.T) {
@@ -171,12 +171,12 @@ func TestDumperKeepsCallerOrder(t *testing.T) {
 
 	// Callers expand a slice of their own into dst, so the deterministic
 	// output order must come from a copy and leave that slice untouched.
-	user, group := &User{}, &Group{}
-	models := []any{user, group}
+	user, box := &User{}, &Box{}
+	models := []any{user, box}
 	schema, err := dumper.Dump(config.DBMySQL, models...)
 	require.NoError(t, err)
 	require.NotEmpty(t, schema)
-	require.Equal(t, []any{user, group}, models)
+	require.Equal(t, []any{user, box}, models)
 }
 
 func TestDumperClosed(t *testing.T) {

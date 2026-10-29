@@ -39,12 +39,12 @@ func TestImports(t *testing.T) {
 		{
 			name:           "other_package",
 			modulePath:     "codegen",
-			modelFileDir:   "model/group",
-			modelQualifier: "group",
+			modelFileDir:   "model/box",
+			modelQualifier: "box",
 			phase:          consts.Create,
 			otherPkgs:      []string{"github.com/hydroan/gst/model"},
 			want: `import (
-	"codegen/model/group"
+	"codegen/model/box"
 	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/model"
@@ -270,13 +270,13 @@ func TestTypes(t *testing.T) {
 		},
 		{
 			name:         "list_with_empty_payload",
-			modelPkgName: "group",
-			modelName:    "Group",
+			modelPkgName: "box",
+			modelName:    "Box",
 			reqName:      dsl.PayloadEmpty,
-			rspName:      "*GroupListRsp",
+			rspName:      "*BoxListRsp",
 			phase:        consts.List,
 			want: `type Lister struct {
-	service.Base[*group.Group, *model.Empty, *group.GroupListRsp]
+	service.Base[*box.Box, *model.Empty, *box.BoxListRsp]
 }`,
 		},
 		{
@@ -292,13 +292,13 @@ func TestTypes(t *testing.T) {
 		},
 		{
 			name:         "create_with_empty_result",
-			modelPkgName: "group",
-			modelName:    "Group",
-			reqName:      "*GroupCreateReq",
+			modelPkgName: "box",
+			modelName:    "Box",
+			reqName:      "*BoxCreateReq",
 			rspName:      dsl.PayloadEmpty,
 			phase:        consts.Create,
 			want: `type Creator struct {
-	service.Base[*group.Group, *group.GroupCreateReq, *model.Empty]
+	service.Base[*box.Box, *box.BoxCreateReq, *model.Empty]
 }`,
 		},
 		{
@@ -350,11 +350,11 @@ func TestServiceMethod1(t *testing.T) {
 		},
 		{
 			name:         "UpdateAfter",
-			recvName:     "g",
-			modelName:    "Group",
+			recvName:     "b",
+			modelName:    "Box",
 			modelPkgName: "model_auth",
 			phase:        consts.UpdateAfter,
-			want:         "func (g *Updater) UpdateAfter(ctx *gst.ServiceContext, group *model_auth.Group) error {\n}",
+			want:         "func (b *Updater) UpdateAfter(ctx *gst.ServiceContext, box *model_auth.Box) error {\n}",
 		},
 	}
 	for _, tt := range tests {
@@ -391,11 +391,11 @@ func TestServiceMethod2(t *testing.T) {
 		},
 		{
 			name:         "ListAfter",
-			recvName:     "g",
-			modelName:    "Group",
+			recvName:     "b",
+			modelName:    "Box",
 			modelPkgName: "model_auth",
 			phase:        consts.ListAfter,
-			want:         "func (g *Lister) ListAfter(ctx *gst.ServiceContext, groups *[]*model_auth.Group) error {\n}",
+			want:         "func (b *Lister) ListAfter(ctx *gst.ServiceContext, boxes *[]*model_auth.Box) error {\n}",
 		},
 	}
 	for _, tt := range tests {
@@ -433,11 +433,11 @@ func TestServiceMethod3(t *testing.T) {
 		},
 		{
 			name:         "UpdateManyBefore",
-			recvName:     "g",
-			modelName:    "Group",
+			recvName:     "b",
+			modelName:    "Box",
 			modelPkgName: "model_auth",
 			phase:        consts.UpdateManyBefore,
-			want:         "func (g *ManyUpdater) UpdateManyBefore(ctx *gst.ServiceContext, groups ...*model_auth.Group) error {\n}",
+			want:         "func (b *ManyUpdater) UpdateManyBefore(ctx *gst.ServiceContext, boxes ...*model_auth.Box) error {\n}",
 		},
 	}
 	for _, tt := range tests {
@@ -479,30 +479,30 @@ func TestServiceMethod4(t *testing.T) {
 			// Bare action type names (the declared form of slice and map
 			// action types) are transcribed as value types.
 			name:         "UpdateBareNamesTranscribed",
-			recvName:     "g",
+			recvName:     "b",
 			modelPkgName: "model",
-			reqName:      "GroupRequest",
-			rspName:      "GroupResponse",
+			reqName:      "BoxRequest",
+			rspName:      "BoxResponse",
 			phase:        consts.Update,
-			want:         "func (g *Updater) Update(ctx *gst.ServiceContext, req model.GroupRequest) (rsp model.GroupResponse, err error) {\n}",
+			want:         "func (b *Updater) Update(ctx *gst.ServiceContext, req model.BoxRequest) (rsp model.BoxResponse, err error) {\n}",
 		},
 		{
 			name:         "UpdateStarredNamesTranscribed",
-			recvName:     "g",
+			recvName:     "b",
 			modelPkgName: "model",
-			reqName:      "*GroupRequest",
-			rspName:      "*GroupResponse",
+			reqName:      "*BoxRequest",
+			rspName:      "*BoxResponse",
 			phase:        consts.Update,
-			want:         "func (g *Updater) Update(ctx *gst.ServiceContext, req *model.GroupRequest) (rsp *model.GroupResponse, err error) {\n}",
+			want:         "func (b *Updater) Update(ctx *gst.ServiceContext, req *model.BoxRequest) (rsp *model.BoxResponse, err error) {\n}",
 		},
 		{
 			name:         "ListEmptyPayload",
-			recvName:     "g",
-			modelPkgName: "group",
+			recvName:     "b",
+			modelPkgName: "box",
 			reqName:      dsl.PayloadEmpty,
-			rspName:      "*GroupListRsp",
+			rspName:      "*BoxListRsp",
 			phase:        consts.List,
-			want:         "func (g *Lister) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *group.GroupListRsp, err error) {\n}",
+			want:         "func (b *Lister) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *box.BoxListRsp, err error) {\n}",
 		},
 		{
 			name:         "GetEmptyPayloadRootModelPackage",
@@ -515,12 +515,12 @@ func TestServiceMethod4(t *testing.T) {
 		},
 		{
 			name:         "CreateEmptyResult",
-			recvName:     "g",
-			modelPkgName: "group",
-			reqName:      "*GroupCreateReq",
+			recvName:     "b",
+			modelPkgName: "box",
+			reqName:      "*BoxCreateReq",
 			rspName:      dsl.PayloadEmpty,
 			phase:        consts.Create,
-			want:         "func (g *Creator) Create(ctx *gst.ServiceContext, req *group.GroupCreateReq) (rsp *model.Empty, err error) {\n}",
+			want:         "func (b *Creator) Create(ctx *gst.ServiceContext, req *box.BoxCreateReq) (rsp *model.Empty, err error) {\n}",
 		},
 	}
 	for _, tt := range tests {

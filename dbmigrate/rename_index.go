@@ -7,7 +7,7 @@ type indexRenamePair struct {
 	Table   string
 	From    string
 	To      string
-	Columns string // normalized column list for display, e.g. "group_id,created_at"
+	Columns string // normalized column list for display, e.g. "box_id,created_at"
 	Unique  bool
 }
 

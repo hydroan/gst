@@ -16,18 +16,19 @@ import (
 // Model stores model information
 //
 // Examples:
-// {ModulePath:"helloworld", ModelPkgName:"model", ModelName:"User", ModelVarName:"u", ModelFileDir:"model", ModelFilePath:"model/user.go"},
-// {ModulePath:"helloworld", ModelPkgName:"sample", ModelName:"Group", ModelVarName:"g", ModelFileDir:"model/sample", ModelFilePath:"model/sample/group.go"},
+//
+//	{ModulePath:"helloworld", ModelPkgName:"model", ModelName:"User", ModelVarName:"u", ModelFileDir:"model", ModelFilePath:"model/user.go"},
+//	{ModulePath:"helloworld", ModelPkgName:"sample", ModelName:"Box", ModelVarName:"b", ModelFileDir:"model/sample", ModelFilePath:"model/sample/box.go"},
 type Model struct {
 	// module related fields
 	ModulePath string // module path parsed from go.mod
 
 	// model related fields
 	ModelPkgName  string // model package name, e.g.: model, sample
-	ModelName     string // model name, e.g.: User, Group
-	ModelVarName  string // lowercase model variable name, e.g.: u, g
+	ModelName     string // model name, e.g.: User, Box
+	ModelVarName  string // lowercase model variable name, e.g.: u, b
 	ModelFileDir  string // directory of the model file, relative to the project root, e.g.: model/sample
-	ModelFilePath string // path of the model file, relative to the project root, e.g.: model/sample/group.go
+	ModelFilePath string // path of the model file, relative to the project root, e.g.: model/sample/box.go
 
 	// custom request and response related fields
 	Design *dsl.Design

@@ -12,10 +12,10 @@ type exampleItem struct {
 }
 
 type exampleNestedModel struct {
-	Tags       map[string]int         `json:"tags"`
-	GroupRoles map[string][]string    `json:"group_roles"`
-	Metadata   map[string]exampleItem `json:"metadata"`
-	Items      []exampleItem          `json:"items"`
+	Tags     map[string]int         `json:"tags"`
+	ItemTags map[string][]string    `json:"item_tags"`
+	Metadata map[string]exampleItem `json:"metadata"`
+	Items    []exampleItem          `json:"items"`
 }
 
 func TestApplyExampleGeneratesRecursiveExamplesForArbitraryTypes(t *testing.T) {
@@ -36,7 +36,7 @@ func TestApplyExampleGeneratesRecursiveExamplesForArbitraryTypes(t *testing.T) {
 		want  any
 	}{
 		{"tags", map[string]any{"string": 0}},
-		{"group_roles", map[string]any{"string": []any{"string"}}},
+		{"item_tags", map[string]any{"string": []any{"string"}}},
 		{"metadata", map[string]any{"string": map[string]any{"name": "string"}}},
 		{"items", []any{map[string]any{"name": "string"}}},
 	}
@@ -93,7 +93,7 @@ func TestApplyExampleIllustratesEveryProperty(t *testing.T) {
 // record illustrated, a map of slices included.
 func TestApplyExampleIllustratesTheRecordOfABatch(t *testing.T) {
 	type batchItemModel struct {
-		GroupRoles map[string][]string `json:"group_roles"`
+		ItemTags map[string][]string `json:"item_tags"`
 	}
 	type batchRequest struct {
 		Items []batchItemModel `json:"items"`
@@ -107,7 +107,7 @@ func TestApplyExampleIllustratesTheRecordOfABatch(t *testing.T) {
 	applyExample(schemaRef)
 
 	want := map[string]any{
-		"items": []any{map[string]any{"group_roles": map[string]any{"string": []any{"string"}}}},
+		"items": []any{map[string]any{"item_tags": map[string]any{"string": []any{"string"}}}},
 	}
 	if !reflect.DeepEqual(schemaRef.Value.Example, want) {
 		t.Fatalf("example = %#v, want %#v", schemaRef.Value.Example, want)

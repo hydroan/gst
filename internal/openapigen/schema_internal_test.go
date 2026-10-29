@@ -17,7 +17,7 @@ import (
 // registry is the only thing the generator reads.
 func init() {
 	registerFixtureDoc("mapDocModel", "", map[string]string{
-		"GroupRoles": "GroupRoles binds groups to their roles.",
+		"ItemTags": "ItemTags binds items to their tags.",
 	})
 	registerFixtureDoc("jsonDocPayload", "", map[string]string{
 		"Code": "Code is the payload code.",
@@ -124,7 +124,7 @@ func TestSchemaFromTypeDescribesSliceMembersOfNestedStructs(t *testing.T) {
 }
 
 type mapDocModel struct {
-	GroupRoles map[string][]string `json:"group_roles,omitempty"`
+	ItemTags map[string][]string `json:"item_tags,omitempty"`
 }
 
 func TestAddSchemaDocsForTypeSetsDescriptionWithoutTitle(t *testing.T) {
@@ -135,15 +135,15 @@ func TestAddSchemaDocsForTypeSetsDescriptionWithoutTitle(t *testing.T) {
 
 	addSchemaDocsForType(reflect.TypeFor[mapDocModel](), schemaRef, nil)
 
-	groupRoles := schemaRef.Value.Properties["group_roles"]
-	if groupRoles == nil || groupRoles.Value == nil {
-		t.Fatal("group_roles property missing")
+	itemTags := schemaRef.Value.Properties["item_tags"]
+	if itemTags == nil || itemTags.Value == nil {
+		t.Fatal("item_tags property missing")
 	}
-	if groupRoles.Value.Title != "" {
-		t.Fatalf("group_roles title = %q, want empty", groupRoles.Value.Title)
+	if itemTags.Value.Title != "" {
+		t.Fatalf("item_tags title = %q, want empty", itemTags.Value.Title)
 	}
-	if groupRoles.Value.Description != "Binds groups to their roles." {
-		t.Fatalf("group_roles description = %q, want API-facing field comment", groupRoles.Value.Description)
+	if itemTags.Value.Description != "Binds items to their tags." {
+		t.Fatalf("item_tags description = %q, want API-facing field comment", itemTags.Value.Description)
 	}
 }
 
@@ -151,20 +151,20 @@ func TestAddSchemaDocsForTypePreservesExistingTitle(t *testing.T) {
 	property := openapi3.NewStringSchema()
 	property.Title = "Explicit schema title"
 	object := openapi3.NewObjectSchema()
-	object.WithProperty("group_roles", property)
+	object.WithProperty("item_tags", property)
 	schemaRef := &openapi3.SchemaRef{Value: object}
 
 	addSchemaDocsForType(reflect.TypeFor[mapDocModel](), schemaRef, nil)
 
-	groupRoles := schemaRef.Value.Properties["group_roles"]
-	if groupRoles == nil || groupRoles.Value == nil {
-		t.Fatal("group_roles property missing")
+	itemTags := schemaRef.Value.Properties["item_tags"]
+	if itemTags == nil || itemTags.Value == nil {
+		t.Fatal("item_tags property missing")
 	}
-	if groupRoles.Value.Title != "Explicit schema title" {
-		t.Fatalf("group_roles title = %q, want explicit schema title", groupRoles.Value.Title)
+	if itemTags.Value.Title != "Explicit schema title" {
+		t.Fatalf("item_tags title = %q, want explicit schema title", itemTags.Value.Title)
 	}
-	if groupRoles.Value.Description != "Binds groups to their roles." {
-		t.Fatalf("group_roles description = %q, want API-facing field comment", groupRoles.Value.Description)
+	if itemTags.Value.Description != "Binds items to their tags." {
+		t.Fatalf("item_tags description = %q, want API-facing field comment", itemTags.Value.Description)
 	}
 }
 
@@ -176,17 +176,17 @@ func TestAddSchemaDocsForTypeDoesNotDuplicateIntoMapAdditionalProperties(t *test
 
 	addSchemaDocsForType(reflect.TypeFor[mapDocModel](), schemaRef, nil)
 
-	groupRoles := schemaRef.Value.Properties["group_roles"]
-	if groupRoles == nil || groupRoles.Value == nil {
-		t.Fatal("group_roles property missing")
+	itemTags := schemaRef.Value.Properties["item_tags"]
+	if itemTags == nil || itemTags.Value == nil {
+		t.Fatal("item_tags property missing")
 	}
 
 	// The map's additionalProperties value schema should stay undecorated: the
 	// field-level docs above already describe it, and every other type in this
 	// codebase (arrays, nested structs) only carries docs at the field level.
-	additionalProperties := groupRoles.Value.AdditionalProperties.Schema
+	additionalProperties := itemTags.Value.AdditionalProperties.Schema
 	if additionalProperties == nil || additionalProperties.Value == nil {
-		t.Fatal("group_roles additionalProperties schema missing")
+		t.Fatal("item_tags additionalProperties schema missing")
 	}
 	if additionalProperties.Value.Title != "" {
 		t.Fatalf("additionalProperties title = %q, want empty", additionalProperties.Value.Title)

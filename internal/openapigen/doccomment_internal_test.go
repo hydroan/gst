@@ -47,9 +47,9 @@ func TestOpenAPIDocCommentRemovesExactGoDocSubject(t *testing.T) {
 		},
 		{
 			name:    "English verb",
-			symbol:  "GroupRoles",
-			comment: "GroupRoles binds groups to their roles.",
-			want:    "Binds groups to their roles.",
+			symbol:  "ItemTags",
+			comment: "ItemTags binds items to their tags.",
+			want:    "Binds items to their tags.",
 		},
 		{
 			name:    "ASCII colon",

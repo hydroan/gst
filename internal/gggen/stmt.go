@@ -151,8 +151,8 @@ func StmtServiceRegister(serviceImport string, phase consts.Phase, route string)
 // model package by. For example, it builds
 //
 //	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records", &gst.ControllerConfig[*model.Record]{}, consts.Create)
-//	router.Register[*model.Record, *gstmodel.Empty, *model.GroupListRsp](router.Auth(), "/api/groups", &gst.ControllerConfig[*model.Record]{}, consts.List)
-//	router.Register[*group.Record, *group.Record, *group.Record](router.Auth(), "/api/groups/:id", &gst.ControllerConfig[*group.Record]{ParamName: "id"}, consts.Get)
+//	router.Register[*model.Record, *gstmodel.Empty, *model.BoxListRsp](router.Auth(), "/api/boxes", &gst.ControllerConfig[*model.Record]{}, consts.List)
+//	router.Register[*box.Record, *box.Record, *box.Record](router.Auth(), "/api/boxes/:id", &gst.ControllerConfig[*box.Record]{ParamName: "id"}, consts.Get)
 //
 // A dsl.PayloadEmpty side becomes *model.Empty under gstModelPkg, the
 // qualifier the router file uses for model.Empty, resolved once per file by

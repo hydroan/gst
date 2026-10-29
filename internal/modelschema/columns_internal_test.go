@@ -39,7 +39,7 @@ type sampleRecord struct {
 	SampleBase
 
 	Name         string `json:"name" query:"name"`
-	GroupIDs     string `json:"group_ids"`
+	BoxIDs       string `json:"box_ids"`
 	MD5Hash      string `json:"md5_hash"`
 	Renamed      string `json:"renamed" gorm:"column:custom_column"`
 	QueryTagged  string `json:"query_tagged" query:"alias"`
@@ -70,7 +70,7 @@ func TestColumns(t *testing.T) {
 	t.Run("ResolvesDBNameThroughGorm", func(t *testing.T) {
 		// gorm's commonInitialisms handling differs from a plain snake case
 		// conversion, so these two names are the regression anchors.
-		require.Contains(t, cols, "group_ids")
+		require.Contains(t, cols, "box_ids")
 		require.Contains(t, cols, "md5_hash")
 	})
 
@@ -88,7 +88,7 @@ func TestColumns(t *testing.T) {
 	t.Run("FieldWithoutAQueryTagIsNoURLParameter", func(t *testing.T) {
 		// The json tag serializes a field and nothing more: without a query
 		// tag the field is no URL parameter, and so is one tagged query:"-".
-		for _, dbName := range []string{"custom_column", "group_ids", "created_at"} {
+		for _, dbName := range []string{"custom_column", "box_ids", "created_at"} {
 			require.Empty(t, cols[dbName].QueryName, dbName)
 			require.False(t, cols[dbName].Filterable, dbName)
 		}

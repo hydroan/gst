@@ -55,7 +55,7 @@ type Row struct{}
 
 func (*Row) TableName() string { return "rows" }
 
-var group = NewColumn[*Row, string]("group_id")
+var box = NewColumn[*Row, string]("box_id")
 `)
 
 	violations := runCheck(ggcheck.ColumnReferenceMinting)
@@ -200,8 +200,8 @@ func (p *Pair[M, V]) match(value V) gst.Filter {
 
 import . "github.com/hydroan/gst"
 
-func owned[M Model](groupIDs ...string) Filter {
-	return NewColumn[M, string]("group_id").In(groupIDs...)
+func owned[M Model](boxIDs ...string) Filter {
+	return NewColumn[M, string]("box_id").In(boxIDs...)
 }
 `)
 

@@ -23,15 +23,15 @@ type User struct {
 	model.Base
 }
 
-type Group struct {
+type Box struct {
 	Name    string
 	Members []User
 
 	model.Base
 }
 
-type GroupUser struct {
-	GroupId int
+type BoxUser struct {
+	BoxId int
 	UserId  int
 }
 
@@ -55,15 +55,15 @@ type User struct {
 	model_auth.Base
 }
 
-type Group struct {
+type Box struct {
 	Name    string
 	Members []User
 
 	model_auth.Base
 }
 
-type GroupUser struct {
-	GroupId int
+type BoxUser struct {
+	BoxId int
 	UserId  int
 }
 
@@ -128,10 +128,10 @@ func TestFindModelsInFile(t *testing.T) {
 					ModelFileDir:  modelDir,
 					ModelFilePath: filename1,
 					ModelPkgName:  "model",
-					ModelName:     "Group",
-					ModelVarName:  "g",
+					ModelName:     "Box",
+					ModelVarName:  "b",
 					Design: &dsl.Design{
-						Endpoint: "groups",
+						Endpoint: "boxes",
 						Migrate:  false,
 					},
 				},
@@ -172,10 +172,10 @@ func TestFindModelsInFile(t *testing.T) {
 					ModelFileDir:  modelDir,
 					ModelFilePath: filename2,
 					ModelPkgName:  "model",
-					ModelName:     "Group",
-					ModelVarName:  "g",
+					ModelName:     "Box",
+					ModelVarName:  "b",
 					Design: &dsl.Design{
-						Endpoint: "groups",
+						Endpoint: "boxes",
 						Migrate:  false,
 					},
 				},

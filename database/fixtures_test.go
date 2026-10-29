@@ -49,7 +49,7 @@ var (
 )
 
 var (
-	errTestHookGroupCreateAfter = errors.New("test hook group create after failed")
+	errTestHookBoxCreateAfter = errors.New("test hook box create after failed")
 
 	u1 = &TestUser{Name: "user1", Email: "user1@example.com", Age: 18, ID: "u1"}
 	u2 = &TestUser{Name: "user2", Email: "user2@example.com", Age: 19, ID: "u2"}
@@ -152,9 +152,9 @@ func cleanupTestData() {
 	_ = database.Database[*TestAutoItem](context.Background()).List(&autoItems)
 	_ = database.Database[*TestAutoItem](context.Background()).Delete(autoItems...)
 
-	hookGroups := make([]*TestHookGroup, 0)
-	_ = database.Database[*TestHookGroup](context.Background()).List(&hookGroups)
-	_ = database.Database[*TestHookGroup](context.Background()).Delete(hookGroups...)
+	hookBoxes := make([]*TestHookBox, 0)
+	_ = database.Database[*TestHookBox](context.Background()).List(&hookBoxes)
+	_ = database.Database[*TestHookBox](context.Background()).Delete(hookBoxes...)
 
 	hookConfigs := make([]*TestHookConfig, 0)
 	_ = database.Database[*TestHookConfig](context.Background()).List(&hookConfigs)
@@ -307,7 +307,7 @@ type TestItem struct {
 	Name        string  `json:"name"`
 	Description string  `json:"description"`
 	Score       float64 `json:"score"`
-	GroupID     string  `json:"group_id"`
+	BoxID       string  `json:"box_id"`
 
 	modelregistry.Base
 }
@@ -1103,24 +1103,24 @@ type TestHookConfig struct {
 func (*TestHookConfig) TableName() string { return "test_hook_configs" }
 func (*TestHookConfig) Purge() bool       { return true }
 
-type TestHookGroup struct {
+type TestHookBox struct {
 	ConfigID string `json:"config_id" gorm:"size:191"`
 	Value    string `json:"value" gorm:"size:191"`
 
 	modelregistry.Base
 }
 
-func (*TestHookGroup) TableName() string { return "test_hook_groups" }
-func (*TestHookGroup) Purge() bool       { return true }
+func (*TestHookBox) TableName() string { return "test_hook_boxes" }
+func (*TestHookBox) Purge() bool       { return true }
 
-func (g *TestHookGroup) CreateAfter(ctx context.Context) error {
+func (g *TestHookBox) CreateAfter(ctx context.Context) error {
 	if strings.TrimSpace(g.ConfigID) == "" {
 		return nil
 	}
 	if err := database.Database[*TestHookConfig](ctx).UpdateByID(g.ConfigID, types.NewAssignment("", "value", g.Value)); err != nil {
 		return err
 	}
-	return errTestHookGroupCreateAfter
+	return errTestHookBoxCreateAfter
 }
 
 // TestHookedSample reads the TestHookConfig rows inside its hooks through the

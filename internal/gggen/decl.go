@@ -209,7 +209,7 @@ func types(modelQualifier, modelName, reqName, rspName, roleName string) *ast.Ge
 //	func (u *Creator) CreateBefore(ctx *gst.ServiceContext, user *model.User) error {
 //	}
 //
-//	func (g *Updater) UpdateAfter(ctx *gst.ServiceContext, group *model_auth.Group) error {
+//	func (b *Updater) UpdateAfter(ctx *gst.ServiceContext, box *model_auth.Box) error {
 //	}
 func serviceMethod1(recvName, modelName, modelQualifier string, phase consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	return &ast.FuncDecl{

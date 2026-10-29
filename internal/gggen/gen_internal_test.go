@@ -180,39 +180,39 @@ func TestGenServiceMethod4(t *testing.T) {
 		{
 			// A bare action type name (the declared form of slice and map
 			// action types) is transcribed as a value type.
-			name: "group_bare_names_transcribed",
+			name: "box_bare_names_transcribed",
 			info: &modelinfo.Model{
 				ModelPkgName: "model",
-				ModelName:    "Group",
-				ModelVarName: "g",
+				ModelName:    "Box",
+				ModelVarName: "b",
 				ModulePath:   "codegen",
 				ModelFileDir: "/tmp/model",
 			},
-			reqName: "GroupRequest",
-			rspName: "GroupResponse",
+			reqName: "BoxRequest",
+			rspName: "BoxResponse",
 			phase:   consts.Update,
-			want: `func (g *Updater) Update(ctx *gst.ServiceContext, req model.GroupRequest) (rsp model.GroupResponse, err error) {
-	log := g.WithContext(ctx, ctx.Phase())
-	log.Info("group update")
+			want: `func (b *Updater) Update(ctx *gst.ServiceContext, req model.BoxRequest) (rsp model.BoxResponse, err error) {
+	log := b.WithContext(ctx, ctx.Phase())
+	log.Info("box update")
 
 	return rsp, nil
 }`,
 		},
 		{
-			name: "group_starred_names_transcribed",
+			name: "box_starred_names_transcribed",
 			info: &modelinfo.Model{
 				ModelPkgName: "model",
-				ModelName:    "Group",
-				ModelVarName: "g",
+				ModelName:    "Box",
+				ModelVarName: "b",
 				ModulePath:   "codegen",
 				ModelFileDir: "/tmp/model",
 			},
-			reqName: "*GroupRequest",
-			rspName: "*GroupResponse",
+			reqName: "*BoxRequest",
+			rspName: "*BoxResponse",
 			phase:   consts.Update,
-			want: `func (g *Updater) Update(ctx *gst.ServiceContext, req *model.GroupRequest) (rsp *model.GroupResponse, err error) {
-	log := g.WithContext(ctx, ctx.Phase())
-	log.Info("group update")
+			want: `func (b *Updater) Update(ctx *gst.ServiceContext, req *model.BoxRequest) (rsp *model.BoxResponse, err error) {
+	log := b.WithContext(ctx, ctx.Phase())
+	log.Info("box update")
 
 	return rsp, nil
 }`,
@@ -686,31 +686,31 @@ func TestGenerateServiceListEmptyPayload(t *testing.T) {
 			name: "sub_package_model",
 			info: &modelinfo.Model{
 				ModulePath:   "helloworld",
-				ModelPkgName: "group",
-				ModelName:    "Group",
-				ModelVarName: "g",
-				ModelFileDir: "model/group",
+				ModelPkgName: "box",
+				ModelName:    "Box",
+				ModelVarName: "b",
+				ModelFileDir: "model/box",
 				Design:       &dsl.Design{},
 			},
 			wantImport:    "\"github.com/hydroan/gst/model\"",
-			wantBase:      "service.Base[*group.Group, *model.Empty, *group.GroupListRsp]",
-			wantSignature: "func (g *Lister) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *group.GroupListRsp, err error)",
-			wantFilter:    "func (g *Lister) Filter(ctx *gst.ServiceContext, group *group.Group, opts gst.QueryOptions) (*group.Group, gst.QueryOptions, error)",
+			wantBase:      "service.Base[*box.Box, *model.Empty, *box.BoxListRsp]",
+			wantSignature: "func (b *Lister) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *box.BoxListRsp, err error)",
+			wantFilter:    "func (b *Lister) Filter(ctx *gst.ServiceContext, box *box.Box, opts gst.QueryOptions) (*box.Box, gst.QueryOptions, error)",
 		},
 		{
 			name: "root_model_package",
 			info: &modelinfo.Model{
 				ModulePath:   "helloworld",
 				ModelPkgName: "model",
-				ModelName:    "Group",
-				ModelVarName: "g",
+				ModelName:    "Box",
+				ModelVarName: "b",
 				ModelFileDir: "model",
 				Design:       &dsl.Design{},
 			},
 			wantImport:    "gstmodel \"github.com/hydroan/gst/model\"",
-			wantBase:      "service.Base[*model.Group, *gstmodel.Empty, *model.GroupListRsp]",
-			wantSignature: "func (g *Lister) List(ctx *gst.ServiceContext, req *gstmodel.Empty) (rsp *model.GroupListRsp, err error)",
-			wantFilter:    "func (g *Lister) Filter(ctx *gst.ServiceContext, group *model.Group, opts gst.QueryOptions) (*model.Group, gst.QueryOptions, error)",
+			wantBase:      "service.Base[*model.Box, *gstmodel.Empty, *model.BoxListRsp]",
+			wantSignature: "func (b *Lister) List(ctx *gst.ServiceContext, req *gstmodel.Empty) (rsp *model.BoxListRsp, err error)",
+			wantFilter:    "func (b *Lister) Filter(ctx *gst.ServiceContext, box *model.Box, opts gst.QueryOptions) (*model.Box, gst.QueryOptions, error)",
 		},
 	}
 	for _, tt := range tests {
@@ -721,7 +721,7 @@ func TestGenerateServiceListEmptyPayload(t *testing.T) {
 				Result:  "*" + tt.info.ModelName + "ListRsp",
 				Phase:   consts.List,
 			}
-			file := GenerateService(tt.info, action, consts.List, "group")
+			file := GenerateService(tt.info, action, consts.List, "box")
 			if file == nil {
 				t.Fatal("GenerateService returned nil")
 			}

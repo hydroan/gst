@@ -137,45 +137,45 @@ func TestApplyServiceMethod4EmptyPayload(t *testing.T) {
 	}{
 		{
 			name:     "switch_business_req_to_empty_payload",
-			modelPkg: "group",
-			code: `package group
+			modelPkg: "box",
+			code: `package box
 
 import (
-	"helloworld/model/group"
+	"helloworld/model/box"
 	"github.com/hydroan/gst"
 )
 
-func (g *Lister) List(ctx *gst.ServiceContext, req *group.GroupListReq) (rsp *group.GroupListRsp, err error) {
+func (b *Lister) List(ctx *gst.ServiceContext, req *box.BoxListReq) (rsp *box.BoxListRsp, err error) {
 	return rsp, nil
 }`,
 			action: &dsl.Action{
 				Payload: dsl.PayloadEmpty,
-				Result:  "*GroupListRsp",
+				Result:  "*BoxListRsp",
 				Phase:   consts.List,
 			},
 			want: "req *model.Empty",
 		},
 		{
 			name:     "switch_empty_payload_back_to_model",
-			modelPkg: "group",
-			code: `package group
+			modelPkg: "box",
+			code: `package box
 
 import (
-	"helloworld/model/group"
+	"helloworld/model/box"
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/model"
 )
 
-func (g *Lister) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *group.GroupListRsp, err error) {
+func (b *Lister) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *box.BoxListRsp, err error) {
 	return rsp, nil
 }`,
 			action: &dsl.Action{
-				Payload: "*Group",
-				Result:  "*GroupListRsp",
+				Payload: "*Box",
+				Result:  "*BoxListRsp",
 				Phase:   consts.List,
 			},
-			want: "req *group.Group",
+			want: "req *box.Box",
 		},
 		{
 			name:     "switch_to_empty_payload_in_root_model_package",
@@ -199,19 +199,19 @@ func (u *Getter) Get(ctx *gst.ServiceContext, req *model.UserGetReq) (rsp *model
 		},
 		{
 			name:     "switch_business_rsp_to_empty_result",
-			modelPkg: "group",
-			code: `package group
+			modelPkg: "box",
+			code: `package box
 
 import (
-	"helloworld/model/group"
+	"helloworld/model/box"
 	"github.com/hydroan/gst"
 )
 
-func (g *Creator) Create(ctx *gst.ServiceContext, req *group.GroupCreateReq) (rsp *group.GroupCreateRsp, err error) {
+func (b *Creator) Create(ctx *gst.ServiceContext, req *box.BoxCreateReq) (rsp *box.BoxCreateRsp, err error) {
 	return rsp, nil
 }`,
 			action: &dsl.Action{
-				Payload: "*GroupCreateReq",
+				Payload: "*BoxCreateReq",
 				Result:  dsl.PayloadEmpty,
 				Phase:   consts.Create,
 			},

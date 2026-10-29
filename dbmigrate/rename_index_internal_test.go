@@ -27,33 +27,33 @@ func TestDetectIndexRenames(t *testing.T) {
 	})
 
 	t.Run("changed column sets are rebuilds, not renames", func(t *testing.T) {
-		// Regression: dropping (group_id, kind, created_at) while adding
-		// (group_id, created_at) must not be reported as a rename.
+		// Regression: dropping (box_id, kind, created_at) while adding
+		// (box_id, created_at) must not be reported as a rename.
 		current := "CREATE TABLE `records` (\n" +
 			"  `id` char(36) NOT NULL,\n" +
 			"  PRIMARY KEY (`id`),\n" +
-			"  KEY `idx_records_group_id_kind_created_at` (`group_id`,`kind`,`created_at`)\n" +
+			"  KEY `idx_records_box_id_kind_created_at` (`box_id`,`kind`,`created_at`)\n" +
 			") ENGINE=InnoDB;"
 		pairs := detectIndexRenames([]string{
-			"CREATE INDEX `idx_records_group_id_created_at` ON `records` (`group_id`, `created_at`)",
-			"ALTER TABLE `records` DROP INDEX `idx_records_group_id_kind_created_at`",
+			"CREATE INDEX `idx_records_box_id_created_at` ON `records` (`box_id`, `created_at`)",
+			"ALTER TABLE `records` DROP INDEX `idx_records_box_id_kind_created_at`",
 		}, current)
 		require.Empty(t, pairs)
 	})
 
 	t.Run("same columns in a different order are rebuilds, not renames", func(t *testing.T) {
-		// (group_id, created_at) and (created_at, group_id) serve different
+		// (box_id, created_at) and (created_at, box_id) serve different
 		// leftmost-prefix queries: reordering the columns changes the index
 		// definition, so the advisory must leave the drop/add pair as a
 		// rebuild instead of suggesting a metadata-only rename.
 		current := "CREATE TABLE `samples` (\n" +
 			"  `id` char(36) NOT NULL,\n" +
 			"  PRIMARY KEY (`id`),\n" +
-			"  KEY `idx_samples_group_created` (`group_id`,`created_at`)\n" +
+			"  KEY `idx_samples_box_created` (`box_id`,`created_at`)\n" +
 			") ENGINE=InnoDB;"
 		pairs := detectIndexRenames([]string{
-			"ALTER TABLE `samples` ADD INDEX `idx_samples_created_group` (`created_at`, `group_id`)",
-			"ALTER TABLE `samples` DROP INDEX `idx_samples_group_created`",
+			"ALTER TABLE `samples` ADD INDEX `idx_samples_created_box` (`created_at`, `box_id`)",
+			"ALTER TABLE `samples` DROP INDEX `idx_samples_box_created`",
 		}, current)
 		require.Empty(t, pairs)
 	})
@@ -73,18 +73,18 @@ func TestDetectIndexRenames(t *testing.T) {
 	t.Run("multiple renames pair one to one across statement shapes", func(t *testing.T) {
 		current := "CREATE TABLE `samples` (\n" +
 			"  PRIMARY KEY (`id`),\n" +
-			"  KEY `idx_samples_group_kind` (`group_id`,`name`),\n" +
+			"  KEY `idx_samples_box_kind` (`box_id`,`name`),\n" +
 			"  UNIQUE KEY `uniq_samples_code_kind` (`code`,`kind`)\n" +
 			") ENGINE=InnoDB;"
 		pairs := detectIndexRenames([]string{
-			"ALTER TABLE `samples` ADD INDEX `idx_samples_group_kind2` (`group_id`, `name`)",
+			"ALTER TABLE `samples` ADD INDEX `idx_samples_box_kind2` (`box_id`, `name`)",
 			"CREATE UNIQUE INDEX `uniq_samples_code_kind2` ON `samples` (`code`, `kind`)",
-			"ALTER TABLE `samples` DROP INDEX `idx_samples_group_kind`",
+			"ALTER TABLE `samples` DROP INDEX `idx_samples_box_kind`",
 			"ALTER TABLE `samples` DROP INDEX `uniq_samples_code_kind`",
 		}, current)
 		require.Len(t, pairs, 2)
-		require.Equal(t, "idx_samples_group_kind", pairs[0].From)
-		require.Equal(t, "idx_samples_group_kind2", pairs[0].To)
+		require.Equal(t, "idx_samples_box_kind", pairs[0].From)
+		require.Equal(t, "idx_samples_box_kind2", pairs[0].To)
 		require.Equal(t, "uniq_samples_code_kind", pairs[1].From)
 		require.Equal(t, "uniq_samples_code_kind2", pairs[1].To)
 	})
@@ -180,22 +180,22 @@ func TestDetectIndexRenames(t *testing.T) {
 		current := "CREATE TABLE `samples` (\n" +
 			"  `id` char(36) NOT NULL,\n" +
 			"  PRIMARY KEY (`id`),\n" +
-			"  KEY `idx_samples_group_time` (`group_id`,`code`,`kind`,`created_at`)\n" +
+			"  KEY `idx_samples_box_time` (`box_id`,`code`,`kind`,`created_at`)\n" +
 			") ENGINE=InnoDB;"
 		pairs := detectIndexRenames([]string{
-			"CREATE INDEX `idx_samples_group_id_code_kind_created_at_0f3a9b2c` ON `samples` (\n" +
-				"  `group_id`,\n" +
+			"CREATE INDEX `idx_samples_box_id_code_kind_created_at_0f3a9b2c` ON `samples` (\n" +
+				"  `box_id`,\n" +
 				"  `code`,\n" +
 				"  `kind`,\n" +
 				"  `created_at`\n" +
 				")",
-			"ALTER TABLE `samples` DROP INDEX `idx_samples_group_time`",
+			"ALTER TABLE `samples` DROP INDEX `idx_samples_box_time`",
 		}, current)
 		require.Equal(t, []indexRenamePair{{
 			Table:   "samples",
-			From:    "idx_samples_group_time",
-			To:      "idx_samples_group_id_code_kind_created_at_0f3a9b2c",
-			Columns: "group_id,code,kind,created_at",
+			From:    "idx_samples_box_time",
+			To:      "idx_samples_box_id_code_kind_created_at_0f3a9b2c",
+			Columns: "box_id,code,kind,created_at",
 		}}, pairs)
 	})
 }

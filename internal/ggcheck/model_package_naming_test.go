@@ -16,8 +16,8 @@ func TestModelPackageNamingAllowsUnderscoreStrippedAndExternalTestPackages(t *te
 	writeCheckFile(t, filepath.Join(projectDir, "model", "sample_record", "sample_record.go"), "package samplerecord\n")
 
 	// A black-box test file using the `<package>_test` package name is allowed.
-	writeCheckFile(t, filepath.Join(projectDir, "model", "group", "group.go"), "package group\n")
-	writeCheckFile(t, filepath.Join(projectDir, "model", "group", "sample_record_test.go"), "package group_test\n")
+	writeCheckFile(t, filepath.Join(projectDir, "model", "box", "box.go"), "package box\n")
+	writeCheckFile(t, filepath.Join(projectDir, "model", "box", "sample_record_test.go"), "package box_test\n")
 
 	// A genuine mismatch between package name and directory name (after stripping underscores) should still be reported.
 	writeCheckFile(t, filepath.Join(projectDir, "model", "mismatch", "mismatch.go"), "package wrongname\n")
@@ -28,7 +28,7 @@ func TestModelPackageNamingAllowsUnderscoreStrippedAndExternalTestPackages(t *te
 		if strings.Contains(violation, filepath.Join("sample_record", "sample_record.go")) {
 			t.Fatalf("underscore-stripped package name should be allowed, got violations: %#v", violations)
 		}
-		if strings.Contains(violation, filepath.Join("group", "sample_record_test.go")) {
+		if strings.Contains(violation, filepath.Join("box", "sample_record_test.go")) {
 			t.Fatalf("external test package name should be allowed, got violations: %#v", violations)
 		}
 	}

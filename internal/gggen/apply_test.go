@@ -550,21 +550,21 @@ func (s *sampleItem) Create(ctx *gst.ServiceContext, req *model.SampleItem) (rsp
 			code: `package samplerecord
 
 import (
-	"helloworld/model/group"
+	"helloworld/model/box"
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
 )
 
 type Patcher struct {
-	service.Base[*group.SampleRecord, *group.SampleRecordPatchReq, *group.SampleRecordPatchRsp]
+	service.Base[*box.SampleRecord, *box.SampleRecordPatchReq, *box.SampleRecordPatchRsp]
 }
 
-func (r *Patcher) Patch(ctx *gst.ServiceContext, req *group.SampleRecordPatchReq) (rsp *group.SampleRecordPatchRsp, err error) {
+func (r *Patcher) Patch(ctx *gst.ServiceContext, req *box.SampleRecordPatchReq) (rsp *box.SampleRecordPatchRsp, err error) {
 	return rsp, nil
 }
 
-func (r *Patcher) validate(ctx *gst.ServiceContext, req *group.SampleRecordPatchReq) (*group.SampleRecord, error) {
+func (r *Patcher) validate(ctx *gst.ServiceContext, req *box.SampleRecordPatchReq) (*box.SampleRecord, error) {
 	return nil, nil
 }
 `,
@@ -577,21 +577,21 @@ func (r *Patcher) validate(ctx *gst.ServiceContext, req *group.SampleRecordPatch
 			want: `package samplerecord
 
 import (
-	"helloworld/model/group"
+	"helloworld/model/box"
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
 )
 
 type Patcher struct {
-	service.Base[*group.SampleRecord, *group.SampleRecordPatchReq, *group.SampleRecordPatchRsp]
+	service.Base[*box.SampleRecord, *box.SampleRecordPatchReq, *box.SampleRecordPatchRsp]
 }
 
-func (r *Patcher) Patch(ctx *gst.ServiceContext, req *group.SampleRecordPatchReq) (rsp *group.SampleRecordPatchRsp, err error) {
+func (r *Patcher) Patch(ctx *gst.ServiceContext, req *box.SampleRecordPatchReq) (rsp *box.SampleRecordPatchRsp, err error) {
 	return rsp, nil
 }
 
-func (r *Patcher) validate(ctx *gst.ServiceContext, req *group.SampleRecordPatchReq) (*group.SampleRecord, error) {
+func (r *Patcher) validate(ctx *gst.ServiceContext, req *box.SampleRecordPatchReq) (*box.SampleRecord, error) {
 	return nil, nil
 }
 `,
@@ -819,42 +819,42 @@ func TestApplyServiceFileEmptyPayload(t *testing.T) {
 	}{
 		{
 			name: "switch_business_req_to_empty_payload_adds_gst_model_import",
-			code: `package group
+			code: `package box
 
 import (
-	"helloworld/model/group"
+	"helloworld/model/box"
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
 )
 
 type Lister struct {
-	service.Base[*group.Group, *group.GroupListReq, *group.GroupListRsp]
+	service.Base[*box.Box, *box.BoxListReq, *box.BoxListRsp]
 }
 
-func (g *Lister) List(ctx *gst.ServiceContext, req *group.GroupListReq) (rsp *group.GroupListRsp, err error) {
+func (b *Lister) List(ctx *gst.ServiceContext, req *box.BoxListReq) (rsp *box.BoxListRsp, err error) {
 	return rsp, nil
 }
 `,
 			action: &dsl.Action{
 				Service: true,
 				Payload: dsl.PayloadEmpty,
-				Result:  "*GroupListRsp",
+				Result:  "*BoxListRsp",
 				Phase:   consts.List,
 			},
-			servicePkgName: "group",
+			servicePkgName: "box",
 			wantContains: []string{
 				`"github.com/hydroan/gst/model"`,
-				"service.Base[*group.Group, *model.Empty, *group.GroupListRsp]",
+				"service.Base[*box.Box, *model.Empty, *box.BoxListRsp]",
 				"req *model.Empty",
 			},
 		},
 		{
 			name: "switch_empty_payload_back_to_model_removes_gst_model_import",
-			code: `package group
+			code: `package box
 
 import (
-	"helloworld/model/group"
+	"helloworld/model/box"
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/model"
@@ -862,23 +862,23 @@ import (
 )
 
 type Lister struct {
-	service.Base[*group.Group, *model.Empty, *group.GroupListRsp]
+	service.Base[*box.Box, *model.Empty, *box.BoxListRsp]
 }
 
-func (g *Lister) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *group.GroupListRsp, err error) {
+func (b *Lister) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *box.BoxListRsp, err error) {
 	return rsp, nil
 }
 `,
 			action: &dsl.Action{
 				Service: true,
-				Payload: "*Group",
-				Result:  "*Group",
+				Payload: "*Box",
+				Result:  "*Box",
 				Phase:   consts.List,
 			},
-			servicePkgName: "group",
+			servicePkgName: "box",
 			wantContains: []string{
-				"service.Base[*group.Group, *group.Group, *group.Group]",
-				"req *group.Group",
+				"service.Base[*box.Box, *box.Box, *box.Box]",
+				"req *box.Box",
 			},
 			wantAbsent: []string{
 				`"github.com/hydroan/gst/model"`,
@@ -918,10 +918,10 @@ func (u *Getter) Get(ctx *gst.ServiceContext, req *model.UserGetReq) (rsp *model
 		},
 		{
 			name: "empty_payload_apply_is_idempotent_for_existing_import",
-			code: `package group
+			code: `package box
 
 import (
-	"helloworld/model/group"
+	"helloworld/model/box"
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/model"
@@ -929,22 +929,22 @@ import (
 )
 
 type Lister struct {
-	service.Base[*group.Group, *model.Empty, *group.GroupListRsp]
+	service.Base[*box.Box, *model.Empty, *box.BoxListRsp]
 }
 
-func (g *Lister) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *group.GroupListRsp, err error) {
+func (b *Lister) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *box.BoxListRsp, err error) {
 	return rsp, nil
 }
 `,
 			action: &dsl.Action{
 				Service: true,
 				Payload: dsl.PayloadEmpty,
-				Result:  "*GroupListRsp",
+				Result:  "*BoxListRsp",
 				Phase:   consts.List,
 			},
-			servicePkgName: "group",
+			servicePkgName: "box",
 			wantContains: []string{
-				"service.Base[*group.Group, *model.Empty, *group.GroupListRsp]",
+				"service.Base[*box.Box, *model.Empty, *box.BoxListRsp]",
 				"req *model.Empty",
 			},
 		},

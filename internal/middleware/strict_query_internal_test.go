@@ -38,7 +38,7 @@ func TestStrictQueryAdmitsUnambiguousQueries(t *testing.T) {
 		rawQuery string
 	}{
 		{name: "no query string", rawQuery: ""},
-		{name: "single-valued keys", rawQuery: "group_id=a&_page=1&_size=10"},
+		{name: "single-valued keys", rawQuery: "box_id=a&_page=1&_size=10"},
 		{name: "bracketed range keys are distinct keys", rawQuery: "created_at[gte]=2026-01-01T00:00:00Z&created_at[lte]=2026-02-01T00:00:00Z"},
 		{name: "same value under different keys", rawQuery: "a=1&b=1"},
 	}
@@ -51,18 +51,18 @@ func TestStrictQueryAdmitsUnambiguousQueries(t *testing.T) {
 }
 
 func TestStrictQueryRejectsRepeatedKeys(t *testing.T) {
-	status, body := strictQueryResult(t, http.MethodGet, "group_id=a&group_id=b")
+	status, body := strictQueryResult(t, http.MethodGet, "box_id=a&box_id=b")
 	require.Equal(t, http.StatusBadRequest, status)
-	require.Contains(t, body, "duplicate query parameter: group_id")
+	require.Contains(t, body, "duplicate query parameter: box_id")
 }
 
 // TestStrictQueryRejectsEncodedKeyVariants pins that repetition is judged on
 // the decoded key: an escaped spelling of the same key must not slip past the
 // gate, or a crafted URL could still drive two decoded readers apart.
 func TestStrictQueryRejectsEncodedKeyVariants(t *testing.T) {
-	status, body := strictQueryResult(t, http.MethodGet, "group%5Fid=a&group_id=b")
+	status, body := strictQueryResult(t, http.MethodGet, "box%5Fid=a&box_id=b")
 	require.Equal(t, http.StatusBadRequest, status)
-	require.Contains(t, body, "duplicate query parameter: group_id")
+	require.Contains(t, body, "duplicate query parameter: box_id")
 }
 
 // TestStrictQueryListsRepeatedKeysSorted pins a stable refusal message: map
@@ -94,9 +94,9 @@ func TestStrictQueryRejectsMalformedQueries(t *testing.T) {
 // regardless of the verb: a POST carrying a polluted query is refused the same
 // way a GET is.
 func TestStrictQueryCoversEveryMethod(t *testing.T) {
-	status, body := strictQueryResult(t, http.MethodPost, "group_id=a&group_id=b")
+	status, body := strictQueryResult(t, http.MethodPost, "box_id=a&box_id=b")
 	require.Equal(t, http.StatusBadRequest, status)
-	require.Contains(t, body, "duplicate query parameter: group_id")
+	require.Contains(t, body, "duplicate query parameter: box_id")
 }
 
 // TestStrictQueryRefusalUsesEnvelope pins that refusals go through the shared
@@ -123,7 +123,7 @@ func BenchmarkStrictQuery(b *testing.B) {
 		target string
 	}{
 		{name: "no query", target: "/probe"},
-		{name: "typical list query", target: "/probe?group_id=g1&_page=1&_size=10&status=enabled"},
+		{name: "typical list query", target: "/probe?box_id=g1&_page=1&_size=10&status=enabled"},
 	}
 	for _, c := range cases {
 		b.Run(c.name, func(b *testing.B) {

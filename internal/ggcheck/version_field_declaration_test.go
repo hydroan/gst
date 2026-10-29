@@ -120,7 +120,7 @@ type Unrelated struct {
 import "github.com/hydroan/gst/model"
 
 type UpdateReq struct {
-	GroupID string        `+"`json:\"group_id\"`"+`
+	BoxID string        `+"`json:\"box_id\"`"+`
 	Version model.Version `+"`json:\"version\"`"+`
 }
 `)

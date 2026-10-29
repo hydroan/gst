@@ -104,23 +104,23 @@ func (Notice) Design() {
 }
 
 func TestResolveRoutesReportsUnmatchedIgnoreRules(t *testing.T) {
-	models := findModels(t, map[string]string{filepath.Join("model", "group", "group.go"): `package model
+	models := findModels(t, map[string]string{filepath.Join("model", "box", "box.go"): `package model
 
 import (
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
 )
 
-type Group struct {
+type Box struct {
 	model.Base
 }
 
-func (Group) Design() {
-	dsl.Endpoint("groups")
+func (Box) Design() {
+	dsl.Endpoint("boxes")
 	dsl.List(func() {})
 }
 `})
-	design := findDesign(t, models, "Group")
+	design := findDesign(t, models, "Box")
 	rules := parseRules(t, "POST /api/signup")
 
 	result := modelinfo.ResolveRoutes(models, rules)

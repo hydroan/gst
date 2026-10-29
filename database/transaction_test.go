@@ -24,19 +24,19 @@ func TestDatabaseTransactionModelHook(t *testing.T) {
 			Value: "initial",
 			ID:    "hook-config-create-after",
 		}
-		group := &TestHookGroup{
+		box := &TestHookBox{
 			ConfigID: config.ID,
 			Value:    "updated",
-			ID:       "hook-group-create-after",
+			ID:       "hook-box-create-after",
 		}
 
 		require.NoError(t, database.Database[*TestHookConfig](ctx).Create(config))
 
-		err := database.Database[*TestHookGroup](ctx).Create(group)
-		require.ErrorIs(t, err, errTestHookGroupCreateAfter)
+		err := database.Database[*TestHookBox](ctx).Create(box)
+		require.ErrorIs(t, err, errTestHookBoxCreateAfter)
 
-		storedGroup := new(TestHookGroup)
-		err = database.Database[*TestHookGroup](ctx).Get(storedGroup, group.ID)
+		storedBox := new(TestHookBox)
+		err = database.Database[*TestHookBox](ctx).Get(storedBox, box.ID)
 		require.ErrorIs(t, err, database.ErrRecordNotFound)
 
 		storedConfig := new(TestHookConfig)
@@ -52,21 +52,21 @@ func TestDatabaseTransactionModelHook(t *testing.T) {
 			Value: "initial",
 			ID:    "hook-config-tx-ctx",
 		}
-		group := &TestHookGroup{
+		box := &TestHookBox{
 			ConfigID: config.ID,
 			Value:    "updated",
-			ID:       "hook-group-tx-ctx",
+			ID:       "hook-box-tx-ctx",
 		}
 
 		require.NoError(t, database.Database[*TestHookConfig](ctx).Create(config))
 
 		err := database.Transaction(ctx, func(ctx context.Context) error {
-			return database.Database[*TestHookGroup](ctx).Create(group)
+			return database.Database[*TestHookBox](ctx).Create(box)
 		})
-		require.ErrorIs(t, err, errTestHookGroupCreateAfter)
+		require.ErrorIs(t, err, errTestHookBoxCreateAfter)
 
-		storedGroup := new(TestHookGroup)
-		err = database.Database[*TestHookGroup](ctx).Get(storedGroup, group.ID)
+		storedBox := new(TestHookBox)
+		err = database.Database[*TestHookBox](ctx).Get(storedBox, box.ID)
 		require.ErrorIs(t, err, database.ErrRecordNotFound)
 
 		storedConfig := new(TestHookConfig)

@@ -31,7 +31,7 @@ func TestMain(m *testing.M) {
 			modelregistry.Register[*TestMixedUniqueItem]()
 			modelregistry.Register[*TestAutoItem]()
 			modelregistry.Register[*TestHookConfig]()
-			modelregistry.Register[*TestHookGroup]()
+			modelregistry.Register[*TestHookBox]()
 			modelregistry.Register[*TestCategory]()
 			modelregistry.Register[*TestAggregateRecord]()
 			modelregistry.Register[*TestCursorSnapshot]()
