@@ -17,13 +17,13 @@ import (
 // Returns:
 //   - A gin.HandlerFunc that enforces the request size limit
 //
-// Example:
+// Example, from an init function (see Register):
 //
 //	// Limit request body to 10MB
-//	router.Use(middleware.RequestSizeLimit(10 * 1024 * 1024))
+//	middleware.Register(middleware.RequestSizeLimit(10 * 1024 * 1024))
 //
 //	// Limit request body to 1MB
-//	router.Use(middleware.RequestSizeLimit(1024 * 1024))
+//	middleware.Register(middleware.RequestSizeLimit(1024 * 1024))
 func RequestSizeLimit(maxSize int64) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Check Content-Length header first (if available and valid)

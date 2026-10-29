@@ -32,13 +32,14 @@ type IPFilterConfig struct {
 // Returns:
 //   - A gin.HandlerFunc that enforces IP whitelist
 //
-// Example:
+// Example, from an init function (see Register):
 //
 //	// Allow only specific IPs
-//	router.Use(middleware.IPWhitelist([]string{"192.168.1.1", "10.0.0.0/8"}))
+//	allowed := []string{"192.168.1.1", "10.0.0.0/8"}
+//	middleware.Register(middleware.IPWhitelist(allowed))
 //
 //	// Allow only localhost
-//	router.Use(middleware.IPWhitelist([]string{"127.0.0.1", "::1"}))
+//	middleware.Register(middleware.IPWhitelist([]string{"127.0.0.1", "::1"}))
 func IPWhitelist(whitelist []string) gin.HandlerFunc {
 	config := &IPFilterConfig{
 		Whitelist: whitelist,
@@ -54,13 +55,15 @@ func IPWhitelist(whitelist []string) gin.HandlerFunc {
 // Returns:
 //   - A gin.HandlerFunc that enforces IP blacklist
 //
-// Example:
+// Example, from an init function (see Register):
 //
 //	// Block specific IPs
-//	router.Use(middleware.IPBlacklist([]string{"192.168.1.100", "10.0.0.0/8"}))
+//	blocked := []string{"192.168.1.100", "10.0.0.0/8"}
+//	middleware.Register(middleware.IPBlacklist(blocked))
 //
 //	// Block known malicious IPs
-//	router.Use(middleware.IPBlacklist([]string{"1.2.3.4", "5.6.7.8"}))
+//	known := []string{"1.2.3.4", "5.6.7.8"}
+//	middleware.Register(middleware.IPBlacklist(known))
 func IPBlacklist(blacklist []string) gin.HandlerFunc {
 	config := &IPFilterConfig{
 		Blacklist: blacklist,
@@ -87,10 +90,10 @@ func IPBlacklist(blacklist []string) gin.HandlerFunc {
 // Returns:
 //   - A gin.HandlerFunc that enforces IP filtering rules
 //
-// Example:
+// Example, from an init function (see Register):
 //
 //	// Use both whitelist and blacklist
-//	router.Use(middleware.IPFilter(&middleware.IPFilterConfig{
+//	middleware.Register(middleware.IPFilter(&middleware.IPFilterConfig{
 //		Whitelist: []string{"192.168.0.0/16"},
 //		Blacklist: []string{"192.168.1.100"},
 //	}))

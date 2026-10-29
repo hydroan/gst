@@ -80,12 +80,15 @@ func newConfig(opts []Option) *config {
 // Every call builds a limiter with buckets of its own, so two limiters never
 // share a bucket even when their key functions return the same key.
 //
-// Example:
+// Example, from an init function (see middleware.Register): a limiter that lets
+// each client IP burst 20 requests and then keep up ten a second, leaving GET
+// requests alone:
 //
-//	r.Use(ratelimiter.RateLimiter(
-//	    ratelimiter.WithBucket(20, 100*time.Millisecond),
-//	    ratelimiter.WithKeyFunc(func(c *gin.Context) string { return c.ClientIP() }),
-//	    ratelimiter.WithSkipFunc(func(c *gin.Context) bool { return c.FullPath() == "/health" }),
+//	middleware.Register(ratelimiter.RateLimiter(
+//		ratelimiter.WithBucket(20, 100*time.Millisecond),
+//		ratelimiter.WithSkipFunc(func(c *gin.Context) bool {
+//			return c.Request.Method == http.MethodGet
+//		}),
 //	))
 func RateLimiter(opts ...Option) gin.HandlerFunc {
 	conf := newConfig(opts)

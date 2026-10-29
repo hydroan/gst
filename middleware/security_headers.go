@@ -44,20 +44,21 @@ type SecurityHeadersConfig struct {
 // Returns:
 //   - A gin.HandlerFunc that sets security headers
 //
-// Example:
+// Example, from an init function (see Register):
 //
 //	// Use default secure headers
-//	router.Use(middleware.SecurityHeaders(nil))
+//	middleware.Register(middleware.SecurityHeaders(nil))
 //
 //	// Use custom configuration
-//	router.Use(middleware.SecurityHeaders(&middleware.SecurityHeadersConfig{
-//		XFrameOptions:            "DENY",
-//		XContentTypeOptions:      "nosniff",
-//		XXSSProtection:           "1; mode=block",
-//		StrictTransportSecurity:  "max-age=31536000; includeSubDomains",
-//		ContentSecurityPolicy:    "default-src 'self'",
-//		ReferrerPolicy:           "strict-origin-when-cross-origin",
-//	}))
+//	headers := &middleware.SecurityHeadersConfig{
+//		XFrameOptions:           "DENY",
+//		XContentTypeOptions:     "nosniff",
+//		XXSSProtection:          "1; mode=block",
+//		StrictTransportSecurity: "max-age=31536000; includeSubDomains",
+//		ContentSecurityPolicy:   "default-src 'self'",
+//		ReferrerPolicy:          "strict-origin-when-cross-origin",
+//	}
+//	middleware.Register(middleware.SecurityHeaders(headers))
 func SecurityHeaders(config *SecurityHeadersConfig) gin.HandlerFunc {
 	// Use default config if none provided
 	if config == nil {

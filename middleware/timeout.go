@@ -34,13 +34,13 @@ import (
 // Streaming routes are left alone, since a stream legitimately outlives any
 // request timeout.
 //
-// Example:
+// Example, from an init function (see Register):
 //
-//	// Set 30 second timeout for all requests
-//	router.Use(middleware.Timeout(30 * time.Second))
+//	// Set a 30 second timeout on every API route
+//	middleware.Register(middleware.Timeout(30 * time.Second))
 //
-//	// Set 5 second timeout
-//	router.Use(middleware.Timeout(5 * time.Second))
+//	// Set a 5 second timeout
+//	middleware.Register(middleware.Timeout(5 * time.Second))
 func Timeout(timeout time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// A streaming response legitimately outlives any request timeout;
