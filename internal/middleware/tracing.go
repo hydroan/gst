@@ -178,8 +178,8 @@ func tracing() gin.HandlerFunc {
 		// Set X-Trace-ID header for callers.
 		c.Header(consts.HEADER_TRACE_ID, traceID)
 
-		// Process request. The gst trace IDs and the request duration are part
-		// of the attribute batches above, so no SetAttributes call is made here.
+		// Process request. The request duration is part of the response batch
+		// above, so no SetAttributes call is made here.
 		c.Next()
 	}
 }

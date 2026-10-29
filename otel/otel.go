@@ -229,7 +229,7 @@ var serviceNameAttr attribute.KeyValue
 
 func initHotPathAttrs(serviceName string) {
 	// Leave the zero (invalid) KeyValue when unset so callers checking Valid()
-	// skip the attribute, matching the previous per-request emptiness check.
+	// skip the attribute.
 	serviceNameAttr = attribute.KeyValue{}
 	if serviceName != "" {
 		serviceNameAttr = attribute.String("service.name", serviceName)
