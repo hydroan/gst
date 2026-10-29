@@ -35,12 +35,12 @@ gst · HTTP 与 gRPC 两条传输线
     <div class="arch-arrow">▼</div>
     <div class="arch-layer stage">
       <div class="arch-layer-title">③ 注册 · 进程 init，两边写进同一张服务表</div>
-      <div class="arch-grid arch-grid-3"><div class="arch-box lane http"><b>router.Register → gin 路由</b><ul><li>每个 phase 一个 <code>controller.XxxHandler</code>（CreateHandler … DeleteManyHandler、Import / Export / SSE）。</li><li>Public 路由挂公开组，其余挂认证组；两个组都直接挂在根上，路由串自带 <code>/api</code>。</li></ul></div><div class="arch-box lane shared"><b>注册表与模块</b><ul><li>服务注册表（<code>internal/serviceregistry</code>）按 route|phase 存 service，重复注册 panic。</li><li>模型注册表；模块 <code>iam.Register()</code>、<code>authz.Register()</code> 只注册模型与路由。</li><li>项目在 <code>middleware/middleware.go</code>、<code>interceptor/interceptor.go</code> 里显式挂认证检查。</li></ul></div><div class="arch-box lane grpc"><b>pb.gen.go → grpc.Register</b><ul><li><code>grpc.Register[S](RegisterXServiceServer, xService{}, grpc.Method{Name, HTTPMethod, Route, Public}…)</code>。</li><li><code>grpcserver</code> 记下每个 rpc 对应的 HTTP 动作与 <code>/api/…</code> 路由，供鉴权与日志用。</li></ul></div></div>
+      <div class="arch-grid arch-grid-3"><div class="arch-box lane http"><b>router.Register → gin 路由</b><ul><li>每个 phase 一个 <code>controller.XxxHandler</code>（CreateHandler … DeleteManyHandler、Import / Export / SSE）。</li><li>Public 路由挂公开组，其余挂认证组；两个组都直接挂在根上，路由串自带 <code>/api</code>。</li></ul></div><div class="arch-box lane shared"><b>注册表与模块</b><ul><li>服务注册表（<code>internal/serviceregistry</code>）按 route|phase 存 service，重复注册 panic。</li><li>模型注册表；模块的 <code>Register()</code> 只注册模型与路由。</li><li>项目在 <code>middleware/middleware.go</code>、<code>interceptor/interceptor.go</code> 里显式挂认证检查。</li></ul></div><div class="arch-box lane grpc"><b>pb.gen.go → grpc.Register</b><ul><li><code>grpc.Register[S](RegisterXServiceServer, xService{}, grpc.Method{Name, HTTPMethod, Route, Public}…)</code>。</li><li><code>grpcserver</code> 记下每个 rpc 对应的 HTTP 动作与 <code>/api/…</code> 路由，供鉴权与日志用。</li></ul></div></div>
     </div>
     <div class="arch-arrow">▼</div>
     <div class="arch-layer stage">
       <div class="arch-layer-title">④ 监听与链 · bootstrap 起两个监听</div>
-      <div class="arch-grid arch-grid-3"><div class="arch-box lane http"><b>gin，[server] 默认 8080</b><ul><li>内建链 <code>middleware.Builtin()</code>：tracing → accessLogger → bodyLogger → recovery → cors → routeParams → strictQuery。</li><li>再挂 <code>middleware.Register</code> 的通用中间件；认证组再挂 <code>middleware.RegisterAuth</code> 的（JwtAuth / IAMSession / Authz）。</li></ul></div><div class="arch-box lane shared"><b>bootstrap</b><ul><li><code>router.Init()</code> 装好路由后 <code>RegisterGo(router.Run, grpcserver.Run)</code> 并行起监听。</li><li>logger、metrics、otel、database、redis 两边共用同一份初始化。</li></ul></div><div class="arch-box lane grpc"><b>grpc.NewServer，[grpc] 默认 8081</b><ul><li>一元链与流链同序：requestScope → 指标 → recovery → <code>interceptor.Register</code> 的通用拦截器（health、reflection 不经过）→ <code>interceptor.RegisterAuth</code> 的鉴权拦截器（Public 方法与 health、reflection 不经过）；流链最内层再加 streamShutdown，停机时让流答 Unavailable 结束。</li><li>OTEL 开着时加 otelgrpc stats handler；health 服务（整体与每个服务）、反射（可关）、keepalive 与 ping 策略、连接寿命、消息上限、TLS。</li><li>没有注册任何服务就不开监听。</li></ul></div></div>
+      <div class="arch-grid arch-grid-3"><div class="arch-box lane http"><b>gin，[server] 默认 8080</b><ul><li>内建链 <code>middleware.Builtin()</code>：tracing → accessLogger → bodyLogger → recovery → cors → routeParams → strictQuery。</li><li>再挂 <code>middleware.Register</code> 的通用中间件；认证组再挂 <code>middleware.RegisterAuth</code> 的。</li></ul></div><div class="arch-box lane shared"><b>bootstrap</b><ul><li><code>router.Init()</code> 装好路由后 <code>RegisterGo(router.Run, grpcserver.Run)</code> 并行起监听。</li><li>logger、metrics、otel、database、redis 两边共用同一份初始化。</li></ul></div><div class="arch-box lane grpc"><b>grpc.NewServer，[grpc] 默认 8081</b><ul><li>一元链与流链同序：requestScope → 指标 → recovery → <code>interceptor.Register</code> 的通用拦截器（health、reflection 不经过）→ <code>interceptor.RegisterAuth</code> 的鉴权拦截器（Public 方法与 health、reflection 不经过）；流链最内层再加 streamShutdown，停机时让流答 Unavailable 结束。</li><li>OTEL 开着时加 otelgrpc stats handler；health 服务（整体与每个服务）、反射（可关）、keepalive 与 ping 策略、连接寿命、消息上限、TLS。</li><li>没有注册任何服务就不开监听。</li></ul></div></div>
     </div>
     <div class="arch-arrow">▼</div>
     <div class="arch-layer stage">
@@ -88,7 +88,7 @@ participant "service" as svc
 client -> builtin : POST /api/records
 builtin -> builtin : tracing、访问日志、body 日志、recovery、cors、路径参数、严格 query
 builtin -> auth : 非 Public 路由进认证组
-auth -> auth : JwtAuth 或 IAMSession，再 Authz
+auth -> auth : RegisterAuth 挂的中间件按注册顺序跑
 auth -> handler : 绑定 body、query、路径参数
 handler -> flow : binding 校验后调流程
 flow -> svc : 模型钩子、service 钩子、数据库
@@ -122,7 +122,7 @@ participant "service" as svc
 client -> builtin : CreateRecord，metadata 带 authorization
 builtin -> builtin : requestScope 取 trace id 与元数据，指标，recovery
 builtin -> project : Register 的通用拦截器
-project -> project : RegisterAuth 的 IAMSession 或 JwtAuth，再 Authz；Public 方法跳过
+project -> project : RegisterAuth 的鉴权拦截器按注册顺序跑；Public 方法跳过
 project -> handler : 进入生成的 handler
 handler -> handler : RecordFromProto，FieldMask 变 paths，Query 变 url.Values
 handler -> flow : grpc.CreateCall(route)(ctx, params, m)
@@ -144,22 +144,19 @@ handler --> client : RecordToProto；失败映射成 status
 | 接口定义 | Swagger 注释，运行期出 `/openapi.json` | | `pb/record.proto`：`RecordService`，每个 rpc 独享 `XxxRequest / XxxResponse`，List 请求带 filters，再按模型嵌入的 Query、Pagination、Cursor 带排序、分页、游标与 expand，Patch 带 `google.protobuf.FieldMask` |
 | 传输代码 | `router/router.gen.go` | `service/service.gen.go` | `pb/record.pb.go`、`pb/record_grpc.pb.go`（插件写），`pb/record.gen.go`（适配层：服务类型 `recordService`、`RecordToProto / RecordFromProto`），每个 pb 包一个 `pb.gen.go`（注册，根目录的空导入子包） |
 | 业务骨架 | | `service/record/<name>.go` 与同名 `_test.go`（生成一次，之后归项目） | Stream 动作的测试骨架拨 `testutil.GRPCTarget()` |
-| 模块代码 | `middleware/iam_session.go`、`authz.go`（gg module copy） | module 的 model 与 service 子树 | `interceptor/iam_session.go`、`authz.go`（只在项目有 GRPC() 模型时复制） |
+| 模块代码 | `middleware/` 下模块的中间件（gg module copy） | module 的 model 与 service 子树 | `interceptor/` 下模块的拦截器（只在项目有 GRPC() 模型时复制） |
 | 清理 | | `gg gen` 删过期的 .gen.go、.pb.go，`gg prune` 删过期的 .proto | 过期的 Go 文件 gg gen 写盘时顺手删掉；.proto 带着 reserved，留给 prune，删前提醒先搬走保留号；prune 也认孤儿拦截器文件 |
 
 ## 4. 身份、鉴权与错误
 
-认证与授权的判定各只有一处实现，两条线各自只做「凭证从哪取、拒绝怎么答」。
+两条线的认证与授权都挂在 `RegisterAuth` 上；框架在这里管的是挂在哪、凭证从哪取、拒绝怎么答、调用者记在哪、失败答什么形状。
 
 | 环节 | HTTP | gRPC | 共用的实现 |
 |---|---|---|---|
-| 挂载 | `middleware.RegisterAuth(middleware.IAMSession(), …)`，只作用于非 Public 路由 | `interceptor.RegisterAuth(interceptor.IAMSession(), …)`，selector 放过 Public 方法与 health、reflection；拦截器返回的 status 错误原样答复，gst 错误按其 HTTP 状态映射、只带 msg，其他错误答 Internal | 项目在自己的 middleware/ 与 interceptor/ 注册文件里显式挂，链按注册顺序跑 |
-| 凭证 | IAMSession 读会话 Cookie，JwtAuth 读 `Authorization: Bearer` 头 | 两者都读 metadata `authorization: Bearer …`，经 `grpc.Bearer(ctx)` 取；会话经 gRPC 使用时登录的 user-agent 要和 gRPC 客户端一致，设备绑定按它比对 | |
-| 会话认证 | `middleware.IAMSession()` | `interceptor.IAMSession()` | `serviceiamsession.Authenticate(ctx, sessionID, userAgent, method, path)`：加载、校验、设备绑定按 user-agent 比对、用户状态、改密豁免、记录活跃（只前移 LastSeenAt，不续期） |
-| JWT | `middleware.JwtAuth()` | `interceptor.JwtAuth()`，拒绝一律 Unauthenticated | jwt 包解析与校验 |
-| 授权 | `middleware.Authz()`，obj 是请求的具体路径（`/api/records/42`）、act 是 HTTP 方法 | `interceptor.Authz()`，obj 是路由模板（`/api/records/{id}`，拦截器把注册时记下的路由写成路由清单的写法）、act 是该 rpc 对应的 HTTP 方法，流式动作是 STREAM | `rbac.Enforce(ctx, Subject, obj, act)`，策略只有一份：写 `{id}`、`/*` 或静态路径的两边一致，写具体段的只在 HTTP 生效，写 `:id` 字面的两边都不命中 |
+| 挂载 | `middleware.RegisterAuth` 收的中间件只作用于非 Public 路由 | `interceptor.RegisterAuth` 收的拦截器经 selector 放过 Public 方法与 health、reflection；拦截器返回的 status 错误原样答复，gst 错误按其 HTTP 状态映射、只带 msg，其他错误答 Internal | 项目在自己的 middleware/ 与 interceptor/ 注册文件里显式挂，链按注册顺序跑 |
+| 凭证 | 请求头与 Cookie | metadata，`grpc.Bearer(ctx)` 取 `authorization: Bearer …` 的值 | |
 | 调用者 | gin 上下文里的用户 | `grpc.WithCaller / CallerOf`，写进访问日志 | `requestctx.Metadata` 里的调用者；trace id 在 `execctx` |
-| 失败的形状 | JSON 错误体 `{msg, data, trace_id}`，状态码取 `gst.Error` 的 status，没有业务状态码；没有 `gst.Error` 的错误是服务端自身的故障，答 500「The server could not process the request.」 | `gst.Error` 映射成 status code 加同一句 msg；框架自己的拒绝（Internal、Unimplemented、Canceled、JwtAuth 的 Unauthenticated）同样只有 status | `gst.NewError / NewErrorWithCause` |
+| 失败的形状 | JSON 错误体 `{msg, data, trace_id}`，状态码取 `gst.Error` 的 status，没有业务状态码；没有 `gst.Error` 的错误是服务端自身的故障，答 500「The server could not process the request.」 | `gst.Error` 映射成 status code 加同一句 msg；框架自己的拒绝（Internal、Unimplemented、Canceled）同样只有 status | `gst.NewError / NewErrorWithCause` |
 
 HTTP 状态到 gRPC status 的映射（`grpcserver.StatusError`）：
 
@@ -191,7 +188,7 @@ HTTP 状态到 gRPC status 的映射（`grpcserver.StatusError`）：
 - `Stream(func(){ Service("watch"); Payload[*Req](); StreamingResult[*Rsp]() })`：Payload / Result 写一问一答的一侧，Streaming 版写流的一侧，至少一侧是流，三种组合都支持。
 - .proto：`rpc WatchFeed (WatchFeedRequest) returns (stream WatchFeedResponse)`；请求消息开头仍是路由参数。
 - `x.gen.go`：服务端流把 `srv.Send` 交给流程；路由带参数时，客户端流与双向流先用 `grpc.FirstMessage(srv.Recv)` 读首条消息取路由参数，再把它当第一条交回，不带参数的直接把 `srv.Recv` 交给流程；第二条起的消息里的路由参数留空或与首条相同放行，不同的那条让 Recv 返回 InvalidArgument（`message 3 names the feed parameter "b", the first names "a"`，`grpc.SameParams`），和批量项对外层参数的规则一样。
-- authz：act 是 `STREAM`，obj 是声明的 `/api/…` 路径的模板（`/api/records/{id}/tail`）；`GET /api/authz/routes` 只列 HTTP 路由，流式动作的策略按这个写法手写。
+- 动作：流式动作登记的 HTTP 方法是 `STREAM`，`grpc.Route(ctx)` 与访问日志的 method 都是它，路由是声明的 `/api/…` 路径。
 
 运行时与 service 签名：
 
@@ -255,7 +252,7 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 
 ## 8. 包与文件地图
 
-项目开发者只看得到公开包；internal 里是框架自己的实现。`dsl`、`router`、`service` 只做转发；`middleware`、`interceptor` 与 `grpc` 只对挂载与调用入口转发，项目自己挂的中间件与拦截器（JwtAuth、IAMSession、Authz、限流与超时这些）和生成代码用的转换函数、`Bearer` 实现就在公开包里。
+项目开发者只看得到公开包；internal 里是框架自己的实现。`dsl`、`router`、`service` 只做转发；`middleware`、`interceptor` 与 `grpc` 只对挂载与调用入口转发，项目自己挂的中间件与拦截器和生成代码用的转换函数、`Bearer` 实现就在公开包里。
 
 | 包 | 归属 | 职责 |
 |---|---|---|
@@ -266,13 +263,13 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 | `internal/ggcheck`、`ggprune`、`ggmodule` | 共用 | 业务项目的静态检查、过期产物清理、模块复制（中间件与拦截器一起管） |
 | `internal/gghelper` | 共用 | gg 的运行帮手；`PinnedCommand` 把固定版本的 protoc 插件与 golangci-lint 编到用户缓存目录再运行 |
 | `router` → `internal/router` | HTTP | gin 引擎、路由注册、认证组、Run / Stop |
-| `middleware` → `internal/middleware` | HTTP | 内建链、`Register / RegisterAuth`；公开包另带 JwtAuth、IAMSession、Authz 等 |
+| `middleware` → `internal/middleware` | HTTP | 内建链、`Register / RegisterAuth`；公开包另带项目挂的中间件 |
 | `internal/controller` | 共用 | HTTP handler、gRPC 调用工厂、流的运行时、十个 CRUD 流程、校验与错误映射 |
 | `grpc` → `internal/grpcserver`（调用函数与流经 `internal/controller`；转换函数与 `Bearer` 实现在本包） | gRPC | 生成代码与项目用的入口：`Register`、`Method`、十个 `XxxCall`、`ServiceCall`、三种流、转换函数、`Bearer / WithCaller / CallerOf / Route / StatusError` |
-| `interceptor` → `internal/grpcserver`（`Register / RegisterAuth`；`JwtAuth` 与模块拦截器实现在本包） | gRPC | `Register / RegisterAuth`、`JwtAuth`，以及随 module copy 复制进项目的 `IAMSession`、`Authz` |
+| `interceptor` → `internal/grpcserver`（`Register / RegisterAuth`；项目挂的拦截器实现在本包） | gRPC | `Register / RegisterAuth` 与项目挂的拦截器，随 module copy 复制进项目的拦截器也以本包为源 |
 | `internal/grpcserver` | gRPC | 监听、拦截器链、requestScope、recovery、指标、health 与反射、状态映射、Drain / Stop |
 | `internal/requestctx`、`internal/types` | 共用 | 请求元数据与 `ServiceContext`、流对象接口，两种传输各自填充 |
-| `internal/service/iam/session`、`authz/rbac` | 共用 | `Authenticate` 与 `Enforce`：会话认证与授权判定的唯一实现 |
+| `authz/rbac` | 共用 | `Enforce`：授权判定的唯一实现 |
 | `testutil` | 共用 | 真容器、两个监听、`GRPCTarget()` |
 | `examples/demo`、`examples/cluster` | 共用 | demo 是入门示例（gRPC 示例在 model/board），cluster 是多副本、gRPC 与会话认证的实弹验证项目 |
 
@@ -284,7 +281,7 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 |---|---|---|
 | rpc 名单数、批量用 Many | AIP-132 要 `ListRecords` 复数，AIP-231/233/234/235 批量要 `Batch` 前缀 | rpc 名 = DSL 动作名 + 模型名（`ListRecord`、`CreateManyRecord`），和 HTTP 路由用同一套动作名，一个动作在两条线上一个名字 |
 | 列表响应与分页 | AIP-132/158 要 `<resources>` 复数字段、不透明的 `next_page_token`、`total_size` | 响应是 `items` 加 `total`，请求按模型嵌入的 Query、Pagination、Cursor 带 `page`、`size`、`cursor_*`，和 HTTP 契约同形，走同一个 urlquery 解析 |
-| 过滤 | AIP-160 是一段字符串表达式 | `filters` 是结构化的 `{field, op, values}`，和 HTTP 的 `field[op]=value` 一一对应，运行期同一套拒绝规则 |
+| 过滤 | AIP-160 是一段字符串表达式 | `filters` 是结构化的 `{field, op, values}`，和 HTTP 的 `field[op]=value` 一一对应，运行期同一套拒绝规则；同一个过滤给两次，两线都答「duplicate query parameter: name[eq]」。两线有意不同的一处：值为空的过滤，gRPC 答 InvalidArgument（`values` 为空答 `filter "name" has no value`，含空串答 `filter "name" has an empty value`），HTTP 的空参数（`name=`）表示不按它过滤——查询串里留空的参数是常见写法，消息里明写一个过滤却留空是写错了 |
 | update_mask | AIP-134 允许省略（省略即按已填字段）、必须支持 `*`；AIP-161 要求整字段与子字段路径都合法 | 必填，不认 `*`（等于 Update），只认顶层键、不点进字段内部，路径必须和 JSON 名精确相同（HTTP 的 body 键照 encoding/json 的规则匹配，只差大小写也算同一个键）：点名的字段整体替换，和 HTTP 的 PATCH 一致；点到 id、created_at 这类框架管理的字段或只在创建时写入的字段（如 tenant_id）时跳过（AIP-161/203 对只读字段的规定）、点到模型没有的字段拒绝（AIP-161） |
 | 什么都没点到的补丁 | AIP-134 的掩码省略即按已填字段；RFC 7396 的空补丁 `{}` 合法、表示不改 | HTTP 的 `{}` 与只含模型没有的键的 body 照 encoding/json 的惯例忽略未知键、整行按原样写回并刷新 updated_at；gRPC 的掩码不剩可改字段时拒绝。两线有意不同的地方之一；每一处有意的差异都是 internal/controller 对照用例里显式的差异行，也都登记在这页 |
 | 缺记录的请求 | AIP-203 把必填字段缺失定为 INVALID_ARGUMENT | 两线都答 400 / InvalidArgument，提示文字各按自己缺的东西说：HTTP 缺 body 答「request body is required」，gRPC 缺 record 字段答「record is required」 |

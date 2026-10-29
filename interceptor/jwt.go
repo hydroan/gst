@@ -20,8 +20,11 @@ const sessionIDKey = "x-session-id"
 
 // JwtAuth authenticates a call from the bearer token in its authorization
 // metadata, the way middleware.JwtAuth authenticates a request from the
-// Authorization header, with the same token: "authorization: Bearer
-// <token>", the x-session-id metadata standing for the X-Session-Id header.
+// Authorization header, with the same token: "authorization: Bearer <token>",
+// the x-session-id metadata standing for the X-Session-Id header. A call it
+// refuses, its token missing, malformed, expired or signed by something else,
+// is answered Unauthenticated with the one message "invalid token", the reason
+// kept to the log.
 //
 // The token answers for itself: it is verified from its signature and
 // claims, with nothing read from storage. Revoking one before it expires

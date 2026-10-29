@@ -19,17 +19,22 @@ var routeParam = regexp.MustCompile(`:([a-zA-Z0-9_]+)`)
 
 // Authz authorizes calls using RBAC, through rbac.Enforce, the one decision
 // path middleware.Authz takes as well: the subject is the caller an
-// authentication interceptor established, the action is the HTTP method of
-// the call's action (STREAM for a Stream action) and the object is the
-// route the action is served at with every parameter written {name}, the
-// way the route list spells it (see grpc.Route and routeParam), so a policy
-// written for the route list decides for both listeners; a refusal is
-// answered as the gRPC status the service error maps to. Over HTTP the
-// middleware judges the concrete path of the request, so a policy naming a
-// concrete path, /api/records/42, grants an HTTP request alone: a call
-// carries no path, only the route. Authz must be called before config.Init
-// so config.Init can read AUTH_RBAC_ENABLED from the environment and enable
-// RBAC initialization.
+// authentication interceptor established, the action is the HTTP method of the
+// call's action (STREAM for a Stream action) and the object is the route the
+// action is served at with every parameter written {name}, the way the route
+// list spells it (see grpc.Route and routeParam), so a policy written for the
+// route list decides for both listeners; a refusal is answered as the gRPC
+// status the service error maps to. Over HTTP the middleware judges the
+// concrete path of the request, so a policy naming a concrete path,
+// /api/records/42, grants an HTTP request alone: a call carries no path, only
+// the route. A policy written with /*, or naming a static path, decides alike
+// on both listeners as well, while one spelling a parameter :id, the way the
+// router registers a route, matches neither: the matcher reads :id as text. The
+// route list, GET /api/authz/routes, lists the HTTP routes alone, so the policy
+// of a Stream action, which has no HTTP route, is written by hand in the same
+// form: STREAM, and the route with every parameter written {name}. Authz must
+// be called before config.Init so config.Init can read AUTH_RBAC_ENABLED from
+// the environment and enable RBAC initialization.
 //
 // Authz must run after an authentication interceptor, IAMSession or JwtAuth,
 // that establishes the caller; registered ahead of one, it refuses every
