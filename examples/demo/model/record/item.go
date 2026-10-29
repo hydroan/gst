@@ -19,7 +19,9 @@ const (
 // parent means to an item is the service's: Create takes the parent from
 // the route and List keeps to it, in service/record/item, while the other
 // actions are the framework's own. The batch actions, declared on a route
-// of their own, take and answer lists of items at /api/items/batch.
+// of their own, take and answer lists of items at /api/items/batch, and the
+// summary route counts the caller's items by the type of their record, a
+// query joining the parent.
 type Item struct {
 	RecordID string   `json:"record_id" query:"record_id"`
 	Kind     ItemKind `json:"kind" query:"kind"`
@@ -51,4 +53,15 @@ func (Item) Design() {
 		UpdateMany(func() {})
 		PatchMany(func() {})
 	})
+	Route("items/summary", func() {
+		List(func() {
+			Service("summary")
+			Result[*ItemSummaryRsp]()
+		})
+	})
+}
+
+// ItemSummaryRsp counts the caller's items by the type of their record.
+type ItemSummaryRsp struct {
+	ByRecordType map[string]int `json:"by_record_type"`
 }

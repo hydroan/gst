@@ -14,6 +14,7 @@ func init() {
 	model.Register[*archive.Document]()
 	model.Register[*Audit]()
 	model.Register[*board.Note]()
+	model.Register[*Preference]()
 	model.Register[*record.Item]()
 	model.Register[*Record]()
 }

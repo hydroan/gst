@@ -6,7 +6,10 @@ import "github.com/hydroan/gst/apidoc"
 
 func init() {
 	apidoc.Register("demo/model", "Audit", apidoc.StructDoc{
-		Comment: "Audit is one row per change to a record, written by the record hooks: a\ntable with no API of its own, so its design declares Migrate and no\naction, and no route is generated for it. The job in cronjob purges the\nold rows.",
+		Comment: "Audit is one row per change to a record, written by the record hooks,\nand one per login lifecycle moment, a login that succeeded or failed and\na logout, written by the login observer in module: a table with no API\nof its own, so its design declares Migrate and no action, and no route\nis generated for it. The job in cronjob purges the old rows.",
+		Fields: map[string]string{
+			"RecordID": "empty for a login or a logout",
+		},
 	})
 	apidoc.Register("demo/model", "Notice", apidoc.StructDoc{
 		Comment: "Notice is a stream of server-sent events: a long-lived GET response a\nbrowser reads through an EventSource, or a Go program through\nclient.Stream. SSE always delegates to service code, which opens the\nstream and decides what to send; how many events a stream carries here is\nconfiguration, see configx.Notice. GET /api/notices.",
@@ -18,14 +21,25 @@ func init() {
 		Comment: "PingRsp is what a ping answers.",
 		Fields: map[string]string{
 			"Msg":     "a word",
-			"Records": "the record count the record_count component keeps",
+			"Records": "the record count the count_records job keeps in dao",
 		},
 	})
-	apidoc.Register("demo/model", "Record", apidoc.StructDoc{
-		Comment: "Record is a table-backed resource with the standard actions on\n/api/records and /api/records/:record. Delete, Update, Patch and Get are\nthe framework's own; Create and List declare Service() for the hooks in\nservice/record, which stamp the owner, write the audit trail and keep a\nlist to the caller's own records. Embedding model.Query lets a list take\nthe framework's query parameters: field[op]=value filters such as\ntype[in]=text,image, _sort_by, _page and _size, and cursor pagination.\nThe summary route counts the records by type in service code of its own,\nand the search route is a custom List reading those parameters itself.",
+	apidoc.Register("demo/model", "Preference", apidoc.StructDoc{
+		Comment: "Preference is one setting of the caller's, named by a key the caller\nholds once: the unique index on the owner and the key declares it, and the\nset route derives the row's id from the two. Setting a key again replaces\nits value in place, an upsert in service/preference, so the client never\nasks whether the key exists; List and Delete are the framework's own with\na hook each, keeping the list to the caller's and refusing to delete\nsomeone else's. GET /api/preferences, POST /api/preferences/set, DELETE\n/api/preferences/:id.",
 		Fields: map[string]string{
+			"UserID": "UserID is the owner, taken from the session when the preference is set.",
+		},
+	})
+	apidoc.Register("demo/model", "PreferenceSetReq", apidoc.StructDoc{
+		Comment: "PreferenceSetReq is the key to set and its value.",
+	})
+	apidoc.Register("demo/model", "Record", apidoc.StructDoc{
+		Comment: "Record is a table-backed resource with the standard actions on\n/api/records and /api/records/:record. Get is the framework's own; the\nother actions declare Service() for the hooks in service/record, which\nstamp the owner, write the audit trail, keep a list to the caller's own\nrecords and every write to them: updating, patching or deleting someone\nelse's record answers 404, as if it were not there. Embedding model.Query\nlets a list take the framework's query parameters: field[op]=value\nfilters such as type[in]=text,image, _sort_by, _page and _size, and\ncursor pagination. The binding tags validate a body before any hook runs,\na 400 naming the field. The summary route counts the records by type in\nservice code of its own, the search route is a custom List reading those\nparameters itself, and the trash route lists the records the caller\ndeleted.",
+		Fields: map[string]string{
+			"Items":    "Items are the record's items, loaded when a request asks for them:\nExpands names the association and ?_expand=items has the framework\npreload it on a list or a get. constraint:- keeps the migration from\nadding a foreign key, the preload resolving the relation in Go.",
 			"UserID":   "UserID is the owner, taken from the session when the record is created.",
 			"Username": "Username is the owner's name, filled in for the client; not a column.",
+			"Version":  "Version protects concurrent edits: a client sends back the version it\nread, an update that carries a stale one answers 409 and one that\ncarries none answers 400. A create sets it to 1, and a successful\nupdate or patch bumps it.",
 		},
 	})
 	apidoc.Register("demo/model", "RecordSearchRsp", apidoc.StructDoc{
@@ -74,7 +88,10 @@ func init() {
 		Comment: "NotePublishRsp reports a publication.",
 	})
 	apidoc.Register("demo/model/record", "Item", apidoc.StructDoc{
-		Comment: "Item is a child resource of Record: model/record/item.go sits in the\ndirectory named after model/record.go, so its routes nest under the\nparent's, /api/records/:record/items. The nesting is the URL's; what the\nparent means to an item is the service's: Create takes the parent from\nthe route and List keeps to it, in service/record/item, while the other\nactions are the framework's own. The batch actions, declared on a route\nof their own, take and answer lists of items at /api/items/batch.",
+		Comment: "Item is a child resource of Record: model/record/item.go sits in the\ndirectory named after model/record.go, so its routes nest under the\nparent's, /api/records/:record/items. The nesting is the URL's; what the\nparent means to an item is the service's: Create takes the parent from\nthe route and List keeps to it, in service/record/item, while the other\nactions are the framework's own. The batch actions, declared on a route\nof their own, take and answer lists of items at /api/items/batch, and the\nsummary route counts the caller's items by the type of their record, a\nquery joining the parent.",
+	})
+	apidoc.Register("demo/model/record", "ItemSummaryRsp", apidoc.StructDoc{
+		Comment: "ItemSummaryRsp counts the caller's items by the type of their record.",
 	})
 	apidoc.Register("demo/model/tool", "Entry", apidoc.StructDoc{
 		Comment: "Entry is a utility action with no table: merging key/value pairs, at\nPOST /api/entries/merge. Service(\"merge\") names the service file after the action\nrather than the phase, and Flatten puts it in the package of the model's\ndirectory, service/tool/merge.go in package tool, instead of a package of\nthe model file's own.",

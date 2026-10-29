@@ -1,6 +1,8 @@
 package model
 
 import (
+	"demo/model/record"
+
 	. "github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
 )
@@ -14,21 +16,35 @@ const (
 )
 
 // Record is a table-backed resource with the standard actions on
-// /api/records and /api/records/:record. Delete, Update, Patch and Get are
-// the framework's own; Create and List declare Service() for the hooks in
-// service/record, which stamp the owner, write the audit trail and keep a
-// list to the caller's own records. Embedding model.Query lets a list take
-// the framework's query parameters: field[op]=value filters such as
-// type[in]=text,image, _sort_by, _page and _size, and cursor pagination.
-// The summary route counts the records by type in service code of its own,
-// and the search route is a custom List reading those parameters itself.
+// /api/records and /api/records/:record. Get is the framework's own; the
+// other actions declare Service() for the hooks in service/record, which
+// stamp the owner, write the audit trail, keep a list to the caller's own
+// records and every write to them: updating, patching or deleting someone
+// else's record answers 404, as if it were not there. Embedding model.Query
+// lets a list take the framework's query parameters: field[op]=value
+// filters such as type[in]=text,image, _sort_by, _page and _size, and
+// cursor pagination. The binding tags validate a body before any hook runs,
+// a 400 naming the field. The summary route counts the records by type in
+// service code of its own, the search route is a custom List reading those
+// parameters itself, and the trash route lists the records the caller
+// deleted.
 type Record struct {
-	Type  RecordType `json:"type" query:"type"`
-	Title string     `json:"title" query:"title"`
+	Type  RecordType `json:"type" query:"type" binding:"omitempty,oneof=text image"`
+	Title string     `json:"title" query:"title" binding:"max=64"`
 	// UserID is the owner, taken from the session when the record is created.
 	UserID string `json:"user_id" query:"user_id" gorm:"size:36;not null"`
 	// Username is the owner's name, filled in for the client; not a column.
 	Username string `json:"username,omitempty" gorm:"-"`
+	// Items are the record's items, loaded when a request asks for them:
+	// Expands names the association and ?_expand=items has the framework
+	// preload it on a list or a get. constraint:- keeps the migration from
+	// adding a foreign key, the preload resolving the relation in Go.
+	Items []*record.Item `json:"items,omitempty" gorm:"foreignKey:RecordID;constraint:-"`
+	// Version protects concurrent edits: a client sends back the version it
+	// read, an update that carries a stale one answers 409 and one that
+	// carries none answers 400. A create sets it to 1, and a successful
+	// update or patch bumps it.
+	Version model.Version `json:"version,omitempty" gorm:"not null;default:1"`
 
 	model.Query
 	model.Base
@@ -36,6 +52,7 @@ type Record struct {
 
 func (Record) TableName() string      { return "records" }
 func (Record) Indexes() []model.Index { return []model.Index{{Fields: []string{"UserID"}}} } // the owner filter of every list relies on it
+func (Record) Expands() []string      { return []string{"Items"} }                           // the associations a request may ask for
 
 func (Record) Design() {
 	Migrate()
@@ -45,9 +62,15 @@ func (Record) Design() {
 	Create(func() {
 		Service()
 	})
-	Delete(func() {})
-	Update(func() {})
-	Patch(func() {})
+	Delete(func() {
+		Service()
+	})
+	Update(func() {
+		Service()
+	})
+	Patch(func() {
+		Service()
+	})
 	List(func() {
 		Service()
 	})
@@ -65,6 +88,12 @@ func (Record) Design() {
 			Result[*RecordSearchRsp]()
 		})
 	})
+	Route("records/trash", func() {
+		List(func() {
+			Service("trash")
+			Result[*RecordTrashRsp]()
+		})
+	})
 }
 
 type (
@@ -79,4 +108,8 @@ type (
 		Items []*Record `json:"items"`
 		Total int       `json:"total"`
 	}
+
+	// RecordTrashRsp is the caller's deleted records and how many there are:
+	// the same shape as RecordSearchRsp, under the trash route's own name.
+	RecordTrashRsp = RecordSearchRsp
 )

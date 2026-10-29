@@ -18,20 +18,26 @@ type Summary struct {
 	service.Base[*model.Record, *gstmodel.Empty, *model.RecordSummaryRsp]
 }
 
-// List counts the caller's records, in all and by type, through the
-// database chain: WithQuery takes a model whose set fields are the
-// conditions.
+// List counts the caller's records by type in one query: database.Select
+// projects the group key, the type, and a count under the alias the result
+// row names, and the framework derives the GROUP BY from the key. The
+// owner condition is the service's to write: a projection runs no service
+// hook, so nothing narrows it to the caller but this Where.
 func (s *Summary) List(ctx *gst.ServiceContext, _ *gstmodel.Empty) (*model.RecordSummaryRsp, error) {
-	rsp := &model.RecordSummaryRsp{ByType: map[model.RecordType]int{}}
-	if err := database.Database[*model.Record](ctx).WithQuery(&model.Record{UserID: ctx.UserID()}).Count(&rsp.Total); err != nil {
+	type recordsOfType struct {
+		Type  model.RecordType
+		Total int
+	}
+	rows := make([]recordsOfType, 0)
+	if err := database.Select[*model.Record, recordsOfType](ctx, model.RecordCols.Type.Group(), gst.Count().As("total")).
+		Where(model.RecordCols.UserID.Eq(ctx.UserID())).
+		Scan(&rows); err != nil {
 		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to count the records", err)
 	}
-	for _, kind := range []model.RecordType{model.RecordTypeText, model.RecordTypeImage} {
-		var total int
-		if err := database.Database[*model.Record](ctx).WithQuery(&model.Record{UserID: ctx.UserID(), Type: kind}).Count(&total); err != nil {
-			return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to count the records", err)
-		}
-		rsp.ByType[kind] = total
+	rsp := &model.RecordSummaryRsp{ByType: make(map[model.RecordType]int, len(rows))}
+	for _, row := range rows {
+		rsp.ByType[row.Type] = row.Total
+		rsp.Total += row.Total
 	}
 	return rsp, nil
 }

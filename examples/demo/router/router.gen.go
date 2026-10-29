@@ -37,6 +37,9 @@ func Init() error {
 	router.Register[*board.Note, *board.NotePublishReq, *board.NotePublishRsp](router.Auth(), "/api/board/notes/:id/publish", &gst.ControllerConfig[*board.Note]{}, consts.Create)
 	router.Register[*model.Notice, *model.Notice, *model.Notice](router.Pub(), "/api/notices", &gst.ControllerConfig[*model.Notice]{}, consts.SSE)
 	router.Register[*model.Ping, *gstmodel.Empty, *model.PingRsp](router.Pub(), "/api/pings", &gst.ControllerConfig[*model.Ping]{}, consts.List)
+	router.Register[*model.Preference, *model.Preference, *model.Preference](router.Auth(), "/api/preferences/:id", &gst.ControllerConfig[*model.Preference]{ParamName: "id"}, consts.Delete)
+	router.Register[*model.Preference, *model.Preference, *model.Preference](router.Auth(), "/api/preferences", &gst.ControllerConfig[*model.Preference]{}, consts.List)
+	router.Register[*model.Preference, *model.PreferenceSetReq, *model.PreferenceSetRsp](router.Auth(), "/api/preferences/set", &gst.ControllerConfig[*model.Preference]{}, consts.Create)
 	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "/api/records/:record/items", &gst.ControllerConfig[*record.Item]{}, consts.Create)
 	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "/api/records/:record/items/:id", &gst.ControllerConfig[*record.Item]{ParamName: "id"}, consts.Delete)
 	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "/api/records/:record/items/:id", &gst.ControllerConfig[*record.Item]{ParamName: "id"}, consts.Update)
@@ -47,6 +50,7 @@ func Init() error {
 	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "/api/items/batch", &gst.ControllerConfig[*record.Item]{}, consts.DeleteMany)
 	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "/api/items/batch", &gst.ControllerConfig[*record.Item]{}, consts.UpdateMany)
 	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "/api/items/batch", &gst.ControllerConfig[*record.Item]{}, consts.PatchMany)
+	router.Register[*record.Item, *gstmodel.Empty, *record.ItemSummaryRsp](router.Auth(), "/api/items/summary", &gst.ControllerConfig[*record.Item]{}, consts.List)
 	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records", &gst.ControllerConfig[*model.Record]{}, consts.Create)
 	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records/:record", &gst.ControllerConfig[*model.Record]{ParamName: "record"}, consts.Delete)
 	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records/:record", &gst.ControllerConfig[*model.Record]{ParamName: "record"}, consts.Update)
@@ -55,6 +59,7 @@ func Init() error {
 	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records/:record", &gst.ControllerConfig[*model.Record]{ParamName: "record"}, consts.Get)
 	router.Register[*model.Record, *gstmodel.Empty, *model.RecordSearchRsp](router.Auth(), "/api/records/search", &gst.ControllerConfig[*model.Record]{}, consts.List)
 	router.Register[*model.Record, *gstmodel.Empty, *model.RecordSummaryRsp](router.Auth(), "/api/records/summary", &gst.ControllerConfig[*model.Record]{}, consts.List)
+	router.Register[*model.Record, *gstmodel.Empty, *model.RecordTrashRsp](router.Auth(), "/api/records/trash", &gst.ControllerConfig[*model.Record]{}, consts.List)
 	router.Register[*tool.Entry, *tool.EntryMergeReq, *tool.EntryMergeRsp](router.Auth(), "/api/entries/merge", &gst.ControllerConfig[*tool.Entry]{}, consts.Create)
 	return nil
 }

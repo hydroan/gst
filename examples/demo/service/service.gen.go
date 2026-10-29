@@ -9,6 +9,7 @@ import (
 	"demo/service/board/note"
 	"demo/service/notice"
 	"demo/service/ping"
+	"demo/service/preference"
 	"demo/service/record"
 	"demo/service/record/item"
 	"demo/service/tool"
@@ -30,11 +31,19 @@ func init() {
 	service.Register[*note.Publish](consts.Create, "/api/board/notes/:id/publish")
 	service.Register[*notice.Streamer](consts.SSE, "/api/notices")
 	service.Register[*ping.Lister](consts.List, "/api/pings")
+	service.Register[*preference.Deleter](consts.Delete, "/api/preferences/:id")
+	service.Register[*preference.Lister](consts.List, "/api/preferences")
+	service.Register[*preference.Set](consts.Create, "/api/preferences/set")
 	service.Register[*item.Creator](consts.Create, "/api/records/:record/items")
 	service.Register[*item.Lister](consts.List, "/api/records/:record/items")
+	service.Register[*item.Summary](consts.List, "/api/items/summary")
 	service.Register[*record.Creator](consts.Create, "/api/records")
+	service.Register[*record.Deleter](consts.Delete, "/api/records/:record")
+	service.Register[*record.Updater](consts.Update, "/api/records/:record")
+	service.Register[*record.Patcher](consts.Patch, "/api/records/:record")
 	service.Register[*record.Lister](consts.List, "/api/records")
 	service.Register[*record.Search](consts.List, "/api/records/search")
 	service.Register[*record.Summary](consts.List, "/api/records/summary")
+	service.Register[*record.Trash](consts.List, "/api/records/trash")
 	service.Register[*tool.Merge](consts.Create, "/api/entries/merge")
 }

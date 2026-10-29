@@ -5,6 +5,7 @@ package model
 
 import (
 	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/model"
 )
 
 // RecordCols are the typed column references of Record.
@@ -18,6 +19,7 @@ var RecordCols = struct {
 	UpdatedAt gst.TimeColumn
 	UpdatedBy gst.Column[string]
 	UserID    gst.Column[string]
+	Version   gst.NumericColumn[model.Version]
 }{
 	CreatedAt: gst.NewTimeColumn[*Record]("created_at"),
 	CreatedBy: gst.NewColumn[*Record, string]("created_by"),
@@ -28,4 +30,5 @@ var RecordCols = struct {
 	UpdatedAt: gst.NewTimeColumn[*Record]("updated_at"),
 	UpdatedBy: gst.NewColumn[*Record, string]("updated_by"),
 	UserID:    gst.NewColumn[*Record, string]("user_id"),
+	Version:   gst.NewNumericColumn[*Record, model.Version]("version"),
 }
