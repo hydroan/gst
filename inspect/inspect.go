@@ -51,6 +51,14 @@ func ValidateFrameworkColumns(typ reflect.Type) error {
 	return modelschema.ValidateFrameworkColumns(typ)
 }
 
+// ValidateTenantIndexes refuses a unique index a model embedding tenant.Scope
+// declares without the tenant among its fields. The inspection program asks
+// it of every model it inspects, so gg check refuses what table preparation
+// refuses at startup.
+func ValidateTenantIndexes(typ reflect.Type) error {
+	return modelschema.ValidateTenantIndexes(typ)
+}
+
 // ValidateQueryNames refuses a model whose query tags name its URL query
 // parameters ambiguously: a name two fields declare, a business field's name
 // in the "_" namespace of the framework's own parameters, or a tag holding

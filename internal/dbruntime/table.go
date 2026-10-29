@@ -119,6 +119,9 @@ func ensureTable(handler *gorm.DB, m types.Model) error {
 	if err = modelschema.ValidateFrameworkColumns(reflect.TypeOf(m)); err != nil {
 		return err
 	}
+	if err = modelschema.ValidateTenantIndexes(reflect.TypeOf(m)); err != nil {
+		return err
+	}
 	if err = urlquery.ValidateQueryNames(reflect.TypeOf(m)); err != nil {
 		return err
 	}

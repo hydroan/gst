@@ -13,6 +13,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
+	"github.com/hydroan/gst/internal/tenant"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
@@ -127,6 +128,31 @@ func TestEnsureTableRejectsARenamedFrameworkColumn(t *testing.T) {
 	err := ensureTable(db, &renamedColumnRecord{})
 	require.ErrorContains(t, err, `framework field DeletedAt maps to column "removed_at" instead of "deleted_at"`)
 	require.False(t, db.Migrator().HasTable("renamed_column_records"))
+}
+
+// globallyUniqueTenantRecord embeds tenant.Scope and declares a value unique
+// across the whole table; table preparation must refuse it before the table
+// exists, whatever the database.
+type globallyUniqueTenantRecord struct {
+	Code string `gorm:"size:64"`
+
+	modelregistry.Base
+	tenant.Scope
+}
+
+func (*globallyUniqueTenantRecord) TableName() string { return "globally_unique_tenant_records" }
+
+func (*globallyUniqueTenantRecord) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Code"}, Unique: true}}
+}
+
+func TestEnsureTableRejectsAUniqueIndexLeavingOutTheTenant(t *testing.T) {
+	db := newSQLiteDB(t)
+	withAutoMigrate(t, true)
+
+	err := ensureTable(db, &globallyUniqueTenantRecord{})
+	require.ErrorContains(t, err, `unique index (Code) leaves out TenantID`)
+	require.False(t, db.Migrator().HasTable("globally_unique_tenant_records"))
 }
 
 // clashingQueryRecord declares one query name on two columns, which the

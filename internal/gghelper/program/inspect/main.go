@@ -42,6 +42,7 @@ type modelColumns struct {
 	Name                     string       `json:"name"`
 	Columns                  []columnInfo `json:"columns"`
 	IndexViolation           string       `json:"index_violation"`
+	TenantIndexViolation     string       `json:"tenant_index_violation"`
 	FrameworkColumnViolation string       `json:"framework_column_violation"`
 	QueryNameViolation       string       `json:"query_name_violation"`
 	IDAccessorViolation      string       `json:"id_accessor_violation"`
@@ -116,6 +117,9 @@ func main() {
 		entry := modelColumns{PkgPath: typ.PkgPath(), PkgName: packageName(typ), Name: typ.Name()}
 		if validateErr := model.ValidateIndexes(schemaDB, m); validateErr != nil {
 			entry.IndexViolation = validateErr.Error()
+		}
+		if validateErr := inspect.ValidateTenantIndexes(typ); validateErr != nil {
+			entry.TenantIndexViolation = validateErr.Error()
 		}
 		if validateErr := inspect.ValidateFrameworkColumns(typ); validateErr != nil {
 			entry.FrameworkColumnViolation = validateErr.Error()
