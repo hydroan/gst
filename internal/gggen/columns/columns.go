@@ -1,11 +1,12 @@
-// Package columns generates the typed column references of a project's
-// models, so filters name columns through the compiler instead of through
-// string literals. Every model file gets a generated file of the same name
-// declaring a <Model>Cols var per model it declares: model/sample/record.go,
-// declaring Record, gets model/sample/record.gen.go with RecordCols. The
-// columns come from gorm's own schema parser, run inside the project's module
-// against the project's real model types by the inspection of package
-// modelinspect.
+// Package columns generates the typed column references of a project's models,
+// so filters name columns through the compiler instead of through string
+// literals. Every model file declaring a model with columns gets a generated
+// file of the same name declaring a <Model>Cols var per such model:
+// model/sample/record.go, declaring Record, gets model/sample/record.gen.go
+// with RecordCols, and a model without columns, such as one embedding
+// model.Empty, gets no var. The columns come from gorm's own schema parser, run
+// inside the project's module against the project's real model types by the
+// inspection of package modelinspect.
 package columns
 
 import (
@@ -31,18 +32,19 @@ type Result struct {
 	// content changed; a file that is already current is not rewritten.
 	Written []string
 
-	// Removed lists the generated files removed because their model source is
-	// gone.
+	// Removed lists the generated files removed because their source file
+	// declares no model with columns any more (see removeOrphanColumnFiles).
 	Removed []string
 }
 
-// Generate writes one .gen.go file per model source file and removes the
-// generated files whose source is gone, and returns the files it wrote and
-// removed. Generated files are framework-owned for their whole life cycle:
-// projects never create, edit, or clean them up. A model file of the model
-// directory named like one of the directory's own generated files is refused
-// before anything is written, see registrationFileOwner. When it fails, the
-// result still lists what it wrote and removed before the failure.
+// Generate writes one .gen.go file per model source file declaring a model with
+// columns, removes the generated files of the sources that no longer declare
+// one, and returns the files it wrote and removed. Generated files are
+// framework-owned for their whole life cycle: projects never create, edit, or
+// clean them up. A model file of the model directory named like one of the
+// directory's own generated files is refused before anything is written, see
+// registrationFileOwner. When it fails, the result still lists what it wrote
+// and removed before the failure.
 func Generate(module string, modelDir string, models []*modelinfo.Model, ignore gghelper.ProjectIgnore) (Result, error) {
 	var result Result
 
@@ -135,11 +137,12 @@ func writeGeneratedFileIfChanged(path string, content string) (bool, error) {
 	return true, nil
 }
 
-// removeOrphanColumnFiles deletes generated column files whose model source no
-// longer declares any model, which happens when a model is deleted, renamed,
-// or moved to another file, and returns the files it deleted. Only files
-// carrying the generated header are removed, so a hand-written file is
-// reported instead of destroyed.
+// removeOrphanColumnFiles deletes the generated column files of dir that wanted
+// leaves out: those whose source file no longer declares a model with columns,
+// which happens when the source file is deleted or renamed, or when its models
+// are deleted, moved to another file, or left without columns. It returns the
+// files it deleted. Only files carrying the generated header are removed, so a
+// hand-written file is reported instead of destroyed.
 func removeOrphanColumnFiles(dir string, wanted map[string]struct{}) ([]string, error) {
 	var removed []string
 	err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, walkErr error) error {

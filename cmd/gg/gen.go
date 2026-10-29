@@ -292,7 +292,7 @@ func genRunWithOptions(opts genRunOptions) error {
 			clioutput.Success("GENERATE", "%s", path)
 		}
 		for _, path := range columnFiles.Removed {
-			clioutput.Success("REMOVE", "%s (model source is gone)", path)
+			clioutput.Success("REMOVE", "%s (its source declares no model with columns any more)", path)
 		}
 	}
 	if genErr != nil {

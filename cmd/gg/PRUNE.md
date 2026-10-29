@@ -91,7 +91,7 @@ stop
 | `gg prune` | 只清理，不生成代码 |
 | `gg gen --prune` | 先生成代码，再清理 |
 
-两个命令清理的范围和确认方式完全一样。`gg module copy` 在内部重新生成代码时不做 prune；`gg gen` 自己照常删的仍然会删：不再走 gRPC 的 model 在 `pb/` 下留下的 Go 文件，以及 model 源文件已经删掉的列引用文件。
+两个命令清理的范围和确认方式完全一样。`gg module copy` 在内部重新生成代码时不做 prune；`gg gen` 自己照常删的仍然会删：不再走 gRPC 的 model 在 `pb/` 下留下的 Go 文件，以及源文件里已经没有带列 model 的列引用文件（源文件删了或改了名，或者里面的 model 删了、挪去了别的文件、一个列都没有了）。
 
 ## 几个说法
 

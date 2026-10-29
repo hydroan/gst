@@ -77,8 +77,8 @@ func TestRemoveOrphanColumnFiles(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{orphan}, removed, "the result lists the removed file and nothing else")
 
-	require.FileExists(t, kept, "a file whose model source still exists is kept")
-	require.NoFileExists(t, orphan, "a file whose model source is gone is removed")
+	require.FileExists(t, kept, "a file in wanted is kept")
+	require.NoFileExists(t, orphan, "a file wanted leaves out is removed")
 	require.FileExists(t, registration, "the registration file belongs to another generation step")
 }
 
