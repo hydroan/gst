@@ -7,13 +7,13 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/requestctx"
 )
 
 // BenchmarkRequestMetadataWithoutParams measures the per-request metadata cost
 // of a route declaring no parameters and receiving no query string — the shape
-// of most read endpoints, and the one where every map allocated is an empty one.
+// of most read endpoints, and the one where every map allocated is an empty
+// one.
 func BenchmarkRequestMetadataWithoutParams(b *testing.B) {
 	benchmarkRequestMetadata(b, "/bench", "/bench", nil)
 }
@@ -38,7 +38,7 @@ func benchmarkRequestMetadata(b *testing.B, route, target string, paramKeys []st
 	engine := gin.New()
 	engine.GET(route, func(c *gin.Context) {
 		if len(paramKeys) > 0 {
-			c.Set(consts.PARAMS, paramKeys)
+			c.Set(requestctx.KeyParams, paramKeys)
 		}
 
 		base := context.Background()

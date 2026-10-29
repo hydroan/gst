@@ -11,7 +11,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
@@ -34,11 +34,10 @@ func recovery() gin.HandlerFunc {
 	return recoveryWithTracing(logger.Recovery, true)
 }
 
-// recoveryWithTracing returns a gin.HandlerFunc (middleware)
-// that recovers from any panics and logs requests using uber-go/zap.
-// All errors are logged using zap.Error().
-// stack means whether output the stack info.
-// The stack info is easy to find where the error occurs but the stack info is too large.
+// recoveryWithTracing returns a gin.HandlerFunc (middleware) that recovers from
+// any panics and logs requests using uber-go/zap. All errors are logged using
+// zap.Error(). stack means whether output the stack info. The stack info is
+// easy to find where the error occurs but the stack info is too large.
 func recoveryWithTracing(log *zap.Logger, stack bool) gin.HandlerFunc {
 	return gin.CustomRecoveryWithWriter(nil, func(c *gin.Context, recovered any) {
 		panicErr := errors.Newf("panic recovered: %v", recovered)
@@ -82,7 +81,7 @@ func recoveryWithTracing(log *zap.Logger, stack bool) gin.HandlerFunc {
 			// the message would be zone-less text on the host clock. The trace
 			// id is a field, so one search of the file finds the panic that
 			// explains a response.
-			traceID := logfield.TraceID(c.GetString(consts.TRACE_ID))
+			traceID := logfield.TraceID(c.GetString(execctx.KeyTraceID))
 			switch {
 			case brokenPipe:
 				log.Error(fmt.Sprintf("%s\n%s", recovered, headersToStr), traceID)

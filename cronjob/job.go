@@ -369,7 +369,7 @@ func (j *job) run(ctx context.Context, at time.Time, fields ...zap.Field) (runEr
 	}()
 	begin := time.Now()
 	runErr = j.fn(ctx)
-	round = append(round, util.LogDuration(time.Since(begin)))
+	round = append(round, logfield.Duration(time.Since(begin)))
 	switch reason := interruption(ctx, runErr); {
 	case runErr == nil:
 		log.Infoz("finished cronjob", round...)

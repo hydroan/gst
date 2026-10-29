@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/lease"
@@ -940,7 +939,7 @@ func TestRunLogsFailureWithErrorStack(t *testing.T) {
 
 			entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), tc.msg)
 			require.Equal(t, tc.err, entry["error"])
-			require.NotEmpty(t, entry[consts.TRACE_ID], "the outcome entry must carry the round's trace id")
+			require.NotEmpty(t, entry[execctx.KeyTraceID], "the outcome entry must carry the round's trace id")
 			require.Contains(t, entry["error_stack"], "job_internal_test.go",
 				"error_stack must point at the line inside the job that failed")
 		})
@@ -985,7 +984,7 @@ func TestRunStampsRoundIdentity(t *testing.T) {
 	require.True(t, got.leased, "the round runs under the instant's lease")
 	require.EqualValues(t, 1, got.term)
 	entry := readLogEntry(t, filepath.Join(dir, "cronjob.log"), "finished cronjob")
-	require.Equal(t, got.identity.TraceID, entry[consts.TRACE_ID])
+	require.Equal(t, got.identity.TraceID, entry[execctx.KeyTraceID])
 	require.Equal(t, "2026-01-01T10:00:01Z", entry["at"], "the outcome entry names the instant the round ran for")
 	require.EqualValues(t, 1, entry["term"], "the outcome entry names the lease's term")
 }

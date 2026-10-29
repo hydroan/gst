@@ -10,6 +10,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/cqlpolicy"
 	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
@@ -172,7 +173,7 @@ func (o *queryObserver) ObserveQuery(ctx context.Context, query gocql.ObservedQu
 		"statement", query.Statement,
 		"values", query.Values,
 		"keyspace", query.Keyspace,
-		util.LogDuration(query.End.Sub(query.Start)),
+		logfield.Duration(query.End.Sub(query.Start)),
 		"error", query.Err,
 	)
 }
@@ -189,7 +190,7 @@ func (o *batchObserver) ObserveBatch(ctx context.Context, batch gocql.ObservedBa
 		"statements", statements,
 		"values", batch.Values,
 		"keyspace", batch.Keyspace,
-		util.LogDuration(batch.End.Sub(batch.Start)),
+		logfield.Duration(batch.End.Sub(batch.Start)),
 		"error", batch.Err,
 	)
 }

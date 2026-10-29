@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hydroan/gst/internal/util"
+	"github.com/hydroan/gst/internal/logfield"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -84,7 +84,7 @@ func runTimed(fn func() error) error {
 
 	begin := time.Now()
 	defer func() {
-		zap.S().Debugw("Init function executed", "function", name, util.LogDuration(time.Since(begin)))
+		zap.S().Debugw("Init function executed", "function", name, logfield.Duration(time.Since(begin)))
 	}()
 
 	return fn()

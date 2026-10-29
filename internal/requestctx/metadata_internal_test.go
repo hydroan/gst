@@ -22,12 +22,12 @@ func TestFromGinExtractsRequestFields(t *testing.T) {
 	var meta Metadata
 	router := gin.New()
 	router.GET("/api/users/:id", func(ctx *gin.Context) {
-		ctx.Set(consts.PARAMS, []string{"id"})
+		ctx.Set(KeyParams, []string{"id"})
 		ctx.Set(consts.CTX_USERNAME, "admin")
 		ctx.Set(consts.CTX_USER_ID, "user-1")
 		ctx.Set(consts.CTX_SESSION_ID, "session-1")
 		ctx.Set(consts.CTX_TENANT_ID, "tenant-1")
-		ctx.Set(consts.CTX_REQUIRES_AUTH, true)
+		ctx.Set(KeyRequiresAuth, true)
 
 		meta = FromGin(ctx)
 	})
@@ -106,7 +106,7 @@ func TestMetadataProtectsParamsAndQuery(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/users/42?tag=blue", nil)
 	ctx.Params = gin.Params{{Key: "id", Value: "42"}}
-	ctx.Set(consts.PARAMS, []string{"id"})
+	ctx.Set(KeyParams, []string{"id"})
 
 	meta := FromGin(ctx)
 
@@ -193,7 +193,7 @@ func TestGinQueryStrictReportsMalformedWithoutMemoizing(t *testing.T) {
 
 	_, err := GinQueryStrict(ginCtx)
 	require.Error(t, err)
-	_, stored := ginCtx.Get(ginQueryKey)
+	_, stored := ginCtx.Get(keyGinQuery)
 	require.False(t, stored, "a failed parse must not memoize a partial result")
 }
 
@@ -207,7 +207,7 @@ func TestGinParamsMemoizesTheRouteParameters(t *testing.T) {
 	router := gin.New()
 	router.GET("/api/records/:id", func(ctx *gin.Context) {
 		ran = true
-		ctx.Set(consts.PARAMS, []string{"id"})
+		ctx.Set(KeyParams, []string{"id"})
 
 		params := ginParams(ctx)
 		require.Equal(t, map[string]string{"id": "42"}, params)
@@ -236,7 +236,7 @@ func TestGinParamsMemoizesTheAbsenceOfParameters(t *testing.T) {
 		ran = true
 		require.Nil(t, ginParams(ctx))
 
-		cached, stored := ctx.Get(ginParamsKey)
+		cached, stored := ctx.Get(keyGinParams)
 		require.True(t, stored, "the absence of parameters must be memoized too")
 		require.Nil(t, cached)
 		require.Nil(t, ginParams(ctx))
@@ -255,7 +255,7 @@ func TestFromGinSharesTheMemoizedParams(t *testing.T) {
 	router := gin.New()
 	router.GET("/api/records/:id", func(ctx *gin.Context) {
 		ran = true
-		ctx.Set(consts.PARAMS, []string{"id"})
+		ctx.Set(KeyParams, []string{"id"})
 
 		first, second := FromGin(ctx), FromGin(ctx)
 		require.Equal(t, "42", first.Param("id"))
@@ -284,7 +284,7 @@ func TestGinConnectionMemoizesTheResolvedFields(t *testing.T) {
 	require.Equal(t, "203.0.113.5", GinClientIP(ginCtx),
 		"the resolution must be gin's own, forwarding headers included")
 
-	stored, ok := ginCtx.Get(ginConnectionKey)
+	stored, ok := ginCtx.Get(keyGinConnection)
 	require.True(t, ok, "the resolved fields must be memoized for the rest of the request")
 	require.Equal(t, connection{
 		clientIP:  "203.0.113.5",
@@ -311,7 +311,7 @@ func TestGinConnectionWithoutRequestMemoizesNothing(t *testing.T) {
 
 	ginCtx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	require.Empty(t, GinClientIP(ginCtx))
-	_, stored := ginCtx.Get(ginConnectionKey)
+	_, stored := ginCtx.Get(keyGinConnection)
 	require.False(t, stored, "without a request there is nothing to memoize")
 
 	ginCtx.Request = httptest.NewRequest(http.MethodGet, "/api/records", nil)

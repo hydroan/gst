@@ -10,7 +10,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/elastic/go-elasticsearch/v8/esapi"
 	"github.com/hydroan/gst/internal/logfield"
-	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 )
@@ -42,7 +41,7 @@ func (*document) Get(ctx context.Context, indexName string, id string, req *GetR
 	begin := time.Now()
 	logger := logger.Elastic.With("index", indexName, "id", id)
 	defer func() {
-		logger.Infow("get document completed", util.LogDuration(time.Since(begin)))
+		logger.Infow("get document completed", logfield.Duration(time.Since(begin)))
 	}()
 
 	opts := []func(*esapi.GetRequest){client.Get.WithContext(ctx)}

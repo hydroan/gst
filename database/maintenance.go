@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -148,7 +148,7 @@ func healthOn(ctx context.Context, instance *gorm.DB) error {
 		logger.Database.WithContext(ctx, phaseHealth).Errorz(
 			"database connection check failed",
 			zap.Error(err),
-			util.LogDuration(time.Since(begin)),
+			logfield.Duration(time.Since(begin)),
 		)
 		return errors.Wrap(err, "database connection check failed")
 	}
@@ -159,7 +159,7 @@ func healthOn(ctx context.Context, instance *gorm.DB) error {
 		logger.Database.WithContext(ctx, phaseHealth).Errorz(
 			"get sql.DB instance failed",
 			zap.Error(err),
-			util.LogDuration(time.Since(begin)),
+			logfield.Duration(time.Since(begin)),
 		)
 		return errors.Wrap(err, "get sql.DB instance failed")
 	}
@@ -173,7 +173,7 @@ func healthOn(ctx context.Context, instance *gorm.DB) error {
 			zap.Int("max", stats.MaxOpenConnections),
 			zap.Int("in_use", stats.InUse),
 			zap.Int("idle", stats.Idle),
-			util.LogDuration(time.Since(begin)),
+			logfield.Duration(time.Since(begin)),
 		)
 	}
 
@@ -182,7 +182,7 @@ func healthOn(ctx context.Context, instance *gorm.DB) error {
 		logger.Database.WithContext(ctx, phaseHealth).Errorz(
 			"database ping failed",
 			zap.Error(err),
-			util.LogDuration(time.Since(begin)),
+			logfield.Duration(time.Since(begin)),
 		)
 		return errors.Wrap(err, "database ping failed")
 	}
@@ -195,7 +195,7 @@ func healthOn(ctx context.Context, instance *gorm.DB) error {
 		zap.Int("max", stats.MaxOpenConnections),
 		zap.Int("in_use", stats.InUse),
 		zap.Int("idle", stats.Idle),
-		util.LogDuration(time.Since(begin)),
+		logfield.Duration(time.Since(begin)),
 	)
 
 	return nil

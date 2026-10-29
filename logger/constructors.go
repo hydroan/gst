@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/instance"
+	"github.com/hydroan/gst/internal/logfield"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	gormlogger "gorm.io/gorm/logger"
@@ -49,7 +49,7 @@ func readConf(filename string) logConfig {
 // DisableMsg/DisableLevel hide "msg" and "level" fields.
 // Console additionally mirrors a file sink to os.Stdout; see newLogWriter.
 //
-// Timestamp layout is deliberately not an option: consts.LayoutTimeEncoder
+// Timestamp layout is deliberately not an option: logfield.TimeLayout
 // applies to every entry, so entries from different files stay orderable
 // against one another and a log store types the field the same way everywhere.
 type Option struct {
@@ -152,5 +152,5 @@ func streamName(file string) string {
 // once, here, not once per entry.
 func newLogCore(cfg logConfig, opts ...Option) zapcore.Core {
 	core := zapcore.NewCore(newLogEncoder(cfg, opts...), newLogWriter(cfg, opts...), newLogLevel(cfg))
-	return &errorFieldCore{Core: core.With([]zapcore.Field{zap.String(consts.INSTANCE, instance.ID())})}
+	return &errorFieldCore{Core: core.With([]zapcore.Field{zap.String(logfield.KeyInstance, instance.ID())})}
 }

@@ -7,9 +7,9 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -231,7 +231,7 @@ func operationLogFields(modelName string, batch int, duration time.Duration, dry
 	if batch > 0 {
 		fields = append(fields, zap.Int("batch_size", batch))
 	}
-	fields = append(fields, util.LogDuration(duration))
+	fields = append(fields, logfield.Duration(duration))
 	if dryRun {
 		fields = append(fields, zap.Bool("dry_run", true))
 	}

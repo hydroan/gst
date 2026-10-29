@@ -49,9 +49,10 @@ func (l *Logger) Fatalz(msg string, fields ...zap.Field) { l.zlog.Fatal(msg, fie
 
 func (l *Logger) ZapLogger() *zap.Logger { return l.zlog }
 
-// With creates a new logger with additional string key-value pairs.
-// Each pair of arguments must be a key(string) followed by its value(string).
-// If an odd number of arguments is provided, an empty string will be appended as the last value.
+// With creates a new logger with additional string key-value pairs. Each pair
+// of arguments must be a key(string) followed by its value(string). If an odd
+// number of arguments is provided, an empty string will be appended as the last
+// value.
 //
 // Example 1 - Multiple With calls:
 //
@@ -67,7 +68,8 @@ func (l *Logger) ZapLogger() *zap.Logger { return l.zlog }
 //	    "trace_id", "123",
 //	)
 //
-// Returns the original logger if no fields are provided or if only an empty key is provided.
+// Returns the original logger if no fields are provided or if only an empty key
+// is provided.
 func (l *Logger) With(fields ...string) types.Logger {
 	if len(fields) == 0 {
 		return l
@@ -90,6 +92,15 @@ func (l *Logger) With(fields ...string) types.Logger {
 	}
 	return &Logger{zlog: l.zlog.With(zapFields...)}
 }
+
+// The keys of the fields withContextFields binds that no other stream
+// writes: the phase of the action, and the cron job or leader name of the
+// execution.
+const (
+	keyPhase   = "phase"
+	keyCronjob = "cronjob"
+	keyLeader  = "leader"
+)
 
 // contextFieldCap is the most fields withContextFields binds: the nine it
 // always binds — phase, route, path, method, username, user id, trace id,
@@ -117,7 +128,7 @@ const contextFieldCap = 10
 func (l *Logger) withContextFields(meta requestctx.Metadata, id execctx.Identity, phase consts.Phase) types.Logger {
 	fields := make([]zap.Field, 0, contextFieldCap)
 	fields = append(fields,
-		zap.String(consts.PHASE, string(phase)),
+		zap.String(keyPhase, string(phase)),
 		logfield.Route(meta.Route()),
 		logfield.Path(meta.Path()),
 		logfield.Method(meta.Method()),
@@ -128,10 +139,10 @@ func (l *Logger) withContextFields(meta requestctx.Metadata, id execctx.Identity
 		logfield.Query(meta.RawQuery()),
 	)
 	if len(id.Cronjob) > 0 {
-		fields = append(fields, zap.String(consts.CRONJOB, id.Cronjob))
+		fields = append(fields, zap.String(keyCronjob, id.Cronjob))
 	}
 	if len(id.Leader) > 0 {
-		fields = append(fields, zap.String(consts.LEADER, id.Leader))
+		fields = append(fields, zap.String(keyLeader, id.Leader))
 	}
 	return &Logger{zlog: l.zlog.With(fields...)}
 }
@@ -140,7 +151,7 @@ func (l *Logger) withContextFields(meta requestctx.Metadata, id execctx.Identity
 // execution identity found on ctx.
 func (l *Logger) WithContext(ctx context.Context, phase consts.Phase) types.Logger {
 	if ctx == nil {
-		return l.With(consts.PHASE, string(phase))
+		return l.With(keyPhase, string(phase))
 	}
 
 	return l.withContextFields(requestctx.FromContext(ctx), execctx.FromContext(ctx), phase)

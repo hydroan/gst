@@ -5,13 +5,13 @@ import (
 	"sync"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/requestctx"
 )
 
 // routeParams is a middleware to get route parameters
 func routeParams() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Set(consts.PARAMS, RouteManager.Get(c.FullPath()))
+		c.Set(requestctx.KeyParams, RouteManager.Get(c.FullPath()))
 	}
 }
 

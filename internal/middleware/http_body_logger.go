@@ -11,8 +11,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/logfield"
-	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 )
@@ -67,17 +67,17 @@ func bodyLogger() gin.HandlerFunc {
 
 		maxBodySize := safeHTTPBodyLogSize(uint64(cmp.Or(cfg.MaxBodySize, defaultHTTPBodyLogMaxSize)))
 
-		// The entry times the request itself, even though the access log already
-		// times the same one: a log store cannot join two files, so "which
-		// requests are slow, and what were they sent" has to be answerable from
-		// this entry alone. Every other request attribute is duplicated here for
-		// the same reason.
+		// The entry times the request itself, even though the access log
+		// already times the same one: a log store cannot join two files, so
+		// "which requests are slow, and what were they sent" has to be
+		// answerable from this entry alone. Every other request attribute is
+		// duplicated here for the same reason.
 		//
-		// It is measured from here rather than read from whatever the access log
-		// started, which would make this middleware depend on being registered
-		// inside that one. The two therefore disagree by the work the outer
-		// middleware still has left when this entry is written — microseconds,
-		// and always in that direction.
+		// It is measured from here rather than read from whatever the access
+		// log started, which would make this middleware depend on being
+		// registered inside that one. The two therefore disagree by the work
+		// the outer middleware still has left when this entry is written —
+		// microseconds, and always in that direction.
 		start := time.Now()
 
 		var request *httpBodyCapture
@@ -227,7 +227,7 @@ func (w *bodyLogWriter) capture(data []byte) {
 // httpBodyLogFieldCap is the most fields one body log entry carries: the
 // eleven every entry has — route, path, method, username, user id, tenant
 // id, trace id, params, query, status and the duration, whose two keys
-// util.LogDuration renders from one inlined field — plus two for the request
+// logfield.Duration renders from one inlined field — plus two for the request
 // body and three for the response body. A request body is captured whole or
 // not at all, so it carries its content and size, or its size beside the
 // truncation marker or the read error; a response body is teed from what the
@@ -271,11 +271,11 @@ func writeHTTPBodyLog(
 		logfield.Username(c.GetString(consts.CTX_USERNAME)),
 		logfield.UserID(c.GetString(consts.CTX_USER_ID)),
 		logfield.TenantID(c.GetString(consts.CTX_TENANT_ID)),
-		logfield.TraceID(c.GetString(consts.TRACE_ID)),
+		logfield.TraceID(c.GetString(execctx.KeyTraceID)),
 		logfield.Params(httpBodyLogParams(c.Params)),
 		logfield.Query(c.Request.URL.RawQuery),
 		logfield.Status(c.Writer.Status()),
-		util.LogDuration(elapsed),
+		logfield.Duration(elapsed),
 	)
 	fields = appendHTTPBodyLogFields(fields, "request", request)
 	fields = appendHTTPBodyLogFields(fields, "response", response)
@@ -310,7 +310,8 @@ func httpBodyLogIsError(c *gin.Context) bool {
 	return c.Writer.Status() >= http.StatusBadRequest
 }
 
-// httpBodyLogWanted reports whether a mode admits logging for the request outcome.
+// httpBodyLogWanted reports whether a mode admits logging for the request
+// outcome.
 func httpBodyLogWanted(mode config.HTTPBodyLogMode, isError bool) bool {
 	switch mode {
 	case config.HTTPBodyLogModeAll:

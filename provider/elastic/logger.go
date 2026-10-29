@@ -8,7 +8,6 @@ import (
 
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/internal/util"
 	"go.uber.org/zap"
 )
 
@@ -43,7 +42,7 @@ func (l *elasticLogger) LogRoundTrip(
 		logfield.Method(req.Method),
 		zap.String("url", req.URL.String()),
 		logfield.Status(status),
-		util.LogDuration(dur),
+		logfield.Duration(dur),
 		zap.Error(err),
 		zap.String("response", body),
 	)

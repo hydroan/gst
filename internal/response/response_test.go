@@ -10,7 +10,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	ginjson "github.com/gin-gonic/gin/codec/json"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/testutil/swap"
 	"github.com/hydroan/gst/internal/types"
@@ -43,7 +43,7 @@ func TestJSONEncodesWithStandardLibrary(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)
-			c.Set(consts.TRACE_ID, "trace-sample")
+			c.Set(execctx.KeyTraceID, "trace-sample")
 
 			response.JSON(c, tt.data...)
 
@@ -118,7 +118,7 @@ func TestAbortAnswersTheErrorAndStopsTheChain(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)
-			c.Set(consts.TRACE_ID, "trace-sample")
+			c.Set(execctx.KeyTraceID, "trace-sample")
 
 			response.Abort(c, tt.err)
 
@@ -155,7 +155,7 @@ func TestAbortNeverAnswersWithASuccessStatus(t *testing.T) {
 		t.Run(http.StatusText(status), func(t *testing.T) {
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)
-			c.Set(consts.TRACE_ID, "trace-sample")
+			c.Set(execctx.KeyTraceID, "trace-sample")
 
 			response.Abort(c, types.NewError(status, "refused"))
 
@@ -202,7 +202,7 @@ func TestJSONAnswersAnEncodingFailureAsTheServersOwn(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	c.Set(consts.TRACE_ID, "trace-sample")
+	c.Set(execctx.KeyTraceID, "trace-sample")
 
 	response.JSON(c, map[string]any{"ratio": math.NaN()})
 

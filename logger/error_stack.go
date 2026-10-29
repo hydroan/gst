@@ -9,9 +9,9 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// errorStackKey is the structured log field holding the stack trace embedded
+// keyErrorStack is the structured log field holding the stack trace embedded
 // in a logged error at its creation point.
-const errorStackKey = "error_stack"
+const keyErrorStack = "error_stack"
 
 // withErrorStack returns the underlying zap logger enriched with the
 // error_stack field when args contain an error carrying an embedded stack
@@ -32,7 +32,7 @@ func (l *Logger) withErrorStack(level zapcore.Level, args []any) *zap.Logger {
 			continue
 		}
 		if stackTrace := errorstack.Origin(err); stackTrace != "" {
-			return l.zlog.With(zap.String(errorStackKey, stackTrace))
+			return l.zlog.With(zap.String(keyErrorStack, stackTrace))
 		}
 	}
 	return l.zlog
@@ -87,7 +87,7 @@ func (c *errorFieldCore) Write(ent zapcore.Entry, fields []zapcore.Field) error 
 // error_stack. fields is returned as it is when it has no error field, so
 // entries without one pay nothing.
 func (c *errorFieldCore) errorFields(fields []zapcore.Field) ([]zapcore.Field, bool) {
-	stacked := c.stacked || slices.ContainsFunc(fields, func(f zapcore.Field) bool { return f.Key == errorStackKey })
+	stacked := c.stacked || slices.ContainsFunc(fields, func(f zapcore.Field) bool { return f.Key == keyErrorStack })
 	var out []zapcore.Field
 	var stack string
 	for i, f := range fields {
@@ -107,7 +107,7 @@ func (c *errorFieldCore) errorFields(fields []zapcore.Field) ([]zapcore.Field, b
 		return fields, stacked
 	}
 	if stack != "" {
-		out = append(out, zap.String(errorStackKey, stack))
+		out = append(out, zap.String(keyErrorStack, stack))
 		stacked = true
 	}
 	return out, stacked

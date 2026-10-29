@@ -20,8 +20,8 @@ import (
 	"github.com/hydroan/gst/internal/cache/capacity"
 	"github.com/hydroan/gst/internal/cache/defaultcache"
 	"github.com/hydroan/gst/internal/cache/registry"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/instance"
+	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
@@ -135,7 +135,7 @@ func (v eventLogView) MarshalJSON() ([]byte, error) {
 		ttl = util.FormatDurationSmart(v.e.TTL, 2)
 	}
 	return json.Marshal(map[string]any{
-		"ts":       time.Unix(0, v.e.TS).UTC().Format(consts.LayoutTimeEncoder),
+		"ts":       time.Unix(0, v.e.TS).UTC().Format(logfield.TimeLayout),
 		"cache_id": v.e.CacheID,
 		"instance": v.e.Instance,
 		"typ":      v.e.Typ,
@@ -148,20 +148,21 @@ func (v eventLogView) MarshalJSON() ([]byte, error) {
 
 // Cache returns the replicated cache of type T, creating it on first use.
 //
-// Why keep one cache per type in a registry?
-// Each type's cache owns the goroutine that watches the peer set and delete events, and they
-// never interfere with each other. The number of types is bounded, so only a few goroutines ever
-// listen for kafka events, and fewer listeners means better throughput.
+// Why keep one cache per type in a registry? Each type's cache owns the
+// goroutine that watches the peer set and delete events, and they never
+// interfere with each other. The number of types is bounded, so only a few
+// goroutines ever listen for kafka events, and fewer listeners means better
+// throughput.
 //
-// Without the registry, every Cache call would spawn another goroutine listening
-// for kafka events and therefore far too many kafka consumers, which is not what we want. Since
-// this function is exported we cannot stop other developers from calling it repeatedly, so the
-// control has to stay here.
+// Without the registry, every Cache call would spawn another goroutine
+// listening for kafka events and therefore far too many kafka consumers, which
+// is not what we want. Since this function is exported we cannot stop other
+// developers from calling it repeatedly, so the control has to stay here.
 //
 // The arithmetic:
 //
-//	kafka consumers on one node: number of service processes * number of dcache instances,
-//	and normally only one service process runs.
+//	kafka consumers on one node: number of service processes * number of
+//	dcache instances, and normally only one service process runs.
 //	total kafka listeners: consumers per node * number of nodes
 func Cache[T any]() (types.Cache[T], error) {
 	return registry.LoadE(caches, func() (types.Cache[T], error) {
@@ -212,16 +213,17 @@ type replicatedCache[T any] struct {
 	// peer events to.
 	store types.Cache[entry[T]]
 
-	// typ is the type of the replicated cache.
-	// When an instance receives a peer event it compares event.Typ with its own
-	// type and ignores the event when they differ.
-	// NOTE: the typ of the replicated cache instances of one type is always the same.
+	// typ is the type of the replicated cache. When an instance receives a peer
+	// event it compares event.Typ with its own type and ignores the event when
+	// they differ. NOTE: the typ of the replicated cache instances of one type
+	// is always the same.
 	typ string
 
-	// cacheID identifies one replicated cache instance, and every instance has its own.
-	// When an instance receives a peer event it compares event.CacheID with its
-	// own ID and ignores the event when they are equal, because it published that event itself.
-	// NOTE: the cacheID of two replicated cache instances is never the same.
+	// cacheID identifies one replicated cache instance, and every instance has
+	// its own. When an instance receives a peer event it compares event.CacheID
+	// with its own ID and ignores the event when they are equal, because it
+	// published that event itself. NOTE: the cacheID of two replicated cache
+	// instances is never the same.
 	cacheID string
 
 	// stats

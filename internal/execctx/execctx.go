@@ -17,6 +17,18 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+// The keys the trace of an execution travels under. KeyTraceID and
+// KeySpanID key the trace id and the span id of a request on its gin
+// context, and KeyTraceID is the log field every entry carries the trace id
+// in; HeaderTraceID and HeaderSpanID are the headers that carry the two
+// between processes, on the request in and the response out.
+const (
+	KeyTraceID    = "trace_id"
+	KeySpanID     = "span_id"
+	HeaderTraceID = "X-Trace-ID"
+	HeaderSpanID  = "X-Span-ID"
+)
+
 // Identity is what a context says about the unit of work it belongs to.
 type Identity struct {
 	// TraceID keys the trail the work leaves across logs, statement comments

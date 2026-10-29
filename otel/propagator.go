@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/execctx"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -32,12 +32,12 @@ func (traceIDHeaderPropagator) Extract(ctx context.Context, carrier propagation.
 	if trace.SpanContextFromContext(ctx).IsValid() {
 		return ctx
 	}
-	traceID, err := trace.TraceIDFromHex(strings.TrimSpace(carrier.Get(consts.HEADER_TRACE_ID)))
+	traceID, err := trace.TraceIDFromHex(strings.TrimSpace(carrier.Get(execctx.HeaderTraceID)))
 	if err != nil {
 		return ctx
 	}
 	spanID := defaultSpanID
-	if value := strings.TrimSpace(carrier.Get(consts.HEADER_SPAN_ID)); value != "" {
+	if value := strings.TrimSpace(carrier.Get(execctx.HeaderSpanID)); value != "" {
 		if parsed, err := trace.SpanIDFromHex(value); err == nil {
 			spanID = parsed
 		}
@@ -51,5 +51,5 @@ func (traceIDHeaderPropagator) Extract(ctx context.Context, carrier propagation.
 }
 
 func (traceIDHeaderPropagator) Fields() []string {
-	return []string{consts.HEADER_TRACE_ID, consts.HEADER_SPAN_ID}
+	return []string{execctx.HeaderTraceID, execctx.HeaderSpanID}
 }

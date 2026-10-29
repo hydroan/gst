@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/execctx"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
@@ -90,7 +89,7 @@ func (c *Client) newRequest(ctx context.Context, method, path string, payload an
 	// trace gets neither: the client invents no identity of its own.
 	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
 	if traceID := execctx.FromContext(ctx).TraceID; traceID != "" {
-		req.Header.Set(consts.HEADER_TRACE_ID, traceID)
+		req.Header.Set(execctx.HeaderTraceID, traceID)
 	}
 	return req, nil
 }

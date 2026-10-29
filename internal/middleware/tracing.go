@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/util"
@@ -68,17 +67,18 @@ func tracing() gin.HandlerFunc {
 				spanID = spanContext.SpanID().String()
 			}
 
-			// Performance: submit all request-scoped attributes of one phase in a
-			// single SetAttributes call. Every call on a recording span locks the
-			// span, grows the attribute slice, and re-runs deduplication, which
-			// dominated allocation profiles under load. When adding attributes,
-			// extend the batches below instead of adding SetAttributes calls, and
-			// keep the recording gate so the sampled-out path stays allocation-free.
-			// The trace and span IDs are deliberately not attributes: every span
-			// already carries both in its own envelope, which is what tracing
-			// backends index and display. Repeating them would cost two string
-			// formats, two attributes and their encoding on every sampled
-			// request, for values a backend already has.
+			// Performance: submit all request-scoped attributes of one phase in
+			// a single SetAttributes call. Every call on a recording span locks
+			// the span, grows the attribute slice, and re-runs deduplication,
+			// which dominated allocation profiles under load. When adding
+			// attributes, extend the batches below instead of adding
+			// SetAttributes calls, and keep the recording gate so the
+			// sampled-out path stays allocation-free. The trace and span IDs
+			// are deliberately not attributes: every span already carries both
+			// in its own envelope, which is what tracing backends index and
+			// display. Repeating them would cost two string formats, two
+			// attributes and their encoding on every sampled request, for
+			// values a backend already has.
 			recording = gstotel.IsSpanRecording(span)
 			if recording {
 				attrs := make([]attribute.KeyValue, 0, requestSpanAttrCap)
@@ -159,24 +159,23 @@ func tracing() gin.HandlerFunc {
 			// tracing on (see requestctx.TraceIDOf); the span id is new either
 			// way.
 			ctx = c.Request.Context()
-			traceID = requestctx.TraceIDOf(c.Request.Header.Get(consts.HEADER_TRACE_ID))
+			traceID = requestctx.TraceIDOf(c.Request.Header.Get(execctx.HeaderTraceID))
 			spanID = util.SpanID()
 		}
 
 		// The trace id is the identity of this execution: everything downstream
 		// that annotates its output — statement comments, the SQL log, the
 		// business log — reads it off the request context, whether it runs on a
-		// service context or on the raw request context. The gin keys below serve
-		// the parts that only see gin.
+		// service context or on the raw request context. The gin keys below
+		// serve the parts that only see gin.
 		c.Request = c.Request.WithContext(execctx.WithTraceID(ctx, traceID))
 
 		// Set trace fields in gin context.
-		c.Set(consts.TRACE_ID, traceID)
-		c.Set(consts.SPAN_ID, spanID)
-		c.Set(consts.SEQ, 0)
+		c.Set(execctx.KeyTraceID, traceID)
+		c.Set(execctx.KeySpanID, spanID)
 
 		// Set X-Trace-ID header for callers.
-		c.Header(consts.HEADER_TRACE_ID, traceID)
+		c.Header(execctx.HeaderTraceID, traceID)
 
 		// Process request. The request duration is part of the response batch
 		// above, so no SetAttributes call is made here.

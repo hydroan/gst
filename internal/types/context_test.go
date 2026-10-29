@@ -23,11 +23,11 @@ func TestServiceContextCarriesRequestMetadata(t *testing.T) {
 	var serviceCtx *types.ServiceContext
 	router := gin.New()
 	router.GET("/api/users/:id", func(ctx *gin.Context) {
-		ctx.Set(consts.PARAMS, []string{"id"})
+		ctx.Set(requestctx.KeyParams, []string{"id"})
 		ctx.Set(consts.CTX_USERNAME, "admin")
 		ctx.Set(consts.CTX_USER_ID, "user-1")
 		ctx.Set(consts.CTX_TENANT_ID, "tenant-1")
-		ctx.Set(consts.CTX_REQUIRES_AUTH, true)
+		ctx.Set(requestctx.KeyRequiresAuth, true)
 		ctx.Request = ctx.Request.WithContext(execctx.WithTraceID(ctx.Request.Context(), "trace-1"))
 
 		serviceCtx = types.NewServiceContext(ctx, nil, "")
@@ -51,7 +51,7 @@ func TestServiceContextQueryAccessorReturnsCopy(t *testing.T) {
 	var serviceCtx *types.ServiceContext
 	router := gin.New()
 	router.GET("/api/users/:id", func(ctx *gin.Context) {
-		ctx.Set(consts.PARAMS, []string{"id"})
+		ctx.Set(requestctx.KeyParams, []string{"id"})
 		ctx.Set(consts.CTX_USERNAME, "admin")
 		ctx.Set(consts.CTX_USER_ID, "user-1")
 		ctx.Request = ctx.Request.WithContext(execctx.WithTraceID(ctx.Request.Context(), "trace-1"))

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/util"
+	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/logger"
 )
 
@@ -97,6 +97,6 @@ func (*document) BulkIndex(ctx context.Context, indexName string, docs ...Docume
 			}
 		}
 	}
-	logger.Elastic.Infow("successfully indexed documents", "length", len(docs), util.LogDuration(time.Since(start)))
+	logger.Elastic.Infow("successfully indexed documents", "length", len(docs), logfield.Duration(time.Since(start)))
 	return nil
 }

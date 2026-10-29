@@ -31,8 +31,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 )
@@ -239,7 +239,7 @@ func start(ctx context.Context, c Component) error {
 	if err := c.Start(ctx); err != nil {
 		return errors.Wrapf(err, "failed to start %s %q", c.Stage, c.Name)
 	}
-	zap.S().Debugw("component started", "stage", c.Stage.String(), "component", c.Name, util.LogDuration(time.Since(begin)))
+	zap.S().Debugw("component started", "stage", c.Stage.String(), "component", c.Name, logfield.Duration(time.Since(begin)))
 	return nil
 }
 

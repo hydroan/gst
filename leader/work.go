@@ -125,7 +125,7 @@ func (w *work) lead(ctx context.Context, h *lease.Handle) {
 	}
 	stopHold()
 
-	outcome := append(slices.Clone(fields), zap.String("reason", reason), util.LogDuration(time.Since(begin)))
+	outcome := append(slices.Clone(fields), zap.String("reason", reason), logfield.Duration(time.Since(begin)))
 	if err != nil {
 		log.Errorz("leader stepped down with error", append([]zap.Field{zap.Error(err)}, outcome...)...)
 	} else {

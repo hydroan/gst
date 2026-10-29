@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/logfield"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -32,19 +32,20 @@ func newLogLevel(cfg logConfig) zapcore.Level {
 // fields opts leave out.
 func newLogEncoder(cfg logConfig, opts ...Option) zapcore.Encoder {
 	encConfig := zap.NewProductionEncoderConfig()
-	// The entry timestamp is rendered in UTC using consts.LayoutTimeEncoder.
+	// The entry timestamp is rendered in UTC using logfield.TimeLayout.
 	// The conversion happens here, the single point every logger's encoder is
 	// built at, so no host zone can leak into a log entry; see the layout
 	// constant for why the stream is UTC.
 	encConfig.EncodeTime = func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
-		enc.AppendString(t.UTC().Format(consts.LayoutTimeEncoder))
+		enc.AppendString(t.UTC().Format(logfield.TimeLayout))
 	}
 	encConfig.EncodeLevel = zapcore.CapitalLevelEncoder
-	// Nanoseconds, matching util.LogDuration. The zap production default encodes
-	// durations as floating point seconds, which rounds sub-millisecond work to
-	// zero and leaves a log store guessing between integer and float. This
-	// backstops any time.Duration that reaches a logger without going through
-	// util.LogDuration, so no entry can carry a differently scaled duration.
+	// Nanoseconds, matching logfield.Duration. The zap production default
+	// encodes durations as floating point seconds, which rounds sub-millisecond
+	// work to zero and leaves a log store guessing between integer and float.
+	// This backstops any time.Duration that reaches a logger without going
+	// through logfield.Duration, so no entry can carry a differently scaled
+	// duration.
 	encConfig.EncodeDuration = zapcore.NanosDurationEncoder
 	// Reflected objects and arrays collapse into a single JSON string field
 	// instead of nesting; see stringifyReflectedEncoder for why.

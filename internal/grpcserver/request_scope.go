@@ -11,7 +11,6 @@ import (
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -26,20 +25,20 @@ import (
 )
 
 // The metadata keys the request scope reads, in the lowercase gRPC metadata
-// keeps its keys in: traceIDKey carries the trace id in and out, the HTTP
-// listener's X-Trace-ID header; userAgentKey and authorityKey are what the
+// keeps its keys in: keyTraceID carries the trace id in and out, the HTTP
+// listener's X-Trace-ID header; keyUserAgent and keyAuthority are what the
 // User-Agent header and the request's host arrive as.
 const (
-	traceIDKey   = "x-trace-id"
-	userAgentKey = "user-agent"
-	authorityKey = ":authority"
+	keyTraceID   = "x-trace-id"
+	keyUserAgent = "user-agent"
+	keyAuthority = ":authority"
 )
 
-// grpcCodeKey is the access-log field naming the status code a call ended
+// keyGrpcCode is the access-log field naming the status code a call ended
 // with, OK or NotFound. It is not the HTTP access log's status, a number: the
 // two codes share no number space, so each listener's log names its own (see
 // logfield.Status).
-const grpcCodeKey = "grpc_code"
+const keyGrpcCode = "grpc_code"
 
 // accessLogFieldCap is the most fields an access-log entry carries, the
 // eleven every entry has plus the error of a failed call, so the slice is
@@ -131,7 +130,7 @@ func enterCall(ctx context.Context, fullMethod string) *callScope {
 		traceID = sc.TraceID().String()
 		ctx = gstotel.ContextWithRequestRootSpan(ctx)
 	} else {
-		traceID = requestctx.TraceIDOf(first(md, traceIDKey))
+		traceID = requestctx.TraceIDOf(first(md, keyTraceID))
 	}
 	ctx = execctx.WithTraceID(ctx, traceID)
 	address, tls := peerOf(ctx)
@@ -152,8 +151,8 @@ func enterCall(ctx context.Context, fullMethod string) *callScope {
 		RequestURI:   fullMethod,
 		Method:       httpMethod,
 		ClientIP:     address,
-		UserAgent:    first(md, userAgentKey),
-		Host:         first(md, authorityKey),
+		UserAgent:    first(md, keyUserAgent),
+		Host:         first(md, keyAuthority),
 		TLS:          tls,
 		RequiresAuth: requiresAuth(serviceOf(fullMethod), fullMethod),
 	}}
@@ -161,7 +160,7 @@ func enterCall(ctx context.Context, fullMethod string) *callScope {
 	ctx = requestctx.WithMetadata(context.WithValue(ctx, callRecordKey{}, c), meta)
 	// SetHeader fails only on a context carrying no call, which the
 	// server's own contexts never are.
-	_ = grpc.SetHeader(ctx, metadata.Pairs(traceIDKey, traceID))
+	_ = grpc.SetHeader(ctx, metadata.Pairs(keyTraceID, traceID))
 	return &callScope{ctx: ctx, fullMethod: fullMethod, record: c, meta: meta, traceID: traceID, start: start}
 }
 
@@ -176,7 +175,7 @@ func (s *callScope) leave(err error) {
 	fields := make([]zapcore.Field, 0, accessLogFieldCap)
 	fields = append(
 		fields,
-		zap.String(grpcCodeKey, st.Code().String()),
+		zap.String(keyGrpcCode, st.Code().String()),
 		logfield.Method(s.meta.Method()),
 		logfield.Username(s.record.caller.Username),
 		logfield.UserID(s.record.caller.UserID),
@@ -186,7 +185,7 @@ func (s *callScope) leave(err error) {
 		logfield.Path(s.meta.Path()),
 		zap.String("ip", s.meta.ClientIP()),
 		zap.String("user_agent", s.meta.UserAgent()),
-		util.LogDuration(time.Since(s.start)),
+		logfield.Duration(time.Since(s.start)),
 	)
 	if err != nil {
 		fields = append(fields, zap.String("error", st.Message()))

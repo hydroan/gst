@@ -11,7 +11,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/client"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
@@ -164,7 +163,7 @@ func TestRequestCarriesTraceOfContext(t *testing.T) {
 		ctx := execctx.WithTraceID(t.Context(), "trace-sample")
 		_, err := cli.Do(ctx, http.MethodGet, "/api/records", nil)
 		require.NoError(t, err)
-		require.Equal(t, "trace-sample", captured.Header.Get(consts.HEADER_TRACE_ID))
+		require.Equal(t, "trace-sample", captured.Header.Get(execctx.HeaderTraceID))
 		require.Empty(t, captured.Header.Get("Traceparent"))
 	})
 
@@ -185,13 +184,13 @@ func TestRequestCarriesTraceOfContext(t *testing.T) {
 		traceID := span.SpanContext().TraceID().String()
 		require.Contains(t, captured.Header.Get("Traceparent"), traceID)
 		// The framework header names the same trace, borrowed from the span.
-		require.Equal(t, traceID, captured.Header.Get(consts.HEADER_TRACE_ID))
+		require.Equal(t, traceID, captured.Header.Get(execctx.HeaderTraceID))
 	})
 
 	t.Run("a context that belongs to no trace", func(t *testing.T) {
 		_, err := cli.Do(t.Context(), http.MethodGet, "/api/records", nil)
 		require.NoError(t, err)
-		require.Empty(t, captured.Header.Get(consts.HEADER_TRACE_ID))
+		require.Empty(t, captured.Header.Get(execctx.HeaderTraceID))
 		require.Empty(t, captured.Header.Get("Traceparent"))
 	})
 }

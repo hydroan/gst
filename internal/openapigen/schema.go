@@ -10,7 +10,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3gen"
 	"github.com/hydroan/gst/apidoc"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/modelschema"
 	"go.uber.org/zap"
 )
 
@@ -26,7 +26,7 @@ const bindingTag = "binding"
 // jsonName returns the name a struct field's json tag gives it, or "" for a
 // field the tag leaves unnamed or out (json:"-").
 func jsonName(field reflect.StructField) string {
-	val := field.Tag.Get(consts.TAG_JSON)
+	val := field.Tag.Get(modelschema.TagJSON)
 	switch val {
 	case "-", "":
 		return ""

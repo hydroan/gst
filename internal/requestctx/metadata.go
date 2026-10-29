@@ -11,30 +11,50 @@ import (
 	"github.com/hydroan/gst/internal/consts"
 )
 
-// Metadata contains immutable request-scoped fields shared by logging and lower-level infrastructure.
+// The keys the request's own fields are stored under on its gin context,
+// and the log fields carrying the same values. KeyRoute names the matched
+// route pattern ("/api/users/:id") and KeyPath the concrete request path
+// ("/api/users/42"): both identify the same request, the pattern has low
+// cardinality and groups every request of one endpoint together, the path
+// pins down a single request, so log aggregation and alerting key on the
+// route, never on the path. KeyMethod names the request verb, which
+// separates the actions one route pattern serves; a gRPC call carries the
+// route and verb of the action its rpc stands for, and the full method as
+// its path. KeyParams holds the names of the route's parameters on the gin
+// context and the parameters as one object in the log, and KeyRequiresAuth
+// whether the action requires authentication.
+const (
+	KeyRoute        = "route"
+	KeyPath         = "path"
+	KeyMethod       = "method"
+	KeyParams       = "params"
+	KeyRequiresAuth = "requires_auth"
+)
+
+// Metadata contains immutable request-scoped fields shared by logging and
+// lower-level infrastructure.
 //
-// Route and path are two identities of the same request and both are kept:
-// the route is the matched route pattern ("/api/users/:id") that groups every
+// Route and path are two identities of the same request and both are kept: the
+// route is the matched route pattern ("/api/users/:id") that groups every
 // request of one endpoint together, the path is the concrete request path
 // ("/api/users/42") that pins down a single request. Consumers aggregating
-// requests must use the route; the path only locates one of them. The method
-// is the request verb, which separates the actions one route pattern serves
-// and neither of the other two distinguishes.
+// requests must use the route; the path only locates one of them. The method is
+// the request verb, which separates the actions one route pattern serves and
+// neither of the other two distinguishes.
 //
-// A call over gRPC carries the same three: the route and method are the
-// ones the registration described the call's action with, the route and
-// HTTP method the action is served at over HTTP (STREAM for a Stream
-// action), and the path is the full method of the call, its target on the
-// wire, as is the request URI. A call whose method the registration did not
-// describe carries the full method as its route and POST as its method.
+// A call over gRPC carries the same three: the route and method are the ones
+// the registration described the call's action with, the route and HTTP method
+// the action is served at over HTTP (STREAM for a Stream action), and the path
+// is the full method of the call, its target on the wire, as is the request
+// URI. A call whose method the registration did not describe carries the full
+// method as its route and POST as its method.
 //
-// The client address, user agent, host and TLS flag describe the connection
-// the request arrived on. They are carried here rather than read off the HTTP
+// The client address, user agent, host and TLS flag describe the connection the
+// request arrived on. They are carried here rather than read off the HTTP
 // request on demand, so that a context built without an HTTP request -- one a
-// transport other than HTTP constructs -- answers for them all the same. So
-// is whether the action requires authentication, which the HTTP listener
-// marks on the gin context and another transport knows from its own
-// registration.
+// transport other than HTTP constructs -- answers for them all the same. So is
+// whether the action requires authentication, which the HTTP listener marks on
+// the gin context and another transport knows from its own registration.
 type Metadata struct {
 	route      string
 	path       string
@@ -157,12 +177,12 @@ func FromGin(c *gin.Context) Metadata {
 		host:       conn.host,
 		tls:        conn.tls,
 
-		requiresAuth: c.GetBool(consts.CTX_REQUIRES_AUTH),
+		requiresAuth: c.GetBool(KeyRequiresAuth),
 	}
 }
 
-// ginQueryKey keys the request's parsed query values on the gin context.
-const ginQueryKey = "gst/requestctx/query"
+// keyGinQuery keys the request's parsed query values on the gin context.
+const keyGinQuery = "gst/requestctx/query"
 
 // GinQuery returns the request's parsed query parameters, parsing them
 // on the first call and reusing that result for the rest of the request.
@@ -180,7 +200,7 @@ func GinQuery(c *gin.Context) url.Values {
 	if c == nil {
 		return nil
 	}
-	if cached, ok := c.Get(ginQueryKey); ok {
+	if cached, ok := c.Get(keyGinQuery); ok {
 		if query, ok := cached.(url.Values); ok {
 			return query
 		}
@@ -189,7 +209,7 @@ func GinQuery(c *gin.Context) url.Values {
 		return nil
 	}
 	query := c.Request.URL.Query()
-	c.Set(ginQueryKey, query)
+	c.Set(keyGinQuery, query)
 	return query
 }
 
@@ -214,13 +234,13 @@ func GinQueryStrict(c *gin.Context) (url.Values, error) {
 	if err != nil {
 		return nil, err
 	}
-	c.Set(ginQueryKey, query)
+	c.Set(keyGinQuery, query)
 
 	return query, nil
 }
 
-// ginParamsKey keys the request's route parameters on the gin context.
-const ginParamsKey = "gst/requestctx/params"
+// keyGinParams keys the request's route parameters on the gin context.
+const keyGinParams = "gst/requestctx/params"
 
 // ginParams returns the request's route parameters, building them on the first
 // call and reusing that map for the rest of the request.
@@ -241,26 +261,26 @@ func ginParams(c *gin.Context) map[string]string {
 	if c == nil {
 		return nil
 	}
-	if cached, ok := c.Get(ginParamsKey); ok {
+	if cached, ok := c.Get(keyGinParams); ok {
 		if params, ok := cached.(map[string]string); ok {
 			return params
 		}
 	}
 
 	var params map[string]string
-	if keys := c.GetStringSlice(consts.PARAMS); len(keys) > 0 {
+	if keys := c.GetStringSlice(KeyParams); len(keys) > 0 {
 		params = make(map[string]string, len(keys))
 		for _, key := range keys {
 			params[key] = c.Param(key)
 		}
 	}
-	c.Set(ginParamsKey, params)
+	c.Set(keyGinParams, params)
 	return params
 }
 
-// ginConnectionKey keys the request's resolved connection fields on the gin
+// keyGinConnection keys the request's resolved connection fields on the gin
 // context.
-const ginConnectionKey = "gst/requestctx/connection"
+const keyGinConnection = "gst/requestctx/connection"
 
 // connection holds the fields describing the connection a request arrived on,
 // resolved once per request by ginConnection.
@@ -287,7 +307,7 @@ func ginConnection(c *gin.Context) connection {
 	if c == nil {
 		return connection{}
 	}
-	if cached, ok := c.Get(ginConnectionKey); ok {
+	if cached, ok := c.Get(keyGinConnection); ok {
 		if conn, ok := cached.(connection); ok {
 			return conn
 		}
@@ -303,7 +323,7 @@ func ginConnection(c *gin.Context) connection {
 		host:      c.Request.Host,
 		tls:       requestTLS(c.Request),
 	}
-	c.Set(ginConnectionKey, conn)
+	c.Set(keyGinConnection, conn)
 	return conn
 }
 

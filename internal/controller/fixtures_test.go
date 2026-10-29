@@ -521,7 +521,7 @@ func serveAs(ctx context.Context, t *testing.T, method, pattern string, handler 
 	require.NoError(t, requestctx.ApplyTrustedProxies(engine, config.App.Server.TrustedProxies))
 	engine.Use(chain...)
 	engine.Handle(method, pattern, func(c *gin.Context) {
-		c.Set(consts.PARAMS, middleware.RouteManager.Get(c.FullPath()))
+		c.Set(requestctx.KeyParams, middleware.RouteManager.Get(c.FullPath()))
 		if username != "" {
 			c.Set(consts.CTX_USERNAME, username)
 			c.Set(consts.CTX_USER_ID, "u-1")

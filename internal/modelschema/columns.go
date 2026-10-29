@@ -8,8 +8,15 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
 	gormschema "gorm.io/gorm/schema"
+)
+
+// The struct tags the framework reads a model's fields by: TagJSON names the
+// field in requests and responses, TagQuery names the URL parameter clients
+// filter by.
+const (
+	TagJSON  = "json"
+	TagQuery = "query"
 )
 
 // Column is one database column of a model.
@@ -74,9 +81,9 @@ func Columns(typ reflect.Type) ([]Column, error) {
 	}
 
 	// FieldsByDBName is gorm's deduplicated column set: a field declared on the
-	// model shadows the one lifted from an embedded struct under the same column
-	// name, and only the winner appears here. Iterating parsed.Fields instead
-	// would yield both and produce two columns with one name.
+	// model shadows the one lifted from an embedded struct under the same
+	// column name, and only the winner appears here. Iterating parsed.Fields
+	// instead would yield both and produce two columns with one name.
 	columns := make([]Column, 0, len(parsed.FieldsByDBName))
 	for _, field := range parsed.FieldsByDBName {
 		index, goName, queryName, hidden := fieldPath(typ, field.StructField)
@@ -120,7 +127,7 @@ func Columns(typ reflect.Type) ([]Column, error) {
 // struct in it, Base.ID for the ID Go promotes, and with no query tags, so
 // the path is walked here, along the field index gorm records.
 func fieldPath(model reflect.Type, field reflect.StructField) (index []int, goName, queryName string, hidden bool) {
-	hiddenFromJSON := func(f reflect.StructField) bool { return strings.TrimSpace(f.Tag.Get(consts.TAG_JSON)) == "-" }
+	hiddenFromJSON := func(f reflect.StructField) bool { return strings.TrimSpace(f.Tag.Get(TagJSON)) == "-" }
 	index = make([]int, 0, len(field.Index))
 	goNames := make([]string, 0, len(field.Index))
 	queryNames := make([]string, 0, len(field.Index))
@@ -163,7 +170,7 @@ func fieldPath(model reflect.Type, field reflect.StructField) (index []int, goNa
 // keeps a field's bare key, its operator-filter key and its documentation on
 // one naming rule.
 func QueryColumnName(field reflect.StructField) string {
-	value := strings.TrimSpace(field.Tag.Get(consts.TAG_QUERY))
+	value := strings.TrimSpace(field.Tag.Get(TagQuery))
 	if idx := strings.IndexByte(value, ','); idx >= 0 {
 		value = value[:idx]
 	}

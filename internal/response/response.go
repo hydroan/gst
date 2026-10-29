@@ -6,7 +6,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/types"
 )
 
@@ -72,8 +72,8 @@ func Abort(c *gin.Context, err error) {
 // written, a 200 with an empty body that reads as a success with nothing in
 // it.
 func envelope(c *gin.Context, status int, msg string, data any) {
-	traceID := c.GetString(consts.TRACE_ID)
-	body, err := json.Marshal(gin.H{"msg": msg, "data": data, consts.TRACE_ID: traceID})
+	traceID := c.GetString(execctx.KeyTraceID)
+	body, err := json.Marshal(gin.H{"msg": msg, "data": data, execctx.KeyTraceID: traceID})
 	if err != nil {
 		_ = c.Error(err)
 		c.Abort()

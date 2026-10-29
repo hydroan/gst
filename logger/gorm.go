@@ -6,13 +6,11 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/dbruntime/dbnode"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/internal/util"
 	"go.uber.org/zap"
 	gormlogger "gorm.io/gorm/logger"
 )
@@ -71,16 +69,16 @@ func (g *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 		logfield.UserID(userID),
 		logfield.TraceID(id.TraceID),
 		zap.String("sql", sql),
-		util.LogDuration(elapsed),
+		logfield.Duration(elapsed),
 		zap.Int64("rows", rows),
 	)
 	// Present only inside a cron round or a leader tenure; a request's lines
 	// carry no empty field for a capability they do not use.
 	if len(id.Cronjob) > 0 {
-		fields = append(fields, zap.String(consts.CRONJOB, id.Cronjob))
+		fields = append(fields, zap.String(keyCronjob, id.Cronjob))
 	}
 	if len(id.Leader) > 0 {
-		fields = append(fields, zap.String(consts.LEADER, id.Leader))
+		fields = append(fields, zap.String(keyLeader, id.Leader))
 	}
 	// Present only on handles with read replicas attached, where "which node
 	// served this query" stops being answerable by assumption.

@@ -11,12 +11,15 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"go.uber.org/zap"
 )
+
+// idFieldName is the name of the id field of a model, which a patch leaves
+// alone.
+const idFieldName = "ID"
 
 // This file holds how a patch names the fields it applies and how they are
 // applied: over HTTP the keys of the JSON body name them, over gRPC the
@@ -190,7 +193,7 @@ func patchFieldsOf(typ reflect.Type) *patchFieldTable {
 				if !field.IsExported() || name == "-" {
 					continue
 				}
-				if _, alone := unwritten[fmt.Sprint(index)]; alone || field.Name == consts.FIELD_ID {
+				if _, alone := unwritten[fmt.Sprint(index)]; alone || field.Name == idFieldName {
 					managed[jsonKey(field)] = struct{}{}
 					continue
 				}

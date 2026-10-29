@@ -194,13 +194,13 @@ func TestGormTraceUsesMetadata(t *testing.T) {
 	require.Len(t, entries, 1)
 
 	fields := entries[0].ContextMap()
-	require.Equal(t, http.MethodPost, fields[consts.CTX_METHOD])
+	require.Equal(t, http.MethodPost, fields[requestctx.KeyMethod])
 	require.Equal(t, "admin", fields[consts.CTX_USERNAME])
 	require.Equal(t, "user-1", fields[consts.CTX_USER_ID])
-	require.Equal(t, "trace-1", fields[consts.TRACE_ID])
+	require.Equal(t, "trace-1", fields[execctx.KeyTraceID])
 	require.Equal(t, "select 1", fields["sql"])
 	require.Equal(t, int64(1), fields["rows"])
-	require.NotContains(t, fields, consts.CRONJOB)
+	require.NotContains(t, fields, keyCronjob)
 }
 
 func TestGormTraceAddsCronjobField(t *testing.T) {
@@ -223,6 +223,6 @@ func TestGormTraceAddsCronjobField(t *testing.T) {
 	require.Len(t, entries, 1)
 
 	fields := entries[0].ContextMap()
-	require.Equal(t, "trace-cron", fields[consts.TRACE_ID])
-	require.Equal(t, "sample_job", fields[consts.CRONJOB])
+	require.Equal(t, "trace-cron", fields[execctx.KeyTraceID])
+	require.Equal(t, "sample_job", fields[keyCronjob])
 }

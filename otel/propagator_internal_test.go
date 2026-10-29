@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/execctx"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
@@ -28,10 +28,10 @@ func TestTraceIDHeaderPropagatorExtractsTheHeaderAsTheParent(t *testing.T) {
 	carrier := func(traceID, spanID string) propagation.HeaderCarrier {
 		header := http.Header{}
 		if traceID != "" {
-			header.Set(consts.HEADER_TRACE_ID, traceID)
+			header.Set(execctx.HeaderTraceID, traceID)
 		}
 		if spanID != "" {
-			header.Set(consts.HEADER_SPAN_ID, spanID)
+			header.Set(execctx.HeaderSpanID, spanID)
 		}
 		return propagation.HeaderCarrier(header)
 	}
@@ -82,11 +82,11 @@ func TestTraceIDHeaderPropagatorExtractsTheHeaderAsTheParent(t *testing.T) {
 // trace context and the framework's client setting the header itself, and
 // that it names the two headers it reads as its fields.
 func TestTraceIDHeaderPropagatorInjectsNothing(t *testing.T) {
-	ctx := traceIDHeaderPropagator{}.Extract(context.Background(), propagation.MapCarrier{consts.HEADER_TRACE_ID: sentTraceID})
+	ctx := traceIDHeaderPropagator{}.Extract(context.Background(), propagation.MapCarrier{execctx.HeaderTraceID: sentTraceID})
 	carrier := propagation.MapCarrier{}
 
 	traceIDHeaderPropagator{}.Inject(ctx, carrier)
 
 	require.Empty(t, carrier)
-	require.Equal(t, []string{consts.HEADER_TRACE_ID, consts.HEADER_SPAN_ID}, traceIDHeaderPropagator{}.Fields())
+	require.Equal(t, []string{execctx.HeaderTraceID, execctx.HeaderSpanID}, traceIDHeaderPropagator{}.Fields())
 }

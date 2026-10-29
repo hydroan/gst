@@ -83,7 +83,7 @@ func TestEnforceRefusesAnAnonymousSubject(t *testing.T) {
 	fields := fieldMap(recorder.entries[0])
 	require.Equal(t, string(consts.EffectDeny), fields["eft"])
 	require.Equal(t, string(consts.DenyReasonUnauthenticated), fields["denied_by"])
-	require.Equal(t, "trace-1", fields[consts.TRACE_ID])
+	require.Equal(t, "trace-1", fields[execctx.KeyTraceID])
 }
 
 // TestEnforceDeniesThroughAnUninitializedPolicySet pins that with no policy

@@ -13,9 +13,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 // TraceID returns a new W3C trace id for an execution outside any trace, a
@@ -138,36 +135,4 @@ func FormatDurationSmart(d time.Duration, precisions ...int) string {
 	default:
 		return fmt.Sprintf(format, float64(ns)/(60*1e9), "min")
 	}
-}
-
-// LogDuration is the only supported way to log how long an operation took. It
-// emits one field pair, integer nanoseconds plus the same value rendered for
-// reading:
-//
-//	{"msg": "executed query", "duration": 2120000, "duration_human": "2.12ms"}
-//
-// Both halves are needed and neither pays for the other. Log stores index the
-// nanosecond field as an integer, so "slower than 500ms" is a range filter and
-// averages and percentiles are aggregations; because time.Duration is integral
-// there is never a mix of integer and floating point values for the store to
-// reconcile, and no unit is left implicit in the field name. The rendered
-// string is what a person reads while tailing a log, where raw nanoseconds are
-// unreadable.
-//
-// Field names come from consts and are written here alone, so no call site can
-// spell them differently and no query has to know which component produced the
-// entry.
-func LogDuration(d time.Duration) zap.Field {
-	return zap.Inline(logDuration(d))
-}
-
-// logDuration renders an elapsed time as the field pair documented on
-// LogDuration. It is inlined rather than nested so both fields sit at the top
-// level of the entry, where the field name alone locates them.
-type logDuration time.Duration
-
-func (d logDuration) MarshalLogObject(enc zapcore.ObjectEncoder) error {
-	enc.AddInt64(consts.LOG_DURATION, int64(d))
-	enc.AddString(consts.LOG_DURATION_HUMAN, FormatDurationSmart(time.Duration(d)))
-	return nil
 }

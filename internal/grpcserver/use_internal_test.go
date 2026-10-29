@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -215,7 +215,7 @@ func TestARefusalFromAProjectInterceptorAnswersItsStatus(t *testing.T) {
 	require.Len(t, logged, 3, "every error but a status error is logged before it is mapped")
 	for _, entry := range logged {
 		require.Equal(t, zapcore.ErrorLevel, entry.Level)
-		require.NotEmpty(t, entry.ContextMap()[consts.TRACE_ID])
+		require.NotEmpty(t, entry.ContextMap()[execctx.KeyTraceID])
 	}
 	require.Contains(t, logged[1].ContextMap()["error"], "session store unreachable")
 	entries := accessLog.All()

@@ -8,7 +8,6 @@ import (
 
 	"github.com/hydroan/gst/internal/util"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zapcore"
 )
 
 // TestBytesToStringConvertsWithoutCopying pins that BytesToString gives back
@@ -91,33 +90,5 @@ func TestFormatDurationSmart(t *testing.T) {
 	// precision defaults to 2 when omitted
 	if got := util.FormatDurationSmart(2120 * time.Microsecond); got != "2.12ms" {
 		t.Errorf("FormatDurationSmart(2120µs) = %v; want 2.12ms", got)
-	}
-}
-
-func TestLogDuration(t *testing.T) {
-	tests := []struct {
-		input    time.Duration
-		expected string
-	}{
-		{2120 * time.Microsecond, `{"duration":2120000,"duration_human":"2.12ms"}`},
-		// sub-microsecond work stays visible instead of rounding away
-		{900 * time.Nanosecond, `{"duration":900,"duration_human":"900ns"}`},
-		{0, `{"duration":0,"duration_human":"0ns"}`},
-		{-1500 * time.Millisecond, `{"duration":-1500000000,"duration_human":"-1.50s"}`},
-		{90 * time.Second, `{"duration":90000000000,"duration_human":"1.50min"}`},
-	}
-
-	// An empty config drops the entry keys, leaving only the fields under test.
-	encoder := zapcore.NewJSONEncoder(zapcore.EncoderConfig{})
-	for _, tc := range tests {
-		buf, err := encoder.EncodeEntry(zapcore.Entry{}, []zapcore.Field{util.LogDuration(tc.input)})
-		if err != nil {
-			t.Fatalf("EncodeEntry(%v) error: %v", tc.input, err)
-		}
-		// Both halves must sit at the top level of the entry, and the machine
-		// half must be an integer so a log store never has to reconcile types.
-		if got := strings.TrimSpace(buf.String()); got != tc.expected {
-			t.Errorf("LogDuration(%v) = %v; want %v", tc.input, got, tc.expected)
-		}
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
@@ -83,7 +84,7 @@ func TestHTTPBodyLoggerLogsRequestAndResponseAsOneEntry(t *testing.T) {
 		c.Set(consts.CTX_USERNAME, "alice")
 		c.Set(consts.CTX_USER_ID, "u-1")
 		c.Set(consts.CTX_TENANT_ID, "alpha")
-		c.Set(consts.TRACE_ID, "trace-1")
+		c.Set(execctx.KeyTraceID, "trace-1")
 		body, err := io.ReadAll(c.Request.Body)
 		require.NoError(t, err)
 		require.JSONEq(t, `{"a":1,"b":2}`, string(body))
@@ -116,7 +117,7 @@ func TestHTTPBodyLoggerLogsRequestAndResponseAsOneEntry(t *testing.T) {
 
 	// The entry carries its own elapsed time so the slowest requests can be
 	// found and read without joining the access log, which a log store cannot
-	// do. Both keys come from util.LogDuration, the only writer of the pair.
+	// do. Both keys come from logfield.Duration, the only writer of the pair.
 	duration, ok := ctx["duration"].(int64)
 	require.True(t, ok, "log field %q is not an int64", "duration")
 	require.Positive(t, duration)

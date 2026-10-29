@@ -10,11 +10,11 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
-	"github.com/hydroan/gst/internal/util"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -59,7 +59,7 @@ func prepareTable(db *gorm.DB, m types.Model) {
 		recordPrepareFailure(errors.Wrapf(err, "failed to prepare table(%s)", typ.String()))
 		return
 	}
-	zap.S().Infow("database table ready", "model", typ.String(), util.LogDuration(time.Since(begin)))
+	zap.S().Infow("database table ready", "model", typ.String(), logfield.Duration(time.Since(begin)))
 }
 
 // prepareFailure is the first failure the preparation met, the one Wait
@@ -243,7 +243,7 @@ func Wait() error {
 		if time.Since(lastLogTime) >= tableProgressLogInterval {
 			zap.S().Infow(
 				"waiting for database initialization",
-				util.LogDuration(time.Since(startTime)),
+				logfield.Duration(time.Since(startTime)),
 				"total_pending", pending,
 			)
 			lastLogTime = time.Now()
@@ -259,7 +259,7 @@ func Wait() error {
 	elapsed := time.Since(startTime)
 	zap.S().Infow(
 		"database initialization completed",
-		util.LogDuration(elapsed),
+		logfield.Duration(elapsed),
 	)
 	return nil
 }

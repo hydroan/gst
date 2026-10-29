@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/logger"
 	"github.com/stretchr/testify/require"
 	"github.com/vmihailenco/msgpack/v5"
@@ -83,7 +83,7 @@ func TestEachFrameIsLoggedOnce(t *testing.T) {
 	fields := make([]string, 0, len(entry))
 	for key := range entry {
 		switch key {
-		case "level", "ts", "caller", "msg", consts.INSTANCE:
+		case "level", "ts", "caller", "msg", logfield.KeyInstance:
 		default:
 			fields = append(fields, key)
 		}

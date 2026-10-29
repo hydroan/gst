@@ -10,7 +10,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/stretchr/testify/require"
@@ -30,7 +29,7 @@ func TestTracingUsesIncomingTraceparent(t *testing.T) {
 		spanContext := trace.SpanFromContext(c.Request.Context()).SpanContext()
 		require.True(t, spanContext.HasTraceID())
 		require.Equal(t, incomingTraceID, spanContext.TraceID().String())
-		require.Equal(t, incomingTraceID, c.GetString(consts.TRACE_ID))
+		require.Equal(t, incomingTraceID, c.GetString(execctx.KeyTraceID))
 		require.Equal(t, incomingTraceID, execctx.FromContext(c.Request.Context()).TraceID)
 		c.Status(http.StatusNoContent)
 	})
@@ -41,7 +40,7 @@ func TestTracingUsesIncomingTraceparent(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusNoContent, w.Code)
-	require.Equal(t, incomingTraceID, w.Header().Get(consts.HEADER_TRACE_ID))
+	require.Equal(t, incomingTraceID, w.Header().Get(execctx.HeaderTraceID))
 }
 
 func TestTracingUsesIncomingTraceIDHeader(t *testing.T) {
@@ -55,18 +54,18 @@ func TestTracingUsesIncomingTraceIDHeader(t *testing.T) {
 		spanContext := trace.SpanFromContext(c.Request.Context()).SpanContext()
 		require.True(t, spanContext.HasTraceID())
 		require.Equal(t, incomingTraceID, spanContext.TraceID().String())
-		require.Equal(t, incomingTraceID, c.GetString(consts.TRACE_ID))
+		require.Equal(t, incomingTraceID, c.GetString(execctx.KeyTraceID))
 		require.Equal(t, incomingTraceID, execctx.FromContext(c.Request.Context()).TraceID)
 		c.Status(http.StatusNoContent)
 	})
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/ping", nil)
-	req.Header.Set(consts.HEADER_TRACE_ID, incomingTraceID)
+	req.Header.Set(execctx.HeaderTraceID, incomingTraceID)
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusNoContent, w.Code)
-	require.Equal(t, incomingTraceID, w.Header().Get(consts.HEADER_TRACE_ID))
+	require.Equal(t, incomingTraceID, w.Header().Get(execctx.HeaderTraceID))
 }
 
 // TestTracingHoldsTheTraceIDHeaderToOneRuleWhenOTELDisabled pins the branch
@@ -94,15 +93,15 @@ func TestTracingHoldsTheTraceIDHeaderToOneRuleWhenOTELDisabled(t *testing.T) {
 			router.Use(tracing())
 			router.GET("/api/ping", func(c *gin.Context) {
 				stamped = execctx.FromContext(c.Request.Context()).TraceID
-				published = c.GetString(consts.TRACE_ID)
-				spanID = c.GetString(consts.SPAN_ID)
+				published = c.GetString(execctx.KeyTraceID)
+				spanID = c.GetString(execctx.KeySpanID)
 				c.Status(http.StatusNoContent)
 			})
 
 			w := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodGet, "/api/ping", nil)
 			if tt.header != "" {
-				req.Header.Set(consts.HEADER_TRACE_ID, tt.header)
+				req.Header.Set(execctx.HeaderTraceID, tt.header)
 			}
 			router.ServeHTTP(w, req)
 
@@ -113,7 +112,7 @@ func TestTracingHoldsTheTraceIDHeaderToOneRuleWhenOTELDisabled(t *testing.T) {
 				require.NotEqual(t, tt.header, stamped)
 			}
 			require.Equal(t, stamped, published)
-			require.Equal(t, stamped, w.Header().Get(consts.HEADER_TRACE_ID))
+			require.Equal(t, stamped, w.Header().Get(execctx.HeaderTraceID))
 			require.Regexp(t, `^[0-9a-f]{16}$`, spanID)
 		})
 	}
@@ -132,10 +131,10 @@ func TestTracingReplacesATraceIDHeaderThatIsNotOne(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/ping", nil)
-	req.Header.Set(consts.HEADER_TRACE_ID, "trace-1")
+	req.Header.Set(execctx.HeaderTraceID, "trace-1")
 	router.ServeHTTP(w, req)
 
-	got := w.Header().Get(consts.HEADER_TRACE_ID)
+	got := w.Header().Get(execctx.HeaderTraceID)
 	require.Regexp(t, `^[0-9a-f]{32}$`, got)
 	require.NotEqual(t, "trace-1", got)
 }
@@ -160,7 +159,7 @@ func TestTracingSkipsRecordingOnlyStateWhenSamplerDrops(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusNoContent, w.Code)
-	require.NotEmpty(t, w.Header().Get(consts.HEADER_TRACE_ID))
+	require.NotEmpty(t, w.Header().Get(execctx.HeaderTraceID))
 }
 
 // TestTracingSetsTheSpanStatusTheWayTheGRPCLineDoes pins the status of the

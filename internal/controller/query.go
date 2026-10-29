@@ -15,6 +15,10 @@ import (
 	"github.com/stoewer/go-strcase"
 )
 
+// expandAll is the value of the expand parameter asking for every
+// association.
+const expandAll = "all"
+
 // listQueryKeys are List controller parameters that belong to model.Query
 // rather than to the resource model's own filter fields.
 var listQueryKeys = map[string]struct{}{
@@ -125,7 +129,7 @@ func parseExpandQuery(query url.Values, m types.Model) []string {
 	}
 
 	items := strings.Split(query.Get(consts.QUERY_EXPAND), ",")
-	if len(items) > 0 && items[0] == consts.VALUE_ALL { // expand all fields
+	if len(items) > 0 && items[0] == expandAll { // expand all fields
 		items = m.Expands()
 	}
 	var matched []string

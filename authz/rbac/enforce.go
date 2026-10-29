@@ -11,7 +11,6 @@ import (
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 )
@@ -156,7 +155,7 @@ func logFailure(ctx context.Context, subject Subject, tenantID, sub, obj, act st
 // is three and more than either other caller. Reserving it keeps the append
 // from growing the slice, which would cost a second allocation and a copy
 // on every authorized request; a test holds the worst case to it exactly.
-// util.LogDuration counts as one of the seven, rendering two keys from a
+// logfield.Duration counts as one of the seven, rendering two keys from a
 // single inlined field.
 const enforceLogFieldCount = 10
 
@@ -173,6 +172,6 @@ func enforceLogFields(ctx context.Context, subject Subject, tenantID, sub, obj, 
 		zap.String("act", act),
 		logfield.Username(subject.Username),
 		logfield.TraceID(execctx.FromContext(ctx).TraceID),
-		util.LogDuration(elapsed),
+		logfield.Duration(elapsed),
 	)
 }

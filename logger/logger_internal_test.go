@@ -10,6 +10,7 @@ import (
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/instance"
+	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -42,7 +43,7 @@ func TestContextFieldsFitTheCapacityInTheWorstCase(t *testing.T) {
 	require.Len(t, entries, 1)
 	require.Len(t, entries[0].Context, contextFieldCap,
 		"the worst case must fill the capacity exactly: a new field bumps contextFieldCap, a dropped one lowers it")
-	require.Contains(t, entries[0].ContextMap(), consts.CRONJOB, "the worst case must carry the optional identity field")
+	require.Contains(t, entries[0].ContextMap(), keyCronjob, "the worst case must carry the optional identity field")
 }
 
 func BenchmarkLoggerDiscard10(b *testing.B) {
@@ -89,7 +90,7 @@ func BenchmarkLoggerDiscard10000(b *testing.B) {
 func newDiscardLogger() *Logger {
 	core := zapcore.NewCore(newLogEncoder(readConf("")), zapcore.AddSync(io.Discard), newLogLevel(readConf("")))
 	return &Logger{zlog: zap.New(
-		&errorFieldCore{Core: core.With([]zapcore.Field{zap.String(consts.INSTANCE, instance.ID())})},
+		&errorFieldCore{Core: core.With([]zapcore.Field{zap.String(logfield.KeyInstance, instance.ID())})},
 		zap.AddCaller(),
 		zap.AddCallerSkip(1),
 		zap.AddStacktrace(zapcore.FatalLevel),
@@ -120,18 +121,18 @@ func TestWithContextAddsMetadataFields(t *testing.T) {
 	require.Len(t, entries, 1)
 
 	fields := entries[0].ContextMap()
-	require.Equal(t, string(consts.List), fields[consts.PHASE])
-	require.Equal(t, "/api/users/:id", fields[consts.CTX_ROUTE])
-	require.Equal(t, "/api/users/42", fields[consts.CTX_PATH])
-	require.Equal(t, http.MethodGet, fields[consts.CTX_METHOD])
+	require.Equal(t, string(consts.List), fields[keyPhase])
+	require.Equal(t, "/api/users/:id", fields[requestctx.KeyRoute])
+	require.Equal(t, "/api/users/42", fields[requestctx.KeyPath])
+	require.Equal(t, http.MethodGet, fields[requestctx.KeyMethod])
 	require.Equal(t, "admin", fields[consts.CTX_USERNAME])
 	require.Equal(t, "user-1", fields[consts.CTX_USER_ID])
-	require.Equal(t, "trace-1", fields[consts.TRACE_ID])
-	require.Equal(t, map[string]any{"id": "42"}, fields[consts.PARAMS])
+	require.Equal(t, "trace-1", fields[execctx.KeyTraceID])
+	require.Equal(t, map[string]any{"id": "42"}, fields[requestctx.KeyParams])
 	// Fields carries no RawQuery, so the logged query is re-encoded from Query.
-	require.Equal(t, "tag=blue&tag=green", fields[consts.QUERY])
+	require.Equal(t, "tag=blue&tag=green", fields[logfield.KeyQuery])
 	// A request runs in no cron round, so its lines carry no field for one.
-	require.NotContains(t, fields, consts.CRONJOB)
+	require.NotContains(t, fields, keyCronjob)
 }
 
 func TestWithContextAddsCronjobField(t *testing.T) {
@@ -145,6 +146,6 @@ func TestWithContextAddsCronjobField(t *testing.T) {
 	require.Len(t, entries, 1)
 
 	fields := entries[0].ContextMap()
-	require.Equal(t, "trace-cron", fields[consts.TRACE_ID])
-	require.Equal(t, "sample_job", fields[consts.CRONJOB])
+	require.Equal(t, "trace-cron", fields[execctx.KeyTraceID])
+	require.Equal(t, "sample_job", fields[keyCronjob])
 }

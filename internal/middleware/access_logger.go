@@ -7,9 +7,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	prommetrics "github.com/hydroan/gst/metrics"
 	"go.uber.org/zap"
@@ -19,7 +19,7 @@ import (
 // accessLogFieldCap is the most fields one access-log entry carries: the
 // twelve every request has — status, method, username, user id, tenant id,
 // trace id, route, path, query, ip, user agent and the duration, whose two
-// keys util.LogDuration renders from one inlined field — plus the span id of
+// keys logfield.Duration renders from one inlined field — plus the span id of
 // a request a recording span traces, plus the error of a request that
 // reported one. The logger runs on every request and sizes its field slice
 // to it once, so the hot path never regrows it; a field added to
@@ -40,7 +40,7 @@ func accessLogger() gin.HandlerFunc {
 
 		// Add tracing information to logs.
 		span := requestSpan(c)
-		traceID := c.GetString(consts.TRACE_ID)
+		traceID := c.GetString(execctx.KeyTraceID)
 		var spanID string
 		if span != nil && span.IsRecording() {
 			spanContext := span.SpanContext()
@@ -66,7 +66,7 @@ func accessLogger() gin.HandlerFunc {
 			logfield.Query(query),
 			zap.String("ip", requestctx.GinClientIP(c)),
 			zap.String("user_agent", c.Request.UserAgent()),
-			util.LogDuration(time.Since(start)),
+			logfield.Duration(time.Since(start)),
 		)
 		if spanID != "" {
 			fields = append(fields, zap.String("span_id", spanID))
@@ -87,7 +87,8 @@ func accessLogger() gin.HandlerFunc {
 	}
 }
 
-// sanitizeLabelValue ensures we never export non UTF-8 label values to Prometheus.
+// sanitizeLabelValue ensures we never export non UTF-8 label values to
+// Prometheus.
 func sanitizeLabelValue(value string) string {
 	if value == "" {
 		return "<empty>"

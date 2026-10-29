@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/util"
+	"github.com/hydroan/gst/internal/logfield"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -227,7 +227,7 @@ func awaitStartupLock(ctx context.Context, lock startupLock, conn *sql.Conn, nam
 			return nil
 		}
 		if time.Since(reported) >= startupLockWaitReport {
-			zap.S().Warnw("still waiting for the startup lock held by another process", "purpose", purpose, util.LogDuration(time.Since(begin)))
+			zap.S().Warnw("still waiting for the startup lock held by another process", "purpose", purpose, logfield.Duration(time.Since(begin)))
 			reported = time.Now()
 		}
 		select {

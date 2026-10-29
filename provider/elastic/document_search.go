@@ -13,7 +13,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/logfield"
-	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 )
@@ -111,8 +110,8 @@ type SearchHit struct {
 	Source map[string]any `json:"_source"`
 }
 
-// AggregationResult represents the result of an aggregation.
-// It can contain single value metrics (min, max, avg, sum) or bucket results (terms).
+// AggregationResult represents the result of an aggregation. It can contain
+// single value metrics (min, max, avg, sum) or bucket results (terms).
 type AggregationResult struct {
 	Value    any              `json:"value,omitempty"`     // For metric aggregations
 	DocCount int64            `json:"doc_count,omitempty"` // Document count
@@ -255,7 +254,7 @@ func (*document) Search(ctx context.Context, indexName string, req *SearchReques
 		"size", size,
 	)
 	defer func() {
-		logger.Infow("search completed", util.LogDuration(time.Since(begin)))
+		logger.Infow("search completed", logfield.Duration(time.Since(begin)))
 	}()
 
 	// Convert request to JSON

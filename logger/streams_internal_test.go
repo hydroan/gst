@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/instance"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
@@ -154,7 +154,7 @@ func TestInitBuildsTheListenerLoggers(t *testing.T) {
 		require.FileExists(t, filepath.Join(dir, file))
 	}
 
-	Recovery.Error("[recovery] panic recovered: boom", zap.String(consts.TRACE_ID, "trace-panic"))
+	Recovery.Error("[recovery] panic recovered: boom", zap.String(execctx.KeyTraceID, "trace-panic"))
 	// Clean flushes the entry out before the file is read; the cleanup runs
 	// it again, idly.
 	Clean()
@@ -165,7 +165,7 @@ func TestInitBuildsTheListenerLoggers(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &entry), "%q", data)
 	require.Equal(t, "ERROR", entry["level"])
 	require.Equal(t, "[recovery] panic recovered: boom", entry["msg"])
-	require.Equal(t, "trace-panic", entry[consts.TRACE_ID])
+	require.Equal(t, "trace-panic", entry[execctx.KeyTraceID])
 }
 
 // TestInitRejectsAnUnknownOutput proves a mistyped output fails logger

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -44,5 +44,5 @@ func TestAPanicAnswersInternalAndIsLoggedWithItsStack(t *testing.T) {
 	require.Contains(t, entries[0].Message, "boom")
 	require.Contains(t, entries[0].Message, "/gst.test.Echo/Boom")
 	require.Contains(t, entries[0].Message, "goroutine ", "the stack of the panic")
-	require.Equal(t, traceID, entries[0].ContextMap()[consts.TRACE_ID])
+	require.Equal(t, traceID, entries[0].ContextMap()[execctx.KeyTraceID])
 }

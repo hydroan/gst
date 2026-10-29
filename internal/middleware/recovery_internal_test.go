@@ -6,10 +6,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/hydroan/gst/internal/types"
-
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -95,7 +94,7 @@ func TestRecoveryLogsThePanicToTheRecoveryLogger(t *testing.T) {
 	t.Cleanup(func() { logger.Recovery = saved })
 
 	engine := gin.New()
-	engine.Use(func(c *gin.Context) { c.Set(consts.TRACE_ID, "trace-panic") }, recovery())
+	engine.Use(func(c *gin.Context) { c.Set(execctx.KeyTraceID, "trace-panic") }, recovery())
 	engine.GET("/panic", func(*gin.Context) { panic("boom") })
 	recorder := httptest.NewRecorder()
 	engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/panic", nil))
@@ -107,5 +106,5 @@ func TestRecoveryLogsThePanicToTheRecoveryLogger(t *testing.T) {
 	require.Contains(t, entries[0].Message, "boom")
 	require.Contains(t, entries[0].Message, "GET /panic")
 	require.Contains(t, entries[0].Message, "goroutine ", "the stack of the panic")
-	require.Equal(t, "trace-panic", entries[0].ContextMap()[consts.TRACE_ID])
+	require.Equal(t, "trace-panic", entries[0].ContextMap()[execctx.KeyTraceID])
 }

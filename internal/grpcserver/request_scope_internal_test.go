@@ -9,6 +9,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -133,15 +134,15 @@ func TestCallsDescribedByAnActionCarryItsRouteAndMethod(t *testing.T) {
 	entries := accessLog.All()
 	require.Len(t, entries, 1)
 	fields := entries[0].ContextMap()
-	require.Equal(t, "/api/records/:id", fields[consts.CTX_ROUTE])
-	require.Equal(t, http.MethodGet, fields[consts.CTX_METHOD])
-	require.Equal(t, "/gst.test.Echo/Look", fields[consts.CTX_PATH])
+	require.Equal(t, "/api/records/:id", fields[requestctx.KeyRoute])
+	require.Equal(t, http.MethodGet, fields[requestctx.KeyMethod])
+	require.Equal(t, "/gst.test.Echo/Look", fields[requestctx.KeyPath])
 
 	require.NoError(t, call(ctx, conn, "Tail"))
 	require.Equal(t, MethodStream, (<-seen).meta.Method())
 	entries = accessLog.All()
 	require.Len(t, entries, 2)
-	require.Equal(t, MethodStream, entries[1].ContextMap()[consts.CTX_METHOD])
+	require.Equal(t, MethodStream, entries[1].ContextMap()[requestctx.KeyMethod])
 }
 
 // TestCallsCarryWhetherTheirMethodRequiresAuth pins the RequiresAuth of the
@@ -201,17 +202,17 @@ func TestCallsAreLoggedLikeHTTPRequests(t *testing.T) {
 	require.Equal(t, "/gst.test.Echo/Ping", entries[0].Message)
 	ok := entries[0].ContextMap()
 	require.Equal(t, "OK", ok["grpc_code"])
-	require.Equal(t, http.MethodPost, ok[consts.CTX_METHOD])
-	require.Equal(t, "/gst.test.Echo/Ping", ok[consts.CTX_ROUTE])
-	require.Equal(t, "/gst.test.Echo/Ping", ok[consts.CTX_PATH])
+	require.Equal(t, http.MethodPost, ok[requestctx.KeyMethod])
+	require.Equal(t, "/gst.test.Echo/Ping", ok[requestctx.KeyRoute])
+	require.Equal(t, "/gst.test.Echo/Ping", ok[requestctx.KeyPath])
 	require.Contains(t, ok, consts.CTX_USERNAME)
 	require.Contains(t, ok, consts.CTX_USER_ID)
 	require.Contains(t, ok, consts.CTX_TENANT_ID)
 	require.Equal(t, "127.0.0.1", ok["ip"])
 	require.Contains(t, ok["user_agent"], "grpc-go/")
-	require.Equal(t, traceID, ok[consts.TRACE_ID])
-	require.Contains(t, ok, consts.LOG_DURATION)
-	require.Contains(t, ok, consts.LOG_DURATION_HUMAN)
+	require.Equal(t, traceID, ok[execctx.KeyTraceID])
+	require.Contains(t, ok, logfield.KeyDuration)
+	require.Contains(t, ok, logfield.KeyDurationHuman)
 	require.NotContains(t, ok, "error")
 	failed := entries[1].ContextMap()
 	require.Equal(t, "NotFound", failed["grpc_code"])

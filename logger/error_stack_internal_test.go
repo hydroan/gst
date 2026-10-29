@@ -84,7 +84,7 @@ func TestErrorzSkipsErrorStackFieldWhenNoErrorField(t *testing.T) {
 	require.Len(t, entries, 1)
 
 	for _, field := range entries[0].Context {
-		require.NotEqual(t, errorStackKey, field.Key)
+		require.NotEqual(t, keyErrorStack, field.Key)
 	}
 }
 
@@ -98,7 +98,7 @@ func TestErrorSkipsErrorStackFieldWhenErrorHasNoStackTrace(t *testing.T) {
 	require.Contains(t, entries[0].Message, "plain failure")
 
 	for _, field := range entries[0].Context {
-		require.NotEqual(t, errorStackKey, field.Key)
+		require.NotEqual(t, keyErrorStack, field.Key)
 	}
 }
 
@@ -116,7 +116,7 @@ func TestErrorSkipsErrorStackFieldWhenDisabledByConfig(t *testing.T) {
 	require.Contains(t, entries[0].Message, "stack traced failure")
 
 	for _, field := range entries[0].Context {
-		require.NotEqual(t, errorStackKey, field.Key)
+		require.NotEqual(t, keyErrorStack, field.Key)
 	}
 }
 
@@ -152,7 +152,7 @@ func TestErrorFieldsAreWrittenAsTextWithTheErrorStack(t *testing.T) {
 	for _, file := range []string{"errorz.log", "errorw.log", "zap.log", "sugar.log"} {
 		line, entry := readLogEntry(t, filepath.Join(dir, file))
 		require.Equal(t, "load account: stack traced failure", entry["error"], file)
-		require.Equal(t, errorstack.Origin(err), entry[errorStackKey], file)
+		require.Equal(t, errorstack.Origin(err), entry[keyErrorStack], file)
 		requireNoVerboseField(t, entry, file)
 		require.NotContains(t, line, "doInit", file)
 	}
@@ -172,7 +172,7 @@ func TestASentinelErrorFieldCarriesNoStack(t *testing.T) {
 
 	line, entry := readLogEntry(t, filepath.Join(dir, "sentinel.log"))
 	require.Equal(t, "sentinel failure", entry["error"])
-	require.NotContains(t, entry, errorStackKey)
+	require.NotContains(t, entry, keyErrorStack)
 	requireNoVerboseField(t, entry, "sentinel.log")
 	require.NotContains(t, line, "doInit")
 }
@@ -191,7 +191,7 @@ func TestTheErrorStackSwitchLeavesAnErrorFieldEntryWithoutAStack(t *testing.T) {
 
 	_, entry := readLogEntry(t, filepath.Join(dir, "switch.log"))
 	require.Equal(t, "stack traced failure", entry["error"])
-	require.NotContains(t, entry, errorStackKey)
+	require.NotContains(t, entry, keyErrorStack)
 	requireNoVerboseField(t, entry, "switch.log")
 }
 
@@ -233,8 +233,8 @@ func TestAnEntryCarriesOneErrorStack(t *testing.T) {
 	Clean()
 
 	line, entry := readLogEntry(t, filepath.Join(dir, "once.log"))
-	require.Equal(t, 1, strings.Count(line, `"`+errorStackKey+`":`), line)
-	require.Equal(t, errorstack.Origin(first), entry[errorStackKey])
+	require.Equal(t, 1, strings.Count(line, `"`+keyErrorStack+`":`), line)
+	require.Equal(t, errorstack.Origin(first), entry[keyErrorStack])
 	require.Equal(t, "second failure", entry["cause"])
 	requireNoVerboseField(t, entry, "once.log")
 }
@@ -278,11 +278,11 @@ func errorStackField(t *testing.T, entry observer.LoggedEntry) string {
 	t.Helper()
 
 	for _, field := range entry.Context {
-		if field.Key == errorStackKey {
+		if field.Key == keyErrorStack {
 			return field.String
 		}
 	}
-	require.Failf(t, "missing field", "log entry has no %s field", errorStackKey)
+	require.Failf(t, "missing field", "log entry has no %s field", keyErrorStack)
 	return ""
 }
 
