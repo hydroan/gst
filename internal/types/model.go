@@ -31,8 +31,11 @@ type Model interface {
 	SetUpdatedBy(string)
 	SetCreatedAt(time.Time)
 	SetUpdatedAt(time.Time)
-	Expands() []string // Expands returns association paths that should be preloaded by default.
-	Purge() bool       // Purge indicates whether to permanently delete records (hard delete). Default is false (soft delete).
+	// Expands returns the association paths a request may ask to have
+	// preloaded, by _expand; a delete the operation log records reads the
+	// record with them all, for the log entry.
+	Expands() []string
+	Purge() bool // Purge indicates whether to permanently delete records (hard delete). Default is false (soft delete).
 
 	CreateBefore(context.Context) error
 	CreateAfter(context.Context) error
