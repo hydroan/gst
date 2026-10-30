@@ -59,19 +59,19 @@
 
 ## tenant 来源
 
-请求 tenant 只有一个来源：请求上下文中的 `CTX_TENANT_ID`。`IAMSession` 会把 `Session.TenantID` 写入它，`Authz` 中间件按现值读取，为空时回退到默认 tenant（`tenant.Default`）。gRPC 上同理：`interceptor.IAMSession()` 把会话的 tenant 写进调用者信息（`grpc.Caller` 的 `TenantID`），`interceptor.Authz()` 从那里读。
+请求 tenant 只有一个来源：请求上下文中的租户键 `requestctx.KeyTenantID`。`IAMSession` 会把 `Session.TenantID` 写入它，`Authz` 中间件按现值读取，为空时回退到默认 tenant（`tenant.Default`）。gRPC 上同理：`interceptor.IAMSession()` 把会话的 tenant 写进调用者信息（`grpc.Caller` 的 `TenantID`），`interceptor.Authz()` 从那里读。
 
 无论通过 `gg module add` 使用内置模块，还是通过 `gg module copy` 复制到业务项目（此时注册的是项目自己的零参 `Authz()`），只要项目使用 IAM session tenant，在登录时传入 `tenant_id` 即可，不需要任何额外配置。
 
-如果项目的 tenant 来源不是 IAM session，例如 JWT claims、子域名或可信网关注入的 header，在 `IAMSession` 之后、`Authz` 之前注册一个项目自己的中间件覆写 `CTX_TENANT_ID`：
+如果项目的 tenant 来源不是 IAM session，例如 JWT claims、子域名或可信网关注入的 header，在 `IAMSession` 之后、`Authz` 之前注册一个项目自己的中间件覆写 `requestctx.KeyTenantID`：
 
 ```go
 middleware.RegisterAuth(func(c *gin.Context) {
     if tenantID := strings.TrimSpace(c.GetHeader("X-Tenant-ID")); tenantID != "" {
-        c.Set(consts.CTX_TENANT_ID, tenantID)
+        c.Set(requestctx.KeyTenantID, tenantID)
     }
     c.Next()
 })
 ```
 
-`CTX_TENANT_ID` 是被双重信任的值：授权在这个 tenant 内判定，请求随后读写的 tenant 作用域行也 scope 到它。它只允许由部署方担保的来源写入（session、经受信网关校验后注入的 header、子域名解析），不要把任意客户端输入原样透传。
+`requestctx.KeyTenantID` 是被双重信任的值：授权在这个 tenant 内判定，请求随后读写的 tenant 作用域行也 scope 到它。它只允许由部署方担保的来源写入（session、经受信网关校验后注入的 header、子域名解析），不要把任意客户端输入原样透传。

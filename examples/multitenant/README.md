@@ -30,7 +30,7 @@
 
 ## 租户从哪来
 
-请求里的租户只有一个来源：请求上下文里的 `CTX_TENANT_ID`。登录时 `tenant_id` 选了哪个租户，会话就记住它，iam 的会话检查在每个请求上把它写进去；项目可以在会话检查之后、授权之前改写它，本例用可信网关的请求头；authz 的授权在这个租户里判定，放行后把同一个租户交给行级隔离，这次请求读写的租户资源行全部只在这个租户里。所以数据能到的范围不会比授权放行的范围大。登录时没选租户就是默认租户 `default`，单租户项目什么都不用配。
+请求里的租户只有一个来源：请求上下文里的租户键 `requestctx.KeyTenantID`。登录时 `tenant_id` 选了哪个租户，会话就记住它，iam 的会话检查在每个请求上把它写进去；项目可以在会话检查之后、授权之前改写它，本例用可信网关的请求头；authz 的授权在这个租户里判定，放行后把同一个租户交给行级隔离，这次请求读写的租户资源行全部只在这个租户里。所以数据能到的范围不会比授权放行的范围大。登录时没选租户就是默认租户 `default`，单租户项目什么都不用配。
 
 root 持有系统角色，它的授权不在任何一个租户里判定，于是它的请求跨全部租户。请求之外的代码（定时任务、启动钩子）没有授权来定租户，上下文默认在 `default` 租户里，要去别处自己说：`tenant.In` 进某一个租户，`tenant.Across` 跨全部。
 
@@ -191,7 +191,7 @@ alice 建租户答 `only the system root may change the tenants`；root 建出 `
 
 ### 五、租户从网关头来
 
-有的部署里租户不是登录时选的，而是前面的网关按域名或路径认出来、放在请求头里。项目自己的中间件和拦截器（`middleware/gateway_tenant.go`、`interceptor/gateway_tenant.go`）在会话检查之后、授权之前读这个头，改写 `CTX_TENANT_ID`。头名由 `[gateway] tenant_header` 配，带上它重启：
+有的部署里租户不是登录时选的，而是前面的网关按域名或路径认出来、放在请求头里。项目自己的中间件和拦截器（`middleware/gateway_tenant.go`、`interceptor/gateway_tenant.go`）在会话检查之后、授权之前读这个头，改写 `requestctx.KeyTenantID`。头名由 `[gateway] tenant_header` 配，带上它重启：
 
 ```bash
 GATEWAY_TENANT_HEADER=X-Tenant-ID go run .

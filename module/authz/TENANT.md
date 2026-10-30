@@ -73,17 +73,17 @@
 
 ## tenant 来源
 
-请求 tenant 只有一个来源：请求上下文中的 `CTX_TENANT_ID`。`Authz` 中间件按现值读取，为空时回退到默认 tenant（`tenant.Default`）。当项目同时使用 `module/iam` 时，`IAMSession` 会把 `Session.TenantID` 写入该上下文，因此登录时选择的 tenant 直接成为 authz 的 tenant 来源，多租户不需要任何额外配置。gRPC 上同理：`interceptor.IAMSession()` 把会话的 tenant 写进调用者信息（`grpc.Caller` 的 `TenantID`），`interceptor.Authz()` 从那里读。
+请求 tenant 只有一个来源：请求上下文中的租户键 `requestctx.KeyTenantID`。`Authz` 中间件按现值读取，为空时回退到默认 tenant（`tenant.Default`）。当项目同时使用 `module/iam` 时，`IAMSession` 会把 `Session.TenantID` 写入该上下文，因此登录时选择的 tenant 直接成为 authz 的 tenant 来源，多租户不需要任何额外配置。gRPC 上同理：`interceptor.IAMSession()` 把会话的 tenant 写进调用者信息（`grpc.Caller` 的 `TenantID`），`interceptor.Authz()` 从那里读。
 
-如果项目的 tenant 来源不是 IAM session，例如 JWT claims、子域名或可信网关注入的 header，在 `IAMSession` 之后、`Authz` 之前注册一个项目自己的中间件覆写 `CTX_TENANT_ID`：
+如果项目的 tenant 来源不是 IAM session，例如 JWT claims、子域名或可信网关注入的 header，在 `IAMSession` 之后、`Authz` 之前注册一个项目自己的中间件覆写 `requestctx.KeyTenantID`：
 
 ```go
 middleware.RegisterAuth(func(c *gin.Context) {
     if tenantID := strings.TrimSpace(c.GetHeader("X-Tenant-ID")); tenantID != "" {
-        c.Set(consts.CTX_TENANT_ID, tenantID)
+        c.Set(requestctx.KeyTenantID, tenantID)
     }
     c.Next()
 })
 ```
 
-`CTX_TENANT_ID` 是被双重信任的值：授权在这个 tenant 内判定，请求随后读写的 tenant 作用域行也 scope 到它。它只允许由部署方担保的来源写入（session、经受信网关校验后注入的 header、子域名解析），不要把任意客户端输入原样透传。
+`requestctx.KeyTenantID` 是被双重信任的值：授权在这个 tenant 内判定，请求随后读写的 tenant 作用域行也 scope 到它。它只允许由部署方担保的来源写入（session、经受信网关校验后注入的 header、子域名解析），不要把任意客户端输入原样透传。
