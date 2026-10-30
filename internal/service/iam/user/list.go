@@ -5,7 +5,6 @@ import (
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/authz/rbac"
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
@@ -169,7 +168,7 @@ func emptyUserVisibilityQueryOptions() gst.QueryOptions {
 func excludeSystemRootSubjects(ctx *gst.ServiceContext, subjectIDs []string) ([]string, error) {
 	filtered := make([]string, 0, len(subjectIDs))
 	for _, subjectID := range subjectIDs {
-		systemRoot, err := rbac.RBAC().HasSystemRole(ctx, subjectID, consts.AUTHZ_SYSTEM_ROLE_ROOT)
+		systemRoot, err := rbac.RBAC().HasSystemRole(ctx, subjectID, rbac.SystemRoleRoot)
 		if err != nil {
 			return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
 		}

@@ -5,7 +5,7 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/types"
 	"go.opentelemetry.io/otel/trace"
 	"gorm.io/gorm"
@@ -59,7 +59,7 @@ type operationChain interface {
 	prepare() error
 	reset()
 	useDryRun(dryRun bool, collector *[]types.SQLStatement)
-	traceAs(modelName string, phase consts.Phase, batch ...int) (func(error), trace.Span)
+	traceAs(modelName string, phase apiaction.Phase, batch ...int) (func(error), trace.Span)
 	freshSession() *gorm.DB
 	annotate(tx *gorm.DB) *gorm.DB
 	quoteIdent(name string) string

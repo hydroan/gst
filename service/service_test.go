@@ -6,7 +6,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
@@ -32,23 +31,23 @@ func TestRegisterResolvesAPointerInstance(t *testing.T) {
 
 	t.Run("base by pointer", func(t *testing.T) {
 		route := newRoute("samples/pointer")
-		service.Register[*base](consts.Create, route)
-		requireResolvesTo[base](t, consts.Create, route)
+		service.Register[*base](service.Create, route)
+		requireResolvesTo[base](t, service.Create, route)
 	})
 	t.Run("base by value", func(t *testing.T) {
 		route := newRoute("samples/struct")
-		service.Register[base](consts.Create, route)
-		requireResolvesTo[base](t, consts.Create, route)
+		service.Register[base](service.Create, route)
+		requireResolvesTo[base](t, service.Create, route)
 	})
 	t.Run("canonical struct by pointer", func(t *testing.T) {
 		route := newRoute("records/pointer")
-		service.Register[*canonical](consts.Create, route)
-		requireResolvesTo[canonical](t, consts.Create, route)
+		service.Register[*canonical](service.Create, route)
+		requireResolvesTo[canonical](t, service.Create, route)
 	})
 	t.Run("canonical struct by value", func(t *testing.T) {
 		route := newRoute("records/struct")
-		service.Register[canonical](consts.Create, route)
-		requireResolvesTo[canonical](t, consts.Create, route)
+		service.Register[canonical](service.Create, route)
+		requireResolvesTo[canonical](t, service.Create, route)
 	})
 }
 
@@ -59,9 +58,9 @@ func TestRegisterPanicsOnAnInterfaceType(t *testing.T) {
 	type contract = types.Service[*testUser, *testUser, *testUser]
 
 	want := fmt.Sprintf("service: register of route %q phase %q requires a concrete service type, not the interface %s",
-		"samples/interface", consts.Create, reflect.TypeFor[contract]())
+		"samples/interface", service.Create, reflect.TypeFor[contract]())
 	require.PanicsWithValue(t, want, func() {
-		service.Register[contract](consts.Create, "samples/interface")
+		service.Register[contract](service.Create, "samples/interface")
 	})
 }
 
@@ -87,22 +86,22 @@ func TestRegisterInjectsTheServiceLogger(t *testing.T) {
 		service.Base[*testUser, *testUser, *testUser]
 	}
 	samples, records := newRoute("samples/service"), newRoute("records/service")
-	service.Register[*base](consts.Create, samples)
-	service.Register[*base](consts.Delete, samples)
-	service.Register[*canonical](consts.Create, records)
+	service.Register[*base](service.Create, samples)
+	service.Register[*base](service.Delete, samples)
+	service.Register[*canonical](service.Create, records)
 
-	for _, phase := range []consts.Phase{consts.Create, consts.Delete} {
+	for _, phase := range []service.Phase{service.Create, service.Delete} {
 		s, ok := serviceregistry.Resolve[*testUser, *testUser, *testUser](serviceregistry.Key(phase, samples)).(*base)
 		require.True(t, ok)
 		require.NotNil(t, s.Logger, "phase %s", phase)
 	}
-	s, ok := serviceregistry.Resolve[*testUser, *testUser, *testUser](serviceregistry.Key(consts.Create, records)).(*canonical)
+	s, ok := serviceregistry.Resolve[*testUser, *testUser, *testUser](serviceregistry.Key(service.Create, records)).(*canonical)
 	require.True(t, ok)
 	require.NotNil(t, s.Logger)
 }
 
 // requireResolvesTo asserts that the route and phase resolve to a *S instance.
-func requireResolvesTo[S any](t *testing.T, phase consts.Phase, route string) {
+func requireResolvesTo[S any](t *testing.T, phase service.Phase, route string) {
 	t.Helper()
 
 	got := serviceregistry.Resolve[*testUser, *testUser, *testUser](serviceregistry.Key(phase, route))

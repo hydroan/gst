@@ -6,7 +6,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 )
 
 // Operation describes one API operation when the OpenAPI document is built.
@@ -16,8 +16,8 @@ type Operation struct {
 	Method string
 	// Path is the route path, eg. "/api/records/{id}/disable".
 	Path string
-	// Phase is the framework action phase, eg. consts.Create.
-	Phase consts.Phase
+	// Phase is the framework action phase, eg. service.Create.
+	Phase apiaction.Phase
 	// CustomTypes reports whether the operation declares its own request and
 	// response types instead of reusing the model (custom action routes do,
 	// default CRUD routes do not).
@@ -131,7 +131,7 @@ func DefaultDescription(op Operation) string {
 // types, and never for List: a trailing literal in a List route is the
 // collection being listed, not an action.
 func trailingActionSegment(op Operation) string {
-	if !op.CustomTypes || op.Phase == consts.List {
+	if !op.CustomTypes || op.Phase == apiaction.List {
 		return ""
 	}
 	segments := strings.Split(strings.Trim(op.Path, "/"), "/")
@@ -158,8 +158,8 @@ func isParamSegment(segment string) bool {
 // phaseDisplay renders the phase as a summary token, eg. "Create", or "Batch
 // Create" for the *_many phases. The SSE phase shows as "SSE", its own name,
 // so that its summaries do not read like those of a Stream action.
-func phaseDisplay(phase consts.Phase) string {
-	if phase == consts.SSE {
+func phaseDisplay(phase apiaction.Phase) string {
+	if phase == apiaction.SSE {
 		return phase.Name()
 	}
 	if base, ok := strings.CutSuffix(string(phase), "_many"); ok {

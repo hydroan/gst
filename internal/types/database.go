@@ -1,6 +1,24 @@
 package types
 
-import "github.com/hydroan/gst/internal/consts"
+// LockMode is the row lock a query asks for: FOR UPDATE, FOR SHARE, and
+// their NOWAIT and SKIP LOCKED forms.
+type LockMode string
+
+// The row lock modes.
+const (
+	// LockUpdate is FOR UPDATE.
+	LockUpdate LockMode = "UPDATE"
+	// LockShare is FOR SHARE.
+	LockShare LockMode = "SHARE"
+	// LockUpdateNoWait is FOR UPDATE NOWAIT.
+	LockUpdateNoWait LockMode = "UPDATE_NOWAIT"
+	// LockShareNoWait is FOR SHARE NOWAIT.
+	LockShareNoWait LockMode = "SHARE_NOWAIT"
+	// LockUpdateSkipLocked is FOR UPDATE SKIP LOCKED.
+	LockUpdateSkipLocked LockMode = "UPDATE_SKIP_LOCKED"
+	// LockShareSkipLocked is FOR SHARE SKIP LOCKED.
+	LockShareSkipLocked LockMode = "SHARE_SKIP_LOCKED"
+)
 
 // Database defines the model-scoped database operation contract.
 // It provides CRUD operations, query builders, and optional dry-run behavior
@@ -107,7 +125,7 @@ type DatabaseOption[M Model] interface {
 	WithSelect(columns ...AnyColumnRef) Database[M]
 	// WithLock adds row-level locking to SELECT queries (must be used within a
 	// transaction).
-	WithLock(mode ...consts.LockMode) Database[M]
+	WithLock(mode ...LockMode) Database[M]
 	// WithBatchSize sets the batch size for Create, Update, and Delete.
 	WithBatchSize(size int) Database[M]
 	// WithPagination applies pagination parameters (page, size) to the query.

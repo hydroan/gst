@@ -10,7 +10,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/sse"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
@@ -41,7 +41,7 @@ func TestSSEHandlerRecordsAStreamEndedByShutdownAsInterrupted(t *testing.T) {
 	oteltest.Enable(t)
 	recorder := oteltest.Record(t)
 
-	registerTestService[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel](consts.SSE, "samples/stream", &sseSampleService{})
+	registerTestService[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel](apiaction.SSE, "samples/stream", &sseSampleService{})
 	engine := gin.New()
 	engine.GET("/samples/stream", SSEHandler[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel](&types.ControllerConfig[*handlerRouteModel]{Route: "samples/stream"}))
 
@@ -75,7 +75,7 @@ func TestSSEHandlerRecordsAStreamEndedByShutdownAsInterrupted(t *testing.T) {
 func TestSSEHandlerAnswersAStreamEndedBeforeItOpenedByWhatEndedIt(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	registerTestService[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel](consts.SSE, "samples/ended-stream", &sseSampleService{})
+	registerTestService[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel](apiaction.SSE, "samples/ended-stream", &sseSampleService{})
 	engine := gin.New()
 	engine.GET("/samples/ended-stream", SSEHandler[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel](&types.ControllerConfig[*handlerRouteModel]{Route: "samples/ended-stream"}))
 	// serveEnded serves req, ends its stream through end and returns the

@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/modelinspect"
 	"github.com/stretchr/testify/require"
@@ -64,7 +63,7 @@ func TestRemoveOrphanColumnFiles(t *testing.T) {
 	sampleDir := filepath.Join(dir, "model", "sample")
 	require.NoError(t, os.MkdirAll(sampleDir, 0o750))
 
-	generated := consts.CodeGeneratedComment() + "\n\npackage sample\n"
+	generated := ggconst.CodeGeneratedComment + "\n\npackage sample\n"
 	kept := filepath.Join(sampleDir, "record.gen.go")
 	orphan := filepath.Join(sampleDir, "removed.gen.go")
 	registration := filepath.Join(dir, "model", ggconst.FileModelGen)

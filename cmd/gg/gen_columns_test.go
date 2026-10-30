@@ -239,7 +239,7 @@ func tableModelSource(name string, readsColumns bool) string {
 
 // TestGenRunReferencesFrameworkTypesThroughThePublicPackages runs gg gen
 // against a model whose columns are typed by the framework's root package,
-// by its consts package and, stored as JSON, by the call types of its grpc
+// by its service package and, stored as JSON, by the call types of its grpc
 // package, the events of its sse package and the server of its testutil
 // package. The generated references name the types the way the model source
 // does, under the import paths a business project can reach.
@@ -252,17 +252,17 @@ func TestGenRunReferencesFrameworkTypesThroughThePublicPackages(t *testing.T) {
 
 import (
 	"github.com/hydroan/gst"
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/grpc"
 	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/service"
 	"github.com/hydroan/gst/sse"
 	"github.com/hydroan/gst/testutil"
 )
 
 type Rule struct {
 	Permission gst.Permission  `+"`json:\"permission\" gorm:\"serializer:json\"`"+`
-	Phase      consts.Phase    `+"`json:\"phase\" gorm:\"size:16\"`"+`
+	Phase      service.Phase    `+"`json:\"phase\" gorm:\"size:16\"`"+`
 	Caller     grpc.Caller     `+"`json:\"caller\" gorm:\"serializer:json\"`"+`
 	Filter     grpc.Filter     `+"`json:\"filter\" gorm:\"serializer:json\"`"+`
 	Frame      sse.Event       `+"`json:\"frame\" gorm:\"serializer:json\"`"+`
@@ -283,7 +283,7 @@ func (Rule) Design() {
 	require.NoError(t, err)
 	for _, want := range []string{
 		`gst.NewColumn[*Rule, gst.Permission]("permission")`,
-		`gst.NewColumn[*Rule, consts.Phase]("phase")`,
+		`gst.NewColumn[*Rule, service.Phase]("phase")`,
 		`gst.NewColumn[*Rule, grpc.Caller]("caller")`,
 		`gst.NewColumn[*Rule, grpc.Filter]("filter")`,
 		`gst.NewColumn[*Rule, sse.Event]("frame")`,
@@ -291,9 +291,9 @@ func (Rule) Design() {
 	} {
 		require.Contains(t, string(columnFile), want)
 	}
-	// The internal packages are named consts, sse and testutil as well, so
-	// the import alone tells the public package from the internal one.
-	for _, pkg := range []string{"consts", "grpc", "sse", "testutil"} {
+	// The internal packages are named sse and testutil as well, so the
+	// import alone tells the public package from the internal one.
+	for _, pkg := range []string{"grpc", "service", "sse", "testutil"} {
 		require.Contains(t, string(columnFile), `"github.com/hydroan/gst/`+pkg+`"`, "the %s package is the one the model source imports", pkg)
 	}
 

@@ -6,7 +6,6 @@ import (
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/authz/rbac"
-	"github.com/hydroan/gst/consts"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/tenant"
 )
@@ -35,7 +34,7 @@ func isSystemRoot(ctx *gst.ServiceContext, actor *modeliamuser.User) (bool, erro
 	if actor == nil || strings.TrimSpace(actor.GetID()) == "" {
 		return false, nil
 	}
-	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, actor.GetID(), consts.AUTHZ_SYSTEM_ROLE_ROOT)
+	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, actor.GetID(), rbac.SystemRoleRoot)
 	if err != nil {
 		return false, gst.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
 	}

@@ -12,7 +12,6 @@ package logfield
 import (
 	"time"
 
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/util"
@@ -21,8 +20,8 @@ import (
 )
 
 // The keys declared here alone; the keys of the fields a request is logged
-// with are the ones its context stores the same values under, in requestctx
-// and consts, and the trace id's is execctx's.
+// with are the ones its context stores the same values under, in requestctx,
+// and the trace id's is execctx's.
 const (
 	keyStatus    = "status"
 	keyThreshold = "threshold"
@@ -71,15 +70,15 @@ func Method(method string) zap.Field { return zap.String(requestctx.KeyMethod, m
 
 // Username is the name of the authenticated caller, "" for an anonymous
 // request.
-func Username(username string) zap.Field { return zap.String(consts.CTX_USERNAME, username) }
+func Username(username string) zap.Field { return zap.String(requestctx.KeyUsername, username) }
 
 // UserID is the id of the authenticated caller, "" for an anonymous request.
-func UserID(id string) zap.Field { return zap.String(consts.CTX_USER_ID, id) }
+func UserID(id string) zap.Field { return zap.String(requestctx.KeyUserID, id) }
 
 // TenantID is the tenant the request acts in, the value its context carries
-// under consts.CTX_TENANT_ID once the authenticated chain has run; "" for a
+// under requestctx.KeyTenantID once the authenticated chain has run; "" for a
 // request that established none.
-func TenantID(id string) zap.Field { return zap.String(consts.CTX_TENANT_ID, id) }
+func TenantID(id string) zap.Field { return zap.String(requestctx.KeyTenantID, id) }
 
 // TraceID is the trace id of the request.
 func TraceID(id string) zap.Field { return zap.String(execctx.KeyTraceID, id) }

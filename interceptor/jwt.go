@@ -13,10 +13,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// sessionIDKey is the metadata carrying the session id JwtAuth pairs with a
+// keySessionID is the metadata carrying the session id JwtAuth pairs with a
 // token, the X-Session-Id header of the HTTP listener, in the lowercase gRPC
 // metadata keeps its keys in.
-const sessionIDKey = "x-session-id"
+const keySessionID = "x-session-id"
 
 // JwtAuth authenticates a call from the bearer token in its authorization
 // metadata, the way middleware.JwtAuth authenticates a request from the
@@ -53,8 +53,8 @@ func JwtAuth() gstgrpc.Interceptor {
 			return nil, status.Error(codes.Unauthenticated, "invalid token")
 		}
 		var sessionID string
-		if md, _ := metadata.FromIncomingContext(ctx); len(md.Get(sessionIDKey)) > 0 {
-			sessionID = md.Get(sessionIDKey)[0]
+		if md, _ := metadata.FromIncomingContext(ctx); len(md.Get(keySessionID)) > 0 {
+			sessionID = md.Get(keySessionID)[0]
 		}
 		return gstgrpc.WithCaller(ctx, gstgrpc.Caller{UserID: claims.UserID, Username: claims.Username, SessionID: sessionID}), nil
 	}

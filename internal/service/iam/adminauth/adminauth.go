@@ -7,7 +7,6 @@ import (
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/authz/rbac"
-	"github.com/hydroan/gst/consts"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/tenant"
 )
@@ -137,5 +136,5 @@ func isSystemRoot(ctx *gst.ServiceContext, user *modeliamuser.User) (bool, error
 	if user == nil || strings.TrimSpace(user.GetID()) == "" {
 		return false, nil
 	}
-	return rbac.RBAC().HasSystemRole(ctx, user.GetID(), consts.AUTHZ_SYSTEM_ROLE_ROOT)
+	return rbac.RBAC().HasSystemRole(ctx, user.GetID(), rbac.SystemRoleRoot)
 }

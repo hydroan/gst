@@ -6,7 +6,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/modelinfo"
 )
@@ -100,7 +100,7 @@ func (Entry) Design() {
 			t.Fatalf("Matches = %+v, want %+v", result.Matches, want)
 		}
 		remaining := remainingPhases(collectActions(findDesign(t, models, "Item")))
-		if !slices.Equal(remaining, []consts.Phase{consts.Create}) {
+		if !slices.Equal(remaining, []apiaction.Phase{apiaction.Create}) {
 			t.Fatalf("remaining Item actions = %v, want only Create", remaining)
 		}
 	})
@@ -129,19 +129,19 @@ func TestRouterTargetForAction(t *testing.T) {
 		name      string
 		route     string
 		param     string
-		phase     consts.Phase
+		phase     apiaction.Phase
 		exact     bool
 		wantRoute string
 		wantParam string
 	}{
-		{name: "item action with a declared parameter", route: "samples", param: ":sample", phase: consts.Get, wantRoute: "/api/samples/:sample", wantParam: "sample"},
-		{name: "item action without a declared parameter", route: "samples", phase: consts.Get, wantRoute: "/api/samples/:id", wantParam: "id"},
-		{name: "collection action", route: "samples", param: ":sample", phase: consts.List, wantRoute: "/api/samples"},
-		{name: "batch action", route: "samples", phase: consts.CreateMany, wantRoute: "/api/samples/batch"},
-		{name: "import action", route: "samples", phase: consts.Import, wantRoute: "/api/samples/import"},
-		{name: "export action", route: "samples", phase: consts.Export, wantRoute: "/api/samples/export"},
-		{name: "sse action", route: "samples", phase: consts.SSE, wantRoute: "/api/samples"},
-		{name: "exact action", route: "iam/admin/users/:id/sessions", param: ":id", phase: consts.Delete, exact: true, wantRoute: "/api/iam/admin/users/:id/sessions", wantParam: "id"},
+		{name: "item action with a declared parameter", route: "samples", param: ":sample", phase: apiaction.Get, wantRoute: "/api/samples/:sample", wantParam: "sample"},
+		{name: "item action without a declared parameter", route: "samples", phase: apiaction.Get, wantRoute: "/api/samples/:id", wantParam: "id"},
+		{name: "collection action", route: "samples", param: ":sample", phase: apiaction.List, wantRoute: "/api/samples"},
+		{name: "batch action", route: "samples", phase: apiaction.CreateMany, wantRoute: "/api/samples/batch"},
+		{name: "import action", route: "samples", phase: apiaction.Import, wantRoute: "/api/samples/import"},
+		{name: "export action", route: "samples", phase: apiaction.Export, wantRoute: "/api/samples/export"},
+		{name: "sse action", route: "samples", phase: apiaction.SSE, wantRoute: "/api/samples"},
+		{name: "exact action", route: "iam/admin/users/:id/sessions", param: ":id", phase: apiaction.Delete, exact: true, wantRoute: "/api/iam/admin/users/:id/sessions", wantParam: "id"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

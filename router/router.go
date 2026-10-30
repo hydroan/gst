@@ -12,16 +12,29 @@ import (
 	"context"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/router"
 	"github.com/hydroan/gst/internal/types"
 )
+
+// APIPath returns the path a route is served at, the route under the API
+// prefix: /api/records/:id for records/:id, and for /records/:id,
+// api/records/:id and /api/records/:id alike, since a leading or trailing
+// slash and a prefix already written are dropped first; a blank route, or
+// the prefix alone, names the root of the prefix, /api/. It is the one rule
+// of the path of a route: gg gen writes every route by it, the router
+// registers, the service registry keys and the modules register routes by
+// it, and the gg commands list routes as it spells them. A route may thus
+// be written with or without the prefix and names the same path either way.
+func APIPath(route string) string {
+	return apiaction.APIPath(route)
+}
 
 // Register registers route on group for each of phases, the actions to
 // serve on it. group is the route group the route belongs to: Auth, whose
 // routes run the middleware registered with middleware.RegisterAuth, or Pub,
 // whose routes do not. Each phase is served by the framework's handler for
-// it, under its HTTP method (see consts.Phase.HTTPMethod):
+// it, under its HTTP method (see service.Phase.HTTPMethod):
 //
 //   - POST: Create, CreateMany, Import
 //   - DELETE: Delete, DeleteMany
@@ -29,7 +42,7 @@ import (
 //   - PATCH: Patch, PatchMany
 //   - GET: List, Get, Export, SSE
 //
-// The route is served at the path consts.APIPath spells for it:
+// The route is served at the path APIPath spells for it:
 // /api/records/:rec whether written as /api/records/:rec, the way generated
 // code writes it, or as records/:rec. A handler finds its service by that
 // path and the phase, so the matching service.Register call names the same
@@ -38,7 +51,7 @@ import (
 // phases, or a phase no HTTP route serves, a hook phase such as CreateBefore
 // or Stream, panics: the mistake stops the start instead of leaving an
 // endpoint that answers 404 or registering nothing in silence.
-func Register[M types.Model, REQ types.Request, RSP types.Response](group *gin.RouterGroup, route string, cfg *types.ControllerConfig[M], phases ...consts.Phase) {
+func Register[M types.Model, REQ types.Request, RSP types.Response](group *gin.RouterGroup, route string, cfg *types.ControllerConfig[M], phases ...apiaction.Phase) {
 	router.Register[M, REQ, RSP](group, route, cfg, phases...)
 }
 

@@ -199,16 +199,16 @@ func describeType(typ reflect.Type, modelPkg string) (expr string, imports map[s
 // path, which a business project cannot import, so the reference is
 // rewritten to the alias the model source actually wrote: model.Base and
 // its siblings for internal/modelregistry, model.Version for
-// internal/modelschema, the root gst package for internal/types, which forwards
-// under the same name every type of it a model can name and this function
-// writes back, the generic streams grpc forwards being instantiations it
-// declines, the consts package for internal/consts, consts.Phase and consts.OP
-// among them, and, for the types a model stores as JSON, the grpc package for
-// internal/controller and internal/grpcserver, grpc.Filter and grpc.Caller
-// among them, sse for internal/sse and testutil for internal/testutil. The
-// tenant column's type is forwarded by no package, a model carrying it only
-// through tenant.Scope, so its reference is written as the type its values are,
-// string.
+// internal/modelschema, the root gst package for internal/types, which
+// forwards under the same name every type of it a model can name and this
+// function writes back, the generic streams grpc forwards being
+// instantiations it declines, the service package for internal/apiaction,
+// service.Phase among them, and, for the types a model stores as JSON, the
+// grpc package for internal/controller and internal/grpcserver, grpc.Filter
+// and grpc.Caller among them, sse for internal/sse and testutil for
+// internal/testutil. The tenant column's type is forwarded by no package, a
+// model carrying it only through tenant.Scope, so its reference is written
+// as the type its values are, string.
 func typeExpr(typ reflect.Type, modelPkg string, imports map[string]string) (string, bool) {
 	if name := typ.Name(); name != "" {
 		if strings.ContainsAny(name, "[]*") {
@@ -223,9 +223,9 @@ func typeExpr(typ reflect.Type, modelPkg string, imports map[string]string) (str
 		case "github.com/hydroan/gst/internal/types":
 			imports["github.com/hydroan/gst"] = "gst"
 			return "gst." + name, true
-		case "github.com/hydroan/gst/internal/consts":
-			imports["github.com/hydroan/gst/consts"] = "consts"
-			return "consts." + name, true
+		case "github.com/hydroan/gst/internal/apiaction":
+			imports["github.com/hydroan/gst/service"] = "service"
+			return "service." + name, true
 		case "github.com/hydroan/gst/internal/controller", "github.com/hydroan/gst/internal/grpcserver":
 			imports["github.com/hydroan/gst/grpc"] = "grpc"
 			return "grpc." + name, true

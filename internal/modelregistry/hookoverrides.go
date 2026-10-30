@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/hookoverride"
 )
 
@@ -60,17 +60,17 @@ const (
 // hookPhases lists the phases of the lifecycle hooks of types.Model by
 // position. It is the set the detection tracks; a phase outside it is not a
 // model hook, and OverridesHook fails closed on it.
-var hookPhases = [hookCount]consts.Phase{
-	hookCreateBefore: consts.CreateBefore,
-	hookCreateAfter:  consts.CreateAfter,
-	hookDeleteBefore: consts.DeleteBefore,
-	hookDeleteAfter:  consts.DeleteAfter,
-	hookUpdateBefore: consts.UpdateBefore,
-	hookUpdateAfter:  consts.UpdateAfter,
-	hookListBefore:   consts.ListBefore,
-	hookListAfter:    consts.ListAfter,
-	hookGetBefore:    consts.GetBefore,
-	hookGetAfter:     consts.GetAfter,
+var hookPhases = [hookCount]apiaction.Phase{
+	hookCreateBefore: apiaction.CreateBefore,
+	hookCreateAfter:  apiaction.CreateAfter,
+	hookDeleteBefore: apiaction.DeleteBefore,
+	hookDeleteAfter:  apiaction.DeleteAfter,
+	hookUpdateBefore: apiaction.UpdateBefore,
+	hookUpdateAfter:  apiaction.UpdateAfter,
+	hookListBefore:   apiaction.ListBefore,
+	hookListAfter:    apiaction.ListAfter,
+	hookGetBefore:    apiaction.GetBefore,
+	hookGetAfter:     apiaction.GetAfter,
 }
 
 // hookMethodNames holds the Go method name of each hook phase, derived once
@@ -136,7 +136,7 @@ func OverridesDeleteHooks(m any) bool {
 // types.Model are tracked; any other phase reports true, so a caller gating
 // work on the answer keeps that work rather than skipping it for a hook the
 // detection does not know.
-func OverridesHook(m any, phase consts.Phase) bool {
+func OverridesHook(m any, phase apiaction.Phase) bool {
 	for i, tracked := range hookPhases {
 		if tracked == phase {
 			return hookOverridesOf(m)[i]

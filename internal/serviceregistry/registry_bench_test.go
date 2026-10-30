@@ -3,7 +3,7 @@ package serviceregistry_test
 import (
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/serviceregistry"
 )
@@ -15,14 +15,14 @@ type testUser struct {
 
 func BenchmarkRegistryKey(b *testing.B) {
 	for b.Loop() {
-		_ = serviceregistry.Key(consts.Create, "samples")
+		_ = serviceregistry.Key(apiaction.Create, "samples")
 	}
 }
 
 // BenchmarkResolve measures the per-request cost when the key is built once
 // up front, which is how the controller handlers resolve services.
 func BenchmarkResolve(b *testing.B) {
-	key := serviceregistry.Key(consts.Create, "samples")
+	key := serviceregistry.Key(apiaction.Create, "samples")
 	for b.Loop() {
 		_ = serviceregistry.Resolve[*testUser, *testUser, *testUser](key)
 	}

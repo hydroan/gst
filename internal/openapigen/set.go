@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/types"
 )
 
@@ -21,7 +21,7 @@ var (
 
 // Set records one registered route for the OpenAPI document. It is the only
 // entry point route registration uses.
-func Set[M types.Model, REQ types.Request, RSP types.Response](path string, authRequired bool, phase consts.Phase) {
+func Set[M types.Model, REQ types.Request, RSP types.Response](path string, authRequired bool, phase apiaction.Phase) {
 	pendingMu.Lock()
 	defer pendingMu.Unlock()
 
@@ -59,7 +59,7 @@ func build() {
 // Route registration goes through Set, which queues this call until the first
 // request asks for the document; this package's own tests call set directly to
 // exercise the generation.
-func set[M types.Model, REQ types.Request, RSP types.Response](path string, authRequired bool, phases ...consts.Phase) {
+func set[M types.Model, REQ types.Request, RSP types.Response](path string, authRequired bool, phases ...apiaction.Phase) {
 	path = convertColonParamsToBraces(path)
 
 	docMutex.Lock()
@@ -73,43 +73,43 @@ func set[M types.Model, REQ types.Request, RSP types.Response](path string, auth
 	for _, phase := range uniquePhases(phases...) {
 		var op *openapi3.Operation
 		switch phase {
-		case consts.Create:
+		case apiaction.Create:
 			setCreate[M, REQ, RSP](path, pathItem)
 			op = pathItem.Post
-		case consts.Delete:
+		case apiaction.Delete:
 			setDelete[M, REQ, RSP](path, pathItem)
 			op = pathItem.Delete
-		case consts.Update:
+		case apiaction.Update:
 			setUpdate[M, REQ, RSP](path, pathItem)
 			op = pathItem.Put
-		case consts.Patch:
+		case apiaction.Patch:
 			setPatch[M, REQ, RSP](path, pathItem)
 			op = pathItem.Patch
-		case consts.List:
+		case apiaction.List:
 			setList[M, REQ, RSP](path, pathItem)
 			op = pathItem.Get
-		case consts.Get:
+		case apiaction.Get:
 			setGet[M, REQ, RSP](path, pathItem)
 			op = pathItem.Get
-		case consts.Import:
+		case apiaction.Import:
 			setImport[M, REQ, RSP](path, pathItem)
 			op = pathItem.Post
-		case consts.Export:
+		case apiaction.Export:
 			setExport[M, REQ, RSP](path, pathItem)
 			op = pathItem.Get
-		case consts.CreateMany:
+		case apiaction.CreateMany:
 			setCreateMany[M, REQ, RSP](path, pathItem)
 			op = pathItem.Post
-		case consts.DeleteMany:
+		case apiaction.DeleteMany:
 			setDeleteMany[M, REQ, RSP](path, pathItem)
 			op = pathItem.Delete
-		case consts.UpdateMany:
+		case apiaction.UpdateMany:
 			setUpdateMany[M, REQ, RSP](path, pathItem)
 			op = pathItem.Put
-		case consts.PatchMany:
+		case apiaction.PatchMany:
 			setPatchMany[M, REQ, RSP](path, pathItem)
 			op = pathItem.Patch
-		case consts.SSE:
+		case apiaction.SSE:
 			setSSE[M, REQ, RSP](path, pathItem)
 			op = pathItem.Get
 		}
@@ -124,13 +124,13 @@ func set[M types.Model, REQ types.Request, RSP types.Response](path string, auth
 }
 
 // uniquePhases returns phases with the repeated ones folded, in no set order.
-func uniquePhases(phases ...consts.Phase) []consts.Phase {
-	seen := make(map[consts.Phase]bool)
+func uniquePhases(phases ...apiaction.Phase) []apiaction.Phase {
+	seen := make(map[apiaction.Phase]bool)
 	for _, phase := range phases {
 		seen[phase] = true
 	}
 
-	unique := make([]consts.Phase, 0, len(seen))
+	unique := make([]apiaction.Phase, 0, len(seen))
 	for phase := range seen {
 		unique = append(unique, phase)
 	}

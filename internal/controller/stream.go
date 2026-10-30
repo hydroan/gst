@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/types"
 	gstotel "github.com/hydroan/gst/otel"
@@ -48,7 +48,7 @@ import (
 // to (see grpcserver.StatusError), or with the context's once the client
 // ended the stream (see finishStream).
 func ServerStreamCall[M types.Model, REQ types.Request, RSP types.Response](route string) func(ctx context.Context, params map[string]string, req REQ, send func(RSP) error) error {
-	a := newAction[M, REQ, RSP](route, consts.Stream)
+	a := newAction[M, REQ, RSP](route, apiaction.Stream)
 	return func(ctx context.Context, params map[string]string, req REQ, send func(RSP) error) error {
 		c, err := a.beginCall(ctx, params, nil)
 		defer c.end()
@@ -63,9 +63,9 @@ func ServerStreamCall[M types.Model, REQ types.Request, RSP types.Response](rout
 		if err = validateRequest(req); err != nil {
 			return c.invalidMessage(err)
 		}
-		_, err = a.traceServiceOperation(c.ctx, consts.Stream, func(spanCtx context.Context) (RSP, error) {
+		_, err = a.traceServiceOperation(c.ctx, apiaction.Stream, func(spanCtx context.Context) (RSP, error) {
 			var zero RSP
-			return zero, svc.Stream(c.serviceContext(spanCtx, consts.Stream), req, types.NewServerStream(send))
+			return zero, svc.Stream(c.serviceContext(spanCtx, apiaction.Stream), req, types.NewServerStream(send))
 		})
 		if err != nil {
 			return c.failService(err)
@@ -81,7 +81,7 @@ func ServerStreamCall[M types.Model, REQ types.Request, RSP types.Response](rout
 // and answers with the response, with the status a failure maps to, or with
 // the context's once the client ended the stream.
 func ClientStreamCall[M types.Model, REQ types.Request, RSP types.Response](route string) func(ctx context.Context, params map[string]string, recv func() (REQ, error)) (RSP, error) {
-	a := newAction[M, REQ, RSP](route, consts.Stream)
+	a := newAction[M, REQ, RSP](route, apiaction.Stream)
 	return func(ctx context.Context, params map[string]string, recv func() (REQ, error)) (RSP, error) {
 		var zero RSP
 		c, err := a.beginCall(ctx, params, nil)
@@ -94,8 +94,8 @@ func ClientStreamCall[M types.Model, REQ types.Request, RSP types.Response](rout
 			return zero, a.unimplemented(c, route)
 		}
 		in := a.requests(c, recv)
-		rsp, err := a.traceServiceOperation(c.ctx, consts.Stream, func(spanCtx context.Context) (RSP, error) {
-			return svc.Stream(c.serviceContext(spanCtx, consts.Stream), types.NewClientStream(in.recv))
+		rsp, err := a.traceServiceOperation(c.ctx, apiaction.Stream, func(spanCtx context.Context) (RSP, error) {
+			return svc.Stream(c.serviceContext(spanCtx, apiaction.Stream), types.NewClientStream(in.recv))
 		})
 		if refused := in.refusal(); refused != nil {
 			return zero, refused
@@ -117,7 +117,7 @@ func ClientStreamCall[M types.Model, REQ types.Request, RSP types.Response](rout
 // stream is over, with the status a failure maps to, or with the context's
 // once the client ended the stream.
 func BidiStreamCall[M types.Model, REQ types.Request, RSP types.Response](route string) func(ctx context.Context, params map[string]string, recv func() (REQ, error), send func(RSP) error) error {
-	a := newAction[M, REQ, RSP](route, consts.Stream)
+	a := newAction[M, REQ, RSP](route, apiaction.Stream)
 	return func(ctx context.Context, params map[string]string, recv func() (REQ, error), send func(RSP) error) error {
 		c, err := a.beginCall(ctx, params, nil)
 		defer c.end()
@@ -129,9 +129,9 @@ func BidiStreamCall[M types.Model, REQ types.Request, RSP types.Response](route 
 			return a.unimplemented(c, route)
 		}
 		in := a.requests(c, recv)
-		_, err = a.traceServiceOperation(c.ctx, consts.Stream, func(spanCtx context.Context) (RSP, error) {
+		_, err = a.traceServiceOperation(c.ctx, apiaction.Stream, func(spanCtx context.Context) (RSP, error) {
 			var zero RSP
-			return zero, svc.Stream(c.serviceContext(spanCtx, consts.Stream), types.NewBidiStream(in.recv, send))
+			return zero, svc.Stream(c.serviceContext(spanCtx, apiaction.Stream), types.NewBidiStream(in.recv, send))
 		})
 		if refused := in.refusal(); refused != nil {
 			return refused

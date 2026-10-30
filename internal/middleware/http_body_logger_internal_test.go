@@ -13,8 +13,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
@@ -81,9 +81,9 @@ func TestHTTPBodyLoggerLogsRequestAndResponseAsOneEntry(t *testing.T) {
 	router := gin.New()
 	router.Use(bodyLogger())
 	router.POST("/api/records", func(c *gin.Context) {
-		c.Set(consts.CTX_USERNAME, "alice")
-		c.Set(consts.CTX_USER_ID, "u-1")
-		c.Set(consts.CTX_TENANT_ID, "alpha")
+		c.Set(requestctx.KeyUsername, "alice")
+		c.Set(requestctx.KeyUserID, "u-1")
+		c.Set(requestctx.KeyTenantID, "alpha")
 		c.Set(execctx.KeyTraceID, "trace-1")
 		body, err := io.ReadAll(c.Request.Body)
 		require.NoError(t, err)

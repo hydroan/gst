@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/modelinfo"
 )
@@ -82,7 +82,7 @@ func TestServiceTarget(t *testing.T) {
 			action: &dsl.Action{
 				Service:     true,
 				ServiceName: "role",
-				Phase:       consts.Create,
+				Phase:       apiaction.Create,
 			},
 			wantFile:   filepath.Join("repo", "service", "authz", "role", "role.go"),
 			wantImport: "github.com/acme/app/repo/service/authz/role",
@@ -94,7 +94,7 @@ func TestServiceTarget(t *testing.T) {
 				Service:     true,
 				ServiceName: "role",
 				Flatten:     true,
-				Phase:       consts.Create,
+				Phase:       apiaction.Create,
 			},
 			wantFile:   filepath.Join("repo", "service", "authz", "role.go"),
 			wantImport: "github.com/acme/app/repo/service/authz",

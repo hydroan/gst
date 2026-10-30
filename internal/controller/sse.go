@@ -6,7 +6,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/sse"
@@ -37,7 +37,7 @@ import (
 // error envelope, while an error after streaming began can only be logged,
 // because the response is already on the wire.
 func SSEHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.SSE)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), apiaction.SSE)
 	return func(c *gin.Context) {
 		stream, stopStream := sse.StreamContext(c.Request.Context())
 		defer stopStream()
@@ -49,12 +49,12 @@ func SSEHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 			return
 		}
 
-		log := logger.Controller.WithContext(c.Request.Context(), consts.SSE)
+		log := logger.Controller.WithContext(c.Request.Context(), apiaction.SSE)
 		svc := a.service()
 		// ended keeps what the service returned when that was nothing but the
 		// stream's context ending, away from the service span and the log.
 		var ended error
-		err := a.traceServiceHook(ctrlSpanCtx, consts.SSE, svc, ginServiceContext(c), func(sc *types.ServiceContext) error {
+		err := a.traceServiceHook(ctrlSpanCtx, apiaction.SSE, svc, ginServiceContext(c), func(sc *types.ServiceContext) error {
 			err := svc.SSE(sc)
 			if lifecycle.Interrupted(stream, err) {
 				ended = err

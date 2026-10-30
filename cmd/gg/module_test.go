@@ -442,9 +442,10 @@ func readProjectFile(t *testing.T, path string) string {
 
 // TestRunModuleCopyOfLogmgmtLeavesAProjectThatCompiles pins that the project
 // builds once module copy writes logmgmt into it: the copied operation log
-// types its op column by consts.OP, which the column file the copy's gen run
-// writes for it references through the public consts package the model
-// source imports, not the internal one reflection reports the type under.
+// types its op column by gst.Operation, which the column file the copy's
+// gen run writes for it references through the root gst package the model
+// source imports, not the internal types package reflection reports the
+// type under.
 func TestRunModuleCopyOfLogmgmtLeavesAProjectThatCompiles(t *testing.T) {
 	projectDir, ok := newGenProject(t)
 	if !ok {
@@ -469,7 +470,7 @@ func TestRunModuleCopyOfLogmgmtLeavesAProjectThatCompiles(t *testing.T) {
 		t.Fatalf("runModuleCopy() error = %v:\n%s", copyErr, output)
 	}
 	columnFile := readProjectFile(t, filepath.Join("model", "logmgmt", "operationlog.gen.go"))
-	for _, want := range []string{`gst.NewColumn[*OperationLog, consts.OP]("op")`, `"github.com/hydroan/gst/consts"`} {
+	for _, want := range []string{`gst.NewColumn[*OperationLog, gst.Operation]("op")`, `"github.com/hydroan/gst"`} {
 		if !strings.Contains(columnFile, want) {
 			t.Fatalf("the column file of the copied operation log lacks %s:\n%s", want, columnFile)
 		}

@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/sse"
@@ -24,9 +24,9 @@ func TestServiceContextCarriesRequestMetadata(t *testing.T) {
 	router := gin.New()
 	router.GET("/api/users/:id", func(ctx *gin.Context) {
 		ctx.Set(requestctx.KeyParams, []string{"id"})
-		ctx.Set(consts.CTX_USERNAME, "admin")
-		ctx.Set(consts.CTX_USER_ID, "user-1")
-		ctx.Set(consts.CTX_TENANT_ID, "tenant-1")
+		ctx.Set(requestctx.KeyUsername, "admin")
+		ctx.Set(requestctx.KeyUserID, "user-1")
+		ctx.Set(requestctx.KeyTenantID, "tenant-1")
 		ctx.Set(requestctx.KeyRequiresAuth, true)
 		ctx.Request = ctx.Request.WithContext(execctx.WithTraceID(ctx.Request.Context(), "trace-1"))
 
@@ -52,8 +52,8 @@ func TestServiceContextQueryAccessorReturnsCopy(t *testing.T) {
 	router := gin.New()
 	router.GET("/api/users/:id", func(ctx *gin.Context) {
 		ctx.Set(requestctx.KeyParams, []string{"id"})
-		ctx.Set(consts.CTX_USERNAME, "admin")
-		ctx.Set(consts.CTX_USER_ID, "user-1")
+		ctx.Set(requestctx.KeyUsername, "admin")
+		ctx.Set(requestctx.KeyUserID, "user-1")
 		ctx.Request = ctx.Request.WithContext(execctx.WithTraceID(ctx.Request.Context(), "trace-1"))
 
 		serviceCtx = types.NewServiceContext(ctx, nil, "")
@@ -71,9 +71,9 @@ func TestServiceContextQueryAccessorReturnsCopy(t *testing.T) {
 }
 
 func TestNewServiceContextStoresPhase(t *testing.T) {
-	serviceCtx := types.NewServiceContext(nil, nil, consts.List)
+	serviceCtx := types.NewServiceContext(nil, nil, apiaction.List)
 
-	require.Equal(t, consts.List, serviceCtx.Phase())
+	require.Equal(t, apiaction.List, serviceCtx.Phase())
 }
 
 func TestServiceContextRequestAccessors(t *testing.T) {
@@ -126,9 +126,9 @@ func TestServiceContextWithoutGinReadsMetadataFromContext(t *testing.T) {
 		RequiresAuth: true,
 	}))
 
-	serviceCtx := types.NewServiceContext(nil, ctx, consts.Get)
+	serviceCtx := types.NewServiceContext(nil, ctx, apiaction.Get)
 
-	require.Equal(t, consts.Get, serviceCtx.Phase())
+	require.Equal(t, apiaction.Get, serviceCtx.Phase())
 	require.Equal(t, "/api/users/:id", serviceCtx.Route())
 	require.Equal(t, "/api/users/42", serviceCtx.Path())
 	require.Equal(t, http.MethodGet, serviceCtx.Method())

@@ -7,7 +7,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/stretchr/testify/require"
@@ -112,14 +111,14 @@ func seedHookedSampleConfigs(t *testing.T) int {
 func TestDatabaseWithLock(t *testing.T) {
 	defer cleanupTestData()
 
-	t.Run("with LockUpdate", func(t *testing.T) {
+	t.Run("with database.LockUpdate", func(t *testing.T) {
 		defer cleanupTestData()
 		setupTestData(t)
 
 		err := database.Transaction(context.Background(), func(ctx context.Context) error {
 			// Get and lock user with FOR UPDATE
 			user := new(TestUser)
-			require.NoError(t, database.Database[*TestUser](ctx).WithLock(consts.LockUpdate).Get(user, u1.ID))
+			require.NoError(t, database.Database[*TestUser](ctx).WithLock(database.LockUpdate).Get(user, u1.ID))
 			require.Equal(t, u1.ID, user.ID)
 			require.Equal(t, u1.Name, user.Name)
 
@@ -149,56 +148,56 @@ func TestDatabaseWithLock(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("with LockUpdateNoWait", func(t *testing.T) {
+	t.Run("with database.LockUpdateNoWait", func(t *testing.T) {
 		defer cleanupTestData()
 		setupTestData(t)
 
 		err := database.Transaction(context.Background(), func(ctx context.Context) error {
 			// Get and lock user with FOR UPDATE NOWAIT
 			user := new(TestUser)
-			require.NoError(t, database.Database[*TestUser](ctx).WithLock(consts.LockUpdateNoWait).Get(user, u1.ID))
+			require.NoError(t, database.Database[*TestUser](ctx).WithLock(database.LockUpdateNoWait).Get(user, u1.ID))
 			require.Equal(t, u1.ID, user.ID)
 			return nil
 		})
 		require.NoError(t, err)
 	})
 
-	t.Run("with LockShare", func(t *testing.T) {
+	t.Run("with database.LockShare", func(t *testing.T) {
 		defer cleanupTestData()
 		setupTestData(t)
 
 		err := database.Transaction(context.Background(), func(ctx context.Context) error {
 			// Get user with FOR SHARE lock
 			user := new(TestUser)
-			require.NoError(t, database.Database[*TestUser](ctx).WithLock(consts.LockShare).Get(user, u1.ID))
+			require.NoError(t, database.Database[*TestUser](ctx).WithLock(database.LockShare).Get(user, u1.ID))
 			require.Equal(t, u1.ID, user.ID)
 			return nil
 		})
 		require.NoError(t, err)
 	})
 
-	t.Run("with LockUpdateSkipLocked", func(t *testing.T) {
+	t.Run("with database.LockUpdateSkipLocked", func(t *testing.T) {
 		defer cleanupTestData()
 		setupTestData(t)
 
 		err := database.Transaction(context.Background(), func(ctx context.Context) error {
 			// Get and lock user with FOR UPDATE SKIP LOCKED
 			user := new(TestUser)
-			require.NoError(t, database.Database[*TestUser](ctx).WithLock(consts.LockUpdateSkipLocked).Get(user, u1.ID))
+			require.NoError(t, database.Database[*TestUser](ctx).WithLock(database.LockUpdateSkipLocked).Get(user, u1.ID))
 			require.Equal(t, u1.ID, user.ID)
 			return nil
 		})
 		require.NoError(t, err)
 	})
 
-	t.Run("with LockShareSkipLocked", func(t *testing.T) {
+	t.Run("with database.LockShareSkipLocked", func(t *testing.T) {
 		defer cleanupTestData()
 		setupTestData(t)
 
 		err := database.Transaction(context.Background(), func(ctx context.Context) error {
 			// Get user with FOR SHARE SKIP LOCKED
 			user := new(TestUser)
-			require.NoError(t, database.Database[*TestUser](ctx).WithLock(consts.LockShareSkipLocked).Get(user, u1.ID))
+			require.NoError(t, database.Database[*TestUser](ctx).WithLock(database.LockShareSkipLocked).Get(user, u1.ID))
 			require.Equal(t, u1.ID, user.ID)
 			return nil
 		})
@@ -212,7 +211,7 @@ func TestDatabaseWithLock(t *testing.T) {
 		err := database.Transaction(context.Background(), func(ctx context.Context) error {
 			// List users with lock
 			users := make([]*TestUser, 0)
-			require.NoError(t, database.Database[*TestUser](ctx).WithLock(consts.LockUpdate).List(&users))
+			require.NoError(t, database.Database[*TestUser](ctx).WithLock(database.LockUpdate).List(&users))
 			require.Len(t, users, 3)
 			return nil
 		})
@@ -228,7 +227,7 @@ func TestDatabaseWithLock(t *testing.T) {
 		// is refused instead of served with a warning.
 		users := make([]*TestUser, 0)
 		err := database.Database[*TestUser](context.Background()).
-			WithLock(consts.LockUpdate).List(&users)
+			WithLock(database.LockUpdate).List(&users)
 		require.ErrorIs(t, err, database.ErrLockOutsideTransaction)
 		require.Empty(t, users, "a refused lock must not return rows")
 	})

@@ -18,7 +18,7 @@ import (
 	"github.com/gin-gonic/gin/binding"
 	ginjson "github.com/gin-gonic/gin/codec/json"
 	"github.com/go-playground/validator/v10"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/testutil/swap"
@@ -760,7 +760,7 @@ func newNormalizeProbeEngine(t *testing.T, route string) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
-	registerTestService[*normalizeProbeModel, *normalizeProbeReq, *normalizeProbeRsp](consts.Create, route, &normalizeProbeService{})
+	registerTestService[*normalizeProbeModel, *normalizeProbeReq, *normalizeProbeRsp](apiaction.Create, route, &normalizeProbeService{})
 	engine := gin.New()
 	engine.POST("/"+route, CreateHandler[*normalizeProbeModel, *normalizeProbeReq, *normalizeProbeRsp](&types.ControllerConfig[*normalizeProbeModel]{Route: route}))
 	return engine

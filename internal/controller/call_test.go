@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/modelschema"
@@ -908,8 +908,8 @@ func sampleHandlers() map[string]rpcHandler {
 		return parentGet(ctx, itemParams(parentItemRoute, params(in), id), id, field[controller.Query](in, "query"))
 	}
 
-	action := controller.ServiceCall[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Create, actionRoute)
-	actionList := controller.ServiceCall[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.List, actionRoute)
+	action := controller.ServiceCall[*sampleRecord, *sampleActionReq, *sampleActionRsp](apiaction.Create, actionRoute)
+	actionList := controller.ServiceCall[*sampleRecord, *sampleActionReq, *sampleActionRsp](apiaction.List, actionRoute)
 	handlers["Action"] = func(ctx context.Context, in map[string]any) (any, error) {
 		return action(ctx, params(in), field[controller.Query](in, "query"), field[*sampleActionReq](in, "payload"))
 	}
@@ -917,7 +917,7 @@ func sampleHandlers() map[string]rpcHandler {
 	handlers["ActionList"] = func(ctx context.Context, in map[string]any) (any, error) {
 		return actionList(ctx, params(in), field[controller.Query](in, "query"), field[*sampleActionReq](in, "payload"))
 	}
-	actionGet := controller.ServiceCall[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Get, actionItemRoute)
+	actionGet := controller.ServiceCall[*sampleRecord, *sampleActionReq, *sampleActionRsp](apiaction.Get, actionItemRoute)
 	handlers["ActionGet"] = func(ctx context.Context, in map[string]any) (any, error) {
 		return actionGet(ctx, params(in), field[controller.Query](in, "query"), field[*sampleActionReq](in, "payload"))
 	}
@@ -945,21 +945,21 @@ func standardRPCs[M types.Model](handlers map[string]rpcHandler, route, prefix s
 	patchMany := controller.PatchManyCall[M](route)
 	deleteMany := controller.DeleteManyCall[M](route)
 
-	handlers[prefix+consts.Create.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
+	handlers[prefix+apiaction.Create.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
 		record, err := fromProto[M](in["record"])
 		if err != nil {
 			return nil, err
 		}
 		return create(ctx, params(in), record)
 	}
-	handlers[prefix+consts.Get.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
+	handlers[prefix+apiaction.Get.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
 		id := field[string](in, "id")
 		return get(ctx, itemParams(route, params(in), id), id, field[controller.Query](in, "query"))
 	}
-	handlers[prefix+consts.List.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
+	handlers[prefix+apiaction.List.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
 		return listing(list(ctx, params(in), field[controller.Query](in, "query")))
 	}
-	handlers[prefix+consts.Update.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
+	handlers[prefix+apiaction.Update.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
 		record, err := fromProto[M](in["record"])
 		if err != nil {
 			return nil, err
@@ -967,7 +967,7 @@ func standardRPCs[M types.Model](handlers map[string]rpcHandler, route, prefix s
 		id := field[string](in, "id")
 		return update(ctx, itemParams(route, params(in), id), id, record)
 	}
-	handlers[prefix+consts.Patch.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
+	handlers[prefix+apiaction.Patch.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
 		record, err := fromProto[M](in["record"])
 		if err != nil {
 			return nil, err
@@ -975,25 +975,25 @@ func standardRPCs[M types.Model](handlers map[string]rpcHandler, route, prefix s
 		id := field[string](in, "id")
 		return patch(ctx, itemParams(route, params(in), id), id, record, field[[]string](in, "mask"))
 	}
-	handlers[prefix+consts.Delete.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
+	handlers[prefix+apiaction.Delete.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
 		id := field[string](in, "id")
 		return done(del(ctx, itemParams(route, params(in), id), id))
 	}
-	handlers[prefix+consts.CreateMany.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
+	handlers[prefix+apiaction.CreateMany.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
 		items, err := itemsFromProto[M](in)
 		if err != nil {
 			return nil, err
 		}
 		return batch(createMany(ctx, params(in), items))
 	}
-	handlers[prefix+consts.UpdateMany.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
+	handlers[prefix+apiaction.UpdateMany.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
 		items, err := itemsFromProto[M](in)
 		if err != nil {
 			return nil, err
 		}
 		return batch(updateMany(ctx, params(in), items))
 	}
-	handlers[prefix+consts.PatchMany.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
+	handlers[prefix+apiaction.PatchMany.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
 		raw := field[[]map[string]any](in, "items")
 		models := make([]M, len(raw))
 		masks := make([][]string, len(raw))
@@ -1011,7 +1011,7 @@ func standardRPCs[M types.Model](handlers map[string]rpcHandler, route, prefix s
 		}
 		return batch(patchMany(ctx, params(in), models, masks))
 	}
-	handlers[prefix+consts.DeleteMany.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
+	handlers[prefix+apiaction.DeleteMany.Name()] = func(ctx context.Context, in map[string]any) (any, error) {
 		return done(deleteMany(ctx, params(in), field[[]string](in, "ids")))
 	}
 }
@@ -1023,12 +1023,12 @@ func params(in map[string]any) map[string]string {
 
 // itemParams returns the route parameters of an item call the way a
 // generated handler builds them: the parameters the message carries plus,
-// under the last parameter segment of route (see consts.LastRouteParam), the
+// under the last parameter segment of route (see apiaction.LastRouteParam), the
 // id the message names the record by, whatever it holds (see the golden
 // record.gen.go of cmd/gg). A route naming no parameter, as the fixture
 // routes are written, gets the parameters as they are.
 func itemParams(route string, given map[string]string, id string) map[string]string {
-	name := consts.LastRouteParam(route)
+	name := apiaction.LastRouteParam(route)
 	if name == "" {
 		return given
 	}

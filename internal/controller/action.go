@@ -10,7 +10,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/requestctx"
@@ -36,28 +36,28 @@ import (
 // (model and request instances) is still created per request via newModel
 // and newRequest.
 type action[M types.Model, REQ types.Request, RSP types.Response] struct {
-	typ        reflect.Type // struct type underlying M
-	name       string       // struct name of M, recorded in span attributes and logs
-	typesEqual bool         // whether M, REQ, and RSP are the same type
-	phase      consts.Phase // the primary phase, the one the handler or call serves
-	serviceKey string       // service registry key, resolved per request via serviceregistry.Resolve
+	typ        reflect.Type    // struct type underlying M
+	name       string          // struct name of M, recorded in span attributes and logs
+	typesEqual bool            // whether M, REQ, and RSP are the same type
+	phase      apiaction.Phase // the primary phase, the one the handler or call serves
+	serviceKey string          // service registry key, resolved per request via serviceregistry.Resolve
 
 	reqKind reflect.Kind // original kind of REQ before pointer dereferencing
 	reqTyp  reflect.Type // struct type underlying REQ, used to build zero requests
 
-	controllerSpan phaseSpan                  // controller span of the action's primary phase
-	serviceSpans   map[consts.Phase]phaseSpan // service span names keyed by phase
+	controllerSpan phaseSpan                     // controller span of the action's primary phase
+	serviceSpans   map[apiaction.Phase]phaseSpan // service span names keyed by phase
 
 	idColumn types.Column[string] // the id column of M, the reference the batch flows read records by
 
 	// itemParam is the route parameter carrying the id of a standard item
 	// action, a Get, Update, Patch or Delete of the model itself: the last
-	// parameter segment of its route (see consts.LastRouteParam), the one the
-	// generated gRPC handler fills from the id field of the message and the
-	// HTTP handler reads the id from, so beginCall and beginRequest leave an
-	// empty one to the action, which refuses the id it lacks; "" for any other
-	// action, a custom one on an item route included, which refuses no empty
-	// id of its own and so exempts no parameter.
+	// parameter segment of its route (see apiaction.LastRouteParam), the one
+	// the generated gRPC handler fills from the id field of the message and
+	// the HTTP handler reads the id from, so beginCall and beginRequest leave
+	// an empty one to the action, which refuses the id it lacks; "" for any
+	// other action, a custom one on an item route included, which refuses no
+	// empty id of its own and so exempts no parameter.
 	itemParam string
 }
 
@@ -70,7 +70,7 @@ type action[M types.Model, REQ types.Request, RSP types.Response] struct {
 // names are precomputed as well. It panics, naming route, when REQ is an
 // interface with methods or a pointer to one, a request type no request
 // body decodes into.
-func newAction[M types.Model, REQ types.Request, RSP types.Response](route string, phase consts.Phase, hookPhases ...consts.Phase) *action[M, REQ, RSP] {
+func newAction[M types.Model, REQ types.Request, RSP types.Response](route string, phase apiaction.Phase, hookPhases ...apiaction.Phase) *action[M, REQ, RSP] {
 	typ := reflect.TypeOf(*new(M)).Elem()
 	name := typ.Name()
 
@@ -87,7 +87,7 @@ func newAction[M types.Model, REQ types.Request, RSP types.Response](route strin
 		panic(fmt.Sprintf("controller: route %q: request type %s is an interface with methods or a pointer to one, which no request body decodes into; declare a concrete type, or any", route, reflect.TypeFor[REQ]()))
 	}
 
-	serviceSpans := make(map[consts.Phase]phaseSpan, len(hookPhases)+1)
+	serviceSpans := make(map[apiaction.Phase]phaseSpan, len(hookPhases)+1)
 	serviceSpans[phase] = newPhaseSpan("service", name, phase)
 	for _, hookPhase := range hookPhases {
 		serviceSpans[hookPhase] = newPhaseSpan("service", name, hookPhase)
@@ -95,7 +95,7 @@ func newAction[M types.Model, REQ types.Request, RSP types.Response](route strin
 	typesEqual := modelregistry.AreTypesEqual[M, REQ, RSP]()
 	itemParam := ""
 	if itemPhases[phase] && typesEqual {
-		itemParam = consts.LastRouteParam(route)
+		itemParam = apiaction.LastRouteParam(route)
 	}
 
 	return &action[M, REQ, RSP]{
@@ -115,7 +115,7 @@ func newAction[M types.Model, REQ types.Request, RSP types.Response](route strin
 
 // itemPhases are the phases of the item actions, whose route ends in the
 // parameter carrying the record's id.
-var itemPhases = map[consts.Phase]bool{consts.Get: true, consts.Update: true, consts.Patch: true, consts.Delete: true}
+var itemPhases = map[apiaction.Phase]bool{apiaction.Get: true, apiaction.Update: true, apiaction.Patch: true, apiaction.Delete: true}
 
 // phaseSpan carries the precomputed span name and operation label of one phase.
 type phaseSpan struct {
@@ -126,7 +126,7 @@ type phaseSpan struct {
 // newPhaseSpan returns the span of phase for component, "controller" or
 // "service", on the model named modelName: its canonical gst span name and
 // the phase's method name as its operation.
-func newPhaseSpan(component, modelName string, phase consts.Phase) phaseSpan {
+func newPhaseSpan(component, modelName string, phase apiaction.Phase) phaseSpan {
 	return phaseSpan{
 		name:      gstotel.FrameworkSpanName(component, modelName, phase.Name()),
 		operation: phase.Name(),
@@ -137,7 +137,7 @@ func newPhaseSpan(component, modelName string, phase consts.Phase) phaseSpan {
 // to on-the-fly construction for phases not declared when the action was
 // built, so a missing declaration degrades to building the span per request
 // instead of a wrong span name.
-func (a *action[M, REQ, RSP]) serviceSpan(phase consts.Phase) phaseSpan {
+func (a *action[M, REQ, RSP]) serviceSpan(phase apiaction.Phase) phaseSpan {
 	if span, ok := a.serviceSpans[phase]; ok {
 		return span
 	}
@@ -262,7 +262,7 @@ func (a *action[M, REQ, RSP]) startSpan(ctx context.Context, method, path string
 // hook. A hook the service does not override is the framework base's no-op:
 // it still runs, so the hook sequence stays the same for every service, but
 // it has nothing worth timing and gets no span.
-func (a *action[M, REQ, RSP]) traceServiceHook(parentCtx context.Context, phase consts.Phase, svc types.Service[M, REQ, RSP], newServiceContext serviceContextFunc, fn func(*types.ServiceContext) error) error {
+func (a *action[M, REQ, RSP]) traceServiceHook(parentCtx context.Context, phase apiaction.Phase, svc types.Service[M, REQ, RSP], newServiceContext serviceContextFunc, fn func(*types.ServiceContext) error) error {
 	run := func(ctx context.Context) error {
 		sc := newServiceContext(ctx, phase)
 		if err := fn(sc); err != nil {
@@ -281,7 +281,7 @@ func (a *action[M, REQ, RSP]) traceServiceHook(parentCtx context.Context, phase 
 }
 
 // traceServiceOperation traces a delegated service operation returning RSP.
-func (a *action[M, REQ, RSP]) traceServiceOperation(parentCtx context.Context, phase consts.Phase, fn func(context.Context) (RSP, error)) (RSP, error) {
+func (a *action[M, REQ, RSP]) traceServiceOperation(parentCtx context.Context, phase apiaction.Phase, fn func(context.Context) (RSP, error)) (RSP, error) {
 	return traceServiceCall(parentCtx, a.serviceSpan(phase), a.name, fn)
 }
 

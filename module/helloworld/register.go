@@ -6,8 +6,8 @@
 package helloworld
 
 import (
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/module"
+	"github.com/hydroan/gst/service"
 )
 
 // Register registers two modules: Helloworld and Helloworld2.
@@ -45,16 +45,16 @@ func Register() {
 		*Rsp](
 		&Module{},
 		module.CRUD(
-			consts.Create,
-			consts.Delete,
-			consts.Update,
-			consts.Patch,
-			consts.List,
-			consts.Get,
-			consts.CreateMany,
-			consts.DeleteMany,
-			consts.UpdateMany,
-			consts.PatchMany,
+			service.Create,
+			service.Delete,
+			service.Update,
+			service.Patch,
+			service.List,
+			service.Get,
+			service.CreateMany,
+			service.DeleteMany,
+			service.UpdateMany,
+			service.PatchMany,
 		),
 	)
 
@@ -64,16 +64,16 @@ func Register() {
 		*Helloworld2](
 		&Module2{},
 		module.CRUD(
-			consts.Create,
-			consts.Delete,
-			consts.Update,
-			consts.Patch,
-			consts.List,
-			consts.Get,
-			consts.CreateMany,
-			consts.DeleteMany,
-			consts.UpdateMany,
-			consts.PatchMany,
+			service.Create,
+			service.Delete,
+			service.Update,
+			service.Patch,
+			service.List,
+			service.Get,
+			service.CreateMany,
+			service.DeleteMany,
+			service.UpdateMany,
+			service.PatchMany,
 		),
 	)
 }

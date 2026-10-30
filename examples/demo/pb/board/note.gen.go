@@ -8,8 +8,8 @@ import (
 
 	"demo/model/board"
 
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/grpc"
+	"github.com/hydroan/gst/service"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -30,7 +30,7 @@ var (
 	patchNote   = grpc.PatchCall[*board.Note]("/api/board/notes/:id")
 	listNote    = grpc.ListCall[*board.Note]("/api/board/notes")
 	getNote     = grpc.GetCall[*board.Note]("/api/board/notes/:id")
-	publishNote = grpc.ServiceCall[*board.Note, *board.NotePublishReq, *board.NotePublishRsp](consts.Create, "/api/board/notes/:id/publish")
+	publishNote = grpc.ServiceCall[*board.Note, *board.NotePublishReq, *board.NotePublishRsp](service.Create, "/api/board/notes/:id/publish")
 )
 
 // CreateNote serves the Create action of Note on /api/board/notes.

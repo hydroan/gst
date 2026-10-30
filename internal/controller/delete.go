@@ -7,7 +7,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
@@ -28,7 +28,7 @@ import (
 // When REQ or RSP differs from M, the handler is the phase service's (see
 // serviceHandler): its Delete method runs on the bound payload.
 func DeleteHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.Delete, consts.DeleteBefore, consts.DeleteAfter)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), apiaction.Delete, apiaction.DeleteBefore, apiaction.DeleteAfter)
 	if !a.typesEqual {
 		return a.serviceHandler()
 	}
@@ -41,7 +41,7 @@ func DeleteHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			return
 		}
 
-		log := logger.Controller.WithContext(c.Request.Context(), consts.Delete)
+		log := logger.Controller.WithContext(c.Request.Context(), apiaction.Delete)
 		id, ok := routeID(c, cfg, log, span)
 		if !ok {
 			return
@@ -61,7 +61,7 @@ func DeleteHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 // record by, it runs the delete flow (see deleteFlow) and answers nothing,
 // or the status the failure maps to (see call).
 func DeleteCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string) error {
-	a := newAction[M, M, M](route, consts.Delete, consts.DeleteBefore, consts.DeleteAfter)
+	a := newAction[M, M, M](route, apiaction.Delete, apiaction.DeleteBefore, apiaction.DeleteAfter)
 	return func(ctx context.Context, params map[string]string, id string) error {
 		c, err := a.beginCall(ctx, params, nil)
 		defer c.end()
@@ -87,7 +87,7 @@ func DeleteCall[M types.Model](route string) func(ctx context.Context, params ma
 // operation log needs when that runs first. Whether the row is purged is the
 // model's decision (its Purge method), never the request's.
 func (a *action[M, REQ, RSP]) deleteFlow(ctx context.Context, newServiceContext serviceContextFunc, id string) error {
-	log := logger.Controller.WithContext(ctx, consts.Delete)
+	log := logger.Controller.WithContext(ctx, apiaction.Delete)
 	svc := a.service()
 
 	m := a.newModel()
@@ -99,7 +99,7 @@ func (a *action[M, REQ, RSP]) deleteFlow(ctx context.Context, newServiceContext 
 	}
 
 	// 1.Perform business logic processing before delete resource.
-	if err := a.traceServiceHook(ctx, consts.DeleteBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
+	if err := a.traceServiceHook(ctx, apiaction.DeleteBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
 		return svc.DeleteBefore(sc, m)
 	}); err != nil {
 		return failService(ctx, log, err)
@@ -110,7 +110,7 @@ func (a *action[M, REQ, RSP]) deleteFlow(ctx context.Context, newServiceContext 
 	// deletes, so a disabled audit costs no query; and from the primary the
 	// delete runs on, since a replica may not have caught up on the record.
 	var copied M
-	if audit.Enabled(consts.OP_DELETE) {
+	if audit.Enabled(types.OperationDelete) {
 		copied = a.newModel()
 		copied.SetID(m.GetID())
 		if err := database.Database[M](ctx).WithReplica(false).WithExpand(copied.Expands()).Get(copied, m.GetID()); err != nil {
@@ -130,14 +130,14 @@ func (a *action[M, REQ, RSP]) deleteFlow(ctx context.Context, newServiceContext 
 		return failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after delete resource.
-	if err := a.traceServiceHook(ctx, consts.DeleteAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
+	if err := a.traceServiceHook(ctx, apiaction.DeleteAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
 		return svc.DeleteAfter(sc, m)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}
 
 	// 4.record operation log to database.
-	if err := audit.RecordOperation(ctx, a.newModel(), consts.OP_DELETE,
+	if err := audit.RecordOperation(ctx, a.newModel(), types.OperationDelete,
 		func() *modellogmgmt.OperationLog {
 			record, _ := json.Marshal(copied)
 			entry := operationLog(ctx, a.name)

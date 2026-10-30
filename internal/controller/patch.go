@@ -9,7 +9,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/response"
@@ -31,7 +31,7 @@ import (
 // When REQ or RSP differs from M, the handler is the phase service's (see
 // serviceHandler): its Patch method runs on the bound payload.
 func PatchHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.Patch, consts.PatchBefore, consts.PatchAfter)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), apiaction.Patch, apiaction.PatchBefore, apiaction.PatchAfter)
 	if !a.typesEqual {
 		return a.serviceHandler()
 	}
@@ -44,7 +44,7 @@ func PatchHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			return
 		}
 
-		log := logger.Controller.WithContext(c.Request.Context(), consts.Patch)
+		log := logger.Controller.WithContext(c.Request.Context(), apiaction.Patch)
 
 		req := a.newModel()
 		body, err := readJSONRequestBody(c)
@@ -119,7 +119,7 @@ func PatchHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 // handler does, runs the patch flow (see patchFlow) and answers with the
 // record patched, or with the status the failure maps to (see call).
 func PatchCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string, m M, paths []string) (M, error) {
-	a := newAction[M, M, M](route, consts.Patch, consts.PatchBefore, consts.PatchAfter)
+	a := newAction[M, M, M](route, apiaction.Patch, apiaction.PatchBefore, apiaction.PatchAfter)
 	return func(ctx context.Context, params map[string]string, id string, m M, paths []string) (M, error) {
 		var zero M
 		c, err := a.beginCall(ctx, params, nil)
@@ -170,7 +170,7 @@ func PatchCall[M types.Model](route string) func(ctx context.Context, params map
 // needs the stale write refused instead declares model.Version.
 func (a *action[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceContext serviceContextFunc, id string, req M, fields patchFieldSet) (M, error) {
 	var zero M
-	log := logger.Controller.WithContext(ctx, consts.Patch)
+	log := logger.Controller.WithContext(ctx, apiaction.Patch)
 	svc := a.service()
 
 	data := make([]M, 0)
@@ -204,7 +204,7 @@ func (a *action[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceContext s
 	cur.SetUpdatedBy("")
 
 	// 1.Perform business logic processing before partial update resource.
-	if err := a.traceServiceHook(ctx, consts.PatchBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
+	if err := a.traceServiceHook(ctx, apiaction.PatchBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
 		return svc.PatchBefore(sc, cur)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
@@ -216,7 +216,7 @@ func (a *action[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceContext s
 		return zero, failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after partial update resource.
-	if err := a.traceServiceHook(ctx, consts.PatchAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
+	if err := a.traceServiceHook(ctx, apiaction.PatchAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
 		return svc.PatchAfter(sc, cur)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
@@ -227,7 +227,7 @@ func (a *action[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceContext s
 	// feeds both columns; Response carries the resulting row instead. The
 	// entry names the patched record by its own id: the body need not carry
 	// one, the route named the record.
-	if err := audit.RecordOperation(ctx, req, consts.OP_PATCH,
+	if err := audit.RecordOperation(ctx, req, types.OperationPatch,
 		func() *modellogmgmt.OperationLog {
 			record, _ := json.Marshal(req)
 			respData, _ := json.Marshal(cur)

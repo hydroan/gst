@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/types"
@@ -18,26 +18,26 @@ import (
 	"go.uber.org/zap"
 )
 
-// Phases of database-layer operations that have no controller counterpart in
-// consts. Values follow the consts.Phase snake_case convention so the log
-// phase field stays uniform across every log source; span names derive their
-// UpperCamelCase form via Phase.Name.
+// Phases of database-layer operations that have no controller counterpart
+// in apiaction. Values follow the apiaction.Phase snake_case convention so
+// the log phase field stays uniform across every log source; span names
+// derive their UpperCamelCase form via Phase.Name.
 const (
-	phaseUpsert        consts.Phase = "upsert"
-	phaseCount         consts.Phase = "count"
-	phaseFirst         consts.Phase = "first"
-	phaseLast          consts.Phase = "last"
-	phaseTake          consts.Phase = "take"
-	phaseUpdateByID    consts.Phase = "update_by_id"
-	phaseSelect        consts.Phase = "select"
-	phaseSelectOne     consts.Phase = "select_one"
-	phaseSelectCount   consts.Phase = "select_count"
-	phaseUnionAll      consts.Phase = "union_all"
-	phaseUnionAllCount consts.Phase = "union_all_count"
-	phaseCleanup       consts.Phase = "cleanup"
-	phaseHealth        consts.Phase = "health"
-	phaseWithQuery     consts.Phase = "with_query"
-	phaseTransaction   consts.Phase = "transaction"
+	phaseUpsert        apiaction.Phase = "upsert"
+	phaseCount         apiaction.Phase = "count"
+	phaseFirst         apiaction.Phase = "first"
+	phaseLast          apiaction.Phase = "last"
+	phaseTake          apiaction.Phase = "take"
+	phaseUpdateByID    apiaction.Phase = "update_by_id"
+	phaseSelect        apiaction.Phase = "select"
+	phaseSelectOne     apiaction.Phase = "select_one"
+	phaseSelectCount   apiaction.Phase = "select_count"
+	phaseUnionAll      apiaction.Phase = "union_all"
+	phaseUnionAllCount apiaction.Phase = "union_all_count"
+	phaseCleanup       apiaction.Phase = "cleanup"
+	phaseHealth        apiaction.Phase = "health"
+	phaseWithQuery     apiaction.Phase = "with_query"
+	phaseTransaction   apiaction.Phase = "transaction"
 )
 
 // trace returns a timing function for database operations that provides
@@ -47,7 +47,7 @@ const (
 //
 // Parameters:
 //   - phase: Operation phase for logging and tracing identification
-//     (consts.Create, consts.List, phaseUpsert, etc.)
+//     (apiaction.Create, apiaction.List, phaseUpsert, etc.)
 //   - batch: Optional batch size for batch operations (used for span attributes
 //     and logging)
 //
@@ -80,7 +80,7 @@ const (
 //
 // Usage Pattern:
 //
-//	done, _ := db.trace(consts.Create, len(models))
+//	done, _ := db.trace(apiaction.Create, len(models))
 //	defer func() { done(err) }()
 //
 // The closure is load-bearing: a plain `defer done(err)` evaluates err where
@@ -94,7 +94,7 @@ const (
 //
 // Note: Must be called after `defer db.reset()` to ensure proper cleanup order.
 // Spans are recorded when gstotel.IsEnabled() returns true.
-func (db *database[M]) trace(phase consts.Phase, batch ...int) (func(error), trace.Span) {
+func (db *database[M]) trace(phase apiaction.Phase, batch ...int) (func(error), trace.Span) {
 	return db.traceAs(reflect.TypeOf(*new(M)).Elem().Name(), phase, batch...)
 }
 
@@ -123,7 +123,7 @@ const (
 // model for an operation on one model, which trace passes, or the result row
 // for a union, which reads several models through a chain borrowed from one
 // of them. The subject is what the span and the log call the model.
-func (db *database[M]) traceAs(modelName string, phase consts.Phase, batch ...int) (func(error), trace.Span) {
+func (db *database[M]) traceAs(modelName string, phase apiaction.Phase, batch ...int) (func(error), trace.Span) {
 	begin := time.Now()
 	var _batch int
 	if len(batch) > 0 {
@@ -259,13 +259,13 @@ func operationLogFields(modelName string, batch int, duration time.Duration, dry
 // Parameters:
 //   - ctx: Database context the hook runs under; nil falls back to
 //     context.Background
-//   - phase: Hook phase (consts.CreateBefore, ...), naming the span
+//   - phase: Hook phase (apiaction.CreateBefore, ...), naming the span
 //     "model.{Model}.{Hook}"
 //   - parentSpan: Database operation span the hook span nests under
 //   - fn: Hook invocation, receiving the context that carries the hook span
 //
 // Returns the hook's error, with the span completed either way.
-func traceModelHook[M types.Model](ctx context.Context, phase consts.Phase, parentSpan trace.Span, fn func(ctx context.Context) error) error {
+func traceModelHook[M types.Model](ctx context.Context, phase apiaction.Phase, parentSpan trace.Span, fn func(ctx context.Context) error) error {
 	hookCtx := context.Background()
 	if ctx != nil {
 		hookCtx = ctx

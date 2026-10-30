@@ -3,7 +3,7 @@
 package versionmod
 
 import (
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/module"
 )
 
@@ -20,6 +20,6 @@ func Register() {
 		*Version,
 		*VersionRsp](
 		&VersionModule{},
-		module.CRUD(consts.List),
+		module.CRUD(apiaction.List),
 	)
 }

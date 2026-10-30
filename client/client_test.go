@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/client"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/router"
@@ -42,16 +42,16 @@ func TestMain(m *testing.M) {
 	testutil.Run(m, testutil.Server{
 		Register: func() { modelregistry.Register[*TestRecord]() },
 		Routes: func() error {
-			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record", nil, consts.Create)
-			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/:id", &types.ControllerConfig[*TestRecord]{ParamName: "id"}, consts.Delete)
-			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/:id", &types.ControllerConfig[*TestRecord]{ParamName: "id"}, consts.Update)
-			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/:id", &types.ControllerConfig[*TestRecord]{ParamName: "id"}, consts.Patch)
-			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record", nil, consts.List)
-			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/:id", &types.ControllerConfig[*TestRecord]{ParamName: "id"}, consts.Get)
-			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/batch", nil, consts.CreateMany)
-			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/batch", nil, consts.DeleteMany)
-			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/batch", nil, consts.UpdateMany)
-			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/batch", nil, consts.PatchMany)
+			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record", nil, apiaction.Create)
+			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/:id", &types.ControllerConfig[*TestRecord]{ParamName: "id"}, apiaction.Delete)
+			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/:id", &types.ControllerConfig[*TestRecord]{ParamName: "id"}, apiaction.Update)
+			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/:id", &types.ControllerConfig[*TestRecord]{ParamName: "id"}, apiaction.Patch)
+			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record", nil, apiaction.List)
+			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/:id", &types.ControllerConfig[*TestRecord]{ParamName: "id"}, apiaction.Get)
+			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/batch", nil, apiaction.CreateMany)
+			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/batch", nil, apiaction.DeleteMany)
+			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/batch", nil, apiaction.UpdateMany)
+			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/batch", nil, apiaction.PatchMany)
 
 			return nil
 		},

@@ -13,7 +13,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst"
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 )
@@ -112,7 +111,7 @@ func consumeTOTPBackupCodeInTx(ctx context.Context, userID, code string, now tim
 	}
 
 	devices := make([]*modelmfa.TOTPDevice, 0)
-	if err := database.Database[*modelmfa.TOTPDevice](ctx).WithLock(consts.LockUpdate).WithQuery(&modelmfa.TOTPDevice{
+	if err := database.Database[*modelmfa.TOTPDevice](ctx).WithLock(database.LockUpdate).WithQuery(&modelmfa.TOTPDevice{
 		UserID:   strings.TrimSpace(userID),
 		IsActive: true,
 	}).List(&devices); err != nil {

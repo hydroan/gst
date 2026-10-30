@@ -4,7 +4,7 @@ import (
 	"reflect"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/types"
 )
@@ -12,26 +12,26 @@ import (
 func setCreate[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeFor[M]()
 	custom := !modelregistry.AreTypesEqual[M, REQ, RSP]()
-	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, consts.Create)
-	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, consts.Create)
+	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, apiaction.Create)
+	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, apiaction.Create)
 	reqSchemaRef := newSchemaRefWithDocs(*new(REQ))
 	if !custom {
-		hideUnwrittenFields(reqSchemaRef, typ, consts.Create)
+		hideUnwrittenFields(reqSchemaRef, typ, apiaction.Create)
 	}
 	rspSchemaRef := newSchemaRefWithDocs(apiResponse[RSP]{})
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
 
-	op := newOperation(path, consts.Create, typ, custom)
+	op := newOperation(path, apiaction.Create, typ, custom)
 	op.RequestBody = newRequestBody[REQ](reqKey)
-	op.Responses = newResponses(rspKey, consts.Create, custom)
+	op.Responses = newResponses(rspKey, apiaction.Create, custom)
 	pathItem.Post = op
 }
 
 func setDelete[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeFor[M]()
 	custom := !modelregistry.AreTypesEqual[M, REQ, RSP]()
-	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, consts.Delete)
-	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, consts.Delete)
+	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, apiaction.Delete)
+	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, apiaction.Delete)
 	rspSchemaRef := newSchemaRefWithDocs(apiResponse[RSP]{})
 	// The framework's own delete answers without data; only a service's
 	// delete answers with its response type.
@@ -40,52 +40,52 @@ func setDelete[M types.Model, REQ types.Request, RSP types.Response](path string
 	}
 	registerSchema[M, REQ, RSP](reqKey, rspKey, nil, rspSchemaRef)
 
-	op := newOperation(path, consts.Delete, typ, custom)
-	op.Responses = newResponses(rspKey, consts.Delete, custom)
+	op := newOperation(path, apiaction.Delete, typ, custom)
+	op.Responses = newResponses(rspKey, apiaction.Delete, custom)
 	pathItem.Delete = op
 }
 
 func setUpdate[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeFor[M]()
 	custom := !modelregistry.AreTypesEqual[M, REQ, RSP]()
-	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, consts.Update)
-	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, consts.Update)
+	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, apiaction.Update)
+	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, apiaction.Update)
 	reqSchemaRef := newSchemaRefWithDocs(*new(REQ))
 	if !custom {
-		hideUnwrittenFields(reqSchemaRef, typ, consts.Update)
+		hideUnwrittenFields(reqSchemaRef, typ, apiaction.Update)
 	}
 	rspSchemaRef := newSchemaRefWithDocs(apiResponse[RSP]{})
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
 
-	op := newOperation(path, consts.Update, typ, custom)
+	op := newOperation(path, apiaction.Update, typ, custom)
 	op.RequestBody = newRequestBody[REQ](reqKey)
-	op.Responses = newResponses(rspKey, consts.Update, custom)
+	op.Responses = newResponses(rspKey, apiaction.Update, custom)
 	pathItem.Put = op
 }
 
 func setPatch[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeFor[M]()
 	custom := !modelregistry.AreTypesEqual[M, REQ, RSP]()
-	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, consts.Patch)
-	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, consts.Patch)
+	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, apiaction.Patch)
+	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, apiaction.Patch)
 	reqSchemaRef := newSchemaRefWithDocs(*new(REQ))
 	if !custom {
-		hideUnwrittenFields(reqSchemaRef, typ, consts.Patch)
+		hideUnwrittenFields(reqSchemaRef, typ, apiaction.Patch)
 	}
 	rspSchemaRef := newSchemaRefWithDocs(apiResponse[RSP]{})
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
 
-	op := newOperation(path, consts.Patch, typ, custom)
+	op := newOperation(path, apiaction.Patch, typ, custom)
 	op.RequestBody = newRequestBody[REQ](reqKey)
-	op.Responses = newResponses(rspKey, consts.Patch, custom)
+	op.Responses = newResponses(rspKey, apiaction.Patch, custom)
 	pathItem.Patch = op
 }
 
 func setList[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeFor[M]()
 	custom := !modelregistry.AreTypesEqual[M, REQ, RSP]()
-	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, consts.List)
-	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, consts.List)
+	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, apiaction.List)
+	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, apiaction.List)
 
 	var rspSchemaRef *openapi3.SchemaRef
 	if !custom {
@@ -95,8 +95,8 @@ func setList[M types.Model, REQ types.Request, RSP types.Response](path string, 
 	}
 	registerSchema[M, REQ, RSP](reqKey, rspKey, nil, rspSchemaRef)
 
-	op := newOperation(path, consts.List, typ, custom)
-	op.Responses = newResponses(rspKey, consts.List, custom)
+	op := newOperation(path, apiaction.List, typ, custom)
+	op.Responses = newResponses(rspKey, apiaction.List, custom)
 	pathItem.Get = op
 	addQueryParameters[M, REQ, RSP](pathItem.Get, true)
 }
@@ -104,27 +104,27 @@ func setList[M types.Model, REQ types.Request, RSP types.Response](path string, 
 func setGet[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeFor[M]()
 	custom := !modelregistry.AreTypesEqual[M, REQ, RSP]()
-	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, consts.Get)
-	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, consts.Get)
+	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, apiaction.Get)
+	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, apiaction.Get)
 	rspSchemaRef := newSchemaRefWithDocs(apiResponse[RSP]{})
 	registerSchema[M, REQ, RSP](reqKey, rspKey, nil, rspSchemaRef)
 
-	op := newOperation(path, consts.Get, typ, custom)
-	op.Responses = newResponses(rspKey, consts.Get, custom)
+	op := newOperation(path, apiaction.Get, typ, custom)
+	op.Responses = newResponses(rspKey, apiaction.Get, custom)
 	pathItem.Get = op
 }
 
 func setCreateMany[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeFor[M]()
 	custom := !modelregistry.AreTypesEqual[M, REQ, RSP]()
-	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, consts.CreateMany)
-	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, consts.CreateMany)
+	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, apiaction.CreateMany)
+	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, apiaction.CreateMany)
 
 	var reqSchemaRef *openapi3.SchemaRef
 	var rspSchemaRef *openapi3.SchemaRef
 	if !custom {
 		reqSchemaRef = newSchemaRefWithDocs(apiBatchRequest[REQ]{})
-		hideUnwrittenFields(reqSchemaRef, typ, consts.CreateMany)
+		hideUnwrittenFields(reqSchemaRef, typ, apiaction.CreateMany)
 		rspSchemaRef = newSchemaRefWithDocs(apiBatchResponse[RSP]{})
 	} else {
 		reqSchemaRef = newSchemaRefWithDocs(*new(REQ))
@@ -132,17 +132,17 @@ func setCreateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 	}
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
 
-	op := newOperation(path, consts.CreateMany, typ, custom)
+	op := newOperation(path, apiaction.CreateMany, typ, custom)
 	op.RequestBody = newRequestBody[REQ](reqKey)
-	op.Responses = newResponses(rspKey, consts.CreateMany, custom)
+	op.Responses = newResponses(rspKey, apiaction.CreateMany, custom)
 	pathItem.Post = op
 }
 
 func setDeleteMany[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeFor[M]()
 	custom := !modelregistry.AreTypesEqual[M, REQ, RSP]()
-	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, consts.DeleteMany)
-	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, consts.DeleteMany)
+	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, apiaction.DeleteMany)
+	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, apiaction.DeleteMany)
 	reqSchemaRef := deleteManyIDsRequestSchema()
 	rspSchemaRef := newSchemaRefWithDocs(apiResponse[RSP]{})
 	// The framework's own batch delete answers without data, like the single
@@ -152,9 +152,9 @@ func setDeleteMany[M types.Model, REQ types.Request, RSP types.Response](path st
 	}
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
 
-	op := newOperation(path, consts.DeleteMany, typ, custom)
+	op := newOperation(path, apiaction.DeleteMany, typ, custom)
 	op.RequestBody = newRequestBody[REQ](reqKey)
-	op.Responses = newResponses(rspKey, consts.DeleteMany, custom)
+	op.Responses = newResponses(rspKey, apiaction.DeleteMany, custom)
 	pathItem.Delete = op
 }
 
@@ -185,14 +185,14 @@ func deleteManyIDsRequestSchema() *openapi3.SchemaRef {
 func setUpdateMany[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeFor[M]()
 	custom := !modelregistry.AreTypesEqual[M, REQ, RSP]()
-	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, consts.UpdateMany)
-	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, consts.UpdateMany)
+	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, apiaction.UpdateMany)
+	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, apiaction.UpdateMany)
 
 	var reqSchemaRef *openapi3.SchemaRef
 	var rspSchemaRef *openapi3.SchemaRef
 	if !custom {
 		reqSchemaRef = newSchemaRefWithDocs(apiBatchRequest[REQ]{})
-		hideUnwrittenFields(reqSchemaRef, typ, consts.UpdateMany)
+		hideUnwrittenFields(reqSchemaRef, typ, apiaction.UpdateMany)
 		rspSchemaRef = newSchemaRefWithDocs(apiBatchResponse[RSP]{})
 	} else {
 		reqSchemaRef = newSchemaRefWithDocs(*new(REQ))
@@ -200,23 +200,23 @@ func setUpdateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 	}
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
 
-	op := newOperation(path, consts.UpdateMany, typ, custom)
+	op := newOperation(path, apiaction.UpdateMany, typ, custom)
 	op.RequestBody = newRequestBody[REQ](reqKey)
-	op.Responses = newResponses(rspKey, consts.UpdateMany, custom)
+	op.Responses = newResponses(rspKey, apiaction.UpdateMany, custom)
 	pathItem.Put = op
 }
 
 func setPatchMany[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeFor[M]()
 	custom := !modelregistry.AreTypesEqual[M, REQ, RSP]()
-	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, consts.PatchMany)
-	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, consts.PatchMany)
+	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, apiaction.PatchMany)
+	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, apiaction.PatchMany)
 
 	var reqSchemaRef *openapi3.SchemaRef
 	var rspSchemaRef *openapi3.SchemaRef
 	if !custom {
 		reqSchemaRef = newSchemaRefWithDocs(apiBatchRequest[REQ]{})
-		hideUnwrittenFields(reqSchemaRef, typ, consts.PatchMany)
+		hideUnwrittenFields(reqSchemaRef, typ, apiaction.PatchMany)
 		rspSchemaRef = newSchemaRefWithDocs(apiBatchResponse[RSP]{})
 	} else {
 		reqSchemaRef = newSchemaRefWithDocs(*new(REQ))
@@ -224,8 +224,8 @@ func setPatchMany[M types.Model, REQ types.Request, RSP types.Response](path str
 	}
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
 
-	op := newOperation(path, consts.PatchMany, typ, custom)
+	op := newOperation(path, apiaction.PatchMany, typ, custom)
 	op.RequestBody = newRequestBody[REQ](reqKey)
-	op.Responses = newResponses(rspKey, consts.PatchMany, custom)
+	op.Responses = newResponses(rspKey, apiaction.PatchMany, custom)
 	pathItem.Patch = op
 }

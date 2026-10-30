@@ -11,8 +11,8 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/auditmanager"
-	"github.com/hydroan/gst/internal/consts"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/requestctx"
@@ -79,7 +79,7 @@ func init() {
 
 // plainServiceContext builds the service contexts of a flow run outside any
 // HTTP request, the way a call does (see call.serviceContext).
-func plainServiceContext(ctx context.Context, phase consts.Phase) *types.ServiceContext {
+func plainServiceContext(ctx context.Context, phase apiaction.Phase) *types.ServiceContext {
 	return types.NewServiceContext(nil, ctx, phase)
 }
 
@@ -87,7 +87,7 @@ func plainServiceContext(ctx context.Context, phase consts.Phase) *types.Service
 // request: the create flow runs on a context carrying the request metadata
 // alone, and takes the audit identity of the record from that metadata.
 func TestCreateFlowRunsOnRequestMetadataAlone(t *testing.T) {
-	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.Create, consts.CreateBefore, consts.CreateAfter)
+	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", apiaction.Create, apiaction.CreateBefore, apiaction.CreateAfter)
 	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "flow-user", UserID: "u-flow"}))
 	record := &flowSample{Name: "created by the flow"}
 
@@ -118,9 +118,9 @@ func TestUpdateFlowsAnswerTheColumnsAnUpdateLeavesAsStored(t *testing.T) {
 	}
 
 	t.Run("Update", func(t *testing.T) {
-		registerTestService[*sealedFlowSample, *sealedFlowSample, *sealedFlowSample](consts.Update, "sealed-flow-samples", sealedAfter)
+		registerTestService[*sealedFlowSample, *sealedFlowSample, *sealedFlowSample](apiaction.Update, "sealed-flow-samples", sealedAfter)
 		sealedAfter.seen = ""
-		a := newAction[*sealedFlowSample, *sealedFlowSample, *sealedFlowSample]("sealed-flow-samples", consts.Update, consts.UpdateBefore, consts.UpdateAfter)
+		a := newAction[*sealedFlowSample, *sealedFlowSample, *sealedFlowSample]("sealed-flow-samples", apiaction.Update, apiaction.UpdateBefore, apiaction.UpdateAfter)
 		record := stored(t)
 		req := &sealedFlowSample{Name: "updated", Code: "forged"}
 
@@ -132,7 +132,7 @@ func TestUpdateFlowsAnswerTheColumnsAnUpdateLeavesAsStored(t *testing.T) {
 	})
 
 	t.Run("UpdateMany", func(t *testing.T) {
-		a := newAction[*sealedFlowSample, *sealedFlowSample, *sealedFlowSample]("sealed-flow-samples", consts.UpdateMany, consts.UpdateManyBefore, consts.UpdateManyAfter)
+		a := newAction[*sealedFlowSample, *sealedFlowSample, *sealedFlowSample]("sealed-flow-samples", apiaction.UpdateMany, apiaction.UpdateManyBefore, apiaction.UpdateManyAfter)
 		record := stored(t)
 		req := batch[*sealedFlowSample]{Items: []*sealedFlowSample{forged(record.GetID(), "updated")}}
 
@@ -142,7 +142,7 @@ func TestUpdateFlowsAnswerTheColumnsAnUpdateLeavesAsStored(t *testing.T) {
 	})
 
 	t.Run("Patch", func(t *testing.T) {
-		a := newAction[*sealedFlowSample, *sealedFlowSample, *sealedFlowSample]("sealed-flow-samples", consts.Patch, consts.PatchBefore, consts.PatchAfter)
+		a := newAction[*sealedFlowSample, *sealedFlowSample, *sealedFlowSample]("sealed-flow-samples", apiaction.Patch, apiaction.PatchBefore, apiaction.PatchAfter)
 		record := stored(t)
 
 		patched, err := a.patchFlow(ctx, plainServiceContext, record.GetID(), forged("", "patched"), patchFieldSet{"Name": {}, "Code": {}})
@@ -152,7 +152,7 @@ func TestUpdateFlowsAnswerTheColumnsAnUpdateLeavesAsStored(t *testing.T) {
 	})
 
 	t.Run("PatchMany", func(t *testing.T) {
-		a := newAction[*sealedFlowSample, *sealedFlowSample, *sealedFlowSample]("sealed-flow-samples", consts.PatchMany, consts.PatchManyBefore, consts.PatchManyAfter)
+		a := newAction[*sealedFlowSample, *sealedFlowSample, *sealedFlowSample]("sealed-flow-samples", apiaction.PatchMany, apiaction.PatchManyBefore, apiaction.PatchManyAfter)
 		record := stored(t)
 		req := batch[*sealedFlowSample]{Items: []*sealedFlowSample{forged(record.GetID(), "patched")}}
 
@@ -168,7 +168,7 @@ func TestUpdateFlowsAnswerTheColumnsAnUpdateLeavesAsStored(t *testing.T) {
 // answers with, 404 with the not-found message here for an id naming no
 // record.
 func TestGetFlowAnswersNotFoundAsAServiceError(t *testing.T) {
-	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.Get, consts.GetBefore, consts.GetAfter)
+	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", apiaction.Get, apiaction.GetBefore, apiaction.GetAfter)
 	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{}))
 
 	_, err := a.getFlow(ctx, plainServiceContext, "missing")
@@ -191,7 +191,7 @@ func TestFlowRecordsTheRequestMethodAndURIInTheOperationLog(t *testing.T) {
 	audit = auditmanager.New(&config.Audit{Enabled: true})
 	t.Cleanup(func() { audit = previous })
 
-	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.Patch, consts.PatchBefore, consts.PatchAfter)
+	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", apiaction.Patch, apiaction.PatchBefore, apiaction.PatchAfter)
 	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{
 		Username: "flow-user", Method: http.MethodPatch, RequestURI: "/app.FlowSampleService/PatchFlowSample",
 	}))
@@ -204,7 +204,7 @@ func TestFlowRecordsTheRequestMethodAndURIInTheOperationLog(t *testing.T) {
 
 	var entries []*modellogmgmt.OperationLog
 	require.NoError(t, database.Database[*modellogmgmt.OperationLog](ctx).
-		WithQuery(&modellogmgmt.OperationLog{Model: a.name, OP: consts.OP_PATCH}).List(&entries))
+		WithQuery(&modellogmgmt.OperationLog{Model: a.name, OP: types.OperationPatch}).List(&entries))
 	entries = slices.DeleteFunc(entries, func(entry *modellogmgmt.OperationLog) bool { return !strings.Contains(entry.Request, name) })
 	require.Len(t, entries, 1)
 	require.Equal(t, http.MethodPatch, entries[0].Method)
@@ -221,7 +221,7 @@ func TestPatchFlowRecordsTheRecordIDInTheOperationLog(t *testing.T) {
 	audit = auditmanager.New(&config.Audit{Enabled: true})
 	t.Cleanup(func() { audit = previous })
 
-	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.Patch, consts.PatchBefore, consts.PatchAfter)
+	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", apiaction.Patch, apiaction.PatchBefore, apiaction.PatchAfter)
 	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "flow-user", UserID: "u-flow"}))
 	record := &flowSample{Name: "before the patch"}
 	require.NoError(t, database.Database[*flowSample](ctx).Create(record))
@@ -233,7 +233,7 @@ func TestPatchFlowRecordsTheRecordIDInTheOperationLog(t *testing.T) {
 
 	var entries []*modellogmgmt.OperationLog
 	require.NoError(t, database.Database[*modellogmgmt.OperationLog](ctx).
-		WithQuery(&modellogmgmt.OperationLog{Model: a.name, OP: consts.OP_PATCH}).List(&entries))
+		WithQuery(&modellogmgmt.OperationLog{Model: a.name, OP: types.OperationPatch}).List(&entries))
 	entries = slices.DeleteFunc(entries, func(entry *modellogmgmt.OperationLog) bool { return !strings.Contains(entry.Request, name) })
 	require.Len(t, entries, 1)
 	require.Equal(t, record.GetID(), entries[0].RecordID)

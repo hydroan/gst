@@ -4,7 +4,7 @@ import (
 	"reflect"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/types"
 )
@@ -34,16 +34,16 @@ const (
 func setImport[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeFor[M]()
 	custom := !modelregistry.AreTypesEqual[M, REQ, RSP]()
-	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, consts.Import)
-	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, consts.Import)
+	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, apiaction.Import)
+	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, apiaction.Import)
 	rspSchemaRef := newSchemaRefWithDocs(apiResponse[RSP]{})
 	// The upload is documented inline as multipart/form-data rather than as a
 	// JSON request component, so no request schema is registered under reqKey.
 	registerSchema[M, REQ, RSP](reqKey, rspKey, nil, rspSchemaRef)
 
-	op := newOperation(path, consts.Import, typ, custom)
+	op := newOperation(path, apiaction.Import, typ, custom)
 	op.RequestBody = importFileRequestBody()
-	op.Responses = newResponses(rspKey, consts.Import, custom)
+	op.Responses = newResponses(rspKey, apiaction.Import, custom)
 	pathItem.Post = op
 }
 
@@ -85,7 +85,7 @@ func importFileRequestBody() *openapi3.RequestBodyRef {
 func setExport[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	custom := !modelregistry.AreTypesEqual[M, REQ, RSP]()
 
-	op := newOperation(path, consts.Export, reflect.TypeFor[M](), custom)
+	op := newOperation(path, apiaction.Export, reflect.TypeFor[M](), custom)
 	op.Parameters = append(op.Parameters, exportFormatParameter())
 	if !modelregistry.IsVirtual(*new(M)) {
 		op.Parameters = append(op.Parameters, exportLimitParameter())
@@ -100,7 +100,7 @@ func setExport[M types.Model, REQ types.Request, RSP types.Response](path string
 func exportFormatParameter() *openapi3.ParameterRef {
 	return &openapi3.ParameterRef{
 		Value: &openapi3.Parameter{
-			Name:        consts.QUERY_FORMAT,
+			Name:        types.QueryFormat,
 			In:          "query",
 			Required:    false,
 			Description: "The export file format.",
@@ -120,7 +120,7 @@ func exportFormatParameter() *openapi3.ParameterRef {
 func exportLimitParameter() *openapi3.ParameterRef {
 	return &openapi3.ParameterRef{
 		Value: &openapi3.Parameter{
-			Name:        consts.QUERY_LIMIT,
+			Name:        types.QueryLimit,
 			In:          "query",
 			Required:    false,
 			Description: "The most records to export; none, zero or less exports every record the query matches.",
@@ -148,5 +148,5 @@ func exportFileResponses(custom bool) *openapi3.Responses {
 			exportMediaTypeCSV:  openapi3.NewMediaType().WithSchemaRef(fileSchema),
 			exportMediaTypeXLSX: openapi3.NewMediaType().WithSchemaRef(fileSchema),
 		})
-	return responsesOf(&openapi3.ResponseRef{Value: response}, consts.Export, custom)
+	return responsesOf(&openapi3.ResponseRef{Value: response}, apiaction.Export, custom)
 }

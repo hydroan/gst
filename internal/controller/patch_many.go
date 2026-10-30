@@ -9,7 +9,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/response"
@@ -31,7 +31,7 @@ import (
 // When REQ or RSP differs from M, the handler is the phase service's (see
 // serviceHandler): its PatchMany method runs on the bound payload.
 func PatchManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.PatchMany, consts.PatchManyBefore, consts.PatchManyAfter)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), apiaction.PatchMany, apiaction.PatchManyBefore, apiaction.PatchManyAfter)
 	if !a.typesEqual {
 		return a.serviceHandler()
 	}
@@ -44,7 +44,7 @@ func PatchManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg 
 			return
 		}
 
-		log := logger.Controller.WithContext(c.Request.Context(), consts.PatchMany)
+		log := logger.Controller.WithContext(c.Request.Context(), apiaction.PatchMany)
 
 		var req batch[M]
 		body, err := readJSONRequestBody(c)
@@ -122,7 +122,7 @@ func PatchManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg 
 // patchManyFlow) and answers with the records patched, or with the status
 // the failure maps to (see call).
 func PatchManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, items []M, paths [][]string) ([]M, error) {
-	a := newAction[M, M, M](route, consts.PatchMany, consts.PatchManyBefore, consts.PatchManyAfter)
+	a := newAction[M, M, M](route, apiaction.PatchMany, apiaction.PatchManyBefore, apiaction.PatchManyAfter)
 	return func(ctx context.Context, params map[string]string, items []M, paths [][]string) ([]M, error) {
 		c, err := a.beginCall(ctx, params, nil)
 		defer c.end()
@@ -186,7 +186,7 @@ func PatchManyCall[M types.Model](route string) func(ctx context.Context, params
 // the stale write refused instead declares model.Version.
 func (a *action[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *batch[M], fieldSets []patchFieldSet) (batch[M], error) {
 	var zero batch[M]
-	log := logger.Controller.WithContext(ctx, consts.PatchMany)
+	log := logger.Controller.WithContext(ctx, apiaction.PatchMany)
 	svc := a.service()
 
 	if err := req.repeatedID(); err != nil {
@@ -228,7 +228,7 @@ func (a *action[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceConte
 	}
 
 	// 1.Perform business logic processing before batch patch resource.
-	if err := a.traceServiceHook(ctx, consts.PatchManyBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
+	if err := a.traceServiceHook(ctx, apiaction.PatchManyBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
 		return svc.PatchManyBefore(sc, patched...)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
@@ -242,7 +242,7 @@ func (a *action[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceConte
 		return zero, failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after batch patch resource.
-	if err := a.traceServiceHook(ctx, consts.PatchManyAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
+	if err := a.traceServiceHook(ctx, apiaction.PatchManyAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
 		return svc.PatchManyAfter(sc, patched...)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
@@ -256,7 +256,7 @@ func (a *action[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceConte
 	// 4.record operation log to database.
 	// Record and Request both carry the request payload, so one marshal
 	// feeds both columns; Response carries the patched records instead.
-	if err := audit.RecordOperation(ctx, a.newModel(), consts.OP_PATCH_MANY,
+	if err := audit.RecordOperation(ctx, a.newModel(), types.OperationPatchMany,
 		func() *modellogmgmt.OperationLog {
 			record, _ := json.Marshal(req)
 			respData, _ := json.Marshal(rsp)

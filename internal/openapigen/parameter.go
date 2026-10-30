@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
@@ -97,7 +96,7 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 		}
 		// The _expand parameter only accepts the model's expandable
 		// association names, so list them where the frontend reads them.
-		if param.Name == consts.QUERY_EXPAND {
+		if param.Name == types.QueryExpand {
 			description = expandableFieldsDescription(description, m.Expands())
 		}
 		queries = append(queries, queryParameter(param.Name, schemaRef, description))
@@ -106,7 +105,7 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 	// Cursor-only models accept _size as the batch size, but the field with
 	// its query tag lives in Pagination, so the parameter is synthesized.
 	if paged && modelregistry.IsCursorable(m) && !modelregistry.IsPaginatable(m) {
-		queries = append(queries, queryParameter(consts.QUERY_SIZE,
+		queries = append(queries, queryParameter(types.QuerySize,
 			&openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeInteger}}},
 			"Batch size for cursor pagination."))
 	}
@@ -213,9 +212,9 @@ func operatorDescription(description string, filterOp types.FilterOp) string {
 // association expansion, which is meaningful only on models that declare
 // expandable associations.
 var frameworkQueryParameterOrder = []string{
-	consts.QUERY_PAGE, consts.QUERY_SIZE, consts.QUERY_SORT_BY,
-	consts.QUERY_CURSOR_VALUE, consts.QUERY_CURSOR_FIELD, consts.QUERY_CURSOR_NEXT,
-	consts.QUERY_EXPAND, consts.QUERY_DEPTH,
+	types.QueryPage, types.QuerySize, types.QuerySortBy,
+	types.QueryCursorValue, types.QueryCursorField, types.QueryCursorNext,
+	types.QueryExpand, types.QueryDepth,
 }
 
 // sortQueryParameters puts business filter parameters first, preserving their

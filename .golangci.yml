@@ -112,7 +112,7 @@ linters:
             - "$gostd"
             - "github.com/cockroachdb/errors"
             - "github.com/gin-gonic/gin"
-            - "github.com/hydroan/gst/internal/consts"
+            - "github.com/hydroan/gst/internal/apiaction"
             - "github.com/hydroan/gst/internal/execctx"
             - "github.com/hydroan/gst/internal/requestctx"
             - "github.com/hydroan/gst/internal/sse"
@@ -155,19 +155,17 @@ linters:
             - pkg: "github.com/hydroan/gst/model$"
               desc: "framework code imports github.com/hydroan/gst/internal/modelregistry"
             - pkg: "github.com/hydroan/gst/service$"
-              desc: "framework code imports github.com/hydroan/gst/internal/serviceregistry"
+              desc: "framework code imports github.com/hydroan/gst/internal/serviceregistry, and internal/apiaction for the phases"
             - pkg: "github.com/hydroan/gst/sse$"
               desc: "framework code imports github.com/hydroan/gst/internal/sse"
             - pkg: "github.com/hydroan/gst/response$"
               desc: "framework code imports github.com/hydroan/gst/internal/response"
             - pkg: "github.com/hydroan/gst/requestctx$"
               desc: "framework code imports github.com/hydroan/gst/internal/requestctx"
-            - pkg: "github.com/hydroan/gst/consts$"
-              desc: "framework code imports github.com/hydroan/gst/internal/consts"
             - pkg: "github.com/hydroan/gst/testutil$"
               desc: "framework code imports github.com/hydroan/gst/internal/testutil"
             - pkg: "github.com/hydroan/gst/router$"
-              desc: "framework code imports github.com/hydroan/gst/internal/router"
+              desc: "framework code imports github.com/hydroan/gst/internal/router, and internal/apiaction for APIPath"
             - pkg: "github.com/hydroan/gst/inspect$"
               desc: "framework code imports what it forwards from github.com/hydroan/gst/internal/modelschema, internal/urlquery and internal/modelregistry"
             - pkg: "github.com/hydroan/gst/cache$"
@@ -474,14 +472,13 @@ linters:
           - forbidigo
         path: internal/middleware/cors\.go
       # Constants in these packages are named after the string each one
-      # stands for: environment variables in config, context keys, query
-      # parameters, header names and route phases in internal/consts and the
-      # public consts forwarding them. The ALL_CAPS and underscored spellings
-      # are deliberate and have to match those strings exactly, and an
-      # explicit staticcheck checks list turns off golangci's own ST1003
-      # exclusion. The paths are anchored so that packages merely named
-      # config elsewhere in the tree stay checked.
-      - path: ^(config|consts|internal/consts)/
+      # stands for: environment variables in config, and the snake case
+      # values of the phases in internal/apiaction. The ALL_CAPS and underscored
+      # spellings are deliberate and have to match those strings exactly,
+      # and an explicit staticcheck checks list turns off golangci's own
+      # ST1003 exclusion. The paths are anchored so that packages merely
+      # named config elsewhere in the tree stay checked.
+      - path: ^(config|internal/apiaction)/
         linters:
           - staticcheck
         text: "ST1003"

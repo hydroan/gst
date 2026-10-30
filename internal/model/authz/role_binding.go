@@ -8,7 +8,6 @@ import (
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/authz/rbac"
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
@@ -17,7 +16,7 @@ import (
 
 // RoleBinding grants a subject a role inside one tenant: a role of the
 // tenant's own, by its id, or the tenant's built-in administrator role, by
-// consts.AUTHZ_ROLE_ADMIN.
+// rbac.RoleAdmin.
 type RoleBinding struct {
 	tenant.Scope
 
@@ -73,11 +72,11 @@ func (r *RoleBinding) CreateBefore(ctx context.Context) error {
 	}
 
 	// The built-in tenant administrator role has no row in the roles table:
-	// it is granted by assignment alone (see consts.AUTHZ_ROLE_ADMIN), and a
+	// it is granted by assignment alone (see rbac.RoleAdmin), and a
 	// binding naming it is how the assignment is made, so it is the one
 	// binding that looks no role up. Every other role has to exist, in the
 	// tenant this binding will belong to.
-	if r.RoleID != consts.AUTHZ_ROLE_ADMIN {
+	if r.RoleID != rbac.RoleAdmin {
 		var role Role
 		if err := database.Database[*Role](ctx).Get(&role, r.RoleID); err != nil {
 			return err

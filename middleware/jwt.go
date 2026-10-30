@@ -6,8 +6,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/apidoc"
 	"github.com/hydroan/gst/authn/jwt"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/logfield"
+	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"go.uber.org/zap"
@@ -55,8 +55,8 @@ func JwtAuth() gin.HandlerFunc {
 
 		// Store the username of the current request in the request-scoped *gin.Context,
 		// so that later handlers can read the current user through c.Get("username").
-		c.Set(consts.CTX_USER_ID, claims.UserID)
-		c.Set(consts.CTX_USERNAME, claims.Username)
-		c.Set(consts.CTX_SESSION_ID, c.GetHeader("X-Session-Id"))
+		c.Set(requestctx.KeyUserID, claims.UserID)
+		c.Set(requestctx.KeyUsername, claims.Username)
+		c.Set(requestctx.KeySessionID, c.GetHeader("X-Session-Id"))
 	}
 }

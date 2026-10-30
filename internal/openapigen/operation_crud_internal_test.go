@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/stretchr/testify/require"
@@ -203,7 +203,7 @@ func TestOperationsDocumentTheFailuresTheyAnswer(t *testing.T) {
 
 			failure := op.Responses.Default()
 			require.NotNil(t, failure)
-			require.Equal(t, "#/components/responses/"+failureResponseKey, failure.Ref)
+			require.Equal(t, "#/components/responses/"+keyFailureResponse, failure.Ref)
 			for _, status := range tt.statuses[1 : len(tt.statuses)-1] {
 				require.Equal(t, failure.Ref, op.Responses.Value(status).Ref, "status %s", status)
 			}
@@ -221,7 +221,7 @@ func TestOperationsDocumentTheFailuresTheyAnswer(t *testing.T) {
 // itself, with success referring to its response component record_create,
 // answers 200 with that component and every failure with the failure envelope.
 func TestResponsesOfAnswersItsExample(t *testing.T) {
-	responses := responsesOf(&openapi3.ResponseRef{Ref: "#/components/responses/record_create"}, consts.Create, false)
+	responses := responsesOf(&openapi3.ResponseRef{Ref: "#/components/responses/record_create"}, apiaction.Create, false)
 
 	refs := make(map[string]string)
 	for status, ref := range responses.Map() {

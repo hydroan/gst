@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/goast"
 )
@@ -20,20 +20,20 @@ import (
 // actionMethodNames is the action keyword set: the DSL method declaring an
 // action of each phase.
 var actionMethodNames = map[string]bool{
-	consts.Create.Name():     true,
-	consts.Delete.Name():     true,
-	consts.Update.Name():     true,
-	consts.Patch.Name():      true,
-	consts.List.Name():       true,
-	consts.Get.Name():        true,
-	consts.CreateMany.Name(): true,
-	consts.DeleteMany.Name(): true,
-	consts.UpdateMany.Name(): true,
-	consts.PatchMany.Name():  true,
-	consts.Import.Name():     true,
-	consts.Export.Name():     true,
-	consts.SSE.Name():        true,
-	consts.Stream.Name():     true,
+	apiaction.Create.Name():     true,
+	apiaction.Delete.Name():     true,
+	apiaction.Update.Name():     true,
+	apiaction.Patch.Name():      true,
+	apiaction.List.Name():       true,
+	apiaction.Get.Name():        true,
+	apiaction.CreateMany.Name(): true,
+	apiaction.DeleteMany.Name(): true,
+	apiaction.UpdateMany.Name(): true,
+	apiaction.PatchMany.Name():  true,
+	apiaction.Import.Name():     true,
+	apiaction.Export.Name():     true,
+	apiaction.SSE.Name():        true,
+	apiaction.Stream.Name():     true,
 }
 
 func isActionMethod(name string) bool {
@@ -42,25 +42,25 @@ func isActionMethod(name string) bool {
 
 // routeIDActionMethodNames are the actions on one row, whose built-in
 // controllers read the resource id from the item parameter the CRUD layout
-// appends to their route (see consts.RouteSuffix). Exact() is how such an
+// appends to their route (see apiaction.RouteSuffix). Exact() is how such an
 // action leaves that parameter off, PATCH /api/records instead of
 // PATCH /api/records/:id, so with Exact() these actions delegate to a
 // custom service method, declaring Payload or Result, either one enough, or
 // Result for the GET-verb Get action, which takes no Payload, whatever
 // parameters the declared route carries itself.
 var routeIDActionMethodNames = map[string]bool{
-	consts.Delete.Name(): true,
-	consts.Update.Name(): true,
-	consts.Patch.Name():  true,
-	consts.Get.Name():    true,
+	apiaction.Delete.Name(): true,
+	apiaction.Update.Name(): true,
+	apiaction.Patch.Name():  true,
+	apiaction.Get.Name():    true,
 }
 
 // getVerbActionMethodNames are actions whose generated routes handle HTTP GET
 // requests. A GET request carries no request body, so these actions must not
 // declare Payload; custom services read filters from ServiceContext.Query().
 var getVerbActionMethodNames = map[string]bool{
-	consts.List.Name(): true,
-	consts.Get.Name():  true,
+	apiaction.List.Name(): true,
+	apiaction.Get.Name():  true,
 }
 
 // fixedContractActionSignatures are actions whose service methods have fixed
@@ -72,9 +72,9 @@ var getVerbActionMethodNames = map[string]bool{
 // controller handles an HTTP GET request whose response is the event stream
 // the service opens through ServiceContext.SSE.
 var fixedContractActionSignatures = map[string]string{
-	consts.Import.Name(): "Import(ctx, io.Reader) ([]M, error)",
-	consts.Export.Name(): "Export(ctx, ...M) ([]byte, error)",
-	consts.SSE.Name():    "SSE(ctx) error",
+	apiaction.Import.Name(): "Import(ctx, io.Reader) ([]M, error)",
+	apiaction.Export.Name(): "Export(ctx, ...M) ([]byte, error)",
+	apiaction.SSE.Name():    "SSE(ctx) error",
 }
 
 // serviceRequiredActionMethodNames are actions whose request cannot be
@@ -83,10 +83,10 @@ var fixedContractActionSignatures = map[string]string{
 // declaring them without Service() is a wiring error caught at generation
 // time.
 var serviceRequiredActionMethodNames = map[string]bool{
-	consts.Import.Name(): true,
-	consts.Export.Name(): true,
-	consts.SSE.Name():    true,
-	consts.Stream.Name(): true,
+	apiaction.Import.Name(): true,
+	apiaction.Export.Name(): true,
+	apiaction.SSE.Name():    true,
+	apiaction.Stream.Name(): true,
 }
 
 var designOnlyMethodNames = map[string]bool{
@@ -101,9 +101,9 @@ var designOnlyMethodNames = map[string]bool{
 // protocol of its own. A model declaring GRPC() needs at least one other
 // action, or its gRPC service would have nothing to serve.
 var httpOnlyActionMethodNames = map[string]bool{
-	consts.Import.Name(): true,
-	consts.Export.Name(): true,
-	consts.SSE.Name():    true,
+	apiaction.Import.Name(): true,
+	apiaction.Export.Name(): true,
+	apiaction.SSE.Name():    true,
 }
 
 // HTTPOnlyAction reports whether the action named name is one gRPC cannot
@@ -119,7 +119,7 @@ func HTTPOnlyAction(name string) bool {
 // does. A model declaring one needs GRPC(), or the action would be served
 // nowhere.
 var grpcOnlyActionMethodNames = map[string]bool{
-	consts.Stream.Name(): true,
+	apiaction.Stream.Name(): true,
 }
 
 // GRPCOnlyAction reports whether the action named name is one HTTP cannot
@@ -507,7 +507,7 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile, vi
 	// selects from the model table; a virtual model has none, so the request
 	// could only fail at runtime. The Export action is exempt: its controller
 	// skips the table phases for virtual models and delegates to the service.
-	if virtual && actionName == consts.List.Name() && !info.result {
+	if virtual && actionName == apiaction.List.Name() && !info.result {
 		errs = append(errs, errors.Newf("%s: %s action on a virtual model relies on the built-in list controller, but a virtual model has no table to list from; declare Result with a custom service method", filename, actionName))
 	}
 	// These actions have no built-in implementation able to answer a request

@@ -22,7 +22,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/logfield"
@@ -181,7 +181,7 @@ func Init() error {
 	root.GET("/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, ginSwagger.URL("/openapi.json")))
 
 	// The groups hang off the root: a route registers by the path it is
-	// served at, prefix included (see consts.APIPath), so no group adds
+	// served at, prefix included (see apiaction.APIPath), so no group adds
 	// one. Auth runs the authentication middleware the project registers,
 	// Pub does not.
 	auth = root.Group("")
@@ -232,13 +232,13 @@ func Pub() *gin.RouterGroup { return pub }
 // parameter registry and the OpenAPI document; the public router.Register
 // forwards to it and documents the contract.
 //
-// The path the route is served at, consts.APIPath of it, is what registers
+// The path the route is served at, apiaction.APIPath of it, is what registers
 // on the group, and it is stamped into the controller config so the
 // handlers resolve the matching phase service through the registry key the
 // path makes; the corresponding service.Register call names the same route.
 // The config is shallow-copied first, keeping a caller-shared config safe
 // for reuse across routes.
-func Register[M types.Model, REQ types.Request, RSP types.Response](router *gin.RouterGroup, route string, cfg *types.ControllerConfig[M], phases ...consts.Phase) {
+func Register[M types.Model, REQ types.Request, RSP types.Response](router *gin.RouterGroup, route string, cfg *types.ControllerConfig[M], phases ...apiaction.Phase) {
 	// A registration that can register nothing is a mistake in the
 	// declaration: it panics as the process starts, the way the service
 	// registry does for a blank route, instead of leaving an endpoint that
@@ -265,10 +265,10 @@ func Register[M types.Model, REQ types.Request, RSP types.Response](router *gin.
 	}
 	if len(unserved) > 0 {
 		sort.Strings(unserved)
-		panic(fmt.Sprintf("router: register of route %q: no HTTP route serves the phase %s; a hook phase runs inside its action and a Stream is served over gRPC alone", consts.APIPath(route), strings.Join(unserved, ", ")))
+		panic(fmt.Sprintf("router: register of route %q: no HTTP route serves the phase %s; a hook phase runs inside its action and a Stream is served over gRPC alone", apiaction.APIPath(route), strings.Join(unserved, ", ")))
 	}
-	routed.Route = consts.APIPath(route)
-	set := make(map[consts.Phase]bool, len(phases))
+	routed.Route = apiaction.APIPath(route)
+	set := make(map[apiaction.Phase]bool, len(phases))
 	for _, phase := range phases {
 		set[phase] = true
 	}
@@ -279,7 +279,7 @@ func Register[M types.Model, REQ types.Request, RSP types.Response](router *gin.
 // phase's HTTP method and through its controller handler, and records the route
 // for Routes, the route manager and the OpenAPI document. Registrations run one
 // at a time under registerMu.
-func register[M types.Model, REQ types.Request, RSP types.Response](router *gin.RouterGroup, relativePath string, phases map[consts.Phase]bool, cfg ...*types.ControllerConfig[M]) {
+func register[M types.Model, REQ types.Request, RSP types.Response](router *gin.RouterGroup, relativePath string, phases map[apiaction.Phase]bool, cfg ...*types.ControllerConfig[M]) {
 	registerMu.Lock()
 	defer registerMu.Unlock()
 
@@ -290,9 +290,9 @@ func register[M types.Model, REQ types.Request, RSP types.Response](router *gin.
 	authRequired := router != pub
 
 	// handle serves a phase's controller under the method the phase maps to,
-	// consts.Phase.HTTPMethod: the one table gg routes, gg route-tree and
+	// apiaction.Phase.HTTPMethod: the one table gg routes, gg route-tree and
 	// gg gen's route ignore rules read the method from as well.
-	handle := func(phase consts.Phase, handler gin.HandlerFunc) {
+	handle := func(phase apiaction.Phase, handler gin.HandlerFunc) {
 		method := phase.HTTPMethod()
 		router.Handle(method, relativePath, handler)
 		registerRoute(endpoint, method, authRequired)
@@ -300,51 +300,51 @@ func register[M types.Model, REQ types.Request, RSP types.Response](router *gin.
 		openapigen.Set[M, REQ, RSP](endpoint, authRequired, phase)
 	}
 
-	if phases[consts.Create] {
-		handle(consts.Create, controller.CreateHandler[M, REQ, RSP](cfg...))
+	if phases[apiaction.Create] {
+		handle(apiaction.Create, controller.CreateHandler[M, REQ, RSP](cfg...))
 	}
-	if phases[consts.Delete] {
-		handle(consts.Delete, controller.DeleteHandler[M, REQ, RSP](cfg...))
+	if phases[apiaction.Delete] {
+		handle(apiaction.Delete, controller.DeleteHandler[M, REQ, RSP](cfg...))
 	}
-	if phases[consts.Update] {
-		handle(consts.Update, controller.UpdateHandler[M, REQ, RSP](cfg...))
+	if phases[apiaction.Update] {
+		handle(apiaction.Update, controller.UpdateHandler[M, REQ, RSP](cfg...))
 	}
-	if phases[consts.Patch] {
-		handle(consts.Patch, controller.PatchHandler[M, REQ, RSP](cfg...))
+	if phases[apiaction.Patch] {
+		handle(apiaction.Patch, controller.PatchHandler[M, REQ, RSP](cfg...))
 	}
-	if phases[consts.List] {
-		handle(consts.List, controller.ListHandler[M, REQ, RSP](cfg...))
+	if phases[apiaction.List] {
+		handle(apiaction.List, controller.ListHandler[M, REQ, RSP](cfg...))
 	}
-	if phases[consts.Get] {
-		handle(consts.Get, controller.GetHandler[M, REQ, RSP](cfg...))
-	}
-
-	if phases[consts.CreateMany] {
-		handle(consts.CreateMany, controller.CreateManyHandler[M, REQ, RSP](cfg...))
-	}
-	if phases[consts.DeleteMany] {
-		handle(consts.DeleteMany, controller.DeleteManyHandler[M, REQ, RSP](cfg...))
-	}
-	if phases[consts.UpdateMany] {
-		handle(consts.UpdateMany, controller.UpdateManyHandler[M, REQ, RSP](cfg...))
-	}
-	if phases[consts.PatchMany] {
-		handle(consts.PatchMany, controller.PatchManyHandler[M, REQ, RSP](cfg...))
+	if phases[apiaction.Get] {
+		handle(apiaction.Get, controller.GetHandler[M, REQ, RSP](cfg...))
 	}
 
-	if phases[consts.Import] {
-		handle(consts.Import, controller.ImportHandler[M, REQ, RSP](cfg...))
+	if phases[apiaction.CreateMany] {
+		handle(apiaction.CreateMany, controller.CreateManyHandler[M, REQ, RSP](cfg...))
 	}
-	if phases[consts.Export] {
-		handle(consts.Export, controller.ExportHandler[M, REQ, RSP](cfg...))
+	if phases[apiaction.DeleteMany] {
+		handle(apiaction.DeleteMany, controller.DeleteManyHandler[M, REQ, RSP](cfg...))
+	}
+	if phases[apiaction.UpdateMany] {
+		handle(apiaction.UpdateMany, controller.UpdateManyHandler[M, REQ, RSP](cfg...))
+	}
+	if phases[apiaction.PatchMany] {
+		handle(apiaction.PatchMany, controller.PatchManyHandler[M, REQ, RSP](cfg...))
 	}
 
-	if phases[consts.SSE] {
-		handle(consts.SSE, controller.SSEHandler[M, REQ, RSP](cfg...))
+	if phases[apiaction.Import] {
+		handle(apiaction.Import, controller.ImportHandler[M, REQ, RSP](cfg...))
+	}
+	if phases[apiaction.Export] {
+		handle(apiaction.Export, controller.ExportHandler[M, REQ, RSP](cfg...))
+	}
+
+	if phases[apiaction.SSE] {
+		handle(apiaction.SSE, controller.SSEHandler[M, REQ, RSP](cfg...))
 		// Streaming responses are exempt from request-scoped response
 		// treatment (body capture, circuit breaking, request timeouts); the
 		// registry is how the middlewares concerned recognize them.
-		middleware.MarkStreamingRoute(consts.SSE.HTTPMethod(), endpoint)
+		middleware.MarkStreamingRoute(apiaction.SSE.HTTPMethod(), endpoint)
 	}
 }
 

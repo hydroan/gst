@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stoewer/go-strcase"
@@ -83,15 +83,15 @@ type autoBaseSample struct {
 // contract declares, mirroring Phase.Name in the other direction, so
 // the tracked set is checked against the contract itself rather than against
 // a second copy of the phase list.
-func modelHookPhases(t *testing.T) []consts.Phase {
+func modelHookPhases(t *testing.T) []apiaction.Phase {
 	t.Helper()
 	contract := reflect.TypeFor[types.Model]()
-	phases := make([]consts.Phase, 0, contract.NumMethod())
+	phases := make([]apiaction.Phase, 0, contract.NumMethod())
 	for method := range contract.Methods() {
 		if !strings.HasSuffix(method.Name, "Before") && !strings.HasSuffix(method.Name, "After") {
 			continue
 		}
-		phase := consts.Phase(strcase.SnakeCase(method.Name))
+		phase := apiaction.Phase(strcase.SnakeCase(method.Name))
 		require.Equal(t, method.Name, phase.Name(), "phase derived from %s must round-trip", method.Name)
 		phases = append(phases, phase)
 	}
@@ -121,8 +121,8 @@ func TestOverridesHooks(t *testing.T) {
 		require.True(t, modelregistry.OverridesCreateHooks(m))
 		require.False(t, modelregistry.OverridesUpdateHooks(m))
 		require.False(t, modelregistry.OverridesDeleteHooks(m))
-		require.True(t, modelregistry.OverridesHook(m, consts.CreateBefore))
-		require.False(t, modelregistry.OverridesHook(m, consts.CreateAfter))
+		require.True(t, modelregistry.OverridesHook(m, apiaction.CreateBefore))
+		require.False(t, modelregistry.OverridesHook(m, apiaction.CreateAfter))
 	})
 
 	t.Run("mixed overrides mark each pair and each hook independently", func(t *testing.T) {
@@ -130,10 +130,10 @@ func TestOverridesHooks(t *testing.T) {
 		require.False(t, modelregistry.OverridesCreateHooks(m))
 		require.True(t, modelregistry.OverridesUpdateHooks(m))
 		require.True(t, modelregistry.OverridesDeleteHooks(m))
-		require.False(t, modelregistry.OverridesHook(m, consts.UpdateBefore))
-		require.True(t, modelregistry.OverridesHook(m, consts.UpdateAfter))
-		require.True(t, modelregistry.OverridesHook(m, consts.DeleteBefore))
-		require.False(t, modelregistry.OverridesHook(m, consts.DeleteAfter))
+		require.False(t, modelregistry.OverridesHook(m, apiaction.UpdateBefore))
+		require.True(t, modelregistry.OverridesHook(m, apiaction.UpdateAfter))
+		require.True(t, modelregistry.OverridesHook(m, apiaction.DeleteBefore))
+		require.False(t, modelregistry.OverridesHook(m, apiaction.DeleteAfter))
 	})
 
 	t.Run("read hooks are tracked one by one", func(t *testing.T) {
@@ -141,10 +141,10 @@ func TestOverridesHooks(t *testing.T) {
 		require.False(t, modelregistry.OverridesCreateHooks(m))
 		require.False(t, modelregistry.OverridesUpdateHooks(m))
 		require.False(t, modelregistry.OverridesDeleteHooks(m))
-		require.True(t, modelregistry.OverridesHook(m, consts.GetBefore))
-		require.False(t, modelregistry.OverridesHook(m, consts.GetAfter))
-		require.False(t, modelregistry.OverridesHook(m, consts.ListBefore))
-		require.True(t, modelregistry.OverridesHook(m, consts.ListAfter))
+		require.True(t, modelregistry.OverridesHook(m, apiaction.GetBefore))
+		require.False(t, modelregistry.OverridesHook(m, apiaction.GetAfter))
+		require.False(t, modelregistry.OverridesHook(m, apiaction.ListBefore))
+		require.True(t, modelregistry.OverridesHook(m, apiaction.ListAfter))
 	})
 
 	t.Run("promotion through a hook free intermediate overrides nothing", func(t *testing.T) {
@@ -156,8 +156,8 @@ func TestOverridesHooks(t *testing.T) {
 		require.True(t, modelregistry.OverridesCreateHooks(m))
 		require.False(t, modelregistry.OverridesUpdateHooks(m))
 		require.False(t, modelregistry.OverridesDeleteHooks(m))
-		require.True(t, modelregistry.OverridesHook(m, consts.CreateBefore))
-		require.False(t, modelregistry.OverridesHook(m, consts.CreateAfter))
+		require.True(t, modelregistry.OverridesHook(m, apiaction.CreateBefore))
+		require.False(t, modelregistry.OverridesHook(m, apiaction.CreateAfter))
 	})
 
 	t.Run("auto base model overrides nothing", func(t *testing.T) {
@@ -181,10 +181,10 @@ func TestOverridesHooks(t *testing.T) {
 		require.False(t, modelregistry.OverridesCreateHooks(42))
 		require.False(t, modelregistry.OverridesUpdateHooks("plain"))
 		require.False(t, modelregistry.OverridesDeleteHooks(struct{}{}))
-		require.False(t, modelregistry.OverridesHook(42, consts.GetBefore))
+		require.False(t, modelregistry.OverridesHook(42, apiaction.GetBefore))
 	})
 
 	t.Run("a phase outside the hook set fails closed as overridden", func(t *testing.T) {
-		require.True(t, modelregistry.OverridesHook(&hookFreeSample{}, consts.Create))
+		require.True(t, modelregistry.OverridesHook(&hookFreeSample{}, apiaction.Create))
 	})
 }

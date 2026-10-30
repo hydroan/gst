@@ -8,7 +8,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
@@ -34,7 +34,7 @@ import (
 // wrote the response itself, streaming or sending a file.
 func (a *action[M, REQ, RSP]) serviceHandler() gin.HandlerFunc {
 	invoke := serviceMethod[M, REQ, RSP](a.phase)
-	binds := a.phase != consts.List && a.phase != consts.Get
+	binds := a.phase != apiaction.List && a.phase != apiaction.Get
 	return func(c *gin.Context) {
 		ctrlSpanCtx, span, ok := a.beginRequest(c)
 		defer span.End()
@@ -48,7 +48,7 @@ func (a *action[M, REQ, RSP]) serviceHandler() gin.HandlerFunc {
 
 		// A Create sent as a multipart form carries a file, not JSON: the
 		// service reads the form itself.
-		form := a.phase == consts.Create && strings.EqualFold(c.ContentType(), "multipart/form-data")
+		form := a.phase == apiaction.Create && strings.EqualFold(c.ContentType(), "multipart/form-data")
 		if binds && !form {
 			reqErr := bindJSONRequest(c, &req)
 			if errors.Is(reqErr, io.EOF) {
@@ -89,27 +89,27 @@ func (a *action[M, REQ, RSP]) serviceHandler() gin.HandlerFunc {
 // handlers of their own, and the hook phases have no such method, so it
 // panics; only a gRPC ServiceCall can name one of them here, the HTTP
 // handler being built for actions with a payload or result alone.
-func serviceMethod[M types.Model, REQ types.Request, RSP types.Response](phase consts.Phase) func(svc types.Service[M, REQ, RSP], sc *types.ServiceContext, req REQ) (RSP, error) {
+func serviceMethod[M types.Model, REQ types.Request, RSP types.Response](phase apiaction.Phase) func(svc types.Service[M, REQ, RSP], sc *types.ServiceContext, req REQ) (RSP, error) {
 	switch phase {
-	case consts.Create:
+	case apiaction.Create:
 		return types.Service[M, REQ, RSP].Create
-	case consts.Delete:
+	case apiaction.Delete:
 		return types.Service[M, REQ, RSP].Delete
-	case consts.Update:
+	case apiaction.Update:
 		return types.Service[M, REQ, RSP].Update
-	case consts.Patch:
+	case apiaction.Patch:
 		return types.Service[M, REQ, RSP].Patch
-	case consts.List:
+	case apiaction.List:
 		return types.Service[M, REQ, RSP].List
-	case consts.Get:
+	case apiaction.Get:
 		return types.Service[M, REQ, RSP].Get
-	case consts.CreateMany:
+	case apiaction.CreateMany:
 		return types.Service[M, REQ, RSP].CreateMany
-	case consts.DeleteMany:
+	case apiaction.DeleteMany:
 		return types.Service[M, REQ, RSP].DeleteMany
-	case consts.UpdateMany:
+	case apiaction.UpdateMany:
 		return types.Service[M, REQ, RSP].UpdateMany
-	case consts.PatchMany:
+	case apiaction.PatchMany:
 		return types.Service[M, REQ, RSP].PatchMany
 	}
 	panic(fmt.Sprintf("controller: phase %q has no rpc; ServiceCall serves the actions of a model's gRPC service", phase))

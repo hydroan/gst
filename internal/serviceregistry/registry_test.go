@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/logger"
@@ -54,7 +54,7 @@ func TestKeyOfABlankRouteResolvesNoService(t *testing.T) {
 }
 
 func TestResolveReturnsBaseWhenServiceMissing(t *testing.T) {
-	key := serviceregistry.Key(consts.Phase("test_missing_service"), "samples")
+	key := serviceregistry.Key(apiaction.Phase("test_missing_service"), "samples")
 	resolved := serviceregistry.Resolve[*testUser, *testUser, *testUser](key)
 
 	_, ok := resolved.(*serviceregistry.Base[*testUser, *testUser, *testUser])
@@ -127,7 +127,7 @@ func TestRegisterPanicsOnEmptyRoute(t *testing.T) {
 	}
 
 	require.Panics(t, func() {
-		serviceregistry.RegisterInstance[*testUser, *testUser, *testUser](consts.Phase("test_register_empty_route"), "  ", &svc{})
+		serviceregistry.RegisterInstance[*testUser, *testUser, *testUser](apiaction.Phase("test_register_empty_route"), "  ", &svc{})
 	})
 }
 
@@ -159,6 +159,6 @@ var phaseSeq atomic.Int64
 
 // newPhase returns a phase named after name that no earlier registration of
 // the process used.
-func newPhase(name string) consts.Phase {
-	return consts.Phase(fmt.Sprintf("%s-%d", name, phaseSeq.Add(1)))
+func newPhase(name string) apiaction.Phase {
+	return apiaction.Phase(fmt.Sprintf("%s-%d", name, phaseSeq.Add(1)))
 }

@@ -7,9 +7,9 @@ import (
 
 	"tmpapp/model"
 
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/grpc"
 	gstmodel "github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/service"
 )
 
 // reportService serves the rpcs of the ReportService service through the
@@ -22,7 +22,7 @@ type reportService struct {
 
 // The calls of the actions of Report, one per rpc of ReportService, built
 // once at package initialization.
-var getReport = grpc.ServiceCall[*model.Report, *gstmodel.Empty, *model.ReportRsp](consts.Get, "/api/reports/summary")
+var getReport = grpc.ServiceCall[*model.Report, *gstmodel.Empty, *model.ReportRsp](service.Get, "/api/reports/summary")
 
 // GetReport serves the Get action of Report on /api/reports/summary.
 func (reportService) GetReport(ctx context.Context, req *GetReportRequest) (*GetReportResponse, error) {

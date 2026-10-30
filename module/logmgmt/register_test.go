@@ -14,7 +14,6 @@ import (
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/consts"
 	internalmiddleware "github.com/hydroan/gst/internal/middleware"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
@@ -195,7 +194,7 @@ func TestOperationLogList(t *testing.T) {
 		l := list.Items[0]
 		require.NotNil(t, l)
 		require.Equal(t, rootUsername, l.User)
-		require.Equal(t, consts.OP_CREATE, l.OP)
+		require.Equal(t, types.OperationCreate, l.OP)
 		require.Equal(t, "roles", l.Table)
 		require.Equal(t, "Role", l.Model)
 		require.Equal(t, "/api/authz/roles", l.URI)

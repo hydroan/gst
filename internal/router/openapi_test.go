@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/router"
 	"github.com/hydroan/gst/internal/types"
@@ -29,7 +29,7 @@ type pagedRecord struct {
 // router.Init, mirroring where generated route registration runs.
 func registerDocumentedRoute() {
 	router.Register[*pagedRecord, *pagedRecord, *pagedRecord](
-		router.Auth(), pagedRecordRoute, &types.ControllerConfig[*pagedRecord]{}, consts.List,
+		router.Auth(), pagedRecordRoute, &types.ControllerConfig[*pagedRecord]{}, apiaction.List,
 	)
 }
 

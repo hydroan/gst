@@ -13,18 +13,18 @@ import (
 // built-in root subject among them: the user row and the credential this
 // returns go through the database chain in a router.OnRoutesReady hook, which
 // runs once the database is reachable and before the server serves. RBAC
-// grants the system root role to the user whose id is consts.AUTHZ_USER_ROOT
+// grants the system root role to the user whose id is rbac.UserRoot
 // at initialization, but nothing creates that user. The hook runs at every
 // start, so it looks the account up before writing it:
 //
 //	router.OnRoutesReady(func(ctx context.Context, _ map[string][]string) error {
-//		if err := database.Database[*iam.User](ctx).Get(new(iam.User), consts.AUTHZ_USER_ROOT); err == nil {
+//		if err := database.Database[*iam.User](ctx).Get(new(iam.User), rbac.UserRoot); err == nil {
 //			return nil
 //		} else if !errors.Is(err, database.ErrRecordNotFound) {
 //			return err
 //		}
-//		root := &iam.User{Username: consts.AUTHZ_USER_ROOT, Status: iam.UserStatusActive}
-//		root.ID = consts.AUTHZ_USER_ROOT
+//		root := &iam.User{Username: rbac.UserRoot, Status: iam.UserStatusActive}
+//		root.ID = rbac.UserRoot
 //		credential, err := iam.NewPasswordCredential(ctx, root.ID, "change-me", true)
 //		if err != nil {
 //			return err

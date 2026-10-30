@@ -14,16 +14,17 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/authn"
+	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/consts"
 	internalmiddleware "github.com/hydroan/gst/internal/middleware"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 	"github.com/hydroan/gst/internal/testutil"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/module/mfa"
@@ -79,8 +80,8 @@ const rootPassword = "12345678"
 func seedRootAccount() error {
 	ctx := context.Background()
 
-	user := &modeliamuser.User{Username: consts.AUTHZ_USER_ROOT, Status: modeliamuser.UserStatusActive}
-	user.ID = consts.AUTHZ_USER_ROOT
+	user := &modeliamuser.User{Username: rbac.UserRoot, Status: modeliamuser.UserStatusActive}
+	user.ID = rbac.UserRoot
 	if err := database.Database[*modeliamuser.User](ctx).Create(user); err != nil {
 		return err
 	}
@@ -147,7 +148,7 @@ func TestTOTPBind(t *testing.T) {
 	require.NotEmpty(t, rsp.ChallengeID)
 	require.NotEmpty(t, rsp.OtpauthURL)
 	require.NotEmpty(t, rsp.QRCodeImageDataURL)
-	require.Equal(t, consts.FrameworkName, rsp.Issuer)
+	require.Equal(t, types.FrameworkName, rsp.Issuer)
 	require.Equal(t, account.Username, rsp.AccountName)
 	require.NotEmpty(t, extractSecretFromOtpauthURL(t, rsp.OtpauthURL))
 	testutil.RequireDataFields(t, resp, "qr_code_image_data_url")
@@ -546,7 +547,7 @@ func TestTOTPAdmin(t *testing.T) {
 	deviceID, _, _ := bindTOTPDeviceForTest(t, account.SessionID, "test-device-admin")
 
 	rootSessionID := loginSessionIDFromCookie(t, iam.LoginReq{
-		Username: consts.AUTHZ_USER_ROOT,
+		Username: rbac.UserRoot,
 		Password: rootPassword,
 	})
 	rootCli := mfaSessionClient(t, rootSessionID)
@@ -576,7 +577,7 @@ func TestTOTPAdmin(t *testing.T) {
 		// EnsureTenantAdmin grants root as an actor, so root may manage any
 		// account, including inspecting the root account: system-root actors
 		// bypass the target checks entirely.
-		resp, err := rootCli.Do(t.Context(), http.MethodGet, "/api/mfa/admin/users/"+consts.AUTHZ_USER_ROOT+"/totp", nil)
+		resp, err := rootCli.Do(t.Context(), http.MethodGet, "/api/mfa/admin/users/"+rbac.UserRoot+"/totp", nil)
 		require.NoError(t, err)
 		rsp := testutil.DecodeResp[*mfa.AdminTOTPStatusRsp](t, resp)
 		require.False(t, rsp.Enabled)

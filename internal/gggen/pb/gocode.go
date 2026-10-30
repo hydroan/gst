@@ -44,18 +44,18 @@ const (
 // fixedImportNames maps the import paths of the packages imported under a
 // fixed name to that name, "" for the package's own.
 var fixedImportNames = map[string]string{
-	importPathContext:        "",
-	importPathJSON:           "",
-	importPathHTTP:           "",
-	importPathTime:           "",
-	importPathDurationPB:     "",
-	importPathStructPB:       "",
-	importPathTimestampPB:    "",
-	importPathDatatypes:      "",
-	importPathGorm:           "",
-	ggconst.ImportPathGRPC:   "",
-	ggconst.ImportPathModel:  gstModelName,
-	ggconst.ImportPathConsts: "",
+	importPathContext:         "",
+	importPathJSON:            "",
+	importPathHTTP:            "",
+	importPathTime:            "",
+	importPathDurationPB:      "",
+	importPathStructPB:        "",
+	importPathTimestampPB:     "",
+	importPathDatatypes:       "",
+	importPathGorm:            "",
+	ggconst.ImportPathGRPC:    "",
+	ggconst.ImportPathModel:   gstModelName,
+	ggconst.ImportPathService: "",
 }
 
 // generatedLocalNames are the identifiers the generated functions declare

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/serviceregistry"
@@ -73,7 +73,7 @@ func TestBaseQueryModel(t *testing.T) {
 	var svc querySampleService
 
 	t.Run("FillsModelFieldsAndFrameworkFields", func(t *testing.T) {
-		m, err := svc.QueryModel(newQueryContext(t, consts.List, "/samples?name=alice&age=10&_page=2&_size=50"))
+		m, err := svc.QueryModel(newQueryContext(t, apiaction.List, "/samples?name=alice&age=10&_page=2&_size=50"))
 		require.NoError(t, err)
 		require.Equal(t, "alice", m.Name)
 		require.Equal(t, 10, m.Age)
@@ -82,31 +82,31 @@ func TestBaseQueryModel(t *testing.T) {
 	})
 
 	t.Run("KeepsFilterKeysAwayFromTheDecoder", func(t *testing.T) {
-		m, err := svc.QueryModel(newQueryContext(t, consts.List, "/samples?name=alice&age[gt]=20&created_at=2026-07-01"))
+		m, err := svc.QueryModel(newQueryContext(t, apiaction.List, "/samples?name=alice&age[gt]=20&created_at=2026-07-01"))
 		require.NoError(t, err)
 		require.Equal(t, "alice", m.Name)
 	})
 
 	t.Run("RejectsUnknownKeys", func(t *testing.T) {
-		_, err := svc.QueryModel(newQueryContext(t, consts.List, "/samples?bogus=1"))
+		_, err := svc.QueryModel(newQueryContext(t, apiaction.List, "/samples?bogus=1"))
 		require.Error(t, err, "an unknown key is a typo and must not be ignored")
 	})
 
 	t.Run("AnExportKeepsItsOwnKeysAwayFromTheDecoder", func(t *testing.T) {
-		m, err := svc.QueryModel(newQueryContext(t, consts.Export, "/samples/export?name=alice&_format=csv&_limit=10"))
+		m, err := svc.QueryModel(newQueryContext(t, apiaction.Export, "/samples/export?name=alice&_format=csv&_limit=10"))
 		require.NoError(t, err)
 		require.Equal(t, "alice", m.Name)
 	})
 
 	t.Run("AnyOtherActionIsRefusedTheExportKeys", func(t *testing.T) {
-		_, err := svc.QueryModel(newQueryContext(t, consts.List, "/samples?_format=csv&_limit=10"))
+		_, err := svc.QueryModel(newQueryContext(t, apiaction.List, "/samples?_format=csv&_limit=10"))
 		require.EqualError(t, err, `unsupported query parameters "_format", "_limit"`)
 	})
 
 	t.Run("ReturnsAFreshModelEachCall", func(t *testing.T) {
-		first, err := svc.QueryModel(newQueryContext(t, consts.List, "/samples?name=alice"))
+		first, err := svc.QueryModel(newQueryContext(t, apiaction.List, "/samples?name=alice"))
 		require.NoError(t, err)
-		second, err := svc.QueryModel(newQueryContext(t, consts.List, "/samples?name=bob"))
+		second, err := svc.QueryModel(newQueryContext(t, apiaction.List, "/samples?name=bob"))
 		require.NoError(t, err)
 		require.NotSame(t, first, second)
 		require.Equal(t, "alice", first.Name, "a later call must not overwrite an earlier model")
@@ -117,13 +117,13 @@ func TestBaseQueryFilters(t *testing.T) {
 	var svc querySampleService
 
 	t.Run("ParsesAgainstTheServiceModel", func(t *testing.T) {
-		filters, err := svc.QueryFilters(newQueryContext(t, consts.List, "/samples?age[gt]=20&name=alice"))
+		filters, err := svc.QueryFilters(newQueryContext(t, apiaction.List, "/samples?age[gt]=20&name=alice"))
 		require.NoError(t, err)
 		require.Equal(t, []types.Filter{types.NewFilter("", "age", types.FilterOpGt, "20")}, filters)
 	})
 
 	t.Run("RejectsUnknownField", func(t *testing.T) {
-		_, err := svc.QueryFilters(newQueryContext(t, consts.List, "/samples?bogus[gt]=20"))
+		_, err := svc.QueryFilters(newQueryContext(t, apiaction.List, "/samples?bogus[gt]=20"))
 		require.Error(t, err)
 	})
 
@@ -131,14 +131,14 @@ func TestBaseQueryFilters(t *testing.T) {
 	// parameter, so a model that never opted in to filtering rejects them.
 	t.Run("ModelWithoutQueryRejectsFilters", func(t *testing.T) {
 		var plain queryPlainService
-		_, err := plain.QueryFilters(newQueryContext(t, consts.List, "/samples?name[like]=a"))
+		_, err := plain.QueryFilters(newQueryContext(t, apiaction.List, "/samples?name[like]=a"))
 		require.Error(t, err)
 	})
 }
 
 func TestBaseQueryPresentFields(t *testing.T) {
 	var svc querySampleService
-	present := svc.QueryPresentFields(newQueryContext(t, consts.List, "/samples?active=false&age[gt]=20&_page=2"))
+	present := svc.QueryPresentFields(newQueryContext(t, apiaction.List, "/samples?active=false&age[gt]=20&_page=2"))
 	require.Equal(t, map[string]struct{}{"active": {}}, present,
 		"only explicitly provided model filter keys are marked present")
 }
@@ -147,19 +147,19 @@ func TestBaseQueryPagination(t *testing.T) {
 	var svc querySampleService
 
 	t.Run("ReadsRequestValues", func(t *testing.T) {
-		page, size := svc.QueryPagination(newQueryContext(t, consts.List, "/samples?_page=2&_size=50"))
+		page, size := svc.QueryPagination(newQueryContext(t, apiaction.List, "/samples?_page=2&_size=50"))
 		require.Equal(t, 2, page)
 		require.Equal(t, 50, size)
 	})
 
 	t.Run("ClampsOversizedPageSize", func(t *testing.T) {
-		_, size := svc.QueryPagination(newQueryContext(t, consts.List, "/samples?_size=100000"))
+		_, size := svc.QueryPagination(newQueryContext(t, apiaction.List, "/samples?_size=100000"))
 		require.Equal(t, 100, size)
 	})
 
 	t.Run("ModelWithoutPaginationKeepsTheSafetyLimit", func(t *testing.T) {
 		var plain queryPlainService
-		page, size := plain.QueryPagination(newQueryContext(t, consts.List, "/samples?_page=2&_size=50"))
+		page, size := plain.QueryPagination(newQueryContext(t, apiaction.List, "/samples?_page=2&_size=50"))
 		require.Equal(t, 1, page, "the page always normalizes to at least 1")
 		require.Equal(t, 1000, size)
 	})
@@ -169,19 +169,19 @@ func TestBaseQueryOrders(t *testing.T) {
 	var svc querySampleService
 
 	t.Run("ReadsRequestValues", func(t *testing.T) {
-		orders, err := svc.QueryOrders(newQueryContext(t, consts.List, "/samples?_sort_by=created_at%20desc"))
+		orders, err := svc.QueryOrders(newQueryContext(t, apiaction.List, "/samples?_sort_by=created_at%20desc"))
 		require.NoError(t, err)
 		require.Equal(t, []types.Order{types.NewOrder("", "created_at", types.OrderDesc)}, orders)
 	})
 
 	t.Run("UnknownColumnIsAClientError", func(t *testing.T) {
-		_, err := svc.QueryOrders(newQueryContext(t, consts.List, "/samples?_sort_by=no_such_column"))
+		_, err := svc.QueryOrders(newQueryContext(t, apiaction.List, "/samples?_sort_by=no_such_column"))
 		require.Error(t, err)
 	})
 
 	t.Run("ModelWithoutQueryYieldsNoOrder", func(t *testing.T) {
 		var plain queryPlainService
-		orders, err := plain.QueryOrders(newQueryContext(t, consts.List, "/samples?_sort_by=created_at%20desc"))
+		orders, err := plain.QueryOrders(newQueryContext(t, apiaction.List, "/samples?_sort_by=created_at%20desc"))
 		require.NoError(t, err)
 		require.Empty(t, orders)
 	})
@@ -192,7 +192,7 @@ func TestBaseQueryCursor(t *testing.T) {
 
 	t.Run("ReadsRequestValues", func(t *testing.T) {
 		var snapshots querySnapshotService
-		cursor, err := snapshots.QueryCursor(newQueryContext(t, consts.List, "/snapshots?_cursor_value=2026-07-01T08:30:15%2B08:00&_cursor_next=true&_cursor_field=snapshot_at"))
+		cursor, err := snapshots.QueryCursor(newQueryContext(t, apiaction.List, "/snapshots?_cursor_value=2026-07-01T08:30:15%2B08:00&_cursor_next=true&_cursor_field=snapshot_at"))
 		require.NoError(t, err)
 		// A time boundary is accepted in RFC 3339 only, like a time filter
 		// bound, and travels as the UTC wall clock.
@@ -204,36 +204,36 @@ func TestBaseQueryCursor(t *testing.T) {
 		// created_at is what a feed in creation order reaches for, and the
 		// column rows share most readily: the ones a page has no room for
 		// would fall between the pages unread.
-		_, err := svc.QueryCursor(newQueryContext(t, consts.List, "/samples?_cursor_value=2026-07-01T08:30:15%2B08:00&_cursor_field=created_at"))
+		_, err := svc.QueryCursor(newQueryContext(t, apiaction.List, "/samples?_cursor_value=2026-07-01T08:30:15%2B08:00&_cursor_field=created_at"))
 		require.ErrorContains(t, err, "not unique")
 	})
 
 	t.Run("UnknownColumnIsAClientError", func(t *testing.T) {
-		_, err := svc.QueryCursor(newQueryContext(t, consts.List, "/samples?_cursor_value=abc&_cursor_field=no_such_column"))
+		_, err := svc.QueryCursor(newQueryContext(t, apiaction.List, "/samples?_cursor_value=abc&_cursor_field=no_such_column"))
 		require.Error(t, err)
 	})
 
 	t.Run("MistypedValueIsAClientError", func(t *testing.T) {
-		_, err := svc.QueryCursor(newQueryContext(t, consts.List, "/samples?_cursor_value=abc&_cursor_field=age"))
+		_, err := svc.QueryCursor(newQueryContext(t, apiaction.List, "/samples?_cursor_value=abc&_cursor_field=age"))
 		require.Error(t, err)
 	})
 
 	t.Run("ModelWithoutCursorYieldsZeroCursor", func(t *testing.T) {
 		var plain queryPlainService
-		cursor, err := plain.QueryCursor(newQueryContext(t, consts.List, "/samples?_cursor_value=abc&_cursor_next=true"))
+		cursor, err := plain.QueryCursor(newQueryContext(t, apiaction.List, "/samples?_cursor_value=abc&_cursor_next=true"))
 		require.NoError(t, err)
 		require.False(t, cursor.Enabled())
 	})
 
 	t.Run("CursorParameterWithoutValueIsTheFirstPage", func(t *testing.T) {
-		cursor, err := svc.QueryCursor(newQueryContext(t, consts.List, "/samples?_size=2&_cursor_next=true"))
+		cursor, err := svc.QueryCursor(newQueryContext(t, apiaction.List, "/samples?_size=2&_cursor_next=true"))
 		require.NoError(t, err)
 		require.True(t, cursor.Enabled(), "the feed is ordered from its first page on")
 		require.False(t, cursor.Bounded())
 	})
 
 	t.Run("PlainRequestOnAnOffsetPagedModelIsNotAFeed", func(t *testing.T) {
-		cursor, err := svc.QueryCursor(newQueryContext(t, consts.List, "/samples?_size=2"))
+		cursor, err := svc.QueryCursor(newQueryContext(t, apiaction.List, "/samples?_size=2"))
 		require.NoError(t, err)
 		require.False(t, cursor.Enabled(), "a model embedding model.Query reads its first page by offset unless a cursor parameter asks for the feed")
 	})
@@ -241,7 +241,7 @@ func TestBaseQueryCursor(t *testing.T) {
 
 // newQueryContext builds a service context of the phase carrying a GET
 // request with the given target URL, for exercising the query parsing methods.
-func newQueryContext(t *testing.T, phase consts.Phase, target string) *types.ServiceContext {
+func newQueryContext(t *testing.T, phase apiaction.Phase, target string) *types.ServiceContext {
 	t.Helper()
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodGet, target, nil)

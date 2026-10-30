@@ -11,7 +11,6 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
@@ -60,7 +59,7 @@ func Decode(q url.Values, m types.Model) error {
 		}
 		field, ok := plan[key]
 		if !ok {
-			if key == consts.QUERY_SIZE && !modelregistry.IsPaginatable(m) {
+			if key == types.QuerySize && !modelregistry.IsPaginatable(m) {
 				continue
 			}
 			unsupported = append(unsupported, key)

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/modelinfo"
 )
@@ -71,11 +71,11 @@ func (s *CustomService) ListAfter(ctx *gst.ServiceContext, data *[]any) error {
 		ModelVarName:  "c",
 		Design: &dsl.Design{
 			Endpoint:   "copytest",
-			Create:     &dsl.Action{Phase: consts.Create},
+			Create:     &dsl.Action{Phase: apiaction.Create},
 			Delete:     &dsl.Action{},
 			Update:     &dsl.Action{},
 			Patch:      &dsl.Action{},
-			List:       &dsl.Action{Service: true, ServiceName: "custom", Phase: consts.List},
+			List:       &dsl.Action{Service: true, ServiceName: "custom", Phase: apiaction.List},
 			Get:        &dsl.Action{},
 			CreateMany: &dsl.Action{},
 			DeleteMany: &dsl.Action{},
@@ -142,7 +142,7 @@ type RecordService struct {
 			ModelVarName:  "s",
 			Design: &dsl.Design{
 				Endpoint:   "samples",
-				Create:     &dsl.Action{Service: true, ServiceName: "sample", Phase: consts.Create},
+				Create:     &dsl.Action{Service: true, ServiceName: "sample", Phase: apiaction.Create},
 				Delete:     &dsl.Action{},
 				Update:     &dsl.Action{},
 				Patch:      &dsl.Action{},
@@ -171,7 +171,7 @@ type RecordService struct {
 				Delete:     &dsl.Action{},
 				Update:     &dsl.Action{},
 				Patch:      &dsl.Action{},
-				List:       &dsl.Action{Service: true, ServiceName: "record", Phase: consts.List},
+				List:       &dsl.Action{Service: true, ServiceName: "record", Phase: apiaction.List},
 				Get:        &dsl.Action{},
 				CreateMany: &dsl.Action{},
 				DeleteMany: &dsl.Action{},
@@ -247,14 +247,14 @@ func (s *SampleService) DeleteAfter(ctx *gst.ServiceContext, req *modelcopytest.
 		ServiceName: "sample",
 		Payload:     "*CopyTest",
 		Result:      "*CopyTest",
-		Phase:       consts.Create,
+		Phase:       apiaction.Create,
 	}
 	deleteAction := &dsl.Action{
 		Service:     true,
 		ServiceName: "sample",
 		Payload:     "*CopyTest",
 		Result:      "*CopyTest",
-		Phase:       consts.Delete,
+		Phase:       apiaction.Delete,
 	}
 	plan := &CopyPlan{
 		Name:              "copytest",
@@ -355,7 +355,7 @@ func itemPatchResult() *modelcopytest.Item {
 		Flatten:     true,
 		Payload:     "*ItemGetReq",
 		Result:      "*ItemGetRsp",
-		Phase:       consts.Get,
+		Phase:       apiaction.Get,
 	}
 	patchAction := &dsl.Action{
 		Service:     true,
@@ -363,7 +363,7 @@ func itemPatchResult() *modelcopytest.Item {
 		Flatten:     true,
 		Payload:     "*ItemPatchReq",
 		Result:      "*ItemPatchRsp",
-		Phase:       consts.Patch,
+		Phase:       apiaction.Patch,
 	}
 	plan := &CopyPlan{
 		Name:              "copytest",
@@ -456,7 +456,7 @@ func (s *ItemListService) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *
 		Service: true,
 		Payload: dsl.PayloadEmpty,
 		Result:  "*ItemListRsp",
-		Phase:   consts.List,
+		Phase:   apiaction.List,
 	}
 	plan := &CopyPlan{
 		Name:              "copytest",
@@ -533,7 +533,7 @@ func (s *SampleService) CreateAfter(ctx *gst.ServiceContext, req *modelcopytest.
 		Flatten:     true,
 		Payload:     "*Sample",
 		Result:      "*Sample",
-		Phase:       consts.Create,
+		Phase:       apiaction.Create,
 	}
 	plan := &CopyPlan{
 		Name:              "copytest",

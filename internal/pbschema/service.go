@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen/jsonshape"
@@ -85,9 +85,9 @@ func (g *Schema) declareService(m *modelinfo.Model) {
 	m.Design.Range(func(route string, action *dsl.Action) {
 		switch {
 		case dsl.HTTPOnlyAction(action.Phase.Name()):
-		case action.Phase == consts.PatchMany && standardAction(m, action):
+		case action.Phase == apiaction.PatchMany && standardAction(m, action):
 			batches[route] = m.ModelName + "Service." + modelinfo.RPCName(m, route, action)
-		case action.Phase == consts.Patch:
+		case action.Phase == apiaction.Patch:
 			patches[route] = action
 		}
 	})
@@ -106,7 +106,7 @@ func (g *Schema) declareService(m *modelinfo.Model) {
 		}
 		routes[name] = route
 		itemOf := ""
-		if action.Phase == consts.Patch && standardAction(m, action) {
+		if action.Phase == apiaction.Patch && standardAction(m, action) {
 			itemOf = batches[route]
 		}
 		r, ok := g.rpcMessages(m, pkg.Types.Scope(), model, file, route, action, itemOf, s)
@@ -115,7 +115,7 @@ func (g *Schema) declareService(m *modelinfo.Model) {
 		}
 		// A Stream action is served over gRPC alone: its route names it and
 		// tells it from the other actions, but is no path a request reaches.
-		comment := name + " is the " + action.Phase.Name() + " action of " + m.ModelName + " on " + consts.APIPath(r.Registered) + "."
+		comment := name + " is the " + action.Phase.Name() + " action of " + m.ModelName + " on " + apiaction.APIPath(r.Registered) + "."
 		if dsl.GRPCOnlyAction(action.Phase.Name()) {
 			comment = name + " is the " + action.Phase.Name() + " action of " + m.ModelName + " declared on " + route + ", served over gRPC alone."
 		}
@@ -159,7 +159,7 @@ func (g *Schema) declareService(m *modelinfo.Model) {
 // declares.
 func standardAction(m *modelinfo.Model, action *dsl.Action) bool {
 	self := "*" + m.ModelName
-	return action.Payload == self && action.Result == self && action.Phase != consts.Stream
+	return action.Payload == self && action.Result == self && action.Phase != apiaction.Stream
 }
 
 // rpcMessages builds the request and response messages of an action in file
@@ -274,7 +274,7 @@ func (g *Schema) addRequest(m *modelinfo.Model, file *ProtoFile, route string, a
 		// controls the model reads: the handler reads a control off the
 		// field of its name, so a parameter taking the name is reported
 		// even when the request carries no such field.
-		if action.Phase == consts.List && slices.Contains(listQueryFieldNames, param.Name) {
+		if action.Phase == apiaction.List && slices.Contains(listQueryFieldNames, param.Name) {
 			g.project.Report(s, "the :%s parameter of %s takes the name of the %s query field of a List request; rename the parameter", param.Param, registered, param.Name)
 			return nil, false
 		}
@@ -295,7 +295,7 @@ func (g *Schema) addRequest(m *modelinfo.Model, file *ProtoFile, route string, a
 // patchAction is the standard Patch of m, taking and answering the model:
 // the action the items of its standard PatchMany are the requests of.
 func patchAction(m *modelinfo.Model) *dsl.Action {
-	return &dsl.Action{Phase: consts.Patch, Payload: "*" + m.ModelName, Result: "*" + m.ModelName}
+	return &dsl.Action{Phase: apiaction.Patch, Payload: "*" + m.ModelName, Result: "*" + m.ModelName}
 }
 
 // patchRequest builds the request message of the standard Patch of m on
@@ -387,7 +387,7 @@ func (r *RPC) Streaming() bool {
 //	  uint32 depth = 2;
 //	}
 func (g *Schema) customRequest(scope *types.Scope, file *ProtoFile, action *dsl.Action, s jsonshape.Site) (*descriptorpb.DescriptorProto, []string, *Message, bool) {
-	if action.Phase == consts.List || action.Phase == consts.Get {
+	if action.Phase == apiaction.List || action.Phase == apiaction.Get {
 		fields, comments, nested := queryFields(action.Phase, allQueryControls)
 		request := newMessage(fields...)
 		request.NestedType = nested
@@ -492,50 +492,50 @@ func (g *Schema) typeMessage(scope *types.Scope, file *ProtoFile, action *dsl.Ac
 func standardMessages(m *modelinfo.Model, model *Message, file *ProtoFile, route string, action *dsl.Action) (request *descriptorpb.DescriptorProto, requestFields []string, response *descriptorpb.DescriptorProto, responseFields []string) {
 	x := ModelFieldName(m)
 	switch action.Phase {
-	case consts.Create:
+	case apiaction.Create:
 		request = newMessage(modelField(x, model))
 		requestFields = append(requestFields, "the "+m.ModelName+" to create")
 		response = newMessage(modelField(x, model))
 		responseFields = append(responseFields, "the "+m.ModelName+" created")
-	case consts.Get:
+	case apiaction.Get:
 		fields, comments, _ := queryFields(action.Phase, allQueryControls)
 		request = newMessage(fields...)
 		requestFields = append(requestFields, comments...)
 		response = newMessage(modelField(x, model))
 		responseFields = append(responseFields, "the "+m.ModelName+" found")
-	case consts.Update:
+	case apiaction.Update:
 		request = newMessage(modelField(x, model))
 		requestFields = append(requestFields, "the replacement")
 		response = newMessage(modelField(x, model))
 		responseFields = append(responseFields, "the "+m.ModelName+" as stored")
-	case consts.Patch:
+	case apiaction.Patch:
 		file.importOf(fieldMaskProto)
 		request = newMessage(modelField(x, model), messageField("update_mask", wellKnownFieldMask))
 		requestFields = append(requestFields, "the values to apply", "the fields of "+x+" to apply, named as the message names them")
 		response = newMessage(modelField(x, model))
 		responseFields = append(responseFields, "the "+m.ModelName+" as stored")
-	case consts.Delete:
+	case apiaction.Delete:
 		request = newMessage()
 		response = newMessage()
-	case consts.List:
+	case apiaction.List:
 		fields, comments, nested := queryFields(action.Phase, queryControlsOf(model.TypeName))
 		request = newMessage(fields...)
 		request.NestedType = nested
 		requestFields = append(requestFields, comments...)
 		response = newMessage(repeatedMessageField("items", model.fullName()), scalarField("total", 0, descriptorpb.FieldDescriptorProto_TYPE_INT64))
 		responseFields = append(responseFields, "the "+m.ModelName+" records of the page", "the number of records the filters match, 0 under cursor pagination")
-	case consts.CreateMany, consts.UpdateMany:
+	case apiaction.CreateMany, apiaction.UpdateMany:
 		request = newMessage(repeatedMessageField("items", model.fullName()))
 		requestFields = append(requestFields, "the "+m.ModelName+" records to write")
 		response = newMessage(repeatedMessageField("items", model.fullName()))
 		responseFields = append(responseFields, "the "+m.ModelName+" records as stored")
-	case consts.PatchMany:
+	case apiaction.PatchMany:
 		item := messageName(m, route, patchAction(m), "Request")
 		request = newMessage(repeatedMessageField("items", "."+file.Package+"."+item))
 		requestFields = append(requestFields, "the patches, each a "+item+" naming the "+m.ModelName+" it applies to by its id")
 		response = newMessage(repeatedMessageField("items", model.fullName()))
 		responseFields = append(responseFields, "the "+m.ModelName+" records as stored")
-	case consts.DeleteMany:
+	case apiaction.DeleteMany:
 		request = newMessage(repeatedStringField("ids", 0))
 		requestFields = append(requestFields, "the ids of the "+m.ModelName+" records to delete")
 		response = newMessage()
@@ -547,7 +547,7 @@ func standardMessages(m *modelinfo.Model, model *Message, file *ProtoFile, route
 // carry, the ones queryFields writes for a model reading every control,
 // which no route parameter of a List may take.
 var listQueryFieldNames = func() []string {
-	fields, _, _ := queryFields(consts.List, allQueryControls)
+	fields, _, _ := queryFields(apiaction.List, allQueryControls)
 	names := make([]string, 0, len(fields))
 	for _, f := range fields {
 		names = append(names, f.GetName())
@@ -624,7 +624,7 @@ var listQueryFieldNames = func() []string {
 //	    repeated string values = 3;
 //	  }
 //	}
-func queryFields(phase consts.Phase, controls queryControls) (fields []*descriptorpb.FieldDescriptorProto, comments []string, nested []*descriptorpb.DescriptorProto) {
+func queryFields(phase apiaction.Phase, controls queryControls) (fields []*descriptorpb.FieldDescriptorProto, comments []string, nested []*descriptorpb.DescriptorProto) {
 	expansion := []*descriptorpb.FieldDescriptorProto{
 		repeatedStringField("expand", 0),
 		scalarField("depth", 0, descriptorpb.FieldDescriptorProto_TYPE_UINT32),
@@ -634,9 +634,9 @@ func queryFields(phase consts.Phase, controls queryControls) (fields []*descript
 		"the depth of the expansion, as the _depth query parameter",
 	}
 	switch phase {
-	case consts.Get:
+	case apiaction.Get:
 		return expansion, expansionComments, nil
-	case consts.List:
+	case apiaction.List:
 		filter := newMessage(stringField("field", 1), stringField("op", 2), repeatedStringField("values", 3))
 		filter.Name = new(filterMessage)
 		fields = append(fields, repeatedMessageField("filters", filterMessage))

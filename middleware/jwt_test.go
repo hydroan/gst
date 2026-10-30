@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/authn/jwt"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/middleware"
 	"github.com/stretchr/testify/require"
 )
@@ -82,7 +82,7 @@ func serveJwtAuth(t *testing.T, header http.Header) *httptest.ResponseRecorder {
 	router := gin.New()
 	router.Use(middleware.JwtAuth())
 	router.GET("/api/jwt", func(c *gin.Context) {
-		c.String(http.StatusOK, "%s %s %s", c.GetString(consts.CTX_USER_ID), c.GetString(consts.CTX_USERNAME), c.GetString(consts.CTX_SESSION_ID))
+		c.String(http.StatusOK, "%s %s %s", c.GetString(requestctx.KeyUserID), c.GetString(requestctx.KeyUsername), c.GetString(requestctx.KeySessionID))
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/jwt", nil)

@@ -5,8 +5,8 @@ import (
 	"go/token"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/dsl"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/modelinfo"
 	"github.com/stretchr/testify/require"
@@ -45,7 +45,7 @@ func TestBuildProjectFile(t *testing.T) {
 		// main.go applies; a table-backed one is listed by name as well, so
 		// that gg check validates its index declarations before gg gen wrote
 		// the registration.
-		require.Equal(t, consts.CodeGeneratedComment()+"\n\n"+`package main
+		require.Equal(t, ggconst.CodeGeneratedComment+"\n\n"+`package main
 
 import (
 	_ "tmpapp/model"
@@ -88,7 +88,7 @@ func init() {
 		// table-backed entries: nothing else.
 		bare, err := buildProjectFile("tmpapp", []*modelinfo.Model{registered})
 		require.NoError(t, err)
-		require.Equal(t, consts.CodeGeneratedComment()+"\n\n"+`package main
+		require.Equal(t, ggconst.CodeGeneratedComment+"\n\n"+`package main
 
 import (
 	_ "tmpapp/model"
@@ -128,7 +128,7 @@ func TestBuildProjectFileListsIgnoredModelsApart(t *testing.T) {
 	file, err := buildProjectFile("tmpapp", []*modelinfo.Model{ignored, virtual, registered})
 	require.NoError(t, err)
 
-	require.Equal(t, consts.CodeGeneratedComment()+"\n\n"+`package main
+	require.Equal(t, ggconst.CodeGeneratedComment+"\n\n"+`package main
 
 import (
 	_ "tmpapp/model"

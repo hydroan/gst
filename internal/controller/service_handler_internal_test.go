@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
@@ -68,7 +68,7 @@ func (*payloadService) List(_ *types.ServiceContext, req *payloadReq) (*payloadR
 func TestServiceHandlerValidatesTheZeroRequestOfAnAbsentBody(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	const route = "required-payloads"
-	registerTestService[*handlerRouteModel, *requiredReq, *payloadRsp](consts.Create, route, &requiredService{})
+	registerTestService[*handlerRouteModel, *requiredReq, *payloadRsp](apiaction.Create, route, &requiredService{})
 	cfg := &types.ControllerConfig[*handlerRouteModel]{Route: route, ParamName: "id"}
 	engine := gin.New()
 	engine.POST("/required-payloads", CreateHandler[*handlerRouteModel, *requiredReq, *payloadRsp](cfg))
@@ -104,7 +104,7 @@ func TestServiceHandlerValidatesTheZeroRequestOfAnAbsentBody(t *testing.T) {
 func TestServiceHandlerBindsWhatTheActionReads(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	const route = "payloads"
-	for _, phase := range []consts.Phase{consts.Create, consts.Get, consts.List} {
+	for _, phase := range []apiaction.Phase{apiaction.Create, apiaction.Get, apiaction.List} {
 		registerTestService[*handlerRouteModel, *payloadReq, *payloadRsp](phase, route, &payloadService{})
 	}
 	cfg := &types.ControllerConfig[*handlerRouteModel]{Route: route, ParamName: "id"}

@@ -17,7 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/middleware"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
@@ -201,28 +201,28 @@ const (
 // binary: the service registry refuses a second registration of a route and
 // phase, which registering per test would attempt under -count.
 func registerFixtureServices() {
-	for _, phase := range []consts.Phase{
-		consts.Create, consts.Delete, consts.Update, consts.Patch, consts.List,
-		consts.CreateMany, consts.DeleteMany, consts.UpdateMany, consts.PatchMany,
+	for _, phase := range []apiaction.Phase{
+		apiaction.Create, apiaction.Delete, apiaction.Update, apiaction.Patch, apiaction.List,
+		apiaction.CreateMany, apiaction.DeleteMany, apiaction.UpdateMany, apiaction.PatchMany,
 	} {
 		serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](phase, refusalRoute, &refusingService{})
 	}
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](consts.List, filterRefusalRoute, &filterRefusingService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](consts.List, hangingRoute, &hangingService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](consts.Import, importRoute, &importingService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](consts.Import, refusedImportRoute, &refusingService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](consts.Export, exportRoute, &exportingService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](consts.Create, observedRoute, &observingService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](consts.Create, cookieBeforeRoute, &cookieBeforeService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](consts.Create, cookieAfterRoute, &cookieAfterService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Create, actionRoute, &actionService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.List, actionRoute, &actionService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Get, actionItemRoute, &actionService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Stream, watchRoute, &watchService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Stream, uploadRoute, &uploadService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Stream, chatRoute, &chatService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Stream, silentRoute, &actionService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](consts.Stream, forkRoute, forkingChat)
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.List, filterRefusalRoute, &filterRefusingService{})
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.List, hangingRoute, &hangingService{})
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.Import, importRoute, &importingService{})
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.Import, refusedImportRoute, &refusingService{})
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.Export, exportRoute, &exportingService{})
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.Create, observedRoute, &observingService{})
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.Create, cookieBeforeRoute, &cookieBeforeService{})
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.Create, cookieAfterRoute, &cookieAfterService{})
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](apiaction.Create, actionRoute, &actionService{})
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](apiaction.List, actionRoute, &actionService{})
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](apiaction.Get, actionItemRoute, &actionService{})
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](apiaction.Stream, watchRoute, &watchService{})
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](apiaction.Stream, uploadRoute, &uploadService{})
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](apiaction.Stream, chatRoute, &chatService{})
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](apiaction.Stream, silentRoute, &actionService{})
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](apiaction.Stream, forkRoute, forkingChat)
 }
 
 // cookieBeforeService and cookieAfterService set a cookie, which only an
@@ -523,8 +523,8 @@ func serveAs(ctx context.Context, t *testing.T, method, pattern string, handler 
 	engine.Handle(method, pattern, func(c *gin.Context) {
 		c.Set(requestctx.KeyParams, middleware.RouteManager.Get(c.FullPath()))
 		if username != "" {
-			c.Set(consts.CTX_USERNAME, username)
-			c.Set(consts.CTX_USER_ID, "u-1")
+			c.Set(requestctx.KeyUsername, username)
+			c.Set(requestctx.KeyUserID, "u-1")
 		}
 	}, handler)
 

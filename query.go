@@ -272,3 +272,12 @@ type SelectBranch[R any] = types.SelectBranch[R]
 // — into one, which no report wants; INTERSECT and EXCEPT are the semi joins
 // FilterExists and FilterNotExists already express.
 type Union[R any] = types.Union[R]
+
+// The framework-owned URL query parameters a project reads itself: the
+// expansion a Get applies and the format an Export writes. Framework
+// parameters all live in the "_" prefix namespace, so bare query keys always
+// belong to model filter fields.
+const (
+	QueryExpand = types.QueryExpand
+	QueryFormat = types.QueryFormat
+)

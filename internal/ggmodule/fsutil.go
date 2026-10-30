@@ -75,7 +75,7 @@ func isGoSourceFile(name string) bool {
 }
 
 // generatedFileHeader matches the Go convention for generated files
-// (https://go.dev/s/generatedcode). gst's own consts.CodeGeneratedComment()
+// (https://go.dev/s/generatedcode). gst's own ggconst.CodeGeneratedComment
 // header matches it, and so does the output of other generators such as
 // mockgen or stringer.
 var generatedFileHeader = regexp.MustCompile(`^// Code generated .* DO NOT EDIT\.$`)

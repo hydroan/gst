@@ -17,12 +17,12 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/interceptor"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/grpcserver"
 	internalmiddleware "github.com/hydroan/gst/internal/middleware"
 	modelauthz "github.com/hydroan/gst/internal/model/authz"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
+	"github.com/hydroan/gst/internal/requestctx"
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/internal/tenant"
@@ -69,13 +69,14 @@ func TestMain(m *testing.M) {
 			// project mounts them, on both listeners, in that order.
 			internalmiddleware.RegisterAuth(middleware.IAMSession())
 			grpcserver.UseAuth(interceptor.IAMSession())
-			// The request tenant's one source is CTX_TENANT_ID, written by
-			// trusted middleware ahead of Authz. The tests stand in for a
-			// trusted gateway: registered after IAMSession, this overwrites the
-			// session's tenant with the header's whenever one is sent.
+			// The request tenant's one source is requestctx.KeyTenantID,
+			// written by trusted middleware ahead of Authz. The tests stand
+			// in for a trusted gateway: registered after IAMSession, this
+			// overwrites the session's tenant with the header's whenever one
+			// is sent.
 			internalmiddleware.RegisterAuth(func(c *gin.Context) {
 				if tenantID := strings.TrimSpace(c.GetHeader(tenantHeader)); tenantID != "" {
-					c.Set(consts.CTX_TENANT_ID, tenantID)
+					c.Set(requestctx.KeyTenantID, tenantID)
 				}
 				c.Next()
 			})
@@ -452,12 +453,12 @@ func TestAuthzRole(t *testing.T) {
 			// Both the reserved ID and the reserved name are rejected, so a
 			// user-created role can never masquerade as the system role.
 			_, err := cli.Post[authz.Role](t.Context(), rolePath, &authz.Role{
-				ID:   consts.AUTHZ_SYSTEM_ROLE_ROOT,
+				ID:   rbac.SystemRoleRoot,
 				Name: "some_role_name",
 			})
 			requireRefusedAsInvalid(t, err)
 			_, err = cli.Post[authz.Role](t.Context(), rolePath, &authz.Role{
-				Name: consts.AUTHZ_SYSTEM_ROLE_ROOT,
+				Name: rbac.SystemRoleRoot,
 			})
 			requireRefusedAsInvalid(t, err)
 		})
@@ -901,15 +902,15 @@ func TestIAMPrincipalReportsSystemRoot(t *testing.T) {
 		require.False(t, rsp.Principal.IsSystemRoot)
 
 		t.Cleanup(func() {
-			_ = rbac.RBAC().UnassignSystemRole(context.Background(), userID, consts.AUTHZ_SYSTEM_ROLE_ROOT)
+			_ = rbac.RBAC().UnassignSystemRole(context.Background(), userID, rbac.SystemRoleRoot)
 		})
-		require.NoError(t, rbac.RBAC().AssignSystemRole(context.Background(), userID, consts.AUTHZ_SYSTEM_ROLE_ROOT))
+		require.NoError(t, rbac.RBAC().AssignSystemRole(context.Background(), userID, rbac.SystemRoleRoot))
 
 		rsp, err = cli.Get[iam.CurrentGetRsp](t.Context(), currentPath)
 		require.NoError(t, err)
 		require.True(t, rsp.Principal.IsSystemRoot)
 
-		require.NoError(t, rbac.RBAC().UnassignSystemRole(context.Background(), userID, consts.AUTHZ_SYSTEM_ROLE_ROOT))
+		require.NoError(t, rbac.RBAC().UnassignSystemRole(context.Background(), userID, rbac.SystemRoleRoot))
 
 		rsp, err = cli.Get[iam.CurrentGetRsp](t.Context(), currentPath)
 		require.NoError(t, err)
@@ -1104,7 +1105,7 @@ func requireNoAdminUserView(t *testing.T, users []iam.AdminUserView, userID stri
 }
 
 // TestAuthzRoleBindingAppointsTheBuiltInAdministrator covers the one binding
-// that looks no role up: naming consts.AUTHZ_ROLE_ADMIN appoints the tenant's
+// that looks no role up: naming rbac.RoleAdmin appoints the tenant's
 // built-in administrator, who reaches every route of that tenant on the
 // tenant_admin branch and sees the whole menu catalog there, and nothing in
 // any other tenant; deleting the binding takes it all back.
@@ -1126,17 +1127,17 @@ func TestAuthzRoleBindingAppointsTheBuiltInAdministrator(t *testing.T) {
 	binding, err := rootCli.Post[authz.RoleBinding](t.Context(), roleBindingPath, &authz.RoleBinding{
 		TenantID:  tenant.ID(tenantID),
 		SubjectID: userID,
-		RoleID:    consts.AUTHZ_ROLE_ADMIN,
+		RoleID:    rbac.RoleAdmin,
 	})
 	require.NoError(t, err)
 	require.EqualValues(t, tenantID, binding.TenantID)
-	requireGroupingRule(t, userID, consts.AUTHZ_ROLE_ADMIN, tenantID)
+	requireGroupingRule(t, userID, rbac.RoleAdmin, tenantID)
 
 	_, err = userCli.Get[client.ListResult[*authz.Role]](t.Context(), rolePath)
 	require.NoError(t, err, "the administrator reaches every route of the tenant")
 	decision, err := rbac.RBAC().Authorize(context.Background(), tenantID, userID, rolePath, http.MethodGet)
 	require.NoError(t, err)
-	require.Equal(t, consts.GrantSourceTenantAdmin, decision.Source)
+	require.Equal(t, types.GrantSourceTenantAdmin, decision.Source)
 
 	menus, err := userCli.Get[client.ListResult[*authz.Menu]](t.Context(), menuPath)
 	require.NoError(t, err)

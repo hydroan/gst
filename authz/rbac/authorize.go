@@ -4,7 +4,6 @@ import (
 	"context"
 	"slices"
 
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/types"
 	prommetrics "github.com/hydroan/gst/metrics"
 )
@@ -63,16 +62,16 @@ func (r *rbac) Authorize(
 //
 // An unknown answer is reported as no reason at all. Guessing between the two
 // would send an operator to repair the step that was never broken.
-func (r *rbac) denyReason(tenant string, subject string) consts.DenyReason {
+func (r *rbac) denyReason(tenant string, subject string) DenyReason {
 	graph := policyGraph
 	if graph == nil {
 		// No graph means no subject holds a role, whatever is stored.
-		return consts.DenyReasonNoRole
+		return DenyReasonNoRole
 	}
 	if len(graph.directRoles(tenantRoleGrouping, subject, tenant)) == 0 {
-		return consts.DenyReasonNoRole
+		return DenyReasonNoRole
 	}
-	return consts.DenyReasonNoPolicy
+	return DenyReasonNoPolicy
 }
 
 // authorize decides the request and names the rule that allowed it.
@@ -102,12 +101,12 @@ func (r *rbac) denyReason(tenant string, subject string) consts.DenyReason {
 // would deadlock the exported methods that already hold it.
 func (r *rbac) authorize(
 	tenant string, subject string, object string, action string,
-) (bool, consts.GrantSource, []string, error) {
-	if r.hasRoleLink(systemRoleGrouping, subject, consts.AUTHZ_SYSTEM_ROLE_ROOT) {
-		return true, consts.GrantSourceSystemRoot, nil, nil
+) (bool, GrantSource, []string, error) {
+	if r.hasRoleLink(systemRoleGrouping, subject, SystemRoleRoot) {
+		return true, GrantSourceSystemRoot, nil, nil
 	}
-	if r.hasRoleLink(tenantRoleGrouping, subject, consts.AUTHZ_ROLE_ADMIN, tenant) {
-		return true, consts.GrantSourceTenantAdmin, nil, nil
+	if r.hasRoleLink(tenantRoleGrouping, subject, RoleAdmin, tenant) {
+		return true, GrantSourceTenantAdmin, nil, nil
 	}
 
 	index := policyIndex
@@ -124,7 +123,7 @@ func (r *rbac) authorize(
 			return false, "", nil, matchErr
 		}
 		if allowed {
-			return true, consts.GrantSourceAuthenticated, matchedRule, nil
+			return true, GrantSourceAuthenticated, matchedRule, nil
 		}
 	}
 
@@ -142,7 +141,7 @@ func (r *rbac) authorize(
 			return false, "", nil, matchErr
 		}
 		if allowed {
-			return true, consts.GrantSourceRole, matchedRule, nil
+			return true, GrantSourceRole, matchedRule, nil
 		}
 	}
 	return false, "", nil, nil
@@ -228,9 +227,9 @@ func countDecision(decision types.Decision, err error) {
 		prommetrics.AuthzDecisionsTotal.WithLabelValues("error", "", "").Inc()
 	case decision.Allowed:
 		prommetrics.AuthzDecisionsTotal.
-			WithLabelValues(string(consts.EffectAllow), string(decision.Source), "").Inc()
+			WithLabelValues(string(EffectAllow), string(decision.Source), "").Inc()
 	default:
 		prommetrics.AuthzDecisionsTotal.
-			WithLabelValues(string(consts.EffectDeny), "", string(decision.Reason)).Inc()
+			WithLabelValues(string(EffectDeny), "", string(decision.Reason)).Inc()
 	}
 }

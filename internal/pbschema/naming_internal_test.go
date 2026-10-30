@@ -3,7 +3,7 @@ package pbschema
 import (
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/modelinfo"
 	"github.com/stretchr/testify/require"
@@ -38,16 +38,16 @@ func TestRequestParamsCarryEveryParameterOfTheRegisteredRoute(t *testing.T) {
 	require.Equal(t, []RequestParam{
 		{Param: "record", Name: "record", comment: "the :record parameter of /api/records/:record/items/:id"},
 		{Param: "id", Name: "id", comment: "the id of the Item"},
-	}, requestParams(item, "records/:record/items", &dsl.Action{Phase: consts.Get}))
+	}, requestParams(item, "records/:record/items", &dsl.Action{Phase: apiaction.Get}))
 	require.Equal(t, []RequestParam{{Param: "record", Name: "record", comment: "the :record parameter of /api/records/:record/items"}},
-		requestParams(item, "records/:record/items", &dsl.Action{Phase: consts.Create}))
+		requestParams(item, "records/:record/items", &dsl.Action{Phase: apiaction.Create}))
 	require.Equal(t, []RequestParam{{Param: "id", Name: "id", comment: "the id of the Item"}},
-		requestParams(item, "items/:id/seal", &dsl.Action{Phase: consts.Create, ServiceName: "seal"}))
+		requestParams(item, "items/:id/seal", &dsl.Action{Phase: apiaction.Create, ServiceName: "seal"}))
 	require.Equal(t, []RequestParam{{Param: "document", Name: "id", comment: "the id of the Document to delete"}},
-		requestParams(document, "archive/documents", &dsl.Action{Phase: consts.Delete}))
+		requestParams(document, "archive/documents", &dsl.Action{Phase: apiaction.Delete}))
 	require.Equal(t, []RequestParam{{Param: "box-id", Name: "box_id", comment: "the :box-id parameter of /api/archive/boxes/:box-id/documents"}},
-		requestParams(document, "archive/boxes/:box-id/documents", &dsl.Action{Phase: consts.List}))
-	require.Empty(t, requestParams(document, "archive/documents", &dsl.Action{Phase: consts.DeleteMany}))
+		requestParams(document, "archive/boxes/:box-id/documents", &dsl.Action{Phase: apiaction.List}))
+	require.Empty(t, requestParams(document, "archive/documents", &dsl.Action{Phase: apiaction.DeleteMany}))
 }
 
 // TestMessageNameIsTheRPCNameAndTheKind pins the examples of the messageName
@@ -57,9 +57,9 @@ func TestMessageNameIsTheRPCNameAndTheKind(t *testing.T) {
 	document := &modelinfo.Model{ModelName: "Document", Design: &dsl.Design{Endpoint: "archive/documents", Param: ":document"}}
 	entry := &modelinfo.Model{ModelName: "Entry", Design: &dsl.Design{Endpoint: "entries"}}
 
-	require.Equal(t, "CreateRecordRequest", messageName(record, "records", &dsl.Action{Phase: consts.Create}, "Request"))
-	require.Equal(t, "ListDocumentByBoxRequest", messageName(document, "archive/boxes/:box/documents", &dsl.Action{Phase: consts.List}, "Request"))
-	require.Equal(t, "MergeEntryResponse", messageName(entry, "entries/merge", &dsl.Action{Phase: consts.Create, ServiceName: "merge"}, "Response"))
+	require.Equal(t, "CreateRecordRequest", messageName(record, "records", &dsl.Action{Phase: apiaction.Create}, "Request"))
+	require.Equal(t, "ListDocumentByBoxRequest", messageName(document, "archive/boxes/:box/documents", &dsl.Action{Phase: apiaction.List}, "Request"))
+	require.Equal(t, "MergeEntryResponse", messageName(entry, "entries/merge", &dsl.Action{Phase: apiaction.Create, ServiceName: "merge"}, "Response"))
 }
 
 // TestModelFieldNameIsTheModelInSnakeCase pins the examples of the

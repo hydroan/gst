@@ -8,7 +8,7 @@ import (
 	"github.com/hydroan/gst/authn"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/cronjob"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/router"
 	servicelogmgmt "github.com/hydroan/gst/internal/service/logmgmt"
 	"github.com/hydroan/gst/module"
@@ -53,8 +53,8 @@ func Register() {
 		*LoginLog](
 		&LoginLogModule{},
 		module.CRUD(
-			consts.List,
-			consts.Get,
+			apiaction.List,
+			apiaction.Get,
 		),
 	)
 
@@ -64,8 +64,8 @@ func Register() {
 		*OperationLog](
 		&OperationLogModule{},
 		module.CRUD(
-			consts.List,
-			consts.Get,
+			apiaction.List,
+			apiaction.Get,
 		),
 	)
 

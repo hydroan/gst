@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/requestctx"
 	"github.com/hydroan/gst/response"
 )
 
@@ -19,11 +19,11 @@ import (
 // the environment and enable RBAC initialization.
 //
 // Authz must run after an authentication middleware that populates
-// consts.CTX_USER_ID. When using built-in IAM sessions, register IAMSession
+// requestctx.KeyUserID. When using built-in IAM sessions, register IAMSession
 // before Authz; otherwise a valid session cookie is rejected as "permission
 // denied" because Authz cannot find the authenticated subject yet.
 //
-// The request tenant has exactly one source: consts.CTX_TENANT_ID, read as it
+// The request tenant has exactly one source: requestctx.KeyTenantID, read as it
 // stands when this middleware runs, defaulted to tenant.Default when empty.
 // Whatever trusted middleware wrote it last decides. IAMSession writes the
 // session's tenant; a deployment whose tenant arrives another way — a header a
@@ -36,16 +36,16 @@ func Authz() gin.HandlerFunc {
 
 	return func(c *gin.Context) {
 		subject := rbac.Subject{
-			UserID:   c.GetString(consts.CTX_USER_ID),
-			Username: c.GetString(consts.CTX_USERNAME),
-			TenantID: c.GetString(consts.CTX_TENANT_ID),
+			UserID:   c.GetString(requestctx.KeyUserID),
+			Username: c.GetString(requestctx.KeyUsername),
+			TenantID: c.GetString(requestctx.KeyTenantID),
 		}
 		ctx, tenantID, err := rbac.Enforce(c.Request.Context(), subject, c.Request.URL.Path, c.Request.Method)
 		if err != nil {
 			response.Abort(c, err)
 			return
 		}
-		c.Set(consts.CTX_TENANT_ID, tenantID)
+		c.Set(requestctx.KeyTenantID, tenantID)
 		c.Request = c.Request.WithContext(ctx)
 	}
 }

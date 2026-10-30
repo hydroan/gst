@@ -7,7 +7,6 @@ import (
 
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/consts"
 	modelauthz "github.com/hydroan/gst/internal/model/authz"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/types"
@@ -83,7 +82,7 @@ func TestReconcilePoliciesSkipsRulesNoRecordDerives(t *testing.T) {
 	require.GreaterOrEqual(t, report.Skipped, 2)
 
 	for _, drift := range report.Drifts {
-		require.NotEqual(t, consts.AUTHZ_ROLE_AUTHENTICATED, drift.Role)
+		require.NotEqual(t, rbac.RoleAuthenticated, drift.Role)
 	}
 }
 
@@ -96,7 +95,7 @@ func TestReconcilePoliciesJudgesTheBuiltInAdminAssignmentByItsBinding(t *testing
 	ctx := context.Background()
 
 	t.Run("made through a binding", func(t *testing.T) {
-		binding := &modelauthz.RoleBinding{SubjectID: uuid.NewV7().String(), RoleID: consts.AUTHZ_ROLE_ADMIN}
+		binding := &modelauthz.RoleBinding{SubjectID: uuid.NewV7().String(), RoleID: rbac.RoleAdmin}
 		require.NoError(t, database.Database[*modelauthz.RoleBinding](ctx).Create(binding))
 		t.Cleanup(func() { require.NoError(t, database.Database[*modelauthz.RoleBinding](ctx).Delete(binding)) })
 
@@ -107,16 +106,16 @@ func TestReconcilePoliciesJudgesTheBuiltInAdminAssignmentByItsBinding(t *testing
 
 	t.Run("made around the framework", func(t *testing.T) {
 		subject := uuid.NewV7().String()
-		require.NoError(t, rbac.RBAC().AssignRole(ctx, tenant.Default, subject, consts.AUTHZ_ROLE_ADMIN))
+		require.NoError(t, rbac.RBAC().AssignRole(ctx, tenant.Default, subject, rbac.RoleAdmin))
 		t.Cleanup(func() {
-			require.NoError(t, rbac.RBAC().UnassignRole(ctx, tenant.Default, subject, consts.AUTHZ_ROLE_ADMIN))
+			require.NoError(t, rbac.RBAC().UnassignRole(ctx, tenant.Default, subject, rbac.RoleAdmin))
 		})
 
 		report, err := authz.ReconcilePolicies(ctx)
 		require.NoError(t, err)
 		require.Contains(t, report.Drifts, authz.PolicyDrift{
 			Kind: "binding", Direction: "orphaned",
-			Tenant: tenant.Default, Role: consts.AUTHZ_ROLE_ADMIN, Subject: subject,
+			Tenant: tenant.Default, Role: rbac.RoleAdmin, Subject: subject,
 		}, "an assignment with no binding behind it should be reported")
 	})
 }

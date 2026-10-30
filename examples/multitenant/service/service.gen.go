@@ -6,11 +6,10 @@ import (
 	"multitenant/service/membership"
 	"multitenant/service/ticket"
 
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/service"
 )
 
 func init() {
-	service.Register[*membership.Lister](consts.List, "/api/memberships")
-	service.Register[*ticket.Creator](consts.Create, "/api/tickets")
+	service.Register[*membership.Lister](service.List, "/api/memberships")
+	service.Register[*ticket.Creator](service.Create, "/api/tickets")
 }

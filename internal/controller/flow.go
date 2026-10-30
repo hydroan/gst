@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/execctx"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/requestctx"
@@ -26,13 +26,13 @@ import (
 // from the context of that call and its phase. Only the transport knows what
 // else the service context should carry — the HTTP handler's gin context,
 // nothing at all for a transport without one — so the transport supplies it.
-type serviceContextFunc func(ctx context.Context, phase consts.Phase) *types.ServiceContext
+type serviceContextFunc func(ctx context.Context, phase apiaction.Phase) *types.ServiceContext
 
 // ginServiceContext returns the serviceContextFunc of the HTTP handler
 // serving c: its service contexts carry the gin context, so the response
 // helpers of ServiceContext keep working inside the hooks.
 func ginServiceContext(c *gin.Context) serviceContextFunc {
-	return func(ctx context.Context, phase consts.Phase) *types.ServiceContext {
+	return func(ctx context.Context, phase apiaction.Phase) *types.ServiceContext {
 		return types.NewServiceContext(c, ctx, phase)
 	}
 }

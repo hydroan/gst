@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/gorilla/schema"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/types"
 )
@@ -31,9 +30,9 @@ func decodeGorilla(q url.Values, m types.Model) error {
 		}
 		values[key] = entry
 	}
-	delete(values, consts.QUERY_FORMAT)
+	delete(values, types.QueryFormat)
 	if !modelregistry.IsPaginatable(m) {
-		delete(values, consts.QUERY_SIZE)
+		delete(values, types.QuerySize)
 	}
 	return gorillaDecoder.Decode(m, values)
 }

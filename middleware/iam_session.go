@@ -3,7 +3,6 @@ package middleware
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/apidoc"
-	"github.com/hydroan/gst/consts"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/requestctx"
 	"github.com/hydroan/gst/response"
@@ -40,9 +39,9 @@ func IAMSession() gin.HandlerFunc {
 		}
 
 		c.Request = c.Request.WithContext(serviceiamsession.WithCurrentSession(ctx, sessionID, current))
-		c.Set(consts.CTX_USER_ID, current.UserID)
-		c.Set(consts.CTX_USERNAME, current.Username)
-		c.Set(consts.CTX_SESSION_ID, sessionID)
-		c.Set(consts.CTX_TENANT_ID, current.TenantID)
+		c.Set(requestctx.KeyUserID, current.UserID)
+		c.Set(requestctx.KeyUsername, current.Username)
+		c.Set(requestctx.KeySessionID, sessionID)
+		c.Set(requestctx.KeyTenantID, current.TenantID)
 	}
 }

@@ -9,7 +9,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/sse"
@@ -27,7 +27,7 @@ type ServiceContext struct {
 	ginCtx         *gin.Context
 	responseWriter http.ResponseWriter
 
-	phase consts.Phase
+	phase apiaction.Phase
 
 	// httpOnlyMethodCalled records that a service called a method only an
 	// HTTP request can serve (see HTTPOnlyMethods) while the context carried
@@ -52,7 +52,7 @@ type ServiceContext struct {
 // defensive nil checks around the returned context.
 //
 //nolint:revive // ServiceContext is constructed from the Gin request first.
-func NewServiceContext(c *gin.Context, ctx context.Context, phase consts.Phase) *ServiceContext {
+func NewServiceContext(c *gin.Context, ctx context.Context, phase apiaction.Phase) *ServiceContext {
 	if c == nil {
 		if ctx == nil {
 			ctx = context.Background()
@@ -93,7 +93,7 @@ func (sc *ServiceContext) Err() error                  { return sc.baseContext()
 func (sc *ServiceContext) Value(key any) any           { return sc.baseContext().Value(key) }
 
 // Phase returns the action phase the service is invoked for.
-func (sc *ServiceContext) Phase() consts.Phase {
+func (sc *ServiceContext) Phase() apiaction.Phase {
 	if sc == nil {
 		return ""
 	}

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/gghelper"
 )
@@ -35,7 +35,7 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.U
 			action: &dsl.Action{
 				Payload: "UserReq",
 				Result:  "UserRsp",
-				Phase:   consts.Create,
+				Phase:   apiaction.Create,
 			},
 			want: "req model.UserReq",
 		},
@@ -54,7 +54,7 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req model.User) (rsp model.Use
 			action: &dsl.Action{
 				Payload: "*UserReq",
 				Result:  "*UserRsp",
-				Phase:   consts.Create,
+				Phase:   apiaction.Create,
 			},
 			want: "req *model.UserReq",
 		},
@@ -73,7 +73,7 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.U
 			action: &dsl.Action{
 				Payload: "*UserReq",
 				Result:  "*UserRsp",
-				Phase:   consts.Create,
+				Phase:   apiaction.Create,
 			},
 			want: "req *model.UserReq",
 		},
@@ -92,7 +92,7 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req model.User) (rsp model.Use
 			action: &dsl.Action{
 				Payload: "UserReq",
 				Result:  "UserRsp",
-				Phase:   consts.Create,
+				Phase:   apiaction.Create,
 			},
 			want: "req model.UserReq",
 		},
@@ -151,7 +151,7 @@ func (b *Lister) List(ctx *gst.ServiceContext, req *box.BoxListReq) (rsp *box.Bo
 			action: &dsl.Action{
 				Payload: dsl.PayloadEmpty,
 				Result:  "*BoxListRsp",
-				Phase:   consts.List,
+				Phase:   apiaction.List,
 			},
 			want: "req *model.Empty",
 		},
@@ -173,7 +173,7 @@ func (b *Lister) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *box.BoxLi
 			action: &dsl.Action{
 				Payload: "*Box",
 				Result:  "*BoxListRsp",
-				Phase:   consts.List,
+				Phase:   apiaction.List,
 			},
 			want: "req *box.Box",
 		},
@@ -193,7 +193,7 @@ func (u *Getter) Get(ctx *gst.ServiceContext, req *model.UserGetReq) (rsp *model
 			action: &dsl.Action{
 				Payload: dsl.PayloadEmpty,
 				Result:  "*UserGetRsp",
-				Phase:   consts.Get,
+				Phase:   apiaction.Get,
 			},
 			want: "req *gstmodel.Empty",
 		},
@@ -213,7 +213,7 @@ func (b *Creator) Create(ctx *gst.ServiceContext, req *box.BoxCreateReq) (rsp *b
 			action: &dsl.Action{
 				Payload: "*BoxCreateReq",
 				Result:  dsl.PayloadEmpty,
-				Phase:   consts.Create,
+				Phase:   apiaction.Create,
 			},
 			want: "(rsp *model.Empty, err error)",
 		},

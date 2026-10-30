@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -33,8 +32,8 @@ func TestRBACWithoutAPolicySetRefusesWrites(t *testing.T) {
 		},
 		"AssignRole":         func() error { return r.AssignRole(ctx, "tenant_a", "u1", "role_a") },
 		"UnassignRole":       func() error { return r.UnassignRole(ctx, "tenant_a", "u1", "role_a") },
-		"AssignSystemRole":   func() error { return r.AssignSystemRole(ctx, "u1", consts.AUTHZ_SYSTEM_ROLE_ROOT) },
-		"UnassignSystemRole": func() error { return r.UnassignSystemRole(ctx, "u1", consts.AUTHZ_SYSTEM_ROLE_ROOT) },
+		"AssignSystemRole":   func() error { return r.AssignSystemRole(ctx, "u1", SystemRoleRoot) },
+		"UnassignSystemRole": func() error { return r.UnassignSystemRole(ctx, "u1", SystemRoleRoot) },
 		"RemoveSubject":      func() error { return r.RemoveSubject(ctx, "u1") },
 	}
 	for name, write := range writes {
@@ -52,19 +51,19 @@ func TestRBACWithoutAPolicySetAnswersReads(t *testing.T) {
 	r := rbacWithoutPolicies(t)
 	ctx := context.Background()
 
-	decision, err := r.Authorize(ctx, "tenant_a", consts.AUTHZ_USER_ROOT, "/api/things", "GET")
+	decision, err := r.Authorize(ctx, "tenant_a", UserRoot, "/api/things", "GET")
 	require.NoError(t, err)
 	assert.False(t, decision.Allowed, "a process deciding from no policies has to deny")
-	assert.Equal(t, consts.DenyReasonNotInitialized, decision.Reason,
+	assert.Equal(t, DenyReasonNotInitialized, decision.Reason,
 		"every request is refused the same way, which is a deployment answer rather than a missing rule")
 
 	// The built-in root subject keeps system_root so that modules registering no
 	// authz can still use root-only administrative flows.
-	systemRoot, err := r.HasSystemRole(ctx, consts.AUTHZ_USER_ROOT, consts.AUTHZ_SYSTEM_ROLE_ROOT)
+	systemRoot, err := r.HasSystemRole(ctx, UserRoot, SystemRoleRoot)
 	require.NoError(t, err)
 	assert.True(t, systemRoot)
 
-	systemRoot, err = r.HasSystemRole(ctx, "u1", consts.AUTHZ_SYSTEM_ROLE_ROOT)
+	systemRoot, err = r.HasSystemRole(ctx, "u1", SystemRoleRoot)
 	require.NoError(t, err)
 	assert.False(t, systemRoot)
 

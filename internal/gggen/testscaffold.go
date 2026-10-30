@@ -14,7 +14,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
@@ -156,7 +156,7 @@ func GenerateServiceTest(info *modelinfo.Model, target modelinfo.ServiceTargetIn
 	name := serviceTestName(action)
 	served := fmt.Sprintf("%s %s", action.Phase.HTTPMethod(), route)
 	how := serviceTestDoc
-	if action.Phase == consts.Stream {
+	if action.Phase == apiaction.Stream {
 		served = fmt.Sprintf("the %s rpc", modelinfo.RPCName(info, route, action))
 		how = serviceStreamTestDoc
 	}
@@ -222,7 +222,7 @@ type serviceTestExample struct {
 // when its name is one a scaffold import takes, and under its name when the
 // path does not tell it (see importSpecName).
 func newServiceTestExample(info *modelinfo.Model, action *dsl.Action, route string) *serviceTestExample {
-	if action.Phase == consts.Stream {
+	if action.Phase == apiaction.Stream {
 		return newStreamTestExample(info, action, route)
 	}
 	example := &serviceTestExample{
@@ -271,7 +271,7 @@ func newServiceTestExample(info *modelinfo.Model, action *dsl.Action, route stri
 	var stmts []ast.Stmt
 	path, usesID := routePathExpr(route)
 	switch action.Phase {
-	case consts.Import:
+	case apiaction.Import:
 		example.imports[scaffoldImportStrings] = ""
 		filename := strLit(filepath.Base(filepath.Dir(route)) + ".csv")
 		content := call(sel(ident("strings"), "NewReader"), strLit("name\nsample\n"))
@@ -280,13 +280,13 @@ func newServiceTestExample(info *modelinfo.Model, action *dsl.Action, route stri
 			requireCall("NoError", ident("err")),
 			requireCall("NotNil", ident("envelope")),
 		)
-	case consts.Export:
+	case apiaction.Export:
 		stmts = append(stmts,
 			define(idents("attachment", "err"), call(sel(ident("cli"), "Download"), testContext(), path)),
 			requireCall("NoError", ident("err")),
 			requireCall("NotEmpty", sel(ident("attachment"), "Content")),
 		)
-	case consts.SSE:
+	case apiaction.SSE:
 		example.imports[scaffoldImportHTTP] = ""
 		example.imports[scaffoldImportSSE] = ""
 		callback := &ast.FuncLit{
@@ -304,7 +304,7 @@ func newServiceTestExample(info *modelinfo.Model, action *dsl.Action, route stri
 		args := []ast.Expr{testContext(), path}
 		var rspType ast.Expr
 		switch action.Phase {
-		case consts.List:
+		case apiaction.List:
 			// The example sends no query parameter: pagination and the
 			// other query capabilities are opted into per model, and a
 			// parameter the model did not opt into is rejected.
@@ -315,10 +315,10 @@ func newServiceTestExample(info *modelinfo.Model, action *dsl.Action, route stri
 			} else {
 				rspType = &ast.IndexExpr{X: sel(ident("client"), "ListResult"), Index: modelType(action.Result)}
 			}
-		case consts.CreateMany, consts.UpdateMany, consts.PatchMany:
+		case apiaction.CreateMany, apiaction.UpdateMany, apiaction.PatchMany:
 			items := &ast.CompositeLit{Type: &ast.ArrayType{Elt: modelType(action.Payload)}, Elts: []ast.Expr{&ast.CompositeLit{}}}
 			args = append(args, call(sel(ident("client"), "BatchItems"), items))
-		case consts.DeleteMany:
+		case apiaction.DeleteMany:
 			usesID = true
 			ids := &ast.CompositeLit{Type: &ast.ArrayType{Elt: ident("string")}, Elts: []ast.Expr{ident("id")}}
 			args = append(args, call(sel(ident("client"), "BatchIDs"), ids))

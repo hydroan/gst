@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,10 +22,10 @@ func TestFromGinExtractsRequestFields(t *testing.T) {
 	router := gin.New()
 	router.GET("/api/users/:id", func(ctx *gin.Context) {
 		ctx.Set(KeyParams, []string{"id"})
-		ctx.Set(consts.CTX_USERNAME, "admin")
-		ctx.Set(consts.CTX_USER_ID, "user-1")
-		ctx.Set(consts.CTX_SESSION_ID, "session-1")
-		ctx.Set(consts.CTX_TENANT_ID, "tenant-1")
+		ctx.Set(KeyUsername, "admin")
+		ctx.Set(KeyUserID, "user-1")
+		ctx.Set(KeySessionID, "session-1")
+		ctx.Set(KeyTenantID, "tenant-1")
 		ctx.Set(KeyRequiresAuth, true)
 
 		meta = FromGin(ctx)
@@ -134,7 +133,7 @@ func TestFromGinReadsIdentityFreshWhileQueryStaysMemoized(t *testing.T) {
 	require.Empty(t, before.Username(), "identity middleware has not run yet")
 	require.Equal(t, []string{"blue"}, before.Query()["tag"])
 
-	ctx.Set(consts.CTX_USERNAME, "admin")
+	ctx.Set(KeyUsername, "admin")
 	after := FromGin(ctx)
 	require.Equal(t, "admin", after.Username(),
 		"identity must be read fresh, not frozen by the first construction")

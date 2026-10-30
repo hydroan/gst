@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/modelinfo"
 )
@@ -800,7 +800,7 @@ func TestGenerateTargetServiceShellCarriesNoHookPlaceholders(t *testing.T) {
 		ModelFileDir: filepath.Join("model", "copytest"),
 		Design:       &dsl.Design{},
 	}
-	action := &dsl.Action{Service: true, Payload: "*CopyTest", Result: "*CopyTest", Phase: consts.Create}
+	action := &dsl.Action{Service: true, Payload: "*CopyTest", Result: "*CopyTest", Phase: apiaction.Create}
 
 	shell, err := generateTargetServiceShell([]moduleCopyAction{{
 		Action:     action,

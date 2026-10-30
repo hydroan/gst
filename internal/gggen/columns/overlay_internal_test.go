@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/modelinfo"
@@ -20,9 +19,9 @@ func TestInspectionOverlayStubsGeneratedFiles(t *testing.T) {
 	t.Chdir(t.TempDir())
 	columns := filepath.Join("model", "sample", "record.gen.go")
 	registration := filepath.Join("model", ggconst.FileModelGen)
-	writeProjectFile(t, columns, consts.CodeGeneratedComment()+"\n// source: model/sample/record.go\n\npackage sample\n\nvar RecordCols = struct{}{}\n")
+	writeProjectFile(t, columns, ggconst.CodeGeneratedComment+"\n// source: model/sample/record.go\n\npackage sample\n\nvar RecordCols = struct{}{}\n")
 	writeProjectFile(t, filepath.Join("model", "sample", "handwritten.gen.go"), "package sample\n")
-	writeProjectFile(t, registration, consts.CodeGeneratedComment()+"\n\npackage model\n\nfunc init() { register(&Deleted{}) }\n")
+	writeProjectFile(t, registration, ggconst.CodeGeneratedComment+"\n\npackage model\n\nfunc init() { register(&Deleted{}) }\n")
 	writeProjectFile(t, filepath.Join("model", "sample", "record.go"), "package sample\n\ntype Record struct{}\n")
 
 	overlay, err := InspectionOverlay("tmpapp", "model", nil, gghelper.NewProjectIgnore())
@@ -131,7 +130,7 @@ func archiveID() string {
 	// Archive was renamed since the previous generation, whose column file is
 	// the only place still declaring its column var.
 	archiveColumns := filepath.Join("model", "archive", "archive.gen.go")
-	writeProjectFile(t, archiveColumns, consts.CodeGeneratedComment()+"\n\npackage archive\n\nvar ArchiveCols = struct{ ID string }{ID: \"id\"}\n")
+	writeProjectFile(t, archiveColumns, ggconst.CodeGeneratedComment+"\n\npackage archive\n\nvar ArchiveCols = struct{ ID string }{ID: \"id\"}\n")
 	models := []*modelinfo.Model{{
 		ModulePath: "tmpapp", ModelPkgName: "sample", ModelName: "Record",
 		ModelFileDir: filepath.Join("model", "sample"), ModelFilePath: recordSource,

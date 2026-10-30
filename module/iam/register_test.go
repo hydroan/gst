@@ -6,11 +6,11 @@ import (
 	"testing"
 
 	"github.com/goforj/godump"
+	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/interceptor"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/grpcserver"
 	internalmiddleware "github.com/hydroan/gst/internal/middleware"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
@@ -76,8 +76,8 @@ func TestMain(m *testing.M) {
 func seedRootAccount() error {
 	ctx := context.Background()
 
-	user := &modeliamuser.User{Username: consts.AUTHZ_USER_ROOT, Status: modeliamuser.UserStatusActive}
-	user.ID = consts.AUTHZ_USER_ROOT
+	user := &modeliamuser.User{Username: rbac.UserRoot, Status: modeliamuser.UserStatusActive}
+	user.ID = rbac.UserRoot
 	if err := database.Database[*modeliamuser.User](ctx).Create(user); err != nil {
 		return err
 	}

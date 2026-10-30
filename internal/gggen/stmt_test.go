@@ -7,7 +7,7 @@ import (
 	"go/token"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/gggen"
 	"github.com/hydroan/gst/internal/gghelper"
@@ -192,7 +192,7 @@ func TestStmtServiceRegister(t *testing.T) {
 		name       string
 		structName string
 		route      string
-		phase      consts.Phase
+		phase      apiaction.Phase
 		want       string
 	}{
 		{
@@ -200,15 +200,15 @@ func TestStmtServiceRegister(t *testing.T) {
 			name:       "user",
 			structName: "user.Creator",
 			route:      "/api/users",
-			phase:      consts.Create,
-			want:       `service.Register[*user.Creator](consts.Create, "/api/users")`,
+			phase:      apiaction.Create,
+			want:       `service.Register[*user.Creator](service.Create, "/api/users")`,
 		},
 		{
 			name:       "box",
 			structName: "box.Updater",
 			route:      "/api/boxes/:id",
-			phase:      consts.Update,
-			want:       `service.Register[*box.Updater](consts.Update, "/api/boxes/:id")`,
+			phase:      apiaction.Update,
+			want:       `service.Register[*box.Updater](service.Update, "/api/boxes/:id")`,
 		},
 	}
 	for _, tt := range tests {
@@ -251,7 +251,7 @@ func TestStmtRouterRegister(t *testing.T) {
 			routerGroup:  "Auth",
 			route:        "/api/records",
 			phase:        "Create",
-			want:         `router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records", &gst.ControllerConfig[*model.Record]{}, consts.Create)`,
+			want:         `router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records", &gst.ControllerConfig[*model.Record]{}, service.Create)`,
 		},
 		{
 			// Bare action type names (the declared form of slice and map
@@ -265,7 +265,7 @@ func TestStmtRouterRegister(t *testing.T) {
 			routerGroup:  "Auth",
 			route:        "/api/box2",
 			phase:        "Update",
-			want:         `router.Register[*pkgmodel.Record, pkgmodel.BoxRequest, pkgmodel.BoxResponse](router.Auth(), "/api/box2", &gst.ControllerConfig[*pkgmodel.Record]{}, consts.Update)`,
+			want:         `router.Register[*pkgmodel.Record, pkgmodel.BoxRequest, pkgmodel.BoxResponse](router.Auth(), "/api/box2", &gst.ControllerConfig[*pkgmodel.Record]{}, service.Update)`,
 		},
 		{
 			name:         "starred_names_in_pub_group",
@@ -277,7 +277,7 @@ func TestStmtRouterRegister(t *testing.T) {
 			routerGroup:  "Pub",
 			route:        "/api/login",
 			phase:        "Update",
-			want:         `router.Register[*pkgmodel.Record, *pkgmodel.BoxRequest, *pkgmodel.BoxResponse](router.Pub(), "/api/login", &gst.ControllerConfig[*pkgmodel.Record]{}, consts.Update)`,
+			want:         `router.Register[*pkgmodel.Record, *pkgmodel.BoxRequest, *pkgmodel.BoxResponse](router.Pub(), "/api/login", &gst.ControllerConfig[*pkgmodel.Record]{}, service.Update)`,
 		},
 		{
 			name:         "list_with_empty_payload",
@@ -289,7 +289,7 @@ func TestStmtRouterRegister(t *testing.T) {
 			routerGroup:  "Auth",
 			route:        "/api/boxes",
 			phase:        "List",
-			want:         `router.Register[*box.Record, *model.Empty, *box.BoxListRsp](router.Auth(), "/api/boxes", &gst.ControllerConfig[*box.Record]{}, consts.List)`,
+			want:         `router.Register[*box.Record, *model.Empty, *box.BoxListRsp](router.Auth(), "/api/boxes", &gst.ControllerConfig[*box.Record]{}, service.List)`,
 		},
 		{
 			name:         "create_with_empty_result",
@@ -301,7 +301,7 @@ func TestStmtRouterRegister(t *testing.T) {
 			routerGroup:  "Auth",
 			route:        "/api/boxes",
 			phase:        "Create",
-			want:         `router.Register[*box.Record, *box.BoxCreateReq, *model.Empty](router.Auth(), "/api/boxes", &gst.ControllerConfig[*box.Record]{}, consts.Create)`,
+			want:         `router.Register[*box.Record, *box.BoxCreateReq, *model.Empty](router.Auth(), "/api/boxes", &gst.ControllerConfig[*box.Record]{}, service.Create)`,
 		},
 		{
 			// A project routing a root model package keeps the gstmodel
@@ -317,7 +317,7 @@ func TestStmtRouterRegister(t *testing.T) {
 			routerGroup:  "Auth",
 			route:        "/api/boxes",
 			phase:        "List",
-			want:         `router.Register[*model.Record, *gstmodel.Empty, *model.BoxListRsp](router.Auth(), "/api/boxes", &gst.ControllerConfig[*model.Record]{}, consts.List)`,
+			want:         `router.Register[*model.Record, *gstmodel.Empty, *model.BoxListRsp](router.Auth(), "/api/boxes", &gst.ControllerConfig[*model.Record]{}, service.List)`,
 		},
 		{
 			// A route ending in a path parameter names it in the controller
@@ -332,7 +332,7 @@ func TestStmtRouterRegister(t *testing.T) {
 			route:        "/api/boxes/:id",
 			paramName:    "id",
 			phase:        "Get",
-			want:         `router.Register[*box.Record, *box.Record, *box.Record](router.Auth(), "/api/boxes/:id", &gst.ControllerConfig[*box.Record]{ParamName: "id"}, consts.Get)`,
+			want:         `router.Register[*box.Record, *box.Record, *box.Record](router.Auth(), "/api/boxes/:id", &gst.ControllerConfig[*box.Record]{ParamName: "id"}, service.Get)`,
 		},
 	}
 	for _, tt := range tests {

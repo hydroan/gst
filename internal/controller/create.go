@@ -7,7 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
@@ -29,7 +29,7 @@ import (
 // serviceHandler): its Create method runs on the bound payload, a multipart
 // form left unbound for the service to read itself.
 func CreateHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.Create, consts.CreateBefore, consts.CreateAfter)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), apiaction.Create, apiaction.CreateBefore, apiaction.CreateAfter)
 	if !a.typesEqual {
 		return a.serviceHandler()
 	}
@@ -42,7 +42,7 @@ func CreateHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			return
 		}
 
-		log := logger.Controller.WithContext(c.Request.Context(), consts.Create)
+		log := logger.Controller.WithContext(c.Request.Context(), apiaction.Create)
 
 		req := a.newModel()
 		if reqErr := bindJSONRequest(c, &req); reqErr != nil {
@@ -70,7 +70,7 @@ func CreateHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 // runs the create flow (see createFlow) and answers with the model created,
 // or with the status the failure maps to (see call).
 func CreateCall[M types.Model](route string) func(ctx context.Context, params map[string]string, m M) (M, error) {
-	a := newAction[M, M, M](route, consts.Create, consts.CreateBefore, consts.CreateAfter)
+	a := newAction[M, M, M](route, apiaction.Create, apiaction.CreateBefore, apiaction.CreateAfter)
 	return func(ctx context.Context, params map[string]string, m M) (M, error) {
 		var zero M
 		c, err := a.beginCall(ctx, params, nil)
@@ -97,12 +97,12 @@ func CreateCall[M types.Model](route string) func(ctx context.Context, params ma
 // which names the caller the request carries as both, and records the
 // operation. The created model is req itself, filled by the write.
 func (a *action[M, REQ, RSP]) createFlow(ctx context.Context, newServiceContext serviceContextFunc, req M) error {
-	log := logger.Controller.WithContext(ctx, consts.Create)
+	log := logger.Controller.WithContext(ctx, apiaction.Create)
 	svc := a.service()
 	clearAudit(req)
 
 	// 1.Perform business logic processing before create resource.
-	if err := a.traceServiceHook(ctx, consts.CreateBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
+	if err := a.traceServiceHook(ctx, apiaction.CreateBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
 		return svc.CreateBefore(sc, req)
 	}); err != nil {
 		return failService(ctx, log, err)
@@ -114,7 +114,7 @@ func (a *action[M, REQ, RSP]) createFlow(ctx context.Context, newServiceContext 
 		return failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after create resource
-	if err := a.traceServiceHook(ctx, consts.CreateAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
+	if err := a.traceServiceHook(ctx, apiaction.CreateAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
 		return svc.CreateAfter(sc, req)
 	}); err != nil {
 		return failService(ctx, log, err)
@@ -123,7 +123,7 @@ func (a *action[M, REQ, RSP]) createFlow(ctx context.Context, newServiceContext 
 	// 4.record operation log to database.
 	// Record, Request, and Response carry the same serialized payload on
 	// this action, so one marshal feeds all three columns.
-	if err := audit.RecordOperation(ctx, req, consts.OP_CREATE,
+	if err := audit.RecordOperation(ctx, req, types.OperationCreate,
 		func() *modellogmgmt.OperationLog {
 			record, _ := json.Marshal(req)
 			entry := operationLog(ctx, a.name)

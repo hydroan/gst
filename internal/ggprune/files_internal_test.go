@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/modelinfo"
@@ -27,7 +27,7 @@ func TestCurrentServiceFilesUsesFlattenTarget(t *testing.T) {
 // flattenPruneModel returns a model whose only enabled action flattens its
 // service file into service/authz/role.go.
 func flattenPruneModel() *modelinfo.Model {
-	disabled := func(phase consts.Phase) *dsl.Action {
+	disabled := func(phase apiaction.Phase) *dsl.Action {
 		return &dsl.Action{Phase: phase}
 	}
 	return &modelinfo.Model{
@@ -42,21 +42,21 @@ func flattenPruneModel() *modelinfo.Model {
 				Service:     true,
 				ServiceName: "role",
 				Flatten:     true,
-				Phase:       consts.Create,
+				Phase:       apiaction.Create,
 			},
-			Delete:     disabled(consts.Delete),
-			Update:     disabled(consts.Update),
-			Patch:      disabled(consts.Patch),
-			List:       disabled(consts.List),
-			Get:        disabled(consts.Get),
-			CreateMany: disabled(consts.CreateMany),
-			DeleteMany: disabled(consts.DeleteMany),
-			UpdateMany: disabled(consts.UpdateMany),
-			PatchMany:  disabled(consts.PatchMany),
-			Import:     disabled(consts.Import),
-			Export:     disabled(consts.Export),
-			SSE:        disabled(consts.SSE),
-			Stream:     disabled(consts.Stream),
+			Delete:     disabled(apiaction.Delete),
+			Update:     disabled(apiaction.Update),
+			Patch:      disabled(apiaction.Patch),
+			List:       disabled(apiaction.List),
+			Get:        disabled(apiaction.Get),
+			CreateMany: disabled(apiaction.CreateMany),
+			DeleteMany: disabled(apiaction.DeleteMany),
+			UpdateMany: disabled(apiaction.UpdateMany),
+			PatchMany:  disabled(apiaction.PatchMany),
+			Import:     disabled(apiaction.Import),
+			Export:     disabled(apiaction.Export),
+			SSE:        disabled(apiaction.SSE),
+			Stream:     disabled(apiaction.Stream),
 		},
 	}
 }

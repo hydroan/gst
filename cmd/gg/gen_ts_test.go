@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 func TestGenTypeScriptRunWritesTheDeclarationsOfTheRoutes(t *testing.T) {
@@ -57,7 +57,7 @@ func TestGenTypeScriptRunReplacesTheFilesOfAnEarlierRun(t *testing.T) {
 
 	outputDir := filepath.Join(projectDir, "generated", "typescript")
 	stale := filepath.Join(outputDir, "model", "gone", "stale.ts")
-	writeProjectFile(t, stale, consts.CodeGeneratedComment()+"\n\nexport type Stale = string;\n")
+	writeProjectFile(t, stale, ggconst.CodeGeneratedComment+"\n\nexport type Stale = string;\n")
 	handwritten := filepath.Join(outputDir, "notes.ts")
 	writeProjectFile(t, handwritten, "export type Note = string;\n")
 

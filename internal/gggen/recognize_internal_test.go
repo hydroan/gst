@@ -6,13 +6,13 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/ggconst"
 )
 
 func TestIsServiceMethod1(t *testing.T) {
-	fn1 := serviceMethod1("u", "User", "model", consts.CreateBefore, "Creator")
-	fn2 := serviceMethod2("u", "User", "model", consts.ListBefore, "Lister")
+	fn1 := serviceMethod1("u", "User", "model", apiaction.CreateBefore, "Creator")
+	fn2 := serviceMethod2("u", "User", "model", apiaction.ListBefore, "Lister")
 	if !isServiceMethod1(fn1) {
 		t.Fatalf("expected isServiceMethod1 to return true for ServiceMethod1-generated func")
 	}
@@ -22,8 +22,8 @@ func TestIsServiceMethod1(t *testing.T) {
 }
 
 func TestIsServiceMethod2(t *testing.T) {
-	fn := serviceMethod2("u", "User", "model", consts.ListBefore, "Lister")
-	fnNeg := serviceMethod3("u", "User", "model", consts.CreateManyBefore, "ManyCreator")
+	fn := serviceMethod2("u", "User", "model", apiaction.ListBefore, "Lister")
+	fnNeg := serviceMethod3("u", "User", "model", apiaction.CreateManyBefore, "ManyCreator")
 	if !isServiceMethod2(fn) {
 		t.Fatalf("expected isServiceMethod2 to return true for ServiceMethod2-generated func")
 	}
@@ -33,8 +33,8 @@ func TestIsServiceMethod2(t *testing.T) {
 }
 
 func TestIsServiceMethod3(t *testing.T) {
-	fn := serviceMethod3("u", "User", "model", consts.CreateManyBefore, "ManyCreator")
-	fnNeg := serviceMethod1("u", "User", "model", consts.CreateBefore, "Creator")
+	fn := serviceMethod3("u", "User", "model", apiaction.CreateManyBefore, "ManyCreator")
+	fnNeg := serviceMethod1("u", "User", "model", apiaction.CreateBefore, "Creator")
 	if !isServiceMethod3(fn) {
 		t.Fatalf("expected isServiceMethod3 to return true for ServiceMethod3-generated func")
 	}
@@ -44,8 +44,8 @@ func TestIsServiceMethod3(t *testing.T) {
 }
 
 func TestIsServiceMethod4(t *testing.T) {
-	fn := serviceMethod4("u", "model", "*UserReq", "*UserRsp", consts.Create, "Creator")
-	fnNeg := serviceMethod3("u", "User", "model", consts.CreateManyBefore, "ManyCreator")
+	fn := serviceMethod4("u", "model", "*UserReq", "*UserRsp", apiaction.Create, "Creator")
+	fnNeg := serviceMethod3("u", "User", "model", apiaction.CreateManyBefore, "ManyCreator")
 	if !isServiceMethod4(fn) {
 		t.Fatalf("expected isServiceMethod4 to return true for ServiceMethod4-generated func")
 	}
@@ -61,7 +61,7 @@ func TestIsServiceType(t *testing.T) {
 
 	// Positive case: types transcribes the bare payload and result names as value
 	// types, so the struct embeds service.Base[*model.User, model.User, model.User]
-	gd := types("model", "User", "User", "User", consts.Create.RoleName())
+	gd := types("model", "User", "User", "User", apiaction.Create.RoleName())
 	if len(gd.Specs) == 0 {
 		t.Fatalf("types() returned no specs")
 	}

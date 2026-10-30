@@ -7,8 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hydroan/gst/internal/consts"
-
+	"github.com/hydroan/gst/internal/types"
 	"github.com/spf13/viper"
 	"golang.org/x/mod/module"
 	"golang.org/x/mod/semver"
@@ -56,9 +55,9 @@ type AppInfo struct {
 
 // setDefaults sets default values for AppInfo configuration
 func (a *AppInfo) setDefaults(v *viper.Viper) {
-	v.SetDefault("app.name", consts.FrameworkName)
+	v.SetDefault("app.name", types.FrameworkName)
 	v.SetDefault("app.version", "")
-	v.SetDefault("app.description", fmt.Sprintf("A Go application built with %s framework", consts.FrameworkName))
+	v.SetDefault("app.description", fmt.Sprintf("A Go application built with %s framework", types.FrameworkName))
 	v.SetDefault("app.license", "MIT")
 	v.SetDefault("app.go_version", runtime.Version())
 	v.SetDefault("app.platform", runtime.GOOS+"/"+runtime.GOARCH)

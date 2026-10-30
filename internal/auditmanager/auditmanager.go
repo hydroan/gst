@@ -8,7 +8,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/consts"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/types"
 	prommetrics "github.com/hydroan/gst/metrics"
@@ -38,7 +37,7 @@ func New(auditConfig *config.Audit) *AuditManager {
 // Enabled reports whether the log records op: the audit is on and op is not
 // excluded. A flow asks it before reading what only the entry needs, so a
 // disabled audit costs no query.
-func (am *AuditManager) Enabled(op consts.OP) bool {
+func (am *AuditManager) Enabled(op types.Operation) bool {
 	return am.config.Enabled && !slices.Contains(am.config.ExcludeOperations, op)
 }
 
@@ -65,7 +64,7 @@ func (am *AuditManager) Enabled(op consts.OP) bool {
 // records has already happened, and a client that went away must not take the
 // record of it with it. writeTimeout bounds the write instead. A failure is
 // counted and returned to the caller, which logs it beside the request.
-func (am *AuditManager) RecordOperation(ctx context.Context, m types.Model, op consts.OP,
+func (am *AuditManager) RecordOperation(ctx context.Context, m types.Model, op types.Operation,
 	build func() *modellogmgmt.OperationLog,
 ) error {
 	// A missing build is the caller failing to say what to record, not a

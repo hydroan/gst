@@ -7,8 +7,8 @@ import (
 
 	"tmpapp/model/record"
 
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/grpc"
+	"github.com/hydroan/gst/service"
 )
 
 // itemService serves the rpcs of the ItemService service through the actions
@@ -26,7 +26,7 @@ var (
 	getItem       = grpc.GetCall[*record.Item]("/api/records/:record/items/:id")
 	patchManyItem = grpc.PatchManyCall[*record.Item]("/api/records/:record/items/batch")
 	sealItem      = grpc.CreateCall[*record.Item]("/api/items/:id/seal")
-	mergeItem     = grpc.ServiceCall[*record.Item, *record.MergeReq, *record.MergedItemRsp](consts.Create, "/api/items/merge")
+	mergeItem     = grpc.ServiceCall[*record.Item, *record.MergeReq, *record.MergedItemRsp](service.Create, "/api/items/merge")
 )
 
 // CreateItem serves the Create action of Item on /api/records/:record/items.

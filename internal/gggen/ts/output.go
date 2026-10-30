@@ -9,8 +9,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen/jsonshape"
+	"github.com/hydroan/gst/internal/types"
 )
 
 // This file holds the layout of the output: the file the declarations of each
@@ -64,7 +65,7 @@ func (g *generator) files() []File {
 		}
 
 		var b strings.Builder
-		b.WriteString(consts.CodeGeneratedComment())
+		b.WriteString(ggconst.CodeGeneratedComment)
 		b.WriteString("\n")
 		if len(imports) > 0 {
 			b.WriteString("\n")
@@ -164,14 +165,14 @@ var nonFileName = regexp.MustCompile(`[^A-Za-z0-9_-]`)
 // yields a file a frontend can copy and import: shop.ts for shop,
 // Sample_Shop___v2.ts for "Sample Shop / v2", and gst.ts for none.
 func preludeFileName(appName string) string {
-	return cmp.Or(strings.Trim(nonFileName.ReplaceAllString(appName, "_"), "_-"), consts.FrameworkName) + ".ts"
+	return cmp.Or(strings.Trim(nonFileName.ReplaceAllString(appName, "_"), "_-"), types.FrameworkName) + ".ts"
 }
 
 // prelude declares the JSON the framework wraps around the project's types:
 // the response envelope written by internal/response, and the list data and
 // batch request bodies of the default actions in internal/controller.
 func prelude() string {
-	return consts.CodeGeneratedComment() + `
+	return ggconst.CodeGeneratedComment + `
 
 /**
  * Envelope is the JSON body of every API response. A successful request

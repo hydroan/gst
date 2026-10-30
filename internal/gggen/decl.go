@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/gertd/go-pluralize"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/modelinfo"
 )
@@ -22,12 +22,12 @@ var pluralizeCli = pluralize.NewClient()
 // and the gst grpc package the stream of a Stream method comes from. The
 // gst model package a model.Empty request or result needs is imported
 // separately (see emptyReqExpr).
-func serviceScaffoldImports(phase consts.Phase) []string {
+func serviceScaffoldImports(phase apiaction.Phase) []string {
 	importPaths := []string{ggconst.ImportPathService, ggconst.ImportPathGst}
 	switch phase {
-	case consts.Import:
+	case apiaction.Import:
 		importPaths = append(importPaths, ggconst.ImportPathIO)
-	case consts.Stream:
+	case apiaction.Stream:
 		importPaths = append(importPaths, ggconst.ImportPathGRPC)
 	}
 	return importPaths
@@ -51,7 +51,7 @@ func serviceScaffoldImports(phase consts.Phase) []string {
 //
 // A model in package io is aliased model_io only in the service file of an
 // Import action, the one that imports io.
-func serviceModelQualifier(info *modelinfo.Model, phase consts.Phase) string {
+func serviceModelQualifier(info *modelinfo.Model, phase apiaction.Phase) string {
 	importPath := info.ImportPath()
 	aliases := ResolveImportConflicts(map[string]string{importPath: info.ModelPkgName}, importNames(serviceScaffoldImports(phase))...)
 	if alias := aliases[importPath]; alias != "" {
@@ -88,7 +88,7 @@ func modelImportSpec(importPath, modelQualifier string) *ast.ImportSpec {
 //		"github.com/hydroan/gst"
 //		"io"
 //	)
-func importDecl(modulePath, modelFileDir, modelQualifier string, phase consts.Phase, otherPkg ...string) *ast.GenDecl {
+func importDecl(modulePath, modelFileDir, modelQualifier string, phase apiaction.Phase, otherPkg ...string) *ast.GenDecl {
 	genDecl := &ast.GenDecl{
 		Tok:   token.IMPORT,
 		Specs: []ast.Spec{modelImportSpec(modelinfo.PackageImportPath(modulePath, modelFileDir), modelQualifier)},
@@ -211,7 +211,7 @@ func types(modelQualifier, modelName, reqName, rspName, roleName string) *ast.Ge
 //
 //	func (b *Updater) UpdateAfter(ctx *gst.ServiceContext, box *model_auth.Box) error {
 //	}
-func serviceMethod1(recvName, modelName, modelQualifier string, phase consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
+func serviceMethod1(recvName, modelName, modelQualifier string, phase apiaction.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	return &ast.FuncDecl{
 		Recv: &ast.FieldList{
 			List: []*ast.Field{
@@ -266,7 +266,7 @@ func serviceMethod1(recvName, modelName, modelQualifier string, phase consts.Pha
 //
 //	func (u *Lister) ListBefore(ctx *gst.ServiceContext, users *[]*model.User) error {
 //	}
-func serviceMethod2(recvName, modelName, modelQualifier string, phase consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
+func serviceMethod2(recvName, modelName, modelQualifier string, phase apiaction.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	return &ast.FuncDecl{
 		Recv: &ast.FieldList{
 			List: []*ast.Field{
@@ -325,7 +325,7 @@ func serviceMethod2(recvName, modelName, modelQualifier string, phase consts.Pha
 //
 //	func (u *ManyCreator) CreateManyBefore(ctx *gst.ServiceContext, users ...*model.User) error {
 //	}
-func serviceMethod3(recvName, modelName, modelQualifier string, phase consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
+func serviceMethod3(recvName, modelName, modelQualifier string, phase apiaction.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	return &ast.FuncDecl{
 		Recv: &ast.FieldList{
 			List: []*ast.Field{
@@ -382,7 +382,7 @@ func serviceMethod3(recvName, modelName, modelQualifier string, phase consts.Pha
 //
 //	func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {
 //	}
-func serviceMethod4(recvName, modelQualifier, reqName, rspName string, phase consts.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
+func serviceMethod4(recvName, modelQualifier, reqName, rspName string, phase apiaction.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	// The dsl.PayloadEmpty sentinel resolves to *model.Empty from the gst
 	// model package on either side; any other action type is emitted in its
 	// declared form.
@@ -725,7 +725,7 @@ func serviceMethod9(recvName, modelQualifier, reqName, rspName string, streaming
 	}
 	return &ast.FuncDecl{
 		Recv: &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{ast.NewIdent(recvName)}, Type: &ast.StarExpr{X: ast.NewIdent(roleName)}}}},
-		Name: ast.NewIdent(consts.Stream.Name()),
+		Name: ast.NewIdent(apiaction.Stream.Name()),
 		Type: &ast.FuncType{Params: &ast.FieldList{List: params}, Results: &ast.FieldList{List: results}},
 		Body: &ast.BlockStmt{List: body},
 	}

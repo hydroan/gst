@@ -4,22 +4,22 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 )
 
 func TestDesignRangeOrderDefaultRoute(t *testing.T) {
 	design := parseDesignFromSource(t, defaultRouteOrderSource, "OrderSample")
 
-	var got []consts.Phase
+	var got []apiaction.Phase
 	design.Range(func(route string, act *Action) {
 		got = append(got, act.Phase)
 	})
 
-	want := []consts.Phase{
-		consts.List,
-		consts.Import,
-		consts.Export,
-		consts.Get,
+	want := []apiaction.Phase{
+		apiaction.List,
+		apiaction.Import,
+		apiaction.Export,
+		apiaction.Get,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("unexpected action order: got %v want %v", got, want)
@@ -29,18 +29,18 @@ func TestDesignRangeOrderDefaultRoute(t *testing.T) {
 func TestDesignRangeOrderCustomRoute(t *testing.T) {
 	design := parseDesignFromSource(t, routeOrderSource, "RouteSample")
 
-	var got []consts.Phase
+	var got []apiaction.Phase
 	design.Range(func(route string, act *Action) {
 		if route == "sample/records" {
 			got = append(got, act.Phase)
 		}
 	})
 
-	want := []consts.Phase{
-		consts.List,
-		consts.Import,
-		consts.Export,
-		consts.Get,
+	want := []apiaction.Phase{
+		apiaction.List,
+		apiaction.Import,
+		apiaction.Export,
+		apiaction.Get,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("unexpected route action order: got %v want %v", got, want)

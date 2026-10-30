@@ -3,8 +3,6 @@ package rbac
 import (
 	"context"
 	"testing"
-
-	"github.com/hydroan/gst/internal/consts"
 )
 
 // BenchmarkAuthorize measures a decision on the branch that costs the most: a
@@ -21,7 +19,7 @@ func BenchmarkAuthorize(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		if source != consts.GrantSourceRole {
+		if source != GrantSourceRole {
 			b.Fatalf("expected role source, got %q", source)
 		}
 	}
@@ -33,7 +31,7 @@ func BenchmarkAuthorize(b *testing.B) {
 // graph, so its cost should not follow the size of the policy set.
 func BenchmarkAuthorizeSystemRoot(b *testing.B) {
 	r := newTestRBAC(b, 363)
-	seed(b, systemRoleGrouping, []string{"u_root", consts.AUTHZ_SYSTEM_ROLE_ROOT})
+	seed(b, systemRoleGrouping, []string{"u_root", SystemRoleRoot})
 	ctx := context.Background()
 	b.ReportAllocs()
 	b.ResetTimer()

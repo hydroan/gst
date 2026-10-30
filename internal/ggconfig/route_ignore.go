@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"gopkg.in/yaml.v3"
 )
 
@@ -173,15 +173,15 @@ func ParseRouteRule(raw string) (RouteRule, error) {
 }
 
 // NormalizeRoutePath splits a route path into the segments of the path it
-// is served at, consts.APIPath of it, a "{name}" parameter segment
+// is served at, apiaction.APIPath of it, a "{name}" parameter segment
 // converted to the ":name" form, so a rule written with or without the
 // prefix and the generated path, which carries it, split alike:
 // "/api/iam/admin/users/{id}/" and "iam/admin/users/{id}" both give
 // [api iam admin users :id]. The root of the prefix, "/api" and "" alike,
 // names no route and gives nil.
 func NormalizeRoutePath(path string) []string {
-	path = strings.Trim(consts.APIPath(strings.TrimSpace(path)), "/")
-	if path == strings.Trim(consts.APIPath(""), "/") {
+	path = strings.Trim(apiaction.APIPath(strings.TrimSpace(path)), "/")
+	if path == strings.Trim(apiaction.APIPath(""), "/") {
 		return nil
 	}
 

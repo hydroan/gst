@@ -8,7 +8,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
@@ -27,7 +27,7 @@ import (
 // When REQ or RSP differs from M, the handler is the phase service's (see
 // serviceHandler): its CreateMany method runs on the bound payload.
 func CreateManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.CreateMany, consts.CreateManyBefore, consts.CreateManyAfter)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), apiaction.CreateMany, apiaction.CreateManyBefore, apiaction.CreateManyAfter)
 	if !a.typesEqual {
 		return a.serviceHandler()
 	}
@@ -40,7 +40,7 @@ func CreateManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg
 			return
 		}
 
-		log := logger.Controller.WithContext(c.Request.Context(), consts.CreateMany)
+		log := logger.Controller.WithContext(c.Request.Context(), apiaction.CreateMany)
 
 		var req batch[M]
 		if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
@@ -66,7 +66,7 @@ func CreateManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg
 // and answers with the items created, or with the status the failure maps
 // to (see call).
 func CreateManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, items []M) ([]M, error) {
-	a := newAction[M, M, M](route, consts.CreateMany, consts.CreateManyBefore, consts.CreateManyAfter)
+	a := newAction[M, M, M](route, apiaction.CreateMany, apiaction.CreateManyBefore, apiaction.CreateManyAfter)
 	return func(ctx context.Context, params map[string]string, items []M) ([]M, error) {
 		c, err := a.beginCall(ctx, params, nil)
 		defer c.end()
@@ -91,13 +91,13 @@ func CreateManyCall[M types.Model](route string) func(ctx context.Context, param
 // carries as both, and records the operation. The items are req's own,
 // filled by the write.
 func (a *action[M, REQ, RSP]) createManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *batch[M]) error {
-	log := logger.Controller.WithContext(ctx, consts.CreateMany)
+	log := logger.Controller.WithContext(ctx, apiaction.CreateMany)
 	svc := a.service()
 	val := a.newModel()
 	clearAudit(req.Items...)
 
 	// 1.Perform business logic processing before batch create resource.
-	if err := a.traceServiceHook(ctx, consts.CreateManyBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
+	if err := a.traceServiceHook(ctx, apiaction.CreateManyBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
 		return svc.CreateManyBefore(sc, req.Items...)
 	}); err != nil {
 		return failService(ctx, log, err)
@@ -110,7 +110,7 @@ func (a *action[M, REQ, RSP]) createManyFlow(ctx context.Context, newServiceCont
 		return failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after batch create resource
-	if err := a.traceServiceHook(ctx, consts.CreateManyAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
+	if err := a.traceServiceHook(ctx, apiaction.CreateManyAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
 		return svc.CreateManyAfter(sc, req.Items...)
 	}); err != nil {
 		return failService(ctx, log, err)
@@ -119,7 +119,7 @@ func (a *action[M, REQ, RSP]) createManyFlow(ctx context.Context, newServiceCont
 	// 4.record operation log to database.
 	// Record, Request, and Response carry the same serialized payload on
 	// this action, so one marshal feeds all three columns.
-	if err := audit.RecordOperation(ctx, val, consts.OP_CREATE_MANY,
+	if err := audit.RecordOperation(ctx, val, types.OperationCreateMany,
 		func() *modellogmgmt.OperationLog {
 			record, _ := json.Marshal(req)
 			entry := operationLog(ctx, a.name)

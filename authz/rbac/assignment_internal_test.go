@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -19,9 +18,9 @@ func TestTenantsForSubjectReadsEveryTenantTheSubjectHoldsARoleIn(t *testing.T) {
 	ctx := context.Background()
 	require.NoError(t, r.AssignRole(ctx, "beta", "u1", "viewer"))
 	require.NoError(t, r.AssignRole(ctx, "alpha", "u1", "editor"))
-	require.NoError(t, r.AssignRole(ctx, "alpha", "u1", consts.AUTHZ_ROLE_ADMIN))
+	require.NoError(t, r.AssignRole(ctx, "alpha", "u1", RoleAdmin))
 	require.NoError(t, r.AssignRole(ctx, "gamma", "u2", "viewer"))
-	require.NoError(t, r.AssignSystemRole(ctx, "u1", consts.AUTHZ_SYSTEM_ROLE_ROOT))
+	require.NoError(t, r.AssignSystemRole(ctx, "u1", SystemRoleRoot))
 
 	tenants, err := r.TenantsForSubject(ctx, "u1")
 	require.NoError(t, err)

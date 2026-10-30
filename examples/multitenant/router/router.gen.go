@@ -6,25 +6,25 @@ import (
 	"multitenant/model"
 
 	"github.com/hydroan/gst"
-	"github.com/hydroan/gst/consts"
 	gstmodel "github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/router"
+	"github.com/hydroan/gst/service"
 )
 
 func Init() error {
-	router.Register[*model.Digest, *model.Digest, *model.Digest](router.Auth(), "/api/digests", &gst.ControllerConfig[*model.Digest]{}, consts.List)
-	router.Register[*model.Digest, *model.Digest, *model.Digest](router.Auth(), "/api/digests/:id", &gst.ControllerConfig[*model.Digest]{ParamName: "id"}, consts.Get)
-	router.Register[*model.Membership, *gstmodel.Empty, *model.MembershipListRsp](router.Auth(), "/api/memberships", &gst.ControllerConfig[*model.Membership]{}, consts.List)
-	router.Register[*model.Tenant, *model.Tenant, *model.Tenant](router.Auth(), "/api/tenants", &gst.ControllerConfig[*model.Tenant]{}, consts.Create)
-	router.Register[*model.Tenant, *model.Tenant, *model.Tenant](router.Auth(), "/api/tenants/:id", &gst.ControllerConfig[*model.Tenant]{ParamName: "id"}, consts.Delete)
-	router.Register[*model.Tenant, *model.Tenant, *model.Tenant](router.Auth(), "/api/tenants/:id", &gst.ControllerConfig[*model.Tenant]{ParamName: "id"}, consts.Patch)
-	router.Register[*model.Tenant, *model.Tenant, *model.Tenant](router.Auth(), "/api/tenants", &gst.ControllerConfig[*model.Tenant]{}, consts.List)
-	router.Register[*model.Tenant, *model.Tenant, *model.Tenant](router.Auth(), "/api/tenants/:id", &gst.ControllerConfig[*model.Tenant]{ParamName: "id"}, consts.Get)
-	router.Register[*model.Ticket, *model.Ticket, *model.Ticket](router.Auth(), "/api/tickets", &gst.ControllerConfig[*model.Ticket]{}, consts.Create)
-	router.Register[*model.Ticket, *model.Ticket, *model.Ticket](router.Auth(), "/api/tickets/:id", &gst.ControllerConfig[*model.Ticket]{ParamName: "id"}, consts.Delete)
-	router.Register[*model.Ticket, *model.Ticket, *model.Ticket](router.Auth(), "/api/tickets/:id", &gst.ControllerConfig[*model.Ticket]{ParamName: "id"}, consts.Update)
-	router.Register[*model.Ticket, *model.Ticket, *model.Ticket](router.Auth(), "/api/tickets/:id", &gst.ControllerConfig[*model.Ticket]{ParamName: "id"}, consts.Patch)
-	router.Register[*model.Ticket, *model.Ticket, *model.Ticket](router.Auth(), "/api/tickets", &gst.ControllerConfig[*model.Ticket]{}, consts.List)
-	router.Register[*model.Ticket, *model.Ticket, *model.Ticket](router.Auth(), "/api/tickets/:id", &gst.ControllerConfig[*model.Ticket]{ParamName: "id"}, consts.Get)
+	router.Register[*model.Digest, *model.Digest, *model.Digest](router.Auth(), "/api/digests", &gst.ControllerConfig[*model.Digest]{}, service.List)
+	router.Register[*model.Digest, *model.Digest, *model.Digest](router.Auth(), "/api/digests/:id", &gst.ControllerConfig[*model.Digest]{ParamName: "id"}, service.Get)
+	router.Register[*model.Membership, *gstmodel.Empty, *model.MembershipListRsp](router.Auth(), "/api/memberships", &gst.ControllerConfig[*model.Membership]{}, service.List)
+	router.Register[*model.Tenant, *model.Tenant, *model.Tenant](router.Auth(), "/api/tenants", &gst.ControllerConfig[*model.Tenant]{}, service.Create)
+	router.Register[*model.Tenant, *model.Tenant, *model.Tenant](router.Auth(), "/api/tenants/:id", &gst.ControllerConfig[*model.Tenant]{ParamName: "id"}, service.Delete)
+	router.Register[*model.Tenant, *model.Tenant, *model.Tenant](router.Auth(), "/api/tenants/:id", &gst.ControllerConfig[*model.Tenant]{ParamName: "id"}, service.Patch)
+	router.Register[*model.Tenant, *model.Tenant, *model.Tenant](router.Auth(), "/api/tenants", &gst.ControllerConfig[*model.Tenant]{}, service.List)
+	router.Register[*model.Tenant, *model.Tenant, *model.Tenant](router.Auth(), "/api/tenants/:id", &gst.ControllerConfig[*model.Tenant]{ParamName: "id"}, service.Get)
+	router.Register[*model.Ticket, *model.Ticket, *model.Ticket](router.Auth(), "/api/tickets", &gst.ControllerConfig[*model.Ticket]{}, service.Create)
+	router.Register[*model.Ticket, *model.Ticket, *model.Ticket](router.Auth(), "/api/tickets/:id", &gst.ControllerConfig[*model.Ticket]{ParamName: "id"}, service.Delete)
+	router.Register[*model.Ticket, *model.Ticket, *model.Ticket](router.Auth(), "/api/tickets/:id", &gst.ControllerConfig[*model.Ticket]{ParamName: "id"}, service.Update)
+	router.Register[*model.Ticket, *model.Ticket, *model.Ticket](router.Auth(), "/api/tickets/:id", &gst.ControllerConfig[*model.Ticket]{ParamName: "id"}, service.Patch)
+	router.Register[*model.Ticket, *model.Ticket, *model.Ticket](router.Auth(), "/api/tickets", &gst.ControllerConfig[*model.Ticket]{}, service.List)
+	router.Register[*model.Ticket, *model.Ticket, *model.Ticket](router.Auth(), "/api/tickets/:id", &gst.ControllerConfig[*model.Ticket]{ParamName: "id"}, service.Get)
 	return nil
 }

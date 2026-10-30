@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen"
 	"github.com/stretchr/testify/require"
@@ -17,18 +17,18 @@ import (
 // TestParseModelRoutesReadsTheRuntimeMethodOfEveryPhase builds a router file
 // the way gg gen writes router/router.gen.go, one route per action phase, and
 // reads each route back under the method the framework router registers the
-// phase by, consts.Phase.HTTPMethod (see the router's own test of that).
+// phase by, apiaction.Phase.HTTPMethod (see the router's own test of that).
 func TestParseModelRoutesReadsTheRuntimeMethodOfEveryPhase(t *testing.T) {
-	phases := []consts.Phase{
-		consts.Create, consts.Delete, consts.Update, consts.Patch,
-		consts.List, consts.Get,
-		consts.CreateMany, consts.DeleteMany, consts.UpdateMany, consts.PatchMany,
-		consts.Import, consts.Export, consts.SSE,
+	phases := []apiaction.Phase{
+		apiaction.Create, apiaction.Delete, apiaction.Update, apiaction.Patch,
+		apiaction.List, apiaction.Get,
+		apiaction.CreateMany, apiaction.DeleteMany, apiaction.UpdateMany, apiaction.PatchMany,
+		apiaction.Import, apiaction.Export, apiaction.SSE,
 	}
 	stmts := make([]ast.Stmt, 0, len(phases))
 	want := make(map[string]string, len(phases))
 	for _, phase := range phases {
-		path := consts.APIPath("samples/" + string(phase))
+		path := apiaction.APIPath("samples/" + string(phase))
 		stmts = append(stmts, gggen.StmtRouterRegister("model", "Sample", "*Sample", "*Sample", "model", "Auth", path, "", phase.Name()))
 		want[path] = phase.HTTPMethod()
 	}
@@ -77,8 +77,8 @@ func TestRoutesListEveryRouteByItsFullPath(t *testing.T) {
 // scope gg does not know is refused.
 func TestRunModelRoutesShowsTheRoutesOfTheScopeAndTextAsked(t *testing.T) {
 	chdirToRoutedProject(t,
-		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", consts.APIPath("records"), "", consts.List.Name()),
-		gggen.StmtRouterRegister("model", "Item", "*Item", "*Item", "model", "Pub", consts.APIPath("items"), "", consts.List.Name()),
+		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", apiaction.APIPath("records"), "", apiaction.List.Name()),
+		gggen.StmtRouterRegister("model", "Item", "*Item", "*Item", "model", "Pub", apiaction.APIPath("items"), "", apiaction.List.Name()),
 	)
 	publicItems := "▶ Router Routes\n  → models: 1, routes: 1, public: 1, auth: 0\n  → scope: public\n\n└─ *model.Item [public]\n   └─ GET    /api/items\n"
 	for _, tt := range []struct {
@@ -112,7 +112,7 @@ func TestRunModelRoutesSaysWhenNoRouteIsLeft(t *testing.T) {
 		require.Equal(t, "No routes found. Please run 'gg gen' first to generate routes.\n", out.String())
 	})
 	t.Run("scope_keeping_nothing", func(t *testing.T) {
-		chdirToRoutedProject(t, gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", consts.APIPath("records"), "", consts.List.Name()))
+		chdirToRoutedProject(t, gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", apiaction.APIPath("records"), "", apiaction.List.Name()))
 		var out bytes.Buffer
 		require.NoError(t, runModelRoutes(&out, "", &modelRoutesCommandOptions{scope: "pub"}))
 		require.Equal(t, "No routes found matching scope: pub\n", out.String())

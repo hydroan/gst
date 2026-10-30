@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/types"
 )
 
 // TestHitRatio pins the percentage arithmetic, including the zero-sample
@@ -43,7 +43,7 @@ func TestAppName(t *testing.T) {
 	defer func() { config.App.Name = old }()
 
 	config.App.Name = ""
-	if got := appName(); got != consts.FrameworkName {
+	if got := appName(); got != types.FrameworkName {
 		t.Fatalf("want the framework name fallback, got %q", got)
 	}
 }

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/instance"
 	"github.com/hydroan/gst/internal/logfield"
@@ -37,7 +37,7 @@ func TestContextFieldsFitTheCapacityInTheWorstCase(t *testing.T) {
 		RawQuery: "page=1",
 	}))
 	ctx = execctx.WithCronjob(ctx, "sample_job", "trace-worst")
-	l.WithContext(ctx, consts.List).Infoz("sample entry")
+	l.WithContext(ctx, apiaction.List).Infoz("sample entry")
 
 	entries := logs.All()
 	require.Len(t, entries, 1)
@@ -115,18 +115,18 @@ func TestWithContextAddsMetadataFields(t *testing.T) {
 	})
 	ctx := execctx.WithTraceID(requestctx.WithMetadata(context.Background(), meta), "trace-1")
 
-	log.WithContext(ctx, consts.List).Infoz("database request")
+	log.WithContext(ctx, apiaction.List).Infoz("database request")
 
 	entries := logs.All()
 	require.Len(t, entries, 1)
 
 	fields := entries[0].ContextMap()
-	require.Equal(t, string(consts.List), fields[keyPhase])
+	require.Equal(t, string(apiaction.List), fields[keyPhase])
 	require.Equal(t, "/api/users/:id", fields[requestctx.KeyRoute])
 	require.Equal(t, "/api/users/42", fields[requestctx.KeyPath])
 	require.Equal(t, http.MethodGet, fields[requestctx.KeyMethod])
-	require.Equal(t, "admin", fields[consts.CTX_USERNAME])
-	require.Equal(t, "user-1", fields[consts.CTX_USER_ID])
+	require.Equal(t, "admin", fields[requestctx.KeyUsername])
+	require.Equal(t, "user-1", fields[requestctx.KeyUserID])
 	require.Equal(t, "trace-1", fields[execctx.KeyTraceID])
 	require.Equal(t, map[string]any{"id": "42"}, fields[requestctx.KeyParams])
 	// Fields carries no RawQuery, so the logged query is re-encoded from Query.
@@ -140,7 +140,7 @@ func TestWithContextAddsCronjobField(t *testing.T) {
 	log := &Logger{zlog: zap.New(core)}
 	ctx := execctx.WithCronjob(context.Background(), "sample_job", "trace-cron")
 
-	log.WithContext(ctx, consts.List).Infoz("round request")
+	log.WithContext(ctx, apiaction.List).Infoz("round request")
 
 	entries := logs.All()
 	require.Len(t, entries, 1)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
@@ -51,8 +50,8 @@ func TestTraceAuthorizeAttributesFitTheCapacityInTheWorstCase(t *testing.T) {
 	finish := traceAuthorize(context.Background(), "sample-tenant")
 	finish(types.Decision{
 		Allowed:     true,
-		Source:      consts.GrantSourceRole,
-		Reason:      consts.DenyReason("sample-denial"),
+		Source:      GrantSourceRole,
+		Reason:      DenyReason("sample-denial"),
 		MatchedRule: []string{"sample-tenant", "/api/samples", "GET"},
 	}, nil)
 

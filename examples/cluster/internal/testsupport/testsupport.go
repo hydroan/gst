@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/client"
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/testutil"
 	"github.com/stretchr/testify/require"
@@ -44,11 +44,11 @@ func Login(t *testing.T, opts ...client.Option) *Account {
 	t.Helper()
 	cli, err := client.New(testutil.BaseURL(), opts...)
 	require.NoError(t, err)
-	envelope, err := cli.Do(t.Context(), http.MethodPost, "/api/login", iam.LoginReq{Username: consts.AUTHZ_USER_ROOT, Password: RootPassword})
+	envelope, err := cli.Do(t.Context(), http.MethodPost, "/api/login", iam.LoginReq{Username: rbac.UserRoot, Password: RootPassword})
 	require.NoError(t, err)
 	cookie := envelope.Cookie("session_id")
 	require.NotNil(t, cookie, "the login set no session cookie")
-	return &Account{Client: cli, Username: consts.AUTHZ_USER_ROOT, SessionID: cookie.Value}
+	return &Account{Client: cli, Username: rbac.UserRoot, SessionID: cookie.Value}
 }
 
 // Session logs the root account in presenting GRPCUserAgent and returns the

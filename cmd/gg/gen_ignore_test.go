@@ -186,12 +186,12 @@ func (Sample) Design() {
 		t.Fatal(err)
 	}
 	// The kept action is registered.
-	if !strings.Contains(string(routerCode), "consts.Create") {
+	if !strings.Contains(string(routerCode), "service.Create") {
 		t.Errorf("router.go should register the samples Create action:\n%s", routerCode)
 	}
 	// Business contract of gen.routes.ignore: the ignored route must not be
 	// registered.
-	if strings.Contains(string(routerCode), "consts.List") {
+	if strings.Contains(string(routerCode), "service.List") {
 		t.Errorf("router.go must not register the ignored samples List action:\n%s", routerCode)
 	}
 }

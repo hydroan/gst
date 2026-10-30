@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen"
 	"github.com/hydroan/gst/internal/gghelper"
@@ -108,7 +107,7 @@ func renderColumnsFile(module string, pkgName string, source string, models []mo
 	fset := token.NewFileSet()
 	lines := goast.NewLineSet(fset)
 	comments := []*ast.CommentGroup{{List: []*ast.Comment{
-		{Slash: lines.Next(), Text: consts.CodeGeneratedComment()},
+		{Slash: lines.Next(), Text: ggconst.CodeGeneratedComment},
 		{Slash: lines.Next(), Text: "// source: " + filepath.ToSlash(source)},
 	}}}
 	lines.Next()

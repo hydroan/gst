@@ -12,7 +12,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/clioutput"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen/ts"
@@ -164,7 +163,7 @@ func typeScriptRoots(models []*modelinfo.Model) []ts.TypeRef {
 // one in the way of an output file stops the run, one anywhere else is kept and
 // reported.
 func writeTypeScriptFiles(dir string, files []ts.File) error {
-	header := consts.CodeGeneratedComment()
+	header := ggconst.CodeGeneratedComment
 	wanted := make(map[string]bool, len(files))
 	for _, f := range files {
 		target := filepath.Join(dir, filepath.FromSlash(f.Path))

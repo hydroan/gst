@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
@@ -124,7 +124,7 @@ func (db *database[M]) Create(objs ...M) (err error) {
 	if db.dialect() == dialectClickHouse {
 		return db.clickhouseCreate(objs)
 	}
-	done, span := db.trace(consts.Create, len(objs))
+	done, span := db.trace(apiaction.Create, len(objs))
 	defer func() { done(err) }()
 
 	batchSize := defaultBatchSize
@@ -147,7 +147,7 @@ func (db *database[M]) Create(objs ...M) (err error) {
 	write := func() error {
 		// Invoke model hook: CreateBefore for the entire batch.
 		if !db.noHook {
-			if err = traceModelHook[M](db.ctx, consts.CreateBefore, span, func(spanCtx context.Context) error {
+			if err = traceModelHook[M](db.ctx, apiaction.CreateBefore, span, func(spanCtx context.Context) error {
 				for i := range objs {
 					if err = objs[i].CreateBefore(spanCtx); err != nil {
 						return err
@@ -172,7 +172,7 @@ func (db *database[M]) Create(objs ...M) (err error) {
 		}
 		// Invoke model hook: CreateAfter for the entire batch.
 		if !db.noHook {
-			if err = traceModelHook[M](db.ctx, consts.CreateAfter, span, func(spanCtx context.Context) error {
+			if err = traceModelHook[M](db.ctx, apiaction.CreateAfter, span, func(spanCtx context.Context) error {
 				for i := range objs {
 					if err = objs[i].CreateAfter(spanCtx); err != nil {
 						return err
@@ -339,7 +339,7 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 	if conditioned && !db.noHook && modelregistry.OverridesDeleteHooks(db.m) {
 		return errors.Wrap(ErrConditionsWithDeleteHooks, "Delete")
 	}
-	done, span := db.trace(consts.Delete, len(objs))
+	done, span := db.trace(apiaction.Delete, len(objs))
 	defer func() { done(err) }()
 
 	batchSize := defaultDeleteBatchSize
@@ -400,7 +400,7 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 	write := func() error {
 		// Invoke model hook: DeleteBefore.
 		if !db.noHook {
-			if err = traceModelHook[M](db.ctx, consts.DeleteBefore, span, func(spanCtx context.Context) error {
+			if err = traceModelHook[M](db.ctx, apiaction.DeleteBefore, span, func(spanCtx context.Context) error {
 				for i := range objs {
 					if err = objs[i].DeleteBefore(spanCtx); err != nil {
 						return err
@@ -471,7 +471,7 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 		}
 		// Invoke model hook: DeleteAfter.
 		if !db.noHook {
-			if err = traceModelHook[M](db.ctx, consts.DeleteAfter, span, func(spanCtx context.Context) error {
+			if err = traceModelHook[M](db.ctx, apiaction.DeleteAfter, span, func(spanCtx context.Context) error {
 				for i := range objs {
 					if err = objs[i].DeleteAfter(spanCtx); err != nil {
 						return err
@@ -616,7 +616,7 @@ func (db *database[M]) Update(objs ...M) (err error) {
 	if db.dialect() == dialectClickHouse {
 		return db.clickhouseUpdate(objs)
 	}
-	done, span := db.trace(consts.Update, len(objs))
+	done, span := db.trace(apiaction.Update, len(objs))
 	defer func() { done(err) }()
 
 	tableName := db.m.TableName()
@@ -657,7 +657,7 @@ func (db *database[M]) Update(objs ...M) (err error) {
 	write := func() error {
 		// Invoke model hook: UpdateBefore.
 		if !db.noHook {
-			if err = traceModelHook[M](db.ctx, consts.UpdateBefore, span, func(spanCtx context.Context) error {
+			if err = traceModelHook[M](db.ctx, apiaction.UpdateBefore, span, func(spanCtx context.Context) error {
 				for i := range objs {
 					if err = objs[i].UpdateBefore(spanCtx); err != nil {
 						return err
@@ -697,7 +697,7 @@ func (db *database[M]) Update(objs ...M) (err error) {
 		}
 		// Invoke model hook: UpdateAfter.
 		if !db.noHook {
-			if err = traceModelHook[M](db.ctx, consts.UpdateAfter, span, func(spanCtx context.Context) error {
+			if err = traceModelHook[M](db.ctx, apiaction.UpdateAfter, span, func(spanCtx context.Context) error {
 				for i := range objs {
 					if err = objs[i].UpdateAfter(spanCtx); err != nil {
 						return err

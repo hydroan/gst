@@ -10,7 +10,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/kr/pretty"
 )
 
@@ -34,20 +34,20 @@ func TestParse(t *testing.T) {
 							// The Payload[*UserReq] declaration in testdata/user.go is
 							// discarded: List handles an HTTP GET request, so declaring
 							// Result fixes the request type to PayloadEmpty.
-							{Service: true, Payload: PayloadEmpty, Result: "*UserRsp", Phase: consts.List},
-							{Service: true, Payload: "*User", Result: "*User", Phase: consts.Get},
+							{Service: true, Payload: PayloadEmpty, Result: "*UserRsp", Phase: apiaction.List},
+							{Service: true, Payload: "*User", Result: "*User", Phase: apiaction.Get},
 						},
 						"tenant/users": {
-							{Service: false, Payload: "*UserReq", Result: "*User", Phase: consts.Create},
-							{Service: false, Payload: "*User", Result: "*User", Phase: consts.Update},
-							{Service: false, Payload: "*User", Result: "*User", Phase: consts.Patch},
-							{Service: false, Payload: "*User", Result: "*User", Phase: consts.CreateMany},
+							{Service: false, Payload: "*UserReq", Result: "*User", Phase: apiaction.Create},
+							{Service: false, Payload: "*User", Result: "*User", Phase: apiaction.Update},
+							{Service: false, Payload: "*User", Result: "*User", Phase: apiaction.Patch},
+							{Service: false, Payload: "*User", Result: "*User", Phase: apiaction.CreateMany},
 						},
 					},
-					Create: &Action{Service: true, Public: true, Payload: "User", Result: "*User", Phase: consts.Create},
-					Delete: &Action{Service: false, Public: false, Payload: "*User", Result: "*User", Phase: consts.Delete},
-					List:   &Action{Service: false, Public: false, Payload: "*User", Result: "*User", Phase: consts.List},
-					Update: &Action{Service: false, Public: false, Payload: "*User", Result: "User", Phase: consts.Update},
+					Create: &Action{Service: true, Public: true, Payload: "User", Result: "*User", Phase: apiaction.Create},
+					Delete: &Action{Service: false, Public: false, Payload: "*User", Result: "*User", Phase: apiaction.Delete},
+					List:   &Action{Service: false, Public: false, Payload: "*User", Result: "*User", Phase: apiaction.List},
+					Update: &Action{Service: false, Public: false, Payload: "*User", Result: "User", Phase: apiaction.Update},
 				},
 			},
 		},
@@ -59,8 +59,8 @@ func TestParse(t *testing.T) {
 					Endpoint: "user2s",
 					Param:    ":user",
 					Migrate:  false,
-					Create:   &Action{Service: false, Public: false, Payload: "User2", Result: "*User3", Phase: consts.Create},
-					Patch:    &Action{Service: false, Public: false, Payload: "*User", Result: "User", Phase: consts.Patch},
+					Create:   &Action{Service: false, Public: false, Payload: "User2", Result: "*User3", Phase: apiaction.Create},
+					Patch:    &Action{Service: false, Public: false, Payload: "*User", Result: "User", Phase: apiaction.Patch},
 				},
 			},
 		},
@@ -71,14 +71,14 @@ func TestParse(t *testing.T) {
 				"User3": {
 					Endpoint: "user",
 					Migrate:  false,
-					Create:   &Action{Service: false, Public: false, Payload: "User", Result: "*User", Phase: consts.Create},
-					Update:   &Action{Service: false, Public: false, Payload: "*User", Result: "User", Phase: consts.Update},
+					Create:   &Action{Service: false, Public: false, Payload: "User", Result: "*User", Phase: apiaction.Create},
+					Update:   &Action{Service: false, Public: false, Payload: "*User", Result: "User", Phase: apiaction.Update},
 				},
 				"User4": {
 					Endpoint: "user4s",
 					Migrate:  false,
-					Create:   &Action{Service: false, Public: false, Payload: "User", Result: "*User", Phase: consts.Create},
-					Update:   &Action{Service: false, Public: false, Payload: "*User", Result: "User", Phase: consts.Update},
+					Create:   &Action{Service: false, Public: false, Payload: "User", Result: "*User", Phase: apiaction.Create},
+					Update:   &Action{Service: false, Public: false, Payload: "*User", Result: "User", Phase: apiaction.Update},
 				},
 			},
 		},
@@ -305,7 +305,7 @@ func TestParseFlatten(t *testing.T) {
 
 	var got *Action
 	design.Range(func(route string, act *Action) {
-		if route == "authz/roles" && act.Phase == consts.Create {
+		if route == "authz/roles" && act.Phase == apiaction.Create {
 			got = act
 		}
 	})
@@ -325,7 +325,7 @@ func TestParseExact(t *testing.T) {
 
 	var got *Action
 	design.Range(func(route string, act *Action) {
-		if route == "iam/admin/users/:id/sessions" && act.Phase == consts.Delete {
+		if route == "iam/admin/users/:id/sessions" && act.Phase == apiaction.Delete {
 			got = act
 		}
 	})
@@ -1222,9 +1222,9 @@ func TestParseStreamActions(t *testing.T) {
 	}
 
 	want := map[string]*Action{
-		"feeds/watch":  {Service: true, ServiceName: "watch", Payload: "*FeedWatchReq", Result: "*FeedEvent", StreamingResult: true, Phase: consts.Stream},
-		"feeds/upload": {Service: true, ServiceName: "upload", Payload: "*FeedEvent", Result: "*FeedUploadRsp", StreamingPayload: true, Phase: consts.Stream},
-		"feeds/chat":   {Service: true, ServiceName: "chat", Payload: "*FeedEvent", Result: "*FeedEvent", StreamingPayload: true, StreamingResult: true, Phase: consts.Stream},
+		"feeds/watch":  {Service: true, ServiceName: "watch", Payload: "*FeedWatchReq", Result: "*FeedEvent", StreamingResult: true, Phase: apiaction.Stream},
+		"feeds/upload": {Service: true, ServiceName: "upload", Payload: "*FeedEvent", Result: "*FeedUploadRsp", StreamingPayload: true, Phase: apiaction.Stream},
+		"feeds/chat":   {Service: true, ServiceName: "chat", Payload: "*FeedEvent", Result: "*FeedEvent", StreamingPayload: true, StreamingResult: true, Phase: apiaction.Stream},
 	}
 	for route, w := range want {
 		actions := design.routes[route]
@@ -1235,7 +1235,7 @@ func TestParseStreamActions(t *testing.T) {
 			t.Errorf("route %s: %s", route, pretty.Diff(w, actions[0]))
 		}
 	}
-	top := &Action{Service: true, ServiceName: "tail", Payload: PayloadEmpty, Result: "*FeedEvent", StreamingResult: true, Phase: consts.Stream}
+	top := &Action{Service: true, ServiceName: "tail", Payload: PayloadEmpty, Result: "*FeedEvent", StreamingResult: true, Phase: apiaction.Stream}
 	if !reflect.DeepEqual(design.Stream, top) {
 		t.Errorf("top-level Stream: %s", pretty.Diff(top, design.Stream))
 	}

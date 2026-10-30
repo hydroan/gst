@@ -9,7 +9,6 @@ import (
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/authn"
 	"github.com/hydroan/gst/authz/rbac"
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
@@ -105,7 +104,7 @@ func (l *LoginService) Create(ctx *gst.ServiceContext, req *modeliamaccount.Logi
 	// Resolved for every login, not only the ones that name a tenant: the
 	// principal in the response reports it, and it is what exempts a system
 	// root from the tenant membership check below.
-	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, targetUser.ID, consts.AUTHZ_SYSTEM_ROLE_ROOT)
+	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, targetUser.ID, rbac.SystemRoleRoot)
 	if err != nil {
 		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
 	}

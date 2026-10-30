@@ -8,7 +8,6 @@ import (
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/internal/types"
@@ -72,7 +71,7 @@ func newAuthorizationRole(t *testing.T, subject authorizationSubject, name strin
 
 // requireReaches asserts the subject may list roles, and that the decision
 // says so for the reason expected.
-func requireReaches(t *testing.T, subject authorizationSubject, route string, source consts.GrantSource) {
+func requireReaches(t *testing.T, subject authorizationSubject, route string, source types.GrantSource) {
 	t.Helper()
 
 	_, err := subject.client.Get[client.ListResult[*authz.Role]](t.Context(), route)
@@ -87,7 +86,7 @@ func requireReaches(t *testing.T, subject authorizationSubject, route string, so
 
 // requireRefused asserts the subject may not reach the route, and that the
 // decision names which of the two steps behind a grant was missing.
-func requireRefused(t *testing.T, subject authorizationSubject, route string, reason consts.DenyReason) {
+func requireRefused(t *testing.T, subject authorizationSubject, route string, reason types.DenyReason) {
 	t.Helper()
 
 	_, err := subject.client.Get[client.ListResult[*authz.RoleBinding]](t.Context(), route)
@@ -108,16 +107,16 @@ func TestAuthorizationGrantsAndRefusesByRole(t *testing.T) {
 	subject := newAuthorizationSubject(t, "authorization_role")
 
 	// Holding no role at all: the denial is about the binding, not the policy.
-	requireRefused(t, subject, deniedRoute, consts.DenyReasonNoRole)
+	requireRefused(t, subject, deniedRoute, types.DenyReasonNoRole)
 
 	roleID := newAuthorizationRole(t, subject, "authorization_role")
 	authzGrantTenantPolicy(t, tenant.Default, roleID, types.Permission{
 		Object: grantedRoute, Action: http.MethodGet,
 	})
 
-	requireReaches(t, subject, grantedRoute, consts.GrantSourceRole)
+	requireReaches(t, subject, grantedRoute, types.GrantSourceRole)
 	// Holding a role that does not carry this permission.
-	requireRefused(t, subject, deniedRoute, consts.DenyReasonNoPolicy)
+	requireRefused(t, subject, deniedRoute, types.DenyReasonNoPolicy)
 }
 
 // TestAuthorizationReportsEveryGrantSource covers the three grants that do not
@@ -131,11 +130,11 @@ func TestAuthorizationReportsEveryGrantSource(t *testing.T) {
 		// object in every tenant without consulting a policy.
 		rootSessionID := authzAdminSessionID(t)
 		root := authorizationSubject{
-			userID:    consts.AUTHZ_USER_ROOT,
+			userID:    rbac.UserRoot,
 			sessionID: rootSessionID,
 			client:    authzSessionClient(t, rootSessionID),
 		}
-		requireReaches(t, root, grantedRoute, consts.GrantSourceSystemRoot)
+		requireReaches(t, root, grantedRoute, types.GrantSourceSystemRoot)
 
 		decision, err := rbac.RBAC().Authorize(
 			context.Background(), tenant.Default, root.userID, grantedRoute, http.MethodGet,
@@ -150,22 +149,22 @@ func TestAuthorizationReportsEveryGrantSource(t *testing.T) {
 		// has no row in the roles table and carries no permissions, so a
 		// subject holding it reaches the route on that branch or not at all.
 		subject := newAuthorizationSubject(t, "authorization_admin")
-		requireRefused(t, subject, deniedRoute, consts.DenyReasonNoRole)
+		requireRefused(t, subject, deniedRoute, types.DenyReasonNoRole)
 
 		ctx := context.Background()
-		require.NoError(t, rbac.RBAC().AssignRole(ctx, tenant.Default, subject.userID, consts.AUTHZ_ROLE_ADMIN))
+		require.NoError(t, rbac.RBAC().AssignRole(ctx, tenant.Default, subject.userID, rbac.RoleAdmin))
 		t.Cleanup(func() {
-			require.NoError(t, rbac.RBAC().UnassignRole(ctx, tenant.Default, subject.userID, consts.AUTHZ_ROLE_ADMIN))
+			require.NoError(t, rbac.RBAC().UnassignRole(ctx, tenant.Default, subject.userID, rbac.RoleAdmin))
 		})
 
-		requireReaches(t, subject, grantedRoute, consts.GrantSourceTenantAdmin)
+		requireReaches(t, subject, grantedRoute, types.GrantSourceTenantAdmin)
 	})
 
 	t.Run("authenticated", func(t *testing.T) {
 		// Policies written for the implicit role are matched without a role
 		// membership check, so they reach a subject holding no role at all.
 		subject := newAuthorizationSubject(t, "authorization_authenticated")
-		requireRefused(t, subject, deniedRoute, consts.DenyReasonNoRole)
+		requireRefused(t, subject, deniedRoute, types.DenyReasonNoRole)
 
 		ctx := context.Background()
 		require.NoError(t, rbac.RBAC().SetPermissionsForAuthenticated(ctx, []types.Permission{
@@ -175,7 +174,7 @@ func TestAuthorizationReportsEveryGrantSource(t *testing.T) {
 			require.NoError(t, rbac.RBAC().SetPermissionsForAuthenticated(ctx, nil))
 		})
 
-		requireReaches(t, subject, grantedRoute, consts.GrantSourceAuthenticated)
+		requireReaches(t, subject, grantedRoute, types.GrantSourceAuthenticated)
 	})
 }
 
@@ -190,7 +189,7 @@ func TestAuthorizationFollowsPolicyChangesWithoutReauthentication(t *testing.T) 
 	authzGrantTenantPolicy(t, tenant.Default, roleID, types.Permission{
 		Object: grantedRoute, Action: http.MethodGet,
 	})
-	requireReaches(t, subject, grantedRoute, consts.GrantSourceRole)
+	requireReaches(t, subject, grantedRoute, types.GrantSourceRole)
 
 	t.Run("a replaced permission set moves the grant", func(t *testing.T) {
 		// The same session, no new login: the permission set is replaced, and
@@ -208,7 +207,7 @@ func TestAuthorizationFollowsPolicyChangesWithoutReauthentication(t *testing.T) 
 	t.Run("an unassigned role takes its grants with it", func(t *testing.T) {
 		require.NoError(t, rbac.RBAC().UnassignRole(context.Background(), tenant.Default, subject.userID, roleID))
 
-		requireRefused(t, subject, deniedRoute, consts.DenyReasonNoRole)
+		requireRefused(t, subject, deniedRoute, types.DenyReasonNoRole)
 	})
 }
 
@@ -221,14 +220,14 @@ func TestAuthorizationFollowsPolicyChangesWithoutReauthentication(t *testing.T) 
 func TestAuthorizationConvergesOnAPolicySetChangedOutsideTheProcess(t *testing.T) {
 	subject := newAuthorizationSubject(t, "authorization_external")
 	roleID := newAuthorizationRole(t, subject, "authorization_external")
-	requireRefused(t, subject, deniedRoute, consts.DenyReasonNoPolicy)
+	requireRefused(t, subject, deniedRoute, types.DenyReasonNoPolicy)
 
 	// Written straight into the table, which is what a write this process did
 	// not make looks like: no mutation, no index rebuild, nothing in memory.
 	ctx := context.Background()
 	granted := &authz.AuthzRule{
 		Ptype: "p", V0: tenant.Default, V1: roleID,
-		V2: deniedRoute, V3: http.MethodGet, V4: string(consts.EffectAllow),
+		V2: deniedRoute, V3: http.MethodGet, V4: string(types.EffectAllow),
 	}
 	require.NoError(t, database.Database[*authz.AuthzRule](ctx).Create(granted))
 	t.Cleanup(func() {
@@ -254,7 +253,7 @@ func TestAuthorizationAttributesInPrecedenceOrder(t *testing.T) {
 	authzGrantTenantPolicy(t, tenant.Default, roleID, types.Permission{
 		Object: grantedRoute, Action: http.MethodGet,
 	})
-	requireReaches(t, subject, grantedRoute, consts.GrantSourceRole)
+	requireReaches(t, subject, grantedRoute, types.GrantSourceRole)
 
 	ctx := context.Background()
 	require.NoError(t, rbac.RBAC().SetPermissionsForAuthenticated(ctx, []types.Permission{
@@ -267,5 +266,5 @@ func TestAuthorizationAttributesInPrecedenceOrder(t *testing.T) {
 	// Both grants now cover the route. Naming the role would send an operator
 	// to revoke it and find the route still open, because the implicit role
 	// reaches every subject that can log in.
-	requireReaches(t, subject, grantedRoute, consts.GrantSourceAuthenticated)
+	requireReaches(t, subject, grantedRoute, types.GrantSourceAuthenticated)
 }

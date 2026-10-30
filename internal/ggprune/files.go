@@ -26,7 +26,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
@@ -85,19 +85,19 @@ func isManagedServiceFile(path string) bool {
 // through sse.go.
 func phaseFileNames() map[string]bool {
 	return map[string]bool{
-		consts.Create.Filename():     true,
-		consts.Delete.Filename():     true,
-		consts.Update.Filename():     true,
-		consts.Patch.Filename():      true,
-		consts.List.Filename():       true,
-		consts.Get.Filename():        true,
-		consts.CreateMany.Filename(): true,
-		consts.DeleteMany.Filename(): true,
-		consts.UpdateMany.Filename(): true,
-		consts.PatchMany.Filename():  true,
-		consts.Import.Filename():     true,
-		consts.Export.Filename():     true,
-		consts.SSE.Filename():        true,
+		apiaction.Create.Filename():     true,
+		apiaction.Delete.Filename():     true,
+		apiaction.Update.Filename():     true,
+		apiaction.Patch.Filename():      true,
+		apiaction.List.Filename():       true,
+		apiaction.Get.Filename():        true,
+		apiaction.CreateMany.Filename(): true,
+		apiaction.DeleteMany.Filename(): true,
+		apiaction.UpdateMany.Filename(): true,
+		apiaction.PatchMany.Filename():  true,
+		apiaction.Import.Filename():     true,
+		apiaction.Export.Filename():     true,
+		apiaction.SSE.Filename():        true,
 	}
 }
 

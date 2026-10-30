@@ -12,7 +12,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	gstgrpc "github.com/hydroan/gst/grpc"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/grpcserver"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	"github.com/hydroan/gst/internal/modelregistry"
@@ -208,8 +208,8 @@ func grpcProbe(t *testing.T) *grpc.ClientConn {
 		// Session runs the framework's call function over the probe's
 		// Session action, the way a generated handler runs a service, so the
 		// call goes through the check of the HTTP-only methods as well.
-		serviceregistry.RegisterInstance[*modelregistry.Empty, *modelregistry.Empty, *probeSessionRsp](consts.Get, probeSessionRoute, &probeSessionService{})
-		sessionCall := gstgrpc.ServiceCall[*modelregistry.Empty, *modelregistry.Empty, *probeSessionRsp](consts.Get, probeSessionRoute)
+		serviceregistry.RegisterInstance[*modelregistry.Empty, *modelregistry.Empty, *probeSessionRsp](apiaction.Get, probeSessionRoute, &probeSessionService{})
+		sessionCall := gstgrpc.ServiceCall[*modelregistry.Empty, *modelregistry.Empty, *probeSessionRsp](apiaction.Get, probeSessionRoute)
 		session := grpc.MethodDesc{
 			MethodName: "Session",
 			Handler: func(_ any, ctx context.Context, dec func(any) error, unary grpc.UnaryServerInterceptor) (any, error) {

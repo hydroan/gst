@@ -4,7 +4,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
@@ -34,7 +34,7 @@ func TestRegisterPanicsOnAPointerEmbeddedBaseOnceTheLoggerExists(t *testing.T) {
 
 	require.Panics(t, func() {
 		RegisterInstance[*loggerTestRecord, *loggerTestRecord, *loggerTestRecord](
-			consts.Phase("test_pointer_base_after_logger"), "samples", &pointerBaseService{})
+			apiaction.Phase("test_pointer_base_after_logger"), "samples", &pointerBaseService{})
 	})
 }
 
@@ -44,7 +44,7 @@ func TestRegisterPanicsOnAPointerEmbeddedBaseOnceTheLoggerExists(t *testing.T) {
 // into every earlier registration panics on it.
 func TestInitPanicsOnAPointerEmbeddedBaseRegisteredBeforeTheLogger(t *testing.T) {
 	setServiceLogger(t, nil)
-	phase := consts.Phase("test_pointer_base_before_logger")
+	phase := apiaction.Phase("test_pointer_base_before_logger")
 	RegisterInstance[*loggerTestRecord, *loggerTestRecord, *loggerTestRecord](phase, "samples", &pointerBaseService{})
 	t.Cleanup(func() {
 		mu.Lock()

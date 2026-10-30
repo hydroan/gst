@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
@@ -25,7 +24,7 @@ func Orders(q url.Values, m types.Model) ([]types.Order, error) {
 	if !modelregistry.IsQueryable(m) {
 		return nil, nil
 	}
-	expression := strings.TrimSpace(q.Get(consts.QUERY_SORT_BY))
+	expression := strings.TrimSpace(q.Get(types.QuerySortBy))
 	if len(expression) == 0 {
 		return nil, nil
 	}

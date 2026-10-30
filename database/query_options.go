@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
@@ -235,12 +234,12 @@ func knownModelColumns[M types.Model]() (map[string]struct{}, error) {
 // It does not work with Create, Update, or Delete operations.
 //
 // Lock modes:
-//   - consts.LockUpdate (default): SELECT ... FOR UPDATE
-//   - consts.LockShare: SELECT ... FOR SHARE
-//   - consts.LockUpdateNoWait: SELECT ... FOR UPDATE NOWAIT
-//   - consts.LockShareNoWait: SELECT ... FOR SHARE NOWAIT
-//   - consts.LockUpdateSkipLocked: SELECT ... FOR UPDATE SKIP LOCKED
-//   - consts.LockShareSkipLocked: SELECT ... FOR SHARE SKIP LOCKED
+//   - LockUpdate (default): SELECT ... FOR UPDATE
+//   - LockShare: SELECT ... FOR SHARE
+//   - LockUpdateNoWait: SELECT ... FOR UPDATE NOWAIT
+//   - LockShareNoWait: SELECT ... FOR SHARE NOWAIT
+//   - LockUpdateSkipLocked: SELECT ... FOR UPDATE SKIP LOCKED
+//   - LockShareSkipLocked: SELECT ... FOR SHARE SKIP LOCKED
 //
 // SQLite has no row-level locks -- the whole database is a single writer --
 // and its GORM driver drops the locking clause, so every mode is a no-op
@@ -254,7 +253,7 @@ func knownModelColumns[M types.Model]() (map[string]struct{}, error) {
 //	    // Get and lock the record with FOR UPDATE
 //	    record := new(model.Sample)
 //	    if err := database.Database[*model.Sample](ctx).
-//	        WithLock(consts.LockUpdate).
+//	        WithLock(LockUpdate).
 //	        Get(record, recordID); err != nil {
 //	        return err
 //	    }
@@ -262,7 +261,7 @@ func knownModelColumns[M types.Model]() (map[string]struct{}, error) {
 //	    record.Status = "processed"
 //	    return database.Database[*model.Sample](ctx).Update(record)
 //	})
-func (db *database[M]) WithLock(mode ...consts.LockMode) types.Database[M] {
+func (db *database[M]) WithLock(mode ...LockMode) types.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
@@ -288,18 +287,18 @@ func (db *database[M]) WithLock(mode ...consts.LockMode) types.Database[M] {
 	options := ""
 	if len(mode) > 0 {
 		switch mode[0] {
-		case consts.LockShare:
+		case LockShare:
 			strength = "SHARE"
-		case consts.LockUpdateNoWait:
+		case LockUpdateNoWait:
 			strength = "UPDATE"
 			options = "NOWAIT"
-		case consts.LockShareNoWait:
+		case LockShareNoWait:
 			strength = "SHARE"
 			options = "NOWAIT"
-		case consts.LockUpdateSkipLocked:
+		case LockUpdateSkipLocked:
 			strength = "UPDATE"
 			options = "SKIP LOCKED"
-		case consts.LockShareSkipLocked:
+		case LockShareSkipLocked:
 			strength = "SHARE"
 			options = "SKIP LOCKED"
 		}

@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst"
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	"github.com/hydroan/gst/model"
@@ -43,7 +42,7 @@ func (a *AdminTOTPResetService) Delete(ctx *gst.ServiceContext, req *model.Empty
 	removed := 0
 	err = database.Transaction(ctx, func(ctx context.Context) error {
 		devices := make([]*modelmfa.TOTPDevice, 0)
-		if listErr := database.Database[*modelmfa.TOTPDevice](ctx).WithLock(consts.LockUpdate).WithQuery(&modelmfa.TOTPDevice{
+		if listErr := database.Database[*modelmfa.TOTPDevice](ctx).WithLock(database.LockUpdate).WithQuery(&modelmfa.TOTPDevice{
 			UserID: targetUserID,
 		}).List(&devices); listErr != nil {
 			return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to list TOTP devices", listErr)

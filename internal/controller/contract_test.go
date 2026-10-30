@@ -15,7 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/middleware"
 	"github.com/hydroan/gst/internal/response"
@@ -98,7 +98,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 
 	scenarios := []contractScenario{
 		{
-			name: "Create stores the record for the caller", fixture: samples, phase: consts.Create,
+			name: "Create stores the record for the caller", fixture: samples, phase: apiaction.Create,
 			input: contractInput{record: map[string]any{"name": uniqueName("contract-create")}},
 			want:  ok,
 			check: func(t *testing.T, in contractInput, got contractAnswer) {
@@ -110,13 +110,13 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "Create refuses a request carrying no record", fixture: samples, phase: consts.Create,
+			name: "Create refuses a request carrying no record", fixture: samples, phase: apiaction.Create,
 			want: noRecord,
 		},
 		{
 			// A date sent with the client's own offset names the UTC day of
 			// that instant, stored and answered as the day at midnight UTC.
-			name: "Create stores a date as the UTC day", fixture: dated, phase: consts.Create,
+			name: "Create stores a date as the UTC day", fixture: dated, phase: apiaction.Create,
 			input: contractInput{record: map[string]any{"name": uniqueName("contract-dated"), "day": "2026-01-02T00:00:00+08:00"}},
 			want:  ok,
 			check: func(t *testing.T, in contractInput, got contractAnswer) {
@@ -129,7 +129,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 		{
 			// A time a model declares a date column by its type tag is a day
 			// the same way.
-			name: "Create stores a date declared on a time as the UTC day", fixture: dated, phase: consts.Create,
+			name: "Create stores a date declared on a time as the UTC day", fixture: dated, phase: apiaction.Create,
 			input: contractInput{record: map[string]any{"name": uniqueName("contract-due"), "day": "2026-01-01T00:00:00Z", "due": "2026-01-02T00:00:00+08:00"}},
 			want:  ok,
 			check: func(t *testing.T, _ contractInput, got contractAnswer) {
@@ -145,7 +145,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			// kept as written on both. A spelling HTTP alone carries, abc or
 			// 17:30, is HTTP's to refuse (see
 			// TestCreateReadsATimeOfDayAsWritten).
-			name: "Create stores a time of day with the fraction of a second it names", fixture: dated, phase: consts.Create,
+			name: "Create stores a time of day with the fraction of a second it names", fixture: dated, phase: apiaction.Create,
 			input: contractInput{record: map[string]any{"name": uniqueName("contract-clock"), "day": "2026-01-01T00:00:00Z", "clock": "17:30:00.5"}},
 			want:  ok,
 			check: func(t *testing.T, _ contractInput, got contractAnswer) {
@@ -156,7 +156,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 		{
 			// A duration of a whole day or more is no time of day, and nothing
 			// is stored for it.
-			name: "Create refuses a time of day past the end of a day", fixture: dated, phase: consts.Create,
+			name: "Create refuses a time of day past the end of a day", fixture: dated, phase: apiaction.Create,
 			input: contractInput{record: map[string]any{"name": uniqueName("contract-clock-overflow"), "clock": "25:00:00"}},
 			want:  contractWant{status: http.StatusBadRequest, msg: "invalid value for field 'clock'"},
 			check: func(t *testing.T, in contractInput, _ contractAnswer) {
@@ -168,7 +168,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			// The tenant is the caller's, stamped when the record is written:
 			// a tenant the record names is ignored on both transports, a
 			// generated FromProto not even reading it.
-			name: "Create files the record under the caller's tenant whatever tenant it names", fixture: scoped, phase: consts.Create,
+			name: "Create files the record under the caller's tenant whatever tenant it names", fixture: scoped, phase: apiaction.Create,
 			input: contractInput{record: map[string]any{"name": uniqueName("contract-scoped"), "tenant_id": "contract-other-tenant"}},
 			want:  ok,
 			check: func(t *testing.T, _ contractInput, got contractAnswer) {
@@ -184,7 +184,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			// FromProto never reads tenant_id, so over gRPC the record names
 			// none, and a call naming no tenant of its own has none to file it
 			// under (see TRANSPORTS.md, section 9).
-			name: "Create by a caller acting across tenants files the record under the tenant it names over HTTP alone", fixture: scopedAcross, phase: consts.Create,
+			name: "Create by a caller acting across tenants files the record under the tenant it names over HTTP alone", fixture: scopedAcross, phase: apiaction.Create,
 			input: contractInput{record: map[string]any{"name": uniqueName("contract-scoped-across"), "tenant_id": "contract-other-tenant"}},
 			want:  contractWant{status: http.StatusOK, grpc: &grpcAnswer{code: codes.InvalidArgument, msg: invalidArgumentMsg}},
 			check: func(t *testing.T, _ contractInput, got contractAnswer) {
@@ -199,7 +199,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			// The round trip of a client: a record read back carries its own
 			// tenant, and the update writing it back is applied, the tenant
 			// it names being the one it has.
-			name: "Update carrying the record's own tenant is applied", fixture: scoped, phase: consts.Update,
+			name: "Update carrying the record's own tenant is applied", fixture: scoped, phase: apiaction.Update,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{id: createScoped(t, "contract-scoped-own").GetID(), record: map[string]any{"name": "contract-scoped-own-updated", "tenant_id": tenant.Default}}
@@ -218,7 +218,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			// refuses it rather than answer a move that never happened, and
 			// gRPC, whose tenant_id is output-only, never reads one (see
 			// TRANSPORTS.md, section 9).
-			name: "Update refuses another tenant over HTTP and gRPC never reads one", fixture: scoped, phase: consts.Update,
+			name: "Update refuses another tenant over HTTP and gRPC never reads one", fixture: scoped, phase: apiaction.Update,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{id: createScoped(t, "contract-scoped-update").GetID(), record: map[string]any{"name": "contract-scoped-updated", "tenant_id": "contract-other-tenant"}}
@@ -238,7 +238,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 		{
 			// An anonymous request names no creator or updater, so the record
 			// is stored with none, whatever the request carries.
-			name: "Create stores no creator or updater an anonymous request names", fixture: public, phase: consts.Create,
+			name: "Create stores no creator or updater an anonymous request names", fixture: public, phase: apiaction.Create,
 			input: contractInput{record: map[string]any{"name": uniqueName("contract-anonymous"), "created_by": "mallory", "updated_by": "mallory"}},
 			want:  ok,
 			check: func(t *testing.T, _ contractInput, got contractAnswer) {
@@ -249,12 +249,12 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "Create refuses a record failing validation", fixture: validated, phase: consts.Create,
+			name: "Create refuses a record failing validation", fixture: validated, phase: apiaction.Create,
 			input: contractInput{record: map[string]any{}},
 			want:  nameRequired,
 		},
 		{
-			name: "Create refuses a value a nested field cannot hold and stores nothing", fixture: shaped, phase: consts.Create,
+			name: "Create refuses a value a nested field cannot hold and stores nothing", fixture: shaped, phase: apiaction.Create,
 			input: contractInput{record: map[string]any{"name": uniqueName("contract-nested"), "address": map[string]any{"city": "c", "floor": 300}}},
 			want:  contractWant{status: http.StatusBadRequest, msg: "invalid value for field 'address.floor'"},
 			check: func(t *testing.T, in contractInput, _ contractAnswer) {
@@ -263,7 +263,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "Create refuses a value the field cannot hold and stores nothing", fixture: shaped, phase: consts.Create,
+			name: "Create refuses a value the field cannot hold and stores nothing", fixture: shaped, phase: apiaction.Create,
 			input: contractInput{record: map[string]any{"name": uniqueName("contract-narrow"), "rank": 300}},
 			want:  contractWant{status: http.StatusBadRequest, msg: "invalid value for field 'rank'"},
 			check: func(t *testing.T, in contractInput, _ contractAnswer) {
@@ -272,7 +272,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "Create refuses a time the field cannot read and stores nothing", fixture: shaped, phase: consts.Create,
+			name: "Create refuses a time the field cannot read and stores nothing", fixture: shaped, phase: apiaction.Create,
 			input: contractInput{record: map[string]any{"name": uniqueName("contract-time"), "due_at": "yesterday"}},
 			want:  contractWant{status: http.StatusBadRequest, msg: "invalid value for field 'due_at'"},
 			check: func(t *testing.T, in contractInput, _ contractAnswer) {
@@ -281,7 +281,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "Create refuses a number the field cannot read and stores nothing", fixture: shaped, phase: consts.Create,
+			name: "Create refuses a number the field cannot read and stores nothing", fixture: shaped, phase: apiaction.Create,
 			input: contractInput{record: map[string]any{"name": uniqueName("contract-number"), "amount": "abc"}},
 			want:  contractWant{status: http.StatusBadRequest, msg: "invalid value for field 'amount'"},
 			check: func(t *testing.T, in contractInput, _ contractAnswer) {
@@ -290,7 +290,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "Create answers the hook's refusal and stores nothing", fixture: refusals, phase: consts.Create,
+			name: "Create answers the hook's refusal and stores nothing", fixture: refusals, phase: apiaction.Create,
 			input: contractInput{record: map[string]any{"name": uniqueName("contract-create-refused")}},
 			want:  refused,
 			check: func(t *testing.T, in contractInput, _ contractAnswer) {
@@ -299,7 +299,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "Get answers the record", fixture: samples, phase: consts.Get,
+			name: "Get answers the record", fixture: samples, phase: apiaction.Get,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{id: createSample(t, "contract-get").GetID()}
@@ -313,17 +313,17 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "Get answers NotFound for an id no record carries", fixture: samples, phase: consts.Get,
+			name: "Get answers NotFound for an id no record carries", fixture: samples, phase: apiaction.Get,
 			input: contractInput{id: "missing"},
 			want:  notFound,
 		},
 		{
-			name: "Get answers NotFound for an id the integer key cannot hold", fixture: counters, phase: consts.Get,
+			name: "Get answers NotFound for an id the integer key cannot hold", fixture: counters, phase: apiaction.Get,
 			input: contractInput{id: "first"},
 			want:  notFound,
 		},
 		{
-			name: "List answers the records the query matches in the order asked", fixture: samples, phase: consts.List,
+			name: "List answers the records the query matches in the order asked", fixture: samples, phase: apiaction.List,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				prefix := uniqueName("contract-list")
@@ -347,17 +347,17 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "List refuses a filter on a field the model lacks", fixture: samples, phase: consts.List,
+			name: "List refuses a filter on a field the model lacks", fixture: samples, phase: apiaction.List,
 			input: contractInput{query: controller.Query{Filters: []controller.Filter{{Field: "missing", Op: "eq", Values: []string{"value"}}}}},
 			want:  contractWant{status: http.StatusBadRequest},
 		},
 		{
-			name: "List refuses a bare key on a column hidden from clients", fixture: samples, phase: consts.List,
+			name: "List refuses a bare key on a column hidden from clients", fixture: samples, phase: apiaction.List,
 			input: contractInput{query: controller.Query{Filters: []controller.Filter{{Field: "secret", Values: []string{"value"}}}}},
 			want:  contractWant{status: http.StatusBadRequest},
 		},
 		{
-			name: "List refuses a filter given twice, every key so given listed", fixture: samples, phase: consts.List,
+			name: "List refuses a filter given twice, every key so given listed", fixture: samples, phase: apiaction.List,
 			input: contractInput{query: controller.Query{Filters: []controller.Filter{
 				{Field: "name", Op: "ne", Values: []string{"a"}},
 				{Field: "name", Op: "eq", Values: []string{"a"}},
@@ -367,7 +367,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			want: contractWant{status: http.StatusBadRequest, msg: "duplicate query parameter: name[eq], name[ne]"},
 		},
 		{
-			name: "List filters by nothing on an empty value over HTTP and refuses it over gRPC", fixture: samples, phase: consts.List,
+			name: "List filters by nothing on an empty value over HTTP and refuses it over gRPC", fixture: samples, phase: apiaction.List,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				createSample(t, uniqueName("contract-empty-filter"))
@@ -380,7 +380,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			check: filtersByNothingOverHTTP,
 		},
 		{
-			name: "List filters by nothing on a filter without a value over HTTP and refuses it over gRPC", fixture: samples, phase: consts.List,
+			name: "List filters by nothing on a filter without a value over HTTP and refuses it over gRPC", fixture: samples, phase: apiaction.List,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				createSample(t, uniqueName("contract-valueless-filter"))
@@ -392,7 +392,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			check: filtersByNothingOverHTTP,
 		},
 		{
-			name: "List accepts a bare key on a field that is not a column and leaves the records to the service", fixture: samples, phase: consts.List,
+			name: "List accepts a bare key on a field that is not a column and leaves the records to the service", fixture: samples, phase: apiaction.List,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				prefix := uniqueName("contract-virtual")
@@ -409,7 +409,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "List matches a date filter by the UTC day", fixture: dated, phase: consts.List,
+			name: "List matches a date filter by the UTC day", fixture: dated, phase: apiaction.List,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				name := uniqueName("contract-dated-list")
@@ -435,7 +435,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 		{
 			// A page without an order of its own is read in primary key order
 			// on both lines, so the pages of a listing hold still.
-			name: "List answers a page in primary key order when no order is given", fixture: dated, phase: consts.List,
+			name: "List answers a page in primary key order when no order is given", fixture: dated, phase: apiaction.List,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				name := uniqueName("contract-dated-page")
@@ -459,7 +459,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			// A cursor parameter without a boundary value asks for the first
 			// page of the feed, read in the feed's order from the start; a
 			// feed answers no total, on the first page as on any other.
-			name: "List reads the first page of a feed in the feed's order and answers no total", fixture: dated, phase: consts.List,
+			name: "List reads the first page of a feed in the feed's order and answers no total", fixture: dated, phase: apiaction.List,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				name := uniqueName("contract-dated-feed")
@@ -483,39 +483,39 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "List refuses a date filter it cannot read", fixture: dated, phase: consts.List,
+			name: "List refuses a date filter it cannot read", fixture: dated, phase: apiaction.List,
 			input: contractInput{query: controller.Query{Filters: []controller.Filter{{Field: "day", Op: "eq", Values: []string{"not-a-date"}}}}},
 			want:  contractWant{status: http.StatusBadRequest},
 		},
 		{
-			name: "List refuses a time filter it cannot read on an optional time", fixture: dated, phase: consts.List,
+			name: "List refuses a time filter it cannot read on an optional time", fixture: dated, phase: apiaction.List,
 			input: contractInput{query: controller.Query{Filters: []controller.Filter{{Field: "closed_at", Op: "gte", Values: []string{"not-a-time"}}}}},
 			want:  contractWant{status: http.StatusBadRequest},
 		},
 		{
-			name: "List refuses a comparison on a JSON column", fixture: dated, phase: consts.List,
+			name: "List refuses a comparison on a JSON column", fixture: dated, phase: apiaction.List,
 			input: contractInput{query: controller.Query{Filters: []controller.Filter{{Field: "meta", Op: "ne", Values: []string{"value"}}}}},
 			want:  contractWant{status: http.StatusBadRequest},
 		},
 		{
-			name: "List matches a JSON column by its text", fixture: dated, phase: consts.List,
+			name: "List matches a JSON column by its text", fixture: dated, phase: apiaction.List,
 			input: contractInput{query: controller.Query{Filters: []controller.Filter{{Field: "meta", Op: "like", Values: []string{"value"}}}}},
 			want:  ok,
 		},
 		{
-			name: "List matches a numeric column by the number's text", fixture: dated, phase: consts.List,
+			name: "List matches a numeric column by the number's text", fixture: dated, phase: apiaction.List,
 			input: contractInput{query: controller.Query{Filters: []controller.Filter{{Field: "count", Op: "like", Values: []string{"1"}}}}},
 			want:  ok,
 		},
 		{
-			name: "List refuses a page on a model that does not page", fixture: counters, phase: consts.List,
+			name: "List refuses a page on a model that does not page", fixture: counters, phase: apiaction.List,
 			input: contractInput{query: controller.Query{Page: 2}},
 			want:  contractWant{status: http.StatusBadRequest},
 		},
-		{name: "List answers the hook's refusal", fixture: refusals, phase: consts.List, want: refused},
-		{name: "List answers the Filter hook's refusal", fixture: filterRefusals, phase: consts.List, want: refused},
+		{name: "List answers the hook's refusal", fixture: refusals, phase: apiaction.List, want: refused},
+		{name: "List answers the Filter hook's refusal", fixture: filterRefusals, phase: apiaction.List, want: refused},
 		{
-			name: "List answers a client that went away as canceled, not as a failure of the server", fixture: hanging, phase: consts.List,
+			name: "List answers a client that went away as canceled, not as a failure of the server", fixture: hanging, phase: apiaction.List,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				ctx, cancel := context.WithCancel(context.Background())
@@ -526,19 +526,19 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			want: contractWant{status: types.StatusClientClosedRequest, msg: "context canceled"},
 		},
 		{
-			name: "List reads under the parent its route names", fixture: parentFixture, phase: consts.List,
+			name: "List reads under the parent its route names", fixture: parentFixture, phase: apiaction.List,
 			input: contractInput{params: map[string]string{"id": "contract-parent"}},
 			want:  ok,
 		},
 		{
 			// A path carries an empty parameter as an empty segment,
 			// controller-parents//samples, the way a message carries one.
-			name: "List refuses an empty route parameter", fixture: parentFixture, phase: consts.List,
+			name: "List refuses an empty route parameter", fixture: parentFixture, phase: apiaction.List,
 			input: contractInput{params: map[string]string{"id": ""}},
 			want:  contractWant{status: http.StatusBadRequest, msg: `route parameter "id" is required`},
 		},
 		{
-			name: "Update replaces the record for the caller", fixture: samples, phase: consts.Update,
+			name: "Update replaces the record for the caller", fixture: samples, phase: apiaction.Update,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{id: createSample(t, "contract-update").GetID(), record: map[string]any{"name": "contract-updated"}}
@@ -556,7 +556,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			// An anonymous update names no updater: the record is stored with
 			// none, neither the one the request carries nor the one stored
 			// before, and its creator stays as stored.
-			name: "Update stores no updater an anonymous request names", fixture: public, phase: consts.Update,
+			name: "Update stores no updater an anonymous request names", fixture: public, phase: apiaction.Update,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{id: createSampleBy(t, "contract-anonymous-update", "u-0").GetID(), record: map[string]any{"name": "contract-anonymous-updated", "created_by": "mallory", "updated_by": "mallory"}}
@@ -571,7 +571,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "Update writes the record the request names, whatever id the record carries", fixture: samples, phase: consts.Update,
+			name: "Update writes the record the request names, whatever id the record carries", fixture: samples, phase: apiaction.Update,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				other := createSample(t, "contract-update-other")
@@ -586,12 +586,12 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "Update answers NotFound for an id no record carries", fixture: samples, phase: consts.Update,
+			name: "Update answers NotFound for an id no record carries", fixture: samples, phase: apiaction.Update,
 			input: contractInput{id: "missing", record: map[string]any{"name": "contract-updated"}},
 			want:  notFound,
 		},
 		{
-			name: "Update refuses a request carrying no record", fixture: samples, phase: consts.Update,
+			name: "Update refuses a request carrying no record", fixture: samples, phase: apiaction.Update,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{id: createSample(t, "contract-update-kept").GetID()}
@@ -603,7 +603,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "Update refuses a record failing validation", fixture: validated, phase: consts.Update,
+			name: "Update refuses a record failing validation", fixture: validated, phase: apiaction.Update,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{id: createValidated(t, "contract-update-validated").GetID(), record: map[string]any{"name": ""}}
@@ -611,7 +611,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			want: nameRequired,
 		},
 		{
-			name: "Update answers the hook's refusal and keeps the record", fixture: refusals, phase: consts.Update,
+			name: "Update answers the hook's refusal and keeps the record", fixture: refusals, phase: apiaction.Update,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{id: createSample(t, "contract-update-refused").GetID(), record: map[string]any{"name": "contract-updated"}}
@@ -623,7 +623,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "Patch applies the fields the request names and leaves the others as stored", fixture: samples, phase: consts.Patch,
+			name: "Patch applies the fields the request names and leaves the others as stored", fixture: samples, phase: apiaction.Patch,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				record := &sampleRecord{Name: "contract-patch", Note: "kept"}
@@ -644,7 +644,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			// An anonymous patch names no updater, as an anonymous update
 			// does: the record is stored with none rather than the one stored
 			// before, and its creator stays as stored.
-			name: "Patch stores no updater an anonymous request names", fixture: public, phase: consts.Patch,
+			name: "Patch stores no updater an anonymous request names", fixture: public, phase: apiaction.Patch,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{id: createSampleBy(t, "contract-anonymous-patch", "u-0").GetID(), record: map[string]any{"name": "contract-anonymous-patched"}}
@@ -659,7 +659,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "Patch naming no field", fixture: samples, phase: consts.Patch,
+			name: "Patch naming no field", fixture: samples, phase: apiaction.Patch,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{id: createSample(t, "contract-patch-nothing").GetID(), record: map[string]any{}}
@@ -679,7 +679,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 		{
 			// HTTP passes over a key naming no field, the way encoding/json
 			// does; gRPC refuses the path.
-			name: "Patch naming a field the model lacks", fixture: samples, phase: consts.Patch,
+			name: "Patch naming a field the model lacks", fixture: samples, phase: apiaction.Patch,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{id: createSample(t, "contract-patch-unknown").GetID(), record: map[string]any{"nope": 1}}
@@ -693,7 +693,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 		{
 			// HTTP binds a key differing only in case the way encoding/json
 			// does; gRPC refuses the path, which must be exact.
-			name: "Patch applies a field named by a key differing only in case", fixture: samples, phase: consts.Patch,
+			name: "Patch applies a field named by a key differing only in case", fixture: samples, phase: apiaction.Patch,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{id: createSample(t, "contract-patch-cased").GetID(), record: map[string]any{"Name": "contract-patched-cased"}}
@@ -709,7 +709,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "Patch leaves a field the framework manages as stored and applies the field beside it", fixture: samples, phase: consts.Patch,
+			name: "Patch leaves a field the framework manages as stored and applies the field beside it", fixture: samples, phase: apiaction.Patch,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{id: createSample(t, "contract-patch-managed").GetID(), record: map[string]any{"created_at": "2001-02-03T04:05:06Z", "name": "contract-patched-beside"}}
@@ -723,7 +723,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "Patch naming only a field the framework manages", fixture: samples, phase: consts.Patch,
+			name: "Patch naming only a field the framework manages", fixture: samples, phase: apiaction.Patch,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{id: createSample(t, "contract-patch-managed-alone").GetID(), record: map[string]any{"created_at": "2001-02-03T04:05:06Z"}}
@@ -737,7 +737,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "Patch refuses a field failing validation", fixture: validated, phase: consts.Patch,
+			name: "Patch refuses a field failing validation", fixture: validated, phase: apiaction.Patch,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{id: createValidated(t, "contract-patch-validated").GetID(), record: map[string]any{"name": ""}}
@@ -745,7 +745,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			want: nameRequired,
 		},
 		{
-			name: "Patch leaves a required field the request does not name alone", fixture: validated, phase: consts.Patch,
+			name: "Patch leaves a required field the request does not name alone", fixture: validated, phase: apiaction.Patch,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{id: createValidated(t, "contract-patch-unnamed").GetID(), record: map[string]any{"note": "only the note"}}
@@ -753,7 +753,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			want: ok,
 		},
 		{
-			name: "Patch refuses a request carrying no record", fixture: samples, phase: consts.Patch,
+			name: "Patch refuses a request carrying no record", fixture: samples, phase: apiaction.Patch,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{id: createSample(t, "contract-patch-no-record").GetID()}
@@ -763,7 +763,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 		{
 			// A request carrying no record carries no version either: the
 			// record it lacks is what it is refused for.
-			name: "Patch refuses a request carrying no record on a versioned model", fixture: versioned, phase: consts.Patch,
+			name: "Patch refuses a request carrying no record on a versioned model", fixture: versioned, phase: apiaction.Patch,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{id: createVersioned(t, "contract-patch-versioned-no-record").GetID()}
@@ -771,7 +771,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			want: noRecord,
 		},
 		{
-			name: "Patch refuses a versioned record without its version", fixture: versioned, phase: consts.Patch,
+			name: "Patch refuses a versioned record without its version", fixture: versioned, phase: apiaction.Patch,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{id: createVersioned(t, "contract-patch-unversioned").GetID(), record: map[string]any{"name": "contract-patched"}}
@@ -779,7 +779,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			want: invalid,
 		},
 		{
-			name: "Patch refuses a stale version", fixture: versioned, phase: consts.Patch,
+			name: "Patch refuses a stale version", fixture: versioned, phase: apiaction.Patch,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{id: createVersioned(t, "contract-patch-stale").GetID(), record: map[string]any{"name": "contract-patched", "version": 5}}
@@ -789,7 +789,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 		{
 			// HTTP finds the version under a key differing only in case the
 			// way encoding/json binds it; gRPC refuses the path.
-			name: "Patch accepts the version under a key differing only in case", fixture: versioned, phase: consts.Patch,
+			name: "Patch accepts the version under a key differing only in case", fixture: versioned, phase: apiaction.Patch,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				record := createVersioned(t, "contract-patch-cased-version")
@@ -798,17 +798,17 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			want: contractWant{status: http.StatusOK, grpc: &grpcAnswer{code: codes.InvalidArgument, msg: `update_mask names "Version", which is no field a patch applies`}},
 		},
 		{
-			name: "Patch answers NotFound for an id no record carries", fixture: samples, phase: consts.Patch,
+			name: "Patch answers NotFound for an id no record carries", fixture: samples, phase: apiaction.Patch,
 			input: contractInput{id: "missing", record: map[string]any{"name": "contract-patched"}},
 			want:  notFound,
 		},
 		{
-			name: "Patch answers NotFound for an id the integer key cannot hold", fixture: counters, phase: consts.Patch,
+			name: "Patch answers NotFound for an id the integer key cannot hold", fixture: counters, phase: apiaction.Patch,
 			input: contractInput{id: "first", record: map[string]any{"name": "contract-patched"}},
 			want:  notFound,
 		},
 		{
-			name: "Patch answers the hook's refusal and keeps the record", fixture: refusals, phase: consts.Patch,
+			name: "Patch answers the hook's refusal and keeps the record", fixture: refusals, phase: apiaction.Patch,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{id: createSample(t, "contract-patch-refused").GetID(), record: map[string]any{"name": "contract-patched"}}
@@ -820,7 +820,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "Delete removes the record", fixture: samples, phase: consts.Delete,
+			name: "Delete removes the record", fixture: samples, phase: apiaction.Delete,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{id: createSample(t, "contract-delete").GetID()}
@@ -832,7 +832,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "Delete answers the hook's refusal and keeps the record", fixture: refusals, phase: consts.Delete,
+			name: "Delete answers the hook's refusal and keeps the record", fixture: refusals, phase: apiaction.Delete,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{id: createSample(t, "contract-delete-refused").GetID()}
@@ -844,17 +844,17 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "Delete answers NotFound for an id no record carries", fixture: samples, phase: consts.Delete,
+			name: "Delete answers NotFound for an id no record carries", fixture: samples, phase: apiaction.Delete,
 			input: contractInput{id: "missing"},
 			want:  notFound,
 		},
 		{
-			name: "Delete answers NotFound for an id the integer key cannot hold", fixture: counters, phase: consts.Delete,
+			name: "Delete answers NotFound for an id the integer key cannot hold", fixture: counters, phase: apiaction.Delete,
 			input: contractInput{id: "first"},
 			want:  notFound,
 		},
 		{
-			name: "CreateMany stores the items", fixture: samples, phase: consts.CreateMany,
+			name: "CreateMany stores the items", fixture: samples, phase: apiaction.CreateMany,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				prefix := uniqueName("contract-create-many")
@@ -870,7 +870,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "CreateMany stores no creator or updater an anonymous request names", fixture: public, phase: consts.CreateMany,
+			name: "CreateMany stores no creator or updater an anonymous request names", fixture: public, phase: apiaction.CreateMany,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				prefix := uniqueName("contract-anonymous-many")
@@ -889,7 +889,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "CreateMany stores the dates of the items as UTC days", fixture: dated, phase: consts.CreateMany,
+			name: "CreateMany stores the dates of the items as UTC days", fixture: dated, phase: apiaction.CreateMany,
 			input: contractInput{items: []map[string]any{{"name": uniqueName("contract-dated-many"), "day": "2026-01-02T00:00:00+08:00"}}},
 			want:  ok,
 			check: func(t *testing.T, in contractInput, got contractAnswer) {
@@ -900,7 +900,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "CreateMany refuses an item failing validation and stores nothing", fixture: validated, phase: consts.CreateMany,
+			name: "CreateMany refuses an item failing validation and stores nothing", fixture: validated, phase: apiaction.CreateMany,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{items: []map[string]any{{"name": uniqueName("contract-create-many-valid")}, {}}}
@@ -912,7 +912,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "CreateMany answers the hook's refusal and stores nothing", fixture: refusals, phase: consts.CreateMany,
+			name: "CreateMany answers the hook's refusal and stores nothing", fixture: refusals, phase: apiaction.CreateMany,
 			input: contractInput{items: []map[string]any{{"name": uniqueName("contract-create-many-refused")}}},
 			want:  refused,
 			check: func(t *testing.T, in contractInput, _ contractAnswer) {
@@ -921,7 +921,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "UpdateMany replaces the items for the caller", fixture: samples, phase: consts.UpdateMany,
+			name: "UpdateMany replaces the items for the caller", fixture: samples, phase: apiaction.UpdateMany,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				a, b := createSample(t, "contract-update-many-a"), createSample(t, "contract-update-many-b")
@@ -943,7 +943,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "UpdateMany stores no updater an anonymous request names", fixture: public, phase: consts.UpdateMany,
+			name: "UpdateMany stores no updater an anonymous request names", fixture: public, phase: apiaction.UpdateMany,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				stored := createSampleBy(t, "contract-anonymous-update-many", "u-0")
@@ -959,7 +959,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "UpdateMany refuses an item naming no record and writes nothing", fixture: samples, phase: consts.UpdateMany,
+			name: "UpdateMany refuses an item naming no record and writes nothing", fixture: samples, phase: apiaction.UpdateMany,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{items: []map[string]any{{"id": createSample(t, "contract-update-many-kept").GetID(), "name": "contract-update-many-renamed"}, {"name": "contract-update-many-other"}}}
@@ -971,13 +971,13 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "UpdateMany refuses a batch naming a record twice and writes nothing", fixture: samples, phase: consts.UpdateMany,
+			name: "UpdateMany refuses a batch naming a record twice and writes nothing", fixture: samples, phase: apiaction.UpdateMany,
 			input: twice(map[string]any{"name": "contract-named-twice-second"}),
 			want:  contractWant{status: http.StatusBadRequest},
 			check: namedTwice,
 		},
 		{
-			name: "UpdateMany answers NotFound when an item names no stored record and writes nothing", fixture: samples, phase: consts.UpdateMany,
+			name: "UpdateMany answers NotFound when an item names no stored record and writes nothing", fixture: samples, phase: apiaction.UpdateMany,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{items: []map[string]any{{"id": createSample(t, "contract-update-many-kept").GetID(), "name": "contract-update-many-renamed"}, {"id": "missing", "name": "contract-update-many-other"}}}
@@ -989,7 +989,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "UpdateMany answers the hook's refusal and writes nothing", fixture: refusals, phase: consts.UpdateMany,
+			name: "UpdateMany answers the hook's refusal and writes nothing", fixture: refusals, phase: apiaction.UpdateMany,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{items: []map[string]any{{"id": createSample(t, "contract-update-many-refused").GetID(), "name": "contract-update-many-renamed"}}}
@@ -1001,7 +1001,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "PatchMany applies the fields each item names", fixture: samples, phase: consts.PatchMany,
+			name: "PatchMany applies the fields each item names", fixture: samples, phase: apiaction.PatchMany,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				a, b := createSample(t, "contract-patch-many-a"), createSample(t, "contract-patch-many-b")
@@ -1021,7 +1021,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "PatchMany stores no updater an anonymous request names", fixture: public, phase: consts.PatchMany,
+			name: "PatchMany stores no updater an anonymous request names", fixture: public, phase: apiaction.PatchMany,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				stored := createSampleBy(t, "contract-anonymous-patch-many", "u-0")
@@ -1037,7 +1037,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "PatchMany refuses an item naming no record and writes nothing", fixture: samples, phase: consts.PatchMany,
+			name: "PatchMany refuses an item naming no record and writes nothing", fixture: samples, phase: apiaction.PatchMany,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{items: []map[string]any{{"id": createSample(t, "contract-patch-many-kept").GetID(), "name": "contract-patch-many-renamed"}, {"name": "contract-patch-many-other"}}}
@@ -1049,13 +1049,13 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "PatchMany refuses a batch naming a record twice and writes nothing", fixture: samples, phase: consts.PatchMany,
+			name: "PatchMany refuses a batch naming a record twice and writes nothing", fixture: samples, phase: apiaction.PatchMany,
 			input: twice(map[string]any{"note": "second"}),
 			want:  contractWant{status: http.StatusBadRequest},
 			check: namedTwice,
 		},
 		{
-			name: "PatchMany answers NotFound when an item names no stored record and writes nothing", fixture: samples, phase: consts.PatchMany,
+			name: "PatchMany answers NotFound when an item names no stored record and writes nothing", fixture: samples, phase: apiaction.PatchMany,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{items: []map[string]any{{"id": createSample(t, "contract-patch-many-kept").GetID(), "name": "contract-patch-many-renamed"}, {"id": "missing", "name": "contract-patch-many-other"}}}
@@ -1067,7 +1067,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "PatchMany refuses a versioned item without its version", fixture: versioned, phase: consts.PatchMany,
+			name: "PatchMany refuses a versioned item without its version", fixture: versioned, phase: apiaction.PatchMany,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{items: []map[string]any{{"id": createVersioned(t, "contract-patch-many-unversioned").GetID(), "name": "contract-patched"}}}
@@ -1077,7 +1077,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 		{
 			// Every item's version is checked before any item is validated, so
 			// a batch defective in several items is refused for the same one.
-			name: "PatchMany refuses a missing version before an invalid field", fixture: versioned, phase: consts.PatchMany,
+			name: "PatchMany refuses a missing version before an invalid field", fixture: versioned, phase: apiaction.PatchMany,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				invalidCode := createVersioned(t, "contract-patch-many-invalid-code").GetID()
@@ -1087,7 +1087,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			want: invalid,
 		},
 		{
-			name: "PatchMany refuses an item failing validation", fixture: validated, phase: consts.PatchMany,
+			name: "PatchMany refuses an item failing validation", fixture: validated, phase: apiaction.PatchMany,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{items: []map[string]any{{"id": createValidated(t, "contract-patch-many-validated").GetID(), "name": ""}}}
@@ -1095,7 +1095,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			want: contractWant{status: http.StatusBadRequest, msg: "items[0].name is a required field"},
 		},
 		{
-			name: "PatchMany refuses an item carrying a value its field cannot hold and writes nothing", fixture: shaped, phase: consts.PatchMany,
+			name: "PatchMany refuses an item carrying a value its field cannot hold and writes nothing", fixture: shaped, phase: apiaction.PatchMany,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				a, b := createShaped(t, "contract-patch-many-narrow-a"), createShaped(t, "contract-patch-many-narrow-b")
@@ -1108,7 +1108,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "PatchMany refuses an item whose nested field cannot hold a value and writes nothing", fixture: shaped, phase: consts.PatchMany,
+			name: "PatchMany refuses an item whose nested field cannot hold a value and writes nothing", fixture: shaped, phase: apiaction.PatchMany,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				a, b := createShaped(t, "contract-patch-many-nested-a"), createShaped(t, "contract-patch-many-nested-b")
@@ -1121,7 +1121,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "PatchMany answers the hook's refusal and writes nothing", fixture: refusals, phase: consts.PatchMany,
+			name: "PatchMany answers the hook's refusal and writes nothing", fixture: refusals, phase: apiaction.PatchMany,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{items: []map[string]any{{"id": createSample(t, "contract-patch-many-refused").GetID(), "name": "contract-patch-many-renamed"}}}
@@ -1133,7 +1133,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "DeleteMany removes the records", fixture: samples, phase: consts.DeleteMany,
+			name: "DeleteMany removes the records", fixture: samples, phase: apiaction.DeleteMany,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{ids: []string{createSample(t, "contract-delete-many-a").GetID(), createSample(t, "contract-delete-many-b").GetID()}}
@@ -1146,7 +1146,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "DeleteMany refuses an empty id and removes nothing", fixture: samples, phase: consts.DeleteMany,
+			name: "DeleteMany refuses an empty id and removes nothing", fixture: samples, phase: apiaction.DeleteMany,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{ids: []string{createSample(t, "contract-delete-many-kept").GetID(), ""}}
@@ -1158,7 +1158,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "DeleteMany answers NotFound when an id names no stored record and removes nothing", fixture: samples, phase: consts.DeleteMany,
+			name: "DeleteMany answers NotFound when an id names no stored record and removes nothing", fixture: samples, phase: apiaction.DeleteMany,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{ids: []string{createSample(t, "contract-delete-many-missing-kept").GetID(), "missing"}}
@@ -1170,12 +1170,12 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "DeleteMany answers NotFound for an id the integer key cannot hold", fixture: counters, phase: consts.DeleteMany,
+			name: "DeleteMany answers NotFound for an id the integer key cannot hold", fixture: counters, phase: apiaction.DeleteMany,
 			input: contractInput{ids: []string{"first"}},
 			want:  notFound,
 		},
 		{
-			name: "DeleteMany answers the hook's refusal and removes nothing", fixture: refusals, phase: consts.DeleteMany,
+			name: "DeleteMany answers the hook's refusal and removes nothing", fixture: refusals, phase: apiaction.DeleteMany,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				return contractInput{ids: []string{createSample(t, "contract-delete-many-refused").GetID()}}
@@ -1187,7 +1187,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "A custom action answers the service's result for the caller", fixture: actionFixture, phase: consts.Create,
+			name: "A custom action answers the service's result for the caller", fixture: actionFixture, phase: apiaction.Create,
 			input: contractInput{payload: map[string]any{"note": "hello"}},
 			want:  ok,
 			check: func(t *testing.T, _ contractInput, got contractAnswer) {
@@ -1198,22 +1198,22 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "A custom action refuses a payload failing validation", fixture: actionFixture, phase: consts.Create,
+			name: "A custom action refuses a payload failing validation", fixture: actionFixture, phase: apiaction.Create,
 			input: contractInput{payload: map[string]any{}},
 			want:  contractWant{status: http.StatusBadRequest, msg: "note is a required field"},
 		},
 		{
-			name: "A custom action answers the service's error with its status", fixture: actionFixture, phase: consts.Create,
+			name: "A custom action answers the service's error with its status", fixture: actionFixture, phase: apiaction.Create,
 			input: contractInput{payload: map[string]any{"note": actionRefuse}},
 			want:  contractWant{status: http.StatusForbidden, msg: "not yours"},
 		},
 		{
-			name: "A custom action answers any other error as the server's own failure", fixture: actionFixture, phase: consts.Create,
+			name: "A custom action answers any other error as the server's own failure", fixture: actionFixture, phase: apiaction.Create,
 			input: contractInput{payload: map[string]any{"note": actionBreak}},
 			want:  contractWant{status: http.StatusInternalServerError, msg: types.FailureMsg},
 		},
 		{
-			name: "A custom action answers a client that went away as canceled, not as a failure of the server", fixture: actionFixture, phase: consts.Create,
+			name: "A custom action answers a client that went away as canceled, not as a failure of the server", fixture: actionFixture, phase: apiaction.Create,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				ctx, cancel := context.WithCancel(context.Background())
@@ -1230,7 +1230,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			want: contractWant{status: types.StatusClientClosedRequest, msg: "context canceled"},
 		},
 		{
-			name: "A custom List reads the query", fixture: actionFixture, phase: consts.List,
+			name: "A custom List reads the query", fixture: actionFixture, phase: apiaction.List,
 			input: contractInput{query: controller.Query{Page: 2}},
 			want:  ok,
 			check: func(t *testing.T, _ contractInput, got contractAnswer) {
@@ -1240,7 +1240,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "A hook writing a cookie before the write", fixture: cookieBefore, phase: consts.Create,
+			name: "A hook writing a cookie before the write", fixture: cookieBefore, phase: apiaction.Create,
 			prepare: func(*testing.T) contractInput {
 				return contractInput{record: map[string]any{"name": uniqueName("contract-cookie-before")}}
 			},
@@ -1255,7 +1255,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "A hook writing a cookie after the write", fixture: cookieAfter, phase: consts.Create,
+			name: "A hook writing a cookie after the write", fixture: cookieAfter, phase: apiaction.Create,
 			prepare: func(*testing.T) contractInput {
 				return contractInput{record: map[string]any{"name": uniqueName("contract-cookie-after")}}
 			},
@@ -1266,7 +1266,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "Create writes the record alone and hands back no child the body carried", fixture: nested, phase: consts.Create,
+			name: "Create writes the record alone and hands back no child the body carried", fixture: nested, phase: apiaction.Create,
 			prepare: func(*testing.T) contractInput {
 				name := uniqueName("contract-nested")
 				return contractInput{record: map[string]any{"name": name, "children": []map[string]any{{"name": name + "-child"}}}}
@@ -1281,7 +1281,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "Create hands the hooks the client address a trusted peer forwards", fixture: observed, phase: consts.Create,
+			name: "Create hands the hooks the client address a trusted peer forwards", fixture: observed, phase: apiaction.Create,
 			prepare: func(*testing.T) contractInput {
 				return contractInput{record: map[string]any{"name": uniqueName("contract-forwarded")}, forwarded: http.Header{"X-Forwarded-For": {"203.0.113.9"}}}
 			},
@@ -1289,7 +1289,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			check: observedClientIP("203.0.113.9"),
 		},
 		{
-			name: "Create hands the hooks the client address a trusted peer names in X-Real-IP alone", fixture: observed, phase: consts.Create,
+			name: "Create hands the hooks the client address a trusted peer names in X-Real-IP alone", fixture: observed, phase: apiaction.Create,
 			prepare: func(*testing.T) contractInput {
 				return contractInput{record: map[string]any{"name": uniqueName("contract-real-ip")}, forwarded: http.Header{"X-Real-IP": {"203.0.113.9"}}}
 			},
@@ -1297,7 +1297,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			check: observedClientIP("203.0.113.9"),
 		},
 		{
-			name: "Create hands the hooks the first of a chain of trusted proxies", fixture: observed, phase: consts.Create,
+			name: "Create hands the hooks the first of a chain of trusted proxies", fixture: observed, phase: apiaction.Create,
 			prepare: func(*testing.T) contractInput {
 				return contractInput{record: map[string]any{"name": uniqueName("contract-proxy-chain")}, forwarded: http.Header{"X-Forwarded-For": {"::1, 127.0.0.1"}}}
 			},
@@ -1305,7 +1305,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			check: observedClientIP("::1"),
 		},
 		{
-			name: "Create hands the hooks the client a trusted proxy names on an X-Forwarded-For line of its own", fixture: observed, phase: consts.Create,
+			name: "Create hands the hooks the client a trusted proxy names on an X-Forwarded-For line of its own", fixture: observed, phase: apiaction.Create,
 			prepare: func(*testing.T) contractInput {
 				return contractInput{record: map[string]any{"name": uniqueName("contract-forwarded-lines")}, forwarded: http.Header{"X-Forwarded-For": {"198.51.100.7", "203.0.113.9"}}}
 			},
@@ -1313,7 +1313,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			check: observedClientIP("203.0.113.9"),
 		},
 		{
-			name: "Create hands the hooks X-Real-IP when X-Forwarded-For is malformed", fixture: observed, phase: consts.Create,
+			name: "Create hands the hooks X-Real-IP when X-Forwarded-For is malformed", fixture: observed, phase: apiaction.Create,
 			prepare: func(*testing.T) contractInput {
 				return contractInput{record: map[string]any{"name": uniqueName("contract-malformed")}, forwarded: http.Header{"X-Forwarded-For": {"junk"}, "X-Real-IP": {"203.0.113.9"}}}
 			},
@@ -1354,7 +1354,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 type contractScenario struct {
 	name    string
 	fixture contractFixture
-	phase   consts.Phase
+	phase   apiaction.Phase
 	input   contractInput
 	prepare func(t *testing.T) contractInput
 	want    contractWant
@@ -1427,8 +1427,8 @@ type grpcAnswer struct {
 // presenting the credential the sample service scopes so.
 type contractFixture struct {
 	route     string
-	handler   func(phase consts.Phase) gin.HandlerFunc
-	rpc       func(phase consts.Phase) string
+	handler   func(phase apiaction.Phase) gin.HandlerFunc
+	rpc       func(phase apiaction.Phase) string
 	anonymous bool
 	across    bool
 }
@@ -1440,32 +1440,32 @@ func standardFixture[M types.Model](route, prefix string) contractFixture {
 	cfg := configFor[M](route)
 	return contractFixture{
 		route: route,
-		handler: func(phase consts.Phase) gin.HandlerFunc {
+		handler: func(phase apiaction.Phase) gin.HandlerFunc {
 			switch phase {
-			case consts.Create:
+			case apiaction.Create:
 				return controller.CreateHandler[M, M, M](cfg)
-			case consts.Get:
+			case apiaction.Get:
 				return controller.GetHandler[M, M, M](cfg)
-			case consts.List:
+			case apiaction.List:
 				return controller.ListHandler[M, M, M](cfg)
-			case consts.Update:
+			case apiaction.Update:
 				return controller.UpdateHandler[M, M, M](cfg)
-			case consts.Patch:
+			case apiaction.Patch:
 				return controller.PatchHandler[M, M, M](cfg)
-			case consts.Delete:
+			case apiaction.Delete:
 				return controller.DeleteHandler[M, M, M](cfg)
-			case consts.CreateMany:
+			case apiaction.CreateMany:
 				return controller.CreateManyHandler[M, M, M](cfg)
-			case consts.UpdateMany:
+			case apiaction.UpdateMany:
 				return controller.UpdateManyHandler[M, M, M](cfg)
-			case consts.PatchMany:
+			case apiaction.PatchMany:
 				return controller.PatchManyHandler[M, M, M](cfg)
-			case consts.DeleteMany:
+			case apiaction.DeleteMany:
 				return controller.DeleteManyHandler[M, M, M](cfg)
 			}
 			panic("no handler of " + phase.Name())
 		},
-		rpc: func(phase consts.Phase) string { return prefix + phase.Name() },
+		rpc: func(phase apiaction.Phase) string { return prefix + phase.Name() },
 	}
 }
 
@@ -1474,15 +1474,15 @@ func standardFixture[M types.Model](route, prefix string) contractFixture {
 // own.
 var actionFixture = contractFixture{
 	route: actionRoute,
-	handler: func(phase consts.Phase) gin.HandlerFunc {
+	handler: func(phase apiaction.Phase) gin.HandlerFunc {
 		cfg := configFor[*sampleRecord](actionRoute)
-		if phase == consts.List {
+		if phase == apiaction.List {
 			return controller.ListHandler[*sampleRecord, *sampleActionReq, *sampleActionRsp](cfg)
 		}
 		return controller.CreateHandler[*sampleRecord, *sampleActionReq, *sampleActionRsp](cfg)
 	},
-	rpc: func(phase consts.Phase) string {
-		if phase == consts.List {
+	rpc: func(phase apiaction.Phase) string {
+		if phase == apiaction.List {
 			return "ActionList"
 		}
 		return "Action"
@@ -1494,17 +1494,17 @@ var actionFixture = contractFixture{
 // scenario names in its params.
 var parentFixture = contractFixture{
 	route: parentRoute,
-	handler: func(consts.Phase) gin.HandlerFunc {
+	handler: func(apiaction.Phase) gin.HandlerFunc {
 		return controller.ListHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](parentRoute))
 	},
-	rpc: func(consts.Phase) string { return "ParentList" },
+	rpc: func(apiaction.Phase) string { return "ParentList" },
 }
 
 // contractTransport sends a scenario's input over one transport, returns
 // what it answered, and holds the answer to what the scenario wants of it.
 type contractTransport struct {
 	name   string
-	do     func(t *testing.T, f contractFixture, phase consts.Phase, in contractInput) contractAnswer
+	do     func(t *testing.T, f contractFixture, phase apiaction.Phase, in contractInput) contractAnswer
 	expect func(t *testing.T, got contractAnswer, want contractWant)
 }
 
@@ -1520,14 +1520,14 @@ var contractTransports = []contractTransport{
 // the path, the query rendered as the query string, the record, the items,
 // the ids or the payload as the JSON body, and the forwarding headers as
 // headers of the request.
-func overHTTP(t *testing.T, f contractFixture, phase consts.Phase, in contractInput) contractAnswer {
+func overHTTP(t *testing.T, f contractFixture, phase apiaction.Phase, in contractInput) contractAnswer {
 	t.Helper()
 	pattern, target := "/"+f.route, "/"+routePath(f.route, in.params)
 	switch phase {
-	case consts.Get, consts.Update, consts.Patch, consts.Delete:
+	case apiaction.Get, apiaction.Update, apiaction.Patch, apiaction.Delete:
 		pattern += "/:id"
 		target += "/" + in.id
-	case consts.CreateMany, consts.UpdateMany, consts.PatchMany, consts.DeleteMany:
+	case apiaction.CreateMany, apiaction.UpdateMany, apiaction.PatchMany, apiaction.DeleteMany:
 		pattern += "/batch"
 		target += "/batch"
 	}
@@ -1536,7 +1536,7 @@ func overHTTP(t *testing.T, f contractFixture, phase consts.Phase, in contractIn
 	}
 	var body string
 	switch {
-	case phase == consts.DeleteMany:
+	case phase == apiaction.DeleteMany:
 		body = encodeJSON(map[string]any{"ids": in.ids})
 	case in.items != nil:
 		body = encodeJSON(map[string]any{"items": in.items})
@@ -1576,7 +1576,7 @@ func overHTTP(t *testing.T, f contractFixture, phase consts.Phase, in contractIn
 // PatchMany, the ids, the query and the payload, as the rpcs of the sample
 // service read them (see standardRPCs), and the forwarding headers as
 // metadata of the call.
-func overGRPC(t *testing.T, f contractFixture, phase consts.Phase, in contractInput) contractAnswer {
+func overGRPC(t *testing.T, f contractFixture, phase apiaction.Phase, in contractInput) contractAnswer {
 	t.Helper()
 	message := map[string]any{}
 	if in.params != nil {
@@ -1587,13 +1587,13 @@ func overGRPC(t *testing.T, f contractFixture, phase consts.Phase, in contractIn
 	}
 	if in.record != nil {
 		message["record"] = in.record
-		if phase == consts.Patch {
+		if phase == apiaction.Patch {
 			message["mask"] = slices.Sorted(maps.Keys(in.record))
 		}
 	}
 	if in.items != nil {
 		message["items"] = in.items
-		if phase == consts.PatchMany {
+		if phase == apiaction.PatchMany {
 			// An item of a batch patch is the request of a single Patch:
 			// its id, the record and, as its mask, the keys but the id.
 			items := make([]map[string]any, len(in.items))
@@ -1606,7 +1606,7 @@ func overGRPC(t *testing.T, f contractFixture, phase consts.Phase, in contractIn
 	if in.ids != nil {
 		message["ids"] = in.ids
 	}
-	if phase == consts.List || phase == consts.Get {
+	if phase == apiaction.List || phase == apiaction.Get {
 		message["query"] = in.query
 	}
 	if in.payload != nil {
@@ -1751,22 +1751,22 @@ func queryString(q controller.Query) string {
 		values.Add(key, strings.Join(f.Values, ","))
 	}
 	if len(q.SortBy) > 0 {
-		values.Set(consts.QUERY_SORT_BY, strings.Join(q.SortBy, ","))
+		values.Set(types.QuerySortBy, strings.Join(q.SortBy, ","))
 	}
 	if q.Page != 0 {
-		values.Set(consts.QUERY_PAGE, strconv.FormatUint(uint64(q.Page), 10))
+		values.Set(types.QueryPage, strconv.FormatUint(uint64(q.Page), 10))
 	}
 	if q.Size != 0 {
-		values.Set(consts.QUERY_SIZE, strconv.FormatUint(uint64(q.Size), 10))
+		values.Set(types.QuerySize, strconv.FormatUint(uint64(q.Size), 10))
 	}
 	if q.CursorField != "" {
-		values.Set(consts.QUERY_CURSOR_FIELD, q.CursorField)
+		values.Set(types.QueryCursorField, q.CursorField)
 	}
 	if q.CursorValue != "" {
-		values.Set(consts.QUERY_CURSOR_VALUE, q.CursorValue)
+		values.Set(types.QueryCursorValue, q.CursorValue)
 	}
 	if q.CursorNext {
-		values.Set(consts.QUERY_CURSOR_NEXT, "true")
+		values.Set(types.QueryCursorNext, "true")
 	}
 	return values.Encode()
 }

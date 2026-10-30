@@ -6,8 +6,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
-
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamprofile "github.com/hydroan/gst/internal/model/iam/profile"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
@@ -89,29 +88,29 @@ func Register() {
 	// ratelimiter.RateLimiter narrowed to this one path through
 	// ratelimiter.WithSkipFunc, whose default key is already the client IP —
 	// and declare that file in module.json with scope "global".
-	module.Use(module.NewWrapper("/login", "id", true, &serviceiamaccount.LoginService{}), module.CRUD(consts.Create))
-	module.Use(module.NewWrapper("/logout", "id", false, &serviceiamaccount.LogoutService{}), module.CRUD(consts.Create))
-	module.Use(module.NewWrapper("/signup", "id", true, &serviceiamaccount.SignupService{}), module.CRUD(consts.Create))
-	module.Use(module.NewWrapper("/iam/change-password", "id", false, &serviceiamaccount.ChangePasswordService{}), module.CRUD(consts.Create))
-	module.Use(module.NewWrapper("/iam/reset-password", "id", false, &serviceiamaccount.ResetPasswordService{}), module.CRUD(consts.Create))
-	module.Use(module.NewWrapper("/iam/admin/users", "id", false, &serviceiamuser.AdminUserCreateService{}), module.CRUD(consts.Create))
-	module.Use(module.NewWrapper("/iam/admin/users", "id", false, &serviceiamuser.AdminUserListService{}), module.CRUD(consts.List))
-	module.Use(module.NewWrapper("/iam/admin/users", "id", false, &serviceiamuser.AdminUserGetService{}), module.CRUD(consts.Get))
-	module.Use(module.NewWrapper("/iam/admin/users", "id", false, &serviceiamuser.AdminUserPatchService{}), module.CRUD(consts.Patch))
-	module.Use(module.NewWrapper("/iam/profile", "id", false, &serviceiamprofile.ProfileGetService{}), module.Exact(consts.Get))
-	module.Use(module.NewWrapper("/iam/profile", "id", false, &serviceiamprofile.ProfilePatchService{}), module.Exact(consts.Patch))
+	module.Use(module.NewWrapper("/login", "id", true, &serviceiamaccount.LoginService{}), module.CRUD(apiaction.Create))
+	module.Use(module.NewWrapper("/logout", "id", false, &serviceiamaccount.LogoutService{}), module.CRUD(apiaction.Create))
+	module.Use(module.NewWrapper("/signup", "id", true, &serviceiamaccount.SignupService{}), module.CRUD(apiaction.Create))
+	module.Use(module.NewWrapper("/iam/change-password", "id", false, &serviceiamaccount.ChangePasswordService{}), module.CRUD(apiaction.Create))
+	module.Use(module.NewWrapper("/iam/reset-password", "id", false, &serviceiamaccount.ResetPasswordService{}), module.CRUD(apiaction.Create))
+	module.Use(module.NewWrapper("/iam/admin/users", "id", false, &serviceiamuser.AdminUserCreateService{}), module.CRUD(apiaction.Create))
+	module.Use(module.NewWrapper("/iam/admin/users", "id", false, &serviceiamuser.AdminUserListService{}), module.CRUD(apiaction.List))
+	module.Use(module.NewWrapper("/iam/admin/users", "id", false, &serviceiamuser.AdminUserGetService{}), module.CRUD(apiaction.Get))
+	module.Use(module.NewWrapper("/iam/admin/users", "id", false, &serviceiamuser.AdminUserPatchService{}), module.CRUD(apiaction.Patch))
+	module.Use(module.NewWrapper("/iam/profile", "id", false, &serviceiamprofile.ProfileGetService{}), module.Exact(apiaction.Get))
+	module.Use(module.NewWrapper("/iam/profile", "id", false, &serviceiamprofile.ProfilePatchService{}), module.Exact(apiaction.Patch))
 
-	module.Use(module.NewWrapper("/iam/session/current", "id", false, &serviceiamsession.CurrentGetService{}), module.Exact(consts.Get))
-	module.Use(module.NewWrapper("/iam/session/current", "id", false, &serviceiamsession.CurrentDeleteService{}), module.Exact(consts.Delete))
-	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionListService{}), module.CRUD(consts.List))
-	module.Use(module.NewWrapper("/iam/admin/sessions", "id", false, &serviceiamsession.AdminSessionListService{}), module.CRUD(consts.List))
-	module.Use(module.NewWrapper("/iam/admin/sessions", "id", false, &serviceiamsession.AdminSessionGetService{}), module.CRUD(consts.Get))
-	module.Use(module.NewWrapper("/iam/admin/sessions", "id", false, &serviceiamsession.AdminSessionDeleteService{}), module.CRUD(consts.Delete))
-	module.Use(module.NewWrapper("/iam/admin/users/:id/sessions", "id", false, &serviceiamsession.AdminUserSessionListService{}), module.CRUD(consts.List))
-	module.Use(module.NewWrapper("/iam/admin/users/:id/sessions", "id", false, &serviceiamsession.AdminUserSessionDeleteService{}), module.Exact(consts.Delete))
-	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionGetService{}), module.CRUD(consts.Get))
-	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionDeleteAllService{}), module.Exact(consts.Delete))
-	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionDeleteService{}), module.CRUD(consts.Delete))
+	module.Use(module.NewWrapper("/iam/session/current", "id", false, &serviceiamsession.CurrentGetService{}), module.Exact(apiaction.Get))
+	module.Use(module.NewWrapper("/iam/session/current", "id", false, &serviceiamsession.CurrentDeleteService{}), module.Exact(apiaction.Delete))
+	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionListService{}), module.CRUD(apiaction.List))
+	module.Use(module.NewWrapper("/iam/admin/sessions", "id", false, &serviceiamsession.AdminSessionListService{}), module.CRUD(apiaction.List))
+	module.Use(module.NewWrapper("/iam/admin/sessions", "id", false, &serviceiamsession.AdminSessionGetService{}), module.CRUD(apiaction.Get))
+	module.Use(module.NewWrapper("/iam/admin/sessions", "id", false, &serviceiamsession.AdminSessionDeleteService{}), module.CRUD(apiaction.Delete))
+	module.Use(module.NewWrapper("/iam/admin/users/:id/sessions", "id", false, &serviceiamsession.AdminUserSessionListService{}), module.CRUD(apiaction.List))
+	module.Use(module.NewWrapper("/iam/admin/users/:id/sessions", "id", false, &serviceiamsession.AdminUserSessionDeleteService{}), module.Exact(apiaction.Delete))
+	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionGetService{}), module.CRUD(apiaction.Get))
+	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionDeleteAllService{}), module.Exact(apiaction.Delete))
+	module.Use(module.NewWrapper("/iam/sessions", "id", false, &serviceiamsession.SessionDeleteService{}), module.CRUD(apiaction.Delete))
 
 	// TODO: add DELETE /api/iam/admin/users/:id. Deleting the IAM rows is the
 	// easy half; the account's authz role bindings have to go with it, and IAM

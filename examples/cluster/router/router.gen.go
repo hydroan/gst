@@ -6,28 +6,28 @@ import (
 	"cluster/model"
 
 	"github.com/hydroan/gst"
-	"github.com/hydroan/gst/consts"
 	gstmodel "github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/router"
+	"github.com/hydroan/gst/service"
 )
 
 func Init() error {
-	router.Register[*model.Cached, *model.CachedReq, *model.CachedCreateRsp](router.Auth(), "/api/caches", &gst.ControllerConfig[*model.Cached]{}, consts.Create)
-	router.Register[*model.Cached, *gstmodel.Empty, *model.CachedDeleteRsp](router.Auth(), "/api/caches/:id", &gst.ControllerConfig[*model.Cached]{ParamName: "id"}, consts.Delete)
-	router.Register[*model.Cached, *gstmodel.Empty, *model.CachedGetRsp](router.Auth(), "/api/caches/:id", &gst.ControllerConfig[*model.Cached]{ParamName: "id"}, consts.Get)
-	router.Register[*model.CounterStep, *model.CounterStep, *model.CounterStep](router.Auth(), "/api/counter_steps", &gst.ControllerConfig[*model.CounterStep]{}, consts.List)
-	router.Register[*model.Flag, *model.Flag, *model.Flag](router.Auth(), "/api/flags", &gst.ControllerConfig[*model.Flag]{}, consts.Create)
-	router.Register[*model.Flag, *model.Flag, *model.Flag](router.Auth(), "/api/flags/:id", &gst.ControllerConfig[*model.Flag]{ParamName: "id"}, consts.Delete)
-	router.Register[*model.Flag, *model.Flag, *model.Flag](router.Auth(), "/api/flags/:id", &gst.ControllerConfig[*model.Flag]{ParamName: "id"}, consts.Update)
-	router.Register[*model.Flag, *model.Flag, *model.Flag](router.Auth(), "/api/flags/:id", &gst.ControllerConfig[*model.Flag]{ParamName: "id"}, consts.Patch)
-	router.Register[*model.Flag, *model.Flag, *model.Flag](router.Auth(), "/api/flags", &gst.ControllerConfig[*model.Flag]{}, consts.List)
-	router.Register[*model.Flag, *model.Flag, *model.Flag](router.Auth(), "/api/flags/:id", &gst.ControllerConfig[*model.Flag]{ParamName: "id"}, consts.Get)
-	router.Register[*model.Flag, *model.Flag, *model.Flag](router.Auth(), "/api/flags/batch", &gst.ControllerConfig[*model.Flag]{}, consts.CreateMany)
-	router.Register[*model.Flag, *model.Flag, *model.Flag](router.Auth(), "/api/flags/batch", &gst.ControllerConfig[*model.Flag]{}, consts.DeleteMany)
-	router.Register[*model.Flag, *model.Flag, *model.Flag](router.Auth(), "/api/flags/batch", &gst.ControllerConfig[*model.Flag]{}, consts.UpdateMany)
-	router.Register[*model.Flag, *model.Flag, *model.Flag](router.Auth(), "/api/flags/batch", &gst.ControllerConfig[*model.Flag]{}, consts.PatchMany)
-	router.Register[*model.Rebuild, *model.RebuildReq, *model.RebuildRsp](router.Auth(), "/api/rebuilds", &gst.ControllerConfig[*model.Rebuild]{}, consts.Create)
-	router.Register[*model.Run, *model.Run, *model.Run](router.Auth(), "/api/runs", &gst.ControllerConfig[*model.Run]{}, consts.List)
-	router.Register[*model.StepDown, *gstmodel.Empty, *model.StepDownRsp](router.Auth(), "/api/step-downs", &gst.ControllerConfig[*model.StepDown]{}, consts.Create)
+	router.Register[*model.Cached, *model.CachedReq, *model.CachedCreateRsp](router.Auth(), "/api/caches", &gst.ControllerConfig[*model.Cached]{}, service.Create)
+	router.Register[*model.Cached, *gstmodel.Empty, *model.CachedDeleteRsp](router.Auth(), "/api/caches/:id", &gst.ControllerConfig[*model.Cached]{ParamName: "id"}, service.Delete)
+	router.Register[*model.Cached, *gstmodel.Empty, *model.CachedGetRsp](router.Auth(), "/api/caches/:id", &gst.ControllerConfig[*model.Cached]{ParamName: "id"}, service.Get)
+	router.Register[*model.CounterStep, *model.CounterStep, *model.CounterStep](router.Auth(), "/api/counter_steps", &gst.ControllerConfig[*model.CounterStep]{}, service.List)
+	router.Register[*model.Flag, *model.Flag, *model.Flag](router.Auth(), "/api/flags", &gst.ControllerConfig[*model.Flag]{}, service.Create)
+	router.Register[*model.Flag, *model.Flag, *model.Flag](router.Auth(), "/api/flags/:id", &gst.ControllerConfig[*model.Flag]{ParamName: "id"}, service.Delete)
+	router.Register[*model.Flag, *model.Flag, *model.Flag](router.Auth(), "/api/flags/:id", &gst.ControllerConfig[*model.Flag]{ParamName: "id"}, service.Update)
+	router.Register[*model.Flag, *model.Flag, *model.Flag](router.Auth(), "/api/flags/:id", &gst.ControllerConfig[*model.Flag]{ParamName: "id"}, service.Patch)
+	router.Register[*model.Flag, *model.Flag, *model.Flag](router.Auth(), "/api/flags", &gst.ControllerConfig[*model.Flag]{}, service.List)
+	router.Register[*model.Flag, *model.Flag, *model.Flag](router.Auth(), "/api/flags/:id", &gst.ControllerConfig[*model.Flag]{ParamName: "id"}, service.Get)
+	router.Register[*model.Flag, *model.Flag, *model.Flag](router.Auth(), "/api/flags/batch", &gst.ControllerConfig[*model.Flag]{}, service.CreateMany)
+	router.Register[*model.Flag, *model.Flag, *model.Flag](router.Auth(), "/api/flags/batch", &gst.ControllerConfig[*model.Flag]{}, service.DeleteMany)
+	router.Register[*model.Flag, *model.Flag, *model.Flag](router.Auth(), "/api/flags/batch", &gst.ControllerConfig[*model.Flag]{}, service.UpdateMany)
+	router.Register[*model.Flag, *model.Flag, *model.Flag](router.Auth(), "/api/flags/batch", &gst.ControllerConfig[*model.Flag]{}, service.PatchMany)
+	router.Register[*model.Rebuild, *model.RebuildReq, *model.RebuildRsp](router.Auth(), "/api/rebuilds", &gst.ControllerConfig[*model.Rebuild]{}, service.Create)
+	router.Register[*model.Run, *model.Run, *model.Run](router.Auth(), "/api/runs", &gst.ControllerConfig[*model.Run]{}, service.List)
+	router.Register[*model.StepDown, *gstmodel.Empty, *model.StepDownRsp](router.Auth(), "/api/step-downs", &gst.ControllerConfig[*model.StepDown]{}, service.Create)
 	return nil
 }

@@ -87,13 +87,12 @@ import (
 	"tmpapp/service/sample/item"
 	sample_service "tmpapp/service/sample/service"
 
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/service"
 )
 
 func init() {
-	service.Register[*item.Creator](consts.Create, "/api/sample/items")
-	service.Register[*sample_service.Creator](consts.Create, "/api/sample/services")
+	service.Register[*item.Creator](service.Create, "/api/sample/items")
+	service.Register[*sample_service.Creator](service.Create, "/api/sample/services")
 }
 `,
 			},
@@ -170,14 +169,13 @@ import (
 	"tmpapp/service/sample/item"
 	sample_record_item "tmpapp/service/sample/record_item"
 
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/service"
 )
 
 func init() {
-	service.Register[*account_recorditem.Creator](consts.Create, "/api/account/record-items")
-	service.Register[*item.Creator](consts.Create, "/api/sample/items")
-	service.Register[*sample_record_item.Creator](consts.Create, "/api/sample/record-items")
+	service.Register[*account_recorditem.Creator](service.Create, "/api/account/record-items")
+	service.Register[*item.Creator](service.Create, "/api/sample/items")
+	service.Register[*sample_record_item.Creator](service.Create, "/api/sample/record-items")
 }
 `,
 			},
@@ -216,12 +214,11 @@ package service
 import (
 	entryitem "tmpapp/service/sample/entry_item"
 
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/service"
 )
 
 func init() {
-	service.Register[*entryitem.Creator](consts.Create, "/api/sample/entry-items")
+	service.Register[*entryitem.Creator](service.Create, "/api/sample/entry-items")
 }
 `,
 			},
@@ -369,8 +366,7 @@ func init() {
 			// packages the router file imports; the sample package keeps its
 			// name. The model file imports no framework package named gst,
 			// so the gst package keeps its name there: every file decides
-			// its own aliases. A model package cannot be named consts: model
-			// directories are singular, and const is a keyword.
+			// its own aliases.
 			name: "router_file_aliases_packages_named_like_framework_imports",
 			files: map[string]string{
 				"model/gst/item.go": `package gst
@@ -436,14 +432,14 @@ import (
 	"tmpapp/model/sample"
 
 	"github.com/hydroan/gst"
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/router"
+	"github.com/hydroan/gst/service"
 )
 
 func Init() error {
-	router.Register[*model_gst.Item, *model_gst.Item, *model_gst.Item](router.Auth(), "/api/gst/items", &gst.ControllerConfig[*model_gst.Item]{}, consts.Create)
-	router.Register[*model_router.Entry, *model_router.Entry, *model_router.Entry](router.Auth(), "/api/router/entries", &gst.ControllerConfig[*model_router.Entry]{}, consts.Create)
-	router.Register[*sample.Record, *sample.Record, *sample.Record](router.Auth(), "/api/sample/records", &gst.ControllerConfig[*sample.Record]{}, consts.Create)
+	router.Register[*model_gst.Item, *model_gst.Item, *model_gst.Item](router.Auth(), "/api/gst/items", &gst.ControllerConfig[*model_gst.Item]{}, service.Create)
+	router.Register[*model_router.Entry, *model_router.Entry, *model_router.Entry](router.Auth(), "/api/router/entries", &gst.ControllerConfig[*model_router.Entry]{}, service.Create)
+	router.Register[*sample.Record, *sample.Record, *sample.Record](router.Auth(), "/api/sample/records", &gst.ControllerConfig[*sample.Record]{}, service.Create)
 	return nil
 }
 `,
@@ -535,15 +531,15 @@ import (
 	sample_model "tmpapp/model/sample/model"
 
 	"github.com/hydroan/gst"
-	"github.com/hydroan/gst/consts"
 	gstmodel "github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/router"
+	"github.com/hydroan/gst/service"
 )
 
 func Init() error {
-	router.Register[*tmpapp_model.Record, *gstmodel.Empty, *tmpapp_model.RecordListRsp](router.Auth(), "/api/records", &gst.ControllerConfig[*tmpapp_model.Record]{}, consts.List)
-	router.Register[*sample.Entry, *sample.Entry, *sample.Entry](router.Auth(), "/api/sample/entries", &gst.ControllerConfig[*sample.Entry]{}, consts.Create)
-	router.Register[*sample_model.Item, *sample_model.Item, *sample_model.Item](router.Auth(), "/api/sample/model/items", &gst.ControllerConfig[*sample_model.Item]{}, consts.Create)
+	router.Register[*tmpapp_model.Record, *gstmodel.Empty, *tmpapp_model.RecordListRsp](router.Auth(), "/api/records", &gst.ControllerConfig[*tmpapp_model.Record]{}, service.List)
+	router.Register[*sample.Entry, *sample.Entry, *sample.Entry](router.Auth(), "/api/sample/entries", &gst.ControllerConfig[*sample.Entry]{}, service.Create)
+	router.Register[*sample_model.Item, *sample_model.Item, *sample_model.Item](router.Auth(), "/api/sample/model/items", &gst.ControllerConfig[*sample_model.Item]{}, service.Create)
 	return nil
 }
 `,

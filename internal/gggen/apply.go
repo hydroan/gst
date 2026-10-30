@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/goast"
@@ -327,7 +327,7 @@ func applyServiceMethod4(fn *ast.FuncDecl, action *dsl.Action, modelPkg string) 
 // rewritten (see applyServiceMethod4 on why the name matters), and only one
 // of the shape isServiceMethod9 recognizes.
 func applyServiceMethod9(fn *ast.FuncDecl, action *dsl.Action, modelPkg string) bool {
-	if fn == nil || action == nil || action.Phase != consts.Stream || !isServiceMethod9(fn) {
+	if fn == nil || action == nil || action.Phase != apiaction.Stream || !isServiceMethod9(fn) {
 		return false
 	}
 	recv := fn.Recv.List[0]
@@ -847,7 +847,7 @@ func serviceModelName(file *ast.File, modelInfo *modelinfo.Model) string {
 // imports "github.com/hydroan/gst/service" under service. Any other package
 // imported without a name is left out: only the package itself tells its
 // name, as with "github.com/cespare/xxhash/v2", named xxhash.
-func frameworkImportNamed(file *ast.File, phase consts.Phase, name string) string {
+func frameworkImportNamed(file *ast.File, phase apiaction.Phase, name string) string {
 	frameworkPaths := serviceScaffoldImports(phase)
 	for _, decl := range file.Decls {
 		genDecl, ok := decl.(*ast.GenDecl)

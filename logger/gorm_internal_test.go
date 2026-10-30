@@ -8,7 +8,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/dbruntime/dbnode"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/requestctx"
@@ -195,8 +194,8 @@ func TestGormTraceUsesMetadata(t *testing.T) {
 
 	fields := entries[0].ContextMap()
 	require.Equal(t, http.MethodPost, fields[requestctx.KeyMethod])
-	require.Equal(t, "admin", fields[consts.CTX_USERNAME])
-	require.Equal(t, "user-1", fields[consts.CTX_USER_ID])
+	require.Equal(t, "admin", fields[requestctx.KeyUsername])
+	require.Equal(t, "user-1", fields[requestctx.KeyUserID])
 	require.Equal(t, "trace-1", fields[execctx.KeyTraceID])
 	require.Equal(t, "select 1", fields["sql"])
 	require.Equal(t, int64(1), fields["rows"])

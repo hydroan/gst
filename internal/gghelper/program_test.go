@@ -239,6 +239,10 @@ func inspectRewriteProblems(forwarded map[string][]forwardedType, rewrites map[s
 var nonColumnTypes = map[string]string{
 	ggconst.ImportPathGst + "/internal/modelschema.Column":      "forwarded by inspect to gg's own programs, which describe a model's columns with it",
 	ggconst.ImportPathGst + "/internal/modelschema.ColumnClass": "forwarded by inspect to gg's own programs, which classify a model's columns with it",
+	ggconst.ImportPathGst + "/internal/types.GrantSource":       "the source of an allowed authorization decision, a word a check answers and the authorization log carries",
+	ggconst.ImportPathGst + "/internal/types.DenyReason":        "the reason of a refused authorization decision, a word a check answers and the authorization log carries",
+	ggconst.ImportPathGst + "/internal/types.Effect":            "the effect of an authorization decision, a word the authorization log carries",
+	ggconst.ImportPathGst + "/internal/types.LockMode":          "the row lock a query asks for, an option of one read",
 }
 
 func TestProjectProgramRunsAgainstTheProjectModuleWithOverlay(t *testing.T) {

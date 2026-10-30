@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/types"
 )
 
@@ -179,7 +178,7 @@ func TestPermissionWritesRefuseTheReservedRole(t *testing.T) {
 	r := newRolePermissionsFixture(t)
 	ctx := context.Background()
 
-	if err := r.SetRolePermissions(ctx, "tenant_a", consts.AUTHZ_ROLE_AUTHENTICATED, []types.Permission{
+	if err := r.SetRolePermissions(ctx, "tenant_a", RoleAuthenticated, []types.Permission{
 		{Object: "/api/things", Action: "GET"},
 	}); !errors.Is(err, ErrReservedRole) {
 		t.Errorf("SetRolePermissions: expected ErrReservedRole, got %v", err)
@@ -211,7 +210,7 @@ func TestPermissionWritesRefuseTheReservedRole(t *testing.T) {
 	}
 
 	// Whatever is already stored has to stay removable.
-	if err = r.RemoveRole(ctx, authenticatedPolicyTenant, consts.AUTHZ_ROLE_AUTHENTICATED); err != nil {
+	if err = r.RemoveRole(ctx, authenticatedPolicyTenant, RoleAuthenticated); err != nil {
 		t.Fatal(err)
 	}
 	decision, err = r.Authorize(ctx, "tenant_b", "u_plain", "/api/things", "GET")

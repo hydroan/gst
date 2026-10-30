@@ -6,7 +6,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/gghelper"
@@ -54,7 +54,7 @@ func (User) Design() {
 	}
 	// The surviving action set is exactly the Create action.
 	remaining := collectActions(design)
-	if len(remaining) != 1 || remaining[0].Phase != consts.Create {
+	if len(remaining) != 1 || remaining[0].Phase != apiaction.Create {
 		t.Fatalf("remaining actions = %v, want only Create", remainingPhases(remaining))
 	}
 }
@@ -98,7 +98,7 @@ func (Notice) Design() {
 		t.Fatalf("Unmatched = %v, want empty", result.Unmatched)
 	}
 	remaining := collectActions(design)
-	if len(remaining) != 1 || remaining[0].Phase != consts.Create {
+	if len(remaining) != 1 || remaining[0].Phase != apiaction.Create {
 		t.Fatalf("remaining actions = %v, want only Create", remainingPhases(remaining))
 	}
 }
@@ -300,8 +300,8 @@ func collectActions(design *dsl.Design) []*dsl.Action {
 	return actions
 }
 
-func remainingPhases(actions []*dsl.Action) []consts.Phase {
-	phases := make([]consts.Phase, 0, len(actions))
+func remainingPhases(actions []*dsl.Action) []apiaction.Phase {
+	phases := make([]apiaction.Phase, 0, len(actions))
 	for _, act := range actions {
 		phases = append(phases, act.Phase)
 	}

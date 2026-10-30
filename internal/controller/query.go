@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
@@ -22,21 +21,21 @@ const expandAll = "all"
 // listQueryKeys are List controller parameters that belong to model.Query
 // rather than to the resource model's own filter fields.
 var listQueryKeys = map[string]struct{}{
-	consts.QUERY_EXPAND:  {},
-	consts.QUERY_DEPTH:   {},
-	consts.QUERY_SORT_BY: {},
+	types.QueryExpand: {},
+	types.QueryDepth:  {},
+	types.QuerySortBy: {},
 }
 
 // listPageQueryKey is enabled by model.Pagination only: offset paging
 // conflicts with cursor semantics, so cursor-only models reject it.
 var listPageQueryKey = map[string]struct{}{
-	consts.QUERY_PAGE: {},
+	types.QueryPage: {},
 }
 
 // listSizeQueryKey is enabled by model.Pagination or model.Cursor: both
 // paging styles need a client-adjustable page/batch size.
 var listSizeQueryKey = map[string]struct{}{
-	consts.QUERY_SIZE: {},
+	types.QuerySize: {},
 }
 
 // listCursorQueryKeys are enabled by model.Cursor. A model may opt in to both
@@ -44,9 +43,9 @@ var listSizeQueryKey = map[string]struct{}{
 // the cursor column and travel direction define the stable order, which
 // checkCursorOrderConflict enforces.
 var listCursorQueryKeys = map[string]struct{}{
-	consts.QUERY_CURSOR_VALUE: {},
-	consts.QUERY_CURSOR_FIELD: {},
-	consts.QUERY_CURSOR_NEXT:  {},
+	types.QueryCursorValue: {},
+	types.QueryCursorField: {},
+	types.QueryCursorNext:  {},
 }
 
 // decodeListQuery rejects the framework query keys the model has not opted in
@@ -117,18 +116,18 @@ const maxExpandDepth = 10
 // becomes "Children.Children.Children"; every other association ignores
 // depth, its rows having no such association to descend into.
 func parseExpandQuery(query url.Values, m types.Model) []string {
-	if !query.Has(consts.QUERY_EXPAND) {
+	if !query.Has(types.QueryExpand) {
 		return nil
 	}
 	depth := 1
-	if query.Has(consts.QUERY_DEPTH) {
-		depth, _ = strconv.Atoi(query.Get(consts.QUERY_DEPTH))
+	if query.Has(types.QueryDepth) {
+		depth, _ = strconv.Atoi(query.Get(types.QueryDepth))
 		if depth < 1 || depth > maxExpandDepth {
 			depth = 1
 		}
 	}
 
-	items := strings.Split(query.Get(consts.QUERY_EXPAND), ",")
+	items := strings.Split(query.Get(types.QueryExpand), ",")
 	if len(items) > 0 && items[0] == expandAll { // expand all fields
 		items = m.Expands()
 	}

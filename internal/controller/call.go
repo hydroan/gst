@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/types"
@@ -156,28 +156,28 @@ func (q Query) values() (url.Values, error) {
 		}
 	}
 	if len(q.SortBy) > 0 {
-		values.Set(consts.QUERY_SORT_BY, strings.Join(q.SortBy, ","))
+		values.Set(types.QuerySortBy, strings.Join(q.SortBy, ","))
 	}
 	if q.Page != 0 {
-		values.Set(consts.QUERY_PAGE, strconv.FormatUint(uint64(q.Page), 10))
+		values.Set(types.QueryPage, strconv.FormatUint(uint64(q.Page), 10))
 	}
 	if q.Size != 0 {
-		values.Set(consts.QUERY_SIZE, strconv.FormatUint(uint64(q.Size), 10))
+		values.Set(types.QuerySize, strconv.FormatUint(uint64(q.Size), 10))
 	}
 	if q.CursorField != "" {
-		values.Set(consts.QUERY_CURSOR_FIELD, q.CursorField)
+		values.Set(types.QueryCursorField, q.CursorField)
 	}
 	if q.CursorValue != "" {
-		values.Set(consts.QUERY_CURSOR_VALUE, q.CursorValue)
+		values.Set(types.QueryCursorValue, q.CursorValue)
 	}
 	if q.CursorNext {
-		values.Set(consts.QUERY_CURSOR_NEXT, strconv.FormatBool(true))
+		values.Set(types.QueryCursorNext, strconv.FormatBool(true))
 	}
 	if len(q.Expand) > 0 {
-		values.Set(consts.QUERY_EXPAND, strings.Join(q.Expand, ","))
+		values.Set(types.QueryExpand, strings.Join(q.Expand, ","))
 	}
 	if q.Depth != 0 {
-		values.Set(consts.QUERY_DEPTH, strconv.FormatUint(uint64(q.Depth), 10))
+		values.Set(types.QueryDepth, strconv.FormatUint(uint64(q.Depth), 10))
 	}
 	return values, nil
 }
@@ -286,7 +286,7 @@ func (a *action[M, REQ, RSP]) beginQueryCall(ctx context.Context, params map[str
 // serviceContext is the serviceContextFunc of the call: its service
 // contexts carry no HTTP request, and are kept for finish to check what
 // the hooks' own checks did not, a service method's calls.
-func (c *call) serviceContext(ctx context.Context, phase consts.Phase) *types.ServiceContext {
+func (c *call) serviceContext(ctx context.Context, phase apiaction.Phase) *types.ServiceContext {
 	sc := types.NewServiceContext(nil, ctx, phase)
 	c.built = append(c.built, sc)
 	return sc
@@ -448,10 +448,10 @@ func answer[T any](c *call, result T) (T, error) {
 // result, or with the status its error maps to (see grpcserver.StatusError).
 // phase must be one gRPC serves: the HTTP-only actions have no rpc, so their
 // phase panics here, as the route registers.
-func ServiceCall[M types.Model, REQ types.Request, RSP types.Response](phase consts.Phase, route string) func(ctx context.Context, params map[string]string, query Query, req REQ) (RSP, error) {
+func ServiceCall[M types.Model, REQ types.Request, RSP types.Response](phase apiaction.Phase, route string) func(ctx context.Context, params map[string]string, query Query, req REQ) (RSP, error) {
 	invoke := serviceMethod[M, REQ, RSP](phase)
 	a := newAction[M, REQ, RSP](route, phase)
-	binds := phase != consts.List && phase != consts.Get
+	binds := phase != apiaction.List && phase != apiaction.Get
 	return func(ctx context.Context, params map[string]string, query Query, req REQ) (RSP, error) {
 		var zero RSP
 		c, err := a.beginQueryCall(ctx, params, query)

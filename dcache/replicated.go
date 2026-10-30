@@ -32,7 +32,7 @@ import (
 )
 
 const (
-	compKey = "comp"
+	keyComp = "comp"
 
 	// minGoroutines is the floor of the event-publishing pool capacity.
 	minGoroutines = 10000
@@ -287,7 +287,7 @@ func newReplicatedCache[T any](store types.Cache[entry[T]]) (*replicatedCache[T]
 	// the process behind them is on every entry already, as the instance
 	// field every logger stamps.
 	comp := fmt.Sprintf("[%s:dcache:%s]", instance.ID(), reflect.TypeFor[T]().String())
-	dc.logger = logger.Dcache.With(compKey, comp)
+	dc.logger = logger.Dcache.With(keyComp, comp)
 
 	// Undo the partially built kafka clients when a later step fails: the
 	// registry does not cache failed constructions, so a retried call would

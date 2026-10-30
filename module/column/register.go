@@ -3,7 +3,7 @@ package column
 import (
 	"maps"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/module"
 )
 
@@ -25,5 +25,5 @@ var tableColumns = make(map[string][]string)
 func Register(m map[string][]string) {
 	maps.Copy(tableColumns, m)
 
-	module.Use[*empty, *empty, rsp](&mod{}, module.CRUD(consts.Get))
+	module.Use[*empty, *empty, rsp](&mod{}, module.CRUD(apiaction.Get))
 }

@@ -5,7 +5,7 @@ import (
 	"slices"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 )
@@ -28,12 +28,12 @@ import (
 // Stamp `gorm:"<-:update"` and Mark `gorm:"->"`, a create documents code, id
 // and name, an update or a patch name and stamp, and an item of a batch
 // update or patch id, name and stamp, id required.
-func hideUnwrittenFields(schemaRef *openapi3.SchemaRef, model reflect.Type, phase consts.Phase) {
+func hideUnwrittenFields(schemaRef *openapi3.SchemaRef, model reflect.Type, phase apiaction.Phase) {
 	if schemaRef == nil || schemaRef.Value == nil {
 		return
 	}
-	insert := phase == consts.Create || phase == consts.CreateMany
-	batch := phase == consts.CreateMany || phase == consts.UpdateMany || phase == consts.PatchMany
+	insert := phase == apiaction.Create || phase == apiaction.CreateMany
+	batch := phase == apiaction.CreateMany || phase == apiaction.UpdateMany || phase == apiaction.PatchMany
 	schema := schemaRef.Value
 	if batch {
 		schema = batchItemSchema(schema)
@@ -42,7 +42,7 @@ func hideUnwrittenFields(schemaRef *openapi3.SchemaRef, model reflect.Type, phas
 	if schema == nil || err != nil {
 		return
 	}
-	if phase == consts.Patch || phase == consts.PatchMany {
+	if phase == apiaction.Patch || phase == apiaction.PatchMany {
 		// A patch checks the fields it names alone, so the binding rules
 		// require none of the others.
 		schema.Required = nil

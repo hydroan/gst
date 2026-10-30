@@ -5,19 +5,19 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/apidoc"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 )
 
 func TestOperationIDDerivesFromPath(t *testing.T) {
 	tests := []struct {
 		path string
-		op   consts.Phase
+		op   apiaction.Phase
 		want string
 	}{
-		{"/api/sample/records/{id}", consts.Patch, "sample_records_patch"},
-		{"/api/boxes", consts.List, "boxes_list"},
-		{"/api/hello-world", consts.Create, "hello_world_create"},
-		{"/api/boxes/{box}/items", consts.List, "boxes_items_list"},
+		{"/api/sample/records/{id}", apiaction.Patch, "sample_records_patch"},
+		{"/api/boxes", apiaction.List, "boxes_list"},
+		{"/api/hello-world", apiaction.Create, "hello_world_create"},
+		{"/api/boxes/{box}/items", apiaction.List, "boxes_items_list"},
 	}
 	for _, tt := range tests {
 		if got := operationID(tt.path, tt.op); got != tt.want {
@@ -27,7 +27,7 @@ func TestOperationIDDerivesFromPath(t *testing.T) {
 }
 
 func TestTagsSkipPathParameters(t *testing.T) {
-	got := tags("/api/{tenant}/records", consts.List, reflect.TypeFor[*summarySentenceModel]())
+	got := tags("/api/{tenant}/records", apiaction.List, reflect.TypeFor[*summarySentenceModel]())
 	if len(got) != 1 || got[0] != "records" {
 		t.Fatalf("tags() = %v, want [records]", got)
 	}
@@ -52,7 +52,7 @@ func TestSummaryCombinesPhaseAndStructCommentFirstSentence(t *testing.T) {
 
 	for name, typ := range types {
 		t.Run(name, func(t *testing.T) {
-			got := summary("/api/sample/records", consts.Patch, typ, false)
+			got := summary("/api/sample/records", apiaction.Patch, typ, false)
 			if got != "Patch The human readable summary sentence" {
 				t.Fatalf("summary() = %q, want the phase plus the first comment sentence", got)
 			}
@@ -62,7 +62,7 @@ func TestSummaryCombinesPhaseAndStructCommentFirstSentence(t *testing.T) {
 
 func TestSummaryUsesTrailingActionSegmentForCustomTypes(t *testing.T) {
 	typ := reflect.TypeFor[*summarySentenceModel]()
-	got := summary("/api/users/{id}/disable", consts.Create, typ, true)
+	got := summary("/api/users/{id}/disable", apiaction.Create, typ, true)
 	if got != "Disable The human readable summary sentence" {
 		t.Fatalf("summary() = %q, want the action segment plus the first comment sentence", got)
 	}
@@ -70,7 +70,7 @@ func TestSummaryUsesTrailingActionSegmentForCustomTypes(t *testing.T) {
 
 func TestSummaryKeepsPhaseForDefaultCRUDNestedCollection(t *testing.T) {
 	typ := reflect.TypeFor[*summarySentenceModel]()
-	got := summary("/api/tenants/{tenant}/users", consts.Create, typ, false)
+	got := summary("/api/tenants/{tenant}/users", apiaction.Create, typ, false)
 	if got != "Create The human readable summary sentence" {
 		t.Fatalf("summary() = %q, want the phase for a default CRUD nested collection", got)
 	}
@@ -78,7 +78,7 @@ func TestSummaryKeepsPhaseForDefaultCRUDNestedCollection(t *testing.T) {
 
 func TestSummaryFallsBackToPathSegments(t *testing.T) {
 	typ := reflect.TypeOf(&struct{ Name string }{})
-	got := summary("/api/sample/records/{id}", consts.Patch, typ, false)
+	got := summary("/api/sample/records/{id}", apiaction.Patch, typ, false)
 	if got != "Patch sample records" {
 		t.Fatalf("summary() = %q, want the path segment fallback", got)
 	}
@@ -95,7 +95,7 @@ func TestDescriptionRemovesStructNameAndKeepsRemainingLines(t *testing.T) {
 
 	for name, typ := range types {
 		t.Run(name, func(t *testing.T) {
-			got := description("/api/sample/records", consts.Patch, typ, false)
+			got := description("/api/sample/records", apiaction.Patch, typ, false)
 			if got != want {
 				t.Fatalf("description() = %q, want API-facing full struct comment", got)
 			}
@@ -111,10 +111,10 @@ func TestSummaryAndDescriptionPreferRegisteredOperationDoc(t *testing.T) {
 
 	typ := reflect.TypeFor[*summarySentenceModel]()
 	path := "/api/override-users/{id}/disable"
-	if got := summary(path, consts.Create, typ, true); got != "The registered summary" {
+	if got := summary(path, apiaction.Create, typ, true); got != "The registered summary" {
 		t.Fatalf("summary() = %q, want the registered override", got)
 	}
-	if got := description(path, consts.Create, typ, true); got != "The registered description." {
+	if got := description(path, apiaction.Create, typ, true); got != "The registered description." {
 		t.Fatalf("description() = %q, want the registered override", got)
 	}
 }

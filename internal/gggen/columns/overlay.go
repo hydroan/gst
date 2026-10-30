@@ -14,7 +14,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/modelinfo"
@@ -138,7 +137,7 @@ func scanColumnInspectionFiles(module string, modelDir string, ignore gghelper.P
 		pkg := modelinfo.PackageImportPath(module, filepath.Dir(path))
 		// A file without the generated header is hand-written, whatever its
 		// name, and keeps participating in the build.
-		if strings.HasSuffix(name, ggconst.SuffixGenGo) && bytes.HasPrefix(content, []byte(consts.CodeGeneratedComment())) {
+		if strings.HasSuffix(name, ggconst.SuffixGenGo) && bytes.HasPrefix(content, []byte(ggconst.CodeGeneratedComment)) {
 			return files.addGeneratedFile(path, pkg, content)
 		}
 		files.addSource(path, pkg, content)

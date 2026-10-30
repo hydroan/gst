@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
@@ -421,7 +421,7 @@ func TestPatchManyFieldSetsFromJSONBodyWrapsDecodeError(t *testing.T) {
 type nopControllerLogger struct{}
 
 func (nopControllerLogger) With(fields ...string) types.Logger { return nopControllerLogger{} }
-func (nopControllerLogger) WithContext(context.Context, consts.Phase) types.Logger {
+func (nopControllerLogger) WithContext(context.Context, apiaction.Phase) types.Logger {
 	return nopControllerLogger{}
 }
 func (nopControllerLogger) Debug(args ...any)                       {}

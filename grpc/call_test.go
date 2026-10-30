@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	gstgrpc "github.com/hydroan/gst/grpc"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -36,9 +36,9 @@ func TestCallFunctionsAreBuiltForAModelAndRoute(t *testing.T) {
 	require.NotNil(t, gstgrpc.UpdateManyCall[*sampleModel]("samples"))
 	require.NotNil(t, gstgrpc.PatchManyCall[*sampleModel]("samples"))
 	require.NotNil(t, gstgrpc.DeleteManyCall[*sampleModel]("samples"))
-	require.NotNil(t, gstgrpc.ServiceCall[*sampleModel, *sampleModel, *sampleModel](consts.Create, "samples/seal"))
+	require.NotNil(t, gstgrpc.ServiceCall[*sampleModel, *sampleModel, *sampleModel](apiaction.Create, "samples/seal"))
 	require.PanicsWithValue(t, `controller: phase "sse" has no rpc; ServiceCall serves the actions of a model's gRPC service`, func() {
-		gstgrpc.ServiceCall[*sampleModel, *sampleModel, *sampleModel](consts.SSE, "samples")
+		gstgrpc.ServiceCall[*sampleModel, *sampleModel, *sampleModel](apiaction.SSE, "samples")
 	})
 }
 

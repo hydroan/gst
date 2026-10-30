@@ -2,7 +2,7 @@ package database
 
 import (
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/modelschema"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -44,7 +44,7 @@ func (db *database[M]) clickhouseVersioned(op string) error {
 // batch fails. ClickHouse has no unique constraints, so a duplicate row is
 // stored, never answered with ErrDuplicatedKey.
 func (db *database[M]) clickhouseCreate(objs []M) (err error) {
-	done, _ := db.trace(consts.Create, len(objs))
+	done, _ := db.trace(apiaction.Create, len(objs))
 	defer func() { done(err) }()
 
 	batchSize := defaultBatchSize
@@ -97,7 +97,7 @@ func (db *database[M]) clickhouseDelete(objs []M) (err error) {
 		ids = append(ids, id)
 	}
 
-	done, _ := db.trace(consts.Delete, len(objs))
+	done, _ := db.trace(apiaction.Delete, len(objs))
 	defer func() { done(err) }()
 
 	batchSize := defaultDeleteBatchSize
@@ -243,7 +243,7 @@ func unqualified(expr clause.Expression) (clause.Expression, error) {
 // any table whose key columns it would rewrite. Narrow the write to the
 // columns being corrected with WithSelect, or use UpdateByID for one column.
 func (db *database[M]) clickhouseUpdate(objs []M) (err error) {
-	done, _ := db.trace(consts.Update, len(objs))
+	done, _ := db.trace(apiaction.Update, len(objs))
 	defer func() { done(err) }()
 
 	// A dry run hands in the copies Update made of the caller's objects.

@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
 )
@@ -86,7 +85,7 @@ func PlanPBFiles(existing, generated []string, protect ggconfig.PruneConfig) (Fi
 		if err != nil {
 			return FilePlan{}, errors.Wrapf(err, "read %s", path)
 		}
-		if !bytes.HasPrefix(content, []byte(consts.CodeGeneratedComment())) {
+		if !bytes.HasPrefix(content, []byte(ggconst.CodeGeneratedComment)) {
 			foreign = append(foreign, path)
 			continue
 		}

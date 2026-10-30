@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/gertd/go-pluralize"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/goast"
 	"github.com/stoewer/go-strcase"
@@ -115,8 +115,8 @@ func initDefaultAction(modelName string, action *Action) {
 
 // isGetVerbPhase reports whether the phase's generated route handles an HTTP
 // GET request, which carries no request body.
-func isGetVerbPhase(phase consts.Phase) bool {
-	return phase == consts.List || phase == consts.Get
+func isGetVerbPhase(phase apiaction.Phase) bool {
+	return phase == apiaction.List || phase == apiaction.Get
 }
 
 // isFixedContractPhase reports whether the phase delegates to a fixed service
@@ -124,8 +124,8 @@ func isGetVerbPhase(phase consts.Phase) bool {
 // controller reads the uploaded multipart form file through
 // Import(ctx, io.Reader) and the Export controller writes the bytes returned
 // by Export(ctx, ...M) as a file attachment.
-func isFixedContractPhase(phase consts.Phase) bool {
-	return phase == consts.Import || phase == consts.Export
+func isFixedContractPhase(phase apiaction.Phase) bool {
+	return phase == apiaction.Import || phase == apiaction.Export
 }
 
 // parse analyzes an AST file to find all models and their Design method declarations.
@@ -324,46 +324,46 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 							continue
 						}
 
-						if act, e := parseAction(consts.Create, funName_, call_.Args[0]); e {
+						if act, e := parseAction(apiaction.Create, funName_, call_.Args[0]); e {
 							defaults.routes[route] = append(defaults.routes[route], act)
 						}
-						if act, e := parseAction(consts.Delete, funName_, call_.Args[0]); e {
+						if act, e := parseAction(apiaction.Delete, funName_, call_.Args[0]); e {
 							defaults.routes[route] = append(defaults.routes[route], act)
 						}
-						if act, e := parseAction(consts.Update, funName_, call_.Args[0]); e {
+						if act, e := parseAction(apiaction.Update, funName_, call_.Args[0]); e {
 							defaults.routes[route] = append(defaults.routes[route], act)
 						}
-						if act, e := parseAction(consts.Patch, funName_, call_.Args[0]); e {
+						if act, e := parseAction(apiaction.Patch, funName_, call_.Args[0]); e {
 							defaults.routes[route] = append(defaults.routes[route], act)
 						}
-						if act, e := parseAction(consts.List, funName_, call_.Args[0]); e {
+						if act, e := parseAction(apiaction.List, funName_, call_.Args[0]); e {
 							defaults.routes[route] = append(defaults.routes[route], act)
 						}
-						if act, e := parseAction(consts.Get, funName_, call_.Args[0]); e {
+						if act, e := parseAction(apiaction.Get, funName_, call_.Args[0]); e {
 							defaults.routes[route] = append(defaults.routes[route], act)
 						}
-						if act, e := parseAction(consts.CreateMany, funName_, call_.Args[0]); e {
+						if act, e := parseAction(apiaction.CreateMany, funName_, call_.Args[0]); e {
 							defaults.routes[route] = append(defaults.routes[route], act)
 						}
-						if act, e := parseAction(consts.DeleteMany, funName_, call_.Args[0]); e {
+						if act, e := parseAction(apiaction.DeleteMany, funName_, call_.Args[0]); e {
 							defaults.routes[route] = append(defaults.routes[route], act)
 						}
-						if act, e := parseAction(consts.UpdateMany, funName_, call_.Args[0]); e {
+						if act, e := parseAction(apiaction.UpdateMany, funName_, call_.Args[0]); e {
 							defaults.routes[route] = append(defaults.routes[route], act)
 						}
-						if act, e := parseAction(consts.PatchMany, funName_, call_.Args[0]); e {
+						if act, e := parseAction(apiaction.PatchMany, funName_, call_.Args[0]); e {
 							defaults.routes[route] = append(defaults.routes[route], act)
 						}
-						if act, e := parseAction(consts.Import, funName_, call_.Args[0]); e {
+						if act, e := parseAction(apiaction.Import, funName_, call_.Args[0]); e {
 							defaults.routes[route] = append(defaults.routes[route], act)
 						}
-						if act, e := parseAction(consts.Export, funName_, call_.Args[0]); e {
+						if act, e := parseAction(apiaction.Export, funName_, call_.Args[0]); e {
 							defaults.routes[route] = append(defaults.routes[route], act)
 						}
-						if act, e := parseAction(consts.SSE, funName_, call_.Args[0]); e {
+						if act, e := parseAction(apiaction.SSE, funName_, call_.Args[0]); e {
 							defaults.routes[route] = append(defaults.routes[route], act)
 						}
-						if act, e := parseAction(consts.Stream, funName_, call_.Args[0]); e {
+						if act, e := parseAction(apiaction.Stream, funName_, call_.Args[0]); e {
 							defaults.routes[route] = append(defaults.routes[route], act)
 						}
 					}
@@ -371,46 +371,46 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 			}
 		}
 
-		if act, e := parseAction(consts.Create, funcName, call.Args[0]); e {
+		if act, e := parseAction(apiaction.Create, funcName, call.Args[0]); e {
 			defaults.Create = act
 		}
-		if act, e := parseAction(consts.Delete, funcName, call.Args[0]); e {
+		if act, e := parseAction(apiaction.Delete, funcName, call.Args[0]); e {
 			defaults.Delete = act
 		}
-		if act, e := parseAction(consts.Update, funcName, call.Args[0]); e {
+		if act, e := parseAction(apiaction.Update, funcName, call.Args[0]); e {
 			defaults.Update = act
 		}
-		if act, e := parseAction(consts.Patch, funcName, call.Args[0]); e {
+		if act, e := parseAction(apiaction.Patch, funcName, call.Args[0]); e {
 			defaults.Patch = act
 		}
-		if act, e := parseAction(consts.List, funcName, call.Args[0]); e {
+		if act, e := parseAction(apiaction.List, funcName, call.Args[0]); e {
 			defaults.List = act
 		}
-		if act, e := parseAction(consts.Get, funcName, call.Args[0]); e {
+		if act, e := parseAction(apiaction.Get, funcName, call.Args[0]); e {
 			defaults.Get = act
 		}
-		if act, e := parseAction(consts.CreateMany, funcName, call.Args[0]); e {
+		if act, e := parseAction(apiaction.CreateMany, funcName, call.Args[0]); e {
 			defaults.CreateMany = act
 		}
-		if act, e := parseAction(consts.DeleteMany, funcName, call.Args[0]); e {
+		if act, e := parseAction(apiaction.DeleteMany, funcName, call.Args[0]); e {
 			defaults.DeleteMany = act
 		}
-		if act, e := parseAction(consts.UpdateMany, funcName, call.Args[0]); e {
+		if act, e := parseAction(apiaction.UpdateMany, funcName, call.Args[0]); e {
 			defaults.UpdateMany = act
 		}
-		if act, e := parseAction(consts.PatchMany, funcName, call.Args[0]); e {
+		if act, e := parseAction(apiaction.PatchMany, funcName, call.Args[0]); e {
 			defaults.PatchMany = act
 		}
-		if act, e := parseAction(consts.Import, funcName, call.Args[0]); e {
+		if act, e := parseAction(apiaction.Import, funcName, call.Args[0]); e {
 			defaults.Import = act
 		}
-		if act, e := parseAction(consts.Export, funcName, call.Args[0]); e {
+		if act, e := parseAction(apiaction.Export, funcName, call.Args[0]); e {
 			defaults.Export = act
 		}
-		if act, e := parseAction(consts.SSE, funcName, call.Args[0]); e {
+		if act, e := parseAction(apiaction.SSE, funcName, call.Args[0]); e {
 			defaults.SSE = act
 		}
-		if act, e := parseAction(consts.Stream, funcName, call.Args[0]); e {
+		if act, e := parseAction(apiaction.Stream, funcName, call.Args[0]); e {
 			defaults.Stream = act
 		}
 
@@ -424,7 +424,8 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 // from the function literal passed to action methods like Create(), Update(), etc.
 //
 // Parameters:
-//   - phase: The expected phase to match (e.g., consts.Create, consts.List)
+//   - phase: The expected phase to match (e.g., apiaction.Create,
+//     apiaction.List)
 //   - funcName: The actual function name being called
 //   - args: The function call arguments, expected to contain a function literal
 //
@@ -450,7 +451,7 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 //	    Payload[*RecordCreateReq]()
 //	    Result[*RecordCreateRsp]()
 //	})
-func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, bool) {
+func parseAction(phase apiaction.Phase, funcName string, expr ast.Expr) (*Action, bool) {
 	var payload string
 	var result string
 	var service bool       // default to false
@@ -572,7 +573,7 @@ func parseAction(phase consts.Phase, funcName string, expr ast.Expr) (*Action, b
 						}
 					}
 					// A streaming side is read for a Stream action alone.
-					declared := !StreamingKeyword(funcName) || phase == consts.Stream
+					declared := !StreamingKeyword(funcName) || phase == apiaction.Stream
 					switch {
 					case PayloadKeyword(funcName):
 						isPayload, streamingPayload = declared, declared && StreamingKeyword(funcName)

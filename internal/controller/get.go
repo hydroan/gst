@@ -7,7 +7,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
@@ -28,7 +28,7 @@ import (
 // serviceHandler): its Get method runs on a zero-value REQ, the GET request
 // carrying no body; the service reads ServiceContext.Query() and Param().
 func GetHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.Get, consts.GetBefore, consts.GetAfter)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), apiaction.Get, apiaction.GetBefore, apiaction.GetAfter)
 	if !a.typesEqual {
 		return a.serviceHandler()
 	}
@@ -41,7 +41,7 @@ func GetHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 			return
 		}
 
-		log := logger.Controller.WithContext(c.Request.Context(), consts.Get)
+		log := logger.Controller.WithContext(c.Request.Context(), apiaction.Get)
 		id, ok := routeID(c, cfg, log, span)
 		if !ok {
 			return
@@ -64,7 +64,7 @@ func GetHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 // naming no record is refused the way a request missing its route parameter
 // is.
 func GetCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string, query Query) (M, error) {
-	a := newAction[M, M, M](route, consts.Get, consts.GetBefore, consts.GetAfter)
+	a := newAction[M, M, M](route, apiaction.Get, apiaction.GetBefore, apiaction.GetAfter)
 	return func(ctx context.Context, params map[string]string, id string, query Query) (M, error) {
 		var zero M
 		c, err := a.beginQueryCall(ctx, params, query)
@@ -91,7 +91,7 @@ func GetCall[M types.Model](route string) func(ctx context.Context, params map[s
 // 404 (see notFound).
 func (a *action[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext serviceContextFunc, id string) (M, error) {
 	var zero M
-	log := logger.Controller.WithContext(ctx, consts.Get)
+	log := logger.Controller.WithContext(ctx, apiaction.Get)
 	svc := a.service()
 
 	// The GetBefore hook reads the id, so it is set first.
@@ -106,7 +106,7 @@ func (a *action[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext ser
 	expands := parseExpandQuery(requestctx.QueryValues(ctx), m)
 
 	// 1.Perform business logic processing before get resource.
-	if err := a.traceServiceHook(ctx, consts.GetBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
+	if err := a.traceServiceHook(ctx, apiaction.GetBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
 		return svc.GetBefore(sc, m)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
@@ -118,7 +118,7 @@ func (a *action[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext ser
 		return zero, failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after get resource.
-	if err := a.traceServiceHook(ctx, consts.GetAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
+	if err := a.traceServiceHook(ctx, apiaction.GetAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
 		return svc.GetAfter(sc, m)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
@@ -134,7 +134,7 @@ func (a *action[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext ser
 	}
 
 	// 4.record operation log to database.
-	if err := audit.RecordOperation(ctx, m, consts.OP_GET,
+	if err := audit.RecordOperation(ctx, m, types.OperationGet,
 		func() *modellogmgmt.OperationLog {
 			return operationLog(ctx, a.name)
 		}); err != nil {

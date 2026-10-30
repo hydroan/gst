@@ -1,10 +1,6 @@
 package types
 
-import (
-	"context"
-
-	"github.com/hydroan/gst/internal/consts"
-)
+import "context"
 
 // Permission is one operation a role is allowed to perform on one object. It is
 // the unit the whole-set replacement methods on RBAC take, so a caller states a
@@ -17,6 +13,69 @@ type Permission struct {
 	// Action is the operation on that object, usually an HTTP method.
 	Action string
 }
+
+// GrantSource names the kind of rule that allowed a request. An allowed request
+// has exactly one source: a subject may satisfy several authorization rules at
+// once, and the source reports the strongest of them, because removing a weaker
+// grant would leave the request allowed anyway.
+type GrantSource string
+
+const (
+	// GrantSourceSystemRoot is the system-level super-admin role, which allows
+	// every request in every tenant without consulting a policy.
+	GrantSourceSystemRoot GrantSource = "system_root"
+	// GrantSourceTenantAdmin is the built-in admin role, which allows every
+	// request inside its own tenant without consulting a policy.
+	GrantSourceTenantAdmin GrantSource = "tenant_admin"
+	// GrantSourceAuthenticated is a policy written for the implicit
+	// authenticated role, which allows the request for every authenticated
+	// subject regardless of the roles it holds.
+	GrantSourceAuthenticated GrantSource = "authenticated"
+	// GrantSourceRole is a policy granted to a role the subject holds in the
+	// request tenant.
+	GrantSourceRole GrantSource = "role"
+)
+
+// DenyReason names why a request was not allowed.
+//
+// A denial has no granting rule, so it cannot be explained the way an allow is,
+// by naming one. What is left to say is which of the two steps behind every
+// grant did not happen: the subject was never given a role here, or it holds
+// roles and none of their permissions covers the request. Those lead to
+// opposite repairs — a role binding, or a permission — and the request tuple
+// alone does not say which.
+//
+// The values are few and fixed, so denials can be counted by reason without the
+// label set growing with the deployment.
+type DenyReason string
+
+const (
+	// DenyReasonUnauthenticated is a request carrying no authenticated subject.
+	// Authorization runs after authentication, so such a request is refused
+	// before any policy is consulted.
+	DenyReasonUnauthenticated DenyReason = "unauthenticated"
+	// DenyReasonNoRole is a subject holding no role in the request tenant.
+	// Nothing tenant-scoped can grant it, whatever permissions exist, so the
+	// missing step is a role binding.
+	DenyReasonNoRole DenyReason = "no_role"
+	// DenyReasonNoPolicy is a subject holding roles whose permissions do not
+	// cover this object and action. The binding is in place, so the missing
+	// step is a permission.
+	DenyReasonNoPolicy DenyReason = "no_policy"
+	// DenyReasonNotInitialized is a process holding no policy set at all, which
+	// denies every request it decides. It reports a deployment that never
+	// initialized authorization rather than a rule somebody forgot to write.
+	DenyReasonNotInitialized DenyReason = "not_initialized"
+)
+
+// Effect is the effect of an authorization policy, allow or deny.
+type Effect string
+
+// The effects of an authorization policy.
+const (
+	EffectAllow Effect = "allow"
+	EffectDeny  Effect = "deny"
+)
 
 // Decision is the outcome of one authorization check.
 //
@@ -33,8 +92,8 @@ type Permission struct {
 // reason on a denial means unknown rather than none.
 type Decision struct {
 	Allowed     bool
-	Source      consts.GrantSource
-	Reason      consts.DenyReason
+	Source      GrantSource
+	Reason      DenyReason
 	MatchedRule []string
 }
 

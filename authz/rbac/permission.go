@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/types"
 )
 
@@ -43,14 +42,14 @@ var ErrReservedRole = errors.New("rbac: role is reserved by the authorization ma
 // comparison is exact, because the matcher's is: a role differing by so much as
 // a space is an ordinary role that reaches nothing on its own.
 func errIfReservedRole(role string) error {
-	if role == consts.AUTHZ_ROLE_AUTHENTICATED {
+	if role == RoleAuthenticated {
 		return errors.Wrapf(ErrReservedRole, "role %q", role)
 	}
 	return nil
 }
 
 // authenticatedPolicyTenant is the tenant column stored for policies written
-// against consts.AUTHZ_ROLE_AUTHENTICATED. The matcher branch for that role
+// against RoleAuthenticated. The matcher branch for that role
 // compares no tenant, so the value never takes part in a decision; it marks the
 // row as tenant-independent for anyone reading authz_rules.
 const authenticatedPolicyTenant = "*"
@@ -82,12 +81,12 @@ func (r *rbac) SetRolePermissions(
 // one of them and not the other.
 func (r *rbac) SetPermissionsForAuthenticated(ctx context.Context, permissions []types.Permission) (err error) {
 	ctx, finishSpan := traceRBAC(ctx, "set_permissions_for_authenticated",
-		rbacTraceFields(authenticatedPolicyTenant, consts.AUTHZ_ROLE_AUTHENTICATED))
+		rbacTraceFields(authenticatedPolicyTenant, RoleAuthenticated))
 	defer func() {
 		finishSpan(err)
 	}()
 
-	return r.replacePermissions(ctx, authenticatedPolicyTenant, consts.AUTHZ_ROLE_AUTHENTICATED, permissions)
+	return r.replacePermissions(ctx, authenticatedPolicyTenant, RoleAuthenticated, permissions)
 }
 
 // replacePermissions swaps the whole permission set stored for role in tenant
@@ -145,7 +144,7 @@ func permissionPolicies(tenant string, role string, permissions []types.Permissi
 	rules := make([][]string, 0, len(unique))
 	for _, permission := range unique {
 		rules = append(rules, []string{
-			tenant, role, permission.Object, permission.Action, string(consts.EffectAllow),
+			tenant, role, permission.Object, permission.Action, string(EffectAllow),
 		})
 	}
 	return rules

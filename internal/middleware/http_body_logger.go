@@ -10,9 +10,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/logfield"
+	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 )
@@ -268,9 +268,9 @@ func writeHTTPBodyLog(
 		logfield.Route(c.FullPath()),
 		logfield.Path(c.Request.URL.Path),
 		logfield.Method(c.Request.Method),
-		logfield.Username(c.GetString(consts.CTX_USERNAME)),
-		logfield.UserID(c.GetString(consts.CTX_USER_ID)),
-		logfield.TenantID(c.GetString(consts.CTX_TENANT_ID)),
+		logfield.Username(c.GetString(requestctx.KeyUsername)),
+		logfield.UserID(c.GetString(requestctx.KeyUserID)),
+		logfield.TenantID(c.GetString(requestctx.KeyTenantID)),
 		logfield.TraceID(c.GetString(execctx.KeyTraceID)),
 		logfield.Params(httpBodyLogParams(c.Params)),
 		logfield.Query(c.Request.URL.RawQuery),

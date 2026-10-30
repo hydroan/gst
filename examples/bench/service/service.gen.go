@@ -5,17 +5,16 @@ package service
 import (
 	"bench/service/bench"
 
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/service"
 )
 
 func init() {
-	service.Register[*bench.Create](consts.Create, "/api/bench/create")
-	service.Register[*bench.Delete](consts.Delete, "/api/bench/delete/:id")
-	service.Register[*bench.Get](consts.Get, "/api/bench/get")
-	service.Register[*bench.Lister](consts.List, "/api/bench/list")
-	service.Register[*bench.List2](consts.List, "/api/bench/list2")
-	service.Register[*bench.Ping](consts.List, "/api/bench/ping")
-	service.Register[*bench.Update](consts.Update, "/api/bench/update/:id")
-	service.Register[*bench.Updatebyid](consts.Patch, "/api/bench/updatebyid/:id")
+	service.Register[*bench.Create](service.Create, "/api/bench/create")
+	service.Register[*bench.Delete](service.Delete, "/api/bench/delete/:id")
+	service.Register[*bench.Get](service.Get, "/api/bench/get")
+	service.Register[*bench.Lister](service.List, "/api/bench/list")
+	service.Register[*bench.List2](service.List, "/api/bench/list2")
+	service.Register[*bench.Ping](service.List, "/api/bench/ping")
+	service.Register[*bench.Update](service.Update, "/api/bench/update/:id")
+	service.Register[*bench.Updatebyid](service.Patch, "/api/bench/updatebyid/:id")
 }

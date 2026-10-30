@@ -5,7 +5,7 @@ import (
 	"go/ast"
 	"go/token"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 )
 
 // StmtLogInfo builds the statement that logs str, a quoted Go string
@@ -112,14 +112,14 @@ func StmtModelRegister(modelName string) *ast.ExprStmt {
 
 // StmtServiceRegister builds the registration of a service in
 // service.gen.go. serviceImport is the service type as the file refers to
-// it: for user.Creator, consts.Create and /api/users it builds
+// it: for user.Creator, apiaction.Create and /api/users it builds
 //
-//	service.Register[*user.Creator](consts.Create, "/api/users")
+//	service.Register[*user.Creator](service.Create, "/api/users")
 //
 // The route argument is the path the route is served at, the same string
 // the matching StmtRouterRegister statement carries, because the service
 // registry keys services by path and phase.
-func StmtServiceRegister(serviceImport string, phase consts.Phase, route string) *ast.ExprStmt {
+func StmtServiceRegister(serviceImport string, phase apiaction.Phase, route string) *ast.ExprStmt {
 	return &ast.ExprStmt{
 		X: &ast.CallExpr{
 			Fun: &ast.IndexExpr{
@@ -133,7 +133,7 @@ func StmtServiceRegister(serviceImport string, phase consts.Phase, route string)
 			},
 			Args: []ast.Expr{
 				&ast.SelectorExpr{
-					X:   ast.NewIdent("consts"),
+					X:   ast.NewIdent("service"),
 					Sel: ast.NewIdent(phase.Name()),
 				},
 				&ast.BasicLit{
@@ -150,9 +150,9 @@ func StmtServiceRegister(serviceImport string, phase consts.Phase, route string)
 // rspName qualified by modelPkgName, the qualifier the file refers to the
 // model package by. For example, it builds
 //
-//	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records", &gst.ControllerConfig[*model.Record]{}, consts.Create)
-//	router.Register[*model.Record, *gstmodel.Empty, *model.BoxListRsp](router.Auth(), "/api/boxes", &gst.ControllerConfig[*model.Record]{}, consts.List)
-//	router.Register[*box.Record, *box.Record, *box.Record](router.Auth(), "/api/boxes/:id", &gst.ControllerConfig[*box.Record]{ParamName: "id"}, consts.Get)
+//	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records", &gst.ControllerConfig[*model.Record]{}, service.Create)
+//	router.Register[*model.Record, *gstmodel.Empty, *model.BoxListRsp](router.Auth(), "/api/boxes", &gst.ControllerConfig[*model.Record]{}, service.List)
+//	router.Register[*box.Record, *box.Record, *box.Record](router.Auth(), "/api/boxes/:id", &gst.ControllerConfig[*box.Record]{ParamName: "id"}, service.Get)
 //
 // A dsl.PayloadEmpty side becomes *model.Empty under gstModelPkg, the
 // qualifier the router file uses for model.Empty, resolved once per file by
@@ -160,7 +160,7 @@ func StmtServiceRegister(serviceImport string, phase consts.Phase, route string)
 // "Pub"), route is the path the route is served at, shared verbatim with the
 // matching StmtServiceRegister statement, paramName is the route parameter the
 // controller reads the resource id from, "" for none, and phase names the
-// consts value of the action, such as Create.
+// phase of the action as the service package spells it, such as Create.
 func StmtRouterRegister(modelPkgName, modelName, reqName, rspName, gstModelPkg string, routerGroup string, route string, paramName string, phase string) *ast.ExprStmt {
 	// The dsl.PayloadEmpty sentinel on either side resolves to
 	// *<gstModelPkg>.Empty. gstModelPkg is the file-level qualifier decided
@@ -262,7 +262,7 @@ func StmtRouterRegister(modelPkgName, modelName, reqName, rspName, gstModelPkg s
 				},
 				paramExpr,
 				&ast.SelectorExpr{
-					X:   ast.NewIdent("consts"),
+					X:   ast.NewIdent("service"),
 					Sel: ast.NewIdent(phase),
 				},
 			},

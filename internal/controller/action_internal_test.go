@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
@@ -26,7 +26,7 @@ var registeredTestServices sync.Map
 // a route and phase, which a test registering its service on every run would
 // attempt under -count. A service a test asserts the state of is therefore
 // shared across the runs, and the test resets that state first.
-func registerTestService[M types.Model, REQ types.Request, RSP types.Response](phase consts.Phase, route string, svc types.Service[M, REQ, RSP]) {
+func registerTestService[M types.Model, REQ types.Request, RSP types.Response](phase apiaction.Phase, route string, svc types.Service[M, REQ, RSP]) {
 	if _, registered := registeredTestServices.LoadOrStore(string(phase)+"|"+route, true); !registered {
 		serviceregistry.RegisterInstance[M, REQ, RSP](phase, route, svc)
 	}
@@ -71,8 +71,8 @@ func (s *handlerStopService) Create(*types.ServiceContext, *handlerRouteReq) (*h
 func TestCreateHandlerDispatchesActionServiceByRoute(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	registerTestService[*handlerRouteModel, *handlerRouteReq, *handlerRouteRsp](consts.Create, "samples/:id/start", &handlerStartService{})
-	registerTestService[*handlerRouteModel, *handlerRouteReq, *handlerRouteRsp](consts.Create, "samples/:id/stop", &handlerStopService{})
+	registerTestService[*handlerRouteModel, *handlerRouteReq, *handlerRouteRsp](apiaction.Create, "samples/:id/start", &handlerStartService{})
+	registerTestService[*handlerRouteModel, *handlerRouteReq, *handlerRouteRsp](apiaction.Create, "samples/:id/stop", &handlerStopService{})
 
 	engine := gin.New()
 	engine.POST("/samples/:id/start", CreateHandler[*handlerRouteModel, *handlerRouteReq, *handlerRouteRsp](&types.ControllerConfig[*handlerRouteModel]{Route: "samples/:id/start"}))
@@ -109,12 +109,12 @@ func (*handlerListBeforeService) ListBefore(*types.ServiceContext, *[]*handlerRo
 func TestTraceServiceHookSpansOnlyOverriddenHooks(t *testing.T) {
 	oteltest.Enable(t)
 	recorder := oteltest.Record(t)
-	a := newAction[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel]("samples", consts.List, consts.ListBefore, consts.ListAfter)
+	a := newAction[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel]("samples", apiaction.List, apiaction.ListBefore, apiaction.ListAfter)
 
 	t.Run("the_default_service_exports_no_hook_span", func(t *testing.T) {
 		svc := serviceregistry.Resolve[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel]("samples/unregistered")
 		data := make([]*handlerRouteModel, 0)
-		require.NoError(t, a.traceServiceHook(context.Background(), consts.ListBefore, svc, bareServiceContext, func(sc *types.ServiceContext) error {
+		require.NoError(t, a.traceServiceHook(context.Background(), apiaction.ListBefore, svc, bareServiceContext, func(sc *types.ServiceContext) error {
 			return svc.ListBefore(sc, &data)
 		}))
 		require.NotContains(t, oteltest.EndedNames(recorder), "service.HandlerRouteModel.ListBefore")
@@ -123,10 +123,10 @@ func TestTraceServiceHookSpansOnlyOverriddenHooks(t *testing.T) {
 	t.Run("an_overridden_hook_gets_a_span_and_its_no-op_partner_does_not", func(t *testing.T) {
 		svc := &handlerListBeforeService{}
 		data := make([]*handlerRouteModel, 0)
-		require.NoError(t, a.traceServiceHook(context.Background(), consts.ListBefore, svc, bareServiceContext, func(sc *types.ServiceContext) error {
+		require.NoError(t, a.traceServiceHook(context.Background(), apiaction.ListBefore, svc, bareServiceContext, func(sc *types.ServiceContext) error {
 			return svc.ListBefore(sc, &data)
 		}))
-		require.NoError(t, a.traceServiceHook(context.Background(), consts.ListAfter, svc, bareServiceContext, func(sc *types.ServiceContext) error {
+		require.NoError(t, a.traceServiceHook(context.Background(), apiaction.ListAfter, svc, bareServiceContext, func(sc *types.ServiceContext) error {
 			return svc.ListAfter(sc, &data)
 		}))
 		names := oteltest.EndedNames(recorder)
@@ -137,6 +137,6 @@ func TestTraceServiceHookSpansOnlyOverriddenHooks(t *testing.T) {
 
 // bareServiceContext builds the service context of a hook run outside any
 // transport, carrying no request.
-func bareServiceContext(ctx context.Context, phase consts.Phase) *types.ServiceContext {
+func bareServiceContext(ctx context.Context, phase apiaction.Phase) *types.ServiceContext {
 	return types.NewServiceContext(nil, ctx, phase)
 }

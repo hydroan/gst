@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
 )
 
 // ErrSubjectIsRole reports an assignment whose subject and role share one name.
@@ -184,7 +183,7 @@ func (r *rbac) HasSystemRole(ctx context.Context, subject string, role string) (
 }
 
 func isBuiltInSystemRole(subject string, role string) bool {
-	return subject == consts.AUTHZ_USER_ROOT && role == consts.AUTHZ_SYSTEM_ROLE_ROOT
+	return subject == UserRoot && role == SystemRoleRoot
 }
 
 // RemoveSubject removes every tenant-scoped and system-level role assignment

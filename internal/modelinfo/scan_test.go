@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/modelinfo"
@@ -68,7 +68,7 @@ func (Item) Design() {
 	if got := findDesign(t, scanned.Models, "Item").Endpoint; got != "samples/:sample/items" {
 		t.Fatalf("Item endpoint = %q, want samples/:sample/items", got)
 	}
-	if remaining := remainingPhases(collectActions(findDesign(t, scanned.Models, "Item"))); !slices.Equal(remaining, []consts.Phase{consts.Create}) {
+	if remaining := remainingPhases(collectActions(findDesign(t, scanned.Models, "Item"))); !slices.Equal(remaining, []apiaction.Phase{apiaction.Create}) {
 		t.Fatalf("remaining Item actions = %v, want only Create", remaining)
 	}
 	if want := []modelinfo.RouteIgnoreMatch{{Method: "GET", Path: "/api/samples/:sample/items", Model: "Item"}}; !slices.Equal(scanned.RouteIgnores.Matches, want) {

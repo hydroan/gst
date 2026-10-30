@@ -124,7 +124,7 @@ type ControllerConfig[M Model] struct {
 	// ParamName names the route parameter that carries the resource ID.
 	ParamName string
 	// Route is the path the handler is registered at, /api/records/:rec, as
-	// consts.APIPath spells it. The controller handlers derive the service
+	// apiaction.APIPath spells it. The controller handlers derive the service
 	// registry key from it, the key the corresponding service.Register call
 	// registers under. router.Register fills it in; an empty route resolves
 	// no service and the handler falls back to the no-op default service.

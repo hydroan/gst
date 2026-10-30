@@ -90,3 +90,23 @@ type RBAC = types.RBAC
 // values (the "z" methods); With attaches string key/value fields and
 // WithContext derives a logger carrying request metadata fields.
 type Logger = types.Logger
+
+// Operation is the operation an operation log records, one per action.
+type Operation = types.Operation
+
+// The operations an operation log records.
+const (
+	OperationCreate = types.OperationCreate
+	OperationDelete = types.OperationDelete
+	OperationUpdate = types.OperationUpdate
+	OperationPatch  = types.OperationPatch
+	OperationList   = types.OperationList
+	OperationGet    = types.OperationGet
+	OperationExport = types.OperationExport
+	OperationImport = types.OperationImport
+
+	OperationCreateMany = types.OperationCreateMany
+	OperationDeleteMany = types.OperationDeleteMany
+	OperationUpdateMany = types.OperationUpdateMany
+	OperationPatchMany  = types.OperationPatchMany
+)

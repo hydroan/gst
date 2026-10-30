@@ -3,7 +3,7 @@ package grpc
 import (
 	"context"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/types"
 )
@@ -189,7 +189,7 @@ func DeleteManyCall[M types.Model](route string) func(ctx context.Context, param
 // and the caller, and answers with its result, or with the status its error
 // maps to. phase is one of the actions gRPC serves; the phase of an HTTP-only
 // action panics, as the route registers.
-func ServiceCall[M types.Model, REQ types.Request, RSP types.Response](phase consts.Phase, route string) func(ctx context.Context, params map[string]string, query Query, req REQ) (RSP, error) {
+func ServiceCall[M types.Model, REQ types.Request, RSP types.Response](phase apiaction.Phase, route string) func(ctx context.Context, params map[string]string, query Query, req REQ) (RSP, error) {
 	return controller.ServiceCall[M, REQ, RSP](phase, route)
 }
 

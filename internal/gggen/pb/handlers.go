@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/goast"
@@ -41,9 +41,9 @@ import (
 //
 //		"tmpapp/model"
 //
-//		"github.com/hydroan/gst/consts"
 //		"github.com/hydroan/gst/grpc"
 //		gstmodel "github.com/hydroan/gst/model"
+//		"github.com/hydroan/gst/service"
 //	)
 //
 //	// reportService serves the rpcs of the ReportService service through the
@@ -56,7 +56,7 @@ import (
 //
 //	// The calls of the actions of Report, one per rpc of ReportService, built
 //	// once at package initialization.
-//	var getReport = grpc.ServiceCall[*model.Report, *gstmodel.Empty, *model.ReportRsp](consts.Get, "/api/reports/summary")
+//	var getReport = grpc.ServiceCall[*model.Report, *gstmodel.Empty, *model.ReportRsp](service.Get, "/api/reports/summary")
 //
 //	// GetReport serves the Get action of Report on /api/reports/summary.
 //	func (reportService) GetReport(ctx context.Context, req *GetReportRequest) (*GetReportResponse, error) {
@@ -168,7 +168,7 @@ func (w *fileWriter) serviceType(service string, model *modelinfo.Model) {
 //		getItem       = grpc.GetCall[*record.Item]("/api/records/:record/items/:id")
 //		patchManyItem = grpc.PatchManyCall[*record.Item]("/api/records/:record/items/batch")
 //		sealItem      = grpc.CreateCall[*record.Item]("/api/items/:id/seal")
-//		mergeItem     = grpc.ServiceCall[*record.Item, *record.MergeReq, *record.MergedItemRsp](consts.Create, "/api/items/merge")
+//		mergeItem     = grpc.ServiceCall[*record.Item, *record.MergeReq, *record.MergedItemRsp](service.Create, "/api/items/merge")
 //	)
 func (w *fileWriter) actionCalls(service string, rpcs []*pbschema.RPC) {
 	model := rpcs[0].Model
@@ -187,7 +187,7 @@ func (w *fileWriter) actionCalls(service string, rpcs []*pbschema.RPC) {
 		default:
 			value = call(
 				&ast.IndexListExpr{X: w.grpc("ServiceCall"), Indices: []ast.Expr{modelType, w.actionType(model, r.Action.Payload), w.actionType(model, r.Action.Result)}},
-				sel(w.out.imports.fixedRef(ggconst.ImportPathConsts), r.Action.Phase.Name()),
+				sel(w.out.imports.fixedRef(ggconst.ImportPathService), r.Action.Phase.Name()),
 				strLit(r.Registered),
 			)
 		}
@@ -423,24 +423,24 @@ func (w *fileWriter) handler(r *pbschema.RPC) {
 			}
 		}
 		switch r.Action.Phase {
-		case consts.Create:
+		case apiaction.Create:
 			body = append(decoded("in", req(x)), single(params, ident("in"))...)
-		case consts.Get:
+		case apiaction.Get:
 			body = single(params, id, query)
-		case consts.Update:
+		case apiaction.Update:
 			body = append(decoded("in", req(x)), single(params, id, ident("in"))...)
-		case consts.Patch:
+		case apiaction.Patch:
 			body = append(decoded("in", req(x)), single(params, id, ident("in"), call(sel(req("update_mask"), "GetPaths")))...)
-		case consts.Delete:
+		case apiaction.Delete:
 			body = []ast.Stmt{ifStmt(define([]string{"err"}, run(params, id)), notNil(ident("err")), returns(ident("nil"), ident("err"))), respond()}
-		case consts.List:
+		case apiaction.List:
 			body = append([]ast.Stmt{define([]string{"models", "total", "err"}, run(params, query)), failing()}, itemsOf("models")...)
 			body = append(body, respond(keyValue(responseFields["items"], ident("items")), keyValue(responseFields["total"], call(ident("int64"), ident("total")))))
-		case consts.CreateMany, consts.UpdateMany:
+		case apiaction.CreateMany, apiaction.UpdateMany:
 			body = append(modelsOf(), define([]string{"stored", "err"}, run(params, ident("models"))), failing())
 			body = append(body, itemsOf("stored")...)
 			body = append(body, respond(keyValue(responseFields["items"], ident("items"))))
-		case consts.PatchMany:
+		case apiaction.PatchMany:
 			// The items are the requests of the model's Patch (see
 			// standardMessages), each readied through PatchItem: its id
 			// names the record and its parameters must agree with the
@@ -477,7 +477,7 @@ func (w *fileWriter) handler(r *pbschema.RPC) {
 				define([]string{"stored", "err"}, run(params, ident("models"), ident("masks"))), failing())
 			body = append(body, itemsOf("stored")...)
 			body = append(body, respond(keyValue(responseFields["items"], ident("items"))))
-		case consts.DeleteMany:
+		case apiaction.DeleteMany:
 			body = []ast.Stmt{ifStmt(define([]string{"err"}, run(params, req("ids"))), notNil(ident("err")), returns(ident("nil"), ident("err"))), respond()}
 		}
 	} else {
@@ -506,7 +506,7 @@ func (w *fileWriter) handler(r *pbschema.RPC) {
 		}
 	}
 
-	w.out.add(r.Name+" serves the "+r.Action.Phase.Name()+" action of "+r.Model.ModelName+" on "+consts.APIPath(r.Registered)+".", &ast.FuncDecl{
+	w.out.add(r.Name+" serves the "+r.Action.Phase.Name()+" action of "+r.Model.ModelName+" on "+apiaction.APIPath(r.Registered)+".", &ast.FuncDecl{
 		Recv: &ast.FieldList{List: []*ast.Field{{Type: ident(serviceTypeName(r.Service))}}},
 		Name: ident(r.Name),
 		Type: &ast.FuncType{
@@ -526,10 +526,10 @@ func (w *fileWriter) handler(r *pbschema.RPC) {
 // of a List, laid out one field per line by the layout returned; the
 // expansion of a Get; and the zero Query for any other phase, which takes
 // no query.
-func (w *fileWriter) query(phase consts.Phase, req func(string) ast.Expr, has func(string) bool) (ast.Expr, func(*goast.LineSet)) {
+func (w *fileWriter) query(phase apiaction.Phase, req func(string) ast.Expr, has func(string) bool) (ast.Expr, func(*goast.LineSet)) {
 	lit := compositeLit(w.grpc("Query"))
 	switch phase {
-	case consts.List:
+	case apiaction.List:
 		lit.Elts = []ast.Expr{keyValue("Filters", call(w.grpc("Filters"), req("filters")))}
 		for _, control := range []struct{ field, name string }{
 			{"SortBy", "sort_by"},
@@ -546,7 +546,7 @@ func (w *fileWriter) query(phase consts.Phase, req func(string) ast.Expr, has fu
 			}
 		}
 		return lit, func(lines *goast.LineSet) { layoutLiteral(lit, lines) }
-	case consts.Get:
+	case apiaction.Get:
 		lit.Elts = []ast.Expr{keyValue("Expand", req("expand")), keyValue("Depth", req("depth"))}
 	}
 	return lit, nil

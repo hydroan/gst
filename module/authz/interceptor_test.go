@@ -10,9 +10,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/config"
 	gstgrpc "github.com/hydroan/gst/grpc"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/grpcserver"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/internal/modelregistry"
@@ -71,7 +72,7 @@ func TestAuthzInterceptor(t *testing.T) {
 	t.Run("as root", func(t *testing.T) {
 		rootSessionID := loginSessionIDFromCookieWithUserAgent(t, iam.LoginReq{Username: rootUsername, Password: rootPassword}, grpcUserAgent)
 		require.NoError(t, authzProbeCall(t, conn, "Deny", rootSessionID))
-		require.Equal(t, consts.AUTHZ_USER_ROOT, authzProbeLastCaller(t).UserID)
+		require.Equal(t, rbac.UserRoot, authzProbeLastCaller(t).UserID)
 	})
 
 	t.Run("on a route with a parameter", func(t *testing.T) {
@@ -189,7 +190,7 @@ func grpcAuthzProbe(t *testing.T) *grpc.ClientConn {
 				},
 			}
 		}
-		listUsers := gstgrpc.ServiceCall[*modeliamuser.User, *modelregistry.Empty, *modeliamuser.AdminUserListRsp](consts.List, userAdminPath)
+		listUsers := gstgrpc.ServiceCall[*modeliamuser.User, *modelregistry.Empty, *modeliamuser.AdminUserListRsp](apiaction.List, userAdminPath)
 		users := grpc.MethodDesc{
 			MethodName: "ListUsers",
 			Handler: func(_ any, ctx context.Context, dec func(any) error, unary grpc.UnaryServerInterceptor) (any, error) {

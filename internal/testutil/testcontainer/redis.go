@@ -25,9 +25,9 @@ const (
 	// it is where a hand-typed debugging connection lands.
 	redisSharedDatabases = 256
 
-	// redisLeaseKey marks a claimed database index. Its value names the
+	// keyRedisLease marks a claimed database index. Its value names the
 	// claiming process, see formatRedisLease.
-	redisLeaseKey = "gst:test:lease"
+	keyRedisLease = "gst:test:lease"
 )
 
 // redisSharedArgs is the command line the shared redis container is created
@@ -136,7 +136,7 @@ func claimRedisDatabase(ctx context.Context, addr string) (*goredis.Client, int,
 	for index := 1; index < redisSharedDatabases; index++ {
 		client := goredis.NewClient(&goredis.Options{Addr: addr, DB: index})
 
-		lease, err := client.Get(ctx, redisLeaseKey).Result()
+		lease, err := client.Get(ctx, keyRedisLease).Result()
 		if err != nil && !errors.Is(err, goredis.Nil) {
 			return nil, 0, errors.CombineErrors(
 				errors.Wrapf(err, "failed to read the lease of the redis database %d", index), client.Close(),
@@ -154,7 +154,7 @@ func claimRedisDatabase(ctx context.Context, addr string) (*goredis.Client, int,
 				errors.Wrapf(err, "failed to flush the redis database %d", index), client.Close(),
 			)
 		}
-		if err := client.Set(ctx, redisLeaseKey, formatRedisLease(), 0).Err(); err != nil {
+		if err := client.Set(ctx, keyRedisLease, formatRedisLease(), 0).Err(); err != nil {
 			return nil, 0, errors.CombineErrors(
 				errors.Wrapf(err, "failed to lease the redis database %d", index), client.Close(),
 			)

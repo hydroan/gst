@@ -11,9 +11,9 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/consts"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/internal/requestctx"
@@ -274,7 +274,7 @@ func TestSessionList(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		// Match the framework client's User-Agent: the session is bound to
 		// the browser fingerprint captured at login.
-		req.Header.Set("User-Agent", consts.FrameworkName)
+		req.Header.Set("User-Agent", types.FrameworkName)
 		req.AddCookie(&http.Cookie{Name: "session_id", Value: sessionID})
 
 		resp, err := http.DefaultClient.Do(req)
@@ -1285,8 +1285,8 @@ func sessionSetUserStatus(t *testing.T, username string, status modeliamuser.Use
 
 func rootSessionTestAccount() sessionTestAccount {
 	return sessionTestAccount{
-		UserID:   consts.AUTHZ_USER_ROOT,
-		Username: consts.AUTHZ_USER_ROOT,
+		UserID:   rbac.UserRoot,
+		Username: rbac.UserRoot,
 		Password: rootPassword,
 	}
 }
@@ -1322,9 +1322,9 @@ func newSessionTestAccount(t *testing.T) sessionTestAccount {
 func sessionLoginRoot(t *testing.T) string {
 	t.Helper()
 
-	sessionID := loginSession(t, consts.AUTHZ_USER_ROOT, rootPassword)
+	sessionID := loginSession(t, rbac.UserRoot, rootPassword)
 	t.Cleanup(func() {
-		require.NoError(t, serviceiamsession.Store.DeleteUserSessions(context.Background(), consts.AUTHZ_USER_ROOT))
+		require.NoError(t, serviceiamsession.Store.DeleteUserSessions(context.Background(), rbac.UserRoot))
 	})
 	return sessionID
 }

@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/instance"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/provider/kafka"
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -29,7 +29,7 @@ func appName() string {
 	if config.App.Name != "" {
 		return config.App.Name
 	}
-	return consts.FrameworkName
+	return types.FrameworkName
 }
 
 // newProducer builds the publishing client through the kafka provider's New,

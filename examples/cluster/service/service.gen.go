@@ -9,18 +9,17 @@ import (
 	"cluster/service/rebuild"
 	stepdown "cluster/service/step_down"
 
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/service"
 )
 
 func init() {
-	service.Register[*cached.Creator](consts.Create, "/api/caches")
-	service.Register[*cached.Deleter](consts.Delete, "/api/caches/:id")
-	service.Register[*cached.Getter](consts.Get, "/api/caches/:id")
-	service.Register[*cached.Exchange](consts.Stream, "/api/caches/exchange")
-	service.Register[*cached.Load](consts.Stream, "/api/caches/load")
-	service.Register[*counterstep.Watch](consts.Stream, "/api/counter_steps/watch")
-	service.Register[*flag.Creator](consts.Create, "/api/flags")
-	service.Register[*rebuild.Creator](consts.Create, "/api/rebuilds")
-	service.Register[*stepdown.Creator](consts.Create, "/api/step-downs")
+	service.Register[*cached.Creator](service.Create, "/api/caches")
+	service.Register[*cached.Deleter](service.Delete, "/api/caches/:id")
+	service.Register[*cached.Getter](service.Get, "/api/caches/:id")
+	service.Register[*cached.Exchange](service.Stream, "/api/caches/exchange")
+	service.Register[*cached.Load](service.Stream, "/api/caches/load")
+	service.Register[*counterstep.Watch](service.Stream, "/api/counter_steps/watch")
+	service.Register[*flag.Creator](service.Create, "/api/flags")
+	service.Register[*rebuild.Creator](service.Create, "/api/rebuilds")
+	service.Register[*stepdown.Creator](service.Create, "/api/step-downs")
 }

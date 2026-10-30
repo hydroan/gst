@@ -9,7 +9,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
@@ -29,7 +29,7 @@ import (
 // When REQ or RSP differs from M, the handler is the phase service's (see
 // serviceHandler): its DeleteMany method runs on the bound payload.
 func DeleteManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.DeleteMany, consts.DeleteManyBefore, consts.DeleteManyAfter)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), apiaction.DeleteMany, apiaction.DeleteManyBefore, apiaction.DeleteManyAfter)
 	if !a.typesEqual {
 		return a.serviceHandler()
 	}
@@ -42,7 +42,7 @@ func DeleteManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg
 			return
 		}
 
-		log := logger.Controller.WithContext(c.Request.Context(), consts.DeleteMany)
+		log := logger.Controller.WithContext(c.Request.Context(), apiaction.DeleteMany)
 
 		var req batch[M]
 		if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
@@ -67,7 +67,7 @@ func DeleteManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg
 // validates a bound body, runs the batch delete flow (see deleteManyFlow)
 // and answers nothing, or the status the failure maps to (see call).
 func DeleteManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, ids []string) error {
-	a := newAction[M, M, M](route, consts.DeleteMany, consts.DeleteManyBefore, consts.DeleteManyAfter)
+	a := newAction[M, M, M](route, apiaction.DeleteMany, apiaction.DeleteManyBefore, apiaction.DeleteManyAfter)
 	return func(ctx context.Context, params map[string]string, ids []string) error {
 		c, err := a.beginCall(ctx, params, nil)
 		defer c.end()
@@ -97,7 +97,7 @@ func DeleteManyCall[M types.Model](route string) func(ctx context.Context, param
 // database layer reports as ErrRecordNotFound. Whether the rows are purged
 // is the model's decision (its Purge method), never the request's.
 func (a *action[M, REQ, RSP]) deleteManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *batch[M]) error {
-	log := logger.Controller.WithContext(ctx, consts.DeleteMany)
+	log := logger.Controller.WithContext(ctx, apiaction.DeleteMany)
 	svc := a.service()
 
 	// 1.Perform business logic processing before batch delete resources.
@@ -120,7 +120,7 @@ func (a *action[M, REQ, RSP]) deleteManyFlow(ctx context.Context, newServiceCont
 		}
 		req.Items = append(req.Items, m)
 	}
-	if err := a.traceServiceHook(ctx, consts.DeleteManyBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
+	if err := a.traceServiceHook(ctx, apiaction.DeleteManyBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
 		return svc.DeleteManyBefore(sc, req.Items...)
 	}); err != nil {
 		return failService(ctx, log, err)
@@ -131,7 +131,7 @@ func (a *action[M, REQ, RSP]) deleteManyFlow(ctx context.Context, newServiceCont
 	// audit costs no query; and from the primary the delete runs on, since
 	// a replica may not have caught up on the records.
 	var deleted []M
-	if audit.Enabled(consts.OP_DELETE_MANY) {
+	if audit.Enabled(types.OperationDeleteMany) {
 		stored, err := a.recordsByID(database.Database[M](ctx).WithReplica(false).WithExpand(a.newModel().Expands()), req.itemIDs())
 		if err != nil {
 			log.Errorz("database operation failed", zap.Error(err))
@@ -150,14 +150,14 @@ func (a *action[M, REQ, RSP]) deleteManyFlow(ctx context.Context, newServiceCont
 		return failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after batch delete resources.
-	if err := a.traceServiceHook(ctx, consts.DeleteManyAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
+	if err := a.traceServiceHook(ctx, apiaction.DeleteManyAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
 		return svc.DeleteManyAfter(sc, req.Items...)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}
 
 	// 4.record operation log to database.
-	if err := audit.RecordOperation(ctx, a.newModel(), consts.OP_DELETE_MANY,
+	if err := audit.RecordOperation(ctx, a.newModel(), types.OperationDeleteMany,
 		func() *modellogmgmt.OperationLog {
 			record, _ := json.Marshal(batch[M]{IDs: req.IDs, Items: deleted})
 			entry := operationLog(ctx, a.name)

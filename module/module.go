@@ -16,9 +16,9 @@
 //	module.Use[*User, *UserReq, *UserRsp](
 //	    &UserModule{},
 //	    module.CRUD(
-//	        consts.Create,
-//	        consts.List,
-//	        consts.Get,
+//	        service.Create,
+//	        service.List,
+//	        service.Get,
 //	    ),
 //	)
 //
@@ -34,7 +34,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/router"
 	"github.com/hydroan/gst/internal/serviceregistry"
@@ -60,13 +60,13 @@ const (
 // UseOption configures how module.Use registers routes for one or more phases.
 type UseOption struct {
 	mode   useRouteMode
-	phases []consts.Phase
+	phases []apiaction.Phase
 }
 
 // CRUD registers phases using the framework's default CRUD route pattern
 // (see crudRoute). A phase no HTTP route serves is refused by name, the way
 // Exact refuses it.
-func CRUD(phases ...consts.Phase) UseOption {
+func CRUD(phases ...apiaction.Phase) UseOption {
 	return UseOption{
 		mode:   useRouteModeCRUD,
 		phases: servedPhases("CRUD", phases),
@@ -75,7 +75,7 @@ func CRUD(phases ...consts.Phase) UseOption {
 
 // Exact registers phases against the module route exactly as declared. A
 // phase no HTTP route serves is refused by name.
-func Exact(phases ...consts.Phase) UseOption {
+func Exact(phases ...apiaction.Phase) UseOption {
 	return UseOption{
 		mode:   useRouteModeExact,
 		phases: servedPhases("Exact", phases),
@@ -88,7 +88,7 @@ func Exact(phases ...consts.Phase) UseOption {
 // phase is no action. A module declares its phases at registration, where
 // a wrong one is a defect of the module to fail on, not a route to go
 // missing without a word.
-func servedPhases(call string, phases []consts.Phase) []consts.Phase {
+func servedPhases(call string, phases []apiaction.Phase) []apiaction.Phase {
 	for _, p := range phases {
 		if p.HTTPMethod() == "" {
 			panic(fmt.Sprintf("module.%s: phase %s has no HTTP route", call, p))
@@ -152,15 +152,15 @@ func Use[M types.Model, REQ types.Request, RSP types.Response](mod types.Module[
 		}
 
 		// The route registers by the path it is served at, however the
-		// module spells it; see consts.APIPath.
-		route := consts.APIPath(mod.Route())
+		// module spells it; see apiaction.APIPath.
+		route := apiaction.APIPath(mod.Route())
 
 		param := mod.Param()
 		param = strings.TrimFunc(param, func(r rune) bool {
 			return r == ' ' || r == '{' || r == '}' || r == '[' || r == ']' || r == ':'
 		})
 		if len(param) == 0 {
-			param = consts.PARAM_ID
+			param = apiaction.ParamID
 		}
 
 		for _, option := range options {
@@ -213,11 +213,11 @@ func registersModel(options []UseOption) bool {
 
 // crudRoute returns the raw route string of the phase under the CRUD layout,
 // the layout gg gen registers a generated project's routes by (see
-// consts.RouteSuffix). Service registration and router registration both
+// apiaction.RouteSuffix). Service registration and router registration both
 // derive the registry key from this route, so they must share this single
 // mapping.
-func crudRoute(route, param string, phase consts.Phase) string {
-	if suffix := consts.RouteSuffix(phase, ":"+param); suffix != "" {
+func crudRoute(route, param string, phase apiaction.Phase) string {
+	if suffix := apiaction.RouteSuffix(phase, ":"+param); suffix != "" {
 		return route + "/" + suffix
 	}
 	return route
@@ -225,9 +225,9 @@ func crudRoute(route, param string, phase consts.Phase) string {
 
 // registerCRUDRouter registers the route of phase under the CRUD layout; an
 // action on one row reads the row's id from the route's parameter.
-func registerCRUDRouter[M types.Model, REQ types.Request, RSP types.Response](mod types.Module[M, REQ, RSP], route, param string, phase consts.Phase) {
+func registerCRUDRouter[M types.Model, REQ types.Request, RSP types.Response](mod types.Module[M, REQ, RSP], route, param string, phase apiaction.Phase) {
 	var cfg *types.ControllerConfig[M]
-	if item := ":" + param; consts.RouteSuffix(phase, item) == item {
+	if item := ":" + param; apiaction.RouteSuffix(phase, item) == item {
 		cfg = &types.ControllerConfig[M]{ParamName: param}
 	}
 	registerRouter(mod, crudRoute(route, param, phase), cfg, phase)
@@ -235,7 +235,7 @@ func registerCRUDRouter[M types.Model, REQ types.Request, RSP types.Response](mo
 
 // registerRouter registers an HTTP route with the appropriate router based on mod.Pub().
 // If mod.Pub() returns true, registers with public router; otherwise with authenticated router.
-func registerRouter[M types.Model, REQ types.Request, RSP types.Response](mod types.Module[M, REQ, RSP], route string, cfg *types.ControllerConfig[M], phase consts.Phase) {
+func registerRouter[M types.Model, REQ types.Request, RSP types.Response](mod types.Module[M, REQ, RSP], route string, cfg *types.ControllerConfig[M], phase apiaction.Phase) {
 	if mod.Pub() {
 		// Register with public router - no authentication required
 		router.Register[M, REQ, RSP](router.Pub(), route, cfg, phase)

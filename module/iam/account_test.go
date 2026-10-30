@@ -12,9 +12,10 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/authn"
+	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
@@ -452,7 +453,7 @@ func TestAccountChangePassword(t *testing.T) {
 			http.MethodPost,
 			"/api/iam/change-password",
 			syncFailUser.SessionID,
-			consts.Create,
+			apiaction.Create,
 		)
 		require.NoError(t, gstredis.Set(t.Context(), accountSessionDataKey(t, syncFailUser.SessionID), "not-a-session", time.Hour))
 
@@ -504,7 +505,7 @@ func TestAccountChangePassword(t *testing.T) {
 			http.MethodPost,
 			"/api/iam/change-password",
 			revokeFailUser.SessionID,
-			consts.Create,
+			apiaction.Create,
 		)
 		svc := &serviceiamaccount.ChangePasswordService{}
 		svc.Logger = logger.Fallback("service")
@@ -776,9 +777,9 @@ func accountLoginUser(t *testing.T, user *accountTestUser, password string) stri
 func accountLoginRoot(t *testing.T) string {
 	t.Helper()
 
-	_, sessionID := accountLoginClient(t, consts.AUTHZ_USER_ROOT, rootPassword)
+	_, sessionID := accountLoginClient(t, rbac.UserRoot, rootPassword)
 	t.Cleanup(func() {
-		_ = serviceiamsession.Store.DeleteUserSessions(context.Background(), consts.AUTHZ_USER_ROOT)
+		_ = serviceiamsession.Store.DeleteUserSessions(context.Background(), rbac.UserRoot)
 	})
 	return sessionID
 }
@@ -842,7 +843,7 @@ func accountSessionClient(t *testing.T, sessionID string) *client.Client {
 	return cli
 }
 
-func accountNewServiceContext(baseCtx context.Context, method, path, sessionID string, phase consts.Phase) *types.ServiceContext {
+func accountNewServiceContext(baseCtx context.Context, method, path, sessionID string, phase apiaction.Phase) *types.ServiceContext {
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
 	ginCtx, _ := gin.CreateTestContext(recorder)

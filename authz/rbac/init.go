@@ -6,14 +6,13 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/consts"
 )
 
 var defaultSystemRootSubjects = []string{
-	consts.AUTHZ_USER_ROOT,
+	UserRoot,
 }
 
-var defaultSystemRole = consts.AUTHZ_SYSTEM_ROLE_ROOT
+var defaultSystemRole = SystemRoleRoot
 
 // Init loads the stored policy set and installs it, when RBAC is enabled.
 //

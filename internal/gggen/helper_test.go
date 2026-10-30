@@ -131,7 +131,7 @@ func TestResolveImportConflicts(t *testing.T) {
 		{
 			name:     "name_a_framework_import_takes_is_aliased",
 			imports:  map[string]string{"helloworld/service/sample/service": "service"},
-			reserved: []string{"service", "consts"},
+			reserved: []string{"service"},
 			want: map[string]string{
 				"helloworld/service/sample/service": "sample_service",
 			},
@@ -139,7 +139,7 @@ func TestResolveImportConflicts(t *testing.T) {
 		{
 			name:     "alias_that_cannot_grow_past_a_framework_name_takes_a_number",
 			imports:  map[string]string{"service": "service"},
-			reserved: []string{"service", "consts"},
+			reserved: []string{"service"},
 			want: map[string]string{
 				"service": "service2",
 			},
@@ -193,7 +193,7 @@ func TestResolveImportConflicts(t *testing.T) {
 				"helloworld/service/sample/record_item": "recorditem",
 				"helloworld/service/sample/service":     "service",
 			},
-			reserved: []string{"service", "consts"},
+			reserved: []string{"service"},
 			want: map[string]string{
 				"helloworld/service/account/recorditem": "account_recorditem",
 				"helloworld/service/api/v2":             "v2",

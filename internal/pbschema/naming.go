@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/modelinfo"
 	"github.com/stoewer/go-strcase"
@@ -110,13 +110,13 @@ func requestParams(m *modelinfo.Model, route string, action *dsl.Action) []Reque
 // ownParamPurpose is what the item actions do to the record the id names,
 // appended to the comment of the id field: " to delete", " to replace",
 // " to patch", and nothing for the others.
-func ownParamPurpose(phase consts.Phase) string {
+func ownParamPurpose(phase apiaction.Phase) string {
 	switch phase {
-	case consts.Delete:
+	case apiaction.Delete:
 		return " to delete"
-	case consts.Update:
+	case apiaction.Update:
 		return " to replace"
-	case consts.Patch:
+	case apiaction.Patch:
 		return " to patch"
 	}
 	return ""

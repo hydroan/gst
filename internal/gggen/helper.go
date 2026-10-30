@@ -27,8 +27,8 @@ import (
 // start with a digit gets an underscore in front. The result maps each import
 // path to the name it is written with, or to "" when it is written without one.
 //
-// For example, the service registration file reserves service and consts for
-// its framework imports, so the imports
+// For example, the service registration file reserves service for its
+// framework import, so the imports
 //
 //	"helloworld/service/account/recorditem" // package recorditem
 //	"helloworld/service/api/v2"             // package v2

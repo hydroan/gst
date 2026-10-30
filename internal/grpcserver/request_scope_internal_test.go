@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/requestctx"
@@ -205,9 +204,9 @@ func TestCallsAreLoggedLikeHTTPRequests(t *testing.T) {
 	require.Equal(t, http.MethodPost, ok[requestctx.KeyMethod])
 	require.Equal(t, "/gst.test.Echo/Ping", ok[requestctx.KeyRoute])
 	require.Equal(t, "/gst.test.Echo/Ping", ok[requestctx.KeyPath])
-	require.Contains(t, ok, consts.CTX_USERNAME)
-	require.Contains(t, ok, consts.CTX_USER_ID)
-	require.Contains(t, ok, consts.CTX_TENANT_ID)
+	require.Contains(t, ok, requestctx.KeyUsername)
+	require.Contains(t, ok, requestctx.KeyUserID)
+	require.Contains(t, ok, requestctx.KeyTenantID)
 	require.Equal(t, "127.0.0.1", ok["ip"])
 	require.Contains(t, ok["user_agent"], "grpc-go/")
 	require.Equal(t, traceID, ok[execctx.KeyTraceID])

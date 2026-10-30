@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/types"
@@ -211,10 +211,10 @@ func newRequestBody[REQ types.Request](reqKey string) *openapi3.RequestBodyRef {
 	}
 }
 
-// failureResponseKey names the response component every failure refers to:
+// keyFailureResponse names the response component every failure refers to:
 // the envelope with msg and trace_id and data null, the one body a failed
 // request of any action answers with.
-const failureResponseKey = "Failure"
+const keyFailureResponse = "Failure"
 
 // registerFailureResponse registers the failure response component, once.
 func registerFailureResponse() {
@@ -223,12 +223,12 @@ func registerFailureResponse() {
 	if doc.Components.Responses == nil {
 		doc.Components.Responses = openapi3.ResponseBodies{}
 	}
-	if _, ok := doc.Components.Responses[failureResponseKey]; ok {
+	if _, ok := doc.Components.Responses[keyFailureResponse]; ok {
 		return
 	}
 	schemaRef := newSchemaRefWithDocs(apiResponse[struct{}]{})
 	markEmptyResponseData(schemaRef)
-	doc.Components.Responses[failureResponseKey] = &openapi3.ResponseRef{
+	doc.Components.Responses[keyFailureResponse] = &openapi3.ResponseRef{
 		Value: &openapi3.Response{
 			Description: new("Failure Response"),
 			Content:     openapi3.NewContentWithJSONSchemaRef(schemaRef),
@@ -244,16 +244,16 @@ func registerFailureResponse() {
 // imported row names that does not exist, and 409 for a duplicate, a stale
 // version or a foreign key; a custom action — the project's own request and
 // response types — answers beyond 400 whatever its service decides.
-func failureStatuses(phase consts.Phase, custom bool) []int {
+func failureStatuses(phase apiaction.Phase, custom bool) []int {
 	if custom {
 		return []int{http.StatusBadRequest}
 	}
 	switch phase {
-	case consts.Get:
+	case apiaction.Get:
 		return []int{http.StatusBadRequest, http.StatusNotFound}
-	case consts.Update, consts.Patch, consts.Delete, consts.UpdateMany, consts.PatchMany, consts.DeleteMany, consts.Import:
+	case apiaction.Update, apiaction.Patch, apiaction.Delete, apiaction.UpdateMany, apiaction.PatchMany, apiaction.DeleteMany, apiaction.Import:
 		return []int{http.StatusBadRequest, http.StatusNotFound, http.StatusConflict}
-	case consts.Create, consts.CreateMany:
+	case apiaction.Create, apiaction.CreateMany:
 		return []int{http.StatusBadRequest, http.StatusConflict}
 	default:
 		return []int{http.StatusBadRequest}
@@ -269,7 +269,7 @@ func failureStatuses(phase consts.Phase, custom bool) []int {
 // The success status is fixed at 200 rather than taken from the caller: a
 // successful request answers 200 whichever action handled it, so a generated
 // document that says otherwise would describe a runtime that does not exist.
-func newResponses(rspKey string, phase consts.Phase, custom bool) *openapi3.Responses {
+func newResponses(rspKey string, phase apiaction.Phase, custom bool) *openapi3.Responses {
 	return responsesOf(&openapi3.ResponseRef{Ref: "#/components/responses/" + rspKey}, phase, custom)
 }
 
@@ -284,9 +284,9 @@ func newResponses(rspKey string, phase consts.Phase, custom bool) *openapi3.Resp
 //	400: #/components/responses/Failure
 //	409: #/components/responses/Failure
 //	default: #/components/responses/Failure
-func responsesOf(success *openapi3.ResponseRef, phase consts.Phase, custom bool) *openapi3.Responses {
+func responsesOf(success *openapi3.ResponseRef, phase apiaction.Phase, custom bool) *openapi3.Responses {
 	registerFailureResponse()
-	failure := &openapi3.ResponseRef{Ref: "#/components/responses/" + failureResponseKey}
+	failure := &openapi3.ResponseRef{Ref: "#/components/responses/" + keyFailureResponse}
 	opts := []openapi3.NewResponsesOption{openapi3.WithStatus(http.StatusOK, success)}
 	for _, status := range failureStatuses(phase, custom) {
 		opts = append(opts, openapi3.WithStatus(status, failure))

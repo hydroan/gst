@@ -13,8 +13,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/clioutput"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/spf13/cobra"
@@ -180,12 +180,12 @@ func modelRouteFromCall(call *ast.CallExpr, modelSources map[string]string) (mod
 		Scope:  routeScope(call.Args[0]),
 		// The registration carries the path the route is served at, which
 		// the listing prints as it is.
-		Path: consts.APIPath(path),
+		Path: apiaction.APIPath(path),
 		// The last argument names the phase the way gg gen writes it,
-		// consts.<Phase.Name()> such as consts.CreateMany; the route
+		// service.<Phase.Name()> such as service.CreateMany; the route
 		// is served under the method the framework router registers that
 		// phase by.
-		Method: consts.Phase(strcase.SnakeCase(phase)).HTTPMethod(),
+		Method: apiaction.Phase(strcase.SnakeCase(phase)).HTTPMethod(),
 		Phase:  phase,
 		Param:  routeParamName(call.Args[2]),
 	}, true

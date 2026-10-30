@@ -1,7 +1,7 @@
 package email
 
 import (
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	serviceemail "github.com/hydroan/gst/internal/service/email"
 	"github.com/hydroan/gst/module"
 )
@@ -21,13 +21,13 @@ import (
 func Register() {
 	serviceemail.SetAccountGateway(iamAccountGateway{})
 
-	module.Use(module.NewWrapper("/iam/email/verification-request", "id", true, &serviceemail.VerificationRequestService{}), module.CRUD(consts.Create))
-	module.Use(module.NewWrapper("/iam/email/verification-resend", "id", true, &serviceemail.VerificationResendService{}), module.CRUD(consts.Create))
-	module.Use(module.NewWrapper("/iam/email/verification-confirm", "id", true, &serviceemail.VerificationConfirmService{}), module.CRUD(consts.Create))
-	module.Use(module.NewWrapper("/iam/email/password-reset-request", "id", true, &serviceemail.PasswordResetRequestService{}), module.CRUD(consts.Create))
-	module.Use(module.NewWrapper("/iam/email/password-reset-confirm", "id", true, &serviceemail.PasswordResetConfirmService{}), module.CRUD(consts.Create))
-	module.Use(module.NewWrapper("/iam/email/change-request", "id", false, &serviceemail.ChangeRequestService{}), module.CRUD(consts.Create))
-	module.Use(module.NewWrapper("/iam/email/change-resend", "id", false, &serviceemail.ChangeResendService{}), module.CRUD(consts.Create))
-	module.Use(module.NewWrapper("/iam/email/change-cancel", "id", true, &serviceemail.ChangeCancelService{}), module.CRUD(consts.Create))
-	module.Use(module.NewWrapper("/iam/email/change-confirm", "id", false, &serviceemail.ChangeConfirmService{}), module.CRUD(consts.Create))
+	module.Use(module.NewWrapper("/iam/email/verification-request", "id", true, &serviceemail.VerificationRequestService{}), module.CRUD(apiaction.Create))
+	module.Use(module.NewWrapper("/iam/email/verification-resend", "id", true, &serviceemail.VerificationResendService{}), module.CRUD(apiaction.Create))
+	module.Use(module.NewWrapper("/iam/email/verification-confirm", "id", true, &serviceemail.VerificationConfirmService{}), module.CRUD(apiaction.Create))
+	module.Use(module.NewWrapper("/iam/email/password-reset-request", "id", true, &serviceemail.PasswordResetRequestService{}), module.CRUD(apiaction.Create))
+	module.Use(module.NewWrapper("/iam/email/password-reset-confirm", "id", true, &serviceemail.PasswordResetConfirmService{}), module.CRUD(apiaction.Create))
+	module.Use(module.NewWrapper("/iam/email/change-request", "id", false, &serviceemail.ChangeRequestService{}), module.CRUD(apiaction.Create))
+	module.Use(module.NewWrapper("/iam/email/change-resend", "id", false, &serviceemail.ChangeResendService{}), module.CRUD(apiaction.Create))
+	module.Use(module.NewWrapper("/iam/email/change-cancel", "id", true, &serviceemail.ChangeCancelService{}), module.CRUD(apiaction.Create))
+	module.Use(module.NewWrapper("/iam/email/change-confirm", "id", false, &serviceemail.ChangeConfirmService{}), module.CRUD(apiaction.Create))
 }

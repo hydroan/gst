@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"github.com/hydroan/gst"
-	"github.com/hydroan/gst/consts"
 	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
@@ -48,7 +47,7 @@ func (t *TOTPBindService) Create(ctx *gst.ServiceContext, req *model.Empty) (rsp
 	log.Infoz("generating TOTP for user", zap.String("user_id", ctx.UserID()), zap.String("username", ctx.Username()))
 
 	key, err := totp.Generate(totp.GenerateOpts{
-		Issuer:      consts.FrameworkName,
+		Issuer:      gst.FrameworkName,
 		AccountName: ctx.Username(),
 		SecretSize:  32, // 32 bytes = 256 bits
 	})
@@ -77,7 +76,7 @@ func (t *TOTPBindService) Create(ctx *gst.ServiceContext, req *model.Empty) (rsp
 		ChallengeID:        challengeID,
 		OtpauthURL:         qrCodeURL,
 		QRCodeImageDataURL: qrCodeImage,
-		Issuer:             consts.FrameworkName,
+		Issuer:             gst.FrameworkName,
 		AccountName:        ctx.Username(),
 	}
 

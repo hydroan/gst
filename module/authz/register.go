@@ -1,7 +1,7 @@
 package authz
 
 import (
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/module"
 )
@@ -36,16 +36,17 @@ import (
 //
 // Middleware and interceptor: Register mounts none. The project mounts the
 // authorization itself, middleware.Authz() with middleware.RegisterAuth after
-// the middleware that establishes the authenticated subject, middleware.IAMSession()
-// with the built-in IAM module, so that Authz reads the CTX_USER_ID the
-// session check wrote; and, when it serves gRPC, interceptor.Authz() after
-// interceptor.IAMSession() with interceptor.RegisterAuth. Mounted ahead of the
-// authentication, Authz sees every request as anonymous and refuses it with
-// "permission denied".
+// the middleware that establishes the authenticated subject,
+// middleware.IAMSession() with the built-in IAM module, so that Authz reads
+// the requestctx.KeyUserID the session check wrote; and, when it serves gRPC,
+// interceptor.Authz() after interceptor.IAMSession() with
+// interceptor.RegisterAuth. Mounted ahead of the authentication, Authz sees
+// every request as anonymous and refuses it with "permission denied".
 //
-// The request tenant is read from CTX_TENANT_ID, which IAMSession fills from
-// the session; a deployment whose tenant arrives another way registers its own
-// middleware between the two and overwrites it. See middleware.Authz.
+// The request tenant is read from requestctx.KeyTenantID, which IAMSession
+// fills from the session; a deployment whose tenant arrives another way
+// registers its own middleware between the two and overwrites it. See
+// middleware.Authz.
 func Register() {
 	// Register AuthzRule explicitly because the policy adapter manages this
 	// table instead of a public CRUD module.
@@ -57,12 +58,12 @@ func Register() {
 		*Role](
 		&RoleModule{},
 		module.CRUD(
-			consts.Create,
-			consts.Delete,
-			consts.Update,
-			consts.Patch,
-			consts.List,
-			consts.Get,
+			apiaction.Create,
+			apiaction.Delete,
+			apiaction.Update,
+			apiaction.Patch,
+			apiaction.List,
+			apiaction.Get,
 		),
 	)
 
@@ -72,10 +73,10 @@ func Register() {
 		*RoleBinding](
 		&RoleBindingModule{},
 		module.CRUD(
-			consts.Create,
-			consts.Delete,
-			consts.List,
-			consts.Get,
+			apiaction.Create,
+			apiaction.Delete,
+			apiaction.List,
+			apiaction.Get,
 		),
 	)
 
@@ -85,12 +86,12 @@ func Register() {
 		*Menu](
 		&MenuModule{},
 		module.CRUD(
-			consts.Create,
-			consts.Delete,
-			consts.Update,
-			consts.Patch,
-			consts.List,
-			consts.Get,
+			apiaction.Create,
+			apiaction.Delete,
+			apiaction.Update,
+			apiaction.Patch,
+			apiaction.List,
+			apiaction.Get,
 		),
 	)
 
@@ -99,6 +100,6 @@ func Register() {
 		*modelregistry.Empty,
 		*RoutesRsp](
 		&RoutesModule{},
-		module.CRUD(consts.List),
+		module.CRUD(apiaction.List),
 	)
 }

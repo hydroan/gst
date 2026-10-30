@@ -7,7 +7,6 @@ import (
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/authz/rbac"
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
@@ -22,7 +21,7 @@ func ensureAdminSessionActor(ctx *gst.ServiceContext) error {
 	if err != nil {
 		return err
 	}
-	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, user.GetID(), consts.AUTHZ_SYSTEM_ROLE_ROOT)
+	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, user.GetID(), rbac.SystemRoleRoot)
 	if err != nil {
 		return gst.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
 	}

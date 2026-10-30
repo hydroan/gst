@@ -11,7 +11,6 @@ import (
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/module/authz"
 	"github.com/hydroan/gst/module/iam"
@@ -42,7 +41,7 @@ const (
 // are; a tenant's roles and bindings are written on a context acting in that
 // tenant, and the stamp files them under it.
 func seed(ctx context.Context, _ map[string][]string) error {
-	err := database.Database[*iam.User](ctx).Get(new(iam.User), consts.AUTHZ_USER_ROOT)
+	err := database.Database[*iam.User](ctx).Get(new(iam.User), rbac.UserRoot)
 	if err == nil {
 		return nil
 	}
@@ -63,7 +62,7 @@ func seed(ctx context.Context, _ map[string][]string) error {
 		// The accounts: root is the built-in system root, by its id; the
 		// others are ordinary accounts whose memberships the bindings below
 		// decide. Alice administers alpha, carol beta, dave belongs to both.
-		if _, err := seedAccount(ctx, consts.AUTHZ_USER_ROOT, consts.AUTHZ_USER_ROOT, password); err != nil {
+		if _, err := seedAccount(ctx, rbac.UserRoot, rbac.UserRoot, password); err != nil {
 			return err
 		}
 		ids := make(map[string]string, 4)
@@ -121,10 +120,10 @@ func seed(ctx context.Context, _ map[string][]string) error {
 			subject string
 			role    string
 		}{
-			{alpha, ids["alice"], consts.AUTHZ_ROLE_ADMIN},
+			{alpha, ids["alice"], rbac.RoleAdmin},
 			{alpha, ids["bob"], agentAlpha},
 			{alpha, ids["dave"], managerAlpha},
-			{beta, ids["carol"], consts.AUTHZ_ROLE_ADMIN},
+			{beta, ids["carol"], rbac.RoleAdmin},
 			{beta, ids["dave"], agentBeta},
 		} {
 			if err := database.Database[*authz.RoleBinding](b.ctx).Create(&authz.RoleBinding{SubjectID: b.subject, RoleID: b.role}); err != nil {

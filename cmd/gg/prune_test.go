@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
@@ -36,7 +36,7 @@ func TestPruneLeftoversDeletesStalePBFiles(t *testing.T) {
 	keptGo := filepath.Join(ggconst.DirPB, "legacy", "item.pb.go")
 	// Every file opens with the header gg gen writes, which prune requires of
 	// a file under pb/ before it deletes it (see ggprune.PlanPBFiles).
-	header := consts.CodeGeneratedComment() + "\n\n"
+	header := ggconst.CodeGeneratedComment + "\n\n"
 	for _, path := range []string{current, stale, kept} {
 		writeProjectFile(t, path, header+"syntax = \"proto3\";\n")
 	}
@@ -894,7 +894,7 @@ func init() {
 // directory a model owns and every other phase file there, list.go among
 // them, belongs to a disabled action.
 func pruneTestModel() *modelinfo.Model {
-	disabled := func(phase consts.Phase) *dsl.Action {
+	disabled := func(phase apiaction.Phase) *dsl.Action {
 		return &dsl.Action{Phase: phase}
 	}
 	return &modelinfo.Model{
@@ -905,20 +905,20 @@ func pruneTestModel() *modelinfo.Model {
 		ModelFilePath: filepath.Join(ggconst.DirModel, "authz", "role.go"),
 		Design: &dsl.Design{
 			Endpoint:   "authz/roles",
-			Create:     &dsl.Action{Service: true, ServiceName: "role", Phase: consts.Create},
-			Delete:     disabled(consts.Delete),
-			Update:     disabled(consts.Update),
-			Patch:      disabled(consts.Patch),
-			List:       disabled(consts.List),
-			Get:        disabled(consts.Get),
-			CreateMany: disabled(consts.CreateMany),
-			DeleteMany: disabled(consts.DeleteMany),
-			UpdateMany: disabled(consts.UpdateMany),
-			PatchMany:  disabled(consts.PatchMany),
-			Import:     disabled(consts.Import),
-			Export:     disabled(consts.Export),
-			SSE:        disabled(consts.SSE),
-			Stream:     disabled(consts.Stream),
+			Create:     &dsl.Action{Service: true, ServiceName: "role", Phase: apiaction.Create},
+			Delete:     disabled(apiaction.Delete),
+			Update:     disabled(apiaction.Update),
+			Patch:      disabled(apiaction.Patch),
+			List:       disabled(apiaction.List),
+			Get:        disabled(apiaction.Get),
+			CreateMany: disabled(apiaction.CreateMany),
+			DeleteMany: disabled(apiaction.DeleteMany),
+			UpdateMany: disabled(apiaction.UpdateMany),
+			PatchMany:  disabled(apiaction.PatchMany),
+			Import:     disabled(apiaction.Import),
+			Export:     disabled(apiaction.Export),
+			SSE:        disabled(apiaction.SSE),
+			Stream:     disabled(apiaction.Stream),
 		},
 	}
 }

@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
@@ -31,7 +30,7 @@ func TestExportAnswersAClientThatWentAwayAsCanceled(t *testing.T) {
 // record the query matches, refuses the paging and cursor parameters a List
 // of the same model takes rather than ignoring them.
 func TestExportRefusesThePagingParameters(t *testing.T) {
-	for _, key := range []string{consts.QUERY_PAGE, consts.QUERY_SIZE, consts.QUERY_CURSOR_VALUE, consts.QUERY_CURSOR_FIELD, consts.QUERY_CURSOR_NEXT} {
+	for _, key := range []string{types.QueryPage, types.QuerySize, types.QueryCursorValue, types.QueryCursorField, types.QueryCursorNext} {
 		rsp := serveAs(context.Background(), t, http.MethodGet, "/controller-exports/export",
 			controller.ExportHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](exportRoute)),
 			"/controller-exports/export?"+key+"=1", "", "alice", nil)

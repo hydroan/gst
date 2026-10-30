@@ -6,9 +6,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/errors"
-
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/logger"
 	prommetrics "github.com/hydroan/gst/metrics"
 	"github.com/prometheus/client_golang/prometheus"
@@ -67,7 +66,7 @@ func TestAccessLoggerCarriesTheTenantTheRequestActsIn(t *testing.T) {
 	router.Use(accessLogger())
 	router.GET("/api/records", func(c *gin.Context) {
 		if tenantID := c.GetHeader("X-Probe-Tenant"); tenantID != "" {
-			c.Set(consts.CTX_TENANT_ID, tenantID)
+			c.Set(requestctx.KeyTenantID, tenantID)
 		}
 		c.Status(http.StatusNoContent)
 	})
@@ -79,8 +78,8 @@ func TestAccessLoggerCarriesTheTenantTheRequestActsIn(t *testing.T) {
 
 	entries := logs.All()
 	require.Len(t, entries, 2)
-	require.Equal(t, "alpha", entries[0].ContextMap()[consts.CTX_TENANT_ID])
-	require.Empty(t, entries[1].ContextMap()[consts.CTX_TENANT_ID], "a request that established no tenant logs the field empty")
+	require.Equal(t, "alpha", entries[0].ContextMap()[requestctx.KeyTenantID])
+	require.Empty(t, entries[1].ContextMap()[requestctx.KeyTenantID], "a request that established no tenant logs the field empty")
 }
 
 // standInRequestMetrics replaces the request metrics for the test, rather

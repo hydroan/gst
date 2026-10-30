@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/pbschema"
 	"github.com/jhump/protoreflect/v2/protoprint"
@@ -131,7 +130,7 @@ func fileDescriptor(f *pbschema.ProtoFile) *descriptorpb.FileDescriptorProto {
 	locations := append([]*descriptorpb.SourceCodeInfo_Location{{
 		Path:                    []int32{pbschema.FileSyntaxTag},
 		Span:                    []int32{0, 0, 0},
-		LeadingDetachedComments: []string{pbschema.CommentText(strings.TrimPrefix(consts.CodeGeneratedComment(), "// "))},
+		LeadingDetachedComments: []string{pbschema.CommentText(strings.TrimPrefix(ggconst.CodeGeneratedComment, "// "))},
 	}}, f.Locations...)
 	return &descriptorpb.FileDescriptorProto{
 		Name:        new(f.Registered),

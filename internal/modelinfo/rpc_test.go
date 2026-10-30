@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/modelinfo"
 	"github.com/stretchr/testify/require"
@@ -16,18 +16,18 @@ import (
 // route adds to the model's own.
 func TestRPCNameJoinsActionModelAndRouteParameters(t *testing.T) {
 	document := &modelinfo.Model{ModelName: "Document", Design: &dsl.Design{Endpoint: "archive/documents", Param: ":document"}}
-	list := &dsl.Action{Phase: consts.List}
+	list := &dsl.Action{Phase: apiaction.List}
 	require.Equal(t, "ListDocument", modelinfo.RPCName(document, "archive/documents", list))
 	require.Equal(t, "ListDocumentByBox", modelinfo.RPCName(document, "archive/boxes/:box/documents", list))
 	require.Equal(t, "ListDocumentByBoxAndShelf", modelinfo.RPCName(document, "archive/boxes/:box/shelves/:shelf/documents", list))
-	require.Equal(t, "MergeDocument", modelinfo.RPCName(document, "archive/documents/merge", &dsl.Action{Phase: consts.Create, ServiceName: "merge"}))
+	require.Equal(t, "MergeDocument", modelinfo.RPCName(document, "archive/documents/merge", &dsl.Action{Phase: apiaction.Create, ServiceName: "merge"}))
 
 	// A nested model's own parameters are those of its endpoint and its
 	// item parameter, :id when it declares none.
 	item := &modelinfo.Model{ModelName: "Item", Design: &dsl.Design{Endpoint: "records/:record/items"}}
-	require.Equal(t, "DeleteManyItem", modelinfo.RPCName(item, "records/:record/items", &dsl.Action{Phase: consts.DeleteMany}))
-	require.Equal(t, "SealItem", modelinfo.RPCName(item, "items/:id/seal", &dsl.Action{Phase: consts.Create, ServiceName: "seal"}))
-	require.Equal(t, "SealItemByOwner", modelinfo.RPCName(item, "owners/:owner/items/:id/seal", &dsl.Action{Phase: consts.Create, ServiceName: "seal"}))
+	require.Equal(t, "DeleteManyItem", modelinfo.RPCName(item, "records/:record/items", &dsl.Action{Phase: apiaction.DeleteMany}))
+	require.Equal(t, "SealItem", modelinfo.RPCName(item, "items/:id/seal", &dsl.Action{Phase: apiaction.Create, ServiceName: "seal"}))
+	require.Equal(t, "SealItemByOwner", modelinfo.RPCName(item, "owners/:owner/items/:id/seal", &dsl.Action{Phase: apiaction.Create, ServiceName: "seal"}))
 }
 
 // TestRouteParamsReadsBothParameterForms pins the example of the RouteParams

@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,7 +16,7 @@ import (
 // clientip_test.go through the engine Init built, from the peers named here.
 func TestInitBelievesTheProxiesTheConfigurationNames(t *testing.T) {
 	clientIP := func(peer string) string {
-		req := httptest.NewRequest(http.MethodGet, consts.APIPath("/client-ip"), nil)
+		req := httptest.NewRequest(http.MethodGet, apiaction.APIPath("/client-ip"), nil)
 		req.RemoteAddr = peer + ":41000"
 		req.Header.Set("X-Forwarded-For", "203.0.113.9")
 		recorder := httptest.NewRecorder()

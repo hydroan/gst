@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/hydroan/gst/consts"
+	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/database"
 	modelauthz "github.com/hydroan/gst/internal/model/authz"
 	"github.com/hydroan/gst/tenant"
@@ -175,7 +175,7 @@ func skipReconcile(rule *modelauthz.AuthzRule) bool {
 	case "p":
 		// Declared by the application through SetPermissionsForAuthenticated,
 		// not derived from any role.
-		return rule.V1 == consts.AUTHZ_ROLE_AUTHENTICATED
+		return rule.V1 == rbac.RoleAuthenticated
 	case "g":
 		// A tenant role assignment is derived from a role binding, the
 		// built-in administrator's included: a binding names that role by

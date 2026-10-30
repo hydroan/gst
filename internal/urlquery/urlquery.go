@@ -22,7 +22,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/types"
 )
 
 // WithoutExportKeys returns a copy of q without the export action's own
@@ -31,8 +31,8 @@ import (
 // action. For name=a&_format=csv&_limit=10 it returns name=a, q left as it is.
 func WithoutExportKeys(q url.Values) url.Values {
 	kept := maps.Clone(q)
-	delete(kept, consts.QUERY_FORMAT)
-	delete(kept, consts.QUERY_LIMIT)
+	delete(kept, types.QueryFormat)
+	delete(kept, types.QueryLimit)
 	return kept
 }
 

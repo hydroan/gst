@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 )
@@ -51,7 +50,7 @@ func New(addr string, opts ...Option) (*Client, error) {
 		addr:       addr,
 		logger:     logger.New(""),
 	}
-	client.header.Set("User-Agent", consts.FrameworkName)
+	client.header.Set("User-Agent", types.FrameworkName)
 	client.header.Set("Content-Type", "application/json")
 
 	for _, opt := range opts {

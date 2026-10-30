@@ -6,7 +6,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/requestctx"
@@ -57,9 +56,9 @@ func accessLogger() gin.HandlerFunc {
 			fields,
 			logfield.Status(c.Writer.Status()),
 			logfield.Method(c.Request.Method),
-			logfield.Username(c.GetString(consts.CTX_USERNAME)),
-			logfield.UserID(c.GetString(consts.CTX_USER_ID)),
-			logfield.TenantID(c.GetString(consts.CTX_TENANT_ID)),
+			logfield.Username(c.GetString(requestctx.KeyUsername)),
+			logfield.UserID(c.GetString(requestctx.KeyUserID)),
+			logfield.TenantID(c.GetString(requestctx.KeyTenantID)),
 			logfield.TraceID(traceID),
 			logfield.Route(route),
 			logfield.Path(path),

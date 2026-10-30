@@ -5,7 +5,7 @@ import (
 	"go/ast"
 	"go/token"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 // LineSet hands out positions on successive lines of a fabricated file, for
@@ -58,7 +58,7 @@ func (l *LineSet) Next() token.Pos {
 func GeneratedHeader(f *ast.File) *token.FileSet {
 	fset := token.NewFileSet()
 	lines := NewLineSet(fset)
-	f.Comments = []*ast.CommentGroup{{List: []*ast.Comment{{Slash: lines.Next(), Text: consts.CodeGeneratedComment()}}}}
+	f.Comments = []*ast.CommentGroup{{List: []*ast.Comment{{Slash: lines.Next(), Text: ggconst.CodeGeneratedComment}}}}
 	lines.Next()
 	f.Package = lines.Next()
 	f.Name.NamePos = f.Package

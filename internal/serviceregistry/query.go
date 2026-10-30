@@ -3,7 +3,7 @@ package serviceregistry
 import (
 	"reflect"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
@@ -83,7 +83,7 @@ import (
 func (Base[M, REQ, RSP]) QueryModel(ctx *types.ServiceContext) (M, error) {
 	m := reflect.New(reflect.TypeFor[M]().Elem()).Interface().(M) //nolint:errcheck
 	query := requestctx.QueryValues(ctx)
-	if ctx.Phase() == consts.Export {
+	if ctx.Phase() == apiaction.Export {
 		query = urlquery.WithoutExportKeys(query)
 	}
 	return m, urlquery.Decode(query, m)

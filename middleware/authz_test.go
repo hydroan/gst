@@ -7,8 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/logfield"
+	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/middleware"
@@ -30,7 +30,7 @@ func TestAuthzLogsDecisionDuration(t *testing.T) {
 		recorder := setupAuthzLoggerTest(t)
 
 		router := gin.New()
-		router.Use(func(c *gin.Context) { c.Set(consts.CTX_USER_ID, "u-1") }, middleware.Authz())
+		router.Use(func(c *gin.Context) { c.Set(requestctx.KeyUserID, "u-1") }, middleware.Authz())
 		router.GET("/api/records", func(c *gin.Context) { c.Status(http.StatusOK) })
 
 		w := performAuthzRequest(router, "/api/records")
@@ -38,8 +38,8 @@ func TestAuthzLogsDecisionDuration(t *testing.T) {
 		require.Equal(t, http.StatusForbidden, w.Code)
 		require.Len(t, recorder.entries, 1)
 		fields := authzLogFieldMap(t, recorder.entries[0])
-		require.Equal(t, string(consts.EffectDeny), fields["eft"])
-		require.Equal(t, string(consts.DenyReasonNotInitialized), fields["denied_by"])
+		require.Equal(t, string(types.EffectDeny), fields["eft"])
+		require.Equal(t, string(types.DenyReasonNotInitialized), fields["denied_by"])
 		requireAuthzLogDuration(t, fields)
 	})
 
@@ -59,8 +59,8 @@ func TestAuthzLogsDecisionDuration(t *testing.T) {
 		require.Equal(t, http.StatusForbidden, w.Code)
 		require.Len(t, recorder.entries, 1)
 		fields := authzLogFieldMap(t, recorder.entries[0])
-		require.Equal(t, string(consts.EffectDeny), fields["eft"])
-		require.Equal(t, string(consts.DenyReasonUnauthenticated), fields["denied_by"])
+		require.Equal(t, string(types.EffectDeny), fields["eft"])
+		require.Equal(t, string(types.DenyReasonUnauthenticated), fields["denied_by"])
 		requireAuthzLogDuration(t, fields)
 	})
 }

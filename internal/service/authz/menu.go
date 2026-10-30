@@ -7,7 +7,6 @@ import (
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/authz/rbac"
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	modelauthz "github.com/hydroan/gst/internal/model/authz"
 	"github.com/hydroan/gst/service"
@@ -96,7 +95,7 @@ func (m *MenuService) ListAfter(ctx *gst.ServiceContext, data *[]*modelauthz.Men
 // role here, or whose roles select no menu at all, yields an empty set with
 // restricted true, which the caller turns into an empty result.
 func visibleMenuIDs(ctx *gst.ServiceContext, log gst.Logger) ([]string, bool, error) {
-	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, ctx.UserID(), consts.AUTHZ_SYSTEM_ROLE_ROOT)
+	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, ctx.UserID(), rbac.SystemRoleRoot)
 	if err != nil {
 		return nil, false, gst.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
 	}
@@ -107,7 +106,7 @@ func visibleMenuIDs(ctx *gst.ServiceContext, log gst.Logger) ([]string, bool, er
 	if err != nil {
 		return nil, false, gst.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
 	}
-	if slices.Contains(held, consts.AUTHZ_ROLE_ADMIN) {
+	if slices.Contains(held, rbac.RoleAdmin) {
 		return nil, false, nil
 	}
 	// No tenant is named in the queries below: the rows they reach are already

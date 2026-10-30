@@ -3,7 +3,7 @@ package logger
 import (
 	"context"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/requestctx"
@@ -125,7 +125,7 @@ const contextFieldCap = 10
 // The cron job name is present only inside a round and the leader name only
 // inside a tenure: a request's lines carry no empty field for a capability
 // they do not use.
-func (l *Logger) withContextFields(meta requestctx.Metadata, id execctx.Identity, phase consts.Phase) types.Logger {
+func (l *Logger) withContextFields(meta requestctx.Metadata, id execctx.Identity, phase apiaction.Phase) types.Logger {
 	fields := make([]zap.Field, 0, contextFieldCap)
 	fields = append(fields,
 		zap.String(keyPhase, string(phase)),
@@ -149,7 +149,7 @@ func (l *Logger) withContextFields(meta requestctx.Metadata, id execctx.Identity
 
 // WithContext creates a new logger carrying the request metadata and the
 // execution identity found on ctx.
-func (l *Logger) WithContext(ctx context.Context, phase consts.Phase) types.Logger {
+func (l *Logger) WithContext(ctx context.Context, phase apiaction.Phase) types.Logger {
 	if ctx == nil {
 		return l.With(keyPhase, string(phase))
 	}

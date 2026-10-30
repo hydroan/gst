@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/modelinfo"
@@ -14,16 +14,16 @@ import (
 func TestServiceActionLogQuoted(t *testing.T) {
 	t.Parallel()
 	act := &dsl.Action{ServiceName: "archive_sample_items"}
-	if got := serviceActionLogQuoted("Record", consts.Create, act); got != `"record: archive sample items"` {
+	if got := serviceActionLogQuoted("Record", apiaction.Create, act); got != `"record: archive sample items"` {
 		t.Fatalf("main create: got %s", got)
 	}
-	if got := serviceActionLogQuoted("Record", consts.CreateBefore, act); got != `"record: archive sample items before"` {
+	if got := serviceActionLogQuoted("Record", apiaction.CreateBefore, act); got != `"record: archive sample items before"` {
 		t.Fatalf("before hook: got %s", got)
 	}
-	if got := serviceActionLogQuoted("Record", consts.CreateAfter, act); got != `"record: archive sample items after"` {
+	if got := serviceActionLogQuoted("Record", apiaction.CreateAfter, act); got != `"record: archive sample items after"` {
 		t.Fatalf("after hook: got %s", got)
 	}
-	if got := serviceActionLogQuoted("User", consts.Create, nil); got != `"user create"` {
+	if got := serviceActionLogQuoted("User", apiaction.Create, nil); got != `"user create"` {
 		t.Fatalf("no ServiceName: got %s", got)
 	}
 }
@@ -32,7 +32,7 @@ func TestGenServiceMethod1(t *testing.T) {
 	tests := []struct {
 		name  string
 		info  *modelinfo.Model
-		phase consts.Phase
+		phase apiaction.Phase
 		want  string
 	}{
 		{
@@ -45,7 +45,7 @@ func TestGenServiceMethod1(t *testing.T) {
 				ModulePath:   "codegen",
 				ModelFileDir: "/tmp/model",
 			},
-			phase: consts.CreateBefore,
+			phase: apiaction.CreateBefore,
 			want: `func (u *Creator) CreateBefore(ctx *gst.ServiceContext, user *model.User) error {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create before")
@@ -72,7 +72,7 @@ func TestGenServiceMethod2(t *testing.T) {
 	tests := []struct {
 		name  string
 		info  *modelinfo.Model
-		phase consts.Phase
+		phase apiaction.Phase
 		want  string
 	}{
 		{
@@ -85,7 +85,7 @@ func TestGenServiceMethod2(t *testing.T) {
 				ModulePath:   "codegen",
 				ModelFileDir: "/tmp/model",
 			},
-			phase: consts.ListBefore,
+			phase: apiaction.ListBefore,
 			want: `func (u *Lister) ListBefore(ctx *gst.ServiceContext, users *[]*model.User) error {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user list before")
@@ -112,7 +112,7 @@ func TestGenServiceMethod3(t *testing.T) {
 	tests := []struct {
 		name  string
 		info  *modelinfo.Model
-		phase consts.Phase
+		phase apiaction.Phase
 		want  string
 	}{
 		{
@@ -125,7 +125,7 @@ func TestGenServiceMethod3(t *testing.T) {
 				ModulePath:   "codegen",
 				ModelFileDir: "/tmp/model",
 			},
-			phase: consts.CreateManyBefore,
+			phase: apiaction.CreateManyBefore,
 			want: `func (u *ManyCreator) CreateManyBefore(ctx *gst.ServiceContext, users ...*model.User) error {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create many before")
@@ -154,7 +154,7 @@ func TestGenServiceMethod4(t *testing.T) {
 		info    *modelinfo.Model
 		reqName string
 		rspName string
-		phase   consts.Phase
+		phase   apiaction.Phase
 		want    string
 	}{
 		{
@@ -169,7 +169,7 @@ func TestGenServiceMethod4(t *testing.T) {
 			},
 			reqName: "*User",
 			rspName: "*User",
-			phase:   consts.Create,
+			phase:   apiaction.Create,
 			want: `func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create")
@@ -190,7 +190,7 @@ func TestGenServiceMethod4(t *testing.T) {
 			},
 			reqName: "BoxRequest",
 			rspName: "BoxResponse",
-			phase:   consts.Update,
+			phase:   apiaction.Update,
 			want: `func (b *Updater) Update(ctx *gst.ServiceContext, req model.BoxRequest) (rsp model.BoxResponse, err error) {
 	log := b.WithContext(ctx, ctx.Phase())
 	log.Info("box update")
@@ -209,7 +209,7 @@ func TestGenServiceMethod4(t *testing.T) {
 			},
 			reqName: "*BoxRequest",
 			rspName: "*BoxResponse",
-			phase:   consts.Update,
+			phase:   apiaction.Update,
 			want: `func (b *Updater) Update(ctx *gst.ServiceContext, req *model.BoxRequest) (rsp *model.BoxResponse, err error) {
 	log := b.WithContext(ctx, ctx.Phase())
 	log.Info("box update")
@@ -237,7 +237,7 @@ func TestGenServiceMethod5(t *testing.T) {
 	tests := []struct {
 		name  string
 		info  *modelinfo.Model
-		phase consts.Phase
+		phase apiaction.Phase
 		want  string
 	}{
 		{
@@ -250,7 +250,7 @@ func TestGenServiceMethod5(t *testing.T) {
 				ModulePath:   "codegen",
 				ModelFileDir: "/tmp/model",
 			},
-			phase: consts.Import,
+			phase: apiaction.Import,
 			want: `func (u *Importer) Import(ctx *gst.ServiceContext, reader io.Reader) (users []*model.User, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user import")
@@ -277,7 +277,7 @@ func TestGenServiceMethod6(t *testing.T) {
 	tests := []struct {
 		name  string
 		info  *modelinfo.Model
-		phase consts.Phase
+		phase apiaction.Phase
 		want  string
 	}{
 		{
@@ -290,7 +290,7 @@ func TestGenServiceMethod6(t *testing.T) {
 				ModulePath:   "codegen",
 				ModelFileDir: "/tmp/model",
 			},
-			phase: consts.Export,
+			phase: apiaction.Export,
 			want: `func (u *Exporter) Export(ctx *gst.ServiceContext, users ...*model.User) (data []byte, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user export")
@@ -317,7 +317,7 @@ func TestGenServiceMethod7(t *testing.T) {
 	tests := []struct {
 		name  string
 		info  *modelinfo.Model
-		phase consts.Phase
+		phase apiaction.Phase
 		want  string
 	}{
 		{
@@ -330,7 +330,7 @@ func TestGenServiceMethod7(t *testing.T) {
 				ModulePath:   "codegen",
 				ModelFileDir: "model",
 			},
-			phase: consts.SSE,
+			phase: apiaction.SSE,
 			want: `func (u *Streamer) SSE(ctx *gst.ServiceContext) (err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user sse")
@@ -358,7 +358,7 @@ func TestGenServiceMethod8(t *testing.T) {
 		name   string
 		info   *modelinfo.Model
 		action *dsl.Action
-		phase  consts.Phase
+		phase  apiaction.Phase
 		role   string
 		want   string
 	}{
@@ -372,7 +372,7 @@ func TestGenServiceMethod8(t *testing.T) {
 				ModulePath:   "codegen",
 				ModelFileDir: "model",
 			},
-			phase: consts.List,
+			phase: apiaction.List,
 			role:  "Lister",
 			want: `func (u *Lister) Filter(ctx *gst.ServiceContext, user *model.User, opts gst.QueryOptions) (*model.User, gst.QueryOptions, error) {
 	log := u.WithContext(ctx, ctx.Phase())
@@ -391,7 +391,7 @@ func TestGenServiceMethod8(t *testing.T) {
 				ModulePath:   "codegen",
 				ModelFileDir: "model",
 			},
-			phase: consts.Export,
+			phase: apiaction.Export,
 			role:  "Exporter",
 			want: `func (u *Exporter) Filter(ctx *gst.ServiceContext, user *model.User, opts gst.QueryOptions) (*model.User, gst.QueryOptions, error) {
 	log := u.WithContext(ctx, ctx.Phase())
@@ -411,7 +411,7 @@ func TestGenServiceMethod8(t *testing.T) {
 				ModelFileDir: "model",
 			},
 			action: &dsl.Action{ServiceName: "search"},
-			phase:  consts.List,
+			phase:  apiaction.List,
 			role:   "Search",
 			want: `func (s *Search) Filter(ctx *gst.ServiceContext, user *model.User, opts gst.QueryOptions) (*model.User, gst.QueryOptions, error) {
 	log := s.WithContext(ctx, ctx.Phase())
@@ -446,7 +446,7 @@ func TestGenServiceMethod9(t *testing.T) {
 	}{
 		{
 			name:   "watch",
-			action: &dsl.Action{Service: true, ServiceName: "watch", Payload: "*FeedWatchReq", Result: "*FeedEvent", StreamingResult: true, Phase: consts.Stream},
+			action: &dsl.Action{Service: true, ServiceName: "watch", Payload: "*FeedWatchReq", Result: "*FeedEvent", StreamingResult: true, Phase: apiaction.Stream},
 			want: `func (w *Watch) Stream(ctx *gst.ServiceContext, req *model.FeedWatchReq, stream *grpc.ServerStream[*model.FeedEvent]) (err error) {
 	log := w.WithContext(ctx, ctx.Phase())
 	log.Info("feed: watch")
@@ -456,7 +456,7 @@ func TestGenServiceMethod9(t *testing.T) {
 		},
 		{
 			name:   "upload",
-			action: &dsl.Action{Service: true, ServiceName: "upload", Payload: "*FeedEvent", Result: "*FeedUploadRsp", StreamingPayload: true, Phase: consts.Stream},
+			action: &dsl.Action{Service: true, ServiceName: "upload", Payload: "*FeedEvent", Result: "*FeedUploadRsp", StreamingPayload: true, Phase: apiaction.Stream},
 			want: `func (u *Upload) Stream(ctx *gst.ServiceContext, stream *grpc.ClientStream[*model.FeedEvent]) (rsp *model.FeedUploadRsp, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("feed: upload")
@@ -469,7 +469,7 @@ func TestGenServiceMethod9(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			info := *feed
 			info.ModelVarName = strings.ToLower(tt.action.RoleName()[:1])
-			got, err := gghelper.FormatNode(genServiceMethod9(&info, "model", tt.action, consts.Stream, tt.action.RoleName()))
+			got, err := gghelper.FormatNode(genServiceMethod9(&info, "model", tt.action, apiaction.Stream, tt.action.RoleName()))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -496,10 +496,10 @@ func TestGenerateServiceCreate(t *testing.T) {
 		Service: true,
 		Payload: "*User",
 		Result:  "*User",
-		Phase:   consts.Create,
+		Phase:   apiaction.Create,
 	}
 
-	file := GenerateService(info, action, consts.Create, "user")
+	file := GenerateService(info, action, apiaction.Create, "user")
 	if file == nil {
 		t.Fatal("GenerateService returned nil")
 	}
@@ -563,10 +563,10 @@ func TestGenerateServiceShellOmitsTheHookPlaceholders(t *testing.T) {
 		Service: true,
 		Payload: "*User",
 		Result:  "*User",
-		Phase:   consts.Create,
+		Phase:   apiaction.Create,
 	}
 
-	file := GenerateServiceShell(info, action, consts.Create, "user")
+	file := GenerateServiceShell(info, action, apiaction.Create, "user")
 	if file == nil {
 		t.Fatal("GenerateServiceShell returned nil")
 	}
@@ -616,10 +616,10 @@ func TestGenerateServiceList(t *testing.T) {
 		Service: true,
 		Payload: "*User",
 		Result:  "*User",
-		Phase:   consts.List,
+		Phase:   apiaction.List,
 	}
 
-	file := GenerateService(info, action, consts.List, "user")
+	file := GenerateService(info, action, apiaction.List, "user")
 	if file == nil {
 		t.Fatal("GenerateService returned nil")
 	}
@@ -719,9 +719,9 @@ func TestGenerateServiceListEmptyPayload(t *testing.T) {
 				Service: true,
 				Payload: dsl.PayloadEmpty,
 				Result:  "*" + tt.info.ModelName + "ListRsp",
-				Phase:   consts.List,
+				Phase:   apiaction.List,
 			}
-			file := GenerateService(tt.info, action, consts.List, "box")
+			file := GenerateService(tt.info, action, apiaction.List, "box")
 			if file == nil {
 				t.Fatal("GenerateService returned nil")
 			}
@@ -754,7 +754,7 @@ func TestGenerateServiceExport(t *testing.T) {
 		Service: true,
 		Payload: "*User",
 		Result:  "*User",
-		Phase:   consts.Export,
+		Phase:   apiaction.Export,
 	}
 
 	// The export controller invocation order: ListBefore, Filter, ListAfter,
@@ -767,7 +767,7 @@ func TestGenerateServiceExport(t *testing.T) {
 	exportSig := "func (u *Exporter) Export(ctx *gst.ServiceContext, users ...*model.User) (data []byte, err error)"
 
 	t.Run("non-empty_model_generates_list_hooks_in_controller_invocation_order", func(t *testing.T) {
-		file := GenerateService(newInfo(false), action, consts.Export, "user")
+		file := GenerateService(newInfo(false), action, apiaction.Export, "user")
 		if file == nil {
 			t.Fatal("GenerateService returned nil")
 		}
@@ -789,7 +789,7 @@ func TestGenerateServiceExport(t *testing.T) {
 	})
 
 	t.Run("empty_model_generates_Export_only", func(t *testing.T) {
-		file := GenerateService(newInfo(true), action, consts.Export, "user")
+		file := GenerateService(newInfo(true), action, apiaction.Export, "user")
 		if file == nil {
 			t.Fatal("GenerateService returned nil")
 		}
@@ -822,10 +822,10 @@ func TestGenerateServiceSSE(t *testing.T) {
 		Service: true,
 		Payload: "*User",
 		Result:  "*User",
-		Phase:   consts.SSE,
+		Phase:   apiaction.SSE,
 	}
 
-	file := GenerateService(info, action, consts.SSE, "user")
+	file := GenerateService(info, action, apiaction.SSE, "user")
 	if file == nil {
 		t.Fatal("GenerateService returned nil")
 	}
@@ -861,9 +861,9 @@ func TestGenerateServiceStream(t *testing.T) {
 		ModelFileDir: "model",
 		Design:       &dsl.Design{},
 	}
-	action := &dsl.Action{Service: true, ServiceName: "chat", Payload: "*FeedEvent", Result: "*FeedEvent", StreamingPayload: true, StreamingResult: true, Phase: consts.Stream}
+	action := &dsl.Action{Service: true, ServiceName: "chat", Payload: "*FeedEvent", Result: "*FeedEvent", StreamingPayload: true, StreamingResult: true, Phase: apiaction.Stream}
 
-	file := GenerateService(info, action, consts.Stream, "feed")
+	file := GenerateService(info, action, apiaction.Stream, "feed")
 	if file == nil {
 		t.Fatal("GenerateService returned nil")
 	}

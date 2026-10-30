@@ -9,7 +9,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
@@ -142,7 +142,7 @@ func TestExportHandlerVirtualModelSkipsListing(t *testing.T) {
 	const route = "test/export_virtual_samples/export"
 	svc := exportVirtualSampleSvc
 	svc.gotModels = 0
-	registerTestService[*exportVirtualSample, *exportVirtualSample, *exportVirtualSample](consts.Export, route, svc)
+	registerTestService[*exportVirtualSample, *exportVirtualSample, *exportVirtualSample](apiaction.Export, route, svc)
 
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
@@ -167,8 +167,8 @@ func TestExportHandlerVirtualModelSkipsListing(t *testing.T) {
 }
 
 // exportFormatSample is a plain table-backed resource for pinning that the
-// export controller keeps its own QUERY_FORMAT parameter away from the model
-// bind, which rejects unknown keys.
+// export controller keeps its own types.QueryFormat parameter away from the
+// model bind, which rejects unknown keys.
 type exportFormatSample struct {
 	Name string `json:"name,omitempty" query:"name"`
 
@@ -205,7 +205,7 @@ func TestExportHandlerKeepsItsOwnParamsFromModelBind(t *testing.T) {
 	const route = "test/export_format_samples/export"
 	svc := exportFormatSampleSvc
 	svc.filterReached = false
-	registerTestService[*exportFormatSample, *exportFormatSample, *exportFormatSample](consts.Export, route, svc)
+	registerTestService[*exportFormatSample, *exportFormatSample, *exportFormatSample](apiaction.Export, route, svc)
 
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
@@ -217,5 +217,5 @@ func TestExportHandlerKeepsItsOwnParamsFromModelBind(t *testing.T) {
 	handler(c)
 
 	require.True(t, svc.filterReached,
-		"QUERY_FORMAT and QUERY_LIMIT are the export controller's own parameters and must not reach the model bind")
+		"_format and _limit are the export controller's own parameters and must not reach the model bind")
 }

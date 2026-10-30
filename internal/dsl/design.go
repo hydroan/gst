@@ -13,7 +13,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/stoewer/go-strcase"
 )
 
@@ -236,7 +236,7 @@ type Action struct {
 
 	// The phase of the action
 	// not part of DSL, just used to identify the current Action.
-	Phase consts.Phase
+	Phase apiaction.Phase
 }
 
 // RoleName returns the struct name of the generated service: the
@@ -276,21 +276,21 @@ var methodList = []string{
 	"StreamingPayload",
 	"StreamingResult",
 
-	consts.Create.Name(),
-	consts.Delete.Name(),
-	consts.Update.Name(),
-	consts.Patch.Name(),
-	consts.List.Name(),
-	consts.Get.Name(),
+	apiaction.Create.Name(),
+	apiaction.Delete.Name(),
+	apiaction.Update.Name(),
+	apiaction.Patch.Name(),
+	apiaction.List.Name(),
+	apiaction.Get.Name(),
 
-	consts.CreateMany.Name(),
-	consts.DeleteMany.Name(),
-	consts.UpdateMany.Name(),
-	consts.PatchMany.Name(),
+	apiaction.CreateMany.Name(),
+	apiaction.DeleteMany.Name(),
+	apiaction.UpdateMany.Name(),
+	apiaction.PatchMany.Name(),
 
-	consts.Import.Name(),
-	consts.Export.Name(),
+	apiaction.Import.Name(),
+	apiaction.Export.Name(),
 
-	consts.SSE.Name(),
-	consts.Stream.Name(),
+	apiaction.SSE.Name(),
+	apiaction.Stream.Name(),
 }

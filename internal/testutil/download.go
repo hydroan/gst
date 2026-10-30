@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/client"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,7 +21,7 @@ var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
 func DownloadCSV(t *testing.T, cli *client.Client, path string, opts ...client.RequestOption) [][]string {
 	t.Helper()
 
-	format := []client.RequestOption{client.WithQuery(consts.QUERY_FORMAT, "csv")}
+	format := []client.RequestOption{client.WithQuery(types.QueryFormat, "csv")}
 	attachment, err := cli.Download(t.Context(), path, append(format, opts...)...)
 	require.NoError(t, err)
 

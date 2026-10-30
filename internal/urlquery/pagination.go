@@ -4,7 +4,6 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/types"
 )
@@ -43,13 +42,13 @@ func Pagination(q url.Values, m types.Model) (page, size int) {
 	cursorable := modelregistry.IsCursorable(m)
 
 	if paginatable {
-		page, _ = strconv.Atoi(q.Get(consts.QUERY_PAGE))
+		page, _ = strconv.Atoi(q.Get(types.QueryPage))
 	}
 	if page <= 0 {
 		page = 1
 	}
 	if paginatable || cursorable {
-		size, _ = strconv.Atoi(q.Get(consts.QUERY_SIZE))
+		size, _ = strconv.Atoi(q.Get(types.QuerySize))
 		switch {
 		case size <= 0:
 			size = DefaultPageSize

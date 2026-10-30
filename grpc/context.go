@@ -13,11 +13,11 @@ import (
 // action the call maps to.
 
 // The metadata a call's credential arrives in, in the lowercase gRPC
-// metadata keeps its keys in: authorizationKey carries it as
+// metadata keeps its keys in: keyAuthorization carries it as
 // "<bearerScheme> <credential>", the Authorization header of the HTTP
 // listener.
 const (
-	authorizationKey = "authorization"
+	keyAuthorization = "authorization"
 	bearerScheme     = "Bearer"
 )
 
@@ -28,7 +28,7 @@ const (
 // credential.
 func Bearer(ctx context.Context) (credential string, ok bool) {
 	md, _ := metadata.FromIncomingContext(ctx)
-	values := md.Get(authorizationKey)
+	values := md.Get(keyAuthorization)
 	if len(values) == 0 {
 		return "", false
 	}

@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/modelinfo"
 	"github.com/stoewer/go-strcase"
@@ -23,7 +23,7 @@ import (
 // name as spaces and an optional hook suffix (before/after/filter/...), as in
 // "user: archive before" for Service("archive") and
 // "record: archive sample items" for Service("archive_sample_items").
-func serviceActionLogQuoted(modelName string, phase consts.Phase, action *dsl.Action) string {
+func serviceActionLogQuoted(modelName string, phase apiaction.Phase, action *dsl.Action) string {
 	modelLower := strings.ToLower(modelName)
 	phaseSnake := strings.ReplaceAll(strcase.SnakeCase(phase.Name()), "_", " ")
 	if action != nil && action.ServiceName != "" {
@@ -49,7 +49,7 @@ func serviceActionLogQuoted(modelName string, phase consts.Phase, action *dsl.Ac
 // action's phase followed by " filter", as in "user list filter" for the
 // List action of User, "user export filter" for its Export action and
 // "user: search filter" for a List with Service("search").
-func serviceFilterLogQuoted(modelName string, phase consts.Phase, action *dsl.Action) string {
+func serviceFilterLogQuoted(modelName string, phase apiaction.Phase, action *dsl.Action) string {
 	msg, _ := strconv.Unquote(serviceActionLogQuoted(modelName, phase, action))
 	return strconv.Quote(msg + " filter")
 }
@@ -58,7 +58,7 @@ func serviceFilterLogQuoted(modelName string, phase consts.Phase, action *dsl.Ac
 // UpdateBefore, UpdateAfter, DeleteBefore, DeleteAfter, GetBefore, GetAfter,
 // PatchBefore, PatchAfter methods. modelQualifier is the name the file refers
 // to the model package by (see serviceModelQualifier). For the model User and
-// phase consts.CreateBefore it generates
+// phase apiaction.CreateBefore it generates
 //
 //	func (u *Creator) CreateBefore(ctx *gst.ServiceContext, user *model.User) error {
 //		log := u.WithContext(ctx, ctx.Phase())
@@ -66,7 +66,7 @@ func serviceFilterLogQuoted(modelName string, phase consts.Phase, action *dsl.Ac
 //
 //		return nil
 //	}
-func genServiceMethod1(info *modelinfo.Model, modelQualifier string, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
+func genServiceMethod1(info *modelinfo.Model, modelQualifier string, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod1(
 		info.ModelVarName, info.ModelName, modelQualifier, phase, roleName,
 		StmtLogWithContext(info.ModelVarName),
@@ -78,7 +78,7 @@ func genServiceMethod1(info *modelinfo.Model, modelQualifier string, action *dsl
 
 // genServiceMethod2 uses AST to generate ListBefore, ListAfter methods,
 // referring to the model package by modelQualifier (see genServiceMethod1). For
-// the model User and phase consts.ListBefore it generates
+// the model User and phase apiaction.ListBefore it generates
 //
 //	func (u *Lister) ListBefore(ctx *gst.ServiceContext, users *[]*model.User) error {
 //		log := u.WithContext(ctx, ctx.Phase())
@@ -86,7 +86,7 @@ func genServiceMethod1(info *modelinfo.Model, modelQualifier string, action *dsl
 //
 //		return nil
 //	}
-func genServiceMethod2(info *modelinfo.Model, modelQualifier string, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
+func genServiceMethod2(info *modelinfo.Model, modelQualifier string, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod2(
 		info.ModelVarName, info.ModelName, modelQualifier, phase, roleName,
 		StmtLogWithContext(info.ModelVarName),
@@ -100,7 +100,7 @@ func genServiceMethod2(info *modelinfo.Model, modelQualifier string, action *dsl
 // DeleteManyBefore, DeleteManyAfter, UpdateManyBefore, UpdateManyAfter,
 // PatchManyBefore, PatchManyAfter, referring to the model package by
 // modelQualifier (see genServiceMethod1). For the model User and phase
-// consts.CreateManyBefore it generates
+// apiaction.CreateManyBefore it generates
 //
 //	func (u *ManyCreator) CreateManyBefore(ctx *gst.ServiceContext, users ...*model.User) error {
 //		log := u.WithContext(ctx, ctx.Phase())
@@ -108,7 +108,7 @@ func genServiceMethod2(info *modelinfo.Model, modelQualifier string, action *dsl
 //
 //		return nil
 //	}
-func genServiceMethod3(info *modelinfo.Model, modelQualifier string, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
+func genServiceMethod3(info *modelinfo.Model, modelQualifier string, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod3(
 		info.ModelVarName, info.ModelName, modelQualifier, phase, roleName,
 		StmtLogWithContext(info.ModelVarName),
@@ -121,7 +121,7 @@ func genServiceMethod3(info *modelinfo.Model, modelQualifier string, action *dsl
 // genServiceMethod4 uses AST to generate Create, Delete, Update, Patch, List,
 // Get, CreateMany, DeleteMany, UpdateMany, PatchMany methods, referring to the
 // model package by modelQualifier (see genServiceMethod1). For the model User,
-// the request and result types *User and phase consts.Create it generates
+// the request and result types *User and phase apiaction.Create it generates
 //
 //	func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {
 //		log := u.WithContext(ctx, ctx.Phase())
@@ -129,7 +129,7 @@ func genServiceMethod3(info *modelinfo.Model, modelQualifier string, action *dsl
 //
 //		return rsp, nil
 //	}
-func genServiceMethod4(info *modelinfo.Model, modelQualifier string, action *dsl.Action, reqName, rspName string, phase consts.Phase, roleName string) *ast.FuncDecl {
+func genServiceMethod4(info *modelinfo.Model, modelQualifier string, action *dsl.Action, reqName, rspName string, phase apiaction.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod4(
 		info.ModelVarName, modelQualifier, reqName, rspName, phase, roleName,
 		StmtLogWithContext(info.ModelVarName),
@@ -154,7 +154,7 @@ func genServiceMethod4(info *modelinfo.Model, modelQualifier string, action *dsl
 //
 //		return users, nil
 //	}
-func genServiceMethod5(info *modelinfo.Model, modelQualifier string, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
+func genServiceMethod5(info *modelinfo.Model, modelQualifier string, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod5(
 		info.ModelVarName, info.ModelName, modelQualifier, roleName,
 		StmtLogWithContext(info.ModelVarName),
@@ -175,7 +175,7 @@ func genServiceMethod5(info *modelinfo.Model, modelQualifier string, action *dsl
 //
 //		return data, nil
 //	}
-func genServiceMethod6(info *modelinfo.Model, modelQualifier string, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
+func genServiceMethod6(info *modelinfo.Model, modelQualifier string, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod6(
 		info.ModelVarName, info.ModelName, modelQualifier, roleName,
 		StmtLogWithContext(info.ModelVarName),
@@ -196,7 +196,7 @@ func genServiceMethod6(info *modelinfo.Model, modelQualifier string, action *dsl
 //
 //		return nil
 //	}
-func genServiceMethod7(info *modelinfo.Model, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
+func genServiceMethod7(info *modelinfo.Model, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod7(
 		info.ModelVarName, roleName,
 		StmtLogWithContext(info.ModelVarName),
@@ -209,7 +209,7 @@ func genServiceMethod7(info *modelinfo.Model, action *dsl.Action, phase consts.P
 // genServiceMethod8 uses AST to generate the Filter hook of the List and
 // Export actions, referring to the model package by modelQualifier (see
 // genServiceMethod1). The scaffold passes the model and the options through
-// unchanged. For the model User and phase consts.List it generates
+// unchanged. For the model User and phase apiaction.List it generates
 //
 //	func (u *Lister) Filter(ctx *gst.ServiceContext, user *model.User, opts gst.QueryOptions) (*model.User, gst.QueryOptions, error) {
 //		log := u.WithContext(ctx, ctx.Phase())
@@ -217,7 +217,7 @@ func genServiceMethod7(info *modelinfo.Model, action *dsl.Action, phase consts.P
 //
 //		return user, opts, nil
 //	}
-func genServiceMethod8(info *modelinfo.Model, modelQualifier string, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
+func genServiceMethod8(info *modelinfo.Model, modelQualifier string, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod8(
 		info.ModelVarName, info.ModelName, modelQualifier, roleName,
 		StmtLogWithContext(info.ModelVarName),
@@ -252,7 +252,7 @@ func genServiceMethod8(info *modelinfo.Model, modelQualifier string, action *dsl
 //
 //		return rsp, nil
 //	}
-func genServiceMethod9(info *modelinfo.Model, modelQualifier string, action *dsl.Action, phase consts.Phase, roleName string) *ast.FuncDecl {
+func genServiceMethod9(info *modelinfo.Model, modelQualifier string, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
 	results := []ast.Expr{ast.NewIdent("nil")}
 	if action.StreamingPayload && !action.StreamingResult {
 		results = []ast.Expr{ast.NewIdent("rsp"), ast.NewIdent("nil")}
@@ -310,7 +310,7 @@ func genServiceMethod9(info *modelinfo.Model, modelQualifier string, action *dsl
 // between ListBefore and ListAfter, the order the controllers invoke them
 // in. A model without a database table, one embedding model.Empty, gets no
 // hooks at all. GenerateServiceShell returns the same file without the hooks.
-func GenerateService(info *modelinfo.Model, action *dsl.Action, phase consts.Phase, servicePkgName string) *ast.File {
+func GenerateService(info *modelinfo.Model, action *dsl.Action, phase apiaction.Phase, servicePkgName string) *ast.File {
 	return generateService(info, action, phase, servicePkgName, true)
 }
 
@@ -341,14 +341,14 @@ func GenerateService(info *modelinfo.Model, action *dsl.Action, phase consts.Pha
 //
 //		return rsp, nil
 //	}
-func GenerateServiceShell(info *modelinfo.Model, action *dsl.Action, phase consts.Phase, servicePkgName string) *ast.File {
+func GenerateServiceShell(info *modelinfo.Model, action *dsl.Action, phase apiaction.Phase, servicePkgName string) *ast.File {
 	return generateService(info, action, phase, servicePkgName, false)
 }
 
 // generateService builds the service file of the action: the struct, the
 // action method and, when hooks is set and the model has a database table,
 // the hook placeholders of the phase.
-func generateService(info *modelinfo.Model, action *dsl.Action, phase consts.Phase, servicePkgName string, hooks bool) *ast.File {
+func generateService(info *modelinfo.Model, action *dsl.Action, phase apiaction.Phase, servicePkgName string, hooks bool) *ast.File {
 	if !action.Service {
 		return nil
 	}
@@ -387,82 +387,82 @@ func generateService(info *modelinfo.Model, action *dsl.Action, phase consts.Pha
 
 	// add methods
 	switch phase {
-	case consts.Create:
+	case apiaction.Create:
 		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
 		if hooks {
 			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.Before(), roleName)) // generate create before hook
 			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.After(), roleName))  // generate create after hook
 		}
-	case consts.Delete:
+	case apiaction.Delete:
 		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
 		if hooks {
 			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.Before(), roleName)) // generate delete before hook
 			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.After(), roleName))  // generate delete after hook
 		}
-	case consts.Update:
+	case apiaction.Update:
 		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
 		if hooks {
 			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.Before(), roleName)) // generate update before hook
 			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.After(), roleName))  // generate update after hook
 		}
-	case consts.Patch:
+	case apiaction.Patch:
 		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
 		if hooks {
 			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.Before(), roleName)) // generate patch before hook
 			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.After(), roleName))  // generate patch after hook
 		}
-	case consts.List: // List hooks use genServiceMethod2, Filter genServiceMethod8
+	case apiaction.List: // List hooks use genServiceMethod2, Filter genServiceMethod8
 		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
 		if hooks {
 			decls = append(decls, genServiceMethod2(info, qualifier, action, phase.Before(), roleName)) // generate list before hook
 			decls = append(decls, genServiceMethod8(info, qualifier, action, phase, roleName))          // generate filter hook
 			decls = append(decls, genServiceMethod2(info, qualifier, action, phase.After(), roleName))  // generate list after hook
 		}
-	case consts.Get:
+	case apiaction.Get:
 		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
 		if hooks {
 			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.Before(), roleName)) // generate get before hook
 			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.After(), roleName))  // generate get after hook
 		}
-	case consts.CreateMany: // XXXMany hooks use genServiceMethod3
+	case apiaction.CreateMany: // XXXMany hooks use genServiceMethod3
 		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
 		if hooks {
 			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.Before(), roleName)) // generate create many before hook
 			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.After(), roleName))  // generate create many after hook
 		}
-	case consts.DeleteMany:
+	case apiaction.DeleteMany:
 		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
 		if hooks {
 			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.Before(), roleName)) // generate delete many before hook
 			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.After(), roleName))  // generate delete many after hook
 		}
-	case consts.UpdateMany:
+	case apiaction.UpdateMany:
 		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
 		if hooks {
 			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.Before(), roleName)) // generate update many before hook
 			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.After(), roleName))  // generate update many after hook
 		}
-	case consts.PatchMany:
+	case apiaction.PatchMany:
 		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
 		if hooks {
 			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.Before(), roleName)) // generate patch many before hook
 			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.After(), roleName))  // generate patch many after hook
 		}
-	case consts.Import:
+	case apiaction.Import:
 		decls = append(decls, genServiceMethod5(info, qualifier, action, phase, roleName))
-	case consts.SSE:
+	case apiaction.SSE:
 		decls = append(decls, genServiceMethod7(info, action, phase, roleName))
-	case consts.Stream:
+	case apiaction.Stream:
 		decls = append(decls, genServiceMethod9(info, qualifier, action, phase, roleName))
-	case consts.Export:
+	case apiaction.Export:
 		// The export controller reuses the list pipeline before delegating to
 		// Export: it invokes ListBefore, applies the service Filter hook when
 		// building the query, then invokes ListAfter, so the hooks are
 		// scaffolded in that order.
 		if hooks {
-			decls = append(decls, genServiceMethod2(info, qualifier, action, consts.ListBefore, roleName)) // generate list before hook
-			decls = append(decls, genServiceMethod8(info, qualifier, action, phase, roleName))             // generate filter hook
-			decls = append(decls, genServiceMethod2(info, qualifier, action, consts.ListAfter, roleName))  // generate list after hook
+			decls = append(decls, genServiceMethod2(info, qualifier, action, apiaction.ListBefore, roleName)) // generate list before hook
+			decls = append(decls, genServiceMethod8(info, qualifier, action, phase, roleName))                // generate filter hook
+			decls = append(decls, genServiceMethod2(info, qualifier, action, apiaction.ListAfter, roleName))  // generate list after hook
 		}
 		decls = append(decls, genServiceMethod6(info, qualifier, action, phase, roleName))
 	}

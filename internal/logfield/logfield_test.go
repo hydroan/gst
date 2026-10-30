@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/requestctx"
@@ -29,8 +28,8 @@ func TestFieldsFixTheirKeyAndType(t *testing.T) {
 		{name: "route", field: logfield.Route("/api/records/:record"), key: requestctx.KeyRoute, typ: zapcore.StringType},
 		{name: "path", field: logfield.Path("/api/records/42"), key: requestctx.KeyPath, typ: zapcore.StringType},
 		{name: "method", field: logfield.Method("GET"), key: requestctx.KeyMethod, typ: zapcore.StringType},
-		{name: "username", field: logfield.Username("alice"), key: consts.CTX_USERNAME, typ: zapcore.StringType},
-		{name: "user_id", field: logfield.UserID("u-1"), key: consts.CTX_USER_ID, typ: zapcore.StringType},
+		{name: "username", field: logfield.Username("alice"), key: requestctx.KeyUsername, typ: zapcore.StringType},
+		{name: "user_id", field: logfield.UserID("u-1"), key: requestctx.KeyUserID, typ: zapcore.StringType},
 		{name: "trace_id", field: logfield.TraceID("t-1"), key: execctx.KeyTraceID, typ: zapcore.StringType},
 		{name: "query", field: logfield.Query("name=a&name=b"), key: logfield.KeyQuery, typ: zapcore.StringType},
 		{name: "params", field: logfield.Params(map[string]string{"record": "42"}), key: requestctx.KeyParams, typ: zapcore.ObjectMarshalerType},

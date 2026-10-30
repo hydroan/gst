@@ -3,7 +3,7 @@ package types
 import (
 	"context"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"go.uber.org/zap"
 )
 
@@ -18,7 +18,7 @@ import (
 type Logger interface {
 	With(fields ...string) Logger
 
-	WithContext(context.Context, consts.Phase) Logger
+	WithContext(context.Context, apiaction.Phase) Logger
 
 	Debug(args ...any)
 	Info(args ...any)

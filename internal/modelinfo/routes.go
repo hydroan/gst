@@ -7,7 +7,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/ds/tree/trie"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconfig"
 )
@@ -123,42 +123,42 @@ func ItemParam(design *dsl.Design) string {
 	if design != nil && design.Param != "" {
 		return design.Param
 	}
-	return ":" + consts.PARAM_ID
+	return ":" + apiaction.ParamID
 }
 
 // RouterTargetForAction returns the path the router registers action at,
 // given the route its design declares it on, and the name of the path
 // parameter that path ends in. The path is the route under the API prefix
-// (see consts.APIPath), so every generated file spells a route the way it
+// (see apiaction.APIPath), so every generated file spells a route the way it
 // is served. An item action appends the parameter ItemParam returns: the Get
 // action of route samples with Param("sample") registers /api/samples/:sample,
 // whose parameter is sample. A batch action appends batch, Import import and
-// Export export (see consts.RouteSuffix, the layout module.Use registers by
+// Export export (see apiaction.RouteSuffix, the layout module.Use registers by
 // too): the CreateMany action of route samples registers /api/samples/batch.
 // An Exact action keeps the route it declares, parameter included:
 // /api/iam/admin/users/:id/sessions, whose parameter is id, for
 // iam/admin/users/:id/sessions.
 func RouterTargetForAction(route string, design *dsl.Design, action *dsl.Action) (string, string) {
-	route = consts.APIPath(route)
+	route = apiaction.APIPath(route)
 	if action == nil {
 		return route, ""
 	}
 
 	if action.Exact {
-		return route, consts.LastRouteParam(route)
+		return route, apiaction.LastRouteParam(route)
 	}
 
-	// The phase decides what follows the route (see consts.RouteSuffix): the
+	// The phase decides what follows the route (see apiaction.RouteSuffix): the
 	// item parameter for an action on one row, which the path then ends in
 	// and names, route "tenant" with param ":tenant" becoming "tenant/:tenant"
 	// and with param ":id" "tenant/:id", or the fixed segment of a batch,
 	// import or export action.
 	paramName := ""
 	item := ItemParam(design)
-	if suffix := consts.RouteSuffix(action.Phase, item); suffix != "" {
+	if suffix := apiaction.RouteSuffix(action.Phase, item); suffix != "" {
 		route = path.Join(route, suffix)
 		if suffix == item {
-			paramName = consts.LastRouteParam(route)
+			paramName = apiaction.LastRouteParam(route)
 		}
 	}
 

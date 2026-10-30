@@ -7,7 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/response"
@@ -28,7 +28,7 @@ import (
 // When REQ or RSP differs from M, the handler is the phase service's (see
 // serviceHandler): its Update method runs on the bound payload.
 func UpdateHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.Update, consts.UpdateBefore, consts.UpdateAfter)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), apiaction.Update, apiaction.UpdateBefore, apiaction.UpdateAfter)
 	if !a.typesEqual {
 		return a.serviceHandler()
 	}
@@ -41,7 +41,7 @@ func UpdateHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			return
 		}
 
-		log := logger.Controller.WithContext(c.Request.Context(), consts.Update)
+		log := logger.Controller.WithContext(c.Request.Context(), apiaction.Update)
 
 		req := a.newModel()
 		if reqErr := bindJSONRequest(c, &req); reqErr != nil {
@@ -75,7 +75,7 @@ func UpdateHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 // updateFlow) and answers with the replacement as stored, or with the
 // status the failure maps to (see call).
 func UpdateCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string, m M) (M, error) {
-	a := newAction[M, M, M](route, consts.Update, consts.UpdateBefore, consts.UpdateAfter)
+	a := newAction[M, M, M](route, apiaction.Update, apiaction.UpdateBefore, apiaction.UpdateAfter)
 	return func(ctx context.Context, params map[string]string, id string, m M) (M, error) {
 		var zero M
 		c, err := a.beginCall(ctx, params, nil)
@@ -117,7 +117,7 @@ func UpdateCall[M types.Model](route string) func(ctx context.Context, params ma
 // the replacement would land on the record it names; an id the model rejects
 // answers 404 (see notFound) without touching the database.
 func (a *action[M, REQ, RSP]) updateFlow(ctx context.Context, newServiceContext serviceContextFunc, id string, req M) error {
-	log := logger.Controller.WithContext(ctx, consts.Update)
+	log := logger.Controller.WithContext(ctx, apiaction.Update)
 	svc := a.service()
 
 	m := a.newModel()
@@ -132,7 +132,7 @@ func (a *action[M, REQ, RSP]) updateFlow(ctx context.Context, newServiceContext 
 	clearAudit(req)
 
 	// 1.Perform business logic processing before update resource.
-	if err := a.traceServiceHook(ctx, consts.UpdateBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
+	if err := a.traceServiceHook(ctx, apiaction.UpdateBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
 		return svc.UpdateBefore(sc, req)
 	}); err != nil {
 		return failService(ctx, log, err)
@@ -153,7 +153,7 @@ func (a *action[M, REQ, RSP]) updateFlow(ctx context.Context, newServiceContext 
 		backfillUnwrittenColumns(a.typ, reflect.ValueOf(req).Elem(), reflect.ValueOf(reloaded).Elem())
 	}
 	// 3.Perform business logic processing after update resource.
-	if err := a.traceServiceHook(ctx, consts.UpdateAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
+	if err := a.traceServiceHook(ctx, apiaction.UpdateAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
 		return svc.UpdateAfter(sc, req)
 	}); err != nil {
 		return failService(ctx, log, err)
@@ -162,7 +162,7 @@ func (a *action[M, REQ, RSP]) updateFlow(ctx context.Context, newServiceContext 
 	// 4.record operation log to database.
 	// Record, Request, and Response carry the same serialized payload on
 	// this action, so one marshal feeds all three columns.
-	if err := audit.RecordOperation(ctx, req, consts.OP_UPDATE,
+	if err := audit.RecordOperation(ctx, req, types.OperationUpdate,
 		func() *modellogmgmt.OperationLog {
 			record, _ := json.Marshal(req)
 			entry := operationLog(ctx, a.name)

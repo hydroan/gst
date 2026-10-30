@@ -15,8 +15,8 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	gstsqlite "github.com/hydroan/gst/database/sqlite"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/auditmanager"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/dbruntime"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/requestctx"
@@ -127,7 +127,7 @@ func uniqueFlowName(prefix string) string {
 
 // operationLogEntries returns the entries of op on model whose Record
 // mentions text.
-func operationLogEntries(ctx context.Context, t *testing.T, model string, op consts.OP, text string) []*modellogmgmt.OperationLog {
+func operationLogEntries(ctx context.Context, t *testing.T, model string, op types.Operation, text string) []*modellogmgmt.OperationLog {
 	t.Helper()
 	var entries []*modellogmgmt.OperationLog
 	require.NoError(t, database.Database[*modellogmgmt.OperationLog](ctx).
@@ -136,7 +136,7 @@ func operationLogEntries(ctx context.Context, t *testing.T, model string, op con
 }
 
 func TestUpdateManyFlowBackfillsTheCreationAuditInOneStatement(t *testing.T) {
-	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.UpdateMany, consts.UpdateManyBefore, consts.UpdateManyAfter)
+	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", apiaction.UpdateMany, apiaction.UpdateManyBefore, apiaction.UpdateManyAfter)
 	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "flow-user", UserID: "u-flow"}))
 	stored := createFlowSamples(ctx, t, uniqueFlowName("update many"), 3)
 	req := batch[*flowSample]{}
@@ -155,7 +155,7 @@ func TestUpdateManyFlowBackfillsTheCreationAuditInOneStatement(t *testing.T) {
 }
 
 func TestPatchManyFlowReadsTheBatchInOneStatement(t *testing.T) {
-	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.PatchMany, consts.PatchManyBefore, consts.PatchManyAfter)
+	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", apiaction.PatchMany, apiaction.PatchManyBefore, apiaction.PatchManyAfter)
 	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "flow-user", UserID: "u-flow"}))
 	stored := createFlowSamples(ctx, t, uniqueFlowName("patch many"), 3)
 	req := batch[*flowSample]{}
@@ -178,7 +178,7 @@ func TestPatchManyFlowReadsTheBatchInOneStatement(t *testing.T) {
 }
 
 func TestPatchManyFlowRefusesAnItemWithoutAnIDBeforeReading(t *testing.T) {
-	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.PatchMany, consts.PatchManyBefore, consts.PatchManyAfter)
+	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", apiaction.PatchMany, apiaction.PatchManyBefore, apiaction.PatchManyAfter)
 	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "flow-user", UserID: "u-flow"}))
 	stored := createFlowSamples(ctx, t, uniqueFlowName("patch many without id"), 1)
 	req := batch[*flowSample]{Items: []*flowSample{
@@ -196,7 +196,7 @@ func TestPatchManyFlowRefusesAnItemWithoutAnIDBeforeReading(t *testing.T) {
 }
 
 func TestDeleteFlowReadsTheRecordOnlyForTheOperationLog(t *testing.T) {
-	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.Delete, consts.DeleteBefore, consts.DeleteAfter)
+	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", apiaction.Delete, apiaction.DeleteBefore, apiaction.DeleteAfter)
 	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "flow-user", UserID: "u-flow"}))
 
 	t.Run("a disabled audit reads nothing", func(t *testing.T) {
@@ -217,27 +217,27 @@ func TestDeleteFlowReadsTheRecordOnlyForTheOperationLog(t *testing.T) {
 		require.NoError(t, a.deleteFlow(ctx, plainServiceContext, record.GetID()))
 
 		require.Len(t, selects(), 1)
-		entries := operationLogEntries(ctx, t, a.name, consts.OP_DELETE, record.Name)
+		entries := operationLogEntries(ctx, t, a.name, types.OperationDelete, record.Name)
 		require.Len(t, entries, 1)
 		require.Equal(t, record.GetID(), entries[0].RecordID)
 	})
 	t.Run("a record preferring replicas is read from the primary", func(t *testing.T) {
 		useReplica(t)
 		useAudit(t, config.Audit{Enabled: true})
-		ra := newAction[*replicaFlowSample, *replicaFlowSample, *replicaFlowSample]("replica-flow-samples", consts.Delete, consts.DeleteBefore, consts.DeleteAfter)
+		ra := newAction[*replicaFlowSample, *replicaFlowSample, *replicaFlowSample]("replica-flow-samples", apiaction.Delete, apiaction.DeleteBefore, apiaction.DeleteAfter)
 		record := &replicaFlowSample{Name: uniqueFlowName("delete from the primary")}
 		require.NoError(t, database.Database[*replicaFlowSample](ctx).Create(record))
 
 		require.NoError(t, ra.deleteFlow(ctx, plainServiceContext, record.GetID()), "a record the replica has not caught up on is the primary's to delete")
 
 		require.ErrorIs(t, database.Database[*replicaFlowSample](ctx).WithReplica(false).Get(&replicaFlowSample{}, record.GetID()), database.ErrRecordNotFound)
-		entries := operationLogEntries(ctx, t, ra.name, consts.OP_DELETE, record.Name)
+		entries := operationLogEntries(ctx, t, ra.name, types.OperationDelete, record.Name)
 		require.Len(t, entries, 1, "the log carries the record as the primary holds it")
 	})
 }
 
 func TestDeleteManyFlowRecordsTheDeletedRecordsWhenAudited(t *testing.T) {
-	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.DeleteMany, consts.DeleteManyBefore, consts.DeleteManyAfter)
+	a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", apiaction.DeleteMany, apiaction.DeleteManyBefore, apiaction.DeleteManyAfter)
 	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "flow-user", UserID: "u-flow"}))
 
 	t.Run("a disabled audit reads nothing", func(t *testing.T) {
@@ -260,7 +260,7 @@ func TestDeleteManyFlowRecordsTheDeletedRecordsWhenAudited(t *testing.T) {
 		require.NoError(t, a.deleteManyFlow(ctx, plainServiceContext, &req))
 
 		require.Len(t, selects(), 1, "the batch reads the records it deletes in one statement")
-		entries := operationLogEntries(ctx, t, a.name, consts.OP_DELETE_MANY, name)
+		entries := operationLogEntries(ctx, t, a.name, types.OperationDeleteMany, name)
 		require.Len(t, entries, 1)
 		for _, record := range stored {
 			require.Contains(t, entries[0].Record, record.GetID())
@@ -270,7 +270,7 @@ func TestDeleteManyFlowRecordsTheDeletedRecordsWhenAudited(t *testing.T) {
 	t.Run("records preferring replicas are read from the primary", func(t *testing.T) {
 		useReplica(t)
 		useAudit(t, config.Audit{Enabled: true})
-		ra := newAction[*replicaFlowSample, *replicaFlowSample, *replicaFlowSample]("replica-flow-samples", consts.DeleteMany, consts.DeleteManyBefore, consts.DeleteManyAfter)
+		ra := newAction[*replicaFlowSample, *replicaFlowSample, *replicaFlowSample]("replica-flow-samples", apiaction.DeleteMany, apiaction.DeleteManyBefore, apiaction.DeleteManyAfter)
 		name := uniqueFlowName("delete many from the primary")
 		stored := []*replicaFlowSample{{Name: name + " 0"}, {Name: name + " 1"}}
 		require.NoError(t, database.Database[*replicaFlowSample](ctx).Create(stored...))
@@ -278,7 +278,7 @@ func TestDeleteManyFlowRecordsTheDeletedRecordsWhenAudited(t *testing.T) {
 
 		require.NoError(t, ra.deleteManyFlow(ctx, plainServiceContext, &req))
 
-		entries := operationLogEntries(ctx, t, ra.name, consts.OP_DELETE_MANY, name)
+		entries := operationLogEntries(ctx, t, ra.name, types.OperationDeleteMany, name)
 		require.Len(t, entries, 1, "the log carries the records as the primary holds them")
 		for _, record := range stored {
 			require.Contains(t, entries[0].Record, record.Name)
@@ -296,20 +296,20 @@ func TestBatchFlowsRecordTheirItemsWhenAudited(t *testing.T) {
 	ctx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{Username: "flow-user", UserID: "u-flow"}))
 
 	t.Run("CreateMany", func(t *testing.T) {
-		a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.CreateMany, consts.CreateManyBefore, consts.CreateManyAfter)
+		a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", apiaction.CreateMany, apiaction.CreateManyBefore, apiaction.CreateManyAfter)
 		name := uniqueFlowName("create many audited")
 		req := batch[*flowSample]{Items: []*flowSample{{Name: name + " 0"}, {Name: name + " 1"}}}
 
 		require.NoError(t, a.createManyFlow(ctx, plainServiceContext, &req))
 
-		entries := operationLogEntries(ctx, t, a.name, consts.OP_CREATE_MANY, name)
+		entries := operationLogEntries(ctx, t, a.name, types.OperationCreateMany, name)
 		require.Len(t, entries, 1)
 		requireLoggedAs(t, req, entries[0].Record)
 		require.Equal(t, entries[0].Record, entries[0].Request)
 		require.Equal(t, entries[0].Record, entries[0].Response)
 	})
 	t.Run("UpdateMany", func(t *testing.T) {
-		a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.UpdateMany, consts.UpdateManyBefore, consts.UpdateManyAfter)
+		a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", apiaction.UpdateMany, apiaction.UpdateManyBefore, apiaction.UpdateManyAfter)
 		name := uniqueFlowName("update many audited")
 		req := batch[*flowSample]{}
 		for _, record := range createFlowSamples(ctx, t, name, 2) {
@@ -318,14 +318,14 @@ func TestBatchFlowsRecordTheirItemsWhenAudited(t *testing.T) {
 
 		require.NoError(t, a.updateManyFlow(ctx, plainServiceContext, &req))
 
-		entries := operationLogEntries(ctx, t, a.name, consts.OP_UPDATE_MANY, name)
+		entries := operationLogEntries(ctx, t, a.name, types.OperationUpdateMany, name)
 		require.Len(t, entries, 1)
 		requireLoggedAs(t, req, entries[0].Record)
 		require.Equal(t, entries[0].Record, entries[0].Request)
 		require.Equal(t, entries[0].Record, entries[0].Response)
 	})
 	t.Run("PatchMany", func(t *testing.T) {
-		a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", consts.PatchMany, consts.PatchManyBefore, consts.PatchManyAfter)
+		a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", apiaction.PatchMany, apiaction.PatchManyBefore, apiaction.PatchManyAfter)
 		name := uniqueFlowName("patch many audited")
 		req := batch[*flowSample]{}
 		var fieldSets []patchFieldSet
@@ -337,7 +337,7 @@ func TestBatchFlowsRecordTheirItemsWhenAudited(t *testing.T) {
 		patched, err := a.patchManyFlow(ctx, plainServiceContext, &req, fieldSets)
 		require.NoError(t, err)
 
-		entries := operationLogEntries(ctx, t, a.name, consts.OP_PATCH_MANY, name)
+		entries := operationLogEntries(ctx, t, a.name, types.OperationPatchMany, name)
 		require.Len(t, entries, 1)
 		requireLoggedAs(t, req, entries[0].Record)
 		require.Equal(t, entries[0].Record, entries[0].Request)

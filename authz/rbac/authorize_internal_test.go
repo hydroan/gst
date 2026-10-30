@@ -5,7 +5,6 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
 	prommetrics "github.com/hydroan/gst/metrics"
 	"github.com/prometheus/client_golang/prometheus"
 	io_prometheus_client "github.com/prometheus/client_model/go"
@@ -23,8 +22,8 @@ func TestAuthorizeNamesTheGrantingRule(t *testing.T) {
 		subject     string
 		object      string
 		wantAllowed bool
-		wantSource  consts.GrantSource
-		wantReason  consts.DenyReason
+		wantSource  GrantSource
+		wantReason  DenyReason
 		wantRule    []string
 	}{
 		{
@@ -32,29 +31,29 @@ func TestAuthorizeNamesTheGrantingRule(t *testing.T) {
 			subject:     "u_system",
 			object:      "/api/things",
 			wantAllowed: true,
-			wantSource:  consts.GrantSourceSystemRoot,
+			wantSource:  GrantSourceSystemRoot,
 		},
 		{
 			name:        "tenant admin",
 			subject:     "u_admin",
 			object:      "/api/things",
 			wantAllowed: true,
-			wantSource:  consts.GrantSourceTenantAdmin,
+			wantSource:  GrantSourceTenantAdmin,
 		},
 		{
 			name:        "authenticated policy",
 			subject:     "u_plain",
 			object:      "/api/open",
 			wantAllowed: true,
-			wantSource:  consts.GrantSourceAuthenticated,
-			wantRule:    []string{"*", consts.AUTHZ_ROLE_AUTHENTICATED, "/api/open", "GET", "allow"},
+			wantSource:  GrantSourceAuthenticated,
+			wantRule:    []string{"*", RoleAuthenticated, "/api/open", "GET", "allow"},
 		},
 		{
 			name:        "role policy",
 			subject:     "u_member",
 			object:      "/api/things",
 			wantAllowed: true,
-			wantSource:  consts.GrantSourceRole,
+			wantSource:  GrantSourceRole,
 			wantRule:    []string{"default", "role_a", "/api/things", "GET", "allow"},
 		},
 		{
@@ -62,14 +61,14 @@ func TestAuthorizeNamesTheGrantingRule(t *testing.T) {
 			subject:     "u_plain",
 			object:      "/api/things",
 			wantAllowed: false,
-			wantReason:  consts.DenyReasonNoRole,
+			wantReason:  DenyReasonNoRole,
 		},
 		{
 			name:        "denied for holding no permission",
 			subject:     "u_member",
 			object:      "/api/unreachable",
 			wantAllowed: false,
-			wantReason:  consts.DenyReasonNoPolicy,
+			wantReason:  DenyReasonNoPolicy,
 		},
 	}
 	for _, c := range cases {
@@ -111,7 +110,7 @@ func TestAuthorizeReportsStrongestSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if source != consts.GrantSourceSystemRoot {
+	if source != GrantSourceSystemRoot {
 		t.Errorf("expected the system role to outrank the role policy, got %q", source)
 	}
 	if rule != nil {
@@ -152,13 +151,13 @@ func TestAuthorizeResolvesInheritedRoleLinks(t *testing.T) {
 
 	for _, grouping := range [][]string{
 		{"u_relayed_system", "relay_role"},
-		{"relay_role", consts.AUTHZ_SYSTEM_ROLE_ROOT},
+		{"relay_role", SystemRoleRoot},
 	} {
 		seed(t, systemRoleGrouping, grouping)
 	}
 	for _, grouping := range [][]string{
 		{"u_relayed_admin", "relay_tenant_role", "default"},
-		{"relay_tenant_role", consts.AUTHZ_ROLE_ADMIN, "default"},
+		{"relay_tenant_role", RoleAdmin, "default"},
 	} {
 		seed(t, tenantRoleGrouping, grouping)
 	}
@@ -166,10 +165,10 @@ func TestAuthorizeResolvesInheritedRoleLinks(t *testing.T) {
 	cases := []struct {
 		name       string
 		subject    string
-		wantSource consts.GrantSource
+		wantSource GrantSource
 	}{
-		{"system role through another role", "u_relayed_system", consts.GrantSourceSystemRoot},
-		{"tenant admin through another role", "u_relayed_admin", consts.GrantSourceTenantAdmin},
+		{"system role through another role", "u_relayed_system", GrantSourceSystemRoot},
+		{"tenant admin through another role", "u_relayed_admin", GrantSourceTenantAdmin},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -203,7 +202,7 @@ func TestHasSystemRoleAgreesWithAuthorize(t *testing.T) {
 
 	for _, grouping := range [][]string{
 		{"u_relayed_system", "relay_role"},
-		{"relay_role", consts.AUTHZ_SYSTEM_ROLE_ROOT},
+		{"relay_role", SystemRoleRoot},
 	} {
 		seed(t, systemRoleGrouping, grouping)
 	}
@@ -216,11 +215,11 @@ func TestHasSystemRoleAgreesWithAuthorize(t *testing.T) {
 		{"assigned directly", "u_system", true},
 		{"reached through another role", "u_relayed_system", true},
 		{"holds no system role", "u_member", false},
-		{"named after the role", consts.AUTHZ_SYSTEM_ROLE_ROOT, false},
+		{"named after the role", SystemRoleRoot, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			held, err := r.HasSystemRole(ctx, c.subject, consts.AUTHZ_SYSTEM_ROLE_ROOT)
+			held, err := r.HasSystemRole(ctx, c.subject, SystemRoleRoot)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -232,7 +231,7 @@ func TestHasSystemRoleAgreesWithAuthorize(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if grantedAsRoot := decision.Source == consts.GrantSourceSystemRoot; grantedAsRoot != held {
+			if grantedAsRoot := decision.Source == GrantSourceSystemRoot; grantedAsRoot != held {
 				t.Errorf(
 					"Authorize reported source %q while HasSystemRole reported %v",
 					decision.Source, held,
@@ -251,7 +250,7 @@ func TestAuthorizeRejectsSubjectsNamedAfterARole(t *testing.T) {
 	r := newAuthorizeFixture(t)
 	ctx := context.Background()
 
-	for _, subject := range []string{consts.AUTHZ_SYSTEM_ROLE_ROOT, consts.AUTHZ_ROLE_ADMIN} {
+	for _, subject := range []string{SystemRoleRoot, RoleAdmin} {
 		t.Run(subject, func(t *testing.T) {
 			decision, err := r.Authorize(ctx, "default", subject, "/api/unrelated", "DELETE")
 			allowed := decision.Allowed
@@ -274,17 +273,17 @@ func TestAuthorizeWithoutPoliciesAnswersTheRoleBranches(t *testing.T) {
 	r := newTestRBAC(t, 0)
 	ctx := context.Background()
 
-	seed(t, systemRoleGrouping, []string{"u_system", consts.AUTHZ_SYSTEM_ROLE_ROOT})
-	seed(t, tenantRoleGrouping, []string{"u_admin", consts.AUTHZ_ROLE_ADMIN, "default"})
+	seed(t, systemRoleGrouping, []string{"u_system", SystemRoleRoot})
+	seed(t, tenantRoleGrouping, []string{"u_admin", RoleAdmin, "default"})
 
 	cases := []struct {
 		name        string
 		subject     string
 		wantAllowed bool
-		wantSource  consts.GrantSource
+		wantSource  GrantSource
 	}{
-		{"system role", "u_system", true, consts.GrantSourceSystemRoot},
-		{"tenant admin", "u_admin", true, consts.GrantSourceTenantAdmin},
+		{"system role", "u_system", true, GrantSourceSystemRoot},
+		{"tenant admin", "u_admin", true, GrantSourceTenantAdmin},
 		{"subject holding neither", "u_plain", false, ""},
 	}
 	for _, c := range cases {
@@ -354,17 +353,17 @@ func newAuthorizeFixture(t *testing.T) *rbac {
 	r := newTestRBAC(t, 0)
 	for _, policy := range [][]string{
 		{"default", "role_a", "/api/things", "GET", "allow"},
-		{"*", consts.AUTHZ_ROLE_AUTHENTICATED, "/api/open", "GET", "allow"},
+		{"*", RoleAuthenticated, "/api/open", "GET", "allow"},
 	} {
 		seed(t, "p", policy)
 	}
 	for _, grouping := range [][]string{
 		{"u_member", "role_a", "default"},
-		{"u_admin", consts.AUTHZ_ROLE_ADMIN, "default"},
+		{"u_admin", RoleAdmin, "default"},
 	} {
 		seed(t, tenantRoleGrouping, grouping)
 	}
-	seed(t, systemRoleGrouping, []string{"u_system", consts.AUTHZ_SYSTEM_ROLE_ROOT})
+	seed(t, systemRoleGrouping, []string{"u_system", SystemRoleRoot})
 	return r
 }
 
@@ -406,9 +405,9 @@ func TestAuthorizeCountsEveryDecision(t *testing.T) {
 		deniedBy  string
 		want      float64
 	}{
-		{string(consts.EffectAllow), string(consts.GrantSourceRole), "", 1},
-		{string(consts.EffectDeny), "", string(consts.DenyReasonNoRole), 1},
-		{string(consts.EffectDeny), "", string(consts.DenyReasonNoPolicy), 1},
+		{string(EffectAllow), string(GrantSourceRole), "", 1},
+		{string(EffectDeny), "", string(DenyReasonNoRole), 1},
+		{string(EffectDeny), "", string(DenyReasonNoPolicy), 1},
 	} {
 		var metric io_prometheus_client.Metric
 		counter, err := prommetrics.AuthzDecisionsTotal.GetMetricWithLabelValues(c.effect, c.allowedBy, c.deniedBy)

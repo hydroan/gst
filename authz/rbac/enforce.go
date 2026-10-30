@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/tenant"
@@ -57,7 +56,7 @@ func Enforce(ctx context.Context, subject Subject, obj, act string) (context.Con
 	if sub == "" {
 		// Anonymous subjects are refused before the tenant is resolved, so
 		// the decision is recorded without one.
-		logDeny(ctx, subject, "", sub, obj, act, consts.DenyReasonUnauthenticated, time.Since(start))
+		logDeny(ctx, subject, "", sub, obj, act, DenyReasonUnauthenticated, time.Since(start))
 		return ctx, "", types.NewError(http.StatusForbidden, "permission denied")
 	}
 	tenantID := strings.TrimSpace(subject.TenantID)
@@ -77,7 +76,7 @@ func Enforce(ctx context.Context, subject Subject, obj, act string) (context.Con
 	// The scope is taken from the decision itself rather than looked up
 	// again, which is what keeps the reach of the data equal to the reach
 	// of the grant.
-	if decision.Source == consts.GrantSourceSystemRoot {
+	if decision.Source == GrantSourceSystemRoot {
 		ctx = tenant.Across(ctx)
 	}
 	logGrant(ctx, subject, tenantID, sub, obj, act, decision.Source, decision.MatchedRule, time.Since(start))
@@ -96,13 +95,13 @@ func Enforce(ctx context.Context, subject Subject, obj, act string) (context.Con
 // as /api/things/42 or a route template such as /api/things/{id}, while the
 // rule holds the pattern that matched it, such as /api/things/{id} or
 // /api/things/*.
-func logGrant(ctx context.Context, subject Subject, tenantID, sub, obj, act string, source consts.GrantSource, matchedRule []string, elapsed time.Duration) {
+func logGrant(ctx context.Context, subject Subject, tenantID, sub, obj, act string, source GrantSource, matchedRule []string, elapsed time.Duration) {
 	if logger.Authz == nil {
 		return
 	}
 	fields := append(
 		enforceLogFields(ctx, subject, tenantID, sub, obj, act, elapsed),
-		zap.String("eft", string(consts.EffectAllow)),
+		zap.String("eft", string(EffectAllow)),
 		zap.String("allowed_by", string(source)),
 	)
 	if len(matchedRule) > 0 {
@@ -122,13 +121,13 @@ func logGrant(ctx context.Context, subject Subject, tenantID, sub, obj, act stri
 // written at decision time, before the action runs, so timestamps mean the
 // same thing for every effect and a panicking handler cannot drop a
 // decision.
-func logDeny(ctx context.Context, subject Subject, tenantID, sub, obj, act string, reason consts.DenyReason, elapsed time.Duration) {
+func logDeny(ctx context.Context, subject Subject, tenantID, sub, obj, act string, reason DenyReason, elapsed time.Duration) {
 	if logger.Authz == nil {
 		return
 	}
 	fields := append(
 		enforceLogFields(ctx, subject, tenantID, sub, obj, act, elapsed),
-		zap.String("eft", string(consts.EffectDeny)),
+		zap.String("eft", string(EffectDeny)),
 	)
 	if reason != "" {
 		fields = append(fields, zap.String("denied_by", string(reason)))

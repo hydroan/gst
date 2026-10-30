@@ -7,8 +7,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/errors"
-
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/types"
 )
 
@@ -23,7 +22,7 @@ var errNotFoundService = errors.New("no service instance matches the given route
 // phase.
 //
 // The route names the one the HTTP layer registers the matching handler
-// under, spelled either way consts.APIPath accepts, because Key derives the
+// under, spelled either way apiaction.APIPath accepts, because Key derives the
 // registry key from the path the route is served at and the controller
 // handlers resolve services through that key. An empty route panics.
 //
@@ -34,7 +33,7 @@ var errNotFoundService = errors.New("no service instance matches the given route
 // RegisterInstance preserves any preconfigured fields on svc. If svc is a
 // non-pointer value, the registry stores a pointer copy so controller lookups
 // always work with pointer service instances.
-func RegisterInstance[M types.Model, REQ types.Request, RSP types.Response](phase consts.Phase, route string, svc types.Service[M, REQ, RSP]) {
+func RegisterInstance[M types.Model, REQ types.Request, RSP types.Response](phase apiaction.Phase, route string, svc types.Service[M, REQ, RSP]) {
 	if svc == nil {
 		return
 	}
@@ -75,7 +74,7 @@ func RegisterInstance[M types.Model, REQ types.Request, RSP types.Response](phas
 // service interface, so only an interface type argument fails, with a panic:
 // it names no service to dispatch to, and registering nothing in its place
 // would leave the route on the built-in handling without a word.
-func Register[S types.Service[M, REQ, RSP], M types.Model, REQ types.Request, RSP types.Response](phase consts.Phase, route string) {
+func Register[S types.Service[M, REQ, RSP], M types.Model, REQ types.Request, RSP types.Response](phase apiaction.Phase, route string) {
 	typ := reflect.TypeFor[S]()
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
@@ -88,7 +87,7 @@ func Register[S types.Service[M, REQ, RSP], M types.Model, REQ types.Request, RS
 }
 
 // Key returns the registry key of the route and phase: the path the route
-// is served at (see consts.APIPath) and the phase, so registration and
+// is served at (see apiaction.APIPath) and the phase, so registration and
 // resolution agree however either side spells the route, with or without
 // the prefix or stray whitespace. A blank route, which RegisterInstance refuses,
 // keys no service, not even one registered on the root of the prefix: the
@@ -98,9 +97,9 @@ func Register[S types.Service[M, REQ, RSP], M types.Model, REQ types.Request, RS
 // distinct request/response declarations into one type, so a type-derived key
 // cannot tell two actions apart. The route is unique per action by HTTP
 // routing rules, which makes route plus phase a collision-free identity.
-func Key(phase consts.Phase, route string) string {
+func Key(phase apiaction.Phase, route string) string {
 	if route = strings.TrimSpace(route); route != "" {
-		route = consts.APIPath(route)
+		route = apiaction.APIPath(route)
 	}
 	return route + "|" + string(phase)
 }

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/gggen"
 	"github.com/stretchr/testify/require"
 )
@@ -40,10 +40,10 @@ func TestParseRouteTreeFromFileReadsGeneratedRoutes(t *testing.T) {
 // it, and one keeping nothing says which it was.
 func TestRouteTreeRunPrintsTheRoutesAsAURLTree(t *testing.T) {
 	chdirToRoutedProject(t,
-		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", consts.APIPath("records"), "", consts.Create.Name()),
-		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", consts.APIPath("records"), "", consts.List.Name()),
-		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", consts.APIPath("records/:id"), "id", consts.Get.Name()),
-		gggen.StmtRouterRegister("model", "Item", "*Item", "*Item", "model", "Pub", consts.APIPath("items"), "", consts.List.Name()),
+		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", apiaction.APIPath("records"), "", apiaction.Create.Name()),
+		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", apiaction.APIPath("records"), "", apiaction.List.Name()),
+		gggen.StmtRouterRegister("model", "Record", "*Record", "*Record", "model", "Auth", apiaction.APIPath("records/:id"), "id", apiaction.Get.Name()),
+		gggen.StmtRouterRegister("model", "Item", "*Item", "*Item", "model", "Pub", apiaction.APIPath("items"), "", apiaction.List.Name()),
 	)
 
 	var out bytes.Buffer

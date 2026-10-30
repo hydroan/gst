@@ -18,11 +18,11 @@ import (
 // The framework packages each generated registration file imports under
 // their own names. Both the file's imports and the names its project imports
 // are aliased around come from these lists. The router file leads with the
-// router and consts imports and sorts the gst import in among the rest.
+// router and service imports and sorts the gst import in among the rest.
 var (
 	modelFileImports        = []string{ggconst.ImportPathModel}
-	serviceFileImports      = []string{ggconst.ImportPathService, ggconst.ImportPathConsts}
-	routerFileLeadImports   = []string{ggconst.ImportPathRouter, ggconst.ImportPathConsts}
+	serviceFileImports      = []string{ggconst.ImportPathService}
+	routerFileLeadImports   = []string{ggconst.ImportPathRouter, ggconst.ImportPathService}
 	routerFileSortedImports = []string{ggconst.ImportPathGst}
 )
 
@@ -167,13 +167,12 @@ func BuildModelFile(modulePath, pkgName string, aliases map[string]string, stmts
 //		"helloworld/service/box"
 //		"helloworld/service/user"
 //
-//		"github.com/hydroan/gst/consts"
 //		"github.com/hydroan/gst/service"
 //	)
 //
 //	func init() {
-//		service.Register[*box.Updater](consts.Update, "/api/boxes/:id")
-//		service.Register[*user.Creator](consts.Create, "/api/users")
+//		service.Register[*box.Updater](service.Update, "/api/boxes/:id")
+//		service.Register[*user.Creator](service.Create, "/api/users")
 //	}
 func BuildServiceFile(modulePath, pkgName string, aliases map[string]string, stmts ...ast.Stmt) (string, error) {
 	body := make([]ast.Stmt, 0, len(stmts))
@@ -232,13 +231,13 @@ func BuildServiceFile(modulePath, pkgName string, aliases map[string]string, stm
 //		"helloworld/model"
 //
 //		"github.com/hydroan/gst"
-//		"github.com/hydroan/gst/consts"
 //		"github.com/hydroan/gst/router"
+//		"github.com/hydroan/gst/service"
 //	)
 //
 //	func Init() error {
-//		router.Register[*model.Box, *model.Box, *model.Box](router.Auth(), "/api/boxes", &gst.ControllerConfig[*model.Box]{}, consts.List)
-//		router.Register[*model.User, *model.User, *model.User](router.Pub(), "/api/users", &gst.ControllerConfig[*model.User]{}, consts.Create)
+//		router.Register[*model.Box, *model.Box, *model.Box](router.Auth(), "/api/boxes", &gst.ControllerConfig[*model.Box]{}, service.List)
+//		router.Register[*model.User, *model.User, *model.User](router.Pub(), "/api/users", &gst.ControllerConfig[*model.User]{}, service.Create)
 //		return nil
 //	}
 func BuildRouterFile(modulePath, pkgName, gstModelPkg string, aliases map[string]string, stmts ...ast.Stmt) (string, error) {

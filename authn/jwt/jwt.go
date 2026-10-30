@@ -8,7 +8,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/types"
 )
 
 const (
@@ -29,7 +29,7 @@ var (
 	ErrMissingSigningKey = errors.New("auth.jwt_secret is not configured")
 )
 
-var issuer = consts.FrameworkName
+var issuer = types.FrameworkName
 
 // signingKey returns the key this package signs every token it issues with, and
 // verifies every token it parses against. It is the package's one point of

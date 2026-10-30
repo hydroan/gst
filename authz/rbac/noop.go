@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/types"
 )
 
@@ -36,7 +35,7 @@ type noop struct{}
 func (noop) Authorize(
 	ctx context.Context, tenant string, subject string, object string, action string,
 ) (types.Decision, error) {
-	return types.Decision{Reason: consts.DenyReasonNotInitialized}, nil
+	return types.Decision{Reason: DenyReasonNotInitialized}, nil
 }
 
 func (noop) RemoveRole(ctx context.Context, tenant string, role string) error {

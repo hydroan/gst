@@ -7,9 +7,9 @@ import (
 
 	"cluster/model"
 
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/grpc"
 	gstmodel "github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/service"
 )
 
 // stepDownService serves the rpcs of the StepDownService service through the
@@ -22,7 +22,7 @@ type stepDownService struct {
 
 // The calls of the actions of StepDown, one per rpc of StepDownService,
 // built once at package initialization.
-var createStepDown = grpc.ServiceCall[*model.StepDown, *gstmodel.Empty, *model.StepDownRsp](consts.Create, "/api/step-downs")
+var createStepDown = grpc.ServiceCall[*model.StepDown, *gstmodel.Empty, *model.StepDownRsp](service.Create, "/api/step-downs")
 
 // CreateStepDown serves the Create action of StepDown on /api/step-downs.
 func (stepDownService) CreateStepDown(ctx context.Context, req *CreateStepDownRequest) (*CreateStepDownResponse, error) {

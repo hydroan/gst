@@ -7,8 +7,8 @@ import (
 
 	"cluster/model"
 
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/grpc"
+	"github.com/hydroan/gst/service"
 )
 
 // rebuildService serves the rpcs of the RebuildService service through the
@@ -21,7 +21,7 @@ type rebuildService struct {
 
 // The calls of the actions of Rebuild, one per rpc of RebuildService, built
 // once at package initialization.
-var createRebuild = grpc.ServiceCall[*model.Rebuild, *model.RebuildReq, *model.RebuildRsp](consts.Create, "/api/rebuilds")
+var createRebuild = grpc.ServiceCall[*model.Rebuild, *model.RebuildReq, *model.RebuildRsp](service.Create, "/api/rebuilds")
 
 // CreateRebuild serves the Create action of Rebuild on /api/rebuilds.
 func (rebuildService) CreateRebuild(ctx context.Context, req *CreateRebuildRequest) (*CreateRebuildResponse, error) {

@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
@@ -59,7 +58,7 @@ func recordEnforceLog(t *testing.T) *enforceLogRecorder {
 func TestEnforceLogFieldsFitTheCountInTheWorstCase(t *testing.T) {
 	recorder := recordEnforceLog(t)
 
-	logGrant(execctx.WithTraceID(context.Background(), "trace-1"), Subject{Username: "alice"}, "tenant-1", "u-1", "/api/samples", http.MethodGet, consts.GrantSourceRole, []string{"role-1", "/api/samples", http.MethodGet}, time.Millisecond)
+	logGrant(execctx.WithTraceID(context.Background(), "trace-1"), Subject{Username: "alice"}, "tenant-1", "u-1", "/api/samples", http.MethodGet, GrantSourceRole, []string{"role-1", "/api/samples", http.MethodGet}, time.Millisecond)
 
 	require.Len(t, recorder.entries, 1)
 	require.Len(t, recorder.entries[0], enforceLogFieldCount, "the worst case must fill the count exactly: a new field bumps enforceLogFieldCount")
@@ -81,8 +80,8 @@ func TestEnforceRefusesAnAnonymousSubject(t *testing.T) {
 	require.Empty(t, tenantID)
 	require.Len(t, recorder.entries, 1)
 	fields := fieldMap(recorder.entries[0])
-	require.Equal(t, string(consts.EffectDeny), fields["eft"])
-	require.Equal(t, string(consts.DenyReasonUnauthenticated), fields["denied_by"])
+	require.Equal(t, string(EffectDeny), fields["eft"])
+	require.Equal(t, string(DenyReasonUnauthenticated), fields["denied_by"])
 	require.Equal(t, "trace-1", fields[execctx.KeyTraceID])
 }
 
@@ -100,6 +99,6 @@ func TestEnforceDeniesThroughAnUninitializedPolicySet(t *testing.T) {
 	require.Equal(t, "default", tenantID)
 	require.Len(t, recorder.entries, 1)
 	fields := fieldMap(recorder.entries[0])
-	require.Equal(t, string(consts.DenyReasonNotInitialized), fields["denied_by"])
+	require.Equal(t, string(DenyReasonNotInitialized), fields["denied_by"])
 	require.Equal(t, "alice", fields["username"])
 }

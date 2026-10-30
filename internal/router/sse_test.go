@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/client"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/middleware"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/router"
@@ -65,18 +65,18 @@ func (s *endlessStreamer) SSE(ctx *types.ServiceContext) error {
 // before the framework bootstraps, while the routes below register after
 // router.Init — the same split generated code has.
 func init() {
-	serviceregistry.RegisterInstance[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](consts.SSE, sseStreamRoute, &noticeStreamer{})
-	serviceregistry.RegisterInstance[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](consts.SSE, sseEndlessRoute, &endlessStreamer{})
+	serviceregistry.RegisterInstance[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](apiaction.SSE, sseStreamRoute, &noticeStreamer{})
+	serviceregistry.RegisterInstance[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](apiaction.SSE, sseEndlessRoute, &endlessStreamer{})
 }
 
 // registerSSERoutes registers the streaming routes; TestMain calls it after
 // router.Init, mirroring where generated route registration runs.
 func registerSSERoutes() {
 	router.Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](
-		router.Auth(), sseStreamRoute, &types.ControllerConfig[*modelregistry.Empty]{}, consts.SSE,
+		router.Auth(), sseStreamRoute, &types.ControllerConfig[*modelregistry.Empty]{}, apiaction.SSE,
 	)
 	router.Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](
-		router.Auth(), sseEndlessRoute, &types.ControllerConfig[*modelregistry.Empty]{}, consts.SSE,
+		router.Auth(), sseEndlessRoute, &types.ControllerConfig[*modelregistry.Empty]{}, apiaction.SSE,
 	)
 }
 

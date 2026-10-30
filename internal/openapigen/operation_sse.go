@@ -4,7 +4,7 @@ import (
 	"reflect"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/types"
 )
@@ -20,7 +20,7 @@ const sseMediaType = "text/event-stream"
 func setSSE[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	custom := !modelregistry.AreTypesEqual[M, REQ, RSP]()
 
-	op := newOperation(path, consts.SSE, reflect.TypeFor[M](), custom)
+	op := newOperation(path, apiaction.SSE, reflect.TypeFor[M](), custom)
 	op.Responses = sseStreamResponses(custom)
 	pathItem.Get = op
 }
@@ -41,5 +41,5 @@ func sseStreamResponses(custom bool) *openapi3.Responses {
 		WithContent(openapi3.Content{
 			sseMediaType: openapi3.NewMediaType().WithSchemaRef(streamSchema),
 		})
-	return responsesOf(&openapi3.ResponseRef{Value: response}, consts.SSE, custom)
+	return responsesOf(&openapi3.ResponseRef{Value: response}, apiaction.SSE, custom)
 }

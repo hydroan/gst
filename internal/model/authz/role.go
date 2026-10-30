@@ -7,7 +7,6 @@ import (
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/authz/rbac"
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
@@ -86,7 +85,7 @@ func (r *Role) validate() error {
 	// The system role is addressed by its constant ID and never lives in the
 	// roles table; reject both the ID and the name to avoid a user-created
 	// role masquerading as it.
-	if r.ID == consts.AUTHZ_SYSTEM_ROLE_ROOT || r.Name == consts.AUTHZ_SYSTEM_ROLE_ROOT {
+	if r.ID == rbac.SystemRoleRoot || r.Name == rbac.SystemRoleRoot {
 		return gst.NewError(http.StatusBadRequest, "system_root is reserved for the system role")
 	}
 
@@ -100,7 +99,7 @@ func (r *Role) validate() error {
 	// object and action in its tenant without consulting a single policy. A role
 	// created under this ID hands tenant-wide superuser access to everyone bound
 	// to it, whatever permissions it appears to select.
-	if r.ID == consts.AUTHZ_ROLE_ADMIN {
+	if r.ID == rbac.RoleAdmin {
 		return gst.NewError(http.StatusBadRequest, "admin is reserved for the built-in tenant administrator role")
 	}
 
@@ -109,7 +108,7 @@ func (r *Role) validate() error {
 	// role created under this ID turns its own permissions into global ones: every
 	// policy syncRolePermissions generates for it would allow every subject that can
 	// log in, including subjects that were never bound to the role.
-	if r.ID == consts.AUTHZ_ROLE_AUTHENTICATED {
+	if r.ID == rbac.RoleAuthenticated {
 		return gst.NewError(http.StatusBadRequest, "authenticated is reserved for the implicit role of every authenticated subject")
 	}
 

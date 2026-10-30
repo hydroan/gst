@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
@@ -45,14 +44,14 @@ func Cursor(q url.Values, m types.Model) (types.Cursor, error) {
 	if !cursorRequested(q, m) {
 		return types.Cursor{}, nil
 	}
-	value := q.Get(consts.QUERY_CURSOR_VALUE)
+	value := q.Get(types.QueryCursorValue)
 
 	// An unnamed column leaves the order column empty on purpose: the database
 	// layer owns the primary key fallback, so both this path and a service
 	// building a cursor by hand land on the same default.
 	column := ""
 	var cursorColumn modelschema.Column
-	if field := strings.TrimSpace(q.Get(consts.QUERY_CURSOR_FIELD)); len(field) > 0 {
+	if field := strings.TrimSpace(q.Get(types.QueryCursorField)); len(field) > 0 {
 		columns, err := modelschema.FilterableIndex(reflect.TypeOf(m))
 		if err != nil {
 			return types.Cursor{}, err
@@ -103,7 +102,7 @@ func Cursor(q url.Values, m types.Model) (types.Cursor, error) {
 		return types.Cursor{}, err
 	}
 
-	if next, _ := modelschema.ParseBool(q.Get(consts.QUERY_CURSOR_NEXT)); next {
+	if next, _ := modelschema.ParseBool(q.Get(types.QueryCursorNext)); next {
 		return types.CursorForward(types.Asc(column), value), nil
 	}
 	return types.CursorBackward(types.Asc(column), value), nil
@@ -121,13 +120,13 @@ func cursorRequested(q url.Values, m types.Model) bool {
 	if !modelregistry.IsCursorable(m) {
 		return false
 	}
-	if len(q.Get(consts.QUERY_CURSOR_VALUE)) > 0 {
+	if len(q.Get(types.QueryCursorValue)) > 0 {
 		return true
 	}
-	if len(q.Get(consts.QUERY_SORT_BY)) > 0 {
+	if len(q.Get(types.QuerySortBy)) > 0 {
 		return false
 	}
-	return q.Has(consts.QUERY_CURSOR_FIELD) || q.Has(consts.QUERY_CURSOR_NEXT) || !modelregistry.IsPaginatable(m)
+	return q.Has(types.QueryCursorField) || q.Has(types.QueryCursorNext) || !modelregistry.IsPaginatable(m)
 }
 
 // normalizeCursorValue checks the boundary value against what the cursor

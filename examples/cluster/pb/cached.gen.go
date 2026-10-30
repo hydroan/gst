@@ -7,9 +7,9 @@ import (
 
 	"cluster/model"
 
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/grpc"
 	gstmodel "github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/service"
 )
 
 // cachedService serves the rpcs of the CachedService service through the
@@ -23,9 +23,9 @@ type cachedService struct {
 // The calls of the actions of Cached, one per rpc of CachedService, built
 // once at package initialization.
 var (
-	createCached   = grpc.ServiceCall[*model.Cached, *model.CachedReq, *model.CachedCreateRsp](consts.Create, "/api/caches")
-	deleteCached   = grpc.ServiceCall[*model.Cached, *gstmodel.Empty, *model.CachedDeleteRsp](consts.Delete, "/api/caches/:id")
-	getCached      = grpc.ServiceCall[*model.Cached, *gstmodel.Empty, *model.CachedGetRsp](consts.Get, "/api/caches/:id")
+	createCached   = grpc.ServiceCall[*model.Cached, *model.CachedReq, *model.CachedCreateRsp](service.Create, "/api/caches")
+	deleteCached   = grpc.ServiceCall[*model.Cached, *gstmodel.Empty, *model.CachedDeleteRsp](service.Delete, "/api/caches/:id")
+	getCached      = grpc.ServiceCall[*model.Cached, *gstmodel.Empty, *model.CachedGetRsp](service.Get, "/api/caches/:id")
 	exchangeCached = grpc.BidiStreamCall[*model.Cached, *model.CachedKeyReq, *model.CachedExchangeRsp]("/api/caches/exchange")
 	loadCached     = grpc.ClientStreamCall[*model.Cached, *model.CachedLoadReq, *model.CachedLoadRsp]("/api/caches/load")
 )

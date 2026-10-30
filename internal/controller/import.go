@@ -8,7 +8,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
@@ -38,7 +38,7 @@ const missingUploadFileMsg = "upload file is required"
 // an ID is created (unique-key collisions fail with 409). Both writes share
 // one transaction, so an import is all-or-nothing.
 func ImportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), consts.Import)
+	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), apiaction.Import)
 	return func(c *gin.Context) {
 		ctrlSpanCtx, span, ok := a.beginRequest(c)
 		defer span.End()
@@ -46,7 +46,7 @@ func ImportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			return
 		}
 
-		log := logger.Controller.WithContext(c.Request.Context(), consts.Import)
+		log := logger.Controller.WithContext(c.Request.Context(), apiaction.Import)
 		// NOTE: the form field name is "file", it must be agreed on with the
 		// frontend.
 		file, err := c.FormFile("file")
@@ -79,9 +79,9 @@ func ImportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			gstotel.RecordError(span, err)
 			return
 		}
-		ml, err := traceServiceCall(ctrlSpanCtx, a.serviceSpan(consts.Import), a.name, func(spanCtx context.Context) ([]M, error) {
+		ml, err := traceServiceCall(ctrlSpanCtx, a.serviceSpan(apiaction.Import), a.name, func(spanCtx context.Context) ([]M, error) {
 			return a.service().
-				Import(types.NewServiceContext(c, spanCtx, consts.Import), buf)
+				Import(types.NewServiceContext(c, spanCtx, apiaction.Import), buf)
 		})
 		if err != nil {
 			response.Error(c, failService(ctrlSpanCtx, log, err))

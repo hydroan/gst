@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
@@ -39,17 +39,17 @@ func TestQueryValuesRenderTheHTTPQuery(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, url.Values{
-		"name":                    {"alice"},
-		"age[gt]":                 {"20"},
-		"status[in]":              {"active,archived"},
-		consts.QUERY_SORT_BY:      {"name,created_at desc"},
-		consts.QUERY_PAGE:         {"2"},
-		consts.QUERY_SIZE:         {"50"},
-		consts.QUERY_CURSOR_FIELD: {"id"},
-		consts.QUERY_CURSOR_VALUE: {"r-1"},
-		consts.QUERY_CURSOR_NEXT:  {"true"},
-		consts.QUERY_EXPAND:       {"children,parent"},
-		consts.QUERY_DEPTH:        {"3"},
+		"name":                 {"alice"},
+		"age[gt]":              {"20"},
+		"status[in]":           {"active,archived"},
+		types.QuerySortBy:      {"name,created_at desc"},
+		types.QueryPage:        {"2"},
+		types.QuerySize:        {"50"},
+		types.QueryCursorField: {"id"},
+		types.QueryCursorValue: {"r-1"},
+		types.QueryCursorNext:  {"true"},
+		types.QueryExpand:      {"children,parent"},
+		types.QueryDepth:       {"3"},
 	}, values)
 
 	empty, err := Query{}.values()

@@ -11,12 +11,12 @@ import (
 	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/modelregistry"
 )
 
 func TestSetMarksPublicRouteSecurity(t *testing.T) {
-	set[*openapiTimeQueryModel, *openapiTimeQueryModel, *openapiTimeQueryModel]("/api/test-public-route", false, consts.List)
+	set[*openapiTimeQueryModel, *openapiTimeQueryModel, *openapiTimeQueryModel]("/api/test-public-route", false, apiaction.List)
 
 	item := doc.Paths.Value("/api/test-public-route")
 	if item == nil || item.Get == nil {
@@ -28,7 +28,7 @@ func TestSetMarksPublicRouteSecurity(t *testing.T) {
 }
 
 func TestSetKeepsAuthRouteSecurityDefault(t *testing.T) {
-	set[*openapiTimeQueryModel, *openapiTimeQueryModel, *openapiTimeQueryModel]("/api/test-auth-route", true, consts.List)
+	set[*openapiTimeQueryModel, *openapiTimeQueryModel, *openapiTimeQueryModel]("/api/test-auth-route", true, apiaction.List)
 
 	item := doc.Paths.Value("/api/test-auth-route")
 	if item == nil || item.Get == nil {
@@ -40,7 +40,7 @@ func TestSetKeepsAuthRouteSecurityDefault(t *testing.T) {
 }
 
 func TestSetDocumentsEmbeddedFrameworkQueryParameters(t *testing.T) {
-	set[*openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel]("/api/test-query-contract", true, consts.List)
+	set[*openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel, *openapiEmbeddedQueryModel]("/api/test-query-contract", true, apiaction.List)
 
 	item := doc.Paths.Value("/api/test-query-contract")
 	if item == nil || item.Get == nil {
@@ -85,8 +85,8 @@ type openapiSecondActionRsp struct {
 // sharing a model and a phase each keep their own payload, instead of
 // collapsing onto one component keyed by the model.
 func TestSetGivesEachCustomPayloadItsOwnRequestBody(t *testing.T) {
-	set[*openapiActionModel, *openapiFirstActionReq, *openapiFirstActionRsp]("/api/openapi-actions/first", true, consts.Create)
-	set[*openapiActionModel, *openapiSecondActionReq, *openapiSecondActionRsp]("/api/openapi-actions/second", true, consts.Create)
+	set[*openapiActionModel, *openapiFirstActionReq, *openapiFirstActionRsp]("/api/openapi-actions/first", true, apiaction.Create)
+	set[*openapiActionModel, *openapiSecondActionReq, *openapiSecondActionRsp]("/api/openapi-actions/second", true, apiaction.Create)
 
 	first := registeredRequestBodySchema(t, operationForPath(t, "/api/openapi-actions/first").RequestBody)
 	if _, ok := first.Properties["reason"]; !ok {
@@ -102,8 +102,8 @@ func TestSetGivesEachCustomPayloadItsOwnRequestBody(t *testing.T) {
 // TestSetGivesEachCustomResponseItsOwnComponent asserts the same isolation for
 // responses, which share the request component key today.
 func TestSetGivesEachCustomResponseItsOwnComponent(t *testing.T) {
-	set[*openapiActionModel, *openapiFirstActionReq, *openapiFirstActionRsp]("/api/openapi-responses/first", true, consts.Create)
-	set[*openapiActionModel, *openapiSecondActionReq, *openapiSecondActionRsp]("/api/openapi-responses/second", true, consts.Create)
+	set[*openapiActionModel, *openapiFirstActionReq, *openapiFirstActionRsp]("/api/openapi-responses/first", true, apiaction.Create)
+	set[*openapiActionModel, *openapiSecondActionReq, *openapiSecondActionRsp]("/api/openapi-responses/second", true, apiaction.Create)
 
 	first := registeredResponseSchema(t, responseRefForPath(t, "/api/openapi-responses/first", 200))
 	if _, ok := dataSchema(t, first).Properties["id"]; !ok {
@@ -134,8 +134,8 @@ type openapiTwinRsp struct {
 // with identical fields still resolve to their own components, since the key is
 // derived from the type rather than from its shape.
 func TestSetSeparatesStructurallyIdenticalPayloads(t *testing.T) {
-	set[*openapiActionModel, *openapiFirstTwinReq, *openapiTwinRsp]("/api/openapi-twins/first", true, consts.Create)
-	set[*openapiActionModel, *openapiSecondTwinReq, *openapiTwinRsp]("/api/openapi-twins/second", true, consts.Create)
+	set[*openapiActionModel, *openapiFirstTwinReq, *openapiTwinRsp]("/api/openapi-twins/first", true, apiaction.Create)
+	set[*openapiActionModel, *openapiSecondTwinReq, *openapiTwinRsp]("/api/openapi-twins/second", true, apiaction.Create)
 
 	first := operationForPath(t, "/api/openapi-twins/first").RequestBody.Ref
 	second := operationForPath(t, "/api/openapi-twins/second").RequestBody.Ref
@@ -147,7 +147,7 @@ func TestSetSeparatesStructurallyIdenticalPayloads(t *testing.T) {
 // TestSetKeepsModelKeyForDefaultCRUD pins the component key of a default CRUD
 // action, where the model doubles as request and response.
 func TestSetKeepsModelKeyForDefaultCRUD(t *testing.T) {
-	set[*openapiActionModel, *openapiActionModel, *openapiActionModel]("/api/openapi-crud", true, consts.Create)
+	set[*openapiActionModel, *openapiActionModel, *openapiActionModel]("/api/openapi-crud", true, apiaction.Create)
 
 	op := operationForPath(t, "/api/openapi-crud")
 	wantRef := "#/components/requestBodies/internal.openapigen.openapiactionmodel_create"
@@ -160,8 +160,8 @@ func TestSetKeepsModelKeyForDefaultCRUD(t *testing.T) {
 // reused across two phases keeps the list envelope apart from the single-item
 // envelope.
 func TestSetSeparatesListAndGetResponsesForSameType(t *testing.T) {
-	set[*openapiActionModel, *openapiActionModel, *openapiActionModel]("/api/openapi-envelope", true, consts.List)
-	set[*openapiActionModel, *openapiActionModel, *openapiActionModel]("/api/openapi-envelope/:id", true, consts.Get)
+	set[*openapiActionModel, *openapiActionModel, *openapiActionModel]("/api/openapi-envelope", true, apiaction.List)
+	set[*openapiActionModel, *openapiActionModel, *openapiActionModel]("/api/openapi-envelope/:id", true, apiaction.Get)
 
 	list := dataSchema(t, registeredResponseSchema(t, responseRefForPath(t, "/api/openapi-envelope", 200)))
 	if _, ok := list.Properties["items"]; !ok {
@@ -188,7 +188,7 @@ type openapiNoDataRsp struct{}
 // {"data":null,"msg":"success","trace_id":"..."}, and responses is a
 // required member of an OpenAPI operation.
 func TestSetDeclaresResponsesForEmptyResponseType(t *testing.T) {
-	set[*openapiActionModel, *openapiNoDataReq, *openapiNoDataRsp]("/api/openapi-nodata", true, consts.Create)
+	set[*openapiActionModel, *openapiNoDataReq, *openapiNoDataRsp]("/api/openapi-nodata", true, apiaction.Create)
 
 	op := operationForPath(t, "/api/openapi-nodata")
 	if op.Responses == nil || op.Responses.Len() == 0 {
@@ -221,8 +221,8 @@ type openapiEntryIndex map[string]*openapiEntry
 // instead of the absent body and the null data member of a type without
 // fields.
 func TestSetDocumentsSliceAndMapBodies(t *testing.T) {
-	set[*openapiActionModel, openapiEntryBatch, openapiEntryIndex]("/api/openapi-collections", true, consts.Create)
-	set[*openapiActionModel, *openapiEntryBatch, openapiEntryBatch]("/api/openapi-collection-pointers", true, consts.Create)
+	set[*openapiActionModel, openapiEntryBatch, openapiEntryIndex]("/api/openapi-collections", true, apiaction.Create)
+	set[*openapiActionModel, *openapiEntryBatch, openapiEntryBatch]("/api/openapi-collection-pointers", true, apiaction.Create)
 
 	for path, wantData := range map[string]openapi3.Types{
 		"/api/openapi-collections":         {openapi3.TypeObject},
@@ -254,9 +254,9 @@ type openapiDeletableModel struct {
 // envelope with a null data member, not the deleted record, while a delete a
 // service performs keeps its response type.
 func TestSetDocumentsNoDataForDefaultDeletes(t *testing.T) {
-	set[*openapiDeletableModel, *openapiDeletableModel, *openapiDeletableModel]("/api/openapi-deletables/{id}", true, consts.Delete)
-	set[*openapiDeletableModel, *openapiDeletableModel, *openapiDeletableModel]("/api/openapi-deletables/batch", true, consts.DeleteMany)
-	set[*openapiDeletableModel, *openapiFirstActionReq, *openapiFirstActionRsp]("/api/openapi-deletable-actions/{id}", true, consts.Delete)
+	set[*openapiDeletableModel, *openapiDeletableModel, *openapiDeletableModel]("/api/openapi-deletables/{id}", true, apiaction.Delete)
+	set[*openapiDeletableModel, *openapiDeletableModel, *openapiDeletableModel]("/api/openapi-deletables/batch", true, apiaction.DeleteMany)
+	set[*openapiDeletableModel, *openapiFirstActionReq, *openapiFirstActionRsp]("/api/openapi-deletable-actions/{id}", true, apiaction.Delete)
 
 	for _, path := range []string{"/api/openapi-deletables/{id}", "/api/openapi-deletables/batch"} {
 		item := doc.Paths.Value(path)
@@ -284,7 +284,7 @@ func TestSetDocumentsNoDataForDefaultDeletes(t *testing.T) {
 // whose schema admits any value and a response whose data member is present,
 // instead of a panic while the route registers.
 func TestSetDocumentsInterfaceBodies(t *testing.T) {
-	set[*openapiActionModel, any, any]("/api/openapi-values", true, consts.Create)
+	set[*openapiActionModel, any, any]("/api/openapi-values", true, apiaction.Create)
 
 	op := operationForPath(t, "/api/openapi-values")
 	payload := registeredRequestBodySchema(t, op.RequestBody)
@@ -311,7 +311,7 @@ type openapiTreeNode struct {
 // cyclic type points at a component that actually exists, so the document stays
 // loadable.
 func TestSetResolvesSelfReferentialSchemaRefs(t *testing.T) {
-	set[*openapiTreeNode, *openapiTreeNode, *openapiTreeNode]("/api/openapi-trees", true, consts.List)
+	set[*openapiTreeNode, *openapiTreeNode, *openapiTreeNode]("/api/openapi-trees", true, apiaction.List)
 
 	docMutex.RLock()
 	schemas := doc.Components.Schemas
@@ -344,7 +344,7 @@ type openapiTreeHolder struct {
 // stops it, and stopping with a null puts an illegal value where the schema
 // expects a non-nullable member, which fails document validation.
 func TestSetBuildsExampleWithoutNullPlaceholders(t *testing.T) {
-	set[*openapiTreeHolder, *openapiTreeHolder, *openapiTreeHolder]("/api/openapi-tree-examples", true, consts.Create)
+	set[*openapiTreeHolder, *openapiTreeHolder, *openapiTreeHolder]("/api/openapi-tree-examples", true, apiaction.Create)
 
 	schema := registeredRequestBodySchema(t, operationForPath(t, "/api/openapi-tree-examples").RequestBody)
 	if schema.Example == nil {
@@ -360,7 +360,7 @@ func TestSetBuildsExampleWithoutNullPlaceholders(t *testing.T) {
 // bare $ref, so its inline Value is not the schema readers validate against,
 // and walking into it invents values the referenced component rejects.
 func TestSetStopsExampleAtSchemaRefBoundaries(t *testing.T) {
-	set[*openapiTreeHolder, *openapiTreeHolder, *openapiTreeHolder]("/api/openapi-ref-boundaries", true, consts.Create)
+	set[*openapiTreeHolder, *openapiTreeHolder, *openapiTreeHolder]("/api/openapi-ref-boundaries", true, apiaction.Create)
 
 	schema := registeredRequestBodySchema(t, operationForPath(t, "/api/openapi-ref-boundaries").RequestBody)
 	example, ok := schema.Example.(map[string]any)
@@ -409,7 +409,7 @@ type openapiExampleShapeModel struct {
 // fails validation where the schema declares a date-time format or an enum.
 func TestSetBuildsExampleHonouringFormatAndEnum(t *testing.T) {
 	registerEnumFieldStatus()
-	set[*openapiExampleShapeModel, *openapiExampleShapeModel, *openapiExampleShapeModel]("/api/openapi-example-shapes", true, consts.Create)
+	set[*openapiExampleShapeModel, *openapiExampleShapeModel, *openapiExampleShapeModel]("/api/openapi-example-shapes", true, apiaction.Create)
 
 	schema := registeredRequestBodySchema(t, operationForPath(t, "/api/openapi-example-shapes").RequestBody)
 	example, ok := schema.Example.(map[string]any)
@@ -451,7 +451,7 @@ type openapiAnyMapModel struct {
 // type still gets a non-null example. Such a schema accepts any value, but a
 // null is only accepted when the schema is explicitly nullable.
 func TestSetBuildsExampleForUntypedMapValues(t *testing.T) {
-	set[*openapiAnyMapModel, *openapiAnyMapModel, *openapiAnyMapModel]("/api/openapi-any-maps", true, consts.Create)
+	set[*openapiAnyMapModel, *openapiAnyMapModel, *openapiAnyMapModel]("/api/openapi-any-maps", true, apiaction.Create)
 
 	schema := registeredRequestBodySchema(t, operationForPath(t, "/api/openapi-any-maps").RequestBody)
 	example, ok := schema.Example.(map[string]any)
@@ -486,7 +486,7 @@ type openapiItemsLine struct {
 // documents, the record's own optional id and the id of each line included:
 // the array is a field like any other, not the records of a batch.
 func TestSetBuildsExampleOfEveryFieldBesideAnItemsArray(t *testing.T) {
-	set[*openapiItemsModel, *openapiItemsModel, *openapiItemsModel]("/api/openapi-items-examples", true, consts.Create)
+	set[*openapiItemsModel, *openapiItemsModel, *openapiItemsModel]("/api/openapi-items-examples", true, apiaction.Create)
 
 	schema := registeredRequestBodySchema(t, operationForPath(t, "/api/openapi-items-examples").RequestBody)
 	want := map[string]any{
@@ -517,8 +517,8 @@ var componentKeyCharset = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 // phases. A key outside it makes the whole document invalid.
 func TestSetBuildsComponentKeysWithinSpecCharset(t *testing.T) {
 	set[*openapiKeyModel, *openapiKeyModel, *openapiKeyModel]("/api/openapi-keys", true,
-		consts.Create, consts.Delete, consts.Update, consts.Patch, consts.List, consts.Get,
-		consts.CreateMany, consts.DeleteMany, consts.UpdateMany, consts.PatchMany)
+		apiaction.Create, apiaction.Delete, apiaction.Update, apiaction.Patch, apiaction.List, apiaction.Get,
+		apiaction.CreateMany, apiaction.DeleteMany, apiaction.UpdateMany, apiaction.PatchMany)
 
 	docMutex.RLock()
 	defer docMutex.RUnlock()

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/gghelper"
@@ -588,7 +588,7 @@ func orphanPruneModel() *modelinfo.Model {
 				Service:     true,
 				ServiceName: "role",
 				Flatten:     true,
-				Phase:       consts.Create,
+				Phase:       apiaction.Create,
 			},
 		},
 	}

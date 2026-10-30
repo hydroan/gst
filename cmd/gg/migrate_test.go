@@ -398,7 +398,6 @@ func requireOnlySchemaSnapshotWritten(t *testing.T, before map[string]string) {
 const migrateSampleModule = `package module
 
 import (
-	"github.com/hydroan/gst/consts"
 	"github.com/hydroan/gst/model"
 	gstmodule "github.com/hydroan/gst/module"
 	"github.com/hydroan/gst/service"
@@ -417,7 +416,7 @@ type SampleService struct {
 }
 
 func init() {
-	gstmodule.Use(gstmodule.NewWrapper[*Sample, *Sample, *Sample]("samples", "id", false, &SampleService{}), gstmodule.CRUD(consts.List))
+	gstmodule.Use(gstmodule.NewWrapper[*Sample, *Sample, *Sample]("samples", "id", false, &SampleService{}), gstmodule.CRUD(service.List))
 }
 `
 

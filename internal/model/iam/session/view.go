@@ -1,6 +1,8 @@
 package modeliamsession
 
-import "time"
+import (
+	"time"
+)
 
 // AdminSessionOwnerView describes a session owner together with all indexed sessions owned by that user.
 type AdminSessionOwnerView struct {
@@ -34,7 +36,7 @@ type PrincipalView struct {
 	MustChangePassword bool   `json:"must_change_password"`
 
 	// IsSystemRoot reports whether the principal holds the system-level
-	// consts.AUTHZ_SYSTEM_ROLE_ROOT role.
+	// rbac.SystemRoleRoot role.
 	//
 	// It states one fact about who the principal is, not what the principal may
 	// do. Every request is decided on its own by authorization and by whatever

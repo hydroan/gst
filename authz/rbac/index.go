@@ -1,9 +1,5 @@
 package rbac
 
-import (
-	"github.com/hydroan/gst/internal/consts"
-)
-
 // decisionIndex is what the policy branches of a decision answer from: the
 // stored allow rules, arranged the way a request asks for them.
 //
@@ -66,11 +62,11 @@ func buildDecisionIndex(set *policySet) *decisionIndex {
 		// to its assertion, so a short one cannot come from storage. Skipping
 		// is still the right answer for one that arrives another way: a rule
 		// that cannot be compared cannot allow.
-		if len(rule) < 5 || rule[4] != string(consts.EffectAllow) {
+		if len(rule) < 5 || rule[4] != string(EffectAllow) {
 			continue
 		}
 		indexed := indexedRule{rule: rule, template: rule[2], action: rule[3]}
-		if rule[1] == consts.AUTHZ_ROLE_AUTHENTICATED {
+		if rule[1] == RoleAuthenticated {
 			index.authenticated = append(index.authenticated, indexed)
 			continue
 		}

@@ -188,8 +188,8 @@ func TestGenRunServesStreamActionsOverGRPCAlone(t *testing.T) {
 	require.NotContains(t, string(router), "feeds", "the router registers nothing for a Stream")
 	services, err := os.ReadFile(filepath.Join(projectDir, ggconst.DirService, ggconst.FileServiceGen))
 	require.NoError(t, err)
-	require.Contains(t, string(services), `service.Register[*feed.Watch](consts.Stream, "/api/feeds/watch")`)
-	require.Contains(t, string(services), `service.Register[*feed.Upload](consts.Stream, "/api/feeds/:feed/upload")`)
+	require.Contains(t, string(services), `service.Register[*feed.Watch](service.Stream, "/api/feeds/watch")`)
+	require.Contains(t, string(services), `service.Register[*feed.Upload](service.Stream, "/api/feeds/:feed/upload")`)
 	for name, signature := range map[string]string{
 		"watch":  "func (w *Watch) Stream(ctx *gst.ServiceContext, req *model.FeedWatchReq, stream *grpc.ServerStream[*model.FeedWatchRsp]) (err error)",
 		"tail":   "func (t *Tail) Stream(ctx *gst.ServiceContext, req *gstmodel.Empty, stream *grpc.ServerStream[*model.FeedTailRsp]) (err error)",

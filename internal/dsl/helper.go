@@ -7,24 +7,24 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hydroan/gst/internal/consts"
+	"github.com/hydroan/gst/internal/apiaction"
 )
 
-var routePhaseOrder = []consts.Phase{
-	consts.Create,
-	consts.Delete,
-	consts.Update,
-	consts.Patch,
-	consts.List,
-	consts.Import,
-	consts.Export,
-	consts.SSE,
-	consts.Stream,
-	consts.Get,
-	consts.CreateMany,
-	consts.DeleteMany,
-	consts.UpdateMany,
-	consts.PatchMany,
+var routePhaseOrder = []apiaction.Phase{
+	apiaction.Create,
+	apiaction.Delete,
+	apiaction.Update,
+	apiaction.Patch,
+	apiaction.List,
+	apiaction.Import,
+	apiaction.Export,
+	apiaction.SSE,
+	apiaction.Stream,
+	apiaction.Get,
+	apiaction.CreateMany,
+	apiaction.DeleteMany,
+	apiaction.UpdateMany,
+	apiaction.PatchMany,
 }
 
 func emitRouteActions(route string, actions []*Action, fn func(string, *Action)) {

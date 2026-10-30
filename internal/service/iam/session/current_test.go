@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/consts"
 	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/internal/types"
 	gstredis "github.com/hydroan/gst/redis"
+	"github.com/hydroan/gst/service"
 	"github.com/stretchr/testify/require"
 )
 
@@ -49,14 +49,14 @@ func TestCurrentSessionReadsTheContextWithoutACookie(t *testing.T) {
 	}
 	ctx := serviceiamsession.WithCurrentSession(t.Context(), sessionID, session)
 
-	serviceCtx := types.NewServiceContext(nil, ctx, consts.Get)
+	serviceCtx := types.NewServiceContext(nil, ctx, service.Get)
 	gotSessionID, gotSession, err := serviceiamsession.CurrentSession(serviceCtx)
 	require.NoError(t, err)
 	require.Equal(t, sessionID, gotSessionID)
 	require.Equal(t, session, gotSession)
 	require.False(t, types.HTTPOnlyMethodCalled(serviceCtx), "the session on the context is read with no cookie asked for, which the call would be refused for")
 
-	_, _, err = serviceiamsession.CurrentSession(types.NewServiceContext(nil, t.Context(), consts.Get))
+	_, _, err = serviceiamsession.CurrentSession(types.NewServiceContext(nil, t.Context(), service.Get))
 	require.Error(t, err, "a call carrying no session at all is refused")
 }
 
@@ -105,5 +105,5 @@ func newSessionServiceContext(baseCtx context.Context, t *testing.T, sessionID s
 		Value: sessionID,
 	})
 
-	return types.NewServiceContext(ginCtx, nil, consts.Get)
+	return types.NewServiceContext(ginCtx, nil, service.Get)
 }

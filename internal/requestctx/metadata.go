@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/internal/consts"
 )
 
 // The keys the request's own fields are stored under on its gin context,
@@ -22,13 +21,22 @@ import (
 // route and verb of the action its rpc stands for, and the full method as
 // its path. KeyParams holds the names of the route's parameters on the gin
 // context and the parameters as one object in the log, and KeyRequiresAuth
-// whether the action requires authentication.
+// whether the action requires authentication. KeyUsername, KeyUserID and
+// KeySessionID name the authenticated caller and the session the request
+// carries, and KeyTenantID the tenant the request acts in: whatever
+// establishes the caller on the gin context writes them, and FromGin reads
+// them as they stand into the Metadata the service context and the logs
+// carry.
 const (
 	KeyRoute        = "route"
 	KeyPath         = "path"
 	KeyMethod       = "method"
 	KeyParams       = "params"
 	KeyRequiresAuth = "requires_auth"
+	KeyUsername     = "username"
+	KeyUserID       = "user_id"
+	KeySessionID    = "session_id"
+	KeyTenantID     = "tenant_id"
 )
 
 // Metadata contains immutable request-scoped fields shared by logging and
@@ -164,10 +172,10 @@ func FromGin(c *gin.Context) Metadata {
 		route:      c.FullPath(),
 		path:       path,
 		method:     method,
-		username:   c.GetString(consts.CTX_USERNAME),
-		userID:     c.GetString(consts.CTX_USER_ID),
-		sessionID:  c.GetString(consts.CTX_SESSION_ID),
-		tenantID:   c.GetString(consts.CTX_TENANT_ID),
+		username:   c.GetString(KeyUsername),
+		userID:     c.GetString(KeyUserID),
+		sessionID:  c.GetString(KeySessionID),
+		tenantID:   c.GetString(KeyTenantID),
 		params:     ginParams(c),
 		query:      GinQuery(c),
 		rawQuery:   rawQuery,

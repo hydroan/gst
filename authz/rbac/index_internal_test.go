@@ -8,7 +8,6 @@ import (
 	"github.com/casbin/casbin/v3"
 	casbinmodel "github.com/casbin/casbin/v3/model"
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/consts"
 	"github.com/stretchr/testify/require"
 )
 
@@ -175,7 +174,7 @@ func TestDecisionIndexAgreesWithTheMatcher(t *testing.T) {
 			tenant := tenants[rng.Intn(len(tenants))]
 			role := roles[rng.Intn(len(roles))]
 			if rng.Intn(6) == 0 {
-				tenant, role = authenticatedPolicyTenant, consts.AUTHZ_ROLE_AUTHENTICATED
+				tenant, role = authenticatedPolicyTenant, RoleAuthenticated
 			}
 			seedBoth("p", []string{
 				tenant, role,
@@ -214,7 +213,7 @@ func TestDecisionIndexAgreesWithTheMatcher(t *testing.T) {
 						}
 						rule := decision.MatchedRule
 						require.Len(t, rule, 5, "an allowed policy decision has to name its rule")
-						require.Equal(t, string(consts.EffectAllow), rule[4])
+						require.Equal(t, string(EffectAllow), rule[4])
 						require.Equal(t, action, rule[3])
 						matched, err := pathMatch(object, rule[2])
 						require.NoError(t, err)
@@ -239,15 +238,15 @@ func TestAuthorizeAttributesInPrecedenceOrder(t *testing.T) {
 		r := newTestRBAC(t, 0)
 		// The role rule is seeded first, so storage order would name it.
 		seed(t, "p", []string{"default", "role_a", "/api/both", "GET", "allow"})
-		seed(t, "p", []string{authenticatedPolicyTenant, consts.AUTHZ_ROLE_AUTHENTICATED, "/api/both", "GET", "allow"})
+		seed(t, "p", []string{authenticatedPolicyTenant, RoleAuthenticated, "/api/both", "GET", "allow"})
 		seed(t, tenantRoleGrouping, []string{"u1", "role_a", "default"})
 
 		decision, err := r.Authorize(ctx, "default", "u1", "/api/both", "GET")
 		require.NoError(t, err)
 		require.True(t, decision.Allowed)
-		require.Equal(t, consts.GrantSourceAuthenticated, decision.Source)
+		require.Equal(t, GrantSourceAuthenticated, decision.Source)
 		require.Equal(t,
-			[]string{authenticatedPolicyTenant, consts.AUTHZ_ROLE_AUTHENTICATED, "/api/both", "GET", "allow"},
+			[]string{authenticatedPolicyTenant, RoleAuthenticated, "/api/both", "GET", "allow"},
 			decision.MatchedRule)
 	})
 
@@ -263,7 +262,7 @@ func TestAuthorizeAttributesInPrecedenceOrder(t *testing.T) {
 		decision, err := r.Authorize(ctx, "default", "u1", "/api/shared", "GET")
 		require.NoError(t, err)
 		require.True(t, decision.Allowed)
-		require.Equal(t, consts.GrantSourceRole, decision.Source)
+		require.Equal(t, GrantSourceRole, decision.Source)
 		require.Equal(t,
 			[]string{"default", "role_a", "/api/shared", "GET", "allow"},
 			decision.MatchedRule)
