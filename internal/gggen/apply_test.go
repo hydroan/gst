@@ -1768,6 +1768,47 @@ func TestApplyServiceFileWithModelSyncForcesCanonicalServiceStruct(t *testing.T)
 		wantAbsent   []string // substrings that must not appear in the rewritten file
 	}{
 		{
+			// The fields dropped with the body took their types from two
+			// imports: the one nothing else names is deleted along with
+			// them, so the file still builds, and the one a method still
+			// names stays.
+			name: "drops_the_imports_of_the_dropped_fields",
+			code: `package user
+
+import (
+	"net/http"
+
+	"helloworld/model"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+	"github.com/redis/go-redis/v9"
+)
+
+type Exporter struct {
+	service.Base[*model.User, *model.User, *model.User]
+	cache  *redis.Client
+	client *http.Client
+}
+
+func (e *Exporter) Export(ctx *gst.ServiceContext, users ...*model.User) (data []byte, err error) {
+	if e.ok() != http.StatusOK {
+		return nil, nil
+	}
+	return data, err
+}
+
+func (e *Exporter) ok() int { return http.StatusOK }
+`,
+			action:      exportAction,
+			wantChanged: true,
+			wantContains: []string{
+				"service.Base[*model.User, *model.User, *model.User]",
+				`"net/http"`,
+			},
+			wantAbsent: []string{`"github.com/redis/go-redis/v9"`, "cache", "client *http.Client"},
+		},
+		{
 			// A hand edit replaced the service.Base embedding with another
 			// service struct and dropped the service import; the struct body is
 			// generated code, so it is forced back to the canonical single

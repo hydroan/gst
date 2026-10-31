@@ -133,18 +133,24 @@ func ResolveImportConflicts(declared map[string]string, reserved ...string) map[
 // referred to as v2 are written with it.
 func importSpecName(importPath, name string) string {
 	base := path.Base(importPath)
-	if name != base {
+	if name != base || isMajorVersion(base) {
 		return name
 	}
-	// gopls assumes the name with ImportPathToAssumedName, in a package
-	// internal to x/tools (golang.org/x/tools/internal/imports), which takes
-	// a v followed by what strconv.Atoi reads as a number for a major version.
-	if rest, ok := strings.CutPrefix(base, "v"); ok {
-		if _, err := strconv.Atoi(rest); err == nil {
-			return name
-		}
-	}
 	return ""
+}
+
+// isMajorVersion reports whether segment is the major version segment of
+// an import path, v2 or v10: gopls assumes the name of such an import with
+// ImportPathToAssumedName, in a package internal to x/tools
+// (golang.org/x/tools/internal/imports), which takes a v followed by what
+// strconv.Atoi reads as a number for a major version.
+func isMajorVersion(segment string) bool {
+	rest, ok := strings.CutPrefix(segment, "v")
+	if !ok {
+		return false
+	}
+	_, err := strconv.Atoi(rest)
+	return err == nil
 }
 
 // importName joins the last depth segments of importPath with underscores, or

@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/apiaction"
@@ -602,10 +603,105 @@ func forceCanonicalServiceStruct(file *ast.File, action *dsl.Action, modelInfo *
 	if structType.Fields == nil {
 		structType.Fields = &ast.FieldList{}
 	}
+	dropped := structType.Fields.List
 	structType.Fields.List = []*ast.Field{baseField}
 	ensureServiceImportSpec(file)
 	ensureModelImportSpec(file, modelInfo.ImportPath(), qualifier)
+	pruneImportsOfDroppedFields(file, dropped)
 	return true
+}
+
+// pruneImportsOfDroppedFields deletes the imports the dropped fields alone
+// referred to, so a file whose struct body was forced back to the canonical
+// form still builds: for every package the types of the dropped fields
+// name, the import is deleted when nothing left in the file names the
+// package. An import is matched by its alias, or by the name gopls assumes
+// for its path (see assumedImportName); a package named unlike its path is
+// left alone, since nothing here can tell its name, and so is one the file
+// still uses.
+func pruneImportsOfDroppedFields(file *ast.File, dropped []*ast.Field) {
+	named := make(map[string]bool)
+	for _, field := range dropped {
+		ast.Inspect(field.Type, func(node ast.Node) bool {
+			if sel, ok := node.(*ast.SelectorExpr); ok {
+				if ident, ok := sel.X.(*ast.Ident); ok {
+					named[ident.Name] = true
+				}
+			}
+			return true
+		})
+	}
+	for _, spec := range slices.Clone(file.Imports) {
+		importPath, err := strconv.Unquote(spec.Path.Value)
+		if err != nil {
+			continue
+		}
+		name := importedAs(spec, importPath)
+		if !named[name] || name == "_" || name == "." || selectorNamed(file, name) {
+			continue
+		}
+		file.Comments = slices.DeleteFunc(file.Comments, func(group *ast.CommentGroup) bool { return group == spec.Doc || group == spec.Comment })
+		removeImportSpec(file, spec)
+	}
+}
+
+// removeImportSpec takes spec out of file: out of the declaration holding
+// it, which goes too once empty, and out of the file's import list.
+func removeImportSpec(file *ast.File, spec *ast.ImportSpec) {
+	for _, decl := range file.Decls {
+		if gen, ok := decl.(*ast.GenDecl); ok && gen.Tok == token.IMPORT {
+			gen.Specs = slices.DeleteFunc(gen.Specs, func(s ast.Spec) bool { return s == spec })
+		}
+	}
+	file.Decls = slices.DeleteFunc(file.Decls, func(decl ast.Decl) bool {
+		gen, ok := decl.(*ast.GenDecl)
+		return ok && gen.Tok == token.IMPORT && len(gen.Specs) == 0
+	})
+	file.Imports = slices.DeleteFunc(file.Imports, func(s *ast.ImportSpec) bool { return s == spec })
+}
+
+// importedAs returns the name a file refers to the import spec by: its
+// alias, or the name assumed for its path (see assumedImportName).
+func importedAs(spec *ast.ImportSpec, importPath string) string {
+	if spec.Name != nil {
+		return spec.Name.Name
+	}
+	return assumedImportName(importPath)
+}
+
+// assumedImportName returns the name gopls assumes for an import written
+// without one, the way ImportPathToAssumedName of x/tools does, in a
+// package internal to x/tools (golang.org/x/tools/internal/imports) that
+// cannot be imported from here: the last segment of the path, the one
+// before a major version segment (see isMajorVersion), without a go- prefix
+// and cut at the first character an identifier cannot hold; redis for
+// github.com/redis/go-redis/v9, yaml for gopkg.in/yaml.v3 and sample for
+// helloworld/model/sample.
+func assumedImportName(importPath string) string {
+	name := path.Base(importPath)
+	if isMajorVersion(name) && path.Dir(importPath) != "." {
+		name = path.Base(path.Dir(importPath))
+	}
+	name = strings.TrimPrefix(name, "go-")
+	if i := strings.IndexFunc(name, func(r rune) bool { return r != '_' && !unicode.IsLetter(r) && !unicode.IsDigit(r) }); i >= 0 {
+		name = name[:i]
+	}
+	return name
+}
+
+// selectorNamed reports whether file still names name as the package of a
+// selector, cache.Client or redis.NewClient.
+func selectorNamed(file *ast.File, name string) bool {
+	found := false
+	ast.Inspect(file, func(node ast.Node) bool {
+		if sel, ok := node.(*ast.SelectorExpr); ok {
+			if ident, ok := sel.X.(*ast.Ident); ok && ident.Name == name {
+				found = true
+			}
+		}
+		return !found
+	})
+	return found
 }
 
 // renameServiceStruct renames the service struct declaration from oldName to
