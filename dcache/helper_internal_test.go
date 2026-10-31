@@ -1,10 +1,12 @@
 package dcache
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/types"
+	"github.com/panjf2000/ants/v2"
 )
 
 // TestHitRatio pins the percentage arithmetic, including the zero-sample
@@ -45,5 +47,35 @@ func TestAppName(t *testing.T) {
 	config.App.Name = ""
 	if got := appName(); got != types.FrameworkName {
 		t.Fatalf("want the framework name fallback, got %q", got)
+	}
+}
+
+// TestMetricsSnapshotsTheCounters pins the snapshot the monitor logs: every
+// counter as it stands, the hit ratio of the hits and the misses, and the
+// capacity and the running goroutines of the publish pool.
+func TestMetricsSnapshotsTheCounters(t *testing.T) {
+	pool, err := ants.NewPool(2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Release()
+	dc := &replicatedCache[string]{pubPool: pool}
+	dc.hits.Store(3)
+	dc.misses.Store(1)
+	dc.sets.Store(4)
+	dc.deletes.Store(5)
+	dc.peerSets.Store(6)
+	dc.peerDeletes.Store(7)
+	dc.publishDropped.Store(8)
+	dc.publishFailed.Store(9)
+
+	want := &replicatedMetrics{
+		Hits: 3, Misses: 1, Ratio: 75, Sets: 4, Deletes: 5,
+		PeerSets: 6, PeerDeletes: 7,
+		PublishDropped: 8, PublishFailed: 9,
+		GoroutinesPoolCap: 2, GoroutinesUsed: 0,
+	}
+	if got := dc.metrics(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("metrics() = %+v, want %+v", got, want)
 	}
 }

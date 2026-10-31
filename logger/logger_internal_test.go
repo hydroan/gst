@@ -149,3 +149,20 @@ func TestWithContextAddsCronjobField(t *testing.T) {
 	require.Equal(t, "trace-cron", fields[execctx.KeyTraceID])
 	require.Equal(t, "sample_job", fields[keyCronjob])
 }
+
+// TestDebugMethodsWriteDebugEntries pins Debugf and Debugw, the formatting
+// and the key-value forms of the debug level: each writes an entry at that
+// level with the message and the field it was given.
+func TestDebugMethodsWriteDebugEntries(t *testing.T) {
+	l, logs := newObservedLogger()
+	l.Debugf("sample %d", 1)
+	l.Debugw("sample", "count", 2)
+
+	entries := logs.All()
+	require.Len(t, entries, 2)
+	require.Equal(t, zapcore.DebugLevel, entries[0].Level)
+	require.Equal(t, "sample 1", entries[0].Message)
+	require.Equal(t, zapcore.DebugLevel, entries[1].Level)
+	require.Equal(t, "sample", entries[1].Message)
+	require.Equal(t, int64(2), entries[1].ContextMap()["count"])
+}

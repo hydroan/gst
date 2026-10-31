@@ -449,3 +449,24 @@ func useInMemorySqlite(t *testing.T) {
 		}
 	}
 }
+
+// TestMigrateCommandsRunTheProgramsTheyBuild pins the two commands end to
+// end: gg migrate, in dry-run mode, and gg migrate schema each build their
+// program and run it, in the sample project on an in-memory sqlite
+// database, where there is nothing to migrate and a schema to print.
+func TestMigrateCommandsRunTheProgramsTheyBuild(t *testing.T) {
+	if !newMigrateSampleProject(t) {
+		return
+	}
+	useInMemorySqlite(t)
+	oldDryRun := migrateDryRun
+	migrateDryRun = true
+	defer func() { migrateDryRun = oldDryRun }()
+
+	if err := migrateCmd.RunE(migrateCmd, nil); err != nil {
+		t.Fatalf("gg migrate --dry-run: %v", err)
+	}
+	if err := migrateSchemaCmd.RunE(migrateSchemaCmd, nil); err != nil {
+		t.Fatalf("gg migrate schema: %v", err)
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/apiaction"
@@ -263,4 +264,30 @@ func TestHTTPOnlyMethodsNameMethodsOfServiceContext(t *testing.T) {
 	if !slices.IsSorted(types.HTTPOnlyMethods) {
 		t.Errorf("HTTPOnlyMethods should be sorted, got %v", types.HTTPOnlyMethods)
 	}
+}
+
+// TestServiceContextDelegatesTheDeadlineOfItsContext pins that a
+// ServiceContext answers the deadline of the context it was made on, the
+// way Done, Err and Value answer that context, which is what lets it stand
+// wherever a context.Context is expected.
+func TestServiceContextDelegatesTheDeadlineOfItsContext(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	deadline := time.Now().Add(time.Hour)
+
+	var serviceCtx *types.ServiceContext
+	router := gin.New()
+	router.GET("/api/samples", func(ctx *gin.Context) {
+		bounded, cancel := context.WithDeadline(ctx.Request.Context(), deadline)
+		defer cancel()
+		ctx.Request = ctx.Request.WithContext(bounded)
+		serviceCtx = types.NewServiceContext(ctx, nil, "")
+		got, ok := serviceCtx.Deadline()
+		require.True(t, ok)
+		require.Equal(t, deadline, got)
+	})
+	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/samples", nil))
+	require.NotNil(t, serviceCtx, "the handler must have run")
+
+	_, ok := types.NewServiceContext(nil, nil, "").Deadline()
+	require.False(t, ok, "a context made on no request has no deadline to answer")
 }
