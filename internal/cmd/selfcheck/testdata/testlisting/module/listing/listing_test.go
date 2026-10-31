@@ -56,3 +56,12 @@ func ownDir() string {
 	_, file, _, _ := runtime.Caller(0)
 	return filepath.Dir(file)
 }
+
+// TestListsByConcatenation lists directories named by concatenation: a part
+// spelt out that climbs out of the package is reported, and a path whose
+// parts stay below it is left alone.
+func TestListsByConcatenation(t *testing.T) {
+	name := "other"
+	_, _ = os.ReadDir("../" + name)
+	_, _ = os.ReadDir("testdata/" + name)
+}

@@ -18,7 +18,9 @@ import (
 // directory of the file runtime.Caller reports and paths below it, the
 // elements of a literal a range runs over and the parameter of listInside,
 // which every caller names inside the package, and the listing in
-// listing.go, which no test runs.
+// listing.go, which no test runs. A path concatenated from parts, in
+// TestListsByConcatenation, is reported when a part spelt out climbs out of
+// the package and left alone when the parts stay below it.
 func TestCheckTestListing(t *testing.T) {
 	root, pkgs := loadFixture(t, "testdata/testlisting/module")
 	violations, err := checkTestListing(root, pkgs)
@@ -35,6 +37,7 @@ func TestCheckTestListing(t *testing.T) {
 		{35, "os.ReadDir"},
 		{36, "os.DirFS"},
 		{50, "os.ReadDir"},
+		{65, "os.ReadDir"},
 	}
 	want := make([]violation, 0, len(reported))
 	for _, r := range reported {

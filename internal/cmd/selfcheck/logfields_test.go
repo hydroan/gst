@@ -16,7 +16,11 @@ import (
 // field handed to a key-value method, and a module source writing a logfield
 // key with the key's type, which a project could not route through logfield;
 // a module source writing it as another type is reported by the type rule
-// like any package.
+// like any package. Slices are read by what they are made of: a slice of
+// strings handed to zap.Any is an array, reported beside a string of the
+// same key; a slice of bytes, and any slice handed to zap.Reflect, is a
+// string, like the string of its key; and a slice of durations or times
+// written once is an array.
 func TestCheckLogFields(t *testing.T) {
 	root, pkgs := loadFixture(t, "testdata/logfields/module")
 	violations, err := checkLogFields(root, pkgs)
@@ -49,6 +53,10 @@ func TestCheckLogFields(t *testing.T) {
 		{
 			File:    "sample/nested.go",
 			Message: "Log field 'sample/nested.go:16': zap.Weird is a field constructor this check does not classify; add it to logfields.go",
+		},
+		{
+			File:    "sample/slices.go",
+			Message: "Log field \"tags\": an array at sample/slices.go:16, a string at sample/slices.go:17; a key has one type, a store mapping keys by type drops the entries of every other",
 		},
 	}, violations)
 }
