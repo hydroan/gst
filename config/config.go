@@ -293,7 +293,9 @@ var builtinSections = sync.OnceValue(func() map[string]bool {
 
 // Register registers a custom configuration into the config system.
 // The type parameter T can be either struct type or pointer to struct type.
-// If T is not a struct or pointer to struct, the registration will be skipped silently.
+// Registering any other type is a declaration error, reported the way a
+// taken section is: Init reports one registered before it, and registering
+// one after Init panics.
 // The registered type will be used to create and initialize the configuration
 // instance when loading configuration from file or environment variables.
 //
@@ -347,13 +349,14 @@ func Register[T any]() {
 		typ = typ.Elem()
 	}
 
-	// Skip if not a struct type
+	var err error
+	section := ""
 	if typ.Kind() != reflect.Struct {
-		return
+		err = errors.Newf("config: Register takes a struct type, or a pointer to one, not %s", typ)
+	} else {
+		section = sectionName(typ)
+		err = checkSection(section, typ)
 	}
-
-	section := sectionName(typ)
-	err := checkSection(section, typ)
 	if err == nil {
 		registeredTypes[section] = typ
 		if initialized {

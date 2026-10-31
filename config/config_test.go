@@ -105,30 +105,6 @@ func TestRegisterReadsTheEnvironmentOverTheFile(t *testing.T) {
 	assert.True(t, relay.Enabled)
 }
 
-func TestRegisterSkipsANonStructType(t *testing.T) {
-	filename := filepath.Join(t.TempDir(), "config.ini")
-	requireWriteConfigFile(t, filename, configData)
-
-	// These should be skipped silently without error or panic
-	config.Register[string]()
-	config.Register[int]()
-	config.Register[*string]()
-	config.Register[[]string]()
-	config.Register[map[string]string]()
-
-	// Should not panic or cause errors
-	config.SetConfigFile(filename)
-	if err := config.Init(); err != nil {
-		t.Fatal(err)
-	}
-	// Getting non-registered configs should return zero values
-	strVal := config.Get[string]()
-	assert.Empty(t, strVal)
-
-	intVal := config.Get[int]()
-	assert.Equal(t, 0, intVal)
-}
-
 // TestLoggerSQLCallerSkipPrefixesFromEnv pins the environment form of the
 // logger.sql_caller_skip_prefixes list: built-in sections unmarshal through
 // viper, whose default decode hook splits an environment string on commas.

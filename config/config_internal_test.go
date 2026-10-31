@@ -226,6 +226,26 @@ func TestInitFailsOnAnEnvironmentValueItCannotDecode(t *testing.T) {
 	})
 }
 
+// TestRegisterRefusesANonStructType pins that a registration of anything but
+// a struct type, or a pointer to one, is a declaration error reported the
+// way a taken section is: by Init, once, and as a panic after Init.
+func TestRegisterRefusesANonStructType(t *testing.T) {
+	withFreshRegistry(t, "")
+
+	Register[string]()
+	Register[*string]()
+	Register[[]string]()
+	Register[map[string]string]()
+
+	err := Init()
+	require.ErrorContains(t, err, "config: Register takes a struct type, or a pointer to one, not string")
+	require.ErrorContains(t, err, "not []string")
+	require.ErrorContains(t, err, "not map[string]string")
+	require.NoError(t, Init(), "a refused registration is reported once")
+	require.Panics(t, func() { Register[int]() })
+	require.Empty(t, Get[string]())
+}
+
 // TestRegisterRefusesATakenSection proves a registered section cannot take a
 // section of the framework's own configuration or of another registered type:
 // a registration made before Init fails Init, once, and leaves the section
