@@ -35,7 +35,11 @@ func (folderService) CreateFolder(ctx context.Context, req *CreateFolderRequest)
 	if err != nil {
 		return nil, err
 	}
-	return &CreateFolderResponse{Folder: FolderToProto(m)}, nil
+	p, err := FolderToProto(m)
+	if err != nil {
+		return nil, err
+	}
+	return &CreateFolderResponse{Folder: p}, nil
 }
 
 // GetFolder serves the Get action of Folder on /api/folders/:id.
@@ -44,13 +48,17 @@ func (folderService) GetFolder(ctx context.Context, req *GetFolderRequest) (*Get
 	if err != nil {
 		return nil, err
 	}
-	return &GetFolderResponse{Folder: FolderToProto(m)}, nil
+	p, err := FolderToProto(m)
+	if err != nil {
+		return nil, err
+	}
+	return &GetFolderResponse{Folder: p}, nil
 }
 
 // FolderToProto encodes Folder values into their message, nil into nil.
-func FolderToProto(m *model.Folder) *Folder {
+func FolderToProto(m *model.Folder) (*Folder, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(Folder)
 	p.Id = grpc.UTF8(m.ID)
@@ -60,14 +68,15 @@ func FolderToProto(m *model.Folder) *Folder {
 	p.UpdatedAt = grpc.Timestamp(m.UpdatedAt)
 	p.TenantId = grpc.UTF8(string(m.TenantID))
 	p.Title = grpc.UTF8(m.Title)
-	return p
+	return p, nil
 }
 
 // FolderFromProto decodes Folder messages into values, nil into nil. Leaves
 // out tenant_id, which the server writes alone. A value a field cannot hold,
 // an integer out of its range, a string that is no JSON number, a time
-// outside the years 1 to 9999, bytes that are no JSON document or a number
-// that is not finite, is refused with InvalidArgument.
+// outside the years 1 to 9999, bytes that are no JSON document, a number
+// that is not finite or a text a type cannot read, is refused with
+// InvalidArgument.
 func FolderFromProto(p *Folder) (*model.Folder, error) {
 	if p == nil {
 		return nil, nil

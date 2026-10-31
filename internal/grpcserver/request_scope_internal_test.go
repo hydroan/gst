@@ -6,10 +6,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/requestctx"
+	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -186,6 +188,7 @@ func TestCallsAreLoggedLikeHTTPRequests(t *testing.T) {
 	serve(map[string]func(context.Context) error{
 		"Ping":    func(context.Context) error { return nil },
 		"Missing": func(context.Context) error { return status.Error(codes.NotFound, "no such record") },
+		"Broken":  func(context.Context) error { return errors.New("the addr cannot be written as text") },
 	})
 	conn := dial(t, start(t), nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -195,9 +198,16 @@ func TestCallsAreLoggedLikeHTTPRequests(t *testing.T) {
 
 	require.NoError(t, call(ctx, conn, "Ping"))
 	require.Error(t, call(ctx, conn, "Missing"))
+	// An error that is no status error is the server's own failure: the
+	// client is answered Internal with the failure message, and the entry
+	// carries the error itself, the way the HTTP access log carries the
+	// error of a response the listener could not encode.
+	broken := call(ctx, conn, "Broken")
+	require.Equal(t, codes.Internal, status.Code(broken))
+	require.Equal(t, types.FailureMsg, status.Convert(broken).Message())
 
 	entries := accessLog.All()
-	require.Len(t, entries, 2)
+	require.Len(t, entries, 3)
 	require.Equal(t, "/gst.test.Echo/Ping", entries[0].Message)
 	ok := entries[0].ContextMap()
 	require.Equal(t, "OK", ok["grpc_code"])
@@ -217,6 +227,9 @@ func TestCallsAreLoggedLikeHTTPRequests(t *testing.T) {
 	require.Equal(t, "NotFound", failed["grpc_code"])
 	require.Equal(t, "no such record", failed["error"])
 	require.Len(t, entries[1].Context, accessLogFieldCap, "the worst case must fill the capacity exactly: a new field bumps accessLogFieldCap")
+	internal := entries[2].ContextMap()
+	require.Equal(t, "Internal", internal["grpc_code"])
+	require.Equal(t, "the addr cannot be written as text", internal["error"])
 }
 
 // TestTheClientAddressForwardedByATrustedPeerIsTheClients pins that the

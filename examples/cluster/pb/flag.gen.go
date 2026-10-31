@@ -43,7 +43,11 @@ func (flagService) CreateFlag(ctx context.Context, req *CreateFlagRequest) (*Cre
 	if err != nil {
 		return nil, err
 	}
-	return &CreateFlagResponse{Flag: FlagToProto(m)}, nil
+	p, err := FlagToProto(m)
+	if err != nil {
+		return nil, err
+	}
+	return &CreateFlagResponse{Flag: p}, nil
 }
 
 // DeleteFlag serves the Delete action of Flag on /api/flags/:id.
@@ -64,7 +68,11 @@ func (flagService) UpdateFlag(ctx context.Context, req *UpdateFlagRequest) (*Upd
 	if err != nil {
 		return nil, err
 	}
-	return &UpdateFlagResponse{Flag: FlagToProto(m)}, nil
+	p, err := FlagToProto(m)
+	if err != nil {
+		return nil, err
+	}
+	return &UpdateFlagResponse{Flag: p}, nil
 }
 
 // PatchFlag serves the Patch action of Flag on /api/flags/:id.
@@ -77,7 +85,11 @@ func (flagService) PatchFlag(ctx context.Context, req *PatchFlagRequest) (*Patch
 	if err != nil {
 		return nil, err
 	}
-	return &PatchFlagResponse{Flag: FlagToProto(m)}, nil
+	p, err := FlagToProto(m)
+	if err != nil {
+		return nil, err
+	}
+	return &PatchFlagResponse{Flag: p}, nil
 }
 
 // ListFlag serves the List action of Flag on /api/flags.
@@ -98,7 +110,11 @@ func (flagService) ListFlag(ctx context.Context, req *ListFlagRequest) (*ListFla
 	}
 	items := make([]*Flag, len(models))
 	for i, m := range models {
-		items[i] = FlagToProto(m)
+		p, err := FlagToProto(m)
+		if err != nil {
+			return nil, err
+		}
+		items[i] = p
 	}
 	return &ListFlagResponse{Items: items, Total: int64(total)}, nil
 }
@@ -109,7 +125,11 @@ func (flagService) GetFlag(ctx context.Context, req *GetFlagRequest) (*GetFlagRe
 	if err != nil {
 		return nil, err
 	}
-	return &GetFlagResponse{Flag: FlagToProto(m)}, nil
+	p, err := FlagToProto(m)
+	if err != nil {
+		return nil, err
+	}
+	return &GetFlagResponse{Flag: p}, nil
 }
 
 // CreateManyFlag serves the CreateMany action of Flag on /api/flags/batch.
@@ -128,7 +148,11 @@ func (flagService) CreateManyFlag(ctx context.Context, req *CreateManyFlagReques
 	}
 	items := make([]*Flag, len(stored))
 	for i, m := range stored {
-		items[i] = FlagToProto(m)
+		p, err := FlagToProto(m)
+		if err != nil {
+			return nil, err
+		}
+		items[i] = p
 	}
 	return &CreateManyFlagResponse{Items: items}, nil
 }
@@ -157,7 +181,11 @@ func (flagService) UpdateManyFlag(ctx context.Context, req *UpdateManyFlagReques
 	}
 	items := make([]*Flag, len(stored))
 	for i, m := range stored {
-		items[i] = FlagToProto(m)
+		p, err := FlagToProto(m)
+		if err != nil {
+			return nil, err
+		}
+		items[i] = p
 	}
 	return &UpdateManyFlagResponse{Items: items}, nil
 }
@@ -184,15 +212,19 @@ func (flagService) PatchManyFlag(ctx context.Context, req *PatchManyFlagRequest)
 	}
 	items := make([]*Flag, len(stored))
 	for i, m := range stored {
-		items[i] = FlagToProto(m)
+		p, err := FlagToProto(m)
+		if err != nil {
+			return nil, err
+		}
+		items[i] = p
 	}
 	return &PatchManyFlagResponse{Items: items}, nil
 }
 
 // FlagToProto encodes Flag values into their message, nil into nil.
-func FlagToProto(m *model.Flag) *Flag {
+func FlagToProto(m *model.Flag) (*Flag, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(Flag)
 	p.Id = grpc.UTF8(m.ID)
@@ -204,13 +236,14 @@ func FlagToProto(m *model.Flag) *Flag {
 	p.On = m.On
 	p.Percent = int64(m.Percent)
 	p.Note = grpc.UTF8(m.Note)
-	return p
+	return p, nil
 }
 
 // FlagFromProto decodes Flag messages into values, nil into nil. A value a
 // field cannot hold, an integer out of its range, a string that is no JSON
 // number, a time outside the years 1 to 9999, bytes that are no JSON
-// document or a number that is not finite, is refused with InvalidArgument.
+// document, a number that is not finite or a text a type cannot read, is
+// refused with InvalidArgument.
 func FlagFromProto(p *Flag) (*model.Flag, error) {
 	if p == nil {
 		return nil, nil

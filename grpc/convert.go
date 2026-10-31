@@ -1,6 +1,7 @@
 package grpc
 
 import (
+	"encoding"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -8,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/types"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -157,6 +159,45 @@ func Document(field string, b []byte) ([]byte, error) {
 		return nil, invalidValue(field, "not a JSON document")
 	}
 	return b, nil
+}
+
+// Text returns s, the text a value of the model field's type T writes with
+// its MarshalText, read into a T through its UnmarshalText, the way
+// encoding/json reads a JSON string into a type with the methods: a
+// netip.Addr from "10.0.0.1". A text the type refuses is refused with
+// invalidValue naming field, `"10.0.0" cannot be read as a netip.Addr:
+// ParseAddr("10.0.0"): IPv4 address too short` the detail. The generated
+// FromProto reads every value of a type with a text method and no JSON one
+// through it (see jsonshape.Project.TextMethod): a field the message leaves
+// empty, "", stands for the unset value and decodes into the zero value
+// without it, while an optional field, an element of a repeated field or
+// the value of a map entry, which hold what they are given, are read
+// through it whatever they hold.
+func Text[T any, P interface {
+	*T
+	encoding.TextUnmarshaler
+}](field, s string) (T, error) {
+	var v T
+	if err := P(&v).UnmarshalText([]byte(s)); err != nil {
+		return v, invalidValue(field, fmt.Sprintf("%q cannot be read as a %T: %v", s, v, err))
+	}
+	return v, nil
+}
+
+// TextOf returns the text v writes with its MarshalText, through UTF8 like
+// any string: the string encoding/json writes for a type with the method. A
+// value the type cannot write as text, a project enum holding a value its
+// method does not know, is an error the generated ToProto answers and the
+// call answers Internal, logged in the access log, the way the HTTP
+// listener answers a response it cannot encode. The generated ToProto
+// writes every value of a type with a text method and no JSON one through
+// it.
+func TextOf(v encoding.TextMarshaler) (string, error) {
+	text, err := v.MarshalText()
+	if err != nil {
+		return "", errors.Wrapf(err, "%T cannot be written as text", v)
+	}
+	return UTF8(string(text)), nil
 }
 
 // UTF8 returns s with every byte that is no part of valid UTF-8 replaced by

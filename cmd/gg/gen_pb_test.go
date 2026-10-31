@@ -684,7 +684,7 @@ func TestGenRunWritesNoProtobufDefinitionWhenAShapeCannotBeDescribed(t *testing.
 	// the numbers the tagged fields hold.
 	healed, readErr := os.ReadFile(filepath.Join(projectDir, "model", "rejected.go"))
 	require.NoError(t, readErr)
-	require.Regexp(t, "Untagged string +`json:\"untagged\" pb:\"18\"`", string(healed))
+	require.Regexp(t, "Untagged string +`json:\"untagged\" pb:\"24\"`", string(healed))
 	require.NotContains(t, err.Error(), "Rejected.untagged")
 	// The tag that cannot be read is left as it is: numbering it would add a
 	// pb tag beside the unreadable one on every run.
@@ -699,8 +699,10 @@ func TestGenRunWritesNoProtobufDefinitionWhenAShapeCannotBeDescribed(t *testing.
 		"tmpapp/model.Rejected.word: the pb tag \"eleven\" is not a field number; write the number alone, as in pb:\"11\"",
 		`tmpapp/model.Rejected.spaced: the struct tag cannot be read from "pb: \"21\"" on, so its pb tag is not found; write each pair as key:"value", as in pb:"11"`,
 		"tmpapp/model.Rejected.note: the field is promoted through an embedded pointer, which a message has no way to leave unset; embed the struct by value",
-		"tmpapp/model.Rejected.limits: a map of pointers to a scalar has no protobuf type, a value is never unset; use a map of values",
-		"tmpapp/model.Rejected.slots: a slice of pointers to a scalar has no protobuf type, an element is never unset; use a slice of values",
+		"tmpapp/model.Rejected.limits: a map of pointers to a scalar or a text has no protobuf type, a value is never unset; use a map of values",
+		"tmpapp/model.Rejected.slots: a slice of pointers to a scalar or a text has no protobuf type, an element is never unset; use a slice of values",
+		"tmpapp/model.Rejected.hosts: a map of pointers to a scalar or a text has no protobuf type, a value is never unset; use a map of values",
+		"tmpapp/model.Rejected.peers: a slice of pointers to a scalar or a text has no protobuf type, an element is never unset; use a slice of values",
 		"tmpapp/model.Rejected.keyed: map key type tmpapp/model.RejectedKey declares MarshalText, which encoding/json and the JSON v2 experiment apply to keys differently; use a string or integer key type without it",
 	} {
 		require.Contains(t, err.Error(), want)
@@ -1266,6 +1268,8 @@ const protobufRecordModel = `package model
 
 import (
 	"encoding/json"
+	"fmt"
+	"net/netip"
 	"time"
 
 	"github.com/hydroan/gst/dsl"
@@ -1292,10 +1296,47 @@ type Record struct {
 		From string 'json:"from" pb:"1"'
 		To   string 'json:"to,omitempty" pb:"2"'
 	} 'json:"window" pb:"24" gorm:"-"'
-	Ignored string 'json:"-"'
+	Addr    netip.Addr   'json:"addr" pb:"25" gorm:"-"'
+	Peer    *netip.Addr  'json:"peer,omitempty" pb:"26" gorm:"-"'
+	Grade   RecordGrade  'json:"grade" pb:"27"'
+	Addrs   []netip.Addr 'json:"addrs,omitempty" pb:"28" gorm:"-"'
+	Ignored string       'json:"-"'
 
 	model.Query
 	model.Base
+}
+
+// RecordGrade is the grade of a record, written as its name.
+type RecordGrade int
+
+// The grades, low and high.
+const (
+	GradeLow RecordGrade = iota + 1
+	GradeHigh
+)
+
+// MarshalText writes the grade as its name.
+func (g RecordGrade) MarshalText() ([]byte, error) {
+	switch g {
+	case GradeLow:
+		return []byte("low"), nil
+	case GradeHigh:
+		return []byte("high"), nil
+	}
+	return nil, fmt.Errorf("unknown grade %d", int(g))
+}
+
+// UnmarshalText reads the grade from its name.
+func (g *RecordGrade) UnmarshalText(text []byte) error {
+	switch string(text) {
+	case "low":
+		*g = GradeLow
+	case "high":
+		*g = GradeHigh
+	default:
+		return fmt.Errorf("unknown grade %q", text)
+	}
+	return nil
 }
 
 // RecordStatus is the lifecycle state of a record.
@@ -1571,6 +1612,7 @@ const protobufRejectedModel = `package model
 
 import (
 	"database/sql"
+	"net/netip"
 
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
@@ -1591,6 +1633,8 @@ type Rejected struct {
 	Limits   map[string]*int32 'json:"limits" pb:"15" gorm:"-"'
 	Slots    []*int32          'json:"slots" pb:"16" gorm:"-"'
 	Keyed    map[RejectedKey]string 'json:"keyed" pb:"17" gorm:"-"'
+	Hosts    map[string]*netip.Addr 'json:"hosts" pb:"22" gorm:"-"'
+	Peers    []*netip.Addr          'json:"peers" pb:"23" gorm:"-"'
 	*RejectedExtra
 
 	model.Base
@@ -1977,6 +2021,7 @@ const protobufConversionTest = `package pb_test
 import (
 	"encoding/json"
 	"math"
+	"net/netip"
 	"testing"
 	"time"
 
@@ -1997,6 +2042,7 @@ import (
 func TestRecordRoundTrips(t *testing.T) {
 	at := time.Date(2026, 9, 26, 8, 0, 0, 0, time.UTC)
 	summary := "short"
+	peer := netip.MustParseAddr("10.0.0.2")
 	in := &model.Record{
 		Title:   "title",
 		Status:  model.RecordStatusActive,
@@ -2011,11 +2057,16 @@ func TestRecordRoundTrips(t *testing.T) {
 		Extra:   map[string]any{"ok": true, "list": []any{"x"}},
 		Due:     at,
 		Meta:    model.RecordMeta{Author: "author", Score: 2},
+		Addr:    netip.MustParseAddr("10.0.0.1"),
+		Peer:    &peer,
+		Grade:   model.GradeHigh,
+		Addrs:   []netip.Addr{netip.MustParseAddr("10.0.0.3")},
 	}
 	in.Window.From, in.Window.To = "from", "to"
 	in.ID, in.CreatedBy, in.CreatedAt = "r-1", "u-1", at
 
-	msg := pb.RecordToProto(in)
+	msg, err := pb.RecordToProto(in)
+	require.NoError(t, err)
 	require.Equal(t, "r-1", msg.GetId())
 	require.Equal(t, "active", msg.GetStatus())
 	require.Equal(t, int64(3), msg.GetCount())
@@ -2023,6 +2074,10 @@ func TestRecordRoundTrips(t *testing.T) {
 	require.Nil(t, msg.UpdatedAt, "the zero time is unset")
 	require.Equal(t, "from", msg.GetWindow().GetFrom())
 	require.Equal(t, int32(2), msg.GetMeta().GetScore())
+	require.Equal(t, "10.0.0.1", msg.GetAddr(), "a type with a text method travels as the text it writes")
+	require.Equal(t, "10.0.0.2", msg.GetPeer())
+	require.Equal(t, "high", msg.GetGrade())
+	require.Equal(t, []string{"10.0.0.3"}, msg.GetAddrs())
 
 	require.Equal(t, []byte(in.Raw), msg.GetRaw(), "a JSON document travels as its bytes, every digit kept")
 
@@ -2030,23 +2085,42 @@ func TestRecordRoundTrips(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, in, out)
 
-	require.Nil(t, pb.RecordToProto(nil))
+	nothing, err := pb.RecordToProto(nil)
+	require.NoError(t, err)
+	require.Nil(t, nothing)
 	none, err := pb.RecordFromProto(nil)
 	require.NoError(t, err)
 	require.Nil(t, none)
 	zero, err := pb.RecordFromProto(&pb.Record{})
 	require.NoError(t, err)
-	require.Equal(t, &model.Record{}, zero, "an empty message decodes into the zero value")
+	require.Equal(t, &model.Record{}, zero, "an empty message decodes into the zero value, its empty texts the zero values of their types")
 
 	_, err = pb.RecordFromProto(&pb.Record{Ratio: math.NaN()})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 	require.Equal(t, "invalid value for field \x27ratio\x27", status.Convert(err).Message(), "a number JSON has no spelling for is refused")
+
+	for _, tt := range []struct {
+		field string
+		msg   *pb.Record
+	}{
+		{"addr", &pb.Record{Addr: "10.0.0"}},
+		{"peer", &pb.Record{Peer: proto.String("nope")}},
+		{"grade", &pb.Record{Grade: "middle"}},
+		{"addrs[1]", &pb.Record{Addrs: []string{"10.0.0.1", "nope"}}},
+	} {
+		_, err := pb.RecordFromProto(tt.msg)
+		require.Equal(t, codes.InvalidArgument, status.Code(err), tt.field)
+		require.Equal(t, "invalid value for field \x27"+tt.field+"\x27", status.Convert(err).Message(), "a text the type cannot read is refused naming the field")
+	}
+	_, err = pb.RecordToProto(&model.Record{})
+	require.ErrorContains(t, err, "unknown grade 0", "a value the type cannot write as text is an error")
 }
 
 func TestItemLinksRoundTrip(t *testing.T) {
 	in := &record.Item{Content: "c", Links: []record.Link{{URL: "https://a", Title: "A"}, {URL: "https://b"}}}
 
-	msg := pbrecord.ItemToProto(in)
+	msg, err := pbrecord.ItemToProto(in)
+	require.NoError(t, err)
 	require.Len(t, msg.GetLinks(), 2)
 	require.Equal(t, "https://b", msg.GetLinks()[1].GetUrl())
 	out, err := pbrecord.ItemFromProto(msg)
@@ -2056,9 +2130,12 @@ func TestItemLinksRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, bare.Links, "no links stay no links")
 
-	merged := pbrecord.MergeRspToProto(&record.MergeRsp{Item: in})
+	merged, err := pbrecord.MergeRspToProto(&record.MergeRsp{Item: in})
+	require.NoError(t, err)
 	require.Equal(t, "c", merged.GetItem().GetContent())
-	require.Nil(t, pbrecord.MergeRspToProto(&record.MergeRsp{}).Item)
+	empty, err := pbrecord.MergeRspToProto(&record.MergeRsp{})
+	require.NoError(t, err)
+	require.Nil(t, empty.Item)
 }
 
 func TestShapeRoundTrips(t *testing.T) {
@@ -2128,7 +2205,8 @@ func TestShapeRoundTrips(t *testing.T) {
 		Level int8   'json:"level" pb:"2"'
 	}{Text: "note", Level: 4}
 
-	msg := pb.ShapeToProto(in)
+	msg, err := pb.ShapeToProto(in)
+	require.NoError(t, err)
 	require.Equal(t, day, msg.GetDate().AsTime())
 	require.Equal(t, 90*time.Minute, msg.GetClock().AsDuration())
 	require.Equal(t, "red", msg.GetOptions().GetColor())
@@ -2189,9 +2267,10 @@ func TestShapeRoundTrips(t *testing.T) {
 	t.Run("a string that is no valid UTF-8 is written out as the JSON encoder writes it", func(t *testing.T) {
 		broken := *in
 		broken.Name = "a\xffb"
-		msg := pb.ShapeToProto(&broken)
+		msg, err := pb.ShapeToProto(&broken)
+		require.NoError(t, err)
 		require.Equal(t, "a�b", msg.GetName())
-		_, err := proto.Marshal(msg)
+		_, err = proto.Marshal(msg)
 		require.NoError(t, err, "the message encodes, where an invalid string would fail the whole response")
 	})
 
@@ -2246,7 +2325,8 @@ func TestPinRoundTrips(t *testing.T) {
 	in := &model.Pin{Label: "label", Link: record.Link{URL: "https://example.test/page", Title: "page"}}
 	in.ID = "p-1"
 
-	msg := pb.PinToProto(in)
+	msg, err := pb.PinToProto(in)
+	require.NoError(t, err)
 	require.IsType(t, &pbrecord.Link{}, msg.GetLink(), "the link travels as the message of the record package")
 	require.Equal(t, "page", msg.GetLink().GetTitle())
 
@@ -2261,15 +2341,17 @@ func TestConversionsGuardContainerElements(t *testing.T) {
 	// bytes come out as U+FFFD.
 	bad := "a\xffb"
 	summary := bad
-	record := pb.RecordToProto(&model.Record{Summary: &summary, Tags: []string{bad}, Labels: map[string]string{bad: bad}})
-	_, err := proto.Marshal(record)
+	record, err := pb.RecordToProto(&model.Record{Grade: model.GradeLow, Summary: &summary, Tags: []string{bad}, Labels: map[string]string{bad: bad}})
+	require.NoError(t, err)
+	_, err = proto.Marshal(record)
 	require.NoError(t, err)
 	require.Equal(t, "a\uFFFDb", record.GetSummary())
 	require.Equal(t, []string{"a\uFFFDb"}, record.GetTags())
 	require.Equal(t, map[string]string{"a\uFFFDb": "a\uFFFDb"}, record.GetLabels())
 	aliases := []string{bad}
 	weights := map[string]int32{bad: 1}
-	shape := pb.ShapeToProto(&model.Shape{Names: model.ShapeNames{bad}, Words: datatypes.JSONSlice[string]{bad}, Aliases: &aliases, Weights: &weights})
+	shape, err := pb.ShapeToProto(&model.Shape{Names: model.ShapeNames{bad}, Words: datatypes.JSONSlice[string]{bad}, Aliases: &aliases, Weights: &weights})
+	require.NoError(t, err)
 	_, err = proto.Marshal(shape)
 	require.NoError(t, err)
 	require.Equal(t, []string{"a\uFFFDb"}, shape.GetNames())
@@ -2314,7 +2396,8 @@ func TestConversionsGuardContainerElements(t *testing.T) {
 	// An empty JSON number in a repeated field, an array or a map, what an
 	// HTTP body's null leaves in one, is written out as 0, the number the
 	// JSON encoder writes it as, so the message read back is taken.
-	zeros := pb.ShapeToProto(&model.Shape{Amounts: []json.Number{""}, Rates: map[string]json.Number{"r": ""}})
+	zeros, err := pb.ShapeToProto(&model.Shape{Amounts: []json.Number{""}, Rates: map[string]json.Number{"r": ""}})
+	require.NoError(t, err)
 	require.Equal(t, []string{"0"}, zeros.GetAmounts())
 	require.Equal(t, []string{"0", "0"}, zeros.GetPair())
 	require.Equal(t, "0", zeros.GetRates()["r"])

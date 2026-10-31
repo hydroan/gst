@@ -28,7 +28,8 @@ type EnumValue struct {
 
 // Enum returns the enum description of obj, or nil when obj is no enum type:
 // an alias, a type from outside the project, a type that is not a string or
-// integer, or one whose package declares no constant of it.
+// integer, one with an encoding method of its own, or one whose package
+// declares no constant of it.
 func (p *Project) Enum(obj *types.TypeName) *Enum {
 	if e, ok := p.enums[obj]; ok {
 		return e
@@ -38,14 +39,16 @@ func (p *Project) Enum(obj *types.TypeName) *Enum {
 	return e
 }
 
-// buildEnum describes obj as an enum type, or returns nil when it is none.
+// buildEnum describes obj as an enum type, or returns nil when it is none:
+// a type with an encoding method of its own encodes as the method writes,
+// not as its constants, so it is no enum either.
 func (p *Project) buildEnum(obj *types.TypeName) *Enum {
 	if obj.IsAlias() || obj.Pkg() == nil {
 		return nil
 	}
 	source := p.sources[obj.Pkg().Path()]
 	basic, isBasic := obj.Type().Underlying().(*types.Basic)
-	if source == nil || !isBasic || basic.Info()&(types.IsString|types.IsInteger) == 0 {
+	if source == nil || !isBasic || basic.Info()&(types.IsString|types.IsInteger) == 0 || p.method(obj.Type(), marshalMethods) != "" {
 		return nil
 	}
 	constants := source.constants[obj]

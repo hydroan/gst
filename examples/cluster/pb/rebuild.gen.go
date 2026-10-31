@@ -33,19 +33,23 @@ func (rebuildService) CreateRebuild(ctx context.Context, req *CreateRebuildReque
 	if err != nil {
 		return nil, err
 	}
-	return &CreateRebuildResponse{Result: RebuildRspToProto(result)}, nil
+	p, err := RebuildRspToProto(result)
+	if err != nil {
+		return nil, err
+	}
+	return &CreateRebuildResponse{Result: p}, nil
 }
 
 // RebuildReqToProto encodes RebuildReq values into their message, nil into
 // nil.
-func RebuildReqToProto(m *model.RebuildReq) *RebuildReq {
+func RebuildReqToProto(m *model.RebuildReq) (*RebuildReq, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(RebuildReq)
 	p.Seconds = int64(m.Seconds)
 	p.InTransaction = m.InTransaction
-	return p
+	return p, nil
 }
 
 // RebuildReqFromProto decodes RebuildReq messages into values, nil into nil.
@@ -61,14 +65,14 @@ func RebuildReqFromProto(p *RebuildReq) (*model.RebuildReq, error) {
 
 // RebuildRspToProto encodes RebuildRsp values into their message, nil into
 // nil.
-func RebuildRspToProto(m *model.RebuildRsp) *RebuildRsp {
+func RebuildRspToProto(m *model.RebuildRsp) (*RebuildRsp, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(RebuildRsp)
 	p.Replica = grpc.UTF8(m.Replica)
 	p.Seconds = int64(m.Seconds)
-	return p
+	return p, nil
 }
 
 // RebuildRspFromProto decodes RebuildRsp messages into values, nil into nil.

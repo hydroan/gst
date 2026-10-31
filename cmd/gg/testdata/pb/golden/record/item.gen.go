@@ -39,7 +39,11 @@ func (itemService) CreateItem(ctx context.Context, req *CreateItemRequest) (*Cre
 	if err != nil {
 		return nil, err
 	}
-	return &CreateItemResponse{Item: ItemToProto(m)}, nil
+	p, err := ItemToProto(m)
+	if err != nil {
+		return nil, err
+	}
+	return &CreateItemResponse{Item: p}, nil
 }
 
 // GetItem serves the Get action of Item on /api/records/:record/items/:id.
@@ -48,7 +52,11 @@ func (itemService) GetItem(ctx context.Context, req *GetItemRequest) (*GetItemRe
 	if err != nil {
 		return nil, err
 	}
-	return &GetItemResponse{Item: ItemToProto(m)}, nil
+	p, err := ItemToProto(m)
+	if err != nil {
+		return nil, err
+	}
+	return &GetItemResponse{Item: p}, nil
 }
 
 // PatchManyItem serves the PatchMany action of Item on
@@ -75,7 +83,11 @@ func (itemService) PatchManyItem(ctx context.Context, req *PatchManyItemRequest)
 	}
 	items := make([]*Item, len(stored))
 	for i, m := range stored {
-		items[i] = ItemToProto(m)
+		p, err := ItemToProto(m)
+		if err != nil {
+			return nil, err
+		}
+		items[i] = p
 	}
 	return &PatchManyItemResponse{Items: items}, nil
 }
@@ -90,7 +102,11 @@ func (itemService) SealItem(ctx context.Context, req *SealItemRequest) (*SealIte
 	if err != nil {
 		return nil, err
 	}
-	return &SealItemResponse{Item: ItemToProto(m)}, nil
+	p, err := ItemToProto(m)
+	if err != nil {
+		return nil, err
+	}
+	return &SealItemResponse{Item: p}, nil
 }
 
 // MergeItem serves the Create action of Item on /api/items/merge.
@@ -103,15 +119,22 @@ func (itemService) MergeItem(ctx context.Context, req *MergeItemRequest) (*Merge
 	if err != nil {
 		return nil, err
 	}
-	return &MergeItemResponse{Result: MergeRspToProto(result)}, nil
+	p, err := MergeRspToProto(result)
+	if err != nil {
+		return nil, err
+	}
+	return &MergeItemResponse{Result: p}, nil
 }
 
-// ItemToProto encodes Item values into their message, nil into nil.
-func ItemToProto(m *record.Item) *Item {
+// ItemToProto encodes Item values into their message, nil into nil. A value
+// a type cannot write as text (see grpc.TextOf) is an error, which the call
+// answers Internal.
+func ItemToProto(m *record.Item) (*Item, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(Item)
+	var err error
 	p.Id = grpc.UTF8(m.ID)
 	p.CreatedBy = grpc.UTF8(m.CreatedBy)
 	p.UpdatedBy = grpc.UTF8(m.UpdatedBy)
@@ -121,16 +144,20 @@ func ItemToProto(m *record.Item) *Item {
 	if m.Links != nil {
 		p.Links = make([]*Link, len(m.Links))
 		for i, v := range m.Links {
-			p.Links[i] = LinkToProto(&v)
+			p.Links[i], err = LinkToProto(&v)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
-	return p
+	return p, nil
 }
 
 // ItemFromProto decodes Item messages into values, nil into nil. A value a
 // field cannot hold, an integer out of its range, a string that is no JSON
 // number, a time outside the years 1 to 9999, bytes that are no JSON
-// document or a number that is not finite, is refused with InvalidArgument.
+// document, a number that is not finite or a text a type cannot read, is
+// refused with InvalidArgument.
 func ItemFromProto(p *Item) (*record.Item, error) {
 	if p == nil {
 		return nil, nil
@@ -166,14 +193,14 @@ func ItemFromProto(p *Item) (*record.Item, error) {
 }
 
 // LinkToProto encodes Link values into their message, nil into nil.
-func LinkToProto(m *record.Link) *Link {
+func LinkToProto(m *record.Link) (*Link, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(Link)
 	p.Url = grpc.UTF8(m.URL)
 	p.Title = grpc.UTF8(m.Title)
-	return p
+	return p, nil
 }
 
 // LinkFromProto decodes Link messages into values, nil into nil.
@@ -188,9 +215,9 @@ func LinkFromProto(p *Link) (*record.Link, error) {
 }
 
 // MergeReqToProto encodes MergeReq values into their message, nil into nil.
-func MergeReqToProto(m *record.MergeReq) *MergeReq {
+func MergeReqToProto(m *record.MergeReq) (*MergeReq, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(MergeReq)
 	if m.IDs != nil {
@@ -199,7 +226,7 @@ func MergeReqToProto(m *record.MergeReq) *MergeReq {
 			p.Ids[i] = grpc.UTF8(v)
 		}
 	}
-	return p
+	return p, nil
 }
 
 // MergeReqFromProto decodes MergeReq messages into values, nil into nil.
@@ -213,19 +240,26 @@ func MergeReqFromProto(p *MergeReq) (*record.MergeReq, error) {
 }
 
 // MergeRspToProto encodes MergeRsp values into their message, nil into nil.
-func MergeRspToProto(m *record.MergeRsp) *MergeRsp {
+// A value a type cannot write as text (see grpc.TextOf) is an error, which
+// the call answers Internal.
+func MergeRspToProto(m *record.MergeRsp) (*MergeRsp, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(MergeRsp)
-	p.Item = ItemToProto(m.Item)
-	return p
+	var err error
+	p.Item, err = ItemToProto(m.Item)
+	if err != nil {
+		return nil, err
+	}
+	return p, nil
 }
 
 // MergeRspFromProto decodes MergeRsp messages into values, nil into nil. A
 // value a field cannot hold, an integer out of its range, a string that is
 // no JSON number, a time outside the years 1 to 9999, bytes that are no JSON
-// document or a number that is not finite, is refused with InvalidArgument.
+// document, a number that is not finite or a text a type cannot read, is
+// refused with InvalidArgument.
 func MergeRspFromProto(p *MergeRsp) (*record.MergeRsp, error) {
 	if p == nil {
 		return nil, nil

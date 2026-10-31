@@ -365,14 +365,18 @@ func typeKey(t types.Type) string {
 // int64, a string enum for a string, is converted; a string is written
 // through grpc.UTF8 wherever it sits, alone, optional, as an element or as a
 // key, so a []string converts element by element (see utf8Guarded); a time
-// becomes a Timestamp through grpc.Timestamp, a duration
-// a Duration, any value a Value through grpc.Value, a JSON object a Struct
-// through grpc.Struct, and raw JSON travels as its bytes; a project struct converts through its
-// XToProto, an unnamed one field by field into its own message; a slice
-// or a map of any of these converts element by element, and a pointer to
-// one converts when it is not nil.
+// becomes a Timestamp through grpc.Timestamp, a duration a Duration, any
+// value a Value through grpc.Value, a JSON object a Struct through
+// grpc.Struct, and raw JSON travels as its bytes; a type with a text method
+// (see pbschema.FieldType.Text) is written through grpc.TextOf and a
+// project struct converts through its XToProto, each a statement that may
+// fail to write the value (see refusing); an unnamed struct converts field
+// by field into its own message; a slice or a map of any of these converts
+// element by element, and a pointer to one converts when it is not nil.
 //
-// The fields of the Record model of the golden fixture encode as
+// The fields of the Record model of the golden fixture, the address, the
+// optional address, the grade and the addresses carried as text among them,
+// encode as
 //
 //	p.Id = grpc.UTF8(m.ID)
 //	p.CreatedBy = grpc.UTF8(m.CreatedBy)
@@ -404,17 +408,48 @@ func typeKey(t types.Type) string {
 //	p.Raw = m.Raw
 //	p.Extra = grpc.Struct(m.Extra)
 //	p.Due = grpc.Timestamp(m.Due)
-//	p.Meta = RecordMetaToProto(&m.Meta)
+//	p.Meta, err = RecordMetaToProto(&m.Meta)
+//	if err != nil {
+//		return nil, err
+//	}
 //	p.Window = new(RecordWindow)
 //	p.Window.From = grpc.UTF8(m.Window.From)
 //	p.Window.To = grpc.UTF8(m.Window.To)
+//	p.Addr, err = grpc.TextOf(&m.Addr)
+//	if err != nil {
+//		return nil, err
+//	}
+//	if m.Peer != nil {
+//		var x string
+//		x, err = grpc.TextOf(m.Peer)
+//		if err != nil {
+//			return nil, err
+//		}
+//		p.Peer = &x
+//	}
+//	p.Grade, err = grpc.TextOf(&m.Grade)
+//	if err != nil {
+//		return nil, err
+//	}
+//	if m.Addrs != nil {
+//		p.Addrs = make([]string, len(m.Addrs))
+//		for i, v := range m.Addrs {
+//			p.Addrs[i], err = grpc.TextOf(&v)
+//			if err != nil {
+//				return nil, err
+//			}
+//		}
+//	}
 //
 // a slice of the Link struct, the links field of Item, as
 //
 //	if m.Links != nil {
 //		p.Links = make([]*Link, len(m.Links))
 //		for i, v := range m.Links {
-//			p.Links[i] = LinkToProto(&v)
+//			p.Links[i], err = LinkToProto(&v)
+//			if err != nil {
+//				return nil, err
+//			}
 //		}
 //	}
 //
@@ -427,8 +462,14 @@ func typeKey(t types.Type) string {
 //	p.Doc = m.Doc
 //	p.Attrs = grpc.Struct(m.Attrs)
 //	data := m.Options.Data()
-//	p.Options = ShapeOptionsToProto(&data)
-//	p.Audit = ShapeAuditToProto(&m.Audit)
+//	p.Options, err = ShapeOptionsToProto(&data)
+//	if err != nil {
+//		return nil, err
+//	}
+//	p.Audit, err = ShapeAuditToProto(&m.Audit)
+//	if err != nil {
+//		return nil, err
+//	}
 //	p.Amount = grpc.UTF8(string(m.Amount))
 //	p.Level = int64(m.Level)
 //	if m.Score != nil {
@@ -448,7 +489,10 @@ func typeKey(t types.Type) string {
 //	if m.ByCode != nil {
 //		p.ByCode = make(map[int32]*ShapePoint, len(m.ByCode))
 //		for k, v := range m.ByCode {
-//			p.ByCode[k] = ShapePointToProto(&v)
+//			p.ByCode[k], err = ShapePointToProto(&v)
+//			if err != nil {
+//				return nil, err
+//			}
 //		}
 //	}
 //	if m.Spans != nil {
@@ -485,11 +529,23 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft pbschema.FieldT
 	if p, ok := t.(*types.Pointer); ok {
 		elem := types.Unalias(p.Elem())
 		if msg := w.namedMessage(elem); msg != nil {
-			return []ast.Stmt{assign(dst, call(w.conversionFunc(msg, "ToProto"), src))}
+			return w.refusing(dst, call(w.conversionFunc(msg, "ToProto"), src))
 		}
 		if _, anonymous := elem.(*types.Struct); anonymous {
 			body := append([]ast.Stmt{assign(dst, newCall(ident(ft.Nested.GoName)))}, w.structToProto(dst, src, ft.Nested)...)
 			return []ast.Stmt{ifNotNil(src, body...)}
+		}
+		if ft.Text && !ft.Repeated {
+			// A pointer to a text type: the text of what it points to, which
+			// an optional field holds through a pointer of its own, nothing
+			// when it is nil. A pointer to a slice of texts is a pointer to
+			// a slice, converted element by element below.
+			if ft.Optional {
+				x := w.temp("x")
+				body := append([]ast.Stmt{w.varDeclExpr(x, ident("string"))}, w.refusing(ident(x), call(w.grpc("TextOf"), src))...)
+				return []ast.Stmt{ifNotNil(src, append(body, assign(dst, addr(ident(x))))...)}
+			}
+			return []ast.Stmt{ifNotNil(src, w.refusing(dst, call(w.grpc("TextOf"), src))...)}
 		}
 		if _, scalar := elem.Underlying().(*types.Basic); scalar && ft.Kind != descriptorpb.FieldDescriptorProto_TYPE_MESSAGE {
 			// A pointer to a scalar: the optional field it maps to holds
@@ -507,6 +563,13 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft pbschema.FieldT
 		// A pointer to a time, a JSON value, a slice, an array or a map:
 		// what it points to encodes when there is anything.
 		return []ast.Stmt{ifNotNil(src, w.toProto(dst, star(src), elem, ft, true)...)}
+	}
+
+	if ft.Text && !ft.Repeated {
+		// The text the value writes, through a pointer to it so that a
+		// method on the pointer counts as well; a slice or an array of
+		// texts converts element by element below.
+		return w.refusing(dst, call(w.grpc("TextOf"), addr(src)))
 	}
 
 	switch typeKey(t) {
@@ -539,7 +602,7 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft pbschema.FieldT
 			}
 		}
 		if msg := w.namedMessage(n); msg != nil {
-			return []ast.Stmt{assign(dst, call(w.conversionFunc(msg, "ToProto"), addr(src)))}
+			return w.refusing(dst, call(w.conversionFunc(msg, "ToProto"), addr(src)))
 		}
 	}
 
@@ -667,11 +730,13 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 // getters, so an unset one decodes into the zero value; the pointer of an
 // optional scalar is taken as it is. A value the Go type may not hold, a
 // narrow integer, a floating-point number or a JSON number (see reader), a
-// time, a JSON document, and a message decoded through a conversion
-// function are read as statements that may refuse it (see refusing and
-// refusingAt), the path in the refusal.
+// time, a JSON document, a text (see grpc.Text), and a message decoded
+// through a conversion function are read as statements that may refuse it
+// (see refusing and refusingAt), the path in the refusal.
 //
-// The fields of the Record model of the golden fixture decode as
+// The fields of the Record model of the golden fixture, the address, the
+// optional address, the grade and the addresses carried as text among
+// them, decode as
 //
 //	m.ID = p.GetId()
 //	m.CreatedBy = p.GetCreatedBy()
@@ -716,6 +781,35 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 //	if v := p.GetWindow(); v != nil {
 //		m.Window.From = v.GetFrom()
 //		m.Window.To = v.GetTo()
+//	}
+//	if s := p.GetAddr(); s != "" {
+//		m.Addr, err = grpc.Text[netip.Addr]("addr", s)
+//		if err != nil {
+//			return nil, err
+//		}
+//	}
+//	if p.Peer != nil {
+//		var x netip.Addr
+//		x, err = grpc.Text[netip.Addr]("peer", *p.Peer)
+//		if err != nil {
+//			return nil, err
+//		}
+//		m.Peer = &x
+//	}
+//	if s := p.GetGrade(); s != "" {
+//		m.Grade, err = grpc.Text[model.RecordGrade]("grade", s)
+//		if err != nil {
+//			return nil, err
+//		}
+//	}
+//	if p.GetAddrs() != nil {
+//		m.Addrs = make([]netip.Addr, len(p.GetAddrs()))
+//		for i, v := range p.GetAddrs() {
+//			m.Addrs[i], err = grpc.Text[netip.Addr](grpc.Element("addrs", i), v)
+//			if err != nil {
+//				return nil, err
+//			}
+//		}
 //	}
 //
 // the links field of Item as
@@ -849,6 +943,15 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft pbschema.Fiel
 				return append([]ast.Stmt{assign(dst, newCall(w.goType(p.Elem())))}, w.structFromProto(dst, v, ft.Nested, path)...)
 			})}
 		}
+		if ft.Text && !ft.Repeated {
+			// A pointer to a text type: a pointer to the value read from the
+			// optional field when it is set, nil otherwise. A pointer to a
+			// slice of texts is a pointer to a slice, decoded element by
+			// element below.
+			x := w.temp("x")
+			body := append(w.declared(x, p.Elem(), w.fromProto(ident(x), src, p.Elem(), ft, path)), assign(dst, addr(ident(x))))
+			return []ast.Stmt{ifNotNil(src, body...)}
+		}
 		if _, scalar := elem.Underlying().(*types.Basic); scalar && ft.Kind != descriptorpb.FieldDescriptorProto_TYPE_MESSAGE {
 			// A pointer to a scalar: the pointer of the optional field it
 			// maps to when the types agree, otherwise a pointer to the
@@ -881,6 +984,23 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft pbschema.Fiel
 		x := w.temp("x")
 		body := append(w.declared(x, p.Elem(), w.fromProto(ident(x), src, p.Elem(), ft, path)), assign(dst, addr(ident(x))))
 		return []ast.Stmt{ifNotNil(src, body...)}
+	}
+
+	if ft.Text && !ft.Repeated {
+		// The text the message carries, read through the type's own
+		// UnmarshalText (see grpc.Text). A field's empty text is the field
+		// unset, read as the zero value; an optional field carries its text
+		// through a pointer, read as it is; an element or a map value is
+		// read through elementFromProto, which has no unset state, a slice
+		// or an array of texts element by element below.
+		read := func(value ast.Expr) ast.Expr {
+			return call(&ast.IndexExpr{X: w.grpc("Text"), Index: w.goType(declared)}, path, value)
+		}
+		if ft.Optional {
+			return w.refusing(dst, read(star(src)))
+		}
+		s := w.temp("s")
+		return []ast.Stmt{ifStmt(define([]string{s}, src), &ast.BinaryExpr{X: ident(s), Op: token.NEQ, Y: strLit("")}, w.refusing(dst, read(ident(s)))...)}
 	}
 
 	switch typeKey(t) {
@@ -994,12 +1114,13 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft pbschema.Fiel
 
 // elementFromProto returns the statements decoding src, an element of a
 // repeated field or the value of a map entry at path, into dst, a Go value
-// of type t: what fromProto returns, but for a JSON number, which is read
-// through grpc.Number whatever it holds. A field's empty string is the field
-// unset; an element or a value has no unset state for it to stand for, and
-// it is no number, so it is refused like any other string that is none.
-// The amounts and rates fields of the Shape model, a repeated field and a
-// map of JSON numbers, decode as
+// of type t: what fromProto returns, but for a JSON number, read through
+// grpc.Number whatever it holds, and a text, read through grpc.Text
+// whatever it holds. A field's empty string is the field unset; an element
+// or a value has no unset state for it to stand for: it is no number, so it
+// is refused like any other string that is none, and it is the text the
+// type reads it as. The amounts and rates fields of the Shape model, a
+// repeated field and a map of JSON numbers, decode as
 //
 //	if p.GetAmounts() != nil {
 //		m.Amounts = make([]json.Number, len(p.GetAmounts()))
@@ -1022,10 +1143,25 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft pbschema.Fiel
 //			}
 //		}
 //	}
+//
+// and the addrs field of the Record model, a repeated field of texts, as
+//
+//	if p.GetAddrs() != nil {
+//		m.Addrs = make([]netip.Addr, len(p.GetAddrs()))
+//		for i, v := range p.GetAddrs() {
+//			m.Addrs[i], err = grpc.Text[netip.Addr](grpc.Element("addrs", i), v)
+//			if err != nil {
+//				return nil, err
+//			}
+//		}
+//	}
 func (w *fileWriter) elementFromProto(dst, src ast.Expr, t types.Type, ft pbschema.FieldType, path ast.Expr) []ast.Stmt {
 	if typeKey(types.Unalias(t)) == "encoding/json.Number" {
 		read, _ := w.reader(t, path, src)
 		return w.refusing(dst, read)
+	}
+	if ft.Text {
+		return w.refusing(dst, call(&ast.IndexExpr{X: w.grpc("Text"), Index: w.goType(t)}, path, src))
 	}
 	return w.fromProto(dst, src, t, ft, path)
 }
@@ -1186,25 +1322,26 @@ func (w *fileWriter) fieldFromProto(dst, src ast.Expr, fc pbschema.FieldConversi
 
 // conversionFuncs builds the two conversion functions of the message of
 // msg, a project type: XToProto encoding a value into its message and
-// XFromProto decoding a message into a value, nil into nil both ways.
-// XFromProto answers an error as well, the refusal of a value a field
-// cannot hold (see refusing), which the handlers answer the call with; a
-// message no field of which reads that way answers nil for it. A field the
-// server writes alone XToProto encodes and XFromProto leaves out, saying so
-// in its doc: FolderFromProto of the golden fixture's folder.gen.go never
-// reads tenant_id.
+// XFromProto decoding a message into a value, nil into nil both ways. Both
+// answer an error as well, which the handlers answer the call with:
+// XToProto the failure to write a value as text (see grpc.TextOf),
+// XFromProto the refusal of a value a field cannot hold (see refusing); a
+// message no field of which converts that way answers nil for it. A field
+// the server writes alone XToProto encodes and XFromProto leaves out,
+// saying so in its doc: FolderFromProto of the golden fixture's
+// folder.gen.go never reads tenant_id.
 //
 // The Link type of the golden fixture, record/item.proto, gets
 //
 //	// LinkToProto encodes Link values into their message, nil into nil.
-//	func LinkToProto(m *record.Link) *Link {
+//	func LinkToProto(m *record.Link) (*Link, error) {
 //		if m == nil {
-//			return nil
+//			return nil, nil
 //		}
 //		p := new(Link)
 //		p.Url = grpc.UTF8(m.URL)
 //		p.Title = grpc.UTF8(m.Title)
-//		return p
+//		return p, nil
 //	}
 //
 //	// LinkFromProto decodes Link messages into values, nil into nil.
@@ -1219,23 +1356,33 @@ func (w *fileWriter) fieldFromProto(dst, src ast.Expr, fc pbschema.FieldConversi
 //	}
 func (w *fileWriter) conversionFuncs(msg *pbschema.Message) {
 	goName := msg.Conversion.GoName
-	body := []ast.Stmt{
-		ifStmt(nil, &ast.BinaryExpr{X: ident("m"), Op: token.EQL, Y: ident("nil")}, returns(ident("nil"))),
-		define([]string{"p"}, newCall(ident(goName))),
-	}
+	w.fallible = false
 	w.resetFuncTemps()
+	var encoded []ast.Stmt
 	for _, fc := range msg.Conversion.Fields {
 		// The temporaries of one field are scoped to its statements, but
 		// for the ones declared at the top level of the function.
 		w.resetTemps()
-		body = append(body, w.fieldToProto(ident("p"), ident("m"), fc)...)
+		encoded = append(encoded, w.fieldToProto(ident("p"), ident("m"), fc)...)
 	}
-	body = append(body, returns(ident("p")))
-	w.out.add(goName+"ToProto encodes "+msg.TypeName.Name()+" values into their message, nil into nil.", &ast.FuncDecl{
+	body := []ast.Stmt{
+		ifStmt(nil, &ast.BinaryExpr{X: ident("m"), Op: token.EQL, Y: ident("nil")}, returns(ident("nil"), ident("nil"))),
+		define([]string{"p"}, newCall(ident(goName))),
+	}
+	doc := goName + "ToProto encodes " + msg.TypeName.Name() + " values into their message, nil into nil."
+	if w.fallible {
+		// err is declared once, for every value written through a helper or
+		// a conversion function that may fail to write it (see refusing).
+		body = append(body, errDecl())
+		doc += " A value a type cannot write as text (see grpc.TextOf) is an error, which the call answers Internal."
+	}
+	body = append(body, encoded...)
+	body = append(body, returns(ident("p"), ident("nil")))
+	w.out.add(doc, &ast.FuncDecl{
 		Name: ident(goName + "ToProto"),
 		Type: &ast.FuncType{
 			Params:  &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{ident("m")}, Type: star(w.goType(msg.TypeName.Type()))}}},
-			Results: &ast.FieldList{List: []*ast.Field{{Type: star(ident(goName))}}},
+			Results: &ast.FieldList{List: []*ast.Field{{Type: star(ident(goName))}, {Type: ident("error")}}},
 		},
 		Body: block(body...),
 	}, nil)
@@ -1255,15 +1402,15 @@ func (w *fileWriter) conversionFuncs(msg *pbschema.Message) {
 		ifStmt(nil, &ast.BinaryExpr{X: ident("p"), Op: token.EQL, Y: ident("nil")}, returns(ident("nil"), ident("nil"))),
 		define([]string{"m"}, newCall(w.goType(msg.TypeName.Type()))),
 	}
-	doc := goName + "FromProto decodes " + msg.TypeName.Name() + " messages into values, nil into nil."
+	doc = goName + "FromProto decodes " + msg.TypeName.Name() + " messages into values, nil into nil."
 	if len(outputOnly) > 0 {
 		doc += " Leaves out " + strings.Join(outputOnly, ", ") + ", which the server writes alone."
 	}
 	if w.fallible {
 		// err is declared once, for every value read through a helper or a
 		// conversion function that may refuse it (see refusing).
-		body = append(body, &ast.DeclStmt{Decl: &ast.GenDecl{Tok: token.VAR, Specs: []ast.Spec{&ast.ValueSpec{Names: []*ast.Ident{ident("err")}, Type: ident("error")}}}})
-		doc += " A value a field cannot hold, an integer out of its range, a string that is no JSON number, a time outside the years 1 to 9999, bytes that are no JSON document or a number that is not finite, is refused with InvalidArgument."
+		body = append(body, errDecl())
+		doc += " A value a field cannot hold, an integer out of its range, a string that is no JSON number, a time outside the years 1 to 9999, bytes that are no JSON document, a number that is not finite or a text a type cannot read, is refused with InvalidArgument."
 	}
 	body = append(body, fields...)
 	body = append(body, returns(ident("m"), ident("nil")))
@@ -1284,4 +1431,10 @@ func lowerFirst(s string) string {
 		return s
 	}
 	return strings.ToLower(s[:1]) + s[1:]
+}
+
+// errDecl declares the err of a conversion function, var err error, the
+// variable every refusing statement of the function assigns.
+func errDecl() ast.Stmt {
+	return &ast.DeclStmt{Decl: &ast.GenDecl{Tok: token.VAR, Specs: []ast.Spec{&ast.ValueSpec{Names: []*ast.Ident{ident("err")}, Type: ident("error")}}}}
 }

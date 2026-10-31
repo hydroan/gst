@@ -125,6 +125,12 @@ type FieldType struct {
 	TypeName string // the fully-qualified message name for a message kind
 	Repeated bool
 	Optional bool // proto3 presence for a scalar held through a pointer
+	// Text marks a string field carrying the text a Go type writes with its
+	// MarshalText and reads with its UnmarshalText (see
+	// jsonshape.Project.TextMethod), the way encoding/json carries it as a
+	// JSON string: the conversions write it through grpc.TextOf and read it
+	// through grpc.Text.
+	Text bool
 	// mapEntry is the synthetic entry message of a map field, nested in the
 	// enclosing message; mapKey and mapValue are the types of its key and
 	// its value.
@@ -278,6 +284,10 @@ func (g *Schema) buildMessage(obj *types.TypeName) {
 	}
 	if method := g.project.MarshalMethod(obj.Type()); method != "" {
 		g.project.Report(s, "the type declares %s, so its JSON shape is decided by code the generator cannot read; drop the method or use a type without one", method)
+		return
+	}
+	if method := g.project.TextMethod(obj.Type()); method != "" {
+		g.project.Report(s, "the type declares %s, so it travels as a string, not as a message; drop the method or use a type without one", method)
 		return
 	}
 	m.Conversion = g.messageOfStruct(m.name, g.project.TypeDoc(obj), st, m.File, s)
@@ -588,17 +598,20 @@ func malformedTag(tag string) (string, bool) {
 // double; time.Time, datatypes.Date and gorm.DeletedAt to
 // google.protobuf.Timestamp and datatypes.Time to google.protobuf.Duration
 // (see timeTypes); a project enum to its underlying string or integer type;
-// a JSON document (json.RawMessage, datatypes.JSON) to bytes, a dynamic
-// value (any) to google.protobuf.Value and a JSON object (map[string]any,
+// a type with a text method and no JSON one (see
+// jsonshape.Project.TextMethod), a netip.Addr or an enum with the method,
+// to string, the text it writes (see FieldType.Text); a JSON document
+// (json.RawMessage, datatypes.JSON) to bytes, a dynamic value (any) to
+// google.protobuf.Value and a JSON object (map[string]any,
 // datatypes.JSONMap) to google.protobuf.Struct; []byte to bytes, a slice or
-// array to repeated, a map to map; a pointer to the type it
-// points to, optional when that is a scalar; a project struct to its message
-// (queued to be built) and an unnamed struct to a message of its own beside
-// parent, named after parent and the field. Anything else is reported: a
-// nested slice or map, a map with a value of those, a map key of the wrong
-// type, an interface with methods, a type with encoding methods of its own,
-// a struct from outside the project, an unnamed struct whose message name a
-// type of the file already takes.
+// array to repeated, a map to map; a pointer to the type it points to,
+// optional when that is a scalar on the wire, a text among them; a project
+// struct to its message (queued to be built) and an unnamed struct to a
+// message of its own beside parent, named after parent and the field.
+// Anything else is reported: a nested slice or map, a map with a value of
+// those, a map key of the wrong type, an interface with methods, a type
+// with a JSON method of its own, a struct from outside the project, an
+// unnamed struct whose message name a type of the file already takes.
 //
 // The fields of the Record model of the golden fixture print as follows,
 // the Go field on the left of each arrow and the protobuf field on its right:
@@ -616,9 +629,13 @@ func malformedTag(tag string) (string, bool) {
 //	Due     time.Time         -> google.protobuf.Timestamp due = 22;
 //	Meta    RecordMeta        -> RecordMeta meta = 23;
 //	Window  struct{...}       -> RecordWindow window = 24;
+//	Addr    netip.Addr        -> string addr = 25;
+//	Peer    *netip.Addr       -> optional string peer = 26;
+//	Grade   RecordGrade       -> string grade = 27;
+//	Addrs   []netip.Addr      -> repeated string addrs = 28;
 //
-// the last with the message RecordWindow declared after Record, holding the
-// fields of the struct.
+// window with the message RecordWindow declared after Record, holding the
+// fields of the struct, and the last four as the text their types write.
 func (g *Schema) fieldTypeOf(t types.Type, file *ProtoFile, parent *descriptorpb.DescriptorProto, key string, s jsonshape.Site) (FieldType, bool) {
 	t = types.Unalias(t)
 	if p, ok := t.(*types.Pointer); ok {
@@ -687,13 +704,18 @@ func (g *Schema) namedFieldType(n *types.Named, file *ProtoFile, parent *descrip
 	if kind, ok := jsonshape.BuiltinOf(n); ok {
 		return g.builtinFieldType(kind, n, file, parent, key, s)
 	}
+	if method := g.project.MarshalMethod(n); method != "" {
+		g.project.Report(s, "type %s declares %s, so its JSON shape is decided by code the generator cannot read; use a type without the method", n, method)
+		return FieldType{}, false
+	}
+	if g.project.TextMethod(n) != "" {
+		// The type travels as the text its method writes, a string, read
+		// back through its UnmarshalText (see grpc.Text).
+		return FieldType{Kind: descriptorpb.FieldDescriptorProto_TYPE_STRING, Text: true}, true
+	}
 	if g.project.Declares(obj) {
 		if n.TypeArgs().Len() > 0 {
 			g.project.Report(s, "the generic type %s of the project is not supported; declare a non-generic type for each instantiation the API uses", n)
-			return FieldType{}, false
-		}
-		if method := g.project.MarshalMethod(n); method != "" {
-			g.project.Report(s, "type %s declares %s, so its JSON shape is decided by code the generator cannot read; use a type without the method", n, method)
 			return FieldType{}, false
 		}
 		if e := g.project.Enum(obj); e != nil {
@@ -710,10 +732,6 @@ func (g *Schema) namedFieldType(n *types.Named, file *ProtoFile, parent *descrip
 			// type, which is what the field holds.
 			return g.fieldTypeOf(n.Underlying(), file, parent, key, s)
 		}
-	}
-	if method := g.project.MarshalMethod(n); method != "" {
-		g.project.Report(s, "type %s declares %s, so its JSON shape is decided by code the generator cannot read; use a type without the method", n, method)
-		return FieldType{}, false
 	}
 	switch n.Underlying().(type) {
 	case *types.Struct:
@@ -753,10 +771,11 @@ func (g *Schema) builtinFieldType(kind jsonshape.Builtin, n *types.Named, file *
 func (g *Schema) repeatedOf(elem types.Type, file *ProtoFile, parent *descriptorpb.DescriptorProto, key string, s jsonshape.Site) (FieldType, bool) {
 	// A nil element has no spelling in a repeated field: a pointer to a
 	// message arrives as an empty message, which the value's zero value
-	// stands for, where a pointer to a scalar would arrive as the scalar's
-	// zero value, nothing telling it from a value that was never set.
-	if pointsToScalar(elem) {
-		g.project.Report(s, "a slice of pointers to a scalar has no protobuf type, an element is never unset; use a slice of values")
+	// stands for, where a pointer to a scalar, a text among them, would
+	// arrive as the scalar's zero value, nothing telling it from a value
+	// that was never set.
+	if pointsToScalar(elem) || g.pointsToText(elem) {
+		g.project.Report(s, "a slice of pointers to a scalar or a text has no protobuf type, an element is never unset; use a slice of values")
 		return FieldType{}, false
 	}
 	ft, ok := g.fieldTypeOf(elem, file, parent, key, s)
@@ -770,6 +789,13 @@ func (g *Schema) repeatedOf(elem types.Type, file *ProtoFile, parent *descriptor
 	ft.Repeated = true
 	ft.Optional = false
 	return ft, true
+}
+
+// pointsToText reports whether t is a pointer to a type that travels as
+// text (see jsonshape.Project.TextMethod), a string scalar on the wire.
+func (g *Schema) pointsToText(t types.Type) bool {
+	p, ok := types.Unalias(t).(*types.Pointer)
+	return ok && g.project.TextMethod(types.Unalias(p.Elem())) != ""
 }
 
 // pointsToScalar reports whether t is a pointer to a type over a scalar.
@@ -806,8 +832,8 @@ func (g *Schema) mapOf(m *types.Map, file *ProtoFile, parent *descriptorpb.Descr
 		return FieldType{}, false
 	}
 	keyKind, _ := scalarKind(keyBasic)
-	if pointsToScalar(m.Elem()) {
-		g.project.Report(s, "a map of pointers to a scalar has no protobuf type, a value is never unset; use a map of values")
+	if pointsToScalar(m.Elem()) || g.pointsToText(m.Elem()) {
+		g.project.Report(s, "a map of pointers to a scalar or a text has no protobuf type, a value is never unset; use a map of values")
 		return FieldType{}, false
 	}
 	value, ok := g.fieldTypeOf(m.Elem(), file, parent, key, s)

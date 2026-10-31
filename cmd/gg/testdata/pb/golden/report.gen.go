@@ -30,18 +30,22 @@ func (reportService) GetReport(ctx context.Context, req *GetReportRequest) (*Get
 	if err != nil {
 		return nil, err
 	}
-	return &GetReportResponse{Result: ReportRspToProto(result)}, nil
+	p, err := ReportRspToProto(result)
+	if err != nil {
+		return nil, err
+	}
+	return &GetReportResponse{Result: p}, nil
 }
 
 // ReportRspToProto encodes ReportRsp values into their message, nil into
 // nil.
-func ReportRspToProto(m *model.ReportRsp) *ReportRsp {
+func ReportRspToProto(m *model.ReportRsp) (*ReportRsp, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(ReportRsp)
 	p.Total = m.Total
-	return p
+	return p, nil
 }
 
 // ReportRspFromProto decodes ReportRsp messages into values, nil into nil.

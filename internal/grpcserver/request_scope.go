@@ -85,8 +85,7 @@ const accessLogFieldCap = 12
 func requestScope(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 	scope := enterCall(ctx, info.FullMethod)
 	rsp, err := handler(scope.ctx, req)
-	scope.leave(err)
-	return rsp, err
+	return rsp, scope.leave(err)
 }
 
 // requestScopeStream is requestScope for a stream: the scope is entered
@@ -95,9 +94,7 @@ func requestScope(ctx context.Context, req any, info *grpc.UnaryServerInfo, hand
 // over, with the status it ended with.
 func requestScopeStream(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 	scope := enterCall(ss.Context(), info.FullMethod)
-	err := handler(srv, withStreamContext(scope.ctx, ss))
-	scope.leave(err)
-	return err
+	return scope.leave(handler(srv, withStreamContext(scope.ctx, ss)))
 }
 
 // callScope is a call inside its request scope: the context the handler
@@ -164,14 +161,24 @@ func enterCall(ctx context.Context, fullMethod string) *callScope {
 	return &callScope{ctx: ctx, fullMethod: fullMethod, record: c, meta: meta, traceID: traceID, start: start}
 }
 
-// leave writes the access-log entry of the call, which ended with err.
-func (s *callScope) leave(err error) {
+// leave writes the access-log entry of the call, which ended with err, and
+// returns the error the call is answered with: err as it is when the call
+// answers it so (see answeredAsIs), Internal otherwise. The entry's error
+// field carries the status message of a failed call, or err itself when
+// the call answers Internal for it, the way the HTTP access log carries
+// the error of a response the listener could not encode.
+func (s *callScope) leave(err error) error {
+	mapped := err != nil && !answeredAsIs(err)
+	answer := err
+	if mapped {
+		answer = StatusError(err)
+	}
 	if logger.GRPC == nil {
 		// A process that never initialized its loggers, which bootstrap
 		// always does before Run; its other loggers drop entries too.
-		return
+		return answer
 	}
-	st := statusOf(err)
+	st := statusOf(answer)
 	fields := make([]zapcore.Field, 0, accessLogFieldCap)
 	fields = append(
 		fields,
@@ -188,9 +195,28 @@ func (s *callScope) leave(err error) {
 		logfield.Duration(time.Since(s.start)),
 	)
 	if err != nil {
-		fields = append(fields, zap.String("error", st.Message()))
+		text := st.Message()
+		if mapped {
+			text = err.Error()
+		}
+		fields = append(fields, zap.String("error", text))
 	}
 	logger.GRPC.Info(s.fullMethod, fields...)
+	return answer
+}
+
+// answeredAsIs reports whether the call answers err as it is: a status
+// error, which the handler mapped already, or a context error, which
+// grpc-go maps to Canceled or DeadlineExceeded itself. Any other error is
+// the server's own failure, a value a generated ToProto could not write
+// among them, answered Internal with types.FailureMsg (see StatusError) the
+// way the HTTP listener answers a response it could not encode, the error
+// itself in the access log.
+func answeredAsIs(err error) bool {
+	if _, ok := status.FromError(err); ok {
+		return true
+	}
+	return status.FromContextError(err).Code() != codes.Unknown
 }
 
 // statusOf returns the status the server answers err with, the way grpc-go

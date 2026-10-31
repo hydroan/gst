@@ -4,6 +4,7 @@ package pb
 
 import (
 	"context"
+	"net/netip"
 
 	"tmpapp/model"
 
@@ -44,7 +45,11 @@ func (recordService) CreateRecord(ctx context.Context, req *CreateRecordRequest)
 	if err != nil {
 		return nil, err
 	}
-	return &CreateRecordResponse{Record: RecordToProto(m)}, nil
+	p, err := RecordToProto(m)
+	if err != nil {
+		return nil, err
+	}
+	return &CreateRecordResponse{Record: p}, nil
 }
 
 // DeleteRecord serves the Delete action of Record on /api/records/:record.
@@ -65,7 +70,11 @@ func (recordService) UpdateRecord(ctx context.Context, req *UpdateRecordRequest)
 	if err != nil {
 		return nil, err
 	}
-	return &UpdateRecordResponse{Record: RecordToProto(m)}, nil
+	p, err := RecordToProto(m)
+	if err != nil {
+		return nil, err
+	}
+	return &UpdateRecordResponse{Record: p}, nil
 }
 
 // PatchRecord serves the Patch action of Record on /api/records/:record.
@@ -78,7 +87,11 @@ func (recordService) PatchRecord(ctx context.Context, req *PatchRecordRequest) (
 	if err != nil {
 		return nil, err
 	}
-	return &PatchRecordResponse{Record: RecordToProto(m)}, nil
+	p, err := RecordToProto(m)
+	if err != nil {
+		return nil, err
+	}
+	return &PatchRecordResponse{Record: p}, nil
 }
 
 // ListRecord serves the List action of Record on /api/records.
@@ -99,7 +112,11 @@ func (recordService) ListRecord(ctx context.Context, req *ListRecordRequest) (*L
 	}
 	items := make([]*Record, len(models))
 	for i, m := range models {
-		items[i] = RecordToProto(m)
+		p, err := RecordToProto(m)
+		if err != nil {
+			return nil, err
+		}
+		items[i] = p
 	}
 	return &ListRecordResponse{Items: items, Total: int64(total)}, nil
 }
@@ -110,7 +127,11 @@ func (recordService) GetRecord(ctx context.Context, req *GetRecordRequest) (*Get
 	if err != nil {
 		return nil, err
 	}
-	return &GetRecordResponse{Record: RecordToProto(m)}, nil
+	p, err := RecordToProto(m)
+	if err != nil {
+		return nil, err
+	}
+	return &GetRecordResponse{Record: p}, nil
 }
 
 // CreateManyRecord serves the CreateMany action of Record on
@@ -130,7 +151,11 @@ func (recordService) CreateManyRecord(ctx context.Context, req *CreateManyRecord
 	}
 	items := make([]*Record, len(stored))
 	for i, m := range stored {
-		items[i] = RecordToProto(m)
+		p, err := RecordToProto(m)
+		if err != nil {
+			return nil, err
+		}
+		items[i] = p
 	}
 	return &CreateManyRecordResponse{Items: items}, nil
 }
@@ -161,7 +186,11 @@ func (recordService) UpdateManyRecord(ctx context.Context, req *UpdateManyRecord
 	}
 	items := make([]*Record, len(stored))
 	for i, m := range stored {
-		items[i] = RecordToProto(m)
+		p, err := RecordToProto(m)
+		if err != nil {
+			return nil, err
+		}
+		items[i] = p
 	}
 	return &UpdateManyRecordResponse{Items: items}, nil
 }
@@ -189,7 +218,11 @@ func (recordService) PatchManyRecord(ctx context.Context, req *PatchManyRecordRe
 	}
 	items := make([]*Record, len(stored))
 	for i, m := range stored {
-		items[i] = RecordToProto(m)
+		p, err := RecordToProto(m)
+		if err != nil {
+			return nil, err
+		}
+		items[i] = p
 	}
 	return &PatchManyRecordResponse{Items: items}, nil
 }
@@ -213,17 +246,24 @@ func (recordService) ListRecordByOwner(ctx context.Context, req *ListRecordByOwn
 	}
 	items := make([]*Record, len(models))
 	for i, m := range models {
-		items[i] = RecordToProto(m)
+		p, err := RecordToProto(m)
+		if err != nil {
+			return nil, err
+		}
+		items[i] = p
 	}
 	return &ListRecordByOwnerResponse{Items: items, Total: int64(total)}, nil
 }
 
-// RecordToProto encodes Record values into their message, nil into nil.
-func RecordToProto(m *model.Record) *Record {
+// RecordToProto encodes Record values into their message, nil into nil. A
+// value a type cannot write as text (see grpc.TextOf) is an error, which the
+// call answers Internal.
+func RecordToProto(m *model.Record) (*Record, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(Record)
+	var err error
 	p.Id = grpc.UTF8(m.ID)
 	p.CreatedBy = grpc.UTF8(m.CreatedBy)
 	p.UpdatedBy = grpc.UTF8(m.UpdatedBy)
@@ -254,17 +294,46 @@ func RecordToProto(m *model.Record) *Record {
 	p.Raw = m.Raw
 	p.Extra = grpc.Struct(m.Extra)
 	p.Due = grpc.Timestamp(m.Due)
-	p.Meta = RecordMetaToProto(&m.Meta)
+	p.Meta, err = RecordMetaToProto(&m.Meta)
+	if err != nil {
+		return nil, err
+	}
 	p.Window = new(RecordWindow)
 	p.Window.From = grpc.UTF8(m.Window.From)
 	p.Window.To = grpc.UTF8(m.Window.To)
-	return p
+	p.Addr, err = grpc.TextOf(&m.Addr)
+	if err != nil {
+		return nil, err
+	}
+	if m.Peer != nil {
+		var x string
+		x, err = grpc.TextOf(m.Peer)
+		if err != nil {
+			return nil, err
+		}
+		p.Peer = &x
+	}
+	p.Grade, err = grpc.TextOf(&m.Grade)
+	if err != nil {
+		return nil, err
+	}
+	if m.Addrs != nil {
+		p.Addrs = make([]string, len(m.Addrs))
+		for i, v := range m.Addrs {
+			p.Addrs[i], err = grpc.TextOf(&v)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	return p, nil
 }
 
 // RecordFromProto decodes Record messages into values, nil into nil. A value
 // a field cannot hold, an integer out of its range, a string that is no JSON
 // number, a time outside the years 1 to 9999, bytes that are no JSON
-// document or a number that is not finite, is refused with InvalidArgument.
+// document, a number that is not finite or a text a type cannot read, is
+// refused with InvalidArgument.
 func RecordFromProto(p *Record) (*model.Record, error) {
 	if p == nil {
 		return nil, nil
@@ -315,19 +384,48 @@ func RecordFromProto(p *Record) (*model.Record, error) {
 		m.Window.From = v.GetFrom()
 		m.Window.To = v.GetTo()
 	}
+	if s := p.GetAddr(); s != "" {
+		m.Addr, err = grpc.Text[netip.Addr]("addr", s)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if p.Peer != nil {
+		var x netip.Addr
+		x, err = grpc.Text[netip.Addr]("peer", *p.Peer)
+		if err != nil {
+			return nil, err
+		}
+		m.Peer = &x
+	}
+	if s := p.GetGrade(); s != "" {
+		m.Grade, err = grpc.Text[model.RecordGrade]("grade", s)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if p.GetAddrs() != nil {
+		m.Addrs = make([]netip.Addr, len(p.GetAddrs()))
+		for i, v := range p.GetAddrs() {
+			m.Addrs[i], err = grpc.Text[netip.Addr](grpc.Element("addrs", i), v)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	return m, nil
 }
 
 // RecordMetaToProto encodes RecordMeta values into their message, nil into
 // nil.
-func RecordMetaToProto(m *model.RecordMeta) *RecordMeta {
+func RecordMetaToProto(m *model.RecordMeta) (*RecordMeta, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(RecordMeta)
 	p.Author = grpc.UTF8(m.Author)
 	p.Score = m.Score
-	return p
+	return p, nil
 }
 
 // RecordMetaFromProto decodes RecordMeta messages into values, nil into nil.

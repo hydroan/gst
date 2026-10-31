@@ -44,7 +44,11 @@ func (counterStepService) ListCounterStep(ctx context.Context, req *ListCounterS
 	}
 	items := make([]*CounterStep, len(models))
 	for i, m := range models {
-		items[i] = CounterStepToProto(m)
+		p, err := CounterStepToProto(m)
+		if err != nil {
+			return nil, err
+		}
+		items[i] = p
 	}
 	return &ListCounterStepResponse{Items: items, Total: int64(total)}, nil
 }
@@ -57,15 +61,19 @@ func (counterStepService) WatchCounterStep(req *WatchCounterStepRequest, srv Cou
 		return err
 	}
 	return watchCounterStep(srv.Context(), nil, payload, func(rsp *model.CounterStep) error {
-		return srv.Send(&WatchCounterStepResponse{Result: CounterStepToProto(rsp)})
+		p, err := CounterStepToProto(rsp)
+		if err != nil {
+			return err
+		}
+		return srv.Send(&WatchCounterStepResponse{Result: p})
 	})
 }
 
 // CounterStepToProto encodes CounterStep values into their message, nil into
 // nil.
-func CounterStepToProto(m *model.CounterStep) *CounterStep {
+func CounterStepToProto(m *model.CounterStep) (*CounterStep, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(CounterStep)
 	p.Id = grpc.UTF8(m.ID)
@@ -76,14 +84,14 @@ func CounterStepToProto(m *model.CounterStep) *CounterStep {
 	p.Seq = m.Seq
 	p.Tenure = grpc.UTF8(m.Tenure)
 	p.Replica = grpc.UTF8(m.Replica)
-	return p
+	return p, nil
 }
 
 // CounterStepFromProto decodes CounterStep messages into values, nil into
 // nil. A value a field cannot hold, an integer out of its range, a string
 // that is no JSON number, a time outside the years 1 to 9999, bytes that are
-// no JSON document or a number that is not finite, is refused with
-// InvalidArgument.
+// no JSON document, a number that is not finite or a text a type cannot
+// read, is refused with InvalidArgument.
 func CounterStepFromProto(p *CounterStep) (*model.CounterStep, error) {
 	if p == nil {
 		return nil, nil
@@ -109,13 +117,13 @@ func CounterStepFromProto(p *CounterStep) (*model.CounterStep, error) {
 
 // CounterStepWatchReqToProto encodes CounterStepWatchReq values into their
 // message, nil into nil.
-func CounterStepWatchReqToProto(m *model.CounterStepWatchReq) *CounterStepWatchReq {
+func CounterStepWatchReqToProto(m *model.CounterStepWatchReq) (*CounterStepWatchReq, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(CounterStepWatchReq)
 	p.After = m.After
-	return p
+	return p, nil
 }
 
 // CounterStepWatchReqFromProto decodes CounterStepWatchReq messages into

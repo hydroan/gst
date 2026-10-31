@@ -59,6 +59,49 @@ func TestLoadReadsTheShapesOfAProject(t *testing.T) {
 	require.Empty(t, project.Diagnostics())
 }
 
+// TestTextMethodNamesHowATypeWithoutAJSONMethodWritesText pins which types
+// a generator describes as strings: a type with MarshalText and no JSON
+// method, netip.Addr and the Grade fixture, writes the text of that method,
+// so TextMethod names it and MarshalMethod answers nothing; a type with a
+// JSON method, time.Time, writes whatever that method does, so MarshalMethod
+// names it and TextMethod answers nothing; a type with neither answers
+// nothing for both. The constants of a type with a text method are no enum:
+// the method decides what they write.
+func TestTextMethodNamesHowATypeWithoutAJSONMethodWritesText(t *testing.T) {
+	project, err := jsonshape.Load(jsonshape.Config{
+		Dir:        ".",
+		ModulePath: fixtureModule,
+		Roots:      []string{fixtureModule + "/model/sample"},
+	})
+	require.NoError(t, err)
+	sample, ok := project.Package(fixtureModule + "/model/sample").Types.Scope().Lookup("Sample").(*types.TypeName)
+	require.True(t, ok)
+	st, ok := sample.Type().Underlying().(*types.Struct)
+	require.True(t, ok)
+	field := func(name string) types.Type {
+		for f := range st.Fields() {
+			if f.Name() == name {
+				return f.Type()
+			}
+		}
+		t.Fatalf("Sample has no field %s", name)
+		return nil
+	}
+	require.Equal(t, "MarshalText", project.TextMethod(field("Addr")))
+	require.Empty(t, project.MarshalMethod(field("Addr")))
+	require.Equal(t, "MarshalText", project.TextMethod(field("Grade")))
+	require.Empty(t, project.MarshalMethod(field("Grade")))
+	require.Empty(t, project.TextMethod(field("Deadline")), "time.Time writes its own JSON")
+	require.Equal(t, "MarshalJSON", project.MarshalMethod(field("Deadline")))
+	require.Empty(t, project.TextMethod(field("Name")))
+	require.Empty(t, project.MarshalMethod(field("Name")))
+
+	grade, ok := project.Package(fixtureModule + "/model/record").Types.Scope().Lookup("Grade").(*types.TypeName)
+	require.True(t, ok)
+	require.Nil(t, project.Enum(grade), "the constants of a type with a text method are no enum")
+	require.Empty(t, project.Diagnostics())
+}
+
 // TestLoadAppliesTheOverlay pins that the files of Config.Overlay take part
 // in the load in place of, or beside, the ones on disk, keyed by a path
 // relative to Config.Dir or an absolute one: a declaration only the overlay

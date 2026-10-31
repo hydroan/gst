@@ -30,19 +30,23 @@ func (stepDownService) CreateStepDown(ctx context.Context, req *CreateStepDownRe
 	if err != nil {
 		return nil, err
 	}
-	return &CreateStepDownResponse{Result: StepDownRspToProto(result)}, nil
+	p, err := StepDownRspToProto(result)
+	if err != nil {
+		return nil, err
+	}
+	return &CreateStepDownResponse{Result: p}, nil
 }
 
 // StepDownRspToProto encodes StepDownRsp values into their message, nil into
 // nil.
-func StepDownRspToProto(m *model.StepDownRsp) *StepDownRsp {
+func StepDownRspToProto(m *model.StepDownRsp) (*StepDownRsp, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(StepDownRsp)
 	p.Replica = grpc.UTF8(m.Replica)
 	p.Asked = m.Asked
-	return p
+	return p, nil
 }
 
 // StepDownRspFromProto decodes StepDownRsp messages into values, nil into

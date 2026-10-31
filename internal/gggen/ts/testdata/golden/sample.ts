@@ -27,6 +27,9 @@ export interface Sample {
   payload?: string | null;
   grid: number[];
   pointers?: ($record.Record | null)[] | null;
+  addr: string;
+  peer?: string | null;
+  grade: $record.Grade;
   status: Status | "";
   previous?: Status | "" | null;
   retired?: Status;

@@ -10,9 +10,11 @@ import (
 
 // render renders the declaration of a project type under its doc comment: an
 // interface for a struct type (see writeInterface), a union of the constants
-// for an enum type (see enumBody), and a type alias for any other. The struct
-// Options, the string type Status with the constants active and archived, and
-// the named slice type Records of *record.Record of package sample render as
+// for an enum type (see enumBody), string for a type writing itself as text
+// (see jsonshape.Project.TextMethod), and a type alias for any other. The
+// struct Options, the string type Status with the constants active and
+// archived and the named slice type Records of *record.Record of package
+// sample, and the type Grade of package record with a MarshalText, render as
 //
 //	/** Options is kept as a JSON document. */
 //	export interface Options {
@@ -29,6 +31,9 @@ import (
 //
 //	/** Records lists records. */
 //	export type Records = ($record.Record | null)[] | null;
+//
+//	/** Grade is the grade of a record, written as its name. */
+//	export type Grade = string;
 func (g *generator) render(obj *types.TypeName) *declaration {
 	ctx := &fileContext{pkgPath: obj.Pkg().Path(), imports: make(map[string]bool)}
 	s := jsonshape.Site{Subject: obj.Pkg().Path() + "." + obj.Name(), Pos: obj.Pos()}
@@ -62,6 +67,13 @@ func (g *generator) render(obj *types.TypeName) *declaration {
 		if method := g.project.MarshalMethod(t); method != "" {
 			g.project.Report(s, "the type declares %s, so its JSON shape is decided by code the generator cannot read; drop the method or use a type without one", method)
 			return d
+		}
+		if g.project.TextMethod(t) != "" {
+			// The type writes itself as text, which encoding/json carries
+			// as a JSON string whatever its structure or constants.
+			writeDoc(&b, "", doc)
+			fmt.Fprintf(&b, "export type %s = string;\n", obj.Name())
+			break
 		}
 		switch u := t.Underlying().(type) {
 		case *types.Struct:
@@ -188,6 +200,9 @@ func (g *generator) expr(t types.Type, ctx *fileContext, s jsonshape.Site) strin
 		if method := g.project.MarshalMethod(tt); method != "" {
 			g.project.Report(s, "type %s declares %s, so its JSON shape is decided by code the generator cannot read; use a type without the method", tt, method)
 			return "unknown"
+		}
+		if g.project.TextMethod(tt) != "" {
+			return "string"
 		}
 		if _, isStruct := tt.Underlying().(*types.Struct); isStruct {
 			key := types.TypeString(tt, nil)

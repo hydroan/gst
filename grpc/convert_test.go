@@ -3,10 +3,12 @@ package grpc_test
 import (
 	"encoding/json"
 	"math"
+	"net/netip"
 	"strconv"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	gstgrpc "github.com/hydroan/gst/grpc"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
@@ -305,4 +307,48 @@ func requireFieldViolation(t *testing.T, err error, field, description string) {
 	require.Len(t, violations, 1)
 	require.Equal(t, field, violations[0].GetField())
 	require.Equal(t, description, violations[0].GetDescription())
+}
+
+// grade is a text type of the tests: an integer written as its name, whose
+// MarshalText refuses a value it does not know.
+type grade int
+
+func (g grade) MarshalText() ([]byte, error) {
+	if g != 1 {
+		return nil, errors.Newf("unknown grade %d", int(g))
+	}
+	return []byte("low"), nil
+}
+
+func (g *grade) UnmarshalText(text []byte) error {
+	if string(text) != "low" {
+		return errors.Newf("unknown grade %q", text)
+	}
+	*g = 1
+	return nil
+}
+
+// TestTextReadsWhatTextOfWrites pins the text round trip of a type with the
+// text methods: TextOf writes what MarshalText writes, Text reads it back
+// through UnmarshalText, a text the type refuses is refused with
+// invalidValue naming the field, and a value the type cannot write is an
+// error carrying the type's own account.
+func TestTextReadsWhatTextOfWrites(t *testing.T) {
+	text, err := gstgrpc.TextOf(netip.MustParseAddr("10.0.0.1"))
+	require.NoError(t, err)
+	require.Equal(t, "10.0.0.1", text)
+	addr, err := gstgrpc.Text[netip.Addr]("addr", text)
+	require.NoError(t, err)
+	require.Equal(t, netip.MustParseAddr("10.0.0.1"), addr)
+
+	_, err = gstgrpc.Text[netip.Addr]("addr", "10.0.0")
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.Equal(t, "invalid value for field 'addr'", status.Convert(err).Message())
+	requireFieldViolation(t, err, "addr", `"10.0.0" cannot be read as a netip.Addr: ParseAddr("10.0.0"): IPv4 address too short`)
+
+	low, err := gstgrpc.Text[grade]("grade", "low")
+	require.NoError(t, err)
+	require.Equal(t, grade(1), low)
+	_, err = gstgrpc.TextOf(grade(7))
+	require.EqualError(t, err, "grpc_test.grade cannot be written as text: unknown grade 7")
 }

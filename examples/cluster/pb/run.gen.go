@@ -42,15 +42,19 @@ func (runService) ListRun(ctx context.Context, req *ListRunRequest) (*ListRunRes
 	}
 	items := make([]*Run, len(models))
 	for i, m := range models {
-		items[i] = RunToProto(m)
+		p, err := RunToProto(m)
+		if err != nil {
+			return nil, err
+		}
+		items[i] = p
 	}
 	return &ListRunResponse{Items: items, Total: int64(total)}, nil
 }
 
 // RunToProto encodes Run values into their message, nil into nil.
-func RunToProto(m *model.Run) *Run {
+func RunToProto(m *model.Run) (*Run, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(Run)
 	p.Id = grpc.UTF8(m.ID)
@@ -64,13 +68,14 @@ func RunToProto(m *model.Run) *Run {
 	if m.EndedAt != nil {
 		p.EndedAt = timestamppb.New(*m.EndedAt)
 	}
-	return p
+	return p, nil
 }
 
 // RunFromProto decodes Run messages into values, nil into nil. A value a
 // field cannot hold, an integer out of its range, a string that is no JSON
 // number, a time outside the years 1 to 9999, bytes that are no JSON
-// document or a number that is not finite, is refused with InvalidArgument.
+// document, a number that is not finite or a text a type cannot read, is
+// refused with InvalidArgument.
 func RunFromProto(p *Run) (*model.Run, error) {
 	if p == nil {
 		return nil, nil

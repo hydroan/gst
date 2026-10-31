@@ -35,7 +35,11 @@ func (noteService) CreateNote(ctx context.Context, req *CreateNoteRequest) (*Cre
 	if err != nil {
 		return nil, err
 	}
-	return &CreateNoteResponse{Note: NoteToProto(m)}, nil
+	p, err := NoteToProto(m)
+	if err != nil {
+		return nil, err
+	}
+	return &CreateNoteResponse{Note: p}, nil
 }
 
 // GetNote serves the Get action of Note on /api/notes/:id.
@@ -44,13 +48,17 @@ func (noteService) GetNote(ctx context.Context, req *GetNoteRequest) (*GetNoteRe
 	if err != nil {
 		return nil, err
 	}
-	return &GetNoteResponse{Note: NoteToProto(m)}, nil
+	p, err := NoteToProto(m)
+	if err != nil {
+		return nil, err
+	}
+	return &GetNoteResponse{Note: p}, nil
 }
 
 // NoteToProto encodes Note values into their message, nil into nil.
-func NoteToProto(m *model.Note) *Note {
+func NoteToProto(m *model.Note) (*Note, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(Note)
 	p.Id = grpc.UTF8(m.ID)
@@ -65,13 +73,14 @@ func NoteToProto(m *model.Note) *Note {
 			p.Tags[i] = grpc.UTF8(v)
 		}
 	}
-	return p
+	return p, nil
 }
 
 // NoteFromProto decodes Note messages into values, nil into nil. A value a
 // field cannot hold, an integer out of its range, a string that is no JSON
 // number, a time outside the years 1 to 9999, bytes that are no JSON
-// document or a number that is not finite, is refused with InvalidArgument.
+// document, a number that is not finite or a text a type cannot read, is
+// refused with InvalidArgument.
 func NoteFromProto(p *Note) (*model.Note, error) {
 	if p == nil {
 		return nil, nil

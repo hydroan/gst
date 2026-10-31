@@ -42,7 +42,11 @@ func (shapeService) CreateShape(ctx context.Context, req *CreateShapeRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	return &CreateShapeResponse{Shape: ShapeToProto(m)}, nil
+	p, err := ShapeToProto(m)
+	if err != nil {
+		return nil, err
+	}
+	return &CreateShapeResponse{Shape: p}, nil
 }
 
 // GetShape serves the Get action of Shape on /api/shapes/:id.
@@ -51,15 +55,22 @@ func (shapeService) GetShape(ctx context.Context, req *GetShapeRequest) (*GetSha
 	if err != nil {
 		return nil, err
 	}
-	return &GetShapeResponse{Shape: ShapeToProto(m)}, nil
+	p, err := ShapeToProto(m)
+	if err != nil {
+		return nil, err
+	}
+	return &GetShapeResponse{Shape: p}, nil
 }
 
-// ShapeToProto encodes Shape values into their message, nil into nil.
-func ShapeToProto(m *model.Shape) *Shape {
+// ShapeToProto encodes Shape values into their message, nil into nil. A
+// value a type cannot write as text (see grpc.TextOf) is an error, which the
+// call answers Internal.
+func ShapeToProto(m *model.Shape) (*Shape, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(Shape)
+	var err error
 	p.Id = grpc.UTF8(m.ID)
 	p.CreatedBy = grpc.UTF8(m.CreatedBy)
 	p.UpdatedBy = grpc.UTF8(m.UpdatedBy)
@@ -70,19 +81,31 @@ func ShapeToProto(m *model.Shape) *Shape {
 	p.Doc = m.Doc
 	p.Attrs = grpc.Struct(m.Attrs)
 	data := m.Options.Data()
-	p.Options = ShapeOptionsToProto(&data)
-	p.Audit = ShapeAuditToProto(&m.Audit)
+	p.Options, err = ShapeOptionsToProto(&data)
+	if err != nil {
+		return nil, err
+	}
+	p.Audit, err = ShapeAuditToProto(&m.Audit)
+	if err != nil {
+		return nil, err
+	}
 	p.Amount = grpc.UTF8(string(m.Amount))
 	p.Level = int64(m.Level)
 	if m.Score != nil {
 		x := int64(*m.Score)
 		p.Score = &x
 	}
-	p.Owner = ShapeOwnerToProto(m.Owner)
+	p.Owner, err = ShapeOwnerToProto(m.Owner)
+	if err != nil {
+		return nil, err
+	}
 	if m.Points != nil {
 		p.Points = make([]*ShapePoint, len(m.Points))
 		for i, v := range m.Points {
-			p.Points[i] = ShapePointToProto(v)
+			p.Points[i], err = ShapePointToProto(v)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	p.Grid = make([]int32, len(m.Grid))
@@ -98,7 +121,10 @@ func ShapeToProto(m *model.Shape) *Shape {
 	if m.ByCode != nil {
 		p.ByCode = make(map[int32]*ShapePoint, len(m.ByCode))
 		for k, v := range m.ByCode {
-			p.ByCode[k] = ShapePointToProto(&v)
+			p.ByCode[k], err = ShapePointToProto(&v)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	if m.Spans != nil {
@@ -130,7 +156,10 @@ func ShapeToProto(m *model.Shape) *Shape {
 	if m.Steps != nil {
 		p.Steps = make([]*ShapePoint, len(m.Steps))
 		for i, v := range m.Steps {
-			p.Steps[i] = ShapePointToProto(&v)
+			p.Steps[i], err = ShapePointToProto(&v)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	if m.Words != nil {
@@ -151,7 +180,10 @@ func ShapeToProto(m *model.Shape) *Shape {
 		if *m.Corners != nil {
 			p.Corners = make([]*ShapePoint, len(*m.Corners))
 			for i, v := range *m.Corners {
-				p.Corners[i] = ShapePointToProto(&v)
+				p.Corners[i], err = ShapePointToProto(&v)
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
@@ -177,13 +209,19 @@ func ShapeToProto(m *model.Shape) *Shape {
 	}
 	p.Name = grpc.UTF8(m.Name)
 	p.MetaName = grpc.UTF8(m.ShapeMeta.Name)
-	p.Frame = WindowToProto(&m.Frame)
+	p.Frame, err = WindowToProto(&m.Frame)
+	if err != nil {
+		return nil, err
+	}
 	p.Window = new(ShapeWindow)
 	p.Window.Width = m.Window.Width
 	p.Rank = int32(m.Rank)
 	p.Port = uint32(m.Port)
 	data2 := m.Extras.Data()
-	p.Extras = ShapeOptionsToProto(&data2)
+	p.Extras, err = ShapeOptionsToProto(&data2)
+	if err != nil {
+		return nil, err
+	}
 	if m.Cells != nil {
 		p.Cells = make(map[string]*ShapeCells, len(m.Cells))
 		for k, v := range m.Cells {
@@ -194,7 +232,10 @@ func ShapeToProto(m *model.Shape) *Shape {
 	if m.ByRank != nil {
 		p.ByRank = make(map[int32]*ShapePoint, len(m.ByRank))
 		for k, v := range m.ByRank {
-			p.ByRank[int32(k)] = ShapePointToProto(&v)
+			p.ByRank[int32(k)], err = ShapePointToProto(&v)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	if m.Price != nil {
@@ -210,7 +251,10 @@ func ShapeToProto(m *model.Shape) *Shape {
 	if m.Owners != nil {
 		p.Owners = make(map[string]*ShapeOwner, len(m.Owners))
 		for k, v := range m.Owners {
-			p.Owners[grpc.UTF8(k)] = ShapeOwnerToProto(v)
+			p.Owners[grpc.UTF8(k)], err = ShapeOwnerToProto(v)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	p.Ratio = m.Ratio
@@ -237,13 +281,14 @@ func ShapeToProto(m *model.Shape) *Shape {
 			p.Rates[grpc.UTF8(k)] = grpc.NumberText(v)
 		}
 	}
-	return p
+	return p, nil
 }
 
 // ShapeFromProto decodes Shape messages into values, nil into nil. A value a
 // field cannot hold, an integer out of its range, a string that is no JSON
 // number, a time outside the years 1 to 9999, bytes that are no JSON
-// document or a number that is not finite, is refused with InvalidArgument.
+// document, a number that is not finite or a text a type cannot read, is
+// refused with InvalidArgument.
 func ShapeFromProto(p *Shape) (*model.Shape, error) {
 	if p == nil {
 		return nil, nil
@@ -590,13 +635,13 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 
 // ShapeOptionsToProto encodes ShapeOptions values into their message, nil
 // into nil.
-func ShapeOptionsToProto(m *model.ShapeOptions) *ShapeOptions {
+func ShapeOptionsToProto(m *model.ShapeOptions) (*ShapeOptions, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(ShapeOptions)
 	p.Color = grpc.UTF8(m.Color)
-	return p
+	return p, nil
 }
 
 // ShapeOptionsFromProto decodes ShapeOptions messages into values, nil into
@@ -612,21 +657,22 @@ func ShapeOptionsFromProto(p *ShapeOptions) (*model.ShapeOptions, error) {
 
 // ShapeAuditToProto encodes ShapeAudit values into their message, nil into
 // nil.
-func ShapeAuditToProto(m *model.ShapeAudit) *ShapeAudit {
+func ShapeAuditToProto(m *model.ShapeAudit) (*ShapeAudit, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(ShapeAudit)
 	if m.Removed.Valid {
 		p.Removed = timestamppb.New(m.Removed.Time)
 	}
-	return p
+	return p, nil
 }
 
 // ShapeAuditFromProto decodes ShapeAudit messages into values, nil into nil.
 // A value a field cannot hold, an integer out of its range, a string that is
 // no JSON number, a time outside the years 1 to 9999, bytes that are no JSON
-// document or a number that is not finite, is refused with InvalidArgument.
+// document, a number that is not finite or a text a type cannot read, is
+// refused with InvalidArgument.
 func ShapeAuditFromProto(p *ShapeAudit) (*model.ShapeAudit, error) {
 	if p == nil {
 		return nil, nil
@@ -646,13 +692,13 @@ func ShapeAuditFromProto(p *ShapeAudit) (*model.ShapeAudit, error) {
 
 // ShapeOwnerToProto encodes ShapeOwner values into their message, nil into
 // nil.
-func ShapeOwnerToProto(m *model.ShapeOwner) *ShapeOwner {
+func ShapeOwnerToProto(m *model.ShapeOwner) (*ShapeOwner, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(ShapeOwner)
 	p.Name = grpc.UTF8(m.Name)
-	return p
+	return p, nil
 }
 
 // ShapeOwnerFromProto decodes ShapeOwner messages into values, nil into nil.
@@ -667,14 +713,14 @@ func ShapeOwnerFromProto(p *ShapeOwner) (*model.ShapeOwner, error) {
 
 // ShapePointToProto encodes ShapePoint values into their message, nil into
 // nil.
-func ShapePointToProto(m *model.ShapePoint) *ShapePoint {
+func ShapePointToProto(m *model.ShapePoint) (*ShapePoint, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(ShapePoint)
 	p.X = m.X
 	p.Y = m.Y
-	return p
+	return p, nil
 }
 
 // ShapePointFromProto decodes ShapePoint messages into values, nil into nil.
@@ -689,13 +735,13 @@ func ShapePointFromProto(p *ShapePoint) (*model.ShapePoint, error) {
 }
 
 // WindowToProto encodes Window values into their message, nil into nil.
-func WindowToProto(m *model.Window) *Window {
+func WindowToProto(m *model.Window) (*Window, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(Window)
 	p.Width = m.Width
-	return p
+	return p, nil
 }
 
 // WindowFromProto decodes Window messages into values, nil into nil.

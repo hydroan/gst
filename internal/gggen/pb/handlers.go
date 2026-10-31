@@ -64,18 +64,22 @@ import (
 //		if err != nil {
 //			return nil, err
 //		}
-//		return &GetReportResponse{Result: ReportRspToProto(result)}, nil
+//		p, err := ReportRspToProto(result)
+//		if err != nil {
+//			return nil, err
+//		}
+//		return &GetReportResponse{Result: p}, nil
 //	}
 //
 //	// ReportRspToProto encodes ReportRsp values into their message, nil into
 //	// nil.
-//	func ReportRspToProto(m *model.ReportRsp) *ReportRsp {
+//	func ReportRspToProto(m *model.ReportRsp) (*ReportRsp, error) {
 //		if m == nil {
-//			return nil
+//			return nil, nil
 //		}
 //		p := new(ReportRsp)
 //		p.Total = m.Total
-//		return p
+//		return p, nil
 //	}
 //
 //	// ReportRspFromProto decodes ReportRsp messages into values, nil into nil.
@@ -253,9 +257,11 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 // service: it reads the route parameters, the id, the query, the record or
 // the items and the update masks off the request message, runs the call of
 // the action on them and answers the response message holding what the
-// call answered. A record, an item or a payload is decoded first, and the
-// refusal of one its conversion function answers is the call's answer, an
-// item's naming the item (see grpc.ItemError).
+// call answered, encoded through its conversion function. A record, an
+// item or a payload is decoded first, and the refusal of one its conversion
+// function answers is the call's answer, an item's naming the item (see
+// grpc.ItemError); the error of encoding what the call answered is the
+// call's answer as well.
 //
 // The rpcs of the Record model of the golden fixture on records, with the
 // parameter record, and the PatchMany of the Item model under
@@ -271,7 +277,11 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 //		if err != nil {
 //			return nil, err
 //		}
-//		return &CreateRecordResponse{Record: RecordToProto(m)}, nil
+//		p, err := RecordToProto(m)
+//		if err != nil {
+//			return nil, err
+//		}
+//		return &CreateRecordResponse{Record: p}, nil
 //	}
 //
 // the Patch action, taking the paths of the update_mask field,
@@ -286,7 +296,11 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 //		if err != nil {
 //			return nil, err
 //		}
-//		return &PatchRecordResponse{Record: RecordToProto(m)}, nil
+//		p, err := RecordToProto(m)
+//		if err != nil {
+//			return nil, err
+//		}
+//		return &PatchRecordResponse{Record: p}, nil
 //	}
 //
 // the List action, taking the query fields of the request,
@@ -309,7 +323,11 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 //		}
 //		items := make([]*Record, len(models))
 //		for i, m := range models {
-//			items[i] = RecordToProto(m)
+//			p, err := RecordToProto(m)
+//			if err != nil {
+//				return nil, err
+//			}
+//			items[i] = p
 //		}
 //		return &ListRecordResponse{Items: items, Total: int64(total)}, nil
 //	}
@@ -340,7 +358,11 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 //		}
 //		items := make([]*Item, len(stored))
 //		for i, m := range stored {
-//			items[i] = ItemToProto(m)
+//			p, err := ItemToProto(m)
+//			if err != nil {
+//				return nil, err
+//			}
+//			items[i] = p
 //		}
 //		return &PatchManyItemResponse{Items: items}, nil
 //	}
@@ -358,7 +380,11 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 //		if err != nil {
 //			return nil, err
 //		}
-//		return &MergeItemResponse{Result: MergeRspToProto(result)}, nil
+//		p, err := MergeRspToProto(result)
+//		if err != nil {
+//			return nil, err
+//		}
+//		return &MergeItemResponse{Result: p}, nil
 //	}
 func (w *fileWriter) handler(r *pbschema.RPC) {
 	w.resetFuncTemps()
@@ -406,13 +432,13 @@ func (w *fileWriter) handler(r *pbschema.RPC) {
 		toProto := func(m ast.Expr) ast.Expr { return call(w.conversionFunc(r.Message, "ToProto"), m) }
 		// single runs the call answering one record and answers it.
 		single := func(args ...ast.Expr) []ast.Stmt {
-			return []ast.Stmt{define([]string{"m", "err"}, run(args...)), failing(), respond(keyValue(responseFields[x], toProto(ident("m"))))}
+			return []ast.Stmt{define([]string{"m", "err"}, run(args...)), failing(), define([]string{"p", "err"}, toProto(ident("m"))), failing(), respond(keyValue(responseFields[x], ident("p")))}
 		}
 		// itemsOf encodes the records the variable from holds into items.
 		itemsOf := func(from string) []ast.Stmt {
 			return []ast.Stmt{
 				define([]string{"items"}, makeCall(&ast.ArrayType{Elt: star(w.messageType(r.Message))}, lenCall(ident(from)))),
-				rangeStmt("i", "m", ident(from), assign(index(ident("items"), ident("i")), toProto(ident("m")))),
+				rangeStmt("i", "m", ident(from), define([]string{"p", "err"}, toProto(ident("m"))), failing(), assign(index(ident("items"), ident("i")), ident("p"))),
 			}
 		}
 		// modelsOf decodes the items of the request into models.
@@ -501,7 +527,9 @@ func (w *fileWriter) handler(r *pbschema.RPC) {
 			body = append(body,
 				define([]string{"result", "err"}, run(params, query, payload)),
 				failing(),
-				respond(keyValue(responseFields["result"], call(w.conversionFunc(r.Result, "ToProto"), ident("result")))),
+				define([]string{"p", "err"}, call(w.conversionFunc(r.Result, "ToProto"), ident("result"))),
+				failing(),
+				respond(keyValue(responseFields["result"], ident("p"))),
 			)
 		}
 	}
@@ -561,8 +589,9 @@ func (w *fileWriter) query(phase apiaction.Phase, req func(string) ast.Expr, has
 // actionCalls) with functions moving the messages of the stream converted
 // to the action's types: the request the message carries as payload, its
 // decoding answering the refusal of a message a field cannot hold, each
-// response encoded into a response message; a client stream answers its
-// response with SendAndClose.
+// response encoded into a response message, the error of encoding one
+// ending the stream; a client stream answers its response with
+// SendAndClose.
 //
 // The Feed model of the golden fixture, each of whose streams carries
 // FeedEvent messages under a name of its own, gets for its Service("watch")
@@ -576,7 +605,11 @@ func (w *fileWriter) query(phase apiaction.Phase, req func(string) ast.Expr, has
 //			return err
 //		}
 //		return watchFeed(srv.Context(), nil, payload, func(rsp *model.FeedWatchRsp) error {
-//			return srv.Send(&WatchFeedResponse{Result: FeedEventToProto(rsp)})
+//			p, err := FeedEventToProto(rsp)
+//			if err != nil {
+//				return err
+//			}
+//			return srv.Send(&WatchFeedResponse{Result: p})
 //		})
 //	}
 //
@@ -611,7 +644,11 @@ func (w *fileWriter) query(phase apiaction.Phase, req func(string) ast.Expr, has
 //		if err != nil {
 //			return err
 //		}
-//		return srv.SendAndClose(&UploadFeedByFeedResponse{Result: FeedUploadRspToProto(result)})
+//		p, err := FeedUploadRspToProto(result)
+//		if err != nil {
+//			return err
+//		}
+//		return srv.SendAndClose(&UploadFeedByFeedResponse{Result: p})
 //	}
 //
 // and for its Service("chat") Stream on feeds/chat, both sides streaming,
@@ -626,7 +663,11 @@ func (w *fileWriter) query(phase apiaction.Phase, req func(string) ast.Expr, has
 //			}
 //			return FeedEventFromProto(msg.GetPayload())
 //		}, func(rsp *model.FeedChatRsp) error {
-//			return srv.Send(&ChatFeedResponse{Result: FeedEventToProto(rsp)})
+//			p, err := FeedEventToProto(rsp)
+//			if err != nil {
+//				return err
+//			}
+//			return srv.Send(&ChatFeedResponse{Result: p})
 //		})
 //	}
 func (w *fileWriter) streamHandler(r *pbschema.RPC) {
@@ -660,18 +701,24 @@ func (w *fileWriter) streamHandler(r *pbschema.RPC) {
 		}
 		return returns(payloadOf(m))
 	}
-	// responseOf encodes the response rsp into the response message, empty
-	// for an action declaring no Result.
-	responseOf := func(rsp ast.Expr) ast.Expr {
+	// responding returns the statements answering the response rsp through
+	// send, srv.Send or srv.SendAndClose: the response message, empty for an
+	// action declaring no Result, encoded first when there is one, a failure
+	// of which is returned instead.
+	responding := func(rsp, send ast.Expr) []ast.Stmt {
 		if r.Result == nil {
-			return addr(compositeLit(ident(r.Response.GetName())))
+			return []ast.Stmt{returns(call(send, addr(compositeLit(ident(r.Response.GetName())))))}
 		}
-		return addr(compositeLit(ident(r.Response.GetName()), keyValue(responseFields["result"], call(w.conversionFunc(r.Result, "ToProto"), rsp))))
+		return []ast.Stmt{
+			define([]string{"p", "err"}, call(w.conversionFunc(r.Result, "ToProto"), rsp)),
+			ifNotNil(ident("err"), returns(ident("err"))),
+			returns(call(send, addr(compositeLit(ident(r.Response.GetName()), keyValue(responseFields["result"], ident("p")))))),
+		}
 	}
 	reqType, rspType := w.actionType(r.Model, r.Action.Payload), w.actionType(r.Model, r.Action.Result)
 	// send is the function sending one response on the stream.
 	send := funcLit([]*ast.Field{{Names: []*ast.Ident{ident("rsp")}, Type: rspType}}, []*ast.Field{{Type: ident("error")}},
-		returns(call(sel(srv, "Send"), responseOf(ident("rsp")))))
+		responding(ident("rsp"), sel(srv, "Send"))...)
 	// recv is the function receiving the next request off the stream, the
 	// first message first when it was read for the route parameters, every
 	// later message then held to the parameters it carried (see
@@ -730,7 +777,7 @@ func (w *fileWriter) streamHandler(r *pbschema.RPC) {
 				ifStmt(nil, notNil(ident("err")), returns(ident("err"))),
 			)
 		}
-		body = append(body, returns(call(sel(srv, "SendAndClose"), responseOf(ident("result")))))
+		body = append(body, responding(ident("result"), sel(srv, "SendAndClose"))...)
 	default:
 		withFirst := len(r.Params) > 0
 		params := paramsOf(ident("first"))

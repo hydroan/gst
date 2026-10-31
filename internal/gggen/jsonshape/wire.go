@@ -254,7 +254,9 @@ const (
 
 // builtins lists the types with encoding methods whose output is known, keyed
 // by package path and type name. The JSON v2 experiment turns json.RawMessage
-// into an alias of jsontext.Value, so both names are listed.
+// into an alias of jsontext.Value, so both names are listed. The OpenAPI
+// document of a running server describes the same types from the same
+// knowledge, by reflection (see internal/openapigen's knownJSONWrites).
 var builtins = map[string]Builtin{
 	"time.Time":                    BuiltinString,
 	"encoding/json.Number":         BuiltinNumber,
@@ -280,16 +282,23 @@ func BuiltinOf(n *types.Named) (Builtin, bool) {
 	return kind, ok
 }
 
-// marshalMethods are the methods through which a type writes its own JSON: the
-// encoding/json ones, and the one the JSON v2 experiment calls as well.
-// Decoding methods do not count: a type with only those still encodes by its
-// structure, which is what a shape describes, and whatever else a request may
-// send is up to the decoding method.
-var marshalMethods = []string{"MarshalJSON", "MarshalJSONTo", "MarshalText", "AppendText"}
+// jsonMarshalMethods are the methods through which a type writes its own
+// JSON: the encoding/json one, and the one the JSON v2 experiment calls as
+// well. Decoding methods do not count: a type with only those still encodes
+// by its structure, which is what a shape describes, and whatever else a
+// request may send is up to the decoding method.
+var jsonMarshalMethods = []string{"MarshalJSON", "MarshalJSONTo"}
 
-// keyMarshalMethods are the methods through which a map key type writes its
-// key.
-var keyMarshalMethods = []string{"MarshalText", "AppendText"}
+// textMarshalMethods are the methods through which a type writes the text
+// it encodes to as a JSON string when it declares no JSON method, and a map
+// key type writes its key: the encoding one, and the one the JSON v2
+// experiment calls as well.
+var textMarshalMethods = []string{"MarshalText", "AppendText"}
+
+// marshalMethods are the methods of both kinds, each of which makes a type
+// decide its own encoding: a byte slice whose element type declares one
+// does not encode as base64.
+var marshalMethods = slices.Concat(jsonMarshalMethods, textMarshalMethods)
 
 // method returns the first of names in the method set of *t, which holds the
 // methods declared on t and the ones promoted to it as well.
@@ -303,9 +312,22 @@ func (p *Project) method(t types.Type, names []string) string {
 	return ""
 }
 
-// MarshalMethod returns the method through which t writes its own JSON, or ""
-// when t encodes by its structure (see marshalMethods).
-func (p *Project) MarshalMethod(t types.Type) string { return p.method(t, marshalMethods) }
+// MarshalMethod returns the method through which t writes its own JSON (see
+// jsonMarshalMethods), or "" when t encodes by its structure or as text
+// (see TextMethod).
+func (p *Project) MarshalMethod(t types.Type) string { return p.method(t, jsonMarshalMethods) }
+
+// TextMethod returns the method through which t writes the text it encodes
+// to as a JSON string, MarshalText or AppendText, when it declares no JSON
+// method, or "" otherwise: a netip.Addr encodes to "10.0.0.1", which a
+// generator describes as a string, and a type with a JSON method encodes
+// whatever that method writes.
+func (p *Project) TextMethod(t types.Type) string {
+	if p.method(t, jsonMarshalMethods) != "" {
+		return ""
+	}
+	return p.method(t, textMarshalMethods)
+}
 
 // IsByteSlice reports whether encoding/json encodes s as a base64 string: a
 // slice of bytes whose element type has no marshal methods.
@@ -321,7 +343,7 @@ func (p *Project) IsByteSlice(s *types.Slice) bool {
 // and without the JSON v2 experiment.
 func (p *Project) CheckMapKey(key types.Type, s Site) bool {
 	key = types.Unalias(key)
-	if method := p.method(key, keyMarshalMethods); method != "" {
+	if method := p.method(key, textMarshalMethods); method != "" {
 		p.Report(s, "map key type %s declares %s, which encoding/json and the JSON v2 experiment apply to keys differently; use a string or integer key type without it", key, method)
 		return true
 	}

@@ -38,7 +38,11 @@ func (pinService) CreatePin(ctx context.Context, req *CreatePinRequest) (*Create
 	if err != nil {
 		return nil, err
 	}
-	return &CreatePinResponse{Pin: PinToProto(m)}, nil
+	p, err := PinToProto(m)
+	if err != nil {
+		return nil, err
+	}
+	return &CreatePinResponse{Pin: p}, nil
 }
 
 // ListPin serves the List action of Pin on /api/pins.
@@ -51,7 +55,11 @@ func (pinService) ListPin(ctx context.Context, req *ListPinRequest) (*ListPinRes
 	}
 	items := make([]*Pin, len(models))
 	for i, m := range models {
-		items[i] = PinToProto(m)
+		p, err := PinToProto(m)
+		if err != nil {
+			return nil, err
+		}
+		items[i] = p
 	}
 	return &ListPinResponse{Items: items, Total: int64(total)}, nil
 }
@@ -62,29 +70,40 @@ func (pinService) GetPin(ctx context.Context, req *GetPinRequest) (*GetPinRespon
 	if err != nil {
 		return nil, err
 	}
-	return &GetPinResponse{Pin: PinToProto(m)}, nil
+	p, err := PinToProto(m)
+	if err != nil {
+		return nil, err
+	}
+	return &GetPinResponse{Pin: p}, nil
 }
 
-// PinToProto encodes Pin values into their message, nil into nil.
-func PinToProto(m *model.Pin) *Pin {
+// PinToProto encodes Pin values into their message, nil into nil. A value a
+// type cannot write as text (see grpc.TextOf) is an error, which the call
+// answers Internal.
+func PinToProto(m *model.Pin) (*Pin, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(Pin)
+	var err error
 	p.Id = grpc.UTF8(m.ID)
 	p.CreatedBy = grpc.UTF8(m.CreatedBy)
 	p.UpdatedBy = grpc.UTF8(m.UpdatedBy)
 	p.CreatedAt = grpc.Timestamp(m.CreatedAt)
 	p.UpdatedAt = grpc.Timestamp(m.UpdatedAt)
 	p.Label = grpc.UTF8(m.Label)
-	p.Link = pb_record.LinkToProto(&m.Link)
-	return p
+	p.Link, err = pb_record.LinkToProto(&m.Link)
+	if err != nil {
+		return nil, err
+	}
+	return p, nil
 }
 
 // PinFromProto decodes Pin messages into values, nil into nil. A value a
 // field cannot hold, an integer out of its range, a string that is no JSON
 // number, a time outside the years 1 to 9999, bytes that are no JSON
-// document or a number that is not finite, is refused with InvalidArgument.
+// document, a number that is not finite or a text a type cannot read, is
+// refused with InvalidArgument.
 func PinFromProto(p *Pin) (*model.Pin, error) {
 	if p == nil {
 		return nil, nil

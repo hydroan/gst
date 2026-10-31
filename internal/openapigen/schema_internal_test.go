@@ -1,6 +1,8 @@
 package openapigen
 
 import (
+	"encoding/json"
+	"net/netip"
 	"reflect"
 	"strings"
 	"testing"
@@ -10,6 +12,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3gen"
 	"github.com/hydroan/gst/apidoc"
 	"gorm.io/datatypes"
+	"gorm.io/gorm"
 )
 
 // The doc comments the schema tests expect on the fixtures declared in this
@@ -501,5 +504,88 @@ func TestNewSchemaRefWithDocsDecoratesCustomListResponseWrapper(t *testing.T) {
 	}
 	if name.Value.Description != "The option name." {
 		t.Fatalf("deeply nested option name description = %q, want API-facing field comment", name.Value.Description)
+	}
+}
+
+// encodingFieldModel carries the forms a type with encoding methods of its
+// own takes in a model: a struct from outside the project with a
+// MarshalText, a pointer to one, an integer type with the method, the types
+// whose JSON the framework knows, a project type with a MarshalJSON of its
+// own, and one inside a datatypes.JSONType; When writes its own JSON and
+// stays a date-time.
+type encodingFieldModel struct {
+	Addr    netip.Addr                               `json:"addr"`
+	Peer    *netip.Addr                              `json:"peer"`
+	Grade   encodingFieldGrade                       `json:"grade"`
+	When    time.Time                                `json:"when"`
+	Day     datatypes.Date                           `json:"day"`
+	Clock   datatypes.Time                           `json:"clock"`
+	Removed gorm.DeletedAt                           `json:"removed"`
+	Amount  json.Number                              `json:"amount"`
+	Raw     json.RawMessage                          `json:"raw"`
+	Doc     datatypes.JSON                           `json:"doc"`
+	Meta    datatypes.JSONMap                        `json:"meta"`
+	Custom  encodingFieldCustom                      `json:"custom"`
+	Options datatypes.JSONType[encodingFieldOptions] `json:"options"`
+}
+
+type encodingFieldGrade int
+
+func (encodingFieldGrade) MarshalText() ([]byte, error) { return []byte("low"), nil }
+
+// encodingFieldCustom writes a JSON of its own, which no reflection reads.
+type encodingFieldCustom struct {
+	Code int `json:"code"`
+}
+
+func (encodingFieldCustom) MarshalJSON() ([]byte, error) { return []byte(`"custom"`), nil }
+
+type encodingFieldOptions struct {
+	Addr netip.Addr `json:"addr"`
+}
+
+func TestNewSchemaRefWithDocsDocumentsWhatEncodingMethodsWrite(t *testing.T) {
+	schemaRef := newSchemaRefWithDocs(encodingFieldModel{})
+	if schemaRef == nil || schemaRef.Value == nil {
+		t.Fatal("newSchemaRefWithDocs() returned nil schema")
+	}
+	prop := func(name string) *openapi3.Schema {
+		t.Helper()
+		ref := schemaRef.Value.Properties[name]
+		if ref == nil || ref.Value == nil {
+			t.Fatalf("%s property missing", name)
+		}
+		return ref.Value
+	}
+	for _, name := range []string{"addr", "peer", "grade", "clock"} {
+		if p := prop(name); !p.Type.Is("string") || len(p.Properties) != 0 || p.Format != "" {
+			t.Fatalf("%s schema = %#v, want a plain string, the text the type writes", name, p)
+		}
+	}
+	if !prop("peer").Nullable {
+		t.Fatal("peer, a pointer, must stay nullable")
+	}
+	for _, name := range []string{"when", "day", "removed"} {
+		if p := prop(name); !p.Type.Is("string") || p.Format != "date-time" {
+			t.Fatalf("%s schema = %#v, want the RFC 3339 string time.Time writes", name, p)
+		}
+	}
+	if !prop("removed").Nullable {
+		t.Fatal("removed, a gorm.DeletedAt, writes null when unset and must be nullable")
+	}
+	if p := prop("amount"); !p.Type.Is("number") {
+		t.Fatalf("amount schema = %#v, want the number a json.Number writes", p)
+	}
+	for _, name := range []string{"raw", "doc", "custom"} {
+		if p := prop(name); p.Type != nil || len(p.Properties) != 0 || p.Format != "" {
+			t.Fatalf("%s schema = %#v, want the empty schema, any JSON value", name, p)
+		}
+	}
+	if p := prop("meta"); !p.Type.Is("object") {
+		t.Fatalf("meta schema = %#v, want the object openapi3gen documents a map as", p)
+	}
+	addr := prop("options").Properties["addr"]
+	if addr == nil || addr.Value == nil || !addr.Value.Type.Is("string") {
+		t.Fatalf("options addr schema = %#v, want a string inside the JSON type as well", addr)
 	}
 }

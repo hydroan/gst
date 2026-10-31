@@ -5,6 +5,7 @@ package sample
 import (
 	"database/sql"
 	"encoding/json"
+	"net/netip"
 	"time"
 
 	"github.com/hydroan/gst/internal/gggen/jsonshape/fixture/model/record"
@@ -39,6 +40,9 @@ type Sample struct {
 	Payload  []byte            `json:"payload"`
 	Grid     [2]int            `json:"grid"`
 	Pointers []*record.Record  `json:"pointers"`
+	Addr     netip.Addr        `json:"addr"`
+	Peer     *netip.Addr       `json:"peer,omitempty"`
+	Grade    record.Grade      `json:"grade"`
 
 	Current    Status     `json:"status"`
 	Previous   *Status    `json:"previous,omitempty"`

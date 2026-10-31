@@ -39,7 +39,11 @@ func (ticketService) CreateTicket(ctx context.Context, req *CreateTicketRequest)
 	if err != nil {
 		return nil, err
 	}
-	return &CreateTicketResponse{Ticket: TicketToProto(m)}, nil
+	p, err := TicketToProto(m)
+	if err != nil {
+		return nil, err
+	}
+	return &CreateTicketResponse{Ticket: p}, nil
 }
 
 // DeleteTicket serves the Delete action of Ticket on /api/tickets/:id.
@@ -60,7 +64,11 @@ func (ticketService) UpdateTicket(ctx context.Context, req *UpdateTicketRequest)
 	if err != nil {
 		return nil, err
 	}
-	return &UpdateTicketResponse{Ticket: TicketToProto(m)}, nil
+	p, err := TicketToProto(m)
+	if err != nil {
+		return nil, err
+	}
+	return &UpdateTicketResponse{Ticket: p}, nil
 }
 
 // PatchTicket serves the Patch action of Ticket on /api/tickets/:id.
@@ -73,7 +81,11 @@ func (ticketService) PatchTicket(ctx context.Context, req *PatchTicketRequest) (
 	if err != nil {
 		return nil, err
 	}
-	return &PatchTicketResponse{Ticket: TicketToProto(m)}, nil
+	p, err := TicketToProto(m)
+	if err != nil {
+		return nil, err
+	}
+	return &PatchTicketResponse{Ticket: p}, nil
 }
 
 // ListTicket serves the List action of Ticket on /api/tickets.
@@ -94,7 +106,11 @@ func (ticketService) ListTicket(ctx context.Context, req *ListTicketRequest) (*L
 	}
 	items := make([]*Ticket, len(models))
 	for i, m := range models {
-		items[i] = TicketToProto(m)
+		p, err := TicketToProto(m)
+		if err != nil {
+			return nil, err
+		}
+		items[i] = p
 	}
 	return &ListTicketResponse{Items: items, Total: int64(total)}, nil
 }
@@ -105,13 +121,17 @@ func (ticketService) GetTicket(ctx context.Context, req *GetTicketRequest) (*Get
 	if err != nil {
 		return nil, err
 	}
-	return &GetTicketResponse{Ticket: TicketToProto(m)}, nil
+	p, err := TicketToProto(m)
+	if err != nil {
+		return nil, err
+	}
+	return &GetTicketResponse{Ticket: p}, nil
 }
 
 // TicketToProto encodes Ticket values into their message, nil into nil.
-func TicketToProto(m *model.Ticket) *Ticket {
+func TicketToProto(m *model.Ticket) (*Ticket, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(Ticket)
 	p.Id = grpc.UTF8(m.ID)
@@ -124,14 +144,15 @@ func TicketToProto(m *model.Ticket) *Ticket {
 	p.Title = grpc.UTF8(m.Title)
 	p.Status = grpc.UTF8(string(m.Status))
 	p.Key = grpc.UTF8(m.Key)
-	return p
+	return p, nil
 }
 
 // TicketFromProto decodes Ticket messages into values, nil into nil. Leaves
 // out tenant_id, which the server writes alone. A value a field cannot hold,
 // an integer out of its range, a string that is no JSON number, a time
-// outside the years 1 to 9999, bytes that are no JSON document or a number
-// that is not finite, is refused with InvalidArgument.
+// outside the years 1 to 9999, bytes that are no JSON document, a number
+// that is not finite or a text a type cannot read, is refused with
+// InvalidArgument.
 func TicketFromProto(p *Ticket) (*model.Ticket, error) {
 	if p == nil {
 		return nil, nil

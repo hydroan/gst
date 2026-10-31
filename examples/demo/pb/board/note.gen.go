@@ -43,7 +43,11 @@ func (noteService) CreateNote(ctx context.Context, req *CreateNoteRequest) (*Cre
 	if err != nil {
 		return nil, err
 	}
-	return &CreateNoteResponse{Note: NoteToProto(m)}, nil
+	p, err := NoteToProto(m)
+	if err != nil {
+		return nil, err
+	}
+	return &CreateNoteResponse{Note: p}, nil
 }
 
 // DeleteNote serves the Delete action of Note on /api/board/notes/:id.
@@ -64,7 +68,11 @@ func (noteService) UpdateNote(ctx context.Context, req *UpdateNoteRequest) (*Upd
 	if err != nil {
 		return nil, err
 	}
-	return &UpdateNoteResponse{Note: NoteToProto(m)}, nil
+	p, err := NoteToProto(m)
+	if err != nil {
+		return nil, err
+	}
+	return &UpdateNoteResponse{Note: p}, nil
 }
 
 // PatchNote serves the Patch action of Note on /api/board/notes/:id.
@@ -77,7 +85,11 @@ func (noteService) PatchNote(ctx context.Context, req *PatchNoteRequest) (*Patch
 	if err != nil {
 		return nil, err
 	}
-	return &PatchNoteResponse{Note: NoteToProto(m)}, nil
+	p, err := NoteToProto(m)
+	if err != nil {
+		return nil, err
+	}
+	return &PatchNoteResponse{Note: p}, nil
 }
 
 // ListNote serves the List action of Note on /api/board/notes.
@@ -90,7 +102,11 @@ func (noteService) ListNote(ctx context.Context, req *ListNoteRequest) (*ListNot
 	}
 	items := make([]*Note, len(models))
 	for i, m := range models {
-		items[i] = NoteToProto(m)
+		p, err := NoteToProto(m)
+		if err != nil {
+			return nil, err
+		}
+		items[i] = p
 	}
 	return &ListNoteResponse{Items: items, Total: int64(total)}, nil
 }
@@ -101,7 +117,11 @@ func (noteService) GetNote(ctx context.Context, req *GetNoteRequest) (*GetNoteRe
 	if err != nil {
 		return nil, err
 	}
-	return &GetNoteResponse{Note: NoteToProto(m)}, nil
+	p, err := NoteToProto(m)
+	if err != nil {
+		return nil, err
+	}
+	return &GetNoteResponse{Note: p}, nil
 }
 
 // PublishNote serves the Create action of Note on
@@ -115,13 +135,17 @@ func (noteService) PublishNote(ctx context.Context, req *PublishNoteRequest) (*P
 	if err != nil {
 		return nil, err
 	}
-	return &PublishNoteResponse{Result: NotePublishRspToProto(result)}, nil
+	p, err := NotePublishRspToProto(result)
+	if err != nil {
+		return nil, err
+	}
+	return &PublishNoteResponse{Result: p}, nil
 }
 
 // NoteToProto encodes Note values into their message, nil into nil.
-func NoteToProto(m *board.Note) *Note {
+func NoteToProto(m *board.Note) (*Note, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(Note)
 	p.Id = grpc.UTF8(m.ID)
@@ -135,13 +159,14 @@ func NoteToProto(m *board.Note) *Note {
 	if m.PublishedAt != nil {
 		p.PublishedAt = timestamppb.New(*m.PublishedAt)
 	}
-	return p
+	return p, nil
 }
 
 // NoteFromProto decodes Note messages into values, nil into nil. A value a
 // field cannot hold, an integer out of its range, a string that is no JSON
 // number, a time outside the years 1 to 9999, bytes that are no JSON
-// document or a number that is not finite, is refused with InvalidArgument.
+// document, a number that is not finite or a text a type cannot read, is
+// refused with InvalidArgument.
 func NoteFromProto(p *Note) (*board.Note, error) {
 	if p == nil {
 		return nil, nil
@@ -175,13 +200,13 @@ func NoteFromProto(p *Note) (*board.Note, error) {
 
 // NotePublishReqToProto encodes NotePublishReq values into their message,
 // nil into nil.
-func NotePublishReqToProto(m *board.NotePublishReq) *NotePublishReq {
+func NotePublishReqToProto(m *board.NotePublishReq) (*NotePublishReq, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(NotePublishReq)
 	p.Channel = grpc.UTF8(m.Channel)
-	return p
+	return p, nil
 }
 
 // NotePublishReqFromProto decodes NotePublishReq messages into values, nil
@@ -197,22 +222,22 @@ func NotePublishReqFromProto(p *NotePublishReq) (*board.NotePublishReq, error) {
 
 // NotePublishRspToProto encodes NotePublishRsp values into their message,
 // nil into nil.
-func NotePublishRspToProto(m *board.NotePublishRsp) *NotePublishRsp {
+func NotePublishRspToProto(m *board.NotePublishRsp) (*NotePublishRsp, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(NotePublishRsp)
 	p.Id = grpc.UTF8(m.ID)
 	p.Channel = grpc.UTF8(m.Channel)
 	p.PublishedAt = grpc.Timestamp(m.PublishedAt)
-	return p
+	return p, nil
 }
 
 // NotePublishRspFromProto decodes NotePublishRsp messages into values, nil
 // into nil. A value a field cannot hold, an integer out of its range, a
 // string that is no JSON number, a time outside the years 1 to 9999, bytes
-// that are no JSON document or a number that is not finite, is refused with
-// InvalidArgument.
+// that are no JSON document, a number that is not finite or a text a type
+// cannot read, is refused with InvalidArgument.
 func NotePublishRspFromProto(p *NotePublishRsp) (*board.NotePublishRsp, error) {
 	if p == nil {
 		return nil, nil

@@ -31,7 +31,11 @@ var (
 // feeds/:feed/tail, served over gRPC alone.
 func (feedService) TailFeedByFeed(req *TailFeedByFeedRequest, srv FeedService_TailFeedByFeedServer) error {
 	return tailFeedByFeed(srv.Context(), map[string]string{"feed": req.GetFeed()}, new(gstmodel.Empty), func(rsp *model.FeedTailRsp) error {
-		return srv.Send(&TailFeedByFeedResponse{Result: FeedEventToProto(rsp)})
+		p, err := FeedEventToProto(rsp)
+		if err != nil {
+			return err
+		}
+		return srv.Send(&TailFeedByFeedResponse{Result: p})
 	})
 }
 
@@ -62,7 +66,11 @@ func (feedService) UploadFeedByFeed(srv FeedService_UploadFeedByFeedServer) erro
 	if err != nil {
 		return err
 	}
-	return srv.SendAndClose(&UploadFeedByFeedResponse{Result: FeedUploadRspToProto(result)})
+	p, err := FeedUploadRspToProto(result)
+	if err != nil {
+		return err
+	}
+	return srv.SendAndClose(&UploadFeedByFeedResponse{Result: p})
 }
 
 // ChatFeed serves the Stream action of Feed declared on feeds/chat, served
@@ -75,7 +83,11 @@ func (feedService) ChatFeed(srv FeedService_ChatFeedServer) error {
 		}
 		return FeedEventFromProto(msg.GetPayload())
 	}, func(rsp *model.FeedChatRsp) error {
-		return srv.Send(&ChatFeedResponse{Result: FeedEventToProto(rsp)})
+		p, err := FeedEventToProto(rsp)
+		if err != nil {
+			return err
+		}
+		return srv.Send(&ChatFeedResponse{Result: p})
 	})
 }
 
@@ -102,14 +114,18 @@ func (feedService) WatchFeed(req *WatchFeedRequest, srv FeedService_WatchFeedSer
 		return err
 	}
 	return watchFeed(srv.Context(), nil, payload, func(rsp *model.FeedWatchRsp) error {
-		return srv.Send(&WatchFeedResponse{Result: FeedEventToProto(rsp)})
+		p, err := FeedEventToProto(rsp)
+		if err != nil {
+			return err
+		}
+		return srv.Send(&WatchFeedResponse{Result: p})
 	})
 }
 
 // FeedToProto encodes Feed values into their message, nil into nil.
-func FeedToProto(m *model.Feed) *Feed {
+func FeedToProto(m *model.Feed) (*Feed, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(Feed)
 	p.Id = grpc.UTF8(m.ID)
@@ -118,13 +134,14 @@ func FeedToProto(m *model.Feed) *Feed {
 	p.CreatedAt = grpc.Timestamp(m.CreatedAt)
 	p.UpdatedAt = grpc.Timestamp(m.UpdatedAt)
 	p.Topic = grpc.UTF8(m.Topic)
-	return p
+	return p, nil
 }
 
 // FeedFromProto decodes Feed messages into values, nil into nil. A value a
 // field cannot hold, an integer out of its range, a string that is no JSON
 // number, a time outside the years 1 to 9999, bytes that are no JSON
-// document or a number that is not finite, is refused with InvalidArgument.
+// document, a number that is not finite or a text a type cannot read, is
+// refused with InvalidArgument.
 func FeedFromProto(p *Feed) (*model.Feed, error) {
 	if p == nil {
 		return nil, nil
@@ -148,14 +165,14 @@ func FeedFromProto(p *Feed) (*model.Feed, error) {
 
 // FeedEventToProto encodes FeedEvent values into their message, nil into
 // nil.
-func FeedEventToProto(m *model.FeedEvent) *FeedEvent {
+func FeedEventToProto(m *model.FeedEvent) (*FeedEvent, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(FeedEvent)
 	p.Seq = m.Seq
 	p.Body = grpc.UTF8(m.Body)
-	return p
+	return p, nil
 }
 
 // FeedEventFromProto decodes FeedEvent messages into values, nil into nil.
@@ -171,13 +188,13 @@ func FeedEventFromProto(p *FeedEvent) (*model.FeedEvent, error) {
 
 // FeedUploadRspToProto encodes FeedUploadRsp values into their message, nil
 // into nil.
-func FeedUploadRspToProto(m *model.FeedUploadRsp) *FeedUploadRsp {
+func FeedUploadRspToProto(m *model.FeedUploadRsp) (*FeedUploadRsp, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(FeedUploadRsp)
 	p.Accepted = m.Accepted
-	return p
+	return p, nil
 }
 
 // FeedUploadRspFromProto decodes FeedUploadRsp messages into values, nil
@@ -193,13 +210,13 @@ func FeedUploadRspFromProto(p *FeedUploadRsp) (*model.FeedUploadRsp, error) {
 
 // FeedWatchReqToProto encodes FeedWatchReq values into their message, nil
 // into nil.
-func FeedWatchReqToProto(m *model.FeedWatchReq) *FeedWatchReq {
+func FeedWatchReqToProto(m *model.FeedWatchReq) (*FeedWatchReq, error) {
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 	p := new(FeedWatchReq)
 	p.Topic = grpc.UTF8(m.Topic)
-	return p
+	return p, nil
 }
 
 // FeedWatchReqFromProto decodes FeedWatchReq messages into values, nil into

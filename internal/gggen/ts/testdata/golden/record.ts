@@ -15,3 +15,6 @@ export interface Record {
  * - 1: StateClosed marks a finished record.
  */
 export type State = 0 | 1;
+
+/** Grade is the grade of a record, written as its name. */
+export type Grade = string;

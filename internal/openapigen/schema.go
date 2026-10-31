@@ -1,6 +1,8 @@
 package openapigen
 
 import (
+	"encoding"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"slices"
@@ -12,10 +14,15 @@ import (
 	"github.com/hydroan/gst/apidoc"
 	"github.com/hydroan/gst/internal/modelschema"
 	"go.uber.org/zap"
+	"gorm.io/datatypes"
+	"gorm.io/gorm"
 )
 
 var (
-	timeType = reflect.TypeFor[time.Time]()
+	timeType          = reflect.TypeFor[time.Time]()
+	jsonMapType       = reflect.TypeFor[datatypes.JSONMap]()
+	textMarshalerType = reflect.TypeFor[encoding.TextMarshaler]()
+	jsonMarshalerType = reflect.TypeFor[json.Marshaler]()
 
 	idFormat = "" // eg: "uuid"
 )
@@ -48,6 +55,9 @@ func jsonName(field reflect.StructField) string {
 // The zero value of an interface-typed payload or result is nil: such a type
 // binds any JSON value, which the empty schema describes.
 //
+// A type whose encoding methods decide its JSON is documented as what they
+// write (see documentEncodingMethods).
+//
 // A fixed-length array type, [N]T, is documented with the empty schema as
 // well, as though it held any value: openapi3gen describes slices but not
 // arrays. A slice type documents the element type.
@@ -55,12 +65,84 @@ func newSchemaRefWithDocs(value any) *openapi3.SchemaRef {
 	if value == nil {
 		return openapi3.NewSchemaRef("", openapi3.NewSchema())
 	}
-	schemaRef, err := openapi3gen.NewSchemaRefForValue(value, nil, openapi3gen.CreateTypeNameGenerator(uniqueComponentName))
+	schemaRef, err := openapi3gen.NewSchemaRefForValue(value, nil, openapi3gen.CreateTypeNameGenerator(uniqueComponentName), openapi3gen.SchemaCustomizer(documentEncodingMethods))
 	if err != nil {
 		return schemaRef
 	}
 	addSchemaDocsForType(reflect.TypeOf(value), schemaRef, nil)
 	return schemaRef
+}
+
+// jsonWrite is what encoding/json writes for a type with encoding methods
+// of its own, as a schema describes it: a nil typ is the empty schema, any
+// JSON value, and nullable marks a type that writes null for a zero value.
+type jsonWrite struct {
+	typ      *openapi3.Types
+	format   string
+	nullable bool
+}
+
+// knownJSONWrites are the types with encoding methods of their own whose
+// JSON the framework knows, the ones the generators know as well (see
+// jsonshape.BuiltinOf): a datatypes.Date writes the RFC 3339 string
+// time.Time writes, a datatypes.Time a clock string, a gorm.DeletedAt that
+// RFC 3339 string or null, a json.Number a number, and a raw JSON document
+// (json.RawMessage, datatypes.JSON) any value. time.Time, datatypes.JSONMap
+// and datatypes.JSONType are left to openapi3gen, which documents the first
+// two as a date-time string and an object, the last unwrapped afterwards
+// (see convertDatatypesJSONTypeSchema).
+var knownJSONWrites = map[reflect.Type]jsonWrite{
+	reflect.TypeFor[datatypes.Date]():  {typ: &openapi3.Types{openapi3.TypeString}, format: "date-time"},
+	reflect.TypeFor[datatypes.Time]():  {typ: &openapi3.Types{openapi3.TypeString}},
+	reflect.TypeFor[gorm.DeletedAt]():  {typ: &openapi3.Types{openapi3.TypeString}, format: "date-time", nullable: true},
+	reflect.TypeFor[json.Number]():     {typ: &openapi3.Types{openapi3.TypeNumber}},
+	reflect.TypeFor[json.RawMessage](): {},
+	reflect.TypeFor[datatypes.JSON]():  {},
+}
+
+// documentEncodingMethods is the openapi3gen customizer documenting a type
+// with encoding methods of its own as what encoding/json writes for it (see
+// jsonWriteOf), in place of what openapi3gen reflects from its structure: a
+// netip.Addr is a string, not an empty object, a json.Number a number, not
+// a string, and a type with a MarshalJSON of its own any value, the empty
+// schema, nothing telling what the method writes. A pointer to one stays
+// nullable.
+func documentEncodingMethods(_ string, t reflect.Type, _ reflect.StructTag, schema *openapi3.Schema) error {
+	write, ok := jsonWriteOf(t)
+	if !ok {
+		return nil
+	}
+	*schema = openapi3.Schema{Type: write.typ, Format: write.format, Nullable: schema.Nullable || write.nullable}
+	return nil
+}
+
+// jsonWriteOf returns what encoding/json writes for t when its encoding
+// methods decide it: a known type's write (see knownJSONWrites), any value
+// for another type with a MarshalJSON, which takes precedence over
+// MarshalText, and a string for a type with a MarshalText alone, the method
+// on t or on its pointer type, as encoding/json finds it. It reports false
+// for a type openapi3gen describes by its structure, time.Time,
+// datatypes.JSONMap and datatypes.JSONType among them.
+func jsonWriteOf(t reflect.Type) (jsonWrite, bool) {
+	if write, ok := knownJSONWrites[t]; ok {
+		return write, true
+	}
+	if t == timeType || t == jsonMapType {
+		return jsonWrite{}, false
+	}
+	if _, isJSONType := datatypesJSONDataType(t); isJSONType {
+		return jsonWrite{}, false
+	}
+	implements := func(iface reflect.Type) bool {
+		return t.Implements(iface) || reflect.PointerTo(t).Implements(iface)
+	}
+	switch {
+	case implements(jsonMarshalerType):
+		return jsonWrite{}, true
+	case implements(textMarshalerType):
+		return jsonWrite{typ: &openapi3.Types{openapi3.TypeString}}, true
+	}
+	return jsonWrite{}, false
 }
 
 // addSchemaDocsForType decorates schemaRef with the doc comments and enum
@@ -302,7 +384,7 @@ func convertDatatypesJSONTypeSchema(propRef *openapi3.SchemaRef, field reflect.S
 
 	value := reflect.Zero(dataType).Interface()
 
-	gen := openapi3gen.NewGenerator()
+	gen := openapi3gen.NewGenerator(openapi3gen.SchemaCustomizer(documentEncodingMethods))
 	schemaRef, err := gen.NewSchemaRefForValue(value, nil)
 	if err != nil || schemaRef == nil || schemaRef.Value == nil || (schemaRef.Value.Type == nil && len(schemaRef.Value.Properties) == 0) {
 		schemaRef = schemaFromType(dataType)

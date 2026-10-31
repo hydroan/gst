@@ -59,6 +59,14 @@ message Record {
   RecordMeta meta = 23;
 
   RecordWindow window = 24;
+
+  string addr = 25;
+
+  optional string peer = 26;
+
+  string grade = 27;
+
+  repeated string addrs = 28;
 }
 
 // RecordWindow is the message of the window field of Record.
