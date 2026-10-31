@@ -87,7 +87,23 @@ type Note struct {
 `)
 	writeCheckFile(t, filepath.Join(projectDir, "model", "note", "table.go"), `package note
 
-func (Note) TableName() string { return "notes" }
+// noteTable is as fixed as a literal, so the method may return it.
+const noteTable = "notes"
+
+func (Note) TableName() string { return noteTable }
+`)
+	// A variable is runtime state, whatever it holds.
+	writeCheckFile(t, filepath.Join(projectDir, "model", "box", "variable.go"), `package box
+
+import "github.com/hydroan/gst/model"
+
+var boxes = "boxes"
+
+type Variable struct {
+	model.Base
+}
+
+func (Variable) TableName() string { return boxes }
 `)
 	// Virtual models embed model.Empty and have no table to declare.
 	writeCheckFile(t, filepath.Join(projectDir, "model", "auth", "login.go"), `package auth
@@ -101,12 +117,13 @@ type Login struct {
 
 	violations := runCheck(ggcheck.ModelTableNameDeclaration)
 
-	if len(violations) != 5 {
-		t.Fatalf("expected five violations, got %#v", violations)
+	if len(violations) != 6 {
+		t.Fatalf("expected six violations, got %#v", violations)
 	}
 	assertViolationContains(t, violations, filepath.Join("model", "box", "box.go"), "model 'Box' embeds model.Base but declares no TableName() string")
-	assertViolationContains(t, violations, filepath.Join("model", "box", "dynamic.go"), "TableName of model 'Dynamic' must be a single return of a non-empty string literal")
-	assertViolationContains(t, violations, filepath.Join("model", "box", "unnamed.go"), "TableName of model 'Unnamed' must be a single return of a non-empty string literal")
+	assertViolationContains(t, violations, filepath.Join("model", "box", "dynamic.go"), "TableName of model 'Dynamic' must be a single return of a non-empty string literal, or of a constant holding one")
+	assertViolationContains(t, violations, filepath.Join("model", "box", "unnamed.go"), "TableName of model 'Unnamed' must be a single return of a non-empty string literal, or of a constant holding one")
+	assertViolationContains(t, violations, filepath.Join("model", "box", "variable.go"), "TableName of model 'Variable' must be a single return of a non-empty string literal, or of a constant holding one")
 	assertViolationContains(t, violations, filepath.Join("model", "audit", "entry.go"), "model 'Entry' embeds model.AutoBase but declares no TableName() string")
 	assertViolationContains(t, violations, filepath.Join("model", "audit", "dotted.go"), "model 'Dotted' embeds model.Base but declares no TableName() string")
 }
