@@ -4,6 +4,9 @@
 package logger
 
 import (
+	"log/slog"
+	"sync/atomic"
+
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/types"
@@ -54,6 +57,13 @@ var (
 	Gorm     gormlogger.Interface
 )
 
+// previousSlogDefault is the slog.Default Init found, which Clean restores
+// before it flushes and stops the app stream that took its place, so that
+// a line written during the shutdown lands where it did before Init. It is
+// held atomically: Clean may run on two goroutines at once, a process's
+// cleanup goroutine under its bound and the one that stopped waiting for it.
+var previousSlogDefault atomic.Pointer[slog.Logger]
+
 // Init builds every stream from the configuration: the global zap logger,
 // the component loggers, the fallbacks of the optional providers and the
 // listeners' loggers. It fails when the configured output is neither stdout
@@ -70,7 +80,13 @@ func Init() error {
 		zap.AddStacktrace(zapcore.FatalLevel),
 	)))
 
-	App = New("app.log")
+	app := New("app.log")
+	App = app
+	// The standard library's loggers write through the app stream from here
+	// on: slog.Default and, through it, the log package (see slogHandler);
+	// Clean hands them back to what they wrote through before.
+	previousSlogDefault.CompareAndSwap(nil, slog.Default())
+	slog.SetDefault(slog.New(&slogHandler{core: app.zlog.Core(), name: app.zlog.Name()}))
 
 	Controller = New("controller.log")
 	Service = New("service.log")
@@ -119,6 +135,9 @@ func Init() error {
 // a process about to exit, or a test about to read a log back, sees everything
 // that was logged.
 func Clean() {
+	if previous := previousSlogDefault.Swap(nil); previous != nil {
+		slog.SetDefault(previous)
+	}
 	_ = zap.L().Sync()
 	// The component streams.
 	logs := []types.Logger{

@@ -115,7 +115,17 @@ const contextFieldCap = 10
 // every context-scoped logger, so all fields go through one zap With call:
 // each With call clones the logger core, so chaining several With calls here
 // would cost a clone per link on every call. When adding metadata fields,
-// extend this single call instead of chaining further With calls.
+// extend appendContextFields instead of chaining further With calls.
+func (l *Logger) withContextFields(meta requestctx.Metadata, id execctx.Identity, phase apiaction.Phase) types.Logger {
+	fields := make([]zap.Field, 0, contextFieldCap)
+	fields = append(fields, zap.String(keyPhase, string(phase)))
+	return &Logger{zlog: l.zlog.With(appendContextFields(fields, meta, id)...)}
+}
+
+// appendContextFields appends to fields the ones derived from a context,
+// the request metadata and the execution identity, for a logger derived
+// from the context (see withContextFields) and for a slog record written
+// on it (see slogHandler) alike.
 //
 // The request fields come from logfield, which fixes the key and the type of
 // each one for every stream writing it; see logfield.Params for why the route
@@ -125,10 +135,8 @@ const contextFieldCap = 10
 // The cron job name is present only inside a round and the leader name only
 // inside a tenure: a request's lines carry no empty field for a capability
 // they do not use.
-func (l *Logger) withContextFields(meta requestctx.Metadata, id execctx.Identity, phase apiaction.Phase) types.Logger {
-	fields := make([]zap.Field, 0, contextFieldCap)
+func appendContextFields(fields []zap.Field, meta requestctx.Metadata, id execctx.Identity) []zap.Field {
 	fields = append(fields,
-		zap.String(keyPhase, string(phase)),
 		logfield.Route(meta.Route()),
 		logfield.Path(meta.Path()),
 		logfield.Method(meta.Method()),
@@ -144,7 +152,7 @@ func (l *Logger) withContextFields(meta requestctx.Metadata, id execctx.Identity
 	if len(id.Leader) > 0 {
 		fields = append(fields, zap.String(keyLeader, id.Leader))
 	}
-	return &Logger{zlog: l.zlog.With(fields...)}
+	return fields
 }
 
 // WithContext creates a new logger carrying the request metadata and the
