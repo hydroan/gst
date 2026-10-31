@@ -195,7 +195,7 @@ func (Record) Design() {
 - 写法不对或超出范围的值答 400（gRPC 答 InvalidArgument），并点名字段；不带时区的时间和 Unix 时间戳一律不收。
 - 响应里时刻和日期写成 RFC 3339，日期是那一天的 UTC 零点（`2026-01-01T00:00:00Z`）；时段写成 `17:30:00`，有小数秒时写满九位（`17:30:00.500000000`）。
 - URL 过滤对这三种字段只支持比较（`eq`、`ne`、`gt`、`gte`、`lt`、`lte`）和 `isnull`，前端的完整写法见 [API_CONTRACT.md](API_CONTRACT.md)。
-- 框架自己写的 `created_at`、`updated_at`、`deleted_at` 是 UTC，截到毫秒。
+- 写库时模型里每个 `time.Time`、`*time.Time` 字段都统一转成 UTC、截到毫秒，并写回内存里的模型，所以 `time.Now()` 写进去的值和回读的一样；框架自己写的 `created_at`、`updated_at`、`deleted_at` 同样。可空的时间用指针：非指针的零值时间在 MySQL 上写不进去，答 500。
 - 定时任务的表达式按 UTC 解释，按别的时区算要写 `CRON_TZ=` 前缀；分析查询按时间分桶也按存储的 UTC 切。要按运营时区切日，在查询里自己换算。
 
 ### 自定义动作
@@ -277,6 +277,7 @@ func (Entry) Design() {
 模型顶层声明 `GRPC()`，它就同时走 gRPC：`gg gen` 从 Go 类型和 `Design()` 推导 `.proto`，进程内
 编译出 `pb/` 下的 Go 代码，并在 gRPC 服务上注册和 HTTP 路由相同的动作，业务代码只写 `service/` 那一份。
 字段用 `pb` tag 给消息编号（`pb:"11"`，1 到 10 留给框架：`model.Base` 的字段，以及嵌入 `tenant.Scope` 时的 `tenant_id`），缺的 `gg gen` 会补上。
+只定义了 `MarshalText`、没有 `MarshalJSON` 的类型（`netip.Addr`、实现了它的枚举）在消息里是 `string`，按它写出的文本收发，和 JSON 里一样。
 只在 gRPC 上有的是流：自定义动作里用 `Stream(func(){...})` 声明，流的那一侧写 `StreamingPayload`/`StreamingResult`，
 另一侧写 `Payload`/`Result`，两侧都流就是双向流，service 方法收发 `grpc.ServerStream`、`ClientStream`
 或 `BidiStream`。测试里 `testutil.GRPCTarget()` 给出测试服务器的 gRPC 地址；测试二进制没导入 `pb` 包、一个 gRPC 服务都没注册时，它直接 panic 并点名要加的导入，`gg gen` 写测试骨架时也会为此警告。完整示例见
@@ -890,6 +891,10 @@ gg config convert config.ini config.yaml
   `logger.file` 去掉 `.log`，没配时是 `global`）。不建文件、不轮转，Kubernetes 这类平台直接采集标准输出。
 - `file`：每一路写 `logger.dir` 下自己的文件，按 `max_age`、`max_size`、`max_backups` 轮转，适合由采集器读文件的部署。
 
+项目代码用标准库写的日志也走这里：框架初始化后，`slog.Default` 和 `log` 包的默认输出都接到 app 那一路（`app.log`），
+`slog.InfoContext(ctx, …)` 带上请求的 ctx 时，和框架自己的日志一样带 `trace_id`、`route`、`user_id` 这些请求字段；
+`slog.Group` 和 `WithGroup` 分出来的组折成一个 JSON 字符串字段，日志库里的字段数不会随分组长大。
+
 写标准输出和写日志文件都先缓冲，最迟 1 秒写出，停机时写完；`file` 模式下 `logger.file` 没配或配成
 `/dev/stdout`、`/dev/stderr` 时，全局那一路直接写、不缓冲。值写错启动直接失败。由采集器读日志文件的部署要写
 `output = file`（或环境变量 `LOGGER_OUTPUT=file`），默认的 `stdout` 不落文件。
@@ -1068,8 +1073,8 @@ replace google.golang.org/genproto => google.golang.org/genproto v0.0.0-20261012
 `gg gen ts` 把 model `Design()` 中各路由收发的 Go 类型（请求 Payload、响应 Result 与模型本身）
 生成为 TypeScript 声明，写到 `generated/typescript/`。目录结构镜像 `model` 目录：`model/sample` 生成
 `sample.ts`，`model/sample/item` 生成 `sample/item.ts`，`model` 包自身生成 `model.ts`，路径里不重复
-`model` 这一层；model 之外被模型引用到的类型（例如 `pkg/notifier` 里作为字段类型出现的结构）保留
-自己的相对路径 `pkg/notifier.ts`，一眼能看出它不来自 model。另有一个以
+`model` 这一层；model 之外被模型引用到的类型（例如 `helper/notifier` 里作为字段类型出现的结构）保留
+自己的相对路径 `helper/notifier.ts`，一眼能看出它不来自 model。另有一个以
 `app.name` 命名的文件（未配置时用框架名 `gst.ts`），声明响应信封 `Envelope<T>`、默认列表结果
 `ListResult<T>` 和默认批量请求体 `ItemsPayload<T>`、`IDsPayload`。
 
@@ -1089,10 +1094,11 @@ replace google.golang.org/genproto => google.golang.org/genproto v0.0.0-20261012
 - 数字一律是 `number`，超过 2^53 的 64 位整数在前端会丢失精度；带 `,string` 选项的字段是 `string`。
 - 同包声明了常量的 string、整数类型生成字面量联合，常量注释写进类型注释，与 Swagger 一致；常量用
   `<<`、`|` 等位运算定义的视为位标志，类型是 `number`；没有零值常量的枚举在使用处补 `| ""` 或 `| 0`。
-- `time.Time`、`datatypes.Date` 是字符串；`any`、`json.RawMessage`、`datatypes.JSON` 是 `unknown`。
+- `time.Time`、`datatypes.Date`，以及只定义了 `MarshalText`、没有 `MarshalJSON` 的类型（`netip.Addr`、实现了它的枚举）
+  是字符串；`any`、`json.RawMessage`、`datatypes.JSON` 是 `unknown`。
 
 JSON 形态由代码决定、无法从类型声明读出的写法，命令会列出全部位置后失败，不写任何文件：自定义了
-`MarshalJSON`、`MarshalText` 等编码方法的类型（上面列出的类型除外）、项目内的泛型类型、带方法的接口、
+`MarshalJSON` 的类型（上面列出的类型除外）、项目内的泛型类型、带方法的接口、
 channel 与函数字段、键不是字符串或整数的 map，以及 `encoding/json` 不认的 tag 名和 tag 选项。只定义了
 `UnmarshalJSON` 等解码方法的类型照常按自身结构生成，即服务端返回它时的形态。
 
