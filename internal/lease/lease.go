@@ -286,9 +286,6 @@ func newHandle(name, holder string, term uint64, claimedAt time.Time) *Handle {
 	return &Handle{name: name, holder: holder, term: term, claimedAt: claimedAt, lost: make(chan struct{})}
 }
 
-// Name returns the coordinated name.
-func (h *Handle) Name() string { return h.name }
-
 // Term returns the term the claim started: the number the world outside the
 // database can refuse stale holders by.
 func (h *Handle) Term() uint64 { return h.term }
