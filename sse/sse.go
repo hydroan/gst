@@ -12,10 +12,14 @@
 //
 //	hub.Publish("records:"+recordID, sse.Event{Event: "records", Data: hint})
 //
-// The streaming side, in a service method:
+// The streaming side, in a service method; the hub is a variable of the
+// package the publishers and the service share, since the generated service
+// struct holds the embedded Base alone:
+//
+//	var hub = sse.NewHub()
 //
 //	func (s *Watcher) List(ctx *gst.ServiceContext, req *model.Empty) (*model.Empty, error) {
-//		events, cancel := s.hub.Subscribe("records:" + ctx.Query().Get("record_id"))
+//		events, cancel := hub.Subscribe("records:" + ctx.Query().Get("record_id"))
 //		defer cancel()
 //		return nil, ctx.SSE(func(conn *sse.Conn) error {
 //			for {

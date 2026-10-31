@@ -103,8 +103,8 @@ var (
 	// The context is what carries the transaction, the lease and the identity
 	// of the work down to the statements, so there is no operation without
 	// one: a chain built on nil reports it from its first terminal operation,
-	// the other entry points at once. Code that has no context to hand down
-	// says so with context.Background.
+	// the other entry points at once. A caller always has one to hand down,
+	// the request's or the job's.
 	ErrNilContext = errors.New("context cannot be nil")
 
 	// ErrUnusableFilter reports a filter the renderer cannot apply. On the
@@ -405,10 +405,9 @@ func (db *database[M]) prepare() error {
 //
 // Parameters:
 //   - ctx: Required context for cancellation, tracing, and request metadata.
-//     In service layer operations, pass the ServiceContext directly; code
-//     with no context to hand down passes context.Background. A nil context
-//     is a defect the chain reports as ErrNilContext from its first terminal
-//     operation.
+//     In a service, pass the ServiceContext; in a job, a component or a
+//     hook, the context it received. A nil context is a defect the chain
+//     reports as ErrNilContext from its first terminal operation.
 //
 // Returns a database manipulator with full CRUD and query capabilities.
 //
@@ -448,9 +447,6 @@ func (db *database[M]) prepare() error {
 //	_ = Database[*Sample](ctx).WithQuery(&Sample{Name: "alpha"}).List(&samples)
 //	s := new(Sample)
 //	_ = Database[*Sample](ctx).Get(s, id)
-//
-//	// Non-service layer
-//	_ = Database[*Sample](context.Background()).WithQuery(&Sample{Name: "alpha"}).List(&samples)
 func Database[M types.Model](ctx context.Context) types.Database[M] {
 	if DB() == nil {
 		panic("database is not initialized")

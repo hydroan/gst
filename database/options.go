@@ -42,16 +42,16 @@ import (
 // Examples:
 //
 //	// Set batch size for Create operation
-//	database.Database[*Sample](context.Background()).WithBatchSize(1000).Create(samples...)
+//	database.Database[*Sample](ctx).WithBatchSize(1000).Create(samples...)
 //
 //	// Set batch size for Upsert operation
-//	database.Database[*Sample](context.Background()).WithBatchSize(500).Upsert(samples...)
+//	database.Database[*Sample](ctx).WithBatchSize(500).Upsert(samples...)
 //
 //	// Set batch size for Delete operation
-//	database.Database[*Sample](context.Background()).WithBatchSize(2000).Delete(samples...)
+//	database.Database[*Sample](ctx).WithBatchSize(2000).Delete(samples...)
 //
 //	// Combined with other methods
-//	database.Database[*Sample](context.Background()).
+//	database.Database[*Sample](ctx).
 //	    WithBatchSize(1000).
 //	    Create(samples...)
 //
@@ -96,7 +96,7 @@ func (db *database[M]) WithBatchSize(size int) types.Database[M] {
 //	WithDryRun().UpdateByID(id, SampleCols.Name.Set(v))  // Build UPDATE SQL without updating record
 //
 //	var statements []types.SQLStatement
-//	err := database.Database[*Sample](context.Background()).
+//	err := database.Database[*Sample](ctx).
 //	    WithDryRun(&statements).
 //	    WithQuery(&Sample{Name: "alpha"}).
 //	    List(&samples)
