@@ -12,7 +12,7 @@ import (
 // lint with the configuration gg new writes, byte for byte: they stand in
 // for a generated project, so a rule that changes here changes there.
 func TestExamplesCarryTheScaffoldLintConfiguration(t *testing.T) {
-	for _, example := range []string{"demo", "cluster", "bench"} {
+	for _, example := range []string{"demo", "cluster", "bench", "multitenant"} {
 		t.Run(example, func(t *testing.T) {
 			content, err := os.ReadFile(filepath.Join("..", "..", "examples", example, ".golangci.yml"))
 			require.NoError(t, err)
