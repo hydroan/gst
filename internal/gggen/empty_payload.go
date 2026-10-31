@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"strconv"
 
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
@@ -79,6 +80,39 @@ func emptyReqPkgName(modelQualifier string) string {
 	return gstModelPkgName
 }
 
+// gstModelQualifier returns the qualifier a service file being rewritten
+// refers to the gst model package by, for a dsl.PayloadEmpty request or
+// result: the name the file's import of the package binds, model or an
+// alias, when it imports the package; otherwise model (see emptyReqPkgName),
+// unless the business model package is referred to as model (modelPkg) or
+// another import of the file takes that name, the root model package of a
+// project imported beside a nested one, in which case the gstmodel alias. A
+// file of package item importing "helloworld/model" and
+// "helloworld/model/record" gets gstmodel, one importing
+// gstmodel "github.com/hydroan/gst/model" keeps gstmodel, and one importing
+// "helloworld/model/box" alone gets model.
+func gstModelQualifier(file *ast.File, modelPkg string) string {
+	if spec := goast.FindImportSpec(file, ggconst.ImportPathModel); spec != nil {
+		if spec.Name != nil {
+			return spec.Name.Name
+		}
+		return gstModelPkgName
+	}
+	if modelPkg == gstModelPkgName {
+		return gstModelPkgAlias
+	}
+	for _, spec := range file.Imports {
+		importPath, err := strconv.Unquote(spec.Path.Value)
+		if err != nil {
+			continue
+		}
+		if importedAs(spec, importPath) == gstModelPkgName {
+			return gstModelPkgAlias
+		}
+	}
+	return gstModelPkgName
+}
+
 // emptyReqExpr builds the *<pkgName>.Empty type expression that generated
 // code uses as the type of a dsl.PayloadEmpty request or result: for
 // gstmodel it builds *gstmodel.Empty.
@@ -98,24 +132,27 @@ func isEmptyPayload(typeName string) bool { return typeName == dsl.PayloadEmpty 
 // payloadTypeTarget resolves an action type name, of a request or a result,
 // to the package qualifier and type name used when rewriting existing service
 // code. modelPkg is the business model package qualifier of the file being
-// rewritten. With modelPkg sample it returns ("model", "*Empty") for
-// dsl.PayloadEmpty and ("sample", "*RecordReq") for *RecordReq.
-func payloadTypeTarget(payload, modelPkg string) (targetPkg, actionType string) {
+// rewritten and gstModelPkg the qualifier it refers to the gst model package
+// by (see gstModelQualifier). With modelPkg sample and gstModelPkg model it
+// returns ("model", "*Empty") for dsl.PayloadEmpty and ("sample",
+// "*RecordReq") for *RecordReq.
+func payloadTypeTarget(payload, modelPkg, gstModelPkg string) (targetPkg, actionType string) {
 	if isEmptyPayload(payload) {
-		return emptyReqPkgName(modelPkg), "*Empty"
+		return gstModelPkg, "*Empty"
 	}
 	return modelPkg, payload
 }
 
 // ensureEmptyReqImportSpec inserts the gst model import into a parsed service
-// file so a rewritten *model.Empty request or result type resolves: when the
-// file refers to the business model package as model (modelPkg), it inserts
+// file so a rewritten *model.Empty request or result type resolves, under
+// gstModelPkg, the qualifier the file refers to the package by (see
+// gstModelQualifier): for gstmodel it inserts
 //
 //	gstmodel "github.com/hydroan/gst/model"
 //
-// and "github.com/hydroan/gst/model" otherwise. It reports whether the file
+// and "github.com/hydroan/gst/model" for model. It reports whether the file
 // was modified.
-func ensureEmptyReqImportSpec(file *ast.File, modelPkg string) bool {
+func ensureEmptyReqImportSpec(file *ast.File, gstModelPkg string) bool {
 	if file == nil || goast.FindImportSpec(file, ggconst.ImportPathModel) != nil {
 		return false
 	}
@@ -126,8 +163,8 @@ func ensureEmptyReqImportSpec(file *ast.File, modelPkg string) bool {
 			Value: fmt.Sprintf("%q", ggconst.ImportPathModel),
 		},
 	}
-	if emptyReqPkgName(modelPkg) == gstModelPkgAlias {
-		spec.Name = ast.NewIdent(gstModelPkgAlias)
+	if gstModelPkg != gstModelPkgName {
+		spec.Name = ast.NewIdent(gstModelPkg)
 	}
 	goast.InsertImportSpec(file, spec)
 	return true

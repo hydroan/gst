@@ -917,6 +917,89 @@ func (u *Getter) Get(ctx *gst.ServiceContext, req *model.UserGetReq) (rsp *model
 			},
 		},
 		{
+			// A file of a nested model package imports the root model package
+			// of the project as model, so it refers to the gst model package
+			// through the gstmodel alias: the rewrite keeps the alias the file
+			// binds, where writing model.Empty would name the project's own
+			// package, which declares no Empty.
+			name: "keeps_the_gst_model_alias_a_file_imports_beside_a_project_package_named_model",
+			code: `package item
+
+import (
+	"helloworld/model"
+	"helloworld/model/record"
+
+	"github.com/hydroan/gst"
+	gstmodel "github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/service"
+)
+
+type Lister struct {
+	service.Base[*record.Item, *gstmodel.Empty, *record.ItemListRsp]
+}
+
+func (l *Lister) List(ctx *gst.ServiceContext, req *gstmodel.Empty) (rsp *record.ItemListRsp, err error) {
+	rsp = &record.ItemListRsp{Kind: model.RecordKindPlain}
+	return rsp, nil
+}
+`,
+			action: &dsl.Action{
+				Service: true,
+				Payload: dsl.PayloadEmpty,
+				Result:  "*ItemListRsp",
+				Phase:   apiaction.List,
+			},
+			servicePkgName: "item",
+			wantContains: []string{
+				`gstmodel "github.com/hydroan/gst/model"`,
+				"service.Base[*record.Item, *gstmodel.Empty, *record.ItemListRsp]",
+				"req *gstmodel.Empty",
+			},
+			wantAbsent: []string{
+				"*model.Empty",
+			},
+		},
+		{
+			// The same file before it imports the gst model package: the import
+			// is added under the gstmodel alias, the name model being taken by
+			// the project package the file imports.
+			name: "switch_to_empty_payload_beside_a_project_package_named_model_uses_gstmodel_alias",
+			code: `package item
+
+import (
+	"helloworld/model"
+	"helloworld/model/record"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Lister struct {
+	service.Base[*record.Item, *record.ItemListReq, *record.ItemListRsp]
+}
+
+func (l *Lister) List(ctx *gst.ServiceContext, req *record.ItemListReq) (rsp *record.ItemListRsp, err error) {
+	rsp = &record.ItemListRsp{Kind: model.RecordKindPlain}
+	return rsp, nil
+}
+`,
+			action: &dsl.Action{
+				Service: true,
+				Payload: dsl.PayloadEmpty,
+				Result:  "*ItemListRsp",
+				Phase:   apiaction.List,
+			},
+			servicePkgName: "item",
+			wantContains: []string{
+				`gstmodel "github.com/hydroan/gst/model"`,
+				"service.Base[*record.Item, *gstmodel.Empty, *record.ItemListRsp]",
+				"req *gstmodel.Empty",
+			},
+			wantAbsent: []string{
+				"*model.Empty",
+			},
+		},
+		{
 			name: "empty_payload_apply_is_idempotent_for_existing_import",
 			code: `package box
 

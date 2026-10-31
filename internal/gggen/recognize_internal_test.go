@@ -44,7 +44,7 @@ func TestIsServiceMethod3(t *testing.T) {
 }
 
 func TestIsServiceMethod4(t *testing.T) {
-	fn := serviceMethod4("u", "model", "*UserReq", "*UserRsp", apiaction.Create, "Creator")
+	fn := serviceMethod4("u", "model", emptyReqPkgName("model"), "*UserReq", "*UserRsp", apiaction.Create, "Creator")
 	fnNeg := serviceMethod3("u", "User", "model", apiaction.CreateManyBefore, "ManyCreator")
 	if !isServiceMethod4(fn) {
 		t.Fatalf("expected isServiceMethod4 to return true for ServiceMethod4-generated func")
@@ -61,7 +61,7 @@ func TestIsServiceType(t *testing.T) {
 
 	// Positive case: types transcribes the bare payload and result names as value
 	// types, so the struct embeds service.Base[*model.User, model.User, model.User]
-	gd := types("model", "User", "User", "User", apiaction.Create.RoleName())
+	gd := types("model", emptyReqPkgName("model"), "User", "User", "User", apiaction.Create.RoleName())
 	if len(gd.Specs) == 0 {
 		t.Fatalf("types() returned no specs")
 	}

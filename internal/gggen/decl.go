@@ -137,12 +137,12 @@ func actionTypeExpr(pkgName, typeName string) ast.Expr {
 }
 
 // actionTypeOrEmptyExpr builds the type expression of one action type,
-// resolving the dsl.PayloadEmpty sentinel to *model.Empty from the gst model
-// package (aliased when the file refers to the business model package as
-// "model") and qualifying any other type by modelQualifier.
-func actionTypeOrEmptyExpr(modelQualifier, typeName string) ast.Expr {
+// resolving the dsl.PayloadEmpty sentinel to *Empty of the gst model package
+// under gstModelPkg (see emptyReqPkgName and gstModelQualifier) and
+// qualifying any other type by modelQualifier.
+func actionTypeOrEmptyExpr(modelQualifier, gstModelPkg, typeName string) ast.Expr {
 	if isEmptyPayload(typeName) {
-		return emptyReqExpr(emptyReqPkgName(modelQualifier))
+		return emptyReqExpr(gstModelPkg)
 	}
 	return actionTypeExpr(modelQualifier, typeName)
 }
@@ -150,7 +150,8 @@ func actionTypeOrEmptyExpr(modelQualifier, typeName string) ast.Expr {
 // types builds the declaration of the service struct named roleName, which
 // embeds service.Base over the model and the action's request and response
 // types, referring to the model package by modelQualifier (see
-// serviceModelQualifier):
+// serviceModelQualifier) and, for a dsl.PayloadEmpty side, to the gst model
+// package by gstModelPkg (see emptyReqPkgName and gstModelQualifier):
 //
 //	type Updater struct {
 //		service.Base[*model.User, *model.UserReq, *model.UserRsp]
@@ -161,12 +162,12 @@ func actionTypeOrEmptyExpr(modelQualifier, typeName string) ast.Expr {
 //	type Updater struct {
 //		service.Base[*model_service.User, *model_service.UserReq, *model_service.UserRsp]
 //	}
-func types(modelQualifier, modelName, reqName, rspName, roleName string) *ast.GenDecl {
+func types(modelQualifier, gstModelPkg, modelName, reqName, rspName, roleName string) *ast.GenDecl {
 	// The dsl.PayloadEmpty sentinel resolves to *model.Empty from the gst
 	// model package on either side; any other action type is emitted in its
 	// declared form.
-	reqExpr := actionTypeOrEmptyExpr(modelQualifier, reqName)
-	rspExpr := actionTypeOrEmptyExpr(modelQualifier, rspName)
+	reqExpr := actionTypeOrEmptyExpr(modelQualifier, gstModelPkg, reqName)
+	rspExpr := actionTypeOrEmptyExpr(modelQualifier, gstModelPkg, rspName)
 
 	return &ast.GenDecl{
 		Tok: token.TYPE,
@@ -378,16 +379,18 @@ func serviceMethod3(recvName, modelName, modelQualifier string, phase apiaction.
 }
 
 // serviceMethod4 builds the declaration of an action method taking the
-// request and returning the result, with the given body. For example:
+// request and returning the result, with the given body, referring to the
+// model package by modelQualifier and, for a dsl.PayloadEmpty side, to the
+// gst model package by gstModelPkg (see types). For example:
 //
 //	func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {
 //	}
-func serviceMethod4(recvName, modelQualifier, reqName, rspName string, phase apiaction.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
+func serviceMethod4(recvName, modelQualifier, gstModelPkg, reqName, rspName string, phase apiaction.Phase, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	// The dsl.PayloadEmpty sentinel resolves to *model.Empty from the gst
 	// model package on either side; any other action type is emitted in its
 	// declared form.
-	reqExpr := actionTypeOrEmptyExpr(modelQualifier, reqName)
-	rspExpr := actionTypeOrEmptyExpr(modelQualifier, rspName)
+	reqExpr := actionTypeOrEmptyExpr(modelQualifier, gstModelPkg, reqName)
+	rspExpr := actionTypeOrEmptyExpr(modelQualifier, gstModelPkg, rspName)
 
 	return &ast.FuncDecl{
 		Recv: &ast.FieldList{
@@ -685,8 +688,10 @@ func serviceMethod8(recvName, modelName, modelQualifier, roleName string, body .
 // action, with the given body: the request and the response stream the
 // action declares, of the gst grpc package, with streamingPayload and
 // streamingResult telling which side streams (see types.ServerStreamer and
-// its kind). For the package model, a Payload FeedWatchReq streaming a Result
-// FeedEvent it builds
+// its kind); the model package is referred to by modelQualifier and the gst
+// model package, for a dsl.PayloadEmpty side, by gstModelPkg (see types).
+// For the package model, a Payload FeedWatchReq streaming a Result FeedEvent
+// it builds
 //
 //	func (w *Watch) Stream(ctx *gst.ServiceContext, req *model.FeedWatchReq, stream *grpc.ServerStream[*model.FeedEvent]) (err error) {
 //	}
@@ -700,9 +705,9 @@ func serviceMethod8(recvName, modelName, modelQualifier, roleName string, body .
 //
 //	func (c *Chat) Stream(ctx *gst.ServiceContext, stream *grpc.BidiStream[*model.FeedEvent, *model.FeedEvent]) (err error) {
 //	}
-func serviceMethod9(recvName, modelQualifier, reqName, rspName string, streamingPayload, streamingResult bool, roleName string, body ...ast.Stmt) *ast.FuncDecl {
-	reqExpr := actionTypeOrEmptyExpr(modelQualifier, reqName)
-	rspExpr := actionTypeOrEmptyExpr(modelQualifier, rspName)
+func serviceMethod9(recvName, modelQualifier, gstModelPkg, reqName, rspName string, streamingPayload, streamingResult bool, roleName string, body ...ast.Stmt) *ast.FuncDecl {
+	reqExpr := actionTypeOrEmptyExpr(modelQualifier, gstModelPkg, reqName)
+	rspExpr := actionTypeOrEmptyExpr(modelQualifier, gstModelPkg, rspName)
 	grpcType := func(name string, indices ...ast.Expr) ast.Expr {
 		sel := &ast.SelectorExpr{X: ast.NewIdent("grpc"), Sel: ast.NewIdent(name)}
 		if len(indices) == 1 {

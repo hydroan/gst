@@ -110,7 +110,7 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req model.User) (rsp model.Use
 			for _, decl := range file.Decls {
 				if funcDecl, ok := decl.(*ast.FuncDecl); ok && funcDecl != nil {
 					if isServiceMethod4(funcDecl) {
-						applyServiceMethod4(funcDecl, tt.action, "model")
+						applyServiceMethod4(funcDecl, tt.action, "model", emptyReqPkgName("model"))
 					}
 				}
 			}
@@ -230,7 +230,7 @@ func (b *Creator) Create(ctx *gst.ServiceContext, req *box.BoxCreateReq) (rsp *b
 			for _, decl := range file.Decls {
 				if funcDecl, ok := decl.(*ast.FuncDecl); ok && funcDecl != nil {
 					if isServiceMethod4(funcDecl) {
-						applyServiceMethod4(funcDecl, tt.action, tt.modelPkg)
+						applyServiceMethod4(funcDecl, tt.action, tt.modelPkg, emptyReqPkgName(tt.modelPkg))
 					}
 				}
 			}

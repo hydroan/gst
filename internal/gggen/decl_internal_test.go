@@ -315,7 +315,7 @@ func TestTypes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res := types(tt.modelPkgName, tt.modelName, tt.reqName, tt.rspName, tt.phase.RoleName())
+			res := types(tt.modelPkgName, emptyReqPkgName(tt.modelPkgName), tt.modelName, tt.reqName, tt.rspName, tt.phase.RoleName())
 			var buf bytes.Buffer
 			fset := token.NewFileSet()
 			if err := format.Node(&buf, fset, res); err != nil {
@@ -525,7 +525,7 @@ func TestServiceMethod4(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res := serviceMethod4(tt.recvName, tt.modelPkgName, tt.reqName, tt.rspName, tt.phase, tt.phase.RoleName())
+			res := serviceMethod4(tt.recvName, tt.modelPkgName, emptyReqPkgName(tt.modelPkgName), tt.reqName, tt.rspName, tt.phase, tt.phase.RoleName())
 			got, err := gghelper.FormatNode(res)
 			if err != nil {
 				t.Error(err)
@@ -696,7 +696,7 @@ func TestServiceMethod9(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := gghelper.FormatNode(serviceMethod9(tt.recvName, "model", tt.req, tt.rsp, tt.streamingPayload, tt.streamingResult, tt.roleName))
+			got, err := gghelper.FormatNode(serviceMethod9(tt.recvName, "model", emptyReqPkgName("model"), tt.req, tt.rsp, tt.streamingPayload, tt.streamingResult, tt.roleName))
 			if err != nil {
 				t.Fatal(err)
 			}

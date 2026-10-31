@@ -131,7 +131,7 @@ func genServiceMethod3(info *modelinfo.Model, modelQualifier string, action *dsl
 //	}
 func genServiceMethod4(info *modelinfo.Model, modelQualifier string, action *dsl.Action, reqName, rspName string, phase apiaction.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod4(
-		info.ModelVarName, modelQualifier, reqName, rspName, phase, roleName,
+		info.ModelVarName, modelQualifier, emptyReqPkgName(modelQualifier), reqName, rspName, phase, roleName,
 		StmtLogWithContext(info.ModelVarName),
 		StmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
 		EmptyLine(),
@@ -258,7 +258,7 @@ func genServiceMethod9(info *modelinfo.Model, modelQualifier string, action *dsl
 		results = []ast.Expr{ast.NewIdent("rsp"), ast.NewIdent("nil")}
 	}
 	return serviceMethod9(
-		info.ModelVarName, modelQualifier, action.Payload, action.Result, action.StreamingPayload, action.StreamingResult, roleName,
+		info.ModelVarName, modelQualifier, emptyReqPkgName(modelQualifier), action.Payload, action.Result, action.StreamingPayload, action.StreamingResult, roleName,
 		StmtLogWithContext(info.ModelVarName),
 		StmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
 		EmptyLine(),
@@ -382,7 +382,7 @@ func generateService(info *modelinfo.Model, action *dsl.Action, phase apiaction.
 
 	decls := []ast.Decl{
 		importDecl(info.ModulePath, info.ModelFileDir, qualifier, phase, otherPkgs...),
-		types(qualifier, info.ModelName, action.Payload, action.Result, roleName),
+		types(qualifier, emptyReqPkgName(qualifier), info.ModelName, action.Payload, action.Result, roleName),
 	}
 
 	// add methods

@@ -204,6 +204,10 @@ func applyServiceFile(file *ast.File, action *dsl.Action, servicePkgName, correc
 		}
 	}
 
+	// The qualifiers the rewritten signatures refer to the model package and
+	// the gst model package by, the latter as the file's imports bind it.
+	modelPkg := serviceModelPackageName(file)
+	gstModelPkg := gstModelQualifier(file, modelPkg)
 	for _, decl := range file.Decls {
 		if funcDecl, ok := decl.(*ast.FuncDecl); ok && funcDecl != nil {
 			if isServiceMethod1(funcDecl) {
@@ -222,11 +226,11 @@ func applyServiceFile(file *ast.File, action *dsl.Action, servicePkgName, correc
 				}
 			}
 			if isServiceMethod4(funcDecl) {
-				if applyServiceMethod4(funcDecl, action, serviceModelPackageName(file)) {
+				if applyServiceMethod4(funcDecl, action, modelPkg, gstModelPkg) {
 					changed = true
 				}
 			}
-			if applyServiceMethod9(funcDecl, action, serviceModelPackageName(file)) {
+			if applyServiceMethod9(funcDecl, action, modelPkg, gstModelPkg) {
 				changed = true
 			}
 		}
@@ -236,7 +240,7 @@ func applyServiceFile(file *ast.File, action *dsl.Action, servicePkgName, correc
 	// *model.Empty request or result needs the import, while pure business
 	// action types must not leave it behind unused.
 	if isEmptyPayload(action.Payload) || isEmptyPayload(action.Result) {
-		if ensureEmptyReqImportSpec(file, serviceModelPackageName(file)) {
+		if ensureEmptyReqImportSpec(file, gstModelPkg) {
 			changed = true
 		}
 	} else if pruneGstModelImportSpec(file) {
@@ -273,7 +277,7 @@ func applyServiceMethod3(fn *ast.FuncDecl, action *dsl.Action) bool { return fal
 // corrupting the function body and breaking the build. Requiring fn.Name to equal
 // action.Phase.Name() (e.g. "Patch") ensures only the actual action method for the current
 // DSL phase is ever rewritten.
-func applyServiceMethod4(fn *ast.FuncDecl, action *dsl.Action, modelPkg string) bool {
+func applyServiceMethod4(fn *ast.FuncDecl, action *dsl.Action, modelPkg, gstModelPkg string) bool {
 	if fn == nil || action == nil || fn.Name == nil {
 		return false
 	}
@@ -293,7 +297,7 @@ func applyServiceMethod4(fn *ast.FuncDecl, action *dsl.Action, modelPkg string) 
 	// package; a business payload switches it back.
 	if fn.Type != nil && fn.Type.Params != nil && len(fn.Type.Params.List) >= 2 && action.Payload != "" {
 		param := fn.Type.Params.List[1]
-		targetPkg, targetType := payloadTypeTarget(action.Payload, modelPkg)
+		targetPkg, targetType := payloadTypeTarget(action.Payload, modelPkg, gstModelPkg)
 		if expr, c := applyTypeRef(param.Type, targetPkg, targetType); c {
 			param.Type = expr
 			changed = true
@@ -304,7 +308,7 @@ func applyServiceMethod4(fn *ast.FuncDecl, action *dsl.Action, modelPkg string) 
 	// dsl.PayloadEmpty sentinel the same way as the request side.
 	if fn.Type != nil && fn.Type.Results != nil && len(fn.Type.Results.List) >= 1 && action.Result != "" {
 		res := fn.Type.Results.List[0]
-		targetPkg, targetType := payloadTypeTarget(action.Result, modelPkg)
+		targetPkg, targetType := payloadTypeTarget(action.Result, modelPkg, gstModelPkg)
 		if expr, c := applyTypeRef(res.Type, targetPkg, targetType); c {
 			res.Type = expr
 			changed = true
@@ -327,7 +331,7 @@ func applyServiceMethod4(fn *ast.FuncDecl, action *dsl.Action, modelPkg string) 
 // the body left alone. Only the method named Stream of the Stream phase is
 // rewritten (see applyServiceMethod4 on why the name matters), and only one
 // of the shape isServiceMethod9 recognizes.
-func applyServiceMethod9(fn *ast.FuncDecl, action *dsl.Action, modelPkg string) bool {
+func applyServiceMethod9(fn *ast.FuncDecl, action *dsl.Action, modelPkg, gstModelPkg string) bool {
 	if fn == nil || action == nil || action.Phase != apiaction.Stream || !isServiceMethod9(fn) {
 		return false
 	}
@@ -342,7 +346,7 @@ func applyServiceMethod9(fn *ast.FuncDecl, action *dsl.Action, modelPkg string) 
 			roleName = id.Name
 		}
 	}
-	want := serviceMethod9(recvName, modelPkg, action.Payload, action.Result, action.StreamingPayload, action.StreamingResult, roleName).Type
+	want := serviceMethod9(recvName, modelPkg, gstModelPkg, action.Payload, action.Result, action.StreamingPayload, action.StreamingResult, roleName).Type
 	if signatureTypes(fn.Type) == signatureTypes(want) {
 		return false
 	}
@@ -498,11 +502,13 @@ func applyServiceType(file *ast.File, spec *ast.TypeSpec, action *dsl.Action, co
 		}
 		// The first generic parameter always references the
 		// business model package, so it provides the target
-		// qualifier for the payload and result parameters.
+		// qualifier for the payload and result parameters; the gst
+		// model package is referred to as the file's imports bind it.
 		modelPkg := goast.TypeQualifier(indexListExpr.Indices[0])
+		gstModelPkg := gstModelQualifier(file, modelPkg)
 		// Handle second parameter (Payload)
 		if action.Payload != "" {
-			targetPkg, targetType := payloadTypeTarget(action.Payload, modelPkg)
+			targetPkg, targetType := payloadTypeTarget(action.Payload, modelPkg, gstModelPkg)
 			if changed2 := applyServiceTypeParam(indexListExpr, 1, targetPkg, targetType); changed2 {
 				changed = true
 			}
@@ -510,7 +516,7 @@ func applyServiceType(file *ast.File, spec *ast.TypeSpec, action *dsl.Action, co
 		// Handle third parameter (Result), resolving the
 		// dsl.PayloadEmpty sentinel the same way as Payload.
 		if action.Result != "" {
-			targetPkg, targetType := payloadTypeTarget(action.Result, modelPkg)
+			targetPkg, targetType := payloadTypeTarget(action.Result, modelPkg, gstModelPkg)
 			if changed3 := applyServiceTypeParam(indexListExpr, 2, targetPkg, targetType); changed3 {
 				changed = true
 			}
@@ -562,7 +568,7 @@ func forceCanonicalServiceStruct(file *ast.File, action *dsl.Action, modelInfo *
 	if spec == nil {
 		existing := findServiceTypeName(file)
 		if len(existing) == 0 {
-			file.Decls = append(file.Decls, types(qualifier, modelInfo.ModelName, action.Payload, action.Result, roleName))
+			file.Decls = append(file.Decls, types(qualifier, gstModelQualifier(file, qualifier), modelInfo.ModelName, action.Payload, action.Result, roleName))
 			ensureServiceImportSpec(file)
 			ensureModelImportSpec(file, modelInfo.ImportPath(), qualifier)
 			return true
@@ -595,7 +601,7 @@ func forceCanonicalServiceStruct(file *ast.File, action *dsl.Action, modelInfo *
 		return renamed
 	}
 
-	baseField := generatedServiceBaseField(qualifier, modelInfo.ModelName, action, roleName)
+	baseField := generatedServiceBaseField(qualifier, gstModelQualifier(file, qualifier), modelInfo.ModelName, action, roleName)
 	if baseField == nil {
 		return false
 	}
@@ -745,10 +751,11 @@ func isCanonicalServiceStructBody(file *ast.File, structType *ast.StructType) bo
 
 // generatedServiceBaseField builds the service.Base[...] embedded field
 // exactly as generated service code declares it for the action, referring to
-// the model package by modelQualifier (see serviceModelQualifier), as in
+// the model package by modelQualifier (see serviceModelQualifier) and to the
+// gst model package by gstModelPkg (see gstModelQualifier), as in
 // service.Base[*model_service.Item, *model_service.Item, *model_service.Item].
-func generatedServiceBaseField(modelQualifier, modelName string, action *dsl.Action, roleName string) *ast.Field {
-	decl := types(modelQualifier, modelName, action.Payload, action.Result, roleName)
+func generatedServiceBaseField(modelQualifier, gstModelPkg, modelName string, action *dsl.Action, roleName string) *ast.Field {
+	decl := types(modelQualifier, gstModelPkg, modelName, action.Payload, action.Result, roleName)
 	typeSpec, ok := decl.Specs[0].(*ast.TypeSpec)
 	if !ok {
 		return nil
