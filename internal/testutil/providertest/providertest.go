@@ -38,14 +38,10 @@ import (
 // changes, and a binary linking the whole framework reruns, starting its
 // services again, after a change anywhere in the framework.
 //
-// Run does not return: it exits the test binary with the result of the tests.
+// Run returns once the tests have run and everything is released, so a
+// call TestMain defers runs; the test binary then exits with the result of
+// the tests, which testing hands to os.Exit itself once TestMain returns.
 func Run(m *testing.M, prepare ...func() (release func() error, err error)) {
-	os.Exit(run(m, prepare))
-}
-
-// run holds the body of Run so that the deferred releases still happen: the
-// os.Exit in Run would skip them.
-func run(m *testing.M, prepare []func() (func() error, error)) int {
 	var releases []func() error
 	defer func() {
 		for _, release := range slices.Backward(releases) {
@@ -89,5 +85,5 @@ func run(m *testing.M, prepare []func() (func() error, error)) int {
 		lifecycle.Stop(ctx)
 	}()
 
-	return m.Run()
+	m.Run()
 }

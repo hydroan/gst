@@ -83,14 +83,12 @@ type Server struct {
 //		})
 //	}
 //
-// Run does not return: it exits the test binary with the result of the tests.
+// Run returns once the tests have run and everything is released, so a
+// call TestMain defers runs; the test binary then exits with the result of
+// the tests, which testing hands to os.Exit itself once TestMain returns. A
+// setup that fails panics, which ends the binary after what came up before
+// it is released.
 func Run(m *testing.M, s Server) {
-	os.Exit(run(m, s))
-}
-
-// run holds the body of Run so that the deferred releases still happen: the
-// os.Exit in Run would skip them.
-func run(m *testing.M, s Server) int {
 	release, afterMigrate, err := s.prepare()
 	defer release()
 	if err != nil {
@@ -130,7 +128,7 @@ func run(m *testing.M, s Server) int {
 		mustWaitForGRPC()
 	}
 
-	return m.Run()
+	m.Run()
 }
 
 // setupKafka, setupRocketMQ and setupElasticsearch start the services whose

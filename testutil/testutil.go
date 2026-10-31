@@ -55,7 +55,9 @@ type Server = testutil.Server
 
 // Run prepares what s declares, starts the test server, runs the tests and
 // releases everything afterwards. It is the whole body of a test package's
-// TestMain and does not return: it exits with the result of the tests.
+// TestMain and returns once the tests have run and everything is released,
+// so a call TestMain defers runs; the test binary then exits with the result
+// of the tests, which testing hands to os.Exit itself once TestMain returns.
 //
 // The log files of the run live in a temporary directory that is removed at
 // release, and their sinks are buffered, so they are not something a test can
