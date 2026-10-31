@@ -145,3 +145,35 @@ func chdirToRoutedProject(t *testing.T, stmts ...ast.Stmt) {
 	require.NoError(t, os.Mkdir(ggconst.DirRouter, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(ggconst.DirRouter, ggconst.FileRouterGen), []byte(code), 0o600))
 }
+
+// TestPrintModelRoutesOrdersTheSourceTreeAndLeavesTheUnknownLast pins the
+// order of the source tree: at every level the names sort, a file before a
+// directory of the same name, record.go before record/, and the routes
+// whose source the router file does not tell come last, under unknown,
+// after a directory that would sort after them by name.
+func TestPrintModelRoutesOrdersTheSourceTreeAndLeavesTheUnknownLast(t *testing.T) {
+	routes := []modelRoute{
+		{Model: "*sample.Orphan", Source: "", Path: "/api/orphans", Method: "GET", Phase: "List", Scope: "auth"},
+		{Model: "*zeta.Entry", Source: "zeta/entry.go", Path: "/api/zeta", Method: "GET", Phase: "List", Scope: "auth"},
+		{Model: "*record.Item", Source: "sample/record/item.go", Path: "/api/records/:record/items", Method: "POST", Phase: "Create", Scope: "auth"},
+		{Model: "*sample.Record", Source: "sample/record.go", Path: "/api/records", Method: "GET", Phase: "List", Scope: "auth"},
+		{Model: "*other.Entry", Source: "other/entry.go", Path: "/api/entries", Method: "GET", Phase: "List", Scope: "public"},
+	}
+	var out bytes.Buffer
+	printModelRoutes(&out, routes, modelRoutesPrintOptions{})
+	require.Equal(t, "▶ Model Routes\n  → models: 5, routes: 5, public: 1, auth: 4\n\n"+
+		"├─ other/\n"+
+		"│  └─ entry.go  *other.Entry [public]\n"+
+		"│     └─ GET    /api/entries\n"+
+		"├─ sample/\n"+
+		"│  ├─ record.go  *sample.Record [auth]\n"+
+		"│  │  └─ GET    /api/records\n"+
+		"│  └─ record/\n"+
+		"│     └─ item.go  *record.Item [auth]\n"+
+		"│        └─ POST   /api/records/:record/items\n"+
+		"├─ zeta/\n"+
+		"│  └─ entry.go  *zeta.Entry [auth]\n"+
+		"│     └─ GET    /api/zeta\n"+
+		"└─ unknown  *sample.Orphan [auth]\n"+
+		"   └─ GET    /api/orphans\n", out.String())
+}

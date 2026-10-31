@@ -6,8 +6,10 @@ import (
 	"go/parser"
 	"go/token"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -352,24 +354,21 @@ type modelRouteSourceGroup struct {
 	routes []modelRoute
 }
 
+// unknownRouteSource stands for the source file of a route the router file
+// does not tell, grouped and shown under this name after every file.
+const unknownRouteSource = "unknown"
+
 func groupModelRoutesBySource(routes []modelRoute) []modelRouteSourceGroup {
 	groupMap := make(map[string][]modelRoute)
 	for _, route := range routes {
 		source := trimModelSourceRoot(route.Source)
 		if source == "" {
-			source = "unknown"
+			source = unknownRouteSource
 		}
 		groupMap[source] = append(groupMap[source], route)
 	}
 
-	sources := make([]string, 0, len(groupMap))
-	for source := range groupMap {
-		sources = append(sources, source)
-	}
-	sort.Slice(sources, func(i, j int) bool {
-		return routeSourceSortKey(sources[i]) < routeSourceSortKey(sources[j])
-	})
-
+	sources := slices.Sorted(maps.Keys(groupMap))
 	groups := make([]modelRouteSourceGroup, 0, len(sources))
 	for _, source := range sources {
 		groups = append(groups, modelRouteSourceGroup{
@@ -619,7 +618,15 @@ func sortedModelRouteSourceNodes(children map[string]*modelRouteSourceNode) []*m
 	return nodes
 }
 
+// modelRouteSourceNodeSortKey orders the nodes of one level of the source
+// tree: by name without the .go suffix, a file before a directory of the
+// same name, record.go before record/, and the routes whose source is
+// unknown (see unknownRouteSource) after every file and directory.
 func modelRouteSourceNodeSortKey(node *modelRouteSourceNode) string {
+	if node.group != nil && node.name == unknownRouteSource {
+		// Past every path: no UTF-8 encoding starts with this byte.
+		return "\xff"
+	}
 	name := strings.TrimSuffix(node.name, ".go")
 	kind := "1"
 	if node.group != nil {
@@ -641,13 +648,6 @@ func modelRouteScope(routes []modelRoute) string {
 		}
 	}
 	return "mixed"
-}
-
-func routeSourceSortKey(source string) string {
-	if source == "" {
-		return "zzzzzz/unknown"
-	}
-	return source
 }
 
 func countRouteModels(routes []modelRoute) int {
