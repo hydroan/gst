@@ -158,7 +158,9 @@ func (db *database[M]) Create(objs ...M) (err error) {
 				return err
 			}
 		}
-		fillForInsert(objs)
+		if _, err = fillForInsert(objs); err != nil {
+			return err
+		}
 		for i := 0; i < len(objs); i += batchSize {
 			end := min(i+batchSize, len(objs))
 			if err = db.ins.Session(&gorm.Session{}).Omit(clause.Associations).Create(objs[i:end]).Error; err != nil {
@@ -668,6 +670,9 @@ func (db *database[M]) Update(objs ...M) (err error) {
 				return err
 			}
 		}
+		if err = normalizeTimes(objs); err != nil {
+			return err
+		}
 		clearAssociations(objs)
 		for i := range objs {
 			session := db.ins.Session(&gorm.Session{})
@@ -745,24 +750,29 @@ func (db *database[M]) updateRowStatement(session *gorm.DB, obj M) *gorm.DB {
 
 // fillForInsert fills objects in for an INSERT, through Create and Upsert
 // alike and on every dialect: an id is generated where one is missing
-// (SetID), the association fields are zeroed (see clearAssociations),
+// (SetID), the association fields are zeroed (see clearAssociations), the
+// time columns are brought onto the time base (see normalizeTimes),
 // created_at and updated_at are forced to the current time whatever the
 // objects hold, and a zero version is raised to 1 (see initializeVersions).
-// dbruntime.NowUTC owns the time base (UTC, millisecond precision), so the
-// timestamps handed back equal what a later read returns. It returns the time
-// it forced, for a statement whose own clock has to agree with it.
-func fillForInsert[M types.Model](objs []M) time.Time {
+// dbruntime.UTCMillisecond defines the time base (UTC, millisecond
+// precision) and dbruntime.NowUTC takes the current time on it, so the
+// timestamps handed back equal what a later read returns. It returns the
+// time it forced, for a statement whose own clock has to agree with it.
+func fillForInsert[M types.Model](objs []M) (time.Time, error) {
 	for i := range objs {
 		objs[i].SetID() // set id when id is empty.
 	}
 	clearAssociations(objs)
+	if err := normalizeTimes(objs); err != nil {
+		return time.Time{}, err
+	}
 	now := dbruntime.NowUTC()
 	for i := range objs {
 		objs[i].SetCreatedAt(now)
 		objs[i].SetUpdatedAt(now)
 	}
 	initializeVersions(objs)
-	return now
+	return now, nil
 }
 
 // clearAssociations zeroes the association fields of every object, the
@@ -785,6 +795,44 @@ func clearAssociations[M types.Model](objs []M) {
 			}
 		}
 	}
+}
+
+// normalizeTimes brings every time.Time and *time.Time column of the objects
+// onto the framework's time base before a write (see
+// dbruntime.UTCMillisecond), written back into the objects so that the
+// value a write hands back equals what a later read returns, whatever zone
+// and precision the value was produced with. A nil pointer stays nil, and a
+// column of another time type, datatypes.Date or sql.NullTime, keeps its own
+// value. The columns are the ones modelschema resolves, so a field gorm
+// ignores is left as it is.
+func normalizeTimes[M types.Model](objs []M) error {
+	columns, err := modelschema.Columns(reflect.TypeOf(*new(M)).Elem())
+	if err != nil {
+		return err
+	}
+	for i := range objs {
+		value := reflect.ValueOf(objs[i]).Elem()
+		for _, c := range columns {
+			if c.Type != timeType && c.Type != timePtrType {
+				continue
+			}
+			// An embedded nil pointer holds no field to bring over.
+			field, indexErr := value.FieldByIndexErr(c.Index)
+			if indexErr != nil {
+				continue
+			}
+			if field.Kind() == reflect.Pointer {
+				if field.IsNil() {
+					continue
+				}
+				field = field.Elem()
+			}
+			if t, ok := reflect.TypeAssert[time.Time](field); ok {
+				field.Set(reflect.ValueOf(dbruntime.UTCMillisecond(t)))
+			}
+		}
+	}
+	return nil
 }
 
 // UpdateByID updates database columns of a single record identified by ID in
@@ -857,6 +905,19 @@ func (db *database[M]) UpdateByID(id string, assignments ...types.Assignment) (e
 			return ErrDuplicateColumn
 		}
 		updates[assignment.Column()] = assignment.Value()
+	}
+	// An assigned time lands on the time base the model's own time columns
+	// do (see normalizeTimes), so a later read returns what was assigned.
+	for column, value := range updates {
+		switch v := value.(type) {
+		case time.Time:
+			updates[column] = dbruntime.UTCMillisecond(v)
+		case *time.Time:
+			if v != nil {
+				t := dbruntime.UTCMillisecond(*v)
+				updates[column] = &t
+			}
+		}
 	}
 	// The caller is who updated the record: updated_by takes the id the
 	// context carries, when it carries one, over any assignment of it.

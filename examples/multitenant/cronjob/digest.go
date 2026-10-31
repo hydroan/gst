@@ -2,6 +2,7 @@ package cronjob
 
 import (
 	"context"
+	"time"
 
 	"multitenant/model"
 
@@ -29,7 +30,7 @@ func digestTickets(ctx context.Context) error {
 	}
 	for _, t := range tenants {
 		scoped := tenant.In(ctx, t.ID)
-		digest := &model.Digest{At: database.DB().NowFunc()}
+		digest := &model.Digest{At: time.Now()}
 		if err := database.Database[*model.Ticket](scoped).
 			WithQuery(&model.Ticket{Status: model.TicketStatusOpen}).Count(&digest.Open); err != nil {
 			return err

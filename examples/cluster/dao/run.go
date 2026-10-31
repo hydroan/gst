@@ -3,6 +3,7 @@ package dao
 
 import (
 	"context"
+	"time"
 
 	"cluster/helper"
 	"cluster/model"
@@ -24,9 +25,7 @@ func StartRun(ctx context.Context, kind, name string) (*model.Run, error) {
 // EndRun marks run ended. The write runs in a transaction on the work's
 // context: a run whose lease was lost, or whose context ended, keeps no end.
 func EndRun(ctx context.Context, run *model.Run) error {
-	// The framework's clock, the one behind created_at and updated_at: UTC,
-	// to the millisecond.
-	ended := database.DB().NowFunc()
+	ended := time.Now()
 	run.EndedAt = &ended
 	return database.Transaction(ctx, func(ctx context.Context) error {
 		return database.Database[*model.Run](ctx).Update(run)

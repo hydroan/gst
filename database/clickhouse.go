@@ -60,7 +60,9 @@ func (db *database[M]) clickhouseCreate(objs []M) (err error) {
 		return errors.Wrap(ErrUnsupportedOnDialect, "dry-run Create on clickhouse")
 	}
 
-	fillForInsert(objs)
+	if _, err = fillForInsert(objs); err != nil {
+		return err
+	}
 	for i := 0; i < len(objs); i += batchSize {
 		end := min(i+batchSize, len(objs))
 		if err = db.ins.Session(&gorm.Session{}).Omit(clause.Associations).Create(objs[i:end]).Error; err != nil {
@@ -257,6 +259,9 @@ func (db *database[M]) clickhouseUpdate(objs []M) (err error) {
 		return nil
 	}
 
+	if err = normalizeTimes(objs); err != nil {
+		return err
+	}
 	clearAssociations(objs)
 	for i := range objs {
 		if err = db.updateRowStatement(db.ins.Session(&gorm.Session{}), objs[i]).Updates(objs[i]).Error; err != nil {

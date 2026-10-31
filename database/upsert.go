@@ -181,7 +181,10 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 		// The created_at and the version filled in here land on inserted rows
 		// alone: a conflict update keeps the row's created_at and never reads
 		// the object's version, the pre-set clause bumping the row's own.
-		now := fillForInsert(objs)
+		var now time.Time
+		if now, err = fillForInsert(objs); err != nil {
+			return err
+		}
 		if len(db.selectColumns) > 0 {
 			db.ins = db.ins.Select(db.selectColumns)
 		}

@@ -1658,3 +1658,47 @@ func TestDatabaseUpsertConcurrentDistinctKeysOnATenantModel(t *testing.T) {
 		})
 	}
 }
+
+// TestWritesBringModelTimesOntoTheTimeBase pins that a time a project
+// produces with time.Now, in any zone and to the nanosecond, is written as
+// UTC to the millisecond and written back into the object, on Create,
+// Update and UpdateByID alike, so the value a write hands back equals what
+// a later read returns.
+func TestWritesBringModelTimesOntoTheTimeBase(t *testing.T) {
+	ctx := context.Background()
+	t.Cleanup(func() {
+		require.NoError(t, database.DB().Exec("DELETE FROM test_aggregate_records").Error)
+	})
+	zone := time.FixedZone("UTC+8", 8*60*60)
+	occurred := time.Date(2026, 1, 2, 3, 4, 5, 999_600_000, zone)
+	closed := occurred.Add(time.Hour)
+	record := &TestAggregateRecord{Category: "time-base", OccurredAt: occurred, ClosedAt: &closed}
+	require.NoError(t, database.Database[*TestAggregateRecord](ctx).Create(record))
+	require.Equal(t, "2026-01-01T19:04:05.999Z", record.OccurredAt.Format(time.RFC3339Nano))
+	require.Equal(t, "2026-01-01T20:04:05.999Z", record.ClosedAt.Format(time.RFC3339Nano))
+
+	read := new(TestAggregateRecord)
+	require.NoError(t, database.Database[*TestAggregateRecord](ctx).Get(read, record.ID))
+	require.True(t, read.OccurredAt.Equal(record.OccurredAt), "occurred_at read back %s, written %s", read.OccurredAt, record.OccurredAt)
+	require.NotNil(t, read.ClosedAt)
+	require.True(t, read.ClosedAt.Equal(*record.ClosedAt), "closed_at read back %s, written %s", read.ClosedAt, record.ClosedAt)
+
+	// Update brings the object's own times over the same way, a nil pointer
+	// staying nil.
+	record.OccurredAt = occurred.Add(24 * time.Hour)
+	record.ClosedAt = nil
+	require.NoError(t, database.Database[*TestAggregateRecord](ctx).Update(record))
+	require.Equal(t, "2026-01-02T19:04:05.999Z", record.OccurredAt.Format(time.RFC3339Nano))
+	require.Nil(t, record.ClosedAt)
+	read = new(TestAggregateRecord)
+	require.NoError(t, database.Database[*TestAggregateRecord](ctx).Get(read, record.ID))
+	require.True(t, read.OccurredAt.Equal(record.OccurredAt), "occurred_at read back %s, written %s", read.OccurredAt, record.OccurredAt)
+	require.Nil(t, read.ClosedAt)
+
+	// UpdateByID brings an assigned time over as well.
+	assigned := occurred.Add(48 * time.Hour)
+	require.NoError(t, database.Database[*TestAggregateRecord](ctx).UpdateByID(record.ID, TestAggregateRecordCols.OccurredAt.Set(assigned)))
+	read = new(TestAggregateRecord)
+	require.NoError(t, database.Database[*TestAggregateRecord](ctx).Get(read, record.ID))
+	require.Equal(t, "2026-01-03T19:04:05.999Z", read.OccurredAt.UTC().Format(time.RFC3339Nano))
+}
