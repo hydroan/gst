@@ -11,6 +11,7 @@ import (
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // WithQuery sets query conditions based on the provided model struct fields.
@@ -199,6 +200,9 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 	// of values is the in operator filter's job. The conditions go out in
 	// column name order: ranging over the map would order them differently on
 	// every run, so one query would render as a different statement each time.
+	//
+	// A condition goes to gorm as the expression it is: gorm reads a string
+	// condition by first trying it as a primary key number.
 	hasValidCondition := false
 	for _, k := range slices.Sorted(maps.Keys(q)) {
 		v := q[k]
@@ -217,10 +221,10 @@ func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Data
 			continue
 		}
 		if _, isTime := timeColumns[k]; isTime {
-			db.ins = db.ins.Where(db.timeComparableExpr(db.quoteIdent(k))+" = "+db.timeComparableExpr("?"), v)
+			db.ins = db.ins.Where(clause.Expr{SQL: db.timeComparableExpr(db.quoteIdent(k)) + " = " + db.timeComparableExpr("?"), Vars: []any{v}})
 			continue
 		}
-		db.ins = db.ins.Where(db.quoteIdent(k)+" = ?", v)
+		db.ins = db.ins.Where(clause.Expr{SQL: db.quoteIdent(k) + " = ?", Vars: []any{v}})
 	}
 	// CRITICAL: Check if all query values are empty after filtering
 	// Even if query map is not empty, all values might be empty strings: a
