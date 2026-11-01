@@ -278,3 +278,43 @@ func benchmarkDatabaseUpdateBatch(b *testing.B, size int) {
 		_ = database.Database[*TestUser](context.Background()).Update(users...)
 	}
 }
+
+// BenchmarkDatabaseListDryRunWithQuery measures building one list request's
+// queries in dry run, the request's whole query chain short of the database
+// round trip: the model conditions, which are the equality filters, a filter
+// of every other URL operator and the COUNT built from the same conditions,
+// as the standard List action builds them.
+func BenchmarkDatabaseListDryRunWithQuery(b *testing.B) {
+	remark := "world"
+	query := &TestUser{Name: "user1", Age: 18, Remark: &remark}
+	opts := types.QueryOptions{
+		PresentFields: map[string]struct{}{"age": {}},
+		Filters: []types.Filter{
+			types.NewFilter("", "name", types.FilterOpNe, "abc"),
+			types.NewFilter("", "age", types.FilterOpGt, "0"),
+			types.NewFilter("", "age", types.FilterOpGte, "1"),
+			types.NewFilter("", "age", types.FilterOpLt, "100"),
+			types.NewFilter("", "age", types.FilterOpLte, "99"),
+			types.NewFilter("", "age", types.FilterOpIn, []string{"1", "2", "3"}),
+			types.NewFilter("", "age", types.FilterOpNotIn, []string{"8", "9"}),
+			types.NewFilter("", "remark", types.FilterOpLike, "wor"),
+			types.NewFilter("", "remark", types.FilterOpNotLike, "xyz"),
+			types.NewFilter("", "remark", types.FilterOpStartsWith, "wo"),
+			types.NewFilter("", "remark", types.FilterOpEndsWith, "ld"),
+			types.NewFilter("", "is_active", types.FilterOpIsNull, false),
+			types.NewFilter("", "created_at", types.FilterOpGte, "2020-01-01 00:00:00"),
+		},
+	}
+	users := make([]*TestUser, 0)
+	count := new(int)
+
+	b.ReportAllocs()
+	for b.Loop() {
+		if err := database.Database[*TestUser](context.Background()).WithDryRun().WithPagination(1, 10).WithQuery(query, opts).List(&users); err != nil {
+			b.Fatal(err)
+		}
+		if err := database.Database[*TestUser](context.Background()).WithDryRun().WithQuery(query, opts).Count(count); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
