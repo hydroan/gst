@@ -112,14 +112,19 @@ const contextFieldCap = 10
 
 // withContextFields binds the fields derived from a context — the request
 // metadata and the execution identity — to a derived logger. This runs for
-// every context-scoped logger, so all fields go through one zap With call:
-// each With call clones the logger core, so chaining several With calls here
-// would cost a clone per link on every call. When adding metadata fields,
-// extend appendContextFields instead of chaining further With calls.
+// every context-scoped logger, so all fields go through one zap WithLazy
+// call, which defers the copy of the logger core, its encoder and the
+// encoder's buffer to the derived logger's first entry: a derived logger
+// whose entries the level discards, or that writes none, never pays for
+// that copy, and pays only for the fields, the lazy core and the two logger
+// values. The fields hold strings and the clone of the route parameters
+// Metadata.Params hands out, so an entry written later reads the values the
+// context held. Chaining several calls here would cost a core copy per
+// link, so when adding metadata fields, extend appendContextFields instead.
 func (l *Logger) withContextFields(meta requestctx.Metadata, id execctx.Identity, phase apiaction.Phase) types.Logger {
 	fields := make([]zap.Field, 0, contextFieldCap)
 	fields = append(fields, zap.String(keyPhase, string(phase)))
-	return &Logger{zlog: l.zlog.With(appendContextFields(fields, meta, id)...)}
+	return &Logger{zlog: l.zlog.WithLazy(appendContextFields(fields, meta, id)...)}
 }
 
 // appendContextFields appends to fields the ones derived from a context,
