@@ -25,7 +25,7 @@ import (
 // require the model to embed model.Query, and the returned conditions are
 // sorted by key for deterministic SQL.
 func Filters(q url.Values, m types.Model) ([]types.Filter, error) {
-	keys := make([]string, 0)
+	keys := make([]string, 0, len(q))
 	for key := range q {
 		if isFilterQueryKey(key) {
 			keys = append(keys, key)
@@ -122,6 +122,24 @@ func splitFilterKey(key string) (field, op string, ok bool) {
 	return field, op, true
 }
 
+// The operator sets filterOps answers, one per kind of column, built once:
+// every filter of every request asks for its column's set, and the callers
+// only read it. Parameters hands a copy out, the one slice a reader outside
+// this package sees.
+var (
+	timeFilterOps = []types.FilterOp{
+		types.FilterOpEq, types.FilterOpNe,
+		types.FilterOpGt, types.FilterOpGte, types.FilterOpLt, types.FilterOpLte,
+		types.FilterOpIsNull,
+	}
+	boolFilterOps = []types.FilterOp{types.FilterOpEq, types.FilterOpNe, types.FilterOpIsNull}
+	jsonFilterOps = []types.FilterOp{
+		types.FilterOpLike, types.FilterOpNotLike, types.FilterOpStartsWith, types.FilterOpEndsWith,
+		types.FilterOpIsNull,
+	}
+	allFilterOps = types.FilterOps()
+)
+
 // filterOps returns the operators a filter on col takes, in types.FilterOps
 // order, read from the data types gorm resolved for the column (see
 // modelschema.Column), and the kind of field the others are refused on.
@@ -131,26 +149,19 @@ func splitFilterKey(key string) (field, op string, ok bool) {
 // JSON document (see modelschema.IsJSONColumn) the like family, a "JSON"
 // field: whether two documents compare equal or order is the dialect's own
 // affair. A number (see modelschema.IsNumericColumn), a string or any other
-// column takes every operator.
+// column takes every operator. The slice is shared and read-only.
 func filterOps(col modelschema.Column) (ops []types.FilterOp, kind string) {
 	switch {
 	case modelschema.IsTimeColumn(col), modelschema.IsTimeOfDayColumn(col):
-		return []types.FilterOp{
-			types.FilterOpEq, types.FilterOpNe,
-			types.FilterOpGt, types.FilterOpGte, types.FilterOpLt, types.FilterOpLte,
-			types.FilterOpIsNull,
-		}, "time"
+		return timeFilterOps, "time"
 	case modelschema.IsBoolColumn(col):
-		return []types.FilterOp{types.FilterOpEq, types.FilterOpNe, types.FilterOpIsNull}, "bool"
+		return boolFilterOps, "bool"
 	case modelschema.IsNumericColumn(col):
-		return types.FilterOps(), ""
+		return allFilterOps, ""
 	case modelschema.IsJSONColumn(col):
-		return []types.FilterOp{
-			types.FilterOpLike, types.FilterOpNotLike, types.FilterOpStartsWith, types.FilterOpEndsWith,
-			types.FilterOpIsNull,
-		}, "JSON"
+		return jsonFilterOps, "JSON"
 	default:
-		return types.FilterOps(), ""
+		return allFilterOps, ""
 	}
 }
 

@@ -68,7 +68,9 @@ func Parameters(typ reflect.Type) ([]Parameter, error) {
 		}
 		param := Parameter{Name: name, Index: field.index, Bare: true}
 		if col, ok := columns[name]; ok {
-			param.Ops, _ = filterOps(col)
+			// filterOps shares its slice; a Parameter carries its own copy.
+			ops, _ := filterOps(col)
+			param.Ops = slices.Clone(ops)
 		}
 		params = append(params, param)
 	}
@@ -78,7 +80,7 @@ func Parameters(typ reflect.Type) ([]Parameter, error) {
 		}
 		_, bare := bareTimeFilterColumns[name]
 		ops, _ := filterOps(col)
-		params = append(params, Parameter{Name: name, Index: col.Index, Bare: bare, Ops: ops})
+		params = append(params, Parameter{Name: name, Index: col.Index, Bare: bare, Ops: slices.Clone(ops)})
 	}
 	slices.SortFunc(params, func(a, b Parameter) int { return slices.Compare(a.Index, b.Index) })
 	return params, nil

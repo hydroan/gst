@@ -41,14 +41,16 @@ func Pagination(q url.Values, m types.Model) (page, size int) {
 	paginatable := modelregistry.IsPaginatable(m)
 	cursorable := modelregistry.IsCursorable(m)
 
-	if paginatable {
-		page, _ = strconv.Atoi(q.Get(types.QueryPage))
+	if raw := q.Get(types.QueryPage); paginatable && len(raw) > 0 {
+		page, _ = strconv.Atoi(raw)
 	}
 	if page <= 0 {
 		page = 1
 	}
 	if paginatable || cursorable {
-		size, _ = strconv.Atoi(q.Get(types.QuerySize))
+		if raw := q.Get(types.QuerySize); len(raw) > 0 {
+			size, _ = strconv.Atoi(raw)
+		}
 		switch {
 		case size <= 0:
 			size = DefaultPageSize
