@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -201,9 +202,13 @@ func (db *database[M]) applyFilters(filters []types.Filter) {
 // column: the chain's model at the top level, the subquery below it, which
 // may well read the same table.
 func (db *database[M]) foreignTableFilter(filters []types.Filter, own, enclosing string) (found types.Filter, reason string, foreign bool) {
-	reader := fmt.Sprintf("model %s reading %q", reflect.TypeOf(*new(M)).Elem().Name(), own)
-	if len(enclosing) > 0 {
-		reader = fmt.Sprintf("the subquery over %q", own)
+	// The reader is named only in a reason: a chain without a foreign filter,
+	// the usual one, spends nothing on it.
+	reader := func() string {
+		if len(enclosing) > 0 {
+			return fmt.Sprintf("the subquery over %q", own)
+		}
+		return fmt.Sprintf("model %s reading %q", reflect.TypeOf(*new(M)).Elem().Name(), own)
 	}
 	for _, f := range filters {
 		switch f.Op() {
@@ -221,14 +226,14 @@ func (db *database[M]) foreignTableFilter(filters []types.Filter, own, enclosing
 			}
 		case types.FilterOpEqCol:
 			if len(f.Table()) > 0 && f.Table() != own {
-				return f, fmt.Sprintf("names table %q, which %s does not read", f.Table(), reader), true
+				return f, fmt.Sprintf("names table %q, which %s does not read", f.Table(), reader()), true
 			}
 			if _, parentTable, ok := eqColParent(f.Value()); ok && len(enclosing) > 0 && len(parentTable) > 0 && parentTable != enclosing {
-				return f, fmt.Sprintf("ties to a column of %q, which is not the table enclosing %s", parentTable, reader), true
+				return f, fmt.Sprintf("ties to a column of %q, which is not the table enclosing %s", parentTable, reader()), true
 			}
 		default:
 			if len(f.Table()) > 0 && f.Table() != own {
-				return f, fmt.Sprintf("names table %q, which %s does not read", f.Table(), reader), true
+				return f, fmt.Sprintf("names table %q, which %s does not read", f.Table(), reader()), true
 			}
 		}
 	}
@@ -908,6 +913,11 @@ func (db *database[M]) outerColumnSet() map[string]struct{} {
 	return set
 }
 
+// tableNames memoizes, by model type, the table name outerTableName reads
+// from a value of the type: a model names its table once for every value,
+// and a chain asks for it several times per query.
+var tableNames sync.Map
+
 // outerTableName resolves the table the current chain reads, for qualifying
 // the outer side of a correlation. It reads the name from M directly instead
 // of from the prepared model, because filters are built while the chain is
@@ -919,9 +929,14 @@ func (db *database[M]) outerTableName() string {
 	if typ == nil || typ.Kind() != reflect.Pointer {
 		return ""
 	}
+	if name, ok := tableNames.Load(typ); ok {
+		return name.(string) //nolint:errcheck // outerTableName alone stores, strings only
+	}
 	m, ok := reflect.TypeAssert[M](reflect.New(typ.Elem()))
 	if !ok {
 		return ""
 	}
-	return m.TableName()
+	name := m.TableName()
+	tableNames.Store(typ, name)
+	return name
 }
