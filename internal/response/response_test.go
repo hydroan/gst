@@ -212,3 +212,22 @@ func TestJSONAnswersAnEncodingFailureAsTheServersOwn(t *testing.T) {
 	require.Len(t, c.Errors, 1)
 	require.True(t, c.IsAborted())
 }
+
+// BenchmarkJSON measures writing a small success envelope, the answer of
+// every successful request.
+func BenchmarkJSON(b *testing.B) {
+	gin.SetMode(gin.TestMode)
+	type sample struct {
+		Name string `json:"name"`
+	}
+	data := &sample{Name: "sample"}
+	w := httptest.NewRecorder()
+
+	b.ReportAllocs()
+	for b.Loop() {
+		w.Body.Reset()
+		c, _ := gin.CreateTestContext(w)
+		c.Set(execctx.KeyTraceID, "trace-sample")
+		response.JSON(c, data)
+	}
+}

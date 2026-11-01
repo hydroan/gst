@@ -73,23 +73,24 @@ func Abort(c *gin.Context, err error) {
 // it.
 func envelope(c *gin.Context, status int, msg string, data any) {
 	traceID := c.GetString(execctx.KeyTraceID)
-	body, err := json.Marshal(gin.H{"msg": msg, "data": data, execctx.KeyTraceID: traceID})
+	body, err := json.Marshal(apiEnvelope{Data: data, Msg: msg, TraceID: traceID})
 	if err != nil {
 		_ = c.Error(err)
 		c.Abort()
 		status = failureStatus
-		body, _ = json.Marshal(failureEnvelope{Msg: failureMsg, TraceID: traceID}) //nolint:errchkjson // strings and a null: nothing in it fails to encode
+		body, _ = json.Marshal(apiEnvelope{Msg: failureMsg, TraceID: traceID}) //nolint:errchkjson // strings and a null: nothing in it fails to encode
 	}
 	c.Render(status, jsonRender{body: body})
 }
 
-// failureEnvelope is the envelope a response that could not be encoded is
-// answered with: the failure message, a null data and the trace id, nothing
-// in it that fails to encode, so its encoding goes unchecked.
-type failureEnvelope struct {
-	Msg     string    `json:"msg"`
-	Data    *struct{} `json:"data"`
-	TraceID string    `json:"trace_id"`
+// apiEnvelope is the API envelope as the wire carries it: data, msg and the
+// trace id, in this key order. A response that could not be encoded is
+// answered with the failure message, a null data and the trace id, nothing
+// in it that fails to encode, so that encoding goes unchecked.
+type apiEnvelope struct {
+	Data    any    `json:"data"`
+	Msg     string `json:"msg"`
+	TraceID string `json:"trace_id"`
 }
 
 // jsonContentType is the Content-Type of a JSON response, the value gin's own
