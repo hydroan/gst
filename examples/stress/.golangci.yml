@@ -1,0 +1,238 @@
+version: "2"
+
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+severity:
+  default: error
+
+linters:
+  default: none
+  enable:
+    # Core correctness.
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+
+    # Error handling.
+    - errorlint
+    - errname
+    - errchkjson
+    - nilerr
+    - nilnil
+    - nilnesserr
+
+    # Backend resource safety.
+    - bidichk
+    - bodyclose
+    - rowserrcheck
+    - sqlclosecheck
+    - durationcheck
+    - fatcontext
+    - gosec
+
+    # Code hygiene.
+    - asciicheck
+    - dupword
+    - gocheckcompilerdirectives
+    - iface
+    - makezero
+    - mirror
+    - misspell
+    - musttag
+    - nolintlint
+    - predeclared
+    - reassign
+    - recvcheck
+    - revive
+    - unconvert
+    - unparam
+    - wastedassign
+
+    # Go modernization.
+    - copyloopvar
+    - exptostd
+    - intrange
+    - modernize
+    - perfsprint
+    - usestdlibvars
+
+    # Broad complementary suite (diagnostic, style, performance).
+    - gocritic
+
+    # Test quality.
+    - testifylint
+    - thelper
+    - tparallel
+    - usetesting
+
+    # Project constraints.
+    - depguard
+    - forbidigo
+    - gomoddirectives
+
+    # Project-specific checks.
+    - canonicalheader
+    - loggercheck
+    - spancheck
+
+    # Documentation.
+    - godoclint
+
+  settings:
+    depguard:
+      rules:
+        main:
+          deny:
+            - pkg: "errors"
+              desc: "Use github.com/cockroachdb/errors instead"
+            - pkg: "github.com/pkg/errors"
+              desc: "Use github.com/cockroachdb/errors instead"
+
+    errcheck:
+      check-type-assertions: true
+      exclude-functions:
+        - io.Copy(*bytes.Buffer)
+        - io.Copy(os.Stdout)
+
+    forbidigo:
+      # Refusing a request outside the controller path goes through
+      # response.Abort, which is the single place the API envelope is written.
+      # gin's own aborts stay reachable on *gin.Context forever, so nothing but
+      # this rule stops the next middleware from writing a second envelope by
+      # hand.
+      forbid:
+        - pattern: '^.*\.AbortWithStatusJSON$'
+          msg: "write the envelope through response.Abort instead of building it by hand"
+        - pattern: '^.*\.AbortWithStatus$'
+          msg: "an empty body carries no envelope and no trace id; refuse through response.Abort"
+        # depguard keeps the standard errors package out, but fmt.Errorf builds
+        # an error without a stack just as well; every error of the application
+        # comes from github.com/cockroachdb/errors.
+        - pattern: '^fmt\.Errorf$'
+          msg: "build errors with github.com/cockroachdb/errors: Newf for a new error, Wrap or Wrapf around a cause"
+
+    godoclint:
+      # Default set of rules to enable.
+      # Possible values are: 'basic', 'all' or 'none'.
+      # Default: 'basic' (enables 'pkg-doc', 'single-pkg-doc', 'start-with-name', and 'deprecated')
+      default: basic
+      # List of rules to enable in addition to the default set.
+      enable:
+        # Check proper package-level godoc, if any.
+        - pkg-doc
+        # Assert at most one godoc per package.
+        - single-pkg-doc
+        # Check godocs start with the corresponding symbol name.
+        - start-with-name
+        # Check deprecated symbols have proper deprecation notice.
+        - deprecated
+
+    gomoddirectives:
+      # A replace pointing at a local path is how a project builds against a
+      # framework checkout beside it while verifying a framework change — a
+      # temporary state, removed once the change is released; only local
+      # paths are allowed, a replace pointing at a remote module is still
+      # refused.
+      replace-local: true
+
+    govet:
+      # These analyzers are not part of the default go vet analyzer set.
+      enable:
+        - shadow
+        - nilness
+        - unusedwrite
+        - reflectvaluecompare
+        - deepequalerrors
+        - sortslice
+
+    misspell:
+      locale: US
+
+    recvcheck:
+      # Design, TableName, Purge and Indexes are stateless declaration
+      # methods that use value receivers by framework convention, while
+      # stateful hooks require pointer receivers.
+      exclusions:
+        - "*.Design"
+        - "*.TableName"
+        - "*.Purge"
+        - "*.Indexes"
+
+    revive:
+      rules:
+        - name: blank-imports
+        - name: dot-imports
+          arguments:
+            - allowedPackages:
+                - github.com/hydroan/gst/dsl
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: error-naming
+        - name: error-return
+        - name: error-strings
+        - name: errorf
+        - name: indent-error-flow
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: var-declaration
+        - name: var-naming
+
+    staticcheck:
+      checks: ["all", "-QF1008"]
+      dot-import-whitelist:
+        - github.com/hydroan/gst/dsl
+
+  exclusions:
+    generated: strict
+    presets:
+      - comments
+      - std-error-handling
+      - common-false-positives
+      - legacy
+    rules:
+      # unparam is excluded in tests because test helpers commonly keep
+      # parameters for signature symmetry across cases.
+      - path: _test\.go
+        linters:
+          - gosec
+          - godoclint
+          - unparam
+      # The gofix //go:fix directive is valid but not yet in
+      # gocheckcompilerdirectives' known directive list.
+      - linters:
+          - gocheckcompilerdirectives
+        text: "//go:fix"
+      # Revive var-naming: ignore ALL_CAPS (redundant with staticcheck) and underscores in names.
+      - linters:
+          - revive
+        text: "don't use (ALL_CAPS|underscores) in Go names"
+      # Allow package names "types" and "util" (meaningful in our context).
+      - linters:
+          - revive
+        text: "avoid meaningless package names"
+        path: "^(types|util)/|.*/(types|util)/"
+      # Constants in the configx package are named after the environment
+      # variables they stand for and hold that name as their value, so the
+      # ALL_CAPS spelling is deliberate and has to match the variable
+      # exactly, and an explicit staticcheck checks list turns off golangci's
+      # own ST1003 exclusion. The path is anchored so that packages merely
+      # named configx elsewhere in the tree stay checked.
+      - path: ^configx/
+        linters:
+          - staticcheck
+        text: "ST1003"
+      # G101 keys off names containing token/password/secret, which every
+      # credential-related environment variable name in configx matches.
+      - path: ^configx/
+        linters:
+          - gosec
+        text: "G101"
+
+issues:
+  max-same-issues: 100

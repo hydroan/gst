@@ -126,6 +126,7 @@ vet:
 	go -C examples/cluster vet ./...
 	go -C examples/bench vet ./...
 	go -C examples/multitenant vet ./...
+	go -C examples/stress vet ./...
 
 # Run golangci-lint: modernize, nilness and shadow run inside it, and goimports
 # checks the imports are organized the way gopls saves them (see .golangci.yml).
@@ -140,6 +141,7 @@ lint:
 	$(call run_tool_in,$(GOLANGCI_LINT),examples/cluster,run ./...)
 	$(call run_tool_in,$(GOLANGCI_LINT),examples/bench,run ./...)
 	$(call run_tool_in,$(GOLANGCI_LINT),examples/multitenant,run ./...)
+	$(call run_tool_in,$(GOLANGCI_LINT),examples/stress,run ./...)
 
 # Hold the framework's own source to the rules golangci-lint cannot express
 # (see internal/cmd/selfcheck): testpackage in golangci-lint, for one, makes a
@@ -164,6 +166,7 @@ ggcheck:
 	cd examples/cluster && "$(GG)" gen && "$(GG)" check
 	cd examples/bench && "$(GG)" gen && "$(GG)" check
 	cd examples/multitenant && "$(GG)" gen && "$(GG)" check
+	cd examples/stress && "$(GG)" gen && "$(GG)" check
 
 # Run unit tests
 # Every package is tested, so a newly added package is covered without editing
@@ -310,6 +313,7 @@ fix:
 	$(call run_tool_in,$(GOLANGCI_LINT),examples/cluster,run --fix ./...)
 	$(call run_tool_in,$(GOLANGCI_LINT),examples/bench,run --fix ./...)
 	$(call run_tool_in,$(GOLANGCI_LINT),examples/multitenant,run --fix ./...)
+	$(call run_tool_in,$(GOLANGCI_LINT),examples/stress,run --fix ./...)
 	$(call install_tool,$(GOFUMPT),$(GOFUMPT_PKG),$(GOFUMPT_VERSION))
 	@echo "Running gofumpt..."
 	$(call run_tool,$(GOFUMPT),-l -w .)
