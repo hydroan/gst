@@ -27,7 +27,8 @@ import (
 func TestMain(m *testing.M) {
 	// The startup seeds the accounts the tests log in as, with the password
 	// the environment names; the sessions live in Redis.
-	os.Setenv(configx.SEED_ROOT_PASSWORD, testsupport.RootPassword)
+	os.Setenv("IAM_ROOT_PASSWORD", testsupport.RootPassword)
+	os.Setenv(configx.SEED_PASSWORD, testsupport.RootPassword)
 	testutil.Run(m, testutil.Server{
 		Database: config.DBSqlite,
 		Redis:    true,

@@ -8,6 +8,7 @@ import (
 
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/testutil"
+	"github.com/hydroan/gst/testutil/iamtest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -15,7 +16,7 @@ import (
 // served by Exporter in export.go: the records the query matches, one CSV
 // row each under the header, nothing else.
 func TestExportRendersTheMatchingRecordsAsCSV(t *testing.T) {
-	account := testsupport.Login(t)
+	account := iamtest.Login(t, testsupport.Root)
 	for _, rec := range []*model.Record{
 		{Code: "e-1", Title: "one", Category: "export", Status: 1, Score: 10, Body: "first body"},
 		{Code: "e-2", Title: "two", Category: "export", Status: 2, Score: 20, Body: "second body"},

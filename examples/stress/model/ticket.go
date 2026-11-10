@@ -30,6 +30,7 @@ func (Ticket) Indexes() []model.Index {
 	return []model.Index{
 		{Fields: []string{"TenantID", "Code"}, Unique: true},
 		{Fields: []string{"TenantID", "CreatedAt"}},
+		{Fields: []string{"TenantID", "Category", "CreatedAt"}},
 	}
 }
 

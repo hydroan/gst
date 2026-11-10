@@ -1,6 +1,6 @@
 // Package module assembles the application's business modules: iam for the
 // login and the sessions, authz for the roles and the authorization, and the
-// seed of the accounts the scenarios log in as.
+// seed of the reader account the scenarios log in as beside root.
 package module
 
 import (

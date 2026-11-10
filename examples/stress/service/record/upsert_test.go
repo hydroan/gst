@@ -6,6 +6,7 @@ import (
 	"stress/internal/testsupport"
 	"stress/model"
 
+	"github.com/hydroan/gst/testutil/iamtest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -14,7 +15,7 @@ import (
 // the record under the id its code names, the second overwrites that row
 // instead of adding one.
 func TestUpsertInsertsThenOverwritesTheRecordOfTheCode(t *testing.T) {
-	cli := testsupport.Login(t).Client
+	cli := iamtest.Login(t, testsupport.Root).Client
 
 	first, err := cli.Post[model.Record](t.Context(), "/api/records/upsert", &model.RecordUpsertReq{Code: "u-1", Title: "first", Category: "alpha", Score: 1})
 	require.NoError(t, err)

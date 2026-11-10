@@ -6,6 +6,7 @@ require (
 	github.com/cockroachdb/errors v1.14.0
 	github.com/hydroan/gst v0.0.0-20261101085516-0a70e6a80ae2
 	github.com/stretchr/testify v1.12.1
+	go.opentelemetry.io/proto/otlp v1.11.0
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.12
 )
@@ -193,7 +194,6 @@ require (
 	go.opentelemetry.io/otel/metric v1.46.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.46.0 // indirect
 	go.opentelemetry.io/otel/trace v1.46.0 // indirect
-	go.opentelemetry.io/proto/otlp v1.11.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.28.0 // indirect
