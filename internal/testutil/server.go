@@ -5,10 +5,14 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"testing"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/grpcserver"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 // BaseURL returns the test server base address clients are constructed with.
@@ -39,6 +43,19 @@ func GRPCTarget() string {
 // grpcServed reports whether the test binary registered gRPC services; a
 // variable for the test of GRPCTarget to run with none.
 var grpcServed = grpcserver.HasServices
+
+// DialGRPC connects to the test server's gRPC listener, at GRPCTarget, in
+// plaintext, the way the listener is served, and closes the connection when
+// the test ends. A call made on it presents no credential of its own: a
+// session id or a token travels in the call's context, see grpc.WithBearer.
+func DialGRPC(t *testing.T) *grpc.ClientConn {
+	t.Helper()
+
+	conn, err := grpc.NewClient(GRPCTarget(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+	return conn
+}
 
 // mustWaitForGRPC waits until the test server's gRPC listener accepts
 // connections.

@@ -29,8 +29,11 @@
 // registered, goes through the auth middleware the project registers, which
 // reads the credentials the client carries: a token set with client.WithToken,
 // headers set with client.WithHeader, and the cookies earlier responses set,
-// kept in its cookie jar. Rejections are asserted with RequireError. A project
-// serving gRPC dials GRPCTarget with the client the protobuf plugin generated.
+// kept in its cookie jar; a project using the iam module logs a test in with
+// the iamtest package under this one. Rejections are asserted with
+// RequireError. A project serving gRPC dials its listener with DialGRPC and
+// hands the connection to the client the protobuf plugin generated; the
+// session or token a call presents travels in its context, see grpc.WithBearer.
 //
 // Database state is asserted with the Require* family, which reads rows back
 // through the framework query chain and fails the test when the state does
@@ -48,6 +51,7 @@ import (
 	testutil "github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/internal/testutil/swap"
 	"github.com/hydroan/gst/internal/types"
+	"google.golang.org/grpc"
 )
 
 // Server declares what a test package needs before its tests can run.
@@ -88,6 +92,17 @@ func URL(path string) string {
 // registered none is told so, GRPCTarget panicking with that import to add.
 func GRPCTarget() string {
 	return testutil.GRPCTarget()
+}
+
+// DialGRPC connects to the test server's gRPC listener, at GRPCTarget, in
+// plaintext, the way the listener is served, and closes the connection when
+// the test ends; the client the protobuf plugin generated takes the
+// connection. A call made on it presents no credential of its own: a session
+// id or a token travels in the call's context, see grpc.WithBearer.
+func DialGRPC(t *testing.T) *grpc.ClientConn {
+	t.Helper()
+
+	return testutil.DialGRPC(t)
 }
 
 // DecodeResp asserts that resp carries a successful envelope and returns the
