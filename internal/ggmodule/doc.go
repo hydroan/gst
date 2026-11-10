@@ -168,7 +168,10 @@
 //     each an import path, an exported function and the reason. Copy
 //     reproduces routes, models, middleware and interceptors but not the
 //     rest of the module's Register body, so gg check's module assembly
-//     check holds the project's non-test code to these calls.
+//     check holds the project's non-test code to these calls. A function of
+//     the module's own copied trees is named by its framework import path
+//     and called through the project's copy of the package, the path
+//     CopiedImportPath gives.
 //   - postNotes: free-form lines printed after a successful copy, for the
 //     manual follow-up steps the copy cannot automate.
 //

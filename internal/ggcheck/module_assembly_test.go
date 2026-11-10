@@ -155,3 +155,87 @@ func TestModuleAssemblySkipsModuleTheProjectNeverCopied(t *testing.T) {
 		t.Fatalf("checkModuleAssembly() = %v, want no violation", violations)
 	}
 }
+
+// writeAssemblyFixtureCopiedHook lays down a framework tree with one copyable
+// module whose required call is a function of the module's own service
+// package, and a project that copied the module: the call has to come
+// through the project's copy of the package, tmpapp/service/hooked.
+func writeAssemblyFixtureCopiedHook(t *testing.T, projectDir string) {
+	t.Helper()
+
+	writeCheckProjectGoMod(t, projectDir)
+	frameworkRoot := filepath.Join(projectDir, "internal", "gst")
+	writeCheckFile(t, filepath.Join(frameworkRoot, "module", "hooked", "register.go"), "package hooked\n\nfunc Register() {}\n")
+	writeCheckFile(t, filepath.Join(frameworkRoot, "module", "hooked", "module.json"), `{
+		"copy": {
+			"requiredAssembly": [
+				{
+					"import": "github.com/hydroan/gst/internal/service/hooked",
+					"function": "InstallHook",
+					"reason": "the hook stays uninstalled until the project installs it"
+				}
+			]
+		}
+	}`)
+	writeCheckFile(t, filepath.Join(projectDir, "model", "hooked", "hooked.go"), "package hooked\n")
+	writeCheckFile(t, filepath.Join(projectDir, "service", "hooked", "hook.go"), "package hooked\n\nfunc InstallHook() {}\n")
+}
+
+func TestModuleAssemblyAcceptsCallThroughTheCopiedPackage(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+	writeAssemblyFixtureCopiedHook(t, projectDir)
+
+	writeCheckFile(t, filepath.Join(projectDir, "module", "module.go"), `package module
+
+import "tmpapp/service/hooked"
+
+func init() {
+	hooked.InstallHook()
+}
+`)
+
+	if violations := runCheck(ggcheck.ModuleAssembly); len(violations) != 0 {
+		t.Fatalf("checkModuleAssembly() = %v, want no violation", violations)
+	}
+}
+
+func TestModuleAssemblyNamesTheCopiedPackageOfAMissingCall(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+	writeAssemblyFixtureCopiedHook(t, projectDir)
+
+	violations := runCheck(ggcheck.ModuleAssembly)
+
+	if len(violations) != 1 {
+		t.Fatalf("checkModuleAssembly() = %v, want one violation", violations)
+	}
+	for _, want := range []string{"module hooked", "hooked.InstallHook", "tmpapp/service/hooked", "the hook stays uninstalled"} {
+		if !strings.Contains(violations[0], want) {
+			t.Fatalf("violation %q missing %q", violations[0], want)
+		}
+	}
+}
+
+func TestModuleAssemblyAcceptsTheFunctionHandedToAnInstaller(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Chdir(projectDir)
+	writeAssemblyFixtureCopiedHook(t, projectDir)
+
+	// A hook is installed by naming it, not calling it: the installer calls
+	// it later, and the requirement is met all the same.
+	writeCheckFile(t, filepath.Join(projectDir, "module", "module.go"), `package module
+
+import "tmpapp/service/hooked"
+
+func install(fn func()) {}
+
+func init() {
+	install(hooked.InstallHook)
+}
+`)
+
+	if violations := runCheck(ggcheck.ModuleAssembly); len(violations) != 0 {
+		t.Fatalf("checkModuleAssembly() = %v, want no violation", violations)
+	}
+}

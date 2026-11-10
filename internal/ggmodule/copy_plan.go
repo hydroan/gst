@@ -12,15 +12,9 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/dsl"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/modelinfo"
-)
-
-const (
-	defaultModelDir       = "model"
-	defaultServiceDir     = "service"
-	defaultMiddlewareDir  = "middleware"
-	defaultInterceptorDir = "interceptor"
 )
 
 // CopyOptions configures the local-source copy workflow.
@@ -144,14 +138,14 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 		Name:                 name,
 		ProjectModulePath:    projectModule,
 		FrameworkRoot:        frameworkRoot,
-		ModelDir:             defaultModelDir,
-		ServiceDir:           defaultServiceDir,
+		ModelDir:             ggconst.DirModel,
+		ServiceDir:           ggconst.DirService,
 		SourceModelDir:       filepath.Join(frameworkRoot, "internal", "model", name),
 		SourceServiceDir:     filepath.Join(frameworkRoot, "internal", "service", name),
-		TargetModelDir:       filepath.Join(defaultModelDir, name),
-		TargetServiceDir:     filepath.Join(defaultServiceDir, name),
-		TargetMiddlewareDir:  defaultMiddlewareDir,
-		TargetInterceptorDir: defaultInterceptorDir,
+		TargetModelDir:       filepath.Join(ggconst.DirModel, name),
+		TargetServiceDir:     filepath.Join(ggconst.DirService, name),
+		TargetMiddlewareDir:  ggconst.DirMiddleware,
+		TargetInterceptorDir: ggconst.DirInterceptor,
 	}
 
 	if sourceDirErr := plan.checkSourceDirs(); sourceDirErr != nil {
@@ -493,12 +487,12 @@ func (p *CopyPlan) StaleInterceptorTargets() []string {
 // project without a model directory serves none, and a file the parser
 // refuses declares nothing here, gg gen reporting it.
 func projectServesGRPC(name string) (bool, error) {
-	if _, err := os.Stat(defaultModelDir); os.IsNotExist(err) {
+	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
 		return false, nil
 	}
-	replaced := filepath.Join(defaultModelDir, name) + string(filepath.Separator)
+	replaced := filepath.Join(ggconst.DirModel, name) + string(filepath.Separator)
 	served := false
-	err := modelinfo.WalkModelFiles(defaultModelDir, gghelper.NewProjectIgnore(), func(path string) error {
+	err := modelinfo.WalkModelFiles(ggconst.DirModel, gghelper.NewProjectIgnore(), func(path string) error {
 		if served || strings.HasPrefix(path, replaced) {
 			return nil
 		}

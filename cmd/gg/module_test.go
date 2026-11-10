@@ -487,7 +487,7 @@ func TestPrintModuleCopyAssemblyNamesThePendingCalls(t *testing.T) {
 	t.Chdir(projectDir)
 
 	output := captureStdout(t, printModuleCopyAssembly)
-	want := "module sample is copied but the project never calls authn.SetSampleGate: the sample gate stays off until it is installed"
+	want := "module sample is copied but the project never calls authn.SetSampleGate (github.com/hydroan/gst/authn): the sample gate stays off until it is installed"
 	if !strings.Contains(output, want) {
 		t.Fatalf("output lacks the pending call %q:\n%s", want, output)
 	}

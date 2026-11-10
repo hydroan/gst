@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"golang.org/x/tools/go/ast/astutil"
 )
@@ -73,8 +74,8 @@ func AddModule(projectDir string, name string) (ChangeResult, error) {
 // same conceptual name.
 func checkNoLocalSource(projectDir string, name string) error {
 	for _, dir := range []string{
-		filepath.Join(projectDir, defaultModelDir, name),
-		filepath.Join(projectDir, defaultServiceDir, name),
+		filepath.Join(projectDir, ggconst.DirModel, name),
+		filepath.Join(projectDir, ggconst.DirService, name),
 	} {
 		hasGoFiles, err := hasModuleGoFiles(dir)
 		if err != nil {

@@ -22,7 +22,7 @@ import (
 // declares to be made in project code.
 var ModuleAssembly = Check{
 	Name: "Module assembly",
-	Rule: "the assembly calls a copied framework module declares in its module.json must be made in the project's non-test code, outside the model and service subtrees the module was copied into",
+	Rule: "the assembly calls a copied framework module declares in its module.json must be made in the project's non-test code, outside the model and service subtrees the module was copied into: the function called, or handed as a value to the installer that runs it; a function of those subtrees comes from the project's copy of the package",
 	run:  checkModuleAssembly,
 }
 
@@ -38,7 +38,9 @@ var ModuleAssembly = Check{
 // model/<module> or service/<module> is only linked when generated
 // registrations happen to import it, which is exactly the accident this check
 // exists to prevent. Test files are skipped for the same reason — wiring that
-// only runs under go test does not arm the binary.
+// only runs under go test does not arm the binary. A function declared in
+// those subtrees is called through the project's copy of the package, so the
+// call is looked for under the copied import path.
 func checkModuleAssembly(ignore gghelper.ProjectIgnore) []string {
 	// Cheapest first: a name whose model subtree is absent was never copied,
 	// so a project that copied nothing reads no manifest and walks nothing.
@@ -63,6 +65,19 @@ func checkModuleAssembly(ignore gghelper.ProjectIgnore) []string {
 	owned, err := copyableModuleOwners()
 	if err != nil {
 		return []string{fmt.Sprintf("listing copyable framework modules: %v", err)}
+	}
+	projectModule, err := gghelper.ModulePath(".")
+	if err != nil {
+		return []string{fmt.Sprintf("reading the project's module path: %v", err)}
+	}
+	// The import path the project makes each call through: the framework's,
+	// or the project's copy of a package of the module's own subtrees.
+	imports := make([]string, len(pending))
+	for i, call := range pending {
+		imports[i] = call.Import
+		if copied, ok := ggmodule.CopiedImportPath(call.Import, call.Module, projectModule); ok {
+			imports[i] = copied
+		}
 	}
 
 	// Cheap first pass: a file that does not mention the function name by
@@ -90,7 +105,7 @@ func checkModuleAssembly(ignore gghelper.ProjectIgnore) []string {
 		if !mentionsAnyFunction(source, wanted) {
 			return nil
 		}
-		collectAssemblyCalls(filename, source, pending, satisfied)
+		collectAssemblyCalls(filename, source, pending, imports, satisfied)
 
 		return nil
 	})
@@ -99,13 +114,13 @@ func checkModuleAssembly(ignore gghelper.ProjectIgnore) []string {
 	}
 
 	violations := make([]string, 0)
-	for _, call := range pending {
+	for i, call := range pending {
 		if satisfied[assemblyKey(call)] {
 			continue
 		}
 		violations = append(violations, fmt.Sprintf(
-			"module %s is copied but the project never calls %s.%s: %s",
-			call.Module, path.Base(call.Import), call.Function, call.Reason))
+			"module %s is copied but the project never calls %s.%s (%s): %s",
+			call.Module, path.Base(imports[i]), call.Function, imports[i], call.Reason))
 	}
 	sort.Strings(violations)
 
@@ -126,11 +141,13 @@ func mentionsAnyFunction(source []byte, wanted map[string]bool) bool {
 	return false
 }
 
-// collectAssemblyCalls marks every required call the file makes. A call counts
-// only when it names the declared package the way this file imports it —
-// under its package name, an alias or a dot import — so a same-named function
-// from another package does not.
-func collectAssemblyCalls(filename string, source []byte, pending []ggmodule.AssemblyCall, satisfied map[string]bool) {
+// collectAssemblyCalls marks every required call the file makes, imports
+// holding the import path each call comes through. A use counts only when
+// it names that package the way this file imports it — under its package
+// name, an alias or a dot import — so a same-named function from another
+// package does not; and a use is the function called, or named as a value,
+// the way a hook is handed to router.OnRoutesReady, which calls it later.
+func collectAssemblyCalls(filename string, source []byte, pending []ggmodule.AssemblyCall, imports []string, satisfied map[string]bool) {
 	file, err := parser.ParseFile(token.NewFileSet(), filename, source, parser.SkipObjectResolution)
 	if err != nil {
 		// An unparsable file is reported by the compiler and by every other
@@ -139,16 +156,16 @@ func collectAssemblyCalls(filename string, source []byte, pending []ggmodule.Ass
 	}
 
 	names := make([]goast.PackageNames, len(pending))
-	for i, required := range pending {
-		names[i] = goast.ImportedNames(file, required.Import, path.Base(required.Import))
+	for i, importPath := range imports {
+		names[i] = goast.ImportedNames(file, importPath, path.Base(importPath))
 	}
 	ast.Inspect(file, func(node ast.Node) bool {
-		call, ok := node.(*ast.CallExpr)
+		expr, ok := node.(ast.Expr)
 		if !ok {
 			return true
 		}
 		for i, required := range pending {
-			if names[i].Refers(call.Fun, required.Function) {
+			if names[i].Refers(expr, required.Function) {
 				satisfied[assemblyKey(required)] = true
 			}
 		}

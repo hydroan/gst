@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 )
 
@@ -198,17 +199,60 @@ type moduleCopyImportRewrite struct {
 	keepSpecialName bool
 }
 
-func buildModuleCopyImportRewrite(imp *ast.ImportSpec, sourcePath string, config moduleCopyRewriteConfig) (moduleCopyImportRewrite, bool) {
-	modelPrefix := frameworkModulePath + "/internal/model/" + config.ModuleName
-	servicePrefix := frameworkModulePath + "/internal/service/" + config.ModuleName
-	switch {
-	case sourcePath == modelPrefix || strings.HasPrefix(sourcePath, modelPrefix+"/"):
-		return newModuleCopyImportRewrite(imp, sourcePath, modelPrefix, projectModuleCopyImportRoot(config.ProjectModulePath, config.ModelDir, config.ModuleName), moduleCopyImportModel), true
-	case sourcePath == servicePrefix || strings.HasPrefix(sourcePath, servicePrefix+"/"):
-		return newModuleCopyImportRewrite(imp, sourcePath, servicePrefix, projectModuleCopyImportRoot(config.ProjectModulePath, config.ServiceDir, config.ModuleName), moduleCopyImportService), true
-	default:
-		return moduleCopyImportRewrite{}, false
+// copiedSubtree is one of the two package trees gg module copy carries from
+// the framework into a project: kind tells which, source is the framework
+// import prefix of the tree and target the prefix the project imports it
+// under, its module path followed by its model or service directory and the
+// module name.
+type copiedSubtree struct {
+	kind   moduleCopyImportKind
+	source string
+	target string
+}
+
+// copiedSubtrees returns the two copied package trees of module as a project
+// at projectModulePath imports them, its models under modelDir and its
+// services under serviceDir: for module iam copied into tmpapp with the
+// default directories, github.com/hydroan/gst/internal/model/iam becomes
+// tmpapp/model/iam and github.com/hydroan/gst/internal/service/iam becomes
+// tmpapp/service/iam.
+func copiedSubtrees(module, projectModulePath, modelDir, serviceDir string) [2]copiedSubtree {
+	return [2]copiedSubtree{
+		{kind: moduleCopyImportModel, source: frameworkModulePath + "/internal/model/" + module, target: projectModuleCopyImportRoot(projectModulePath, modelDir, module)},
+		{kind: moduleCopyImportService, source: frameworkModulePath + "/internal/service/" + module, target: projectModuleCopyImportRoot(projectModulePath, serviceDir, module)},
 	}
+}
+
+// holds reports whether importPath is the package at the root of the tree or
+// one under it.
+func (s copiedSubtree) holds(importPath string) bool {
+	return importPath == s.source || strings.HasPrefix(importPath, s.source+"/")
+}
+
+// CopiedImportPath returns the import path a project at projectModulePath
+// that copied module imports the framework package at importPath under, when
+// the package is in one of the module's copied trees, internal/model/<module>
+// or internal/service/<module>: the prefix gives way the way gg module copy
+// rewrites the imports of the copied sources, so
+// github.com/hydroan/gst/internal/service/iam/account of module iam, copied
+// into tmpapp, is tmpapp/service/iam/account. A package outside the trees is
+// reported false: a project imports it from the framework as it is.
+func CopiedImportPath(importPath, module, projectModulePath string) (string, bool) {
+	for _, subtree := range copiedSubtrees(module, projectModulePath, ggconst.DirModel, ggconst.DirService) {
+		if subtree.holds(importPath) {
+			return subtree.target + strings.TrimPrefix(importPath, subtree.source), true
+		}
+	}
+	return "", false
+}
+
+func buildModuleCopyImportRewrite(imp *ast.ImportSpec, sourcePath string, config moduleCopyRewriteConfig) (moduleCopyImportRewrite, bool) {
+	for _, subtree := range copiedSubtrees(config.ModuleName, config.ProjectModulePath, config.ModelDir, config.ServiceDir) {
+		if subtree.holds(sourcePath) {
+			return newModuleCopyImportRewrite(imp, sourcePath, subtree.source, subtree.target, subtree.kind), true
+		}
+	}
+	return moduleCopyImportRewrite{}, false
 }
 
 func newModuleCopyImportRewrite(imp *ast.ImportSpec, sourcePath string, sourcePrefix string, targetPrefix string, kind moduleCopyImportKind) moduleCopyImportRewrite {
