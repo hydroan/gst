@@ -9,8 +9,8 @@ import (
 )
 
 // This file holds what a call's context answers and what is established on it:
-// the credential the call presents, the caller WithCaller names, and the HTTP
-// action the call maps to.
+// the credential the call presents and the one WithBearer sends with a call,
+// the caller WithCaller names, and the HTTP action the call maps to.
 
 // The metadata a call's credential arrives in, in the lowercase gRPC
 // metadata keeps its keys in: keyAuthorization carries it as
@@ -37,6 +37,14 @@ func Bearer(ctx context.Context) (credential string, ok bool) {
 		return "", false
 	}
 	return credential, true
+}
+
+// WithBearer returns ctx carrying credential as the call's authorization
+// metadata, "Bearer <credential>", the form Bearer reads: a session id for
+// the session interceptor, a token for a JWT one. Every call made on the
+// returned context presents it.
+func WithBearer(ctx context.Context, credential string) context.Context {
+	return metadata.AppendToOutgoingContext(ctx, keyAuthorization, bearerScheme+" "+credential)
 }
 
 // Caller is who a call is made by, as WithCaller established it: the user by
