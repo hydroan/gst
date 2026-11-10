@@ -1,8 +1,11 @@
 package response
 
 import (
+	"bytes"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"net/http"
+	"sync"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
@@ -60,27 +63,49 @@ func Abort(c *gin.Context, err error) {
 	Error(c, err)
 }
 
+// envelopeBufferCap is the largest buffer envelope keeps for the response
+// after: one a larger body grew is left to the garbage collector, so a
+// single large response does not hold its size for as long as the process
+// runs. It is the bound fmt keeps on the buffers it uses again.
+const envelopeBufferCap = 64 << 10
+
+// envelopeBuffers holds the buffers envelopes are encoded into, so a
+// response does not allocate its body anew: json.Marshal returns a copy of
+// the body, of the body's size, on every call.
+var envelopeBuffers = sync.Pool{
+	New: func() any { return new(bytes.Buffer) },
+}
+
 // envelope writes the API envelope — msg, data and the trace id — with
 // status. It is encoded with encoding/json whatever JSON codec gin was built
 // with: the codecs gin's jsoniter, go_json and sonic build tags select encode
 // differently (the first two ignore omitzero), and the framework's wire
-// contract is the encoding/json one. It is encoded before anything is
-// written: a data no JSON holds, a NaN or a channel a service put there, is
-// the server's own failure, answered 500 with failureMsg and recorded on
-// the context for the access log, the handler chain stopped, where an
-// encoding failing under gin's render would leave the status already
-// written, a 200 with an empty body that reads as a success with nothing in
-// it.
+// contract is the encoding/json one, written here as json.Marshal writes it,
+// encoding/json/v2 under the options json.DefaultOptionsV1 names. It is
+// encoded before anything is written: a data no JSON holds, a NaN or a
+// channel a service put there, is the server's own failure, answered 500
+// with failureMsg and recorded on the context for the access log, the
+// handler chain stopped, where an encoding failing under gin's render would
+// leave the status already written, a 200 with an empty body that reads as a
+// success with nothing in it.
 func envelope(c *gin.Context, status int, msg string, data any) {
 	traceID := c.GetString(execctx.KeyTraceID)
-	body, err := json.Marshal(apiEnvelope{Data: data, Msg: msg, TraceID: traceID})
-	if err != nil {
+	body := envelopeBuffers.Get().(*bytes.Buffer) //nolint:errcheck // the pool holds nothing else
+	if err := jsonv2.MarshalWrite(body, apiEnvelope{Data: data, Msg: msg, TraceID: traceID}, json.DefaultOptionsV1()); err != nil {
 		_ = c.Error(err)
 		c.Abort()
 		status = failureStatus
-		body, _ = json.Marshal(apiEnvelope{Msg: failureMsg, TraceID: traceID}) //nolint:errchkjson // strings and a null: nothing in it fails to encode
+		body.Reset()
+		_ = jsonv2.MarshalWrite(body, apiEnvelope{Msg: failureMsg, TraceID: traceID}, json.DefaultOptionsV1()) // strings and a null: nothing in it fails to encode
 	}
-	c.Render(status, jsonRender{body: body})
+	c.Render(status, jsonRender{body: body.Bytes()})
+
+	// The render has written the body out, and a writer keeps nothing of
+	// what it is handed, so the buffer is free for the response after.
+	if body.Cap() <= envelopeBufferCap {
+		body.Reset()
+		envelopeBuffers.Put(body)
+	}
 }
 
 // apiEnvelope is the API envelope as the wire carries it: data, msg and the

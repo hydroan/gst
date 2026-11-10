@@ -4,6 +4,9 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,7 +25,8 @@ import (
 // whatever JSON codec gin was built with. The codecs the jsoniter and go_json
 // build tags select ignore omitzero, so an envelope encoded through gin's
 // codec grows keys, such as a zero created_at, that the framework's models
-// declare absent.
+// declare absent. The body is what json.Marshal writes, byte for byte: the
+// characters HTML reads are escaped, and a nil slice and a nil map are null.
 func TestJSONEncodesWithStandardLibrary(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	swap.Value(t, &ginjson.API, ginjson.Core(swappedGinCodec{}))
@@ -31,6 +35,10 @@ func TestJSONEncodesWithStandardLibrary(t *testing.T) {
 		Name      string    `json:"name"`
 		CreatedAt time.Time `json:"created_at,omitzero"`
 	}
+	type collections struct {
+		Items []string          `json:"items"`
+		Tags  map[string]string `json:"tags"`
+	}
 	tests := []struct {
 		name string
 		data []any
@@ -38,6 +46,8 @@ func TestJSONEncodesWithStandardLibrary(t *testing.T) {
 	}{
 		{"with data", []any{&sample{Name: "sample"}}, `{"data":{"name":"sample"},"msg":"success","trace_id":"trace-sample"}`},
 		{"without data", nil, `{"data":null,"msg":"success","trace_id":"trace-sample"}`},
+		{"html characters", []any{&sample{Name: "<a&b>"}}, `{"data":{"name":"\u003ca\u0026b\u003e"},"msg":"success","trace_id":"trace-sample"}`},
+		{"nil slice and map", []any{&collections{}}, `{"data":{"items":null,"tags":null},"msg":"success","trace_id":"trace-sample"}`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -198,36 +208,127 @@ func TestAttachment(t *testing.T) {
 // context for the access log and the handler chain stopped, and not the 200
 // with an empty body gin's render leaves behind when the encoding fails
 // under it.
+//
+// The failure envelope is the whole body wherever the encoding failed: a
+// value that fails after a part of the data was encoded leaves nothing of
+// that part in it.
 func TestJSONAnswersAnEncodingFailureAsTheServersOwn(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Set(execctx.KeyTraceID, "trace-sample")
+	tests := []struct {
+		name string
+		data any
+	}{
+		{"nothing encoded before the failure", map[string]any{"ratio": math.NaN()}},
+		{"a part of the data encoded before the failure", []any{strings.Repeat("x", 100_000), math.NaN()}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Set(execctx.KeyTraceID, "trace-sample")
 
-	response.JSON(c, map[string]any{"ratio": math.NaN()})
+			response.JSON(c, tt.data)
 
-	require.Equal(t, http.StatusInternalServerError, w.Code)
-	require.Equal(t, "application/json; charset=utf-8", w.Header().Get("Content-Type"))
-	require.JSONEq(t, `{"data":null,"msg":"The server could not process the request.","trace_id":"trace-sample"}`, w.Body.String())
-	require.Len(t, c.Errors, 1)
-	require.True(t, c.IsAborted())
+			require.Equal(t, http.StatusInternalServerError, w.Code)
+			require.Equal(t, "application/json; charset=utf-8", w.Header().Get("Content-Type"))
+			require.JSONEq(t, `{"data":null,"msg":"The server could not process the request.","trace_id":"trace-sample"}`, w.Body.String())
+			require.Len(t, c.Errors, 1)
+			require.True(t, c.IsAborted())
+		})
+	}
 }
 
-// BenchmarkJSON measures writing a small success envelope, the answer of
-// every successful request.
+// TestJSONWritesEachBodyWhole pins the body of a response to its own data
+// whatever the responses before it and beside it carried: the envelopes are
+// encoded into buffers that are used again, so a body must hold nothing of
+// another response, after a larger one, after one too large to keep its
+// buffer, and among many written at once.
+func TestJSONWritesEachBodyWhole(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	write := func(data string) (status int, body string) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Set(execctx.KeyTraceID, "trace-sample")
+
+		response.JSON(c, data)
+
+		return w.Code, w.Body.String()
+	}
+
+	t.Run("one after another", func(t *testing.T) {
+		for _, size := range []int{100_000, 10, 70_000, 0, 5_000, 1} {
+			data := strings.Repeat("x", size)
+			status, body := write(data)
+			require.Equal(t, http.StatusOK, status)
+			require.Equal(t, `{"data":"`+data+`","msg":"success","trace_id":"trace-sample"}`, body)
+		}
+	})
+
+	t.Run("many at once", func(t *testing.T) {
+		var wg sync.WaitGroup
+		for worker := range 8 {
+			wg.Go(func() {
+				for round := range 200 {
+					data := strings.Repeat(strconv.Itoa(worker), 1+(worker*977+round*131)%6_000)
+					status, body := write(data)
+					if status != http.StatusOK || body != `{"data":"`+data+`","msg":"success","trace_id":"trace-sample"}` {
+						t.Errorf("worker %d round %d: status %d, and the body, %d bytes, is not the response's own", worker, round, status, len(body))
+						return
+					}
+				}
+			})
+		}
+		wg.Wait()
+	})
+}
+
+// BenchmarkJSON measures writing a success envelope, the answer of every
+// successful request: one record, and a page of twenty, the answer of a
+// list.
 func BenchmarkJSON(b *testing.B) {
 	gin.SetMode(gin.TestMode)
 	type sample struct {
-		Name string `json:"name"`
+		ID        string    `json:"id"`
+		Name      string    `json:"name"`
+		Remark    string    `json:"remark"`
+		Amount    int64     `json:"amount"`
+		CreatedAt time.Time `json:"created_at"`
+		UpdatedAt time.Time `json:"updated_at"`
 	}
-	data := &sample{Name: "sample"}
-	w := httptest.NewRecorder()
+	type page struct {
+		Items []*sample `json:"items"`
+		Total int64     `json:"total"`
+	}
+	at := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
+	items := make([]*sample, 20)
+	for i := range items {
+		items[i] = &sample{
+			ID:        "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f40" + strconv.Itoa(10+i),
+			Name:      "sample " + strconv.Itoa(i),
+			Remark:    "a remark as long as the ones a record usually carries",
+			Amount:    int64(i) * 100,
+			CreatedAt: at,
+			UpdatedAt: at,
+		}
+	}
+	cases := []struct {
+		name string
+		data any
+	}{
+		{"record", items[0]},
+		{"page", &page{Items: items, Total: 100_000}},
+	}
+	for _, tc := range cases {
+		b.Run(tc.name, func(b *testing.B) {
+			w := httptest.NewRecorder()
 
-	b.ReportAllocs()
-	for b.Loop() {
-		w.Body.Reset()
-		c, _ := gin.CreateTestContext(w)
-		c.Set(execctx.KeyTraceID, "trace-sample")
-		response.JSON(c, data)
+			b.ReportAllocs()
+			for b.Loop() {
+				w.Body.Reset()
+				c, _ := gin.CreateTestContext(w)
+				c.Set(execctx.KeyTraceID, "trace-sample")
+				response.JSON(c, tc.data)
+			}
+		})
 	}
 }
