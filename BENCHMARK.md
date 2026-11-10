@@ -2,6 +2,8 @@
 
 框架性能基线与压测方法。全部压测接口由 [examples/bench](./examples/bench) 项目提供，「启动被测服务」的命令一律在 `examples/bench` 目录下执行；压测工具使用 [hey](https://github.com/rakyll/hey)。
 
+真实项目形态下的压测（登录态、权限、真数据、真写入、gRPC、多租户、追踪导出、过载）在 [STRESS.md](./STRESS.md)，被压的是 [examples/stress](./examples/stress)；两份文档口径不同，数字不互相比较。
+
 ## 压测目标地址
 
 压测命令通过 `BENCH_BASE_URL` 指向被测服务。值含协议和端口、结尾不带 `/`。URL 在命令里必须用双引号，单引号不展开变量。
