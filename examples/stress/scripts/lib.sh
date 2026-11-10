@@ -64,6 +64,9 @@ infra_down() { docker rm -f gst-stress-mysql gst-stress-redis >/dev/null 2>&1; l
 
 start_server() { # name env=value...
   local name=$1; shift
+  # A server left running would answer in place of the one started here, and
+  # every measurement would be of it.
+  if curl -s -o /dev/null "$BASE/api/ping"; then log "$BASE already answers: stop the server running there first"; exit 1; fi
   SERVER_NAME=$name; SERVER_BIN=$BIN
   cd "$STRESS_DIR" || exit 1
   mkdir -p "$STRESS_DIR/logs"; local f; for f in "$STRESS_DIR"/logs/*.log; do [ -e "$f" ] && : > "$f"; done
@@ -130,13 +133,41 @@ cpu_summary() { # cores us_per_request
   local c0 c1 parsed qps total; read -r c0 c1 < "$1.cpu"; parsed=$(parse_hey "$1"); qps=$(echo "$parsed" | awk '{print $1}'); total=$(echo "$parsed" | awk '{print $7}')
   awk -v c0="$c0" -v c1="$c1" -v qps="$qps" -v total="$total" 'BEGIN { d=c1-c0; if (total>0 && qps>0) printf "%.2f %.1f\n", d/total, d*1e6/(qps*total); else print "0 0" }'
 }
-pprof_total() { # sample_index file
-  go tool pprof -top -sample_index="$1" "$SERVER_BIN" "$2" 2>/dev/null | awk '/Total samples =/ { for (i=1;i<=NF;i++) if ($i=="=") { v=$(i+1); gsub(/,/,"",v); u=v; gsub(/[0-9.]/,"",u); n=v; gsub(/[^0-9.]/,"",n); m=1; if (u=="kB") m=1024; else if (u=="MB") m=1024*1024; else if (u=="GB") m=1024*1024*1024; printf "%.0f\n", n*m; exit } }'
+
+# alloc_profile writes the process's cumulative allocation profile to a file.
+# The profile trails the allocations by up to two collections, so two are run
+# first.
+alloc_profile() { # file
+  curl -s -o /dev/null "$PPROF/debug/pprof/heap?gc=1"; curl -s -o "$1" "$PPROF/debug/pprof/heap?gc=1"
+}
+# alloc_delta prints what the process allocated between two of those
+# profiles, in bytes (alloc_space) or in objects (alloc_objects).
+alloc_delta() { # sample_index before after
+  go tool pprof -top -unit=bytes -sample_index="$1" -base "$2" "$3" 2>/dev/null | awk '/Showing nodes accounting for/ { v=$(NF-1); gsub(/[^0-9]/,"",v); print v; exit }'
+}
+# alloc_case measures what one request of a variant allocates: hey completes
+# a fixed number of requests, 20 s of them at the rate given, no fewer than
+# ALLOC_MIN_REQUESTS and no more than the million hey's report counts,
+# between two readings of the cumulative allocation profile, and the
+# difference is divided by the requests completed. The line goes to
+# allocs.tsv: the case, KB and objects per request, the requests.
+alloc_case() { # name rate url [hey args...]
+  local name=$1 rate=$2 url=$3 n parsed count space objs kb per; shift 3
+  n=$(awk -v q="$rate" -v c="${CONC:-50}" -v m="${ALLOC_MIN_REQUESTS:-20000}" 'BEGIN { n = q * 20; if (n < m) n = m; if (n > 1000000) n = 1000000; print int(n / c) * c }')
+  alloc_profile "$OUT/$name-allocs-before.pb.gz"
+  hey -n "$n" -c "${CONC:-50}" "$@" "$url" > "$OUT/$name-allocs.txt" 2>&1
+  alloc_profile "$OUT/$name-allocs-after.pb.gz"
+  parsed=$(parse_hey "$OUT/$name-allocs.txt"); count=$(echo "$parsed" | awk '{print $5 + $6}')
+  space=$(alloc_delta alloc_space "$OUT/$name-allocs-before.pb.gz" "$OUT/$name-allocs-after.pb.gz")
+  objs=$(alloc_delta alloc_objects "$OUT/$name-allocs-before.pb.gz" "$OUT/$name-allocs-after.pb.gz")
+  kb=$(awk -v b="$space" -v n="$count" 'BEGIN { if (n > 0) printf "%.1f", b / 1024 / n; else print 0 }'); per=$(awk -v o="$objs" -v n="$count" 'BEGIN { if (n > 0) printf "%.0f", o / n; else print 0 }')
+  log "ALLOCS $name: ${kb}KB/req ${per}objs/req ($count requests, non200 $(echo "$parsed" | awk '{print $5}'))"
+  printf '%s\t%s\t%s\t%s\n' "$name" "$kb" "$per" "$count" >> "$OUT/allocs.tsv"
 }
 
-# run_case: warmup 10s -> cooldown -> ROUNDS x 30s -> a 20s run with a 15s
-# allocs profile. Results go to results.tsv (one line per round) and
-# allocs.tsv (one line per case).
+# run_case: warmup 10s -> cooldown -> ROUNDS x 30s -> the allocations of one
+# request (see alloc_case). Results go to results.tsv (one line per round)
+# and allocs.tsv (one line per case).
 run_case() { # name min_cooldown url [hey args...]
   local name=$1 min=$2 url=$3; shift 3
   log "case $name warmup"
@@ -155,13 +186,7 @@ run_case() { # name min_cooldown url [hey args...]
     cooldown "$min"
   done
   if [ "${ALLOCS:-1}" = 1 ]; then
-    hey_run "$OUT/$name-allocs.txt" 20s "$url" "$@" & local hp=$!
-    sleep 2; curl -s -o "$OUT/$name-allocs.pb.gz" "$PPROF/debug/pprof/allocs?seconds=15"; wait $hp
-    local aq space objs kb per; aq=$(parse_hey "$OUT/$name-allocs.txt" | awk '{print $1}')
-    space=$(pprof_total alloc_space "$OUT/$name-allocs.pb.gz"); objs=$(pprof_total alloc_objects "$OUT/$name-allocs.pb.gz")
-    kb=$(awk -v b="$space" -v q="$aq" 'BEGIN{ if (q>0) printf "%.1f", b/1024/(q*15); else print 0 }'); per=$(awk -v o="$objs" -v q="$aq" 'BEGIN{ if (q>0) printf "%.0f", o/(q*15); else print 0 }')
-    log "ALLOCS $name: ${kb}KB/req ${per}objs/req (qps $aq)"
-    printf '%s\t%s\t%s\t%s\n' "$name" "$kb" "$per" "$aq" >> "$OUT/allocs.tsv"
+    alloc_case "$name" "$(echo "$parsed" | awk '{print $1}')" "$url" "$@"
     [ -n "${AFTER_ROUND:-}" ] && $AFTER_ROUND "$name" allocs
     cooldown "$min"
   fi
