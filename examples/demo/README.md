@@ -13,7 +13,7 @@ gst 的入门示例：一个用 `gg new` 生成、按框架推荐写法补齐的
 | `pb/` | `gg gen` 从 `model/board/` 推导的 `.proto` 和 Go 代码，提交进仓库 |
 | `configx/` `cronjob/` `component/` `middleware/` `interceptor/` `module/` | 扩展点：每一项一个文件，在各自的 `xxx.go` 的 `init()` 里注册 |
 | `dao/` | service 之下共用的东西：这里是每进程定时任务刷新、ping 答出的记录计数 |
-| `internal/testsupport/` | 测试共用的一小段：注册并登录一个账号、拨 gRPC 连接 |
+| `internal/testsupport/` | 测试共用的一小段：注册一个新账号并登录 |
 | `config.ini` | 本地运行的配置。测试不靠它，testutil 自己起容器并指定端口 |
 | `main.go`、`*.gen.go` | `gg gen` 生成，不手改 |
 
@@ -88,5 +88,5 @@ grpcurl -plaintext -d '{"payload":{"topic":"news"}}' localhost:8091 demo.board.F
 ```
 
 需要登录的方法把会话 id 放在 `authorization: Bearer <session id>` 里，会话绑定登录时的 User-Agent，
-程序要用什么客户端调用就用什么 User-Agent 登录；写法见 `internal/testsupport/testsupport.go`
-和 `service/board/note/create_test.go`。
+程序要用什么客户端调用就用什么 User-Agent 登录；写法见 `service/board/note/create_test.go`
+（登录时带上 `iamtest.GRPCUserAgent`，调用时用 `grpc.WithBearer` 带上会话）。

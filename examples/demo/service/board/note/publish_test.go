@@ -7,6 +7,10 @@ import (
 	"demo/model/board"
 	pbboard "demo/pb/board"
 
+	"github.com/hydroan/gst/client"
+	gstgrpc "github.com/hydroan/gst/grpc"
+	"github.com/hydroan/gst/testutil"
+	"github.com/hydroan/gst/testutil/iamtest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,8 +36,8 @@ func TestPublish(t *testing.T) {
 	})
 
 	t.Run("over gRPC", func(t *testing.T) {
-		notes := pbboard.NewNoteServiceClient(testsupport.Dial(t))
-		ctx := testsupport.Authorized(t.Context(), testsupport.Session(t))
+		notes := pbboard.NewNoteServiceClient(testutil.DialGRPC(t))
+		ctx := gstgrpc.WithBearer(t.Context(), testsupport.Login(t, client.WithUserAgent(iamtest.GRPCUserAgent)).SessionID)
 
 		rsp, err := notes.PublishNote(ctx, &pbboard.PublishNoteRequest{Id: note.ID, Payload: &pbboard.NotePublishReq{Channel: "wire"}})
 		require.NoError(t, err)

@@ -29,11 +29,12 @@ const (
 )
 
 // seed writes the baseline the scenarios start from, the first time the
-// process starts with an empty database: the tenant registry, the accounts,
-// the menu catalog, each tenant's roles and the bindings that make an
-// account a member of a tenant. It runs in a startup hook, after the
-// framework has initialized the authorization and before the server serves,
-// and finds the root account on every later start, so it writes once.
+// process starts with an empty database: the tenant registry, the accounts
+// beside root, which the iam module seeds from IAM_ROOT_PASSWORD, the menu
+// catalog, each tenant's roles and the bindings that make an account a
+// member of a tenant. It runs in a startup hook, after the framework has
+// initialized the authorization and before the server serves, and finds the
+// registry filled on every later start, so it writes once.
 //
 // What the hook acts in is what a job acts in: no request decided a tenant,
 // so the context acts in the default tenant until tenant.In names another.
@@ -41,7 +42,7 @@ const (
 // are; a tenant's roles and bindings are written on a context acting in that
 // tenant, and the stamp files them under it.
 func seed(ctx context.Context, _ map[string][]string) error {
-	err := database.Database[*iam.User](ctx).Get(new(iam.User), rbac.UserRoot)
+	err := database.Database[*model.Tenant](ctx).Get(new(model.Tenant), tenantAlpha)
 	if err == nil {
 		return nil
 	}
@@ -59,12 +60,8 @@ func seed(ctx context.Context, _ map[string][]string) error {
 			}
 		}
 
-		// The accounts: root is the built-in system root, by its id; the
-		// others are ordinary accounts whose memberships the bindings below
-		// decide. Alice administers alpha, carol beta, dave belongs to both.
-		if _, err := seedAccount(ctx, rbac.UserRoot, rbac.UserRoot, password); err != nil {
-			return err
-		}
+		// The accounts, ordinary ones whose memberships the bindings below
+		// decide: alice administers alpha, carol beta, dave belongs to both.
 		ids := make(map[string]string, 4)
 		for _, username := range []string{"alice", "bob", "carol", "dave"} {
 			id, err := seedAccount(ctx, "", username, password)
@@ -150,14 +147,7 @@ func seed(ctx context.Context, _ map[string][]string) error {
 func seedAccount(ctx context.Context, id, username, password string) (string, error) {
 	user := &iam.User{Username: username, Status: iam.UserStatusActive}
 	user.ID = id
-	if err := database.Database[*iam.User](ctx).Create(user); err != nil {
-		return "", err
-	}
-	credential, err := iam.NewPasswordCredential(ctx, user.ID, password, false)
-	if err != nil {
-		return "", err
-	}
-	if err := database.Database[*iam.PasswordCredential](ctx).Create(credential); err != nil {
+	if err := iam.CreateAccount(ctx, user, password, false); err != nil {
 		return "", err
 	}
 	return user.ID, nil

@@ -7,6 +7,9 @@ import (
 	"cluster/model"
 	"cluster/pb"
 
+	gstgrpc "github.com/hydroan/gst/grpc"
+	"github.com/hydroan/gst/testutil"
+	"github.com/hydroan/gst/testutil/iamtest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,9 +19,9 @@ import (
 // fetched from a peer, which is what makes a missed event visible from
 // outside.
 func TestGetAnswersWhatThisReplicaHolds(t *testing.T) {
-	ctx := testsupport.Authorized(t.Context(), testsupport.Session(t))
+	ctx := gstgrpc.WithBearer(t.Context(), iamtest.GRPCSession(t, testsupport.Root))
 	t.Run("over HTTP", func(t *testing.T) {
-		cli := testsupport.Login(t).Client
+		cli := iamtest.Login(t, testsupport.Root).Client
 
 		missing, err := cli.Get[model.CachedGetRsp](ctx, "/api/caches/never-written-key")
 		require.NoError(t, err)
@@ -35,7 +38,7 @@ func TestGetAnswersWhatThisReplicaHolds(t *testing.T) {
 	})
 
 	t.Run("over gRPC", func(t *testing.T) {
-		caches := pb.NewCachedServiceClient(testsupport.Dial(t))
+		caches := pb.NewCachedServiceClient(testutil.DialGRPC(t))
 
 		missing, err := caches.GetCached(ctx, &pb.GetCachedRequest{Id: "never-written-over-grpc"})
 		require.NoError(t, err)

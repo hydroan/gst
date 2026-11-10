@@ -12,7 +12,9 @@ import (
 	"cluster/pb"
 
 	"github.com/hydroan/gst/client"
+	gstgrpc "github.com/hydroan/gst/grpc"
 	"github.com/hydroan/gst/testutil"
+	"github.com/hydroan/gst/testutil/iamtest"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -29,9 +31,9 @@ import (
 // answers with the x-served-by header the interceptor in
 // interceptor/served_by.go adds to every call.
 func TestCreate(t *testing.T) {
-	ctx := testsupport.Authorized(t.Context(), testsupport.Session(t))
+	ctx := gstgrpc.WithBearer(t.Context(), iamtest.GRPCSession(t, testsupport.Root))
 	t.Run("over HTTP", func(t *testing.T) {
-		cli := testsupport.Login(t).Client
+		cli := iamtest.Login(t, testsupport.Root).Client
 
 		flag, err := cli.Post[model.Flag](ctx, "/api/flags", &model.Flag{Name: flagName("http"), On: true})
 		require.NoError(t, err)
@@ -40,7 +42,7 @@ func TestCreate(t *testing.T) {
 	})
 
 	t.Run("over gRPC", func(t *testing.T) {
-		flags := pb.NewFlagServiceClient(testsupport.Dial(t))
+		flags := pb.NewFlagServiceClient(testutil.DialGRPC(t))
 
 		var header metadata.MD
 		rsp, err := flags.CreateFlag(ctx, &pb.CreateFlagRequest{Flag: &pb.Flag{Name: flagName("grpc"), On: true}}, grpc.Header(&header))
@@ -51,11 +53,11 @@ func TestCreate(t *testing.T) {
 	})
 
 	t.Run("without a name", func(t *testing.T) {
-		cli := testsupport.Login(t).Client
+		cli := iamtest.Login(t, testsupport.Root).Client
 		_, err := cli.Post[model.Flag](ctx, "/api/flags", &model.Flag{On: true})
 		testutil.RequireError(t, err, http.StatusBadRequest)
 
-		flags := pb.NewFlagServiceClient(testsupport.Dial(t))
+		flags := pb.NewFlagServiceClient(testutil.DialGRPC(t))
 		_, err = flags.CreateFlag(ctx, &pb.CreateFlagRequest{Flag: &pb.Flag{On: true}})
 		require.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
@@ -66,7 +68,7 @@ func TestCreate(t *testing.T) {
 		_, err = cli.Post[model.Flag](t.Context(), "/api/flags", &model.Flag{Name: flagName("anonymous")})
 		testutil.RequireError(t, err, http.StatusUnauthorized)
 
-		flags := pb.NewFlagServiceClient(testsupport.Dial(t))
+		flags := pb.NewFlagServiceClient(testutil.DialGRPC(t))
 		_, err = flags.CreateFlag(t.Context(), &pb.CreateFlagRequest{Flag: &pb.Flag{Name: flagName("anonymous")}})
 		require.Equal(t, codes.Unauthenticated, status.Code(err))
 	})
@@ -76,12 +78,12 @@ func TestCreate(t *testing.T) {
 // the two transports sharing one table, and an id no flag has answers
 // NotFound.
 func TestGet(t *testing.T) {
-	ctx := testsupport.Authorized(t.Context(), testsupport.Session(t))
-	cli := testsupport.Login(t).Client
+	ctx := gstgrpc.WithBearer(t.Context(), iamtest.GRPCSession(t, testsupport.Root))
+	cli := iamtest.Login(t, testsupport.Root).Client
 	created, err := cli.Post[model.Flag](ctx, "/api/flags", &model.Flag{Name: flagName("get"), Note: "created over http"})
 	require.NoError(t, err)
 
-	flags := pb.NewFlagServiceClient(testsupport.Dial(t))
+	flags := pb.NewFlagServiceClient(testutil.DialGRPC(t))
 	rsp, err := flags.GetFlag(ctx, &pb.GetFlagRequest{Id: created.ID})
 	require.NoError(t, err)
 	require.Equal(t, created.Name, rsp.GetFlag().GetName())
@@ -94,8 +96,8 @@ func TestGet(t *testing.T) {
 // TestList covers the ListFlag rpc: the filters, sorting and paging of the
 // HTTP list, each filter a field, an operator and its values.
 func TestList(t *testing.T) {
-	ctx := testsupport.Authorized(t.Context(), testsupport.Session(t))
-	flags := pb.NewFlagServiceClient(testsupport.Dial(t))
+	ctx := gstgrpc.WithBearer(t.Context(), iamtest.GRPCSession(t, testsupport.Root))
+	flags := pb.NewFlagServiceClient(testutil.DialGRPC(t))
 	note := flagName("list")
 	names := []string{note + "-a", note + "-b", note + "-c"}
 	for i, name := range names {
@@ -131,8 +133,8 @@ func TestList(t *testing.T) {
 
 // TestUpdate covers the UpdateFlag rpc: the whole flag is replaced.
 func TestUpdate(t *testing.T) {
-	ctx := testsupport.Authorized(t.Context(), testsupport.Session(t))
-	flags := pb.NewFlagServiceClient(testsupport.Dial(t))
+	ctx := gstgrpc.WithBearer(t.Context(), iamtest.GRPCSession(t, testsupport.Root))
+	flags := pb.NewFlagServiceClient(testutil.DialGRPC(t))
 	name := flagName("update")
 	created, err := flags.CreateFlag(ctx, &pb.CreateFlagRequest{Flag: &pb.Flag{Name: name, On: true}})
 	require.NoError(t, err)
@@ -151,8 +153,8 @@ func TestUpdate(t *testing.T) {
 // and the rest keep their values; a mask naming nothing, or a field the flag
 // does not have, is refused with InvalidArgument.
 func TestPatch(t *testing.T) {
-	ctx := testsupport.Authorized(t.Context(), testsupport.Session(t))
-	flags := pb.NewFlagServiceClient(testsupport.Dial(t))
+	ctx := gstgrpc.WithBearer(t.Context(), iamtest.GRPCSession(t, testsupport.Root))
+	flags := pb.NewFlagServiceClient(testutil.DialGRPC(t))
 	created, err := flags.CreateFlag(ctx, &pb.CreateFlagRequest{Flag: &pb.Flag{Name: flagName("patch"), On: true}})
 	require.NoError(t, err)
 	id := created.GetFlag().GetId()
@@ -172,8 +174,8 @@ func TestPatch(t *testing.T) {
 
 // TestDelete covers the DeleteFlag rpc: the flag is gone afterwards.
 func TestDelete(t *testing.T) {
-	ctx := testsupport.Authorized(t.Context(), testsupport.Session(t))
-	flags := pb.NewFlagServiceClient(testsupport.Dial(t))
+	ctx := gstgrpc.WithBearer(t.Context(), iamtest.GRPCSession(t, testsupport.Root))
+	flags := pb.NewFlagServiceClient(testutil.DialGRPC(t))
 	created, err := flags.CreateFlag(ctx, &pb.CreateFlagRequest{Flag: &pb.Flag{Name: flagName("delete")}})
 	require.NoError(t, err)
 	id := created.GetFlag().GetId()
@@ -189,8 +191,8 @@ func TestDelete(t *testing.T) {
 // PatchManyFlag and DeleteManyFlag, over one set of flags: created together,
 // updated together, patched together with a mask each, deleted together.
 func TestBatch(t *testing.T) {
-	ctx := testsupport.Authorized(t.Context(), testsupport.Session(t))
-	flags := pb.NewFlagServiceClient(testsupport.Dial(t))
+	ctx := gstgrpc.WithBearer(t.Context(), iamtest.GRPCSession(t, testsupport.Root))
+	flags := pb.NewFlagServiceClient(testutil.DialGRPC(t))
 	note := flagName("batch")
 	byNote := &pb.ListFlagRequest{Filters: []*pb.ListFlagRequest_Filter{{Field: "note", Values: []string{note}}}}
 

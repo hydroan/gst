@@ -6,6 +6,9 @@ import (
 	"cluster/internal/testsupport"
 	"cluster/pb"
 
+	gstgrpc "github.com/hydroan/gst/grpc"
+	"github.com/hydroan/gst/testutil"
+	"github.com/hydroan/gst/testutil/iamtest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -14,8 +17,8 @@ import (
 // the count once the client has closed its side, and the entries read back
 // from that replica's store.
 func TestLoad(t *testing.T) {
-	ctx := testsupport.Authorized(t.Context(), testsupport.Session(t))
-	caches := pb.NewCachedServiceClient(testsupport.Dial(t))
+	ctx := gstgrpc.WithBearer(t.Context(), iamtest.GRPCSession(t, testsupport.Root))
+	caches := pb.NewCachedServiceClient(testutil.DialGRPC(t))
 
 	stream, err := caches.LoadCached(ctx)
 	require.NoError(t, err)

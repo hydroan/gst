@@ -10,7 +10,7 @@ import (
 	// The application registers its models, services, jobs, leader work,
 	// locks, interceptors and gRPC services through the init of these
 	// packages, exactly as main.go imports them.
-	"cluster/configx"
+	_ "cluster/configx"
 	_ "cluster/cronjob"
 	_ "cluster/interceptor"
 	"cluster/internal/testsupport"
@@ -27,16 +27,18 @@ import (
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
+	gstgrpc "github.com/hydroan/gst/grpc"
 	"github.com/hydroan/gst/testutil"
+	"github.com/hydroan/gst/testutil/iamtest"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 func TestMain(m *testing.M) {
-	// The startup seeds the root account the tests log in as, with the
+	// The iam module seeds the root account the tests log in as, with the
 	// password the environment names.
-	os.Setenv(configx.SEED_ROOT_PASSWORD, testsupport.RootPassword)
+	os.Setenv("IAM_ROOT_PASSWORD", testsupport.RootPassword)
 	testutil.Run(m, testutil.Server{
 		Database: config.DBMySQL,
 		Redis:    true,
@@ -50,7 +52,7 @@ func TestMain(m *testing.M) {
 // rebuild is recorded as a run under the lock, marked ended once it ran to its
 // end.
 func TestCreateRunsOnceAtATime(t *testing.T) {
-	cli := testsupport.Login(t).Client
+	cli := iamtest.Login(t, testsupport.Root).Client
 
 	results := make(chan error, 2)
 	var wg sync.WaitGroup
@@ -95,8 +97,8 @@ func TestCreateRunsOnceAtATime(t *testing.T) {
 // is refused with AlreadyExists, the status a 409 becomes over gRPC; the runs
 // then list over the ListRun rpc, every one marked ended.
 func TestCreateOverGRPCRunsOnceAtATime(t *testing.T) {
-	ctx := testsupport.Authorized(t.Context(), testsupport.Session(t))
-	rebuilds := pb.NewRebuildServiceClient(testsupport.Dial(t))
+	ctx := gstgrpc.WithBearer(t.Context(), iamtest.GRPCSession(t, testsupport.Root))
+	rebuilds := pb.NewRebuildServiceClient(testutil.DialGRPC(t))
 
 	results := make(chan error, 2)
 	var wg sync.WaitGroup
@@ -123,7 +125,7 @@ func TestCreateOverGRPCRunsOnceAtATime(t *testing.T) {
 	require.Equal(t, 1, ran, "exactly one of two concurrent rebuilds runs")
 	require.Equal(t, 1, refused, "the other is refused at once with AlreadyExists")
 
-	runs, err := pb.NewRunServiceClient(testsupport.Dial(t)).ListRun(ctx, &pb.ListRunRequest{
+	runs, err := pb.NewRunServiceClient(testutil.DialGRPC(t)).ListRun(ctx, &pb.ListRunRequest{
 		Filters: []*pb.ListRunRequest_Filter{{Field: "kind", Values: []string{"lock"}}},
 		SortBy:  []string{"created_at desc"},
 	})

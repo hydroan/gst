@@ -8,7 +8,7 @@ import (
 	// locks, interceptors and gRPC services through the init of these
 	// packages, as main.go imports them; the replicated cache component is
 	// left out, since it needs kafka and these tests do not.
-	"cluster/configx"
+	_ "cluster/configx"
 	_ "cluster/cronjob"
 	_ "cluster/interceptor"
 	"cluster/internal/testsupport"
@@ -26,9 +26,9 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	// The startup seeds the root account the tests log in as, with the
+	// The iam module seeds the root account the tests log in as, with the
 	// password the environment names.
-	os.Setenv(configx.SEED_ROOT_PASSWORD, testsupport.RootPassword)
+	os.Setenv("IAM_ROOT_PASSWORD", testsupport.RootPassword)
 	testutil.Run(m, testutil.Server{
 		Database: config.DBSqlite,
 		Redis:    true,

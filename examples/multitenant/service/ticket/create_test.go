@@ -9,7 +9,10 @@ import (
 	"multitenant/pb"
 
 	"github.com/hydroan/gst/client"
+	gstgrpc "github.com/hydroan/gst/grpc"
+	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/testutil"
+	"github.com/hydroan/gst/testutil/iamtest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,8 +24,8 @@ import (
 // the manage menu may read but not write, an update cannot move a ticket to
 // another tenant, and the system root, acting in no one tenant, names it.
 func TestCreate(t *testing.T) {
-	alice := testsupport.Login(t, "alice", "alpha")
-	carol := testsupport.Login(t, "carol", "beta")
+	alice := iamtest.Login(t, iam.LoginReq{Username: "alice", Password: testsupport.Password, TenantID: "alpha"})
+	carol := iamtest.Login(t, iam.LoginReq{Username: "carol", Password: testsupport.Password, TenantID: "beta"})
 
 	ticket, err := alice.Client.Post[model.Ticket](t.Context(), "/api/tickets", map[string]any{"code": "T-1", "title": "printer", "tenant_id": "beta"})
 	require.NoError(t, err)
@@ -49,7 +52,7 @@ func TestCreate(t *testing.T) {
 	})
 
 	t.Run("a role without the manage menu may read but not write", func(t *testing.T) {
-		bob := testsupport.Login(t, "bob", "alpha")
+		bob := iamtest.Login(t, iam.LoginReq{Username: "bob", Password: testsupport.Password, TenantID: "alpha"})
 		got, err := bob.Client.Get[model.Ticket](t.Context(), "/api/tickets/"+ticket.ID)
 		require.NoError(t, err)
 		require.Equal(t, ticket.ID, got.ID)
@@ -67,7 +70,7 @@ func TestCreate(t *testing.T) {
 		// across all of them: its body names the tenant a row is filed
 		// under, and a row naming none goes to the tenant the request acts
 		// in.
-		root := testsupport.Login(t, "root", "alpha")
+		root := iamtest.Login(t, iam.LoginReq{Username: "root", Password: testsupport.Password, TenantID: "alpha"})
 		filed, err := root.Client.Post[model.Ticket](t.Context(), "/api/tickets", map[string]any{"code": "T-9", "title": "filed for beta", "tenant_id": "beta"})
 		require.NoError(t, err)
 		require.Equal(t, "beta", filed.GetTenantID())
@@ -83,8 +86,8 @@ func TestCreate(t *testing.T) {
 	})
 
 	t.Run("over gRPC the stamp holds as well", func(t *testing.T) {
-		tickets := pb.NewTicketServiceClient(testsupport.Dial(t))
-		ctx := testsupport.Authorized(t.Context(), testsupport.Session(t, "alice", "alpha"))
+		tickets := pb.NewTicketServiceClient(testutil.DialGRPC(t))
+		ctx := gstgrpc.WithBearer(t.Context(), iamtest.GRPCSession(t, iam.LoginReq{Username: "alice", Password: testsupport.Password, TenantID: "alpha"}))
 		created, err := tickets.CreateTicket(ctx, &pb.CreateTicketRequest{Ticket: &pb.Ticket{Code: "T-2", Title: "over grpc", TenantId: "beta"}})
 		require.NoError(t, err)
 		require.Equal(t, "alpha", created.GetTicket().GetTenantId())

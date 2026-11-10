@@ -10,6 +10,9 @@ import (
 	"cluster/pb"
 
 	"github.com/hydroan/gst/database"
+	gstgrpc "github.com/hydroan/gst/grpc"
+	"github.com/hydroan/gst/testutil"
+	"github.com/hydroan/gst/testutil/iamtest"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -21,7 +24,7 @@ import (
 // hangs up. The leader work of the test process writes numbers of its own
 // meanwhile, which the stream carries too; the test looks for its own.
 func TestWatch(t *testing.T) {
-	ctx := testsupport.Authorized(t.Context(), testsupport.Session(t))
+	ctx := gstgrpc.WithBearer(t.Context(), iamtest.GRPCSession(t, testsupport.Root))
 	base := time.Now().UnixNano() / int64(time.Millisecond) * 1000
 	write := func(seq int64) {
 		require.NoError(t, database.Database[*model.CounterStep](context.Background()).Create(&model.CounterStep{Seq: seq, Tenure: "watch-test", Replica: "watch-test"}))
@@ -31,7 +34,7 @@ func TestWatch(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	steps := pb.NewCounterStepServiceClient(testsupport.Dial(t))
+	steps := pb.NewCounterStepServiceClient(testutil.DialGRPC(t))
 	stream, err := steps.WatchCounterStep(ctx, &pb.WatchCounterStepRequest{Payload: &pb.CounterStepWatchReq{After: base}})
 	require.NoError(t, err)
 
@@ -58,13 +61,13 @@ func TestWatch(t *testing.T) {
 // TestList covers the ListCounterStep rpc: the numbers of the counter,
 // filtered and sorted as the HTTP list is.
 func TestList(t *testing.T) {
-	ctx := testsupport.Authorized(t.Context(), testsupport.Session(t))
+	ctx := gstgrpc.WithBearer(t.Context(), iamtest.GRPCSession(t, testsupport.Root))
 	base := time.Now().UnixNano()/int64(time.Millisecond)*1000 + 500
 	for _, seq := range []int64{base + 1, base + 2} {
 		require.NoError(t, database.Database[*model.CounterStep](context.Background()).Create(&model.CounterStep{Seq: seq, Tenure: "list-test", Replica: "list-test"}))
 	}
 
-	steps := pb.NewCounterStepServiceClient(testsupport.Dial(t))
+	steps := pb.NewCounterStepServiceClient(testutil.DialGRPC(t))
 	rsp, err := steps.ListCounterStep(ctx, &pb.ListCounterStepRequest{
 		Filters: []*pb.ListCounterStepRequest_Filter{{Field: "tenure", Values: []string{"list-test"}}},
 		SortBy:  []string{"seq desc"},

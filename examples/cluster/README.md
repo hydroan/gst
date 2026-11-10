@@ -15,7 +15,7 @@
 | `model/run.go`、`dao/run.go` | 每一轮定时任务、每一次锁下的运行：开始时记一行，跑完时补上结束时间，都写在工作自己的事务里；被打断的没有结束时间。`GET /api/runs`，也是 gRPC 的 `ListRun` |
 | `model/counter_step.go`、`service/counter_step/` | 计数器的每个数字，和写它的那一任、那个副本。`GET /api/counter_steps`；`WatchCounterStep` 服务端流从某个数字之后一直推送，哪个副本都能服务，被切断的客户端换个副本从上次的数字接着读 |
 | `model/flag.go`、`service/flag/` | 功能开关，全部署共用一张表：十个标准动作全开，含批量和 Patch，HTTP 的 `/api/flags` 和 gRPC 的 `CreateFlag`、`PatchFlag`、`CreateManyFlag` 等一一对应，Create 钩子给打开了却没写 percent 的开关补成 100，两种传输都经过它 |
-| `module/module.go`、`module/seed.go`、`configx/seed.go`、`middleware/middleware.go`、`interceptor/interceptor.go` | iam 模块的登录和会话，authz 模块的角色、绑定和授权判定；会话检查和授权在 HTTP 上挂 `middleware.IAMSession()`、`middleware.Authz()`，在 gRPC 上挂 `interceptor.IAMSession()`、`interceptor.Authz()`。会话存在 Redis 里，三个副本共用，在哪个副本登录都算数；策略每个副本各存一份内存副本，一分钟从主库重载一次。启动时播种内置的 root 账号，口令来自 `SEED_ROOT_PASSWORD`，没配就不启动 |
+| `module/module.go`、`middleware/middleware.go`、`interceptor/interceptor.go` | iam 模块的登录和会话，authz 模块的角色、绑定和授权判定；会话检查和授权在 HTTP 上挂 `middleware.IAMSession()`、`middleware.Authz()`，在 gRPC 上挂 `interceptor.IAMSession()`、`interceptor.Authz()`。会话存在 Redis 里，三个副本共用，在哪个副本登录都算数；策略每个副本各存一份内存副本，一分钟从主库重载一次。内置的 root 账号由 iam 模块在第一次启动时播种，口令来自 `IAM_ROOT_PASSWORD` |
 | `interceptor/served_by.go` | 项目自己的 gRPC 拦截器：每个经过项目拦截器的调用（健康与反射不经过）响应头带 `x-served-by`，写的是答话的副本，和行里的 `replica` 对得上 |
 | `pb/` | `gg gen` 从声明了 `GRPC()` 的模型推导的 `.proto` 和 Go 代码，提交进仓库 |
 | `Dockerfile` | 镜像：以非 root 用户运行，配置全部来自环境变量；PID 1 是 tini，方便从 Pod 里给进程发信号；带 curl 和 grpcurl，场景里在 Pod 里调本副本或集群内地址 |

@@ -164,7 +164,7 @@ spec:
                 secretKeyRef:
                   name: mysql
                   key: password
-            - name: SEED_ROOT_PASSWORD
+            - name: IAM_ROOT_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: cluster

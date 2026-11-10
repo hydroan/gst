@@ -4,10 +4,10 @@ import (
 	"io"
 	"testing"
 
-	"demo/internal/testsupport"
 	pbboard "demo/pb/board"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -15,7 +15,7 @@ import (
 // stream, public, answering three events of the topic and ending, with the
 // x-served-by header the project's interceptor adds to every call.
 func TestWatch(t *testing.T) {
-	feeds := pbboard.NewFeedServiceClient(testsupport.Dial(t))
+	feeds := pbboard.NewFeedServiceClient(testutil.DialGRPC(t))
 
 	stream, err := feeds.WatchFeed(t.Context(), &pbboard.WatchFeedRequest{Payload: &pbboard.FeedWatchReq{Topic: "news"}})
 	require.NoError(t, err)

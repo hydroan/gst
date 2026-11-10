@@ -7,6 +7,9 @@ import (
 	"cluster/model"
 	"cluster/pb"
 
+	gstgrpc "github.com/hydroan/gst/grpc"
+	"github.com/hydroan/gst/testutil"
+	"github.com/hydroan/gst/testutil/iamtest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,9 +19,9 @@ import (
 // replica that missed it keeps serving the entry until the ttl runs out,
 // which the deployment scenarios in the README check.
 func TestDeleteRemovesTheEntry(t *testing.T) {
-	ctx := testsupport.Authorized(t.Context(), testsupport.Session(t))
+	ctx := gstgrpc.WithBearer(t.Context(), iamtest.GRPCSession(t, testsupport.Root))
 	t.Run("over HTTP", func(t *testing.T) {
-		cli := testsupport.Login(t).Client
+		cli := iamtest.Login(t, testsupport.Root).Client
 
 		_, err := cli.Post[model.CachedCreateRsp](ctx, "/api/caches", model.CachedReq{Key: "deleted-key", Value: "deleted-value"})
 		require.NoError(t, err)
@@ -33,7 +36,7 @@ func TestDeleteRemovesTheEntry(t *testing.T) {
 	})
 
 	t.Run("over gRPC", func(t *testing.T) {
-		caches := pb.NewCachedServiceClient(testsupport.Dial(t))
+		caches := pb.NewCachedServiceClient(testutil.DialGRPC(t))
 
 		_, err := caches.CreateCached(ctx, &pb.CreateCachedRequest{Payload: &pb.CachedReq{Key: "deleted-over-grpc", Value: "deleted-value"}})
 		require.NoError(t, err)

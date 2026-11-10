@@ -8,6 +8,9 @@ import (
 	"cluster/pb"
 
 	"github.com/cockroachdb/errors"
+	gstgrpc "github.com/hydroan/gst/grpc"
+	"github.com/hydroan/gst/testutil"
+	"github.com/hydroan/gst/testutil/iamtest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,8 +19,8 @@ import (
 // replica holds, a key it never received answered as missing, and the
 // stream ending once the client closes its side.
 func TestExchange(t *testing.T) {
-	ctx := testsupport.Authorized(t.Context(), testsupport.Session(t))
-	caches := pb.NewCachedServiceClient(testsupport.Dial(t))
+	ctx := gstgrpc.WithBearer(t.Context(), iamtest.GRPCSession(t, testsupport.Root))
+	caches := pb.NewCachedServiceClient(testutil.DialGRPC(t))
 	_, err := caches.CreateCached(ctx, &pb.CreateCachedRequest{Payload: &pb.CachedReq{Key: "exchanged-key", Value: "exchanged-value"}})
 	require.NoError(t, err)
 

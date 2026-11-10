@@ -8,7 +8,7 @@ import (
 	// locks, interceptors and gRPC services through the init of these
 	// packages, exactly as main.go imports them.
 	_ "cluster/component"
-	"cluster/configx"
+	_ "cluster/configx"
 	_ "cluster/cronjob"
 	_ "cluster/interceptor"
 	"cluster/internal/testsupport"
@@ -22,14 +22,16 @@ import (
 	_ "cluster/service"
 
 	"github.com/hydroan/gst/config"
+	gstgrpc "github.com/hydroan/gst/grpc"
 	"github.com/hydroan/gst/testutil"
+	"github.com/hydroan/gst/testutil/iamtest"
 	"github.com/stretchr/testify/require"
 )
 
 func TestMain(m *testing.M) {
-	// The startup seeds the root account the tests log in as, with the
+	// The iam module seeds the root account the tests log in as, with the
 	// password the environment names.
-	os.Setenv(configx.SEED_ROOT_PASSWORD, testsupport.RootPassword)
+	os.Setenv("IAM_ROOT_PASSWORD", testsupport.RootPassword)
 	testutil.Run(m, testutil.Server{
 		Database: config.DBMySQL,
 		Redis:    true,
@@ -44,9 +46,9 @@ func TestMain(m *testing.M) {
 // propagation between replicas is what the deployment scenarios in the README
 // check; one process can only show that the entry was cached at all.
 func TestCreateCachesTheEntry(t *testing.T) {
-	ctx := testsupport.Authorized(t.Context(), testsupport.Session(t))
+	ctx := gstgrpc.WithBearer(t.Context(), iamtest.GRPCSession(t, testsupport.Root))
 	t.Run("over HTTP", func(t *testing.T) {
-		cli := testsupport.Login(t).Client
+		cli := iamtest.Login(t, testsupport.Root).Client
 
 		rsp, err := cli.Post[model.CachedCreateRsp](ctx, "/api/caches", model.CachedReq{Key: "created-key", Value: "created-value"})
 		require.NoError(t, err)
@@ -60,7 +62,7 @@ func TestCreateCachesTheEntry(t *testing.T) {
 	})
 
 	t.Run("over gRPC", func(t *testing.T) {
-		caches := pb.NewCachedServiceClient(testsupport.Dial(t))
+		caches := pb.NewCachedServiceClient(testutil.DialGRPC(t))
 
 		rsp, err := caches.CreateCached(ctx, &pb.CreateCachedRequest{Payload: &pb.CachedReq{Key: "created-over-grpc", Value: "created-value"}})
 		require.NoError(t, err)

@@ -7,6 +7,10 @@ import (
 	"demo/model/board"
 	pbboard "demo/pb/board"
 
+	"github.com/hydroan/gst/client"
+	gstgrpc "github.com/hydroan/gst/grpc"
+	"github.com/hydroan/gst/testutil"
+	"github.com/hydroan/gst/testutil/iamtest"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -27,8 +31,8 @@ func TestCreate(t *testing.T) {
 	})
 
 	t.Run("over gRPC", func(t *testing.T) {
-		notes := pbboard.NewNoteServiceClient(testsupport.Dial(t))
-		ctx := testsupport.Authorized(t.Context(), testsupport.Session(t))
+		notes := pbboard.NewNoteServiceClient(testutil.DialGRPC(t))
+		ctx := gstgrpc.WithBearer(t.Context(), testsupport.Login(t, client.WithUserAgent(iamtest.GRPCUserAgent)).SessionID)
 		rsp, err := notes.CreateNote(ctx, &pbboard.CreateNoteRequest{Note: &pbboard.Note{Title: "hello", Body: "over grpc", Published: true}})
 		require.NoError(t, err)
 		require.Equal(t, "hello", rsp.GetNote().GetTitle())
@@ -37,7 +41,7 @@ func TestCreate(t *testing.T) {
 	})
 
 	t.Run("over gRPC without a session", func(t *testing.T) {
-		notes := pbboard.NewNoteServiceClient(testsupport.Dial(t))
+		notes := pbboard.NewNoteServiceClient(testutil.DialGRPC(t))
 		_, err := notes.CreateNote(t.Context(), &pbboard.CreateNoteRequest{Note: &pbboard.Note{Title: "hello"}})
 		require.Equal(t, codes.Unauthenticated, status.Code(err))
 	})

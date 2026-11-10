@@ -15,14 +15,14 @@
 | `middleware/`、`interceptor/` | HTTP 和 gRPC 各挂三段认证链，顺序一样：iam 的会话检查（写下会话里的租户）、项目自己的网关头覆写、authz 的授权（在那个租户里判定，并把它交给行级隔离） |
 | `configx/gateway.go`、`configx/seed.go` | `[gateway] tenant_header`：可信网关放租户的请求头名，空就不覆写；`[seed] password`：播种账号的口令 |
 | `pb/` | `gg gen` 从 `model/ticket.go` 推导的 `.proto` 和 Go 代码，提交进仓库 |
-| `internal/testsupport/` | 测试共用：用播种账号登进某个租户、拨 gRPC 连接 |
+| `internal/testsupport/` | 测试共用的播种口令；登录用框架的 `testutil/iamtest`，登录请求里点名租户 |
 
 启动时播种的数据：
 
 | | |
 | --- | --- |
 | 租户 | `alpha`（Alpha）、`beta`（Beta） |
-| 账号 | `root`（内置的 system root）、`alice`、`bob`、`carol`、`dave`，口令都是 `[seed] password`，默认 `12345678` |
+| 账号 | `root`（内置的 system root，iam 模块按 `IAM_ROOT_PASSWORD` 播种）、`alice`、`bob`、`carol`、`dave`（口令是 `[seed] password`，默认 `12345678`）；下面的命令把两个口令都设成 `12345678` |
 | 菜单（全局目录） | `tickets`：读票（GET `/api/tickets`、`/api/tickets/{id}`）；`tickets_manage`：写票（POST、PUT、PATCH、DELETE）；`digests`：读汇总 |
 | 角色 | alpha：`agent`（tickets、digests）、`manager`（三个都有）；beta：`agent`（tickets、digests） |
 | 绑定 | alice 是 alpha 的内置管理员 `admin`；bob 是 alpha 的 agent；dave 是 alpha 的 manager，也是 beta 的 agent；carol 是 beta 的 admin |
@@ -43,7 +43,7 @@ mysql -uroot -p -e "CREATE DATABASE multitenant; GRANT ALL ON multitenant.* TO '
 ```
 
 ```bash
-cd examples/multitenant && go run .
+cd examples/multitenant && IAM_ROOT_PASSWORD=12345678 go run .
 ```
 
 HTTP 在 8092、gRPC 在 8093，接口文档在 http://localhost:8092/docs/index.html 。日志一行一条 JSON 写到 stdout，`logger` 字段标明哪一路（`access`、`authz`、`cronjob`、`app` 等）。
@@ -318,5 +318,5 @@ go test ./...
 ## 正式环境
 
 - `[gateway] tenant_header` 只在网关会剥掉客户端自带的同名头时才配，它的值被原样信任。
-- 播种口令经 `SEED_PASSWORD` 注入；root 的口令只在第一次启动时写进库，之后改口令走 iam 的接口，换配置不会改掉已经播种的账号。
+- 播种口令经 `SEED_PASSWORD` 注入，root 的经 `IAM_ROOT_PASSWORD`；都只在第一次启动时写进库，之后改口令走 iam 的接口，换配置不会改掉已经播种的账号。
 - 关掉 `auto_migrate`，表结构变更走 `gg migrate`。

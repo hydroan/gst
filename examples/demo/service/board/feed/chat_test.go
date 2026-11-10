@@ -8,6 +8,10 @@ import (
 	pbboard "demo/pb/board"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/client"
+	gstgrpc "github.com/hydroan/gst/grpc"
+	"github.com/hydroan/gst/testutil"
+	"github.com/hydroan/gst/testutil/iamtest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -15,9 +19,9 @@ import (
 // bidirectional stream echoing every event until the client closes its
 // side.
 func TestChat(t *testing.T) {
-	feeds := pbboard.NewFeedServiceClient(testsupport.Dial(t))
+	feeds := pbboard.NewFeedServiceClient(testutil.DialGRPC(t))
 
-	stream, err := feeds.ChatFeed(testsupport.Authorized(t.Context(), testsupport.Session(t)))
+	stream, err := feeds.ChatFeed(gstgrpc.WithBearer(t.Context(), testsupport.Login(t, client.WithUserAgent(iamtest.GRPCUserAgent)).SessionID))
 	require.NoError(t, err)
 	for seq, body := range []string{"hello", "again"} {
 		require.NoError(t, stream.Send(&pbboard.ChatFeedRequest{Payload: &pbboard.FeedEvent{Seq: int64(seq + 1), Body: body}}))

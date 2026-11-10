@@ -1,15 +1,17 @@
 package ticket_test
 
 import (
+	"os"
 	"testing"
 
 	// The registrations of main.go: the models, modules, services, jobs,
 	// middleware and interceptors register themselves through the init of
 	// these packages, and pb the gRPC services.
 	_ "multitenant/component"
-	_ "multitenant/configx"
+	"multitenant/configx"
 	_ "multitenant/cronjob"
 	_ "multitenant/interceptor"
+	"multitenant/internal/testsupport"
 	_ "multitenant/leader"
 	_ "multitenant/lock"
 	_ "multitenant/middleware"
@@ -30,6 +32,10 @@ import (
 // and the accounts the tests log in as, and the server serves the tests,
 // over HTTP and gRPC, until they are done.
 func TestMain(m *testing.M) {
+	// The startup hook seeds the accounts the tests log in as, and the iam
+	// module the root account, both with the one test password.
+	os.Setenv(configx.SEED_PASSWORD, testsupport.Password)
+	os.Setenv("IAM_ROOT_PASSWORD", testsupport.Password)
 	testutil.Run(m, testutil.Server{
 		Database: config.DBSqlite,
 		Redis:    true,

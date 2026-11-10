@@ -6,6 +6,8 @@ import (
 	"multitenant/internal/testsupport"
 	"multitenant/model"
 
+	"github.com/hydroan/gst/module/iam"
+	"github.com/hydroan/gst/testutil/iamtest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -14,13 +16,13 @@ import (
 // in, and that tenant as current, the default tenant for a login naming
 // none.
 func TestList(t *testing.T) {
-	dave := testsupport.Login(t, "dave", "alpha")
+	dave := iamtest.Login(t, iam.LoginReq{Username: "dave", Password: testsupport.Password, TenantID: "alpha"})
 	memberships, err := dave.Client.Get[model.MembershipListRsp](t.Context(), "/api/memberships")
 	require.NoError(t, err)
 	require.Equal(t, []string{"alpha", "beta"}, memberships.Tenants)
 	require.Equal(t, "alpha", memberships.Current)
 
-	bob := testsupport.Login(t, "bob", "")
+	bob := iamtest.Login(t, iam.LoginReq{Username: "bob", Password: testsupport.Password})
 	memberships, err = bob.Client.Get[model.MembershipListRsp](t.Context(), "/api/memberships")
 	require.NoError(t, err)
 	require.Equal(t, []string{"alpha"}, memberships.Tenants)

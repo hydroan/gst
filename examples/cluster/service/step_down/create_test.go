@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	_ "cluster/component"
-	"cluster/configx"
+	_ "cluster/configx"
 	_ "cluster/cronjob"
 	_ "cluster/interceptor"
 	"cluster/internal/testsupport"
@@ -19,14 +19,16 @@ import (
 	_ "cluster/service"
 
 	"github.com/hydroan/gst/config"
+	gstgrpc "github.com/hydroan/gst/grpc"
 	"github.com/hydroan/gst/testutil"
+	"github.com/hydroan/gst/testutil/iamtest"
 	"github.com/stretchr/testify/require"
 )
 
 func TestMain(m *testing.M) {
-	// The startup seeds the root account the tests log in as, with the
+	// The iam module seeds the root account the tests log in as, with the
 	// password the environment names.
-	os.Setenv(configx.SEED_ROOT_PASSWORD, testsupport.RootPassword)
+	os.Setenv("IAM_ROOT_PASSWORD", testsupport.RootPassword)
 	testutil.Run(m, testutil.Server{
 		Database: config.DBMySQL,
 		Redis:    true,
@@ -40,9 +42,9 @@ func TestMain(m *testing.M) {
 // Whether that replica held the leadership is what asked reports; the
 // deployment scenarios in the README send it to the one that does.
 func TestCreateAsksTheLeaderWorkToReturn(t *testing.T) {
-	ctx := testsupport.Authorized(t.Context(), testsupport.Session(t))
+	ctx := gstgrpc.WithBearer(t.Context(), iamtest.GRPCSession(t, testsupport.Root))
 	t.Run("over HTTP", func(t *testing.T) {
-		cli := testsupport.Login(t).Client
+		cli := iamtest.Login(t, testsupport.Root).Client
 
 		rsp, err := cli.Post[model.StepDownRsp](ctx, "/api/step-downs", nil)
 		require.NoError(t, err)
@@ -50,7 +52,7 @@ func TestCreateAsksTheLeaderWorkToReturn(t *testing.T) {
 	})
 
 	t.Run("over gRPC", func(t *testing.T) {
-		rsp, err := pb.NewStepDownServiceClient(testsupport.Dial(t)).CreateStepDown(ctx, &pb.CreateStepDownRequest{})
+		rsp, err := pb.NewStepDownServiceClient(testutil.DialGRPC(t)).CreateStepDown(ctx, &pb.CreateStepDownRequest{})
 		require.NoError(t, err)
 		require.NotEmpty(t, rsp.GetResult().GetReplica(), "the reply names the replica that took the request")
 	})

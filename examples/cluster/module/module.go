@@ -7,17 +7,15 @@
 // established on one replica is good on all of them, while the policies
 // every replica decides from are its own copy of the stored rules, reloaded
 // once a minute. The root account the deployment administers itself through
-// is seeded at startup, in seed.go.
+// is seeded by the iam module at the first start, from IAM_ROOT_PASSWORD.
 package module
 
 import (
 	"github.com/hydroan/gst/module/authz"
 	"github.com/hydroan/gst/module/iam"
-	"github.com/hydroan/gst/router"
 )
 
 func init() {
 	iam.Register()
 	authz.Register()
-	router.OnRoutesReady(seedRoot)
 }
