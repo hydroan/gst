@@ -67,6 +67,10 @@ func TransactionOn(ctx context.Context, instance *gorm.DB, fn func(ctx context.C
 	return transactionOn(ctx, instance, fn)
 }
 
+// transactionSpanName is the name of the span a transaction runs under,
+// built once: transactionOn starts one for every transaction it opens.
+var transactionSpanName = gstotel.OperationSpanName("database", "Transaction")
+
 // transactionOn is the shared body of Transaction and TransactionOn. The
 // connection handle keys the context transaction, so per-instance
 // transactions coexist and joining is always same-instance only.
@@ -84,7 +88,7 @@ func transactionOn(ctx context.Context, base *gorm.DB, fn func(ctx context.Conte
 		return fn(ctx)
 	}
 
-	spanCtx, span := gstotel.StartSpan(ctx, gstotel.OperationSpanName("database", "Transaction"))
+	spanCtx, span := gstotel.StartSpan(ctx, transactionSpanName)
 	defer span.End()
 	// No recording gate here: both attributes are constants, so there is
 	// nothing to skip building. Gate where assembling the attributes costs

@@ -262,8 +262,22 @@ func RequestRootContext(ctx context.Context) context.Context {
 	return trace.ContextWithSpan(ctx, span)
 }
 
+// spanNameSegmentCap is the most segments a span name has: the component,
+// the resource and the operation of FrameworkSpanName. joinSpanName sizes
+// its segment list to it, which keeps the list off the heap; the worst-case
+// test keeps the count honest when a segment is added.
+const spanNameSegmentCap = 3
+
+// spanNameSeparators rewrites the separators a segment may carry, a space, a
+// hyphen, a dot and a slash, as underscores, the separator the case
+// conversions of spanComponentName and spanSymbolName split words on.
+var spanNameSeparators = strings.NewReplacer(" ", "_", "-", "_", ".", "_", "/", "_")
+
+// joinSpanName joins the name of component and the names of symbols with
+// dots, leaving out the segments that have none: "database", "Record" and
+// "Get" make "database.Record.Get", "cache" and "get" make "cache.Get".
 func joinSpanName(component string, symbols ...string) string {
-	names := make([]string, 0, len(symbols)+1)
+	names := make([]string, 0, spanNameSegmentCap)
 	if component = spanComponentName(component); component != "" {
 		names = append(names, component)
 	}
@@ -275,17 +289,23 @@ func joinSpanName(component string, symbols ...string) string {
 	return strings.Join(names, ".")
 }
 
+// spanComponentName returns the snake_case name of a component segment:
+// "database" stays "database", "HTTPServer" and "http-server" both become
+// "http_server". A segment of lowercase letters alone, which the framework's
+// own components are, is returned as it is.
 func spanComponentName(segment string) string {
 	segment = strings.TrimSpace(segment)
-	if segment == "" {
-		return ""
+	if strings.IndexFunc(segment, func(r rune) bool { return r < 'a' || r > 'z' }) < 0 {
+		return segment
 	}
-
-	replacer := strings.NewReplacer(" ", "_", "-", "_", ".", "_", "/", "_")
-	segment = replacer.Replace(segment)
-	return strings.Trim(strcase.SnakeCase(segment), "_")
+	return strings.Trim(strcase.SnakeCase(spanNameSeparators.Replace(segment)), "_")
 }
 
+// spanSymbolName returns the UpperCamelCase name of a resource or operation
+// segment: "RoleBinding" stays "RoleBinding", "get" becomes "Get" and
+// "assign_role" becomes "AssignRole". A segment that starts with an
+// uppercase letter and carries no separator, a Go type or method name, is
+// returned as it is.
 func spanSymbolName(segment string) string {
 	segment = strings.TrimSpace(segment)
 	if segment == "" {
@@ -294,10 +314,7 @@ func spanSymbolName(segment string) string {
 	if !strings.ContainsAny(segment, " _-./") && segment[0] >= 'A' && segment[0] <= 'Z' {
 		return segment
 	}
-
-	replacer := strings.NewReplacer(" ", "_", "-", "_", ".", "_", "/", "_")
-	segment = replacer.Replace(segment)
-	return strcase.UpperCamelCase(segment)
+	return strcase.UpperCamelCase(spanNameSeparators.Replace(segment))
 }
 
 // normalizeConfig applies OTEL defaults and validates startup-only settings.

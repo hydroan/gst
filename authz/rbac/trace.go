@@ -66,6 +66,10 @@ func traceRBAC(ctx context.Context, operation string, fields []attribute.KeyValu
 	}
 }
 
+// authorizeSpanName is the name of the span one decision is made under,
+// built once: a decision is made on every request.
+var authorizeSpanName = gstotel.OperationSpanName("rbac", "authorize")
+
 // traceAuthorize starts the span one decision is made under, and returns a
 // callback that records what was decided rather than only whether deciding
 // worked.
@@ -86,7 +90,7 @@ func traceAuthorize(ctx context.Context, tenant string) func(types.Decision, err
 		return func(types.Decision, error) {}
 	}
 
-	_, span := gstotel.StartSpan(contextOrBackground(ctx), gstotel.OperationSpanName("rbac", "authorize"))
+	_, span := gstotel.StartSpan(contextOrBackground(ctx), authorizeSpanName)
 	if !gstotel.IsSpanRecording(span) {
 		return func(types.Decision, error) { span.End() }
 	}

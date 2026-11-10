@@ -41,15 +41,17 @@ const middlewareOutcomeAttrCap = 5
 //
 //	wrapped := middlewareWrapper(getFunctionName(middleware), middleware)
 func middlewareWrapper(name string, middleware gin.HandlerFunc) gin.HandlerFunc {
+	// The canonical gst operation name of the middleware's span, built once
+	// here, as the middleware is wrapped, and shared by every request it
+	// serves.
+	spanName := gstotel.OperationSpanName("middleware", name)
+
 	return func(c *gin.Context) {
 		// Skip tracing if OTEL is not enabled
 		if !gstotel.IsEnabled() {
 			middleware(c)
 			return
 		}
-
-		// Use the canonical gst operation name for middleware spans.
-		spanName := gstotel.OperationSpanName("middleware", name)
 
 		// Start new span for middleware execution under the HTTP request span.
 		originalCtx := c.Request.Context()

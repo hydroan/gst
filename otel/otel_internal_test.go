@@ -2,6 +2,7 @@ package otel
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -210,6 +211,27 @@ func TestFrameworkSpanNameUsesDottedGoNames(t *testing.T) {
 			operation: "createAfter",
 			want:      "database.RoleBinding.CreateAfter",
 		},
+		{
+			name:      "component in camel case",
+			component: "HTTPServer",
+			resource:  "Record",
+			operation: "Get",
+			want:      "http_server.Record.Get",
+		},
+		{
+			name:      "component with a separator",
+			component: "http-server",
+			resource:  "Record",
+			operation: "Get",
+			want:      "http_server.Record.Get",
+		},
+		{
+			name:      "no resource",
+			component: "database",
+			resource:  "",
+			operation: "get",
+			want:      "database.Get",
+		},
 	}
 
 	for _, tt := range tests {
@@ -244,6 +266,18 @@ func TestOperationSpanNameUsesDottedGoNames(t *testing.T) {
 			operation: "assign_role",
 			want:      "rbac.AssignRole",
 		},
+		{
+			name:      "qualified function name",
+			component: "middleware",
+			operation: "github.com/x/y.Middleware",
+			want:      "middleware.GithubComXYMiddleware",
+		},
+		{
+			name:      "no component",
+			component: "",
+			operation: "get",
+			want:      "Get",
+		},
 	}
 
 	for _, tt := range tests {
@@ -251,6 +285,23 @@ func TestOperationSpanNameUsesDottedGoNames(t *testing.T) {
 			require.Equal(t, tt.want, OperationSpanName(tt.component, tt.operation))
 		})
 	}
+}
+
+// TestSpanNameSegmentsFitTheCapacityInTheWorstCase pins spanNameSegmentCap
+// to the longest name there is, a component, a resource and an operation:
+// its segments fill the list joinSpanName sizes exactly, so building it
+// allocates the name's own text and nothing else, where a segment more
+// would grow the list onto the heap.
+func TestSpanNameSegmentsFitTheCapacityInTheWorstCase(t *testing.T) {
+	name := FrameworkSpanName("service", "AdminUserSession", "DeleteManyAfter")
+	require.Len(t, strings.Split(name, "."), spanNameSegmentCap)
+
+	// AllocsPerRun averages over whole allocations, so the count is an
+	// integer already.
+	allocs := int(testing.AllocsPerRun(100, func() {
+		_ = FrameworkSpanName("service", "AdminUserSession", "DeleteManyAfter")
+	}))
+	require.Equal(t, 1, allocs)
 }
 
 // plainError is an error without any embedded stack trace.
