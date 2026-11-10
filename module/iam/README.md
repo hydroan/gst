@@ -36,6 +36,7 @@ gg module copy iam
 | --- | --- | --- |
 | `IAM_SESSION_EXPIRATION` | `8h` | 会话寿命，登录时定死 |
 | `IAM_SESSION_USER_STATE_TTL` | `30s` | 用户状态缓存最多能陈旧多久 |
+| `IAM_ROOT_PASSWORD` | 无 | 第一次启动时写入内置 root 账号的口令；没配就不写，已存在的不动 |
 | `IAM_LOGIN_FAILURE_LIMIT` | `5` | 连续失败几次锁定账号 |
 | `IAM_LOGIN_FAILURE_WINDOW` | `15m` | 锁定持续多久 |
 

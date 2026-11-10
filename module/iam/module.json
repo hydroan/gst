@@ -3,6 +3,9 @@
     "excludeSourceFiles": [
       "internal/service/iam/session/store_testseam.go"
     ],
+    "includeSourceFiles": [
+      "internal/service/iam/account/baseline.go"
+    ],
     "middleware": [
       {
         "sourceFile": "middleware/iam_session.go",
@@ -17,12 +20,19 @@
         "handler": "IAMSession"
       }
     ],
+    "requiredAssembly": [
+      {
+        "import": "github.com/hydroan/gst/internal/service/iam/account",
+        "function": "SeedRoot",
+        "reason": "IAM_ROOT_PASSWORD seeds no root account until the hook is installed, router.OnRoutesReady(SeedRoot)"
+      }
+    ],
     "postNotes": [
       "Copy mode registers middleware.IAMSession() and, when the project serves gRPC, interceptor.IAMSession() without arguments; a model declaring GRPC() later needs the copy run again for the interceptor.",
       "Set IAM_SESSION_EXPIRATION, for example 30m or 24h, to override the default session lifetime without editing copied code.",
       "Set IAM_SESSION_USER_STATE_TTL, for example 30s or 1m, to tune the user-state cache TTL without editing copied code.",
       "If project-owned initialization calls SetSessionExpiration(...), that explicit value overrides IAM_SESSION_EXPIRATION.",
-      "If the project needs default users, seed the copied IAM User, PasswordCredential, and EmailIdentity models in project-owned initialization code.",
+      "Set IAM_ROOT_PASSWORD to have SeedRoot write the root account at the first start; other baseline accounts go through the copied CreateAccount in a router.OnRoutesReady hook of the project's.",
       "If copied login accepts tenant_id, non-root users need authz RBAC role binding in that tenant; otherwise tenant selection is rejected.",
       "Non-root tenant admin IAM APIs require module/authz RBAC tenant role assignments; without authz they remain root-only through the built-in RBAC fallback."
     ]

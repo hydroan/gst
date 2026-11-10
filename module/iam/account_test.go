@@ -25,6 +25,7 @@ import (
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/module/iam"
 	gstredis "github.com/hydroan/gst/redis"
+	"github.com/hydroan/gst/testutil/iamtest"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -180,6 +181,30 @@ func TestAccountSeededCredentialLogsIn(t *testing.T) {
 	require.True(t, rsp.Principal.MustChangePassword, "the flag the credential was created with has to reach the principal")
 
 	accountRequireLoginRejected(t, username, "87654321")
+}
+
+// TestAccountCreateAccountLogsIn covers CreateAccount, the way a project
+// writes a baseline account, and iamtest.Login, the way a project's tests log
+// one in: the user row gets its id on insert, the account logs in with the
+// password written and no other, the must-change flag the credential was
+// created with reaches the principal, and a nil user is refused.
+func TestAccountCreateAccountLogsIn(t *testing.T) {
+	ctx := context.Background()
+	username := fmt.Sprintf("acct_created_%d", time.Now().UnixNano())
+	user := &iam.User{Username: username, Status: iam.UserStatusActive}
+	require.NoError(t, iam.CreateAccount(ctx, user, "12345678", true))
+	require.NotEmpty(t, user.ID, "the insert has to hand the id back")
+
+	account := iamtest.Login(t, iam.LoginReq{Username: username, Password: "12345678"})
+	require.Equal(t, user.ID, account.UserID)
+	require.Equal(t, username, account.Username)
+	require.NotEmpty(t, account.SessionID)
+	rsp, err := accountNewClient(t).Post[iam.LoginRsp](t.Context(), loginPath, iam.LoginReq{Username: username, Password: "12345678"})
+	require.NoError(t, err)
+	require.True(t, rsp.Principal.MustChangePassword, "the flag the credential was created with has to reach the principal")
+
+	accountRequireLoginRejected(t, username, "87654321")
+	require.Error(t, iam.CreateAccount(ctx, nil, "12345678", false))
 }
 
 func TestAccountLogout(t *testing.T) {

@@ -1,20 +1,17 @@
 package iam_test
 
 import (
-	"context"
 	"net/http"
+	"os"
 	"testing"
 
 	"github.com/goforj/godump"
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/interceptor"
 	"github.com/hydroan/gst/internal/grpcserver"
 	internalmiddleware "github.com/hydroan/gst/internal/middleware"
-	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
-	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/middleware"
@@ -55,6 +52,9 @@ func TestMain(m *testing.M) {
 	// NOTE: do not remove me
 	godump.Dump()
 
+	// The root account the tests log in as is seeded the way a deployment's
+	// is, by the module from IAM_ROOT_PASSWORD at the start.
+	os.Setenv("IAM_ROOT_PASSWORD", rootPassword)
 	testutil.Run(m, testutil.Server{
 		Database: config.DBMySQL,
 		Redis:    true,
@@ -66,29 +66,24 @@ func TestMain(m *testing.M) {
 			grpcserver.UseAuth(interceptor.IAMSession())
 		},
 		Routes: registerRequestMetadataProbe,
-		Seed:   seedRootAccount,
 	})
 }
 
-// seedRootAccount creates the root user and password credential the tests
-// authenticate with. Baseline accounts are application data, so the test
-// creates them explicitly through the standard database chain.
-func seedRootAccount() error {
-	ctx := context.Background()
+// TestSeedRootWritesTheRootAccountOnce covers SeedRoot beyond the start of
+// this test binary, which seeded the root account the tests log in as from
+// IAM_ROOT_PASSWORD: run again with another password it leaves the account
+// alone, so the first password still logs in and the second does not; a
+// password under the rule a signup's is held to is refused, naming the
+// variable; an empty variable writes nothing.
+func TestSeedRootWritesTheRootAccountOnce(t *testing.T) {
+	t.Setenv("IAM_ROOT_PASSWORD", "another-password")
+	require.NoError(t, serviceiamaccount.SeedRoot(t.Context(), nil))
+	accountLoginRoot(t)
+	accountRequireLoginRejected(t, rbac.UserRoot, "another-password")
 
-	user := &modeliamuser.User{Username: rbac.UserRoot, Status: modeliamuser.UserStatusActive}
-	user.ID = rbac.UserRoot
-	if err := database.Database[*modeliamuser.User](ctx).Create(user); err != nil {
-		return err
-	}
+	t.Setenv("IAM_ROOT_PASSWORD", "short")
+	require.ErrorContains(t, serviceiamaccount.SeedRoot(t.Context(), nil), "IAM_ROOT_PASSWORD")
 
-	credential, err := serviceiamaccount.NewPasswordCredential(ctx, user.ID, rootPassword, false)
-	if err != nil {
-		return err
-	}
-	if err := database.Database[*modeliamaccount.PasswordCredential](ctx).Create(credential); err != nil {
-		return err
-	}
-
-	return nil
+	t.Setenv("IAM_ROOT_PASSWORD", "")
+	require.NoError(t, serviceiamaccount.SeedRoot(t.Context(), nil))
 }

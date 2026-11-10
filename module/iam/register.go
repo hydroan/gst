@@ -69,6 +69,10 @@ import (
 //   - IAM_SESSION_EXPIRATION sets the session lifetime; it defaults to 8 hours.
 //     It is read at registration so an unparseable value fails startup rather
 //     than the first login.
+//   - IAM_ROOT_PASSWORD is the password the built-in root account, the user
+//     rbac.UserRoot, is created with the first time the deployment starts;
+//     unset, no account is created. The account is left alone once it exists,
+//     the password included: a changed value rotates nothing.
 func Register() {
 	// Sessions live only in Redis, so a deployment without it cannot
 	// authenticate anyone. Refusing at startup states that in the one place a
@@ -76,6 +80,12 @@ func Register() {
 	router.OnRoutesReady(func(context.Context, map[string][]string) error {
 		return requireRedisEnabled()
 	})
+
+	// The root account the deployment administers itself through, written at
+	// the first start from IAM_ROOT_PASSWORD and found on every later one. A
+	// project that copied the module installs the hook itself, the way
+	// module.json requires.
+	router.OnRoutesReady(serviceiamaccount.SeedRoot)
 
 	// Resolve once during registration so invalid environment configuration
 	// fails during startup rather than at the first login.
@@ -118,10 +128,9 @@ func Register() {
 	// adapter the way module/mfa installs one for AccountAdministrator, so that
 	// a deployment without authz still deletes cleanly.
 
-	// Register the backing IAM tables. Baseline accounts are application
-	// data: a project creates them explicitly through the standard database
-	// chain in a startup hook such as router.OnRoutesReady, the password
-	// hashed by NewPasswordCredential.
+	// Register the backing IAM tables. The root account comes from SeedRoot
+	// above; the project's other baseline accounts go through CreateAccount in
+	// a startup hook of its own.
 	modelregistry.Register[*modeliamuser.User]()
 	modelregistry.Register[*modeliamaccount.PasswordCredential]()
 	modelregistry.Register[*modeliamaccount.EmailIdentity]()

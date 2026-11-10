@@ -19,11 +19,11 @@ import (
 	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/testutil/iamtest"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
@@ -42,7 +42,7 @@ import (
 func TestIAMSessionInterceptor(t *testing.T) {
 	conn := grpcProbe(t)
 	account := newSessionTestAccount(t)
-	sessionID := loginSession(t, account.Username, account.Password, client.WithUserAgent(grpcUserAgent))
+	sessionID := loginSession(t, account.Username, account.Password, client.WithUserAgent(iamtest.GRPCUserAgent))
 	t.Cleanup(func() {
 		require.NoError(t, serviceiamsession.Store.DeleteUserSessions(context.Background(), account.UserID))
 	})
@@ -87,7 +87,7 @@ func TestIAMSessionInterceptor(t *testing.T) {
 	})
 
 	t.Run("with a stored value that is not a snapshot", func(t *testing.T) {
-		corrupted := loginSession(t, account.Username, account.Password, client.WithUserAgent(grpcUserAgent))
+		corrupted := loginSession(t, account.Username, account.Password, client.WithUserAgent(iamtest.GRPCUserAgent))
 		corruptSessionSnapshot(t, corrupted)
 
 		err := probeCall(t, conn, "Look", corrupted)
@@ -127,7 +127,7 @@ func TestIAMSessionInterceptor(t *testing.T) {
 func TestCurrentSessionOverGRPC(t *testing.T) {
 	conn := grpcProbe(t)
 	account := newSessionTestAccount(t)
-	sessionID := loginSession(t, account.Username, account.Password, client.WithUserAgent(grpcUserAgent))
+	sessionID := loginSession(t, account.Username, account.Password, client.WithUserAgent(iamtest.GRPCUserAgent))
 	t.Cleanup(func() {
 		require.NoError(t, serviceiamsession.Store.DeleteUserSessions(context.Background(), account.UserID))
 	})
@@ -176,11 +176,6 @@ func (*probeSessionService) Get(sc *types.ServiceContext, _ *modelregistry.Empty
 	}
 	return &probeSessionRsp{SessionID: sessionID}, nil
 }
-
-// grpcUserAgent is the user agent grpc-go presents for the probe's calls: a
-// session a call names has to have been established presenting it, the way
-// a request's session has to have been established from its browser.
-const grpcUserAgent = "grpc-go/" + grpc.Version
 
 // grpcProbe returns a connection to the probe listener, starting it on
 // first use behind the session interceptor TestMain mounted.
@@ -268,7 +263,7 @@ func probeCall(t *testing.T, conn *grpc.ClientConn, name, sessionID string) erro
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 	defer cancel()
 	if sessionID != "" {
-		ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+sessionID)
+		ctx = gstgrpc.WithBearer(ctx, sessionID)
 	}
 	return conn.Invoke(ctx, "/gst.test.Probe/"+name, &emptypb.Empty{}, &emptypb.Empty{}, grpc.WaitForReady(true))
 }

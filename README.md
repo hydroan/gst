@@ -957,10 +957,10 @@ func init() {
 声明了 `GRPC()` 的项目再在 `interceptor/interceptor.go` 里 `interceptor.RegisterAuth(interceptor.IAMSession())`；
 用 authz 模块时 `middleware.Authz()`、`interceptor.Authz()` 挂在它们之后（认证链按注册顺序跑）；策略对象按路由清单的写法写，
 `/api/records/{id}`、`/api/records/*` 或静态路径两条线一致，写具体路径（`/api/records/42`）的只对 HTTP 生效，`:id` 这种写法哪边都不命中，
-项目自己要读当前用户的中间件也排在会话检查之后。默认账号属于业务数据，框架不代为创建：
-需要时由项目在启动钩子（如 `router.OnRoutesReady`）里通过标准数据库链写入，口令用
-`iam.NewPasswordCredential` 生成后随账号一起写入（写法见它的文档），或者像
-`examples/demo` 的测试那样走公开的 `POST /api/signup` 注册。
+项目自己要读当前用户的中间件也排在会话检查之后。内置的 root 账号由 iam 模块在第一次启动时写入，
+口令来自环境变量 `IAM_ROOT_PASSWORD`，没配就不写，已存在的不动（换口令走 iam 的接口）；其余基线账号属于业务数据，
+由项目在启动钩子（如 `router.OnRoutesReady`）里用 `iam.CreateAccount` 写入（用户行与口令凭据在一个事务里，写法见它的文档），
+或者像 `examples/demo` 的测试那样走公开的 `POST /api/signup` 注册。
 
 ## 多租户
 
