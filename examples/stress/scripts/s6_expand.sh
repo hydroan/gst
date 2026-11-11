@@ -15,6 +15,10 @@ stop_server
 # One request of each at debug level: the SQL statements it issues.
 start_server s6-sql LOGGER_LEVEL=debug
 ROOT=$(login root)
+# The first request of a session on a server just started loads the user's
+# state from the database into the cache, two statements more; it is made
+# here, so the two requests counted below are steady ones.
+curl -s -o /dev/null -A "$UA" -b "session_id=$ROOT" "$BASE/api/orders?$Q"
 T1=$(curl -s -A "$UA" -b "session_id=$ROOT" "$BASE/api/orders?$Q" | grep -o '"trace_id":"[0-9a-f]*"' | cut -d'"' -f4)
 T2=$(curl -s -A "$UA" -b "session_id=$ROOT" "$BASE/api/orders?$Q&_expand=lines" | grep -o '"trace_id":"[0-9a-f]*"' | cut -d'"' -f4)
 stop_server
