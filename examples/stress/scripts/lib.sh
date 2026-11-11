@@ -21,7 +21,7 @@ ROUNDS=${ROUNDS:-3}
 UA=${UA:-hey/0.0.1}
 ROOT_PASSWORD=stress-root
 MYSQL="docker exec gst-stress-mysql mysql -h127.0.0.1 -uroot -pstress stress"
-SRVENV=(DEBUG_PPROF_ENABLED=true DEBUG_PPROF_PORT=10002 LOGGER_HTTP_BODY_ENABLED=false OTEL_ENABLED=false DATABASE_TYPE=mysql MYSQL_HOST=127.0.0.1 MYSQL_PORT=3307 MYSQL_DATABASE=stress MYSQL_USERNAME=root MYSQL_PASSWORD=stress REDIS_ADDR=127.0.0.1:6380 IAM_ROOT_PASSWORD=$ROOT_PASSWORD SEED_PASSWORD=$ROOT_PASSWORD)
+SRVENV=(DEBUG_PPROF_ENABLED=true DEBUG_PPROF_PORT=10002 LOGGER_HTTP_BODY_ENABLED=false LOGGER_MAX_SIZE=1024 OTEL_ENABLED=false DATABASE_TYPE=mysql MYSQL_HOST=127.0.0.1 MYSQL_PORT=3307 MYSQL_DATABASE=stress MYSQL_USERNAME=root MYSQL_PASSWORD=stress REDIS_ADDR=127.0.0.1:6380 IAM_ROOT_PASSWORD=$ROOT_PASSWORD SEED_PASSWORD=$ROOT_PASSWORD)
 JSON='Content-Type: application/json'
 
 log() { printf '%s %s\n' "$(date +%H:%M:%S)" "$*" | tee -a "$LOG"; }
@@ -84,10 +84,29 @@ start_server() { # name env=value...
 
 check_logs() {
   local files errs warns
-  files=$(ls "$STRESS_DIR"/logs/*.log 2>/dev/null | grep -v -E "/(access|http_body)\.log$")
+  files=$(ls "$STRESS_DIR"/logs/*.log 2>/dev/null | grep -v -E "/(access|http_body)(-[^/]*)?\.log$")
   errs=$(cat $files 2>/dev/null | grep -c -F '"level":"ERROR"'); warns=$(cat $files 2>/dev/null | grep -c -F '"level":"WARN"')
   log "logs after $SERVER_NAME: stdout errors=$(grep -c -F '"level":"ERROR"' "$OUT/server-$SERVER_NAME.log") stream errors=$errs warns=$warns rss $(rss_mb "$SERVER_PID")MB"
   if [ "$errs" -gt 0 ] || [ "$warns" -gt 0 ]; then cat $files | grep -E -F -e '"level":"ERROR"' -e '"level":"WARN"' | cut -c1-400 | head -5 | tee -a "$LOG"; fi
+}
+
+# round_logs prints how many ERROR entries, WARN entries and slow statement
+# warnings the streams wrote since a moment (UTC, 2006-01-02T15:04:05), read
+# off the entries' own timestamps. A stream rotates and keeps one backup, so
+# the scan check_logs makes as a scenario ends has lost what an early round
+# logged; a round is scanned as it ends, while its entries are still in the
+# file or its backup, which SRVENV sizes at 1 GB each for that: a round
+# writes a few hundred MB to its busiest stream. The slow statement warnings
+# are counted apart from the other warnings: the method lets them be. An
+# entry is on disk within a second of being written, hence the wait.
+round_logs() { # since
+  sleep 2
+  local files; files=$(ls "$STRESS_DIR"/logs/*.log 2>/dev/null | grep -v -E "/(access|http_body)(-[^/]*)?\.log$")
+  cat $files 2>/dev/null | grep -a -F -e '"level":"ERROR"' -e '"level":"WARN"' | awk -v since="$1" '
+    match($0, /"ts":"[^"]*"/) && substr($0, RSTART + 6, 19) >= since {
+      if ($0 ~ /"level":"ERROR"/) e++; else if ($0 ~ /"msg":"slow sql detected"/) s++; else w++
+    }
+    END { printf "%d %d %d\n", e, w, s }'
 }
 
 stop_server() {
@@ -165,9 +184,10 @@ alloc_case() { # name rate url [hey args...]
   printf '%s\t%s\t%s\t%s\n' "$name" "$kb" "$per" "$count" >> "$OUT/allocs.tsv"
 }
 
-# run_case: warmup 10s -> cooldown -> ROUNDS x 30s -> the allocations of one
-# request (see alloc_case). Results go to results.tsv (one line per round)
-# and allocs.tsv (one line per case).
+# run_case: warmup 10s -> cooldown -> ROUNDS x 30s, each with the ERROR, WARN
+# and slow statement entries the round logged (see round_logs) -> the
+# allocations of one request (see alloc_case). Results go to results.tsv (one
+# line per round) and allocs.tsv (one line per case).
 run_case() { # name min_cooldown url [hey args...]
   local name=$1 min=$2 url=$3; shift 3
   log "case $name warmup"
@@ -175,13 +195,13 @@ run_case() { # name min_cooldown url [hey args...]
   log "case $name warmup: $(parse_hey "$OUT/$name-warmup.txt")"
   [ -n "${AFTER_ROUND:-}" ] && $AFTER_ROUND "$name" warmup
   cooldown "$min"
-  local i pre_idle parsed cpu
+  local i pre_idle parsed cpu since logs
   for i in $(seq 1 "$ROUNDS"); do
-    pre_idle=$(cpu_idle)
+    pre_idle=$(cpu_idle); since=$(date -u +%Y-%m-%dT%H:%M:%S)
     hey_run "$OUT/$name-r$i.txt" 30s "$url" "$@"
-    parsed=$(parse_hey "$OUT/$name-r$i.txt"); cpu=$(cpu_summary "$OUT/$name-r$i.txt")
-    log "RESULT $name r$i pre_idle=${pre_idle}% run_idle=$(idle_summary "$OUT/$name-r$i.txt")% cpu(cores us/req)=$cpu $parsed"
-    printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$name" "$i" "$pre_idle" "$parsed" "$(idle_summary "$OUT/$name-r$i.txt")" "$cpu" >> "$OUT/results.tsv"
+    parsed=$(parse_hey "$OUT/$name-r$i.txt"); cpu=$(cpu_summary "$OUT/$name-r$i.txt"); logs=$(round_logs "$since")
+    log "RESULT $name r$i pre_idle=${pre_idle}% run_idle=$(idle_summary "$OUT/$name-r$i.txt")% cpu(cores us/req)=$cpu logs(error warn slow_sql)=$logs $parsed"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$name" "$i" "$pre_idle" "$parsed" "$(idle_summary "$OUT/$name-r$i.txt")" "$cpu" "$logs" >> "$OUT/results.tsv"
     [ -n "${AFTER_ROUND:-}" ] && $AFTER_ROUND "$name" "r$i"
     cooldown "$min"
   done
