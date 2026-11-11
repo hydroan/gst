@@ -41,7 +41,7 @@ bash -c 'source examples/stress/scripts/lib.sh && infra_up'
 OUT=examples/stress/out/s2 ROWS=100000 bash examples/stress/scripts/s2_data.sh
 ```
 
-结果目录里：`run.log` 每轮一行 `RESULT`（QPS、分位、非 200、服务 CPU 核与每请求微秒）和 `ALLOCS`（每请求分配）；`results.tsv`、`allocs.tsv` 是同样的数字按列排好；`*.txt` 是 hey 或 k6 的原始输出，旁边的 `.idle`、`.ps` 是压测中每秒的整机空闲和每 10 秒最忙的进程；`cpu_*.pb.gz`、`allocs_*.pb.gz` 是 profile，`scripts/analyze.sh <OUT> <name>…` 把它们转成文本报告。
+结果目录里：`run.log` 每轮一行 `RESULT`（QPS、分位、非 200、服务 CPU 核与每请求微秒，以及这一轮里服务日志的 ERROR、WARN、慢 SQL 告警条数）和 `ALLOCS`（每请求分配）；`results.tsv`、`allocs.tsv` 是同样的数字按列排好；`*.txt` 是 hey 或 k6 的原始输出，旁边的 `.idle`、`.ps` 是压测中每秒的整机空闲和每 10 秒最忙的进程；`cpu_*.pb.gz`、`allocs_*.pb.gz` 是 profile，`scripts/analyze.sh <OUT> <name>…` 把它们转成文本报告。
 
 ## 跑整条链路
 
@@ -49,7 +49,7 @@ OUT=examples/stress/out/s2 ROWS=100000 bash examples/stress/scripts/s2_data.sh
 bash examples/stress/scripts/chain.sh
 ```
 
-按场景顺序跑完全部，每个场景写进 `out/<场景>`，场景之间按需要清空并重灌 records；约三小时。
+从重新建的容器开始，按数据依赖的顺序跑完十个场景，每个场景写进 `out/<场景>`；标明表长的场景开始前，records 清空并重灌到那个行数，没灌到就停下，不带着错的数据量往下跑；约五小时。
 
 ## 结果怎么进 STRESS.md
 
