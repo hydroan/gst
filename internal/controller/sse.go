@@ -9,7 +9,7 @@ import (
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/response"
-	"github.com/hydroan/gst/internal/sse"
+	"github.com/hydroan/gst/internal/streamctx"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"go.opentelemetry.io/otel/attribute"
@@ -21,7 +21,7 @@ import (
 // The action always delegates to the phase service's SSE method, which opens
 // the stream through ServiceContext.SSE and blocks until it is over; there is
 // no default streaming behavior. The whole request runs on the stream's
-// context, see sse.StreamContext: the service's own work and the stream end
+// context, see streamctx.New: the service's own work and the stream end
 // together when the client leaves or the server begins to shut down, so an
 // open stream never holds the shutdown.
 //
@@ -39,7 +39,7 @@ import (
 func SSEHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), apiaction.SSE)
 	return func(c *gin.Context) {
-		stream, stopStream := sse.StreamContext(c.Request.Context())
+		stream, stopStream := streamctx.New(c.Request.Context())
 		defer stopStream()
 		c.Request = c.Request.WithContext(stream)
 
@@ -81,7 +81,7 @@ func SSEHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 			// another replica, and the client going away as a canceled
 			// request.
 			answer := endedAnswer(stream.Err(), ended)
-			if errors.Is(context.Cause(stream), sse.ErrServerShutdown) {
+			if errors.Is(context.Cause(stream), streamctx.ErrServerShutdown) {
 				answer = types.NewErrorWithCause(http.StatusServiceUnavailable, shutdownMsg, ended)
 			}
 			response.Error(c, answer)
@@ -99,7 +99,7 @@ func streamEndReason(stream context.Context) string {
 	switch {
 	case stream.Err() == nil:
 		return ""
-	case errors.Is(context.Cause(stream), sse.ErrServerShutdown):
+	case errors.Is(context.Cause(stream), streamctx.ErrServerShutdown):
 		return "server shutting down"
 	default:
 		return "client disconnected"

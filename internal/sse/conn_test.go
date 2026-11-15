@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/sse"
+	"github.com/hydroan/gst/internal/streamctx"
 )
 
 // startStreamServer starts a real HTTP server with aggressively short
@@ -93,7 +94,7 @@ func TestServe_StreamEndsWhenTheServerShutsDown(t *testing.T) {
 	shutdown, beginShutdown := context.WithCancel(context.Background())
 	causes := make(chan error, 1)
 	srv := startStreamServer(t, time.Second, func(w http.ResponseWriter, r *http.Request) {
-		r = r.WithContext(sse.WithServerShutdown(r.Context(), shutdown))
+		r = r.WithContext(streamctx.WithServerShutdown(r.Context(), shutdown))
 		err := sse.Serve(w, r, func(conn *sse.Conn) error {
 			<-conn.Context().Done()
 			causes <- context.Cause(conn.Context())
@@ -110,7 +111,7 @@ func TestServe_StreamEndsWhenTheServerShutsDown(t *testing.T) {
 
 	select {
 	case cause := <-causes:
-		if !errors.Is(cause, sse.ErrServerShutdown) {
+		if !errors.Is(cause, streamctx.ErrServerShutdown) {
 			t.Errorf("Expected the stream to end with ErrServerShutdown, got %v", cause)
 		}
 	case <-time.After(5 * time.Second):
@@ -118,38 +119,6 @@ func TestServe_StreamEndsWhenTheServerShutsDown(t *testing.T) {
 	}
 	if _, err := io.ReadAll(rsp.Body); err != nil {
 		t.Errorf("Expected the client to read the end of the stream, got %v", err)
-	}
-}
-
-func TestStreamContext_WatchesTheServerOnce(t *testing.T) {
-	plain := context.Background()
-	if got, stop := sse.StreamContext(plain); got != plain {
-		t.Errorf("Expected a context without a server signal to come back as is")
-	} else {
-		stop()
-	}
-
-	shutdown, beginShutdown := context.WithCancel(context.Background())
-	request := sse.WithServerShutdown(context.Background(), shutdown)
-	stream, stop := sse.StreamContext(request)
-	defer stop()
-	if again, stopAgain := sse.StreamContext(stream); again != stream {
-		t.Errorf("Expected a stream context to come back as is when derived again")
-	} else {
-		stopAgain()
-	}
-
-	beginShutdown()
-	select {
-	case <-stream.Done():
-	case <-time.After(5 * time.Second):
-		t.Fatal("The stream context must end when the server shuts down")
-	}
-	if cause := context.Cause(stream); !errors.Is(cause, sse.ErrServerShutdown) {
-		t.Errorf("Expected ErrServerShutdown as the cause, got %v", cause)
-	}
-	if request.Err() != nil {
-		t.Errorf("Expected the request context itself to run on while the server drains, got %v", request.Err())
 	}
 }
 

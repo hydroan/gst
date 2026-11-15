@@ -12,7 +12,7 @@ import (
 
 // errServerShutdown is the cause the context of a stream ends with when the
 // server begins to stop, as opposed to the client going away: the
-// counterpart of sse.ErrServerShutdown for the HTTP listener's streams.
+// counterpart of streamctx.ErrServerShutdown for the HTTP listener's streams.
 var errServerShutdown = errors.New("grpc: the server is shutting down")
 
 // shutdownMsg is the status message a stream the stop ended is answered
@@ -23,7 +23,7 @@ const shutdownMsg = "the server is shutting down"
 
 // streamShutdown returns the stream interceptor closest to the handler: it
 // gives the stream a context that ends the moment the server begins to
-// stop (see Stop), the way sse.StreamContext ends a Server-Sent Events
+// stop (see Stop), the way streamctx.New ends a Server-Sent Events
 // stream when the HTTP listener does, ends a read waiting on the client
 // with it (see shutdownStream), and answers a stream the stop ended with
 // Unavailable, the status the gRPC conventions give a server shutting

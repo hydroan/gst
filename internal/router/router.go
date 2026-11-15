@@ -30,7 +30,7 @@ import (
 	"github.com/hydroan/gst/internal/openapigen"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
-	"github.com/hydroan/gst/internal/sse"
+	"github.com/hydroan/gst/internal/streamctx"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	swaggerFiles "github.com/swaggo/files"
@@ -533,7 +533,7 @@ func warnUnguardedRoutes(log *zap.SugaredLogger) {
 // contexts, so a stream watching only its request would hold the shutdown for
 // as long as its client stays, up to the bound Stop gives it. Every request
 // context carries the server's shutdown signal for the stream to watch, see
-// sse.StreamContext; ordinary requests do not watch it and run to completion.
+// streamctx.New; ordinary requests do not watch it and run to completion.
 func newServer(addr string, handler http.Handler) *http.Server {
 	shutdown, beginShutdown := context.WithCancel(context.Background())
 	srv := &http.Server{
@@ -544,7 +544,7 @@ func newServer(addr string, handler http.Handler) *http.Server {
 		IdleTimeout:    config.App.IdleTimeout,
 		MaxHeaderBytes: 1 << 20, // 1 MB
 		BaseContext: func(net.Listener) context.Context {
-			return sse.WithServerShutdown(context.Background(), shutdown)
+			return streamctx.WithServerShutdown(context.Background(), shutdown)
 		},
 	}
 	srv.RegisterOnShutdown(beginShutdown)

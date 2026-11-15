@@ -12,7 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/serviceregistry"
-	"github.com/hydroan/gst/internal/sse"
+	"github.com/hydroan/gst/internal/streamctx"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
@@ -46,7 +46,7 @@ func TestSSEHandlerRecordsAStreamEndedByShutdownAsInterrupted(t *testing.T) {
 	engine.GET("/samples/stream", SSEHandler[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel](&types.ControllerConfig[*handlerRouteModel]{Route: "samples/stream"}))
 
 	shutdown, beginShutdown := context.WithCancel(t.Context())
-	req := httptest.NewRequestWithContext(sse.WithServerShutdown(t.Context(), shutdown), http.MethodGet, "/samples/stream", nil)
+	req := httptest.NewRequestWithContext(streamctx.WithServerShutdown(t.Context(), shutdown), http.MethodGet, "/samples/stream", nil)
 	served := make(chan struct{})
 	go func() {
 		defer close(served)
@@ -107,7 +107,7 @@ func TestSSEHandlerAnswersAStreamEndedBeforeItOpenedByWhatEndedIt(t *testing.T) 
 
 	t.Run("the server shut down", func(t *testing.T) {
 		shutdown, beginShutdown := context.WithCancel(t.Context())
-		req := httptest.NewRequestWithContext(sse.WithServerShutdown(t.Context(), shutdown), http.MethodGet, "/samples/ended-stream", nil)
+		req := httptest.NewRequestWithContext(streamctx.WithServerShutdown(t.Context(), shutdown), http.MethodGet, "/samples/ended-stream", nil)
 		rec := serveEnded(t, req, beginShutdown)
 
 		require.Equal(t, http.StatusServiceUnavailable, rec.Code)
