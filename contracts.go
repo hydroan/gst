@@ -23,6 +23,21 @@ type (
 // import/export, filtering, and logging.
 type Service[M Model, REQ Request, RSP Response] = types.Service[M, REQ, RSP]
 
+// ServerStream is the response stream of a Stream action declaring a
+// StreamingResult: the service's Stream method sends each response through
+// Send, which fails once the client went away or the call was canceled.
+type ServerStream[RSP Response] = types.ServerStream[RSP]
+
+// ClientStream is the request stream of a Stream action declaring a
+// StreamingPayload: the service's Stream method reads each request through
+// Recv, which answers io.EOF once the client finished sending.
+type ClientStream[REQ Request] = types.ClientStream[REQ]
+
+// BidiStream is the request and response stream of a Stream action
+// declaring both a StreamingPayload and a StreamingResult: Recv and Send
+// as on the two above, independent of each other.
+type BidiStream[REQ Request, RSP Response] = types.BidiStream[REQ, RSP]
+
 // Module describes a registered API module: route metadata, auth exposure,
 // resource parameter name, and the service implementation used by controllers.
 type Module[M Model, REQ Request, RSP Response] = types.Module[M, REQ, RSP]

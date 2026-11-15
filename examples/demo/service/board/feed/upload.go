@@ -8,7 +8,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst"
-	"github.com/hydroan/gst/grpc"
 	"github.com/hydroan/gst/service"
 )
 
@@ -20,7 +19,7 @@ type Upload struct {
 
 // Stream counts the events until the client closes its side, which Recv
 // reports as io.EOF, and answers the count.
-func (u *Upload) Stream(_ *gst.ServiceContext, stream *grpc.ClientStream[*board.FeedUploadReq]) (*board.FeedUploadRsp, error) {
+func (u *Upload) Stream(_ *gst.ServiceContext, stream *gst.ClientStream[*board.FeedUploadReq]) (*board.FeedUploadRsp, error) {
 	var accepted int64
 	for {
 		if _, err := stream.Recv(); err != nil {

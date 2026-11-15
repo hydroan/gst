@@ -236,7 +236,7 @@ func genServiceMethod8(info *modelinfo.Model, modelQualifier string, action *dsl
 // declaring Payload[*FeedWatchReq] and StreamingResult[*FeedEvent] it
 // generates
 //
-//	func (w *Watch) Stream(ctx *gst.ServiceContext, req *model.FeedWatchReq, stream *grpc.ServerStream[*model.FeedEvent]) (err error) {
+//	func (w *Watch) Stream(ctx *gst.ServiceContext, req *model.FeedWatchReq, stream *gst.ServerStream[*model.FeedEvent]) (err error) {
 //		log := w.WithContext(ctx, ctx.Phase())
 //		log.Info("feed: watch")
 //
@@ -246,7 +246,7 @@ func genServiceMethod8(info *modelinfo.Model, modelQualifier string, action *dsl
 // and a Service("upload") Stream declaring StreamingPayload[*FeedEvent] and
 // Result[*FeedUploadRsp], whose method answers a response,
 //
-//	func (u *Upload) Stream(ctx *gst.ServiceContext, stream *grpc.ClientStream[*model.FeedEvent]) (rsp *model.FeedUploadRsp, err error) {
+//	func (u *Upload) Stream(ctx *gst.ServiceContext, stream *gst.ClientStream[*model.FeedEvent]) (rsp *model.FeedUploadRsp, err error) {
 //		log := u.WithContext(ctx, ctx.Phase())
 //		log.Info("feed: upload")
 //

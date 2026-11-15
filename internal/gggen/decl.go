@@ -18,17 +18,13 @@ var pluralizeCli = pluralize.NewClient()
 // serviceScaffoldImports lists the framework packages a generated service file
 // of an action with phase imports besides the model package: the gst service
 // package its service struct embeds Base from, the gst package its methods
-// take the ServiceContext from, io for the Reader an Import method reads,
-// and the gst grpc package the stream of a Stream method comes from. The
-// gst model package a model.Empty request or result needs is imported
-// separately (see emptyReqExpr).
+// take the ServiceContext and the stream of a Stream method from, and io for
+// the Reader an Import method reads. The gst model package a model.Empty
+// request or result needs is imported separately (see emptyReqExpr).
 func serviceScaffoldImports(phase apiaction.Phase) []string {
 	importPaths := []string{ggconst.ImportPathService, ggconst.ImportPathGst}
-	switch phase {
-	case apiaction.Import:
+	if phase == apiaction.Import {
 		importPaths = append(importPaths, ggconst.ImportPathIO)
-	case apiaction.Stream:
-		importPaths = append(importPaths, ggconst.ImportPathGRPC)
 	}
 	return importPaths
 }
@@ -181,8 +177,8 @@ func types(modelQualifier, gstModelPkg, modelName, reqName, rspName, roleName st
 							{
 								Type: &ast.IndexListExpr{
 									X: &ast.SelectorExpr{
-										X:   ast.NewIdent("service"),
-										Sel: ast.NewIdent("Base"),
+										X:   ast.NewIdent(ggconst.PkgService),
+										Sel: ast.NewIdent(ggconst.ServiceBase),
 									},
 									Indices: []ast.Expr{
 										&ast.StarExpr{
@@ -232,8 +228,8 @@ func serviceMethod1(recvName, modelName, modelQualifier string, phase apiaction.
 						Names: []*ast.Ident{ast.NewIdent("ctx")},
 						Type: &ast.StarExpr{
 							X: &ast.SelectorExpr{
-								X:   ast.NewIdent("gst"),
-								Sel: ast.NewIdent("ServiceContext"),
+								X:   ast.NewIdent(ggconst.PkgGst),
+								Sel: ast.NewIdent(ggconst.GstServiceContext),
 							},
 						},
 					},
@@ -287,8 +283,8 @@ func serviceMethod2(recvName, modelName, modelQualifier string, phase apiaction.
 						Names: []*ast.Ident{ast.NewIdent("ctx")},
 						Type: &ast.StarExpr{
 							X: &ast.SelectorExpr{
-								X:   ast.NewIdent("gst"),
-								Sel: ast.NewIdent("ServiceContext"),
+								X:   ast.NewIdent(ggconst.PkgGst),
+								Sel: ast.NewIdent(ggconst.GstServiceContext),
 							},
 						},
 					},
@@ -346,8 +342,8 @@ func serviceMethod3(recvName, modelName, modelQualifier string, phase apiaction.
 						Names: []*ast.Ident{ast.NewIdent("ctx")},
 						Type: &ast.StarExpr{
 							X: &ast.SelectorExpr{
-								X:   ast.NewIdent("gst"),
-								Sel: ast.NewIdent("ServiceContext"),
+								X:   ast.NewIdent(ggconst.PkgGst),
+								Sel: ast.NewIdent(ggconst.GstServiceContext),
 							},
 						},
 					},
@@ -411,8 +407,8 @@ func serviceMethod4(recvName, modelQualifier, gstModelPkg, reqName, rspName stri
 						Names: []*ast.Ident{ast.NewIdent("ctx")},
 						Type: &ast.StarExpr{
 							X: &ast.SelectorExpr{
-								X:   ast.NewIdent("gst"),
-								Sel: ast.NewIdent("ServiceContext"),
+								X:   ast.NewIdent(ggconst.PkgGst),
+								Sel: ast.NewIdent(ggconst.GstServiceContext),
 							},
 						},
 					},
@@ -458,7 +454,7 @@ func serviceMethod5(recvName, modelName, modelQualifier, roleName string, body .
 				},
 			},
 		},
-		Name: ast.NewIdent("Import"),
+		Name: ast.NewIdent(apiaction.Import.Name()),
 		Type: &ast.FuncType{
 			Params: &ast.FieldList{
 				List: []*ast.Field{
@@ -466,15 +462,15 @@ func serviceMethod5(recvName, modelName, modelQualifier, roleName string, body .
 						Names: []*ast.Ident{ast.NewIdent("ctx")},
 						Type: &ast.StarExpr{
 							X: &ast.SelectorExpr{
-								X:   ast.NewIdent("gst"),
-								Sel: ast.NewIdent("ServiceContext"),
+								X:   ast.NewIdent(ggconst.PkgGst),
+								Sel: ast.NewIdent(ggconst.GstServiceContext),
 							},
 						},
 					},
 					{
 						Names: []*ast.Ident{ast.NewIdent("reader")},
 						Type: &ast.SelectorExpr{
-							X:   ast.NewIdent("io"),
+							X:   ast.NewIdent(ggconst.PkgIO),
 							Sel: ast.NewIdent("Reader"),
 						},
 					},
@@ -525,7 +521,7 @@ func serviceMethod6(recvName, modelName, modelQualifier, roleName string, body .
 				},
 			},
 		},
-		Name: ast.NewIdent("Export"),
+		Name: ast.NewIdent(apiaction.Export.Name()),
 		Type: &ast.FuncType{
 			Params: &ast.FieldList{
 				List: []*ast.Field{
@@ -533,8 +529,8 @@ func serviceMethod6(recvName, modelName, modelQualifier, roleName string, body .
 						Names: []*ast.Ident{ast.NewIdent("ctx")},
 						Type: &ast.StarExpr{
 							X: &ast.SelectorExpr{
-								X:   ast.NewIdent("gst"),
-								Sel: ast.NewIdent("ServiceContext"),
+								X:   ast.NewIdent(ggconst.PkgGst),
+								Sel: ast.NewIdent(ggconst.GstServiceContext),
 							},
 						},
 					},
@@ -589,7 +585,7 @@ func serviceMethod7(recvName, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 				},
 			},
 		},
-		Name: ast.NewIdent("SSE"),
+		Name: ast.NewIdent(apiaction.SSE.Name()),
 		Type: &ast.FuncType{
 			Params: &ast.FieldList{
 				List: []*ast.Field{
@@ -597,8 +593,8 @@ func serviceMethod7(recvName, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 						Names: []*ast.Ident{ast.NewIdent("ctx")},
 						Type: &ast.StarExpr{
 							X: &ast.SelectorExpr{
-								X:   ast.NewIdent("gst"),
-								Sel: ast.NewIdent("ServiceContext"),
+								X:   ast.NewIdent(ggconst.PkgGst),
+								Sel: ast.NewIdent(ggconst.GstServiceContext),
 							},
 						},
 					},
@@ -633,7 +629,7 @@ func serviceMethod8(recvName, modelName, modelQualifier, roleName string, body .
 		},
 	}
 	optionsType := &ast.SelectorExpr{
-		X:   ast.NewIdent("gst"),
+		X:   ast.NewIdent(ggconst.PkgGst),
 		Sel: ast.NewIdent("QueryOptions"),
 	}
 	return &ast.FuncDecl{
@@ -655,8 +651,8 @@ func serviceMethod8(recvName, modelName, modelQualifier, roleName string, body .
 						Names: []*ast.Ident{ast.NewIdent("ctx")},
 						Type: &ast.StarExpr{
 							X: &ast.SelectorExpr{
-								X:   ast.NewIdent("gst"),
-								Sel: ast.NewIdent("ServiceContext"),
+								X:   ast.NewIdent(ggconst.PkgGst),
+								Sel: ast.NewIdent(ggconst.GstServiceContext),
 							},
 						},
 					},
@@ -686,47 +682,47 @@ func serviceMethod8(recvName, modelName, modelQualifier, roleName string, body .
 
 // serviceMethod9 builds the declaration of the Stream method of a Stream
 // action, with the given body: the request and the response stream the
-// action declares, of the gst grpc package, with streamingPayload and
+// action declares, of the gst package, with streamingPayload and
 // streamingResult telling which side streams (see types.ServerStreamer and
 // its kind); the model package is referred to by modelQualifier and the gst
 // model package, for a dsl.PayloadEmpty side, by gstModelPkg (see types).
 // For the package model, a Payload FeedWatchReq streaming a Result FeedEvent
 // it builds
 //
-//	func (w *Watch) Stream(ctx *gst.ServiceContext, req *model.FeedWatchReq, stream *grpc.ServerStream[*model.FeedEvent]) (err error) {
+//	func (w *Watch) Stream(ctx *gst.ServiceContext, req *model.FeedWatchReq, stream *gst.ServerStream[*model.FeedEvent]) (err error) {
 //	}
 //
 // a streaming Payload FeedEvent answering a Result FeedUploadRsp
 //
-//	func (u *Upload) Stream(ctx *gst.ServiceContext, stream *grpc.ClientStream[*model.FeedEvent]) (rsp *model.FeedUploadRsp, err error) {
+//	func (u *Upload) Stream(ctx *gst.ServiceContext, stream *gst.ClientStream[*model.FeedEvent]) (rsp *model.FeedUploadRsp, err error) {
 //	}
 //
 // and both sides streaming FeedEvent
 //
-//	func (c *Chat) Stream(ctx *gst.ServiceContext, stream *grpc.BidiStream[*model.FeedEvent, *model.FeedEvent]) (err error) {
+//	func (c *Chat) Stream(ctx *gst.ServiceContext, stream *gst.BidiStream[*model.FeedEvent, *model.FeedEvent]) (err error) {
 //	}
 func serviceMethod9(recvName, modelQualifier, gstModelPkg, reqName, rspName string, streamingPayload, streamingResult bool, roleName string, body ...ast.Stmt) *ast.FuncDecl {
 	reqExpr := actionTypeOrEmptyExpr(modelQualifier, gstModelPkg, reqName)
 	rspExpr := actionTypeOrEmptyExpr(modelQualifier, gstModelPkg, rspName)
-	grpcType := func(name string, indices ...ast.Expr) ast.Expr {
-		sel := &ast.SelectorExpr{X: ast.NewIdent("grpc"), Sel: ast.NewIdent(name)}
+	streamType := func(name string, indices ...ast.Expr) ast.Expr {
+		sel := &ast.SelectorExpr{X: ast.NewIdent(ggconst.PkgGst), Sel: ast.NewIdent(name)}
 		if len(indices) == 1 {
 			return &ast.StarExpr{X: &ast.IndexExpr{X: sel, Index: indices[0]}}
 		}
 		return &ast.StarExpr{X: &ast.IndexListExpr{X: sel, Indices: indices}}
 	}
-	params := []*ast.Field{{Names: []*ast.Ident{ast.NewIdent("ctx")}, Type: &ast.StarExpr{X: &ast.SelectorExpr{X: ast.NewIdent("gst"), Sel: ast.NewIdent("ServiceContext")}}}}
+	params := []*ast.Field{{Names: []*ast.Ident{ast.NewIdent("ctx")}, Type: &ast.StarExpr{X: &ast.SelectorExpr{X: ast.NewIdent(ggconst.PkgGst), Sel: ast.NewIdent(ggconst.GstServiceContext)}}}}
 	results := []*ast.Field{{Names: []*ast.Ident{ast.NewIdent("err")}, Type: ast.NewIdent("error")}}
 	switch {
 	case streamingPayload && streamingResult:
-		params = append(params, &ast.Field{Names: []*ast.Ident{ast.NewIdent("stream")}, Type: grpcType("BidiStream", reqExpr, rspExpr)})
+		params = append(params, &ast.Field{Names: []*ast.Ident{ast.NewIdent("stream")}, Type: streamType(ggconst.GstBidiStream, reqExpr, rspExpr)})
 	case streamingPayload:
-		params = append(params, &ast.Field{Names: []*ast.Ident{ast.NewIdent("stream")}, Type: grpcType("ClientStream", reqExpr)})
+		params = append(params, &ast.Field{Names: []*ast.Ident{ast.NewIdent("stream")}, Type: streamType(ggconst.GstClientStream, reqExpr)})
 		results = append([]*ast.Field{{Names: []*ast.Ident{ast.NewIdent("rsp")}, Type: rspExpr}}, results...)
 	default:
 		params = append(params,
 			&ast.Field{Names: []*ast.Ident{ast.NewIdent("req")}, Type: reqExpr},
-			&ast.Field{Names: []*ast.Ident{ast.NewIdent("stream")}, Type: grpcType("ServerStream", rspExpr)})
+			&ast.Field{Names: []*ast.Ident{ast.NewIdent("stream")}, Type: streamType(ggconst.GstServerStream, rspExpr)})
 	}
 	return &ast.FuncDecl{
 		Recv: &ast.FieldList{List: []*ast.Field{{Names: []*ast.Ident{ast.NewIdent(recvName)}, Type: &ast.StarExpr{X: ast.NewIdent(roleName)}}}},

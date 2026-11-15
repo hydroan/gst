@@ -191,10 +191,10 @@ func TestGenRunServesStreamActionsOverGRPCAlone(t *testing.T) {
 	require.Contains(t, string(services), `service.Register[*feed.Watch](service.Stream, "/api/feeds/watch")`)
 	require.Contains(t, string(services), `service.Register[*feed.Upload](service.Stream, "/api/feeds/:feed/upload")`)
 	for name, signature := range map[string]string{
-		"watch":  "func (w *Watch) Stream(ctx *gst.ServiceContext, req *model.FeedWatchReq, stream *grpc.ServerStream[*model.FeedWatchRsp]) (err error)",
-		"tail":   "func (t *Tail) Stream(ctx *gst.ServiceContext, req *gstmodel.Empty, stream *grpc.ServerStream[*model.FeedTailRsp]) (err error)",
-		"upload": "func (u *Upload) Stream(ctx *gst.ServiceContext, stream *grpc.ClientStream[*model.FeedUploadReq]) (rsp *model.FeedUploadRsp, err error)",
-		"chat":   "func (c *Chat) Stream(ctx *gst.ServiceContext, stream *grpc.BidiStream[*model.FeedChatReq, *model.FeedChatRsp]) (err error)",
+		"watch":  "func (w *Watch) Stream(ctx *gst.ServiceContext, req *model.FeedWatchReq, stream *gst.ServerStream[*model.FeedWatchRsp]) (err error)",
+		"tail":   "func (t *Tail) Stream(ctx *gst.ServiceContext, req *gstmodel.Empty, stream *gst.ServerStream[*model.FeedTailRsp]) (err error)",
+		"upload": "func (u *Upload) Stream(ctx *gst.ServiceContext, stream *gst.ClientStream[*model.FeedUploadReq]) (rsp *model.FeedUploadRsp, err error)",
+		"chat":   "func (c *Chat) Stream(ctx *gst.ServiceContext, stream *gst.BidiStream[*model.FeedChatReq, *model.FeedChatRsp]) (err error)",
 	} {
 		code, readErr := os.ReadFile(filepath.Join(projectDir, ggconst.DirService, "feed", name+".go"))
 		require.NoError(t, readErr, name)

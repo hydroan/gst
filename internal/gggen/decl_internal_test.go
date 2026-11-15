@@ -683,15 +683,15 @@ func TestServiceMethod9(t *testing.T) {
 	}{
 		{
 			"server stream", "w", "Watch", "*FeedWatchReq", "*FeedEvent", false, true,
-			"func (w *Watch) Stream(ctx *gst.ServiceContext, req *model.FeedWatchReq, stream *grpc.ServerStream[*model.FeedEvent]) (err error) {\n}",
+			"func (w *Watch) Stream(ctx *gst.ServiceContext, req *model.FeedWatchReq, stream *gst.ServerStream[*model.FeedEvent]) (err error) {\n}",
 		},
 		{
 			"client stream", "u", "Upload", "*FeedEvent", "*FeedUploadRsp", true, false,
-			"func (u *Upload) Stream(ctx *gst.ServiceContext, stream *grpc.ClientStream[*model.FeedEvent]) (rsp *model.FeedUploadRsp, err error) {\n}",
+			"func (u *Upload) Stream(ctx *gst.ServiceContext, stream *gst.ClientStream[*model.FeedEvent]) (rsp *model.FeedUploadRsp, err error) {\n}",
 		},
 		{
 			"bidirectional stream", "c", "Chat", "*FeedEvent", "*FeedEvent", true, true,
-			"func (c *Chat) Stream(ctx *gst.ServiceContext, stream *grpc.BidiStream[*model.FeedEvent, *model.FeedEvent]) (err error) {\n}",
+			"func (c *Chat) Stream(ctx *gst.ServiceContext, stream *gst.BidiStream[*model.FeedEvent, *model.FeedEvent]) (err error) {\n}",
 		},
 	}
 	for _, tt := range tests {

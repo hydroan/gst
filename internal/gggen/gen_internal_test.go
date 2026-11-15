@@ -447,7 +447,7 @@ func TestGenServiceMethod9(t *testing.T) {
 		{
 			name:   "watch",
 			action: &dsl.Action{Service: true, ServiceName: "watch", Payload: "*FeedWatchReq", Result: "*FeedEvent", StreamingResult: true, Phase: apiaction.Stream},
-			want: `func (w *Watch) Stream(ctx *gst.ServiceContext, req *model.FeedWatchReq, stream *grpc.ServerStream[*model.FeedEvent]) (err error) {
+			want: `func (w *Watch) Stream(ctx *gst.ServiceContext, req *model.FeedWatchReq, stream *gst.ServerStream[*model.FeedEvent]) (err error) {
 	log := w.WithContext(ctx, ctx.Phase())
 	log.Info("feed: watch")
 
@@ -457,7 +457,7 @@ func TestGenServiceMethod9(t *testing.T) {
 		{
 			name:   "upload",
 			action: &dsl.Action{Service: true, ServiceName: "upload", Payload: "*FeedEvent", Result: "*FeedUploadRsp", StreamingPayload: true, Phase: apiaction.Stream},
-			want: `func (u *Upload) Stream(ctx *gst.ServiceContext, stream *grpc.ClientStream[*model.FeedEvent]) (rsp *model.FeedUploadRsp, err error) {
+			want: `func (u *Upload) Stream(ctx *gst.ServiceContext, stream *gst.ClientStream[*model.FeedEvent]) (rsp *model.FeedUploadRsp, err error) {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("feed: upload")
 
@@ -851,7 +851,7 @@ func TestGenerateServiceSSE(t *testing.T) {
 
 // TestGenerateServiceStream pins the service file of a Stream action: the
 // struct embedding service.Base on the action's types, the Stream method of
-// its kind, the gst grpc import the stream comes from, and no hook.
+// its kind, the gst import the stream comes from, and no hook.
 func TestGenerateServiceStream(t *testing.T) {
 	info := &modelinfo.Model{
 		ModulePath:   "helloworld",
@@ -873,10 +873,10 @@ func TestGenerateServiceStream(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		`"github.com/hydroan/gst/grpc"`,
+		`"github.com/hydroan/gst"`,
 		"type Chat struct",
 		"service.Base[*model.Feed, *model.FeedEvent, *model.FeedEvent]",
-		"func (c *Chat) Stream(ctx *gst.ServiceContext, stream *grpc.BidiStream[*model.FeedEvent, *model.FeedEvent]) (err error)",
+		"func (c *Chat) Stream(ctx *gst.ServiceContext, stream *gst.BidiStream[*model.FeedEvent, *model.FeedEvent]) (err error)",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("generated service missing %q, got:\n%s", want, got)

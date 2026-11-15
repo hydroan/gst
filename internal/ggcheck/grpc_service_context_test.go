@@ -183,7 +183,6 @@ import (
 	"net/http"
 
 	"github.com/hydroan/gst"
-	"github.com/hydroan/gst/grpc"
 	"github.com/hydroan/gst/service"
 	"tmpapp/model"
 )
@@ -192,7 +191,7 @@ type Chatter struct {
 	service.Base[*model.Entry, *model.Entry, *model.Entry]
 }
 
-func (c *Chatter) Stream(ctx *gst.ServiceContext, stream *grpc.BidiStream[*model.Entry, *model.Entry]) error {
+func (c *Chatter) Stream(ctx *gst.ServiceContext, stream *gst.BidiStream[*model.Entry, *model.Entry]) error {
 	ctx.SetCookie(&http.Cookie{Name: "chat"})
 	return nil
 }

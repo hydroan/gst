@@ -714,7 +714,6 @@ import (
 	"helloworld/model"
 
 	"github.com/hydroan/gst"
-	"github.com/hydroan/gst/grpc"
 	"github.com/hydroan/gst/service"
 )
 
@@ -722,7 +721,7 @@ type Watch struct {
 	service.Base[*model.Feed, *model.FeedWatchReq, *model.FeedEvent]
 }
 
-func (w *Watch) Stream(ctx *gst.ServiceContext, req *model.FeedWatchReq, stream *grpc.ServerStream[*model.FeedEvent]) (err error) {
+func (w *Watch) Stream(ctx *gst.ServiceContext, req *model.FeedWatchReq, stream *gst.ServerStream[*model.FeedEvent]) (err error) {
 	log := w.WithContext(ctx, ctx.Phase())
 	log.Info("feed: watch")
 
@@ -740,7 +739,7 @@ func (w *Watch) Stream(ctx *gst.ServiceContext, req *model.FeedWatchReq, stream 
 	got, err := gghelper.FormatFile(file, fset, "helloworld")
 	require.NoError(t, err)
 	require.Contains(t, got, "service.Base[*model.Feed, *model.FeedEvent, *model.FeedEvent]")
-	require.Contains(t, got, "func (w *Watch) Stream(ctx *gst.ServiceContext, stream *grpc.BidiStream[*model.FeedEvent, *model.FeedEvent]) (err error) {\n\tlog := w.WithContext(ctx, ctx.Phase())\n\tlog.Info(\"feed: watch\")\n\n\treturn nil\n}")
+	require.Contains(t, got, "func (w *Watch) Stream(ctx *gst.ServiceContext, stream *gst.BidiStream[*model.FeedEvent, *model.FeedEvent]) (err error) {\n\tlog := w.WithContext(ctx, ctx.Phase())\n\tlog.Info(\"feed: watch\")\n\n\treturn nil\n}")
 	changed, err = gggen.ApplyServiceFile(file, action, "feed")
 	require.NoError(t, err)
 	require.False(t, changed, "a matching signature is left alone")
@@ -751,7 +750,6 @@ import (
 	"helloworld/model"
 
 	"github.com/hydroan/gst"
-	"github.com/hydroan/gst/grpc"
 	"github.com/hydroan/gst/service"
 )
 
@@ -759,7 +757,7 @@ type Upload struct {
 	service.Base[*model.Feed, *model.FeedEvent, *model.FeedUploadRsp]
 }
 
-func (u *Upload) Stream(ctx *gst.ServiceContext, events *grpc.ClientStream[*model.FeedEvent]) (*model.FeedUploadRsp, error) {
+func (u *Upload) Stream(ctx *gst.ServiceContext, events *gst.ClientStream[*model.FeedEvent]) (*model.FeedUploadRsp, error) {
 	return nil, nil
 }
 `
@@ -783,7 +781,6 @@ import (
 	"helloworld/model"
 
 	"github.com/hydroan/gst"
-	"github.com/hydroan/gst/grpc"
 	"github.com/hydroan/gst/service"
 )
 
@@ -791,7 +788,7 @@ type Watch struct {
 	service.Base[*model.Feed, *model.FeedWatchReq, *model.FeedEvent]
 }
 
-func (w *Watch) Stream(ctx *gst.ServiceContext, r *model.FeedWatchReq, s *grpc.ServerStream[*model.FeedEvent]) error {
+func (w *Watch) Stream(ctx *gst.ServiceContext, r *model.FeedWatchReq, s *gst.ServerStream[*model.FeedEvent]) error {
 	return s.Send(nil)
 }
 `
@@ -805,7 +802,7 @@ func (w *Watch) Stream(ctx *gst.ServiceContext, r *model.FeedWatchReq, s *grpc.S
 	require.True(t, changed)
 	got, err := gghelper.FormatFile(file, fset, "helloworld")
 	require.NoError(t, err)
-	require.Contains(t, got, "func (w *Watch) Stream(ctx *gst.ServiceContext, r *model.FeedWatchReq, s *grpc.ServerStream[*model.FeedTick]) error {\n\treturn s.Send(nil)\n}")
+	require.Contains(t, got, "func (w *Watch) Stream(ctx *gst.ServiceContext, r *model.FeedWatchReq, s *gst.ServerStream[*model.FeedTick]) error {\n\treturn s.Send(nil)\n}")
 }
 
 func TestApplyServiceFileEmptyPayload(t *testing.T) {

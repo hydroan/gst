@@ -194,9 +194,9 @@ HTTP 状态到 gRPC status 的映射（`grpcserver.StatusError`）：
 
 - 拦截器在首条消息前跑一次，访问日志一条流记一条，状态取流结束时的。
 - 请求逐条 normalize 与校验，被拒的那条让 Recv 返回错误，调用答 InvalidArgument。
-- 服务端流：`Stream(ctx *gst.ServiceContext, req REQ, stream *grpc.ServerStream[RSP]) error`。
-- 客户端流：`Stream(ctx, stream *grpc.ClientStream[REQ]) (RSP, error)`，对方发完 Recv 答 io.EOF。
-- 双向流：`Stream(ctx, stream *grpc.BidiStream[REQ, RSP]) error`。
+- 服务端流：`Stream(ctx *gst.ServiceContext, req REQ, stream *gst.ServerStream[RSP]) error`。
+- 客户端流：`Stream(ctx, stream *gst.ClientStream[REQ]) (RSP, error)`，对方发完 Recv 答 io.EOF。
+- 双向流：`Stream(ctx, stream *gst.BidiStream[REQ, RSP]) error`。
 - ctx 取消即流结束：客户端停掉 watch 答 Canceled，不算错误，服务察觉 ctx 结束后返回 nil 也一样；进程停机时流的 ctx 同样结束，正等客户端下一条消息（或首条）的 Recv 也随之返回，调用答 Unavailable「the server is shutting down」，客户端据此换副本重连（一元调用照常排空）。
 
 ```plantuml
@@ -265,7 +265,7 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 | `router` → `internal/router` | HTTP | gin 引擎、路由注册、认证组、Run / Stop |
 | `middleware` → `internal/middleware` | HTTP | 内建链、`Register / RegisterAuth`；公开包另带项目挂的中间件 |
 | `internal/controller` | 共用 | HTTP handler、gRPC 调用工厂、流的运行时、十个 CRUD 流程、校验与错误映射 |
-| `grpc` → `internal/grpcserver`（调用函数与流经 `internal/controller`；转换函数与 `Bearer` 实现在本包） | gRPC | 生成代码与项目用的入口：`Register`、`Method`、十个 `XxxCall`、`ServiceCall`、三种流、转换函数、`Bearer / WithCaller / CallerOf / Route / StatusError` |
+| `grpc` → `internal/grpcserver`（调用函数与流经 `internal/controller`；转换函数与 `Bearer` 实现在本包） | gRPC | 生成代码与项目用的入口：`Register`、`Method`、十个 `XxxCall`、`ServiceCall`、三种流的调用、转换函数、`Bearer / WithCaller / CallerOf / Route / StatusError` |
 | `interceptor` → `internal/grpcserver`（`Register / RegisterAuth`；项目挂的拦截器实现在本包） | gRPC | `Register / RegisterAuth` 与项目挂的拦截器，随 module copy 复制进项目的拦截器也以本包为源 |
 | `internal/grpcserver` | gRPC | 监听、拦截器链、requestScope、recovery、指标、health 与反射、状态映射、Drain / Stop |
 | `internal/requestctx`、`internal/types` | 共用 | 请求元数据与 `ServiceContext`、流对象接口，两种传输各自填充 |

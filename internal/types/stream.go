@@ -5,7 +5,7 @@ package types
 // the requests one by one, and a bidirectional stream does both. The
 // controller builds each on the stream of the transport (see the stream
 // calls of the controller), so a service depends on no transport; the
-// public grpc package forwards the types to a project's service code.
+// root gst package forwards the types to a project's service code.
 
 // ServerStreamer is the service of a Stream action declaring a Payload and
 // a StreamingResult: Stream answers req with the responses it sends on

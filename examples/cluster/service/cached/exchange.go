@@ -10,7 +10,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst"
-	"github.com/hydroan/gst/grpc"
 	"github.com/hydroan/gst/service"
 )
 
@@ -23,7 +22,7 @@ type Exchange struct {
 
 // Stream answers every key until the client closes its side, which Recv
 // reports as io.EOF; returning then ends the stream.
-func (e *Exchange) Stream(ctx *gst.ServiceContext, stream *grpc.BidiStream[*model.CachedKeyReq, *model.CachedExchangeRsp]) error {
+func (e *Exchange) Stream(ctx *gst.ServiceContext, stream *gst.BidiStream[*model.CachedKeyReq, *model.CachedExchangeRsp]) error {
 	for {
 		req, err := stream.Recv()
 		if errors.Is(err, io.EOF) {

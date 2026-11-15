@@ -7,27 +7,12 @@ import (
 	"github.com/hydroan/gst/internal/types"
 )
 
-// This file holds what a Stream action's service reads and writes, the
-// streams, and the calls the generated handlers of streaming rpcs run the
-// action through: ServerStreamCall, ClientStreamCall and BidiStreamCall,
-// one per kind of stream, the counterparts of ServiceCall, FirstMessage,
-// which a handler reads the route parameters of a request stream through,
-// and SameParams, which it holds every later message to them with.
-
-// ServerStream is the response stream of a Stream action declaring a
-// StreamingResult: the service's Stream method sends each response through
-// Send, which fails once the client went away or the call was canceled.
-type ServerStream[RSP types.Response] = types.ServerStream[RSP]
-
-// ClientStream is the request stream of a Stream action declaring a
-// StreamingPayload: the service's Stream method reads each request through
-// Recv, which answers io.EOF once the client finished sending.
-type ClientStream[REQ types.Request] = types.ClientStream[REQ]
-
-// BidiStream is the request and response stream of a Stream action
-// declaring both a StreamingPayload and a StreamingResult: Recv and Send
-// as on the two above, independent of each other.
-type BidiStream[REQ types.Request, RSP types.Response] = types.BidiStream[REQ, RSP]
+// This file holds the calls the generated handlers of streaming rpcs run a
+// Stream action through: ServerStreamCall, ClientStreamCall and
+// BidiStreamCall, one per kind of stream, the counterparts of ServiceCall,
+// FirstMessage, which a handler reads the route parameters of a request
+// stream through, and SameParams, which it holds every later message to
+// them with.
 
 // FirstMessage returns the first message of a request stream read through
 // recv, the Recv of the stream the plugin generated: what the generated

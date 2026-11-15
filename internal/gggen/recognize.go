@@ -4,6 +4,8 @@ import (
 	"go/ast"
 	"slices"
 
+	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/goast"
 )
 
@@ -43,14 +45,14 @@ func isServiceMethod1(fn *ast.FuncDecl) bool {
 // genServiceMethod9 generates through serviceMethod9, any of its three
 // kinds:
 //
-//	func (r *recv) Stream(ctx *gst.ServiceContext, req <T>, stream *grpc.ServerStream[<T>]) error
-//	func (r *recv) Stream(ctx *gst.ServiceContext, stream *grpc.ClientStream[<T>]) (<T>, error)
-//	func (r *recv) Stream(ctx *gst.ServiceContext, stream *grpc.BidiStream[<T>, <T>]) error
+//	func (r *recv) Stream(ctx *gst.ServiceContext, req <T>, stream *gst.ServerStream[<T>]) error
+//	func (r *recv) Stream(ctx *gst.ServiceContext, stream *gst.ClientStream[<T>]) (<T>, error)
+//	func (r *recv) Stream(ctx *gst.ServiceContext, stream *gst.BidiStream[<T>, <T>]) error
 //
 // that is, a method named Stream taking the service context first and a
-// pointer to a stream of the grpc package last.
+// pointer to a stream of the gst package last.
 func isServiceMethod9(fn *ast.FuncDecl) bool {
-	if fn == nil || fn.Recv == nil || fn.Name == nil || fn.Name.Name != "Stream" || fn.Type == nil || fn.Type.Params == nil || fn.Type.Results == nil {
+	if fn == nil || fn.Recv == nil || fn.Name == nil || fn.Name.Name != apiaction.Stream.Name() || fn.Type == nil || fn.Type.Params == nil || fn.Type.Results == nil {
 		return false
 	}
 	if !goast.IsPointerReceiver(fn.Recv) {
@@ -78,10 +80,10 @@ func isServiceMethod9(fn *ast.FuncDecl) bool {
 		return false
 	}
 	pkg, ok := sel.X.(*ast.Ident)
-	if !ok || pkg.Name != "grpc" {
+	if !ok || pkg.Name != ggconst.PkgGst {
 		return false
 	}
-	return slices.Contains([]string{"ServerStream", "ClientStream", "BidiStream"}, sel.Sel.Name)
+	return slices.Contains([]string{ggconst.GstServerStream, ggconst.GstClientStream, ggconst.GstBidiStream}, sel.Sel.Name)
 }
 
 // isServiceMethod2 checks whether a function declaration matches the shape
@@ -202,7 +204,7 @@ func isServiceContextParam(field *ast.Field) bool {
 	if !ok {
 		return false
 	}
-	return pkg.Name == "gst" && sel.Sel != nil && sel.Sel.Name == "ServiceContext"
+	return pkg.Name == ggconst.PkgGst && sel.Sel != nil && sel.Sel.Name == ggconst.GstServiceContext
 }
 
 // isQualifiedOrPointer checks the type is qualified by a package name, by

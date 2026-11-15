@@ -8,7 +8,6 @@ import (
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/grpc"
 	"github.com/hydroan/gst/service"
 )
 
@@ -28,7 +27,7 @@ type Watch struct {
 
 // Stream sends the numbers after req.After as they appear and returns once
 // ctx is done, which is when the client has gone or the process is stopping.
-func (w *Watch) Stream(ctx *gst.ServiceContext, req *model.CounterStepWatchReq, stream *grpc.ServerStream[*model.CounterStep]) error {
+func (w *Watch) Stream(ctx *gst.ServiceContext, req *model.CounterStepWatchReq, stream *gst.ServerStream[*model.CounterStep]) error {
 	after := req.After
 	ticker := time.NewTicker(watchInterval)
 	defer ticker.Stop()

@@ -7,7 +7,6 @@ import (
 	"demo/model/board"
 
 	"github.com/hydroan/gst"
-	"github.com/hydroan/gst/grpc"
 	"github.com/hydroan/gst/service"
 )
 
@@ -20,7 +19,7 @@ type Watch struct {
 // Stream sends three events of the topic and returns, which ends the
 // stream. A live feed would block on its source instead and send until ctx
 // is done, which is when the client has gone.
-func (w *Watch) Stream(_ *gst.ServiceContext, req *board.FeedWatchReq, stream *grpc.ServerStream[*board.FeedWatchRsp]) error {
+func (w *Watch) Stream(_ *gst.ServiceContext, req *board.FeedWatchReq, stream *gst.ServerStream[*board.FeedWatchRsp]) error {
 	for seq := int64(1); seq <= 3; seq++ {
 		if err := stream.Send(&board.FeedWatchRsp{Seq: seq, Body: req.Topic + " #" + strconv.FormatInt(seq, 10)}); err != nil {
 			return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to send the event", err)

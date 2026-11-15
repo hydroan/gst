@@ -201,7 +201,7 @@ func describeType(typ reflect.Type, modelPkg string) (expr string, imports map[s
 // its siblings for internal/modelregistry, model.Version for
 // internal/modelschema, the root gst package for internal/types, which
 // forwards under the same name every type of it a model can name and this
-// function writes back, the generic streams grpc forwards being
+// function writes back, the generic streams among them being
 // instantiations it declines, the service package for internal/apiaction,
 // service.Phase among them, and, for the types a model stores as JSON, the
 // grpc package for internal/controller and internal/grpcserver, grpc.Filter

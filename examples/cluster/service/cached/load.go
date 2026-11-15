@@ -10,7 +10,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst"
-	"github.com/hydroan/gst/grpc"
 	"github.com/hydroan/gst/service"
 )
 
@@ -23,7 +22,7 @@ type Load struct {
 
 // Stream caches every entry until the client closes its side, which Recv
 // reports as io.EOF, and answers the count.
-func (l *Load) Stream(ctx *gst.ServiceContext, stream *grpc.ClientStream[*model.CachedLoadReq]) (*model.CachedLoadRsp, error) {
+func (l *Load) Stream(ctx *gst.ServiceContext, stream *gst.ClientStream[*model.CachedLoadReq]) (*model.CachedLoadRsp, error) {
 	var count int64
 	for {
 		entry, err := stream.Recv()

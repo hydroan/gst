@@ -8,7 +8,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst"
-	"github.com/hydroan/gst/grpc"
 	"github.com/hydroan/gst/service"
 )
 
@@ -20,7 +19,7 @@ type Chat struct {
 
 // Stream echoes every event back until the client closes its side, which
 // Recv reports as io.EOF; returning then ends the stream.
-func (c *Chat) Stream(_ *gst.ServiceContext, stream *grpc.BidiStream[*board.FeedChatReq, *board.FeedChatRsp]) error {
+func (c *Chat) Stream(_ *gst.ServiceContext, stream *gst.BidiStream[*board.FeedChatReq, *board.FeedChatRsp]) error {
 	for {
 		event, err := stream.Recv()
 		if errors.Is(err, io.EOF) {
