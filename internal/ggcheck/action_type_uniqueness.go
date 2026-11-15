@@ -54,7 +54,7 @@ func checkActionTypeUniqueness(ignore gghelper.ProjectIgnore) []string {
 	}
 	var paths []string
 	err := ignore.Walk(ggconst.DirModel, func(path string, info os.FileInfo) error {
-		if !info.IsDir() && strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, "_test.go") && !isGeneratedFileName(path) {
+		if !info.IsDir() && strings.HasSuffix(path, ggconst.ExtensionGo) && !strings.HasSuffix(path, ggconst.PatternTestFile) && !isGeneratedFileName(path) {
 			paths = append(paths, path)
 		}
 		return nil

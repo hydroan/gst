@@ -56,14 +56,14 @@ func TestMainFiles(ignore ProjectIgnore) ([]string, error) {
 		if err != nil {
 			return err
 		}
-		if !bytes.Contains(src, []byte("TestMain")) {
+		if !bytes.Contains(src, []byte(ggconst.FuncTestMain)) {
 			return nil
 		}
 		file, err := parser.ParseFile(token.NewFileSet(), path, src, parser.SkipObjectResolution)
 		if err != nil {
 			return errors.Wrapf(err, "reading the test file %s", path)
 		}
-		if strings.HasSuffix(file.Name.Name, "_test") && goast.DeclaresTestMain(file) {
+		if strings.HasSuffix(file.Name.Name, ggconst.SuffixTestPkg) && goast.DeclaresTestMain(file) {
 			files = append(files, path)
 		}
 		return nil

@@ -93,7 +93,7 @@ func BuildAPIDocFile(modulePath, pkgName string, entries modelinfo.APIDocEntries
 // documented fields no Fields field.
 func apidocRegisterStmt(lines *goast.LineSet, entry modelinfo.StructDocEntry) ast.Stmt {
 	callPos := lines.Next()
-	doc := &ast.CompositeLit{Type: sel(ident("apidoc"), "StructDoc"), Lbrace: callPos}
+	doc := &ast.CompositeLit{Type: sel(ident(ggconst.PkgAPIDoc), "StructDoc"), Lbrace: callPos}
 	if entry.Doc.Comment != "" {
 		doc.Elts = append(doc.Elts, keyValue("Comment", strLit(entry.Doc.Comment), lines.Next()))
 	}
@@ -113,7 +113,7 @@ func apidocRegisterStmt(lines *goast.LineSet, entry modelinfo.StructDocEntry) as
 		doc.Elts = append(doc.Elts, keyValue("Fields", fields, fieldsPos))
 	}
 	doc.Rbrace = lines.Next()
-	return exprStmt(call(sel(&ast.Ident{Name: "apidoc", NamePos: callPos}, "Register"), strLit(entry.PkgPath), strLit(entry.TypeName), doc))
+	return exprStmt(call(sel(&ast.Ident{Name: ggconst.PkgAPIDoc, NamePos: callPos}, ggconst.FuncRegister), strLit(entry.PkgPath), strLit(entry.TypeName), doc))
 }
 
 // apidocRegisterEnumStmt builds the registration of one enum's docs, taking
@@ -131,13 +131,13 @@ func apidocRegisterStmt(lines *goast.LineSet, entry modelinfo.StructDocEntry) as
 // comment no Comment element.
 func apidocRegisterEnumStmt(lines *goast.LineSet, entry modelinfo.EnumDocEntry) ast.Stmt {
 	callPos := lines.Next()
-	doc := &ast.CompositeLit{Type: sel(ident("apidoc"), "EnumDoc"), Lbrace: callPos}
+	doc := &ast.CompositeLit{Type: sel(ident(ggconst.PkgAPIDoc), "EnumDoc"), Lbrace: callPos}
 	if entry.Doc.Comment != "" {
 		doc.Elts = append(doc.Elts, keyValue("Comment", strLit(entry.Doc.Comment), lines.Next()))
 	}
 	valuesPos := lines.Next()
 	values := &ast.CompositeLit{
-		Type:   &ast.ArrayType{Elt: sel(ident("apidoc"), "EnumValue")},
+		Type:   &ast.ArrayType{Elt: sel(ident(ggconst.PkgAPIDoc), "EnumValue")},
 		Lbrace: valuesPos,
 	}
 	for _, value := range entry.Doc.Values {
@@ -153,7 +153,7 @@ func apidocRegisterEnumStmt(lines *goast.LineSet, entry modelinfo.EnumDocEntry) 
 	values.Rbrace = lines.Next()
 	doc.Elts = append(doc.Elts, keyValue("Values", values, valuesPos))
 	doc.Rbrace = lines.Next()
-	return exprStmt(call(sel(&ast.Ident{Name: "apidoc", NamePos: callPos}, "RegisterEnum"), strLit(entry.PkgPath), strLit(entry.TypeName), doc))
+	return exprStmt(call(sel(&ast.Ident{Name: ggconst.PkgAPIDoc, NamePos: callPos}, "RegisterEnum"), strLit(entry.PkgPath), strLit(entry.TypeName), doc))
 }
 
 // enumValueLiteral renders one enum constant value as a Go literal, as in

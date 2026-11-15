@@ -390,7 +390,7 @@ func BuildMainFile(projectName string, extraDirs ...string) (string, error) {
 								Args: []ast.Expr{
 									&ast.SelectorExpr{
 										X:   ast.NewIdent(ggconst.PkgRouter),
-										Sel: ast.NewIdent(ggconst.RouterInit),
+										Sel: ast.NewIdent(ggconst.FuncInit2),
 									},
 								},
 							},

@@ -42,7 +42,7 @@ func checkJSONTagNaming(ignore gghelper.ProjectIgnore) []string {
 	packageFiles := make(map[string][]string)
 	err := ignore.Walk(ggconst.DirModel, func(path string, info os.FileInfo) error {
 		// Skip directories and non-Go files
-		if info.IsDir() || !strings.HasSuffix(path, ".go") {
+		if info.IsDir() || !strings.HasSuffix(path, ggconst.ExtensionGo) {
 			return nil
 		}
 
@@ -53,7 +53,7 @@ func checkJSONTagNaming(ignore gghelper.ProjectIgnore) []string {
 
 		violations = append(violations, checkFileModelJSONTagNaming(path)...)
 
-		if strings.HasSuffix(path, "_test.go") {
+		if strings.HasSuffix(path, ggconst.PatternTestFile) {
 			return nil
 		}
 		dir := filepath.Dir(path)

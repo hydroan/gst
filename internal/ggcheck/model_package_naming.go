@@ -31,7 +31,7 @@ func checkModelPackageNaming(ignore gghelper.ProjectIgnore) []string {
 
 	err := ignore.Walk(ggconst.DirModel, func(path string, info os.FileInfo) error {
 		// Skip directories and non-Go files
-		if info.IsDir() || !strings.HasSuffix(path, ".go") {
+		if info.IsDir() || !strings.HasSuffix(path, ggconst.ExtensionGo) {
 			return nil
 		}
 
@@ -62,7 +62,7 @@ func checkModelPackageNaming(ignore gghelper.ProjectIgnore) []string {
 		expectedName := modelinfo.ModelPackageName(dirName)
 
 		// Allow black-box test files to use the `<package>_test` external test package name.
-		if strings.HasSuffix(path, "_test.go") && packageName == expectedName+"_test" {
+		if strings.HasSuffix(path, ggconst.PatternTestFile) && packageName == expectedName+ggconst.SuffixTestPkg {
 			return nil
 		}
 

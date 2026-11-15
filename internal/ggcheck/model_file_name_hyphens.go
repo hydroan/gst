@@ -26,10 +26,10 @@ func checkModelFileNameHyphens(ignore gghelper.ProjectIgnore) []string {
 	}
 
 	err := ignore.Walk(ggconst.DirModel, func(path string, info os.FileInfo) error {
-		if info.IsDir() || !strings.HasSuffix(path, ".go") || strings.Contains(path, "_test.go") || isGeneratedFileName(path) {
+		if info.IsDir() || !strings.HasSuffix(path, ggconst.ExtensionGo) || strings.Contains(path, ggconst.PatternTestFile) || isGeneratedFileName(path) {
 			return nil
 		}
-		fileName := strings.TrimSuffix(info.Name(), ".go")
+		fileName := strings.TrimSuffix(info.Name(), ggconst.ExtensionGo)
 		if strings.Contains(fileName, "-") {
 			violations = append(violations, fmt.Sprintf("Model file '%s' should not contain hyphens (suggested: %s.go)",
 				path, strings.ReplaceAll(fileName, "-", "_")))

@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
 )
@@ -45,7 +46,7 @@ func checkTransactionClosureContext(ignore gghelper.ProjectIgnore) []string {
 			return nil
 		}
 
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+		if !strings.HasSuffix(path, ggconst.ExtensionGo) || strings.HasSuffix(path, ggconst.PatternTestFile) {
 			return nil
 		}
 

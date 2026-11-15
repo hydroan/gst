@@ -71,7 +71,7 @@ func goFilesInPackageDir(root string) ([]string, error) {
 }
 
 func isGoSourceFile(name string) bool {
-	return strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, "_test.go") && !strings.HasPrefix(name, ".")
+	return strings.HasSuffix(name, ggconst.ExtensionGo) && !strings.HasSuffix(name, ggconst.PatternTestFile) && !strings.HasPrefix(name, ".")
 }
 
 // generatedFileHeader matches the Go convention for generated files

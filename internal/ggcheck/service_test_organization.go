@@ -50,7 +50,7 @@ func checkServiceTestOrganization(ignore gghelper.ProjectIgnore) []string {
 			}
 			return nil
 		}
-		if !strings.HasSuffix(path, "_test.go") {
+		if !strings.HasSuffix(path, ggconst.PatternTestFile) {
 			return nil
 		}
 
@@ -81,11 +81,11 @@ func checkServiceTestOrganization(ignore gghelper.ProjectIgnore) []string {
 // of its package: foo_test.go needs foo.go, and foo_internal_test.go is the
 // internal test form of foo.go.
 func pairedSourceFileExists(testPath string) bool {
-	stem := strings.TrimSuffix(testPath, "_test.go")
-	if gghelper.FileExists(stem + ".go") {
+	stem := strings.TrimSuffix(testPath, ggconst.PatternTestFile)
+	if gghelper.FileExists(stem + ggconst.ExtensionGo) {
 		return true
 	}
-	if internal := strings.TrimSuffix(stem, "_internal"); internal != stem && gghelper.FileExists(internal+".go") {
+	if internal := strings.TrimSuffix(stem, "_internal"); internal != stem && gghelper.FileExists(internal+ggconst.ExtensionGo) {
 		return true
 	}
 	return false

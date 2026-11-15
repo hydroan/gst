@@ -146,7 +146,7 @@ func buildMigrateProjectFile(moduleName string) (string, error) {
 		})
 	}
 	f := &ast.File{
-		Name:  ast.NewIdent("main"),
+		Name:  ast.NewIdent(ggconst.PkgMain),
 		Decls: []ast.Decl{&ast.GenDecl{Tok: token.IMPORT, Specs: specs}},
 	}
 	fset := goast.GeneratedHeader(f)
@@ -179,7 +179,7 @@ func migrateProjectImports(moduleName string) []string {
 func hasGoSources(dir string) bool {
 	sources, _ := filepath.Glob(filepath.Join(dir, "*.go"))
 	for _, source := range sources {
-		if !strings.HasSuffix(source, "_test.go") {
+		if !strings.HasSuffix(source, ggconst.PatternTestFile) {
 			return true
 		}
 	}

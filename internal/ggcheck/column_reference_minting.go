@@ -19,7 +19,7 @@ import (
 // variables gg gen writes from the model schema; a reference minted by hand
 // names a column the schema is never asked about, so a typo or a renamed
 // field surfaces only when the query runs.
-var columnConstructors = []string{"NewColumn", "NewNumericColumn", "NewTimeColumn", "NewJSONStringsColumn"}
+var columnConstructors = []string{ggconst.GstNewColumn, ggconst.GstNewNumericColumn, ggconst.GstNewTimeColumn, ggconst.GstNewJSONStringsColumn}
 
 // ColumnReferenceMinting keeps project code from minting column references by
 // hand.
@@ -53,7 +53,7 @@ func checkColumnReferenceMinting(ignore gghelper.ProjectIgnore) []string {
 			}
 			return nil
 		}
-		if !strings.HasSuffix(path, ".go") || isGeneratedFileName(path) {
+		if !strings.HasSuffix(path, ggconst.ExtensionGo) || isGeneratedFileName(path) {
 			return nil
 		}
 		violations = append(violations, checkFileColumnReferenceMinting(path)...)
@@ -69,7 +69,7 @@ func checkColumnReferenceMinting(ignore gghelper.ProjectIgnore) []string {
 // one file. A file that fails to parse is reported as a violation so broken
 // code cannot slip past the check.
 func checkFileColumnReferenceMinting(path string) []string {
-	gstNames, found := importedNamesOf(path, ggconst.ImportPathGst, "gst")
+	gstNames, found := importedNamesOf(path, ggconst.ImportPathGst, ggconst.PkgGst)
 	if !found {
 		return nil
 	}

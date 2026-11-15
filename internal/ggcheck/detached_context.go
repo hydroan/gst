@@ -19,7 +19,7 @@ import (
 // context handed down to it — the write's for a model hook, a request's, a
 // round's, a tenure's, a lock's, the process's for a component, the start's
 // for a routes-ready hook — and must pass that context on to the database.
-var detachedContextDirs = []string{"model", "service", "dao", "cronjob", "leader", "lock", "component", "router"}
+var detachedContextDirs = []string{ggconst.DirModel, ggconst.DirService, ggconst.DirDAO, ggconst.DirCronjob, ggconst.DirLeader, ggconst.DirLock, ggconst.DirComponent, ggconst.DirRouter}
 
 // DetachedContext keeps context.Background() and context.TODO() out of the
 // framework database and dao calls of project code.
@@ -77,7 +77,7 @@ func checkDetachedContext(ignore gghelper.ProjectIgnore) []string {
 			if info.IsDir() {
 				return nil
 			}
-			if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") || isGeneratedFileName(path) {
+			if !strings.HasSuffix(path, ggconst.ExtensionGo) || strings.HasSuffix(path, ggconst.PatternTestFile) || isGeneratedFileName(path) {
 				return nil
 			}
 			if dir == ggconst.DirService && moduleOwnedPath(owned, ggconst.DirService, path) {

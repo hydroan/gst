@@ -95,7 +95,7 @@ func checkModuleAssembly(ignore gghelper.ProjectIgnore) []string {
 			}
 			return nil
 		}
-		if !strings.HasSuffix(filename, ".go") || strings.HasSuffix(filename, "_test.go") {
+		if !strings.HasSuffix(filename, ggconst.ExtensionGo) || strings.HasSuffix(filename, ggconst.PatternTestFile) {
 			return nil
 		}
 		source, readErr := os.ReadFile(filename)

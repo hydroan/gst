@@ -139,7 +139,7 @@ func collectVersionFieldFindings(ignore gghelper.ProjectIgnore) ([]VersionFieldF
 			return nil
 		}
 		base := filepath.Base(path)
-		if !strings.HasSuffix(base, ".go") || strings.HasSuffix(base, "_test.go") || isGeneratedFileName(path) {
+		if !strings.HasSuffix(base, ggconst.ExtensionGo) || strings.HasSuffix(base, ggconst.PatternTestFile) || isGeneratedFileName(path) {
 			return nil
 		}
 		fileFindings, err := scanVersionFieldFile(path)
@@ -416,7 +416,7 @@ func collectActionTypeVersionFindings(ignore gghelper.ProjectIgnore) ([]actionTy
 			return nil
 		}
 		base := filepath.Base(path)
-		if !strings.HasSuffix(base, ".go") || strings.HasSuffix(base, "_test.go") || isGeneratedFileName(path) {
+		if !strings.HasSuffix(base, ggconst.ExtensionGo) || strings.HasSuffix(base, ggconst.PatternTestFile) || isGeneratedFileName(path) {
 			return nil
 		}
 		dir := filepath.Dir(path)

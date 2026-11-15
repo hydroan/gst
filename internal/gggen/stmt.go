@@ -6,6 +6,7 @@ import (
 	"go/token"
 
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 // StmtLogInfo builds the statement that logs str, a quoted Go string
@@ -99,8 +100,8 @@ func StmtModelRegister(modelName string) *ast.ExprStmt {
 		X: &ast.CallExpr{
 			Fun: &ast.IndexExpr{
 				X: &ast.SelectorExpr{
-					X:   ast.NewIdent("model"),
-					Sel: ast.NewIdent("Register"),
+					X:   ast.NewIdent(ggconst.PkgModel),
+					Sel: ast.NewIdent(ggconst.FuncRegister),
 				},
 				Index: &ast.StarExpr{
 					X: ast.NewIdent(modelName),
@@ -124,8 +125,8 @@ func StmtServiceRegister(serviceImport string, phase apiaction.Phase, route stri
 		X: &ast.CallExpr{
 			Fun: &ast.IndexExpr{
 				X: &ast.SelectorExpr{
-					X:   ast.NewIdent("service"),
-					Sel: ast.NewIdent("Register"),
+					X:   ast.NewIdent(ggconst.PkgService),
+					Sel: ast.NewIdent(ggconst.FuncRegister),
 				},
 				Index: &ast.StarExpr{
 					X: ast.NewIdent(serviceImport),
@@ -133,7 +134,7 @@ func StmtServiceRegister(serviceImport string, phase apiaction.Phase, route stri
 			},
 			Args: []ast.Expr{
 				&ast.SelectorExpr{
-					X:   ast.NewIdent("service"),
+					X:   ast.NewIdent(ggconst.PkgService),
 					Sel: ast.NewIdent(phase.Name()),
 				},
 				&ast.BasicLit{
@@ -188,8 +189,8 @@ func StmtRouterRegister(modelPkgName, modelName, reqName, rspName, gstModelPkg s
 		X: &ast.CompositeLit{
 			Type: &ast.IndexExpr{
 				X: &ast.SelectorExpr{
-					X:   ast.NewIdent("gst"),
-					Sel: ast.NewIdent("ControllerConfig"),
+					X:   ast.NewIdent(ggconst.PkgGst),
+					Sel: ast.NewIdent(ggconst.GstControllerConfig),
 				},
 				Index: &ast.StarExpr{
 					X: &ast.SelectorExpr{
@@ -208,8 +209,8 @@ func StmtRouterRegister(modelPkgName, modelName, reqName, rspName, gstModelPkg s
 			X: &ast.CompositeLit{
 				Type: &ast.IndexExpr{
 					X: &ast.SelectorExpr{
-						X:   ast.NewIdent("gst"),
-						Sel: ast.NewIdent("ControllerConfig"),
+						X:   ast.NewIdent(ggconst.PkgGst),
+						Sel: ast.NewIdent(ggconst.GstControllerConfig),
 					},
 					Index: &ast.StarExpr{
 						X: &ast.SelectorExpr{
@@ -220,7 +221,7 @@ func StmtRouterRegister(modelPkgName, modelName, reqName, rspName, gstModelPkg s
 				},
 				Elts: []ast.Expr{
 					&ast.KeyValueExpr{
-						Key: ast.NewIdent("ParamName"),
+						Key: ast.NewIdent(ggconst.GstControllerConfigParamName),
 						Value: &ast.BasicLit{
 							Kind:  token.STRING,
 							Value: fmt.Sprintf("%q", paramName),
@@ -235,8 +236,8 @@ func StmtRouterRegister(modelPkgName, modelName, reqName, rspName, gstModelPkg s
 		X: &ast.CallExpr{
 			Fun: &ast.IndexListExpr{
 				X: &ast.SelectorExpr{
-					X:   ast.NewIdent("router"),
-					Sel: ast.NewIdent("Register"),
+					X:   ast.NewIdent(ggconst.PkgRouter),
+					Sel: ast.NewIdent(ggconst.FuncRegister),
 				},
 				Indices: []ast.Expr{
 					&ast.StarExpr{
@@ -252,7 +253,7 @@ func StmtRouterRegister(modelPkgName, modelName, reqName, rspName, gstModelPkg s
 			Args: []ast.Expr{
 				&ast.CallExpr{
 					Fun: &ast.SelectorExpr{
-						X:   ast.NewIdent("router"),
+						X:   ast.NewIdent(ggconst.PkgRouter),
 						Sel: ast.NewIdent(routerGroup),
 					},
 				},
@@ -262,7 +263,7 @@ func StmtRouterRegister(modelPkgName, modelName, reqName, rspName, gstModelPkg s
 				},
 				paramExpr,
 				&ast.SelectorExpr{
-					X:   ast.NewIdent("service"),
+					X:   ast.NewIdent(ggconst.PkgService),
 					Sel: ast.NewIdent(phase),
 				},
 			},

@@ -86,14 +86,14 @@ func checkModelSingularNaming(ignore gghelper.ProjectIgnore) []string {
 					path, client.Singular(dirName))
 				violations = append(violations, violation)
 			}
-		} else if strings.HasSuffix(path, ".go") && !strings.Contains(path, "_test.go") {
+		} else if strings.HasSuffix(path, ggconst.ExtensionGo) && !strings.Contains(path, ggconst.PatternTestFile) {
 			// Skip framework-generated files.
 			if isGeneratedFileName(path) {
 				return nil
 			}
 
 			// Check Go file name (without .go extension)
-			fileName := strings.TrimSuffix(info.Name(), ".go")
+			fileName := strings.TrimSuffix(info.Name(), ggconst.ExtensionGo)
 
 			// As for directories, names of three letters or fewer are not
 			// checked and singular is checked first; the allowed plural file

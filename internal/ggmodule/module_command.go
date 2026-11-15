@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 // ChangeStatus describes whether a module command changed module/module.go.
@@ -72,5 +73,5 @@ func validateModuleCommandName(name string, subject string) error {
 }
 
 func projectModuleFile(projectDir string) string {
-	return filepath.Join(projectDir, "module", "module.go")
+	return filepath.Join(projectDir, ggconst.DirModule, "module.go")
 }

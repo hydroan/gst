@@ -207,7 +207,7 @@ var contextDerivations = []string{
 func packageNameOf(dir string) string {
 	sources, _ := filepath.Glob(filepath.Join(dir, "*.go"))
 	for _, source := range sources {
-		if strings.HasSuffix(source, "_test.go") {
+		if strings.HasSuffix(source, ggconst.PatternTestFile) {
 			continue
 		}
 		file, err := parser.ParseFile(token.NewFileSet(), source, nil, parser.PackageClauseOnly)
@@ -332,7 +332,7 @@ func serviceContextParams(decl *ast.FuncDecl, gstNames goast.PackageNames) map[v
 	}
 	for _, field := range decl.Type.Params.List {
 		star, ok := field.Type.(*ast.StarExpr)
-		if !ok || !gstNames.Refers(star.X, "ServiceContext") {
+		if !ok || !gstNames.Refers(star.X, ggconst.GstServiceContext) {
 			continue
 		}
 		for _, name := range field.Names {

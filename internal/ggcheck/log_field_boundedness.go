@@ -52,7 +52,7 @@ func checkLogFieldBoundedness(ignore gghelper.ProjectIgnore) []string {
 			}
 			return nil
 		}
-		if !strings.HasSuffix(path, ".go") || isGeneratedFileName(path) {
+		if !strings.HasSuffix(path, ggconst.ExtensionGo) || isGeneratedFileName(path) {
 			return nil
 		}
 		violations = append(violations, checkFileLogFieldBoundedness(path)...)

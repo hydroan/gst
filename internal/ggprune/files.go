@@ -68,11 +68,11 @@ func ScanServiceFiles(serviceDir string) ([]string, error) {
 // service.Base[...], while service/sample/record/create_test.go and a
 // service/sample/record/util.go declaring no such service are not.
 func isManagedServiceFile(path string) bool {
-	if !strings.HasSuffix(path, ".go") {
+	if !strings.HasSuffix(path, ggconst.ExtensionGo) {
 		return false
 	}
 	fileName := filepath.Base(path)
-	if strings.HasSuffix(fileName, "_test.go") {
+	if strings.HasSuffix(fileName, ggconst.PatternTestFile) {
 		return false
 	}
 	if phaseFileNames()[fileName] {

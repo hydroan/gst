@@ -161,7 +161,7 @@ func (g *generator) registrations(out *goFile, files []*pbschema.ProtoFile) {
 				}
 				args = append(args, compositeLit(sel(out.imports.fixedRef(ggconst.ImportPathGRPC), "Method"), elts...))
 			}
-			register := call(index(sel(out.imports.fixedRef(ggconst.ImportPathGRPC), "Register"), ident(service+"Server")), args...)
+			register := call(index(sel(out.imports.fixedRef(ggconst.ImportPathGRPC), ggconst.FuncRegister), ident(service+"Server")), args...)
 			body = append(body, exprStmt(register))
 			calls = append(calls, register)
 		}

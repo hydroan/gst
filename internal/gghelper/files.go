@@ -73,9 +73,9 @@ func PathUnderRoot(path, root string) (string, error) {
 // service file: gg prune deletes them with a service file it deletes, and gg
 // module copy with a stale one.
 func PairedTestFiles(servicePath string) []string {
-	stem := strings.TrimSuffix(servicePath, ".go")
+	stem := strings.TrimSuffix(servicePath, ggconst.ExtensionGo)
 	var tests []string
-	for _, path := range []string{stem + ggconst.PatternTestFile, stem + "_internal" + ggconst.PatternTestFile} {
+	for _, path := range []string{stem + ggconst.PatternTestFile, stem + ggconst.PatternInternalTestFile} {
 		if _, err := os.Stat(path); err == nil {
 			tests = append(tests, path)
 		}

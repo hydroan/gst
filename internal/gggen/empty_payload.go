@@ -14,7 +14,7 @@ import (
 
 const (
 	// gstModelPkgName is the package name of the gst model package.
-	gstModelPkgName = "model"
+	gstModelPkgName = ggconst.PkgModel
 	// gstModelPkgAlias is the import alias used when the plain "model"
 	// qualifier would clash with another import in the generated file.
 	gstModelPkgAlias = "gstmodel"
@@ -120,7 +120,7 @@ func emptyReqExpr(pkgName string) ast.Expr {
 	return &ast.StarExpr{
 		X: &ast.SelectorExpr{
 			X:   ast.NewIdent(pkgName),
-			Sel: ast.NewIdent("Empty"),
+			Sel: ast.NewIdent(ggconst.FieldEmpty),
 		},
 	}
 }

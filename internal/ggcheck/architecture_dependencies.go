@@ -56,7 +56,7 @@ func checkServiceDependencies(modulePath string, ignore gghelper.ProjectIgnore) 
 	}
 
 	err := ignore.Walk(ggconst.DirService, func(path string, _ os.FileInfo) error {
-		if !strings.HasSuffix(path, ".go") || strings.Contains(path, "_test.go") {
+		if !strings.HasSuffix(path, ggconst.ExtensionGo) || strings.Contains(path, ggconst.PatternTestFile) {
 			return nil
 		}
 
@@ -67,7 +67,7 @@ func checkServiceDependencies(modulePath string, ignore gghelper.ProjectIgnore) 
 			return nil
 		}
 
-		fileViolations := checkFileForArchitectureImports(path, "service", modulePath)
+		fileViolations := checkFileForArchitectureImports(path, ggconst.DirService, modulePath)
 		violations = append(violations, fileViolations...)
 
 		return nil
@@ -88,11 +88,11 @@ func checkDAODependencies(modulePath string, ignore gghelper.ProjectIgnore) []st
 	}
 
 	err := ignore.Walk(ggconst.DirDAO, func(path string, _ os.FileInfo) error {
-		if !strings.HasSuffix(path, ".go") || strings.Contains(path, "_test.go") {
+		if !strings.HasSuffix(path, ggconst.ExtensionGo) || strings.Contains(path, ggconst.PatternTestFile) {
 			return nil
 		}
 
-		fileViolations := checkFileForArchitectureImports(path, "dao", modulePath)
+		fileViolations := checkFileForArchitectureImports(path, ggconst.DirDAO, modulePath)
 		violations = append(violations, fileViolations...)
 
 		return nil
@@ -114,7 +114,7 @@ func checkModelDependencies(modulePath string, ignore gghelper.ProjectIgnore) []
 	}
 
 	err := ignore.Walk(ggconst.DirModel, func(path string, _ os.FileInfo) error {
-		if !strings.HasSuffix(path, ".go") || strings.Contains(path, "_test.go") {
+		if !strings.HasSuffix(path, ggconst.ExtensionGo) || strings.Contains(path, ggconst.PatternTestFile) {
 			return nil
 		}
 
@@ -123,7 +123,7 @@ func checkModelDependencies(modulePath string, ignore gghelper.ProjectIgnore) []
 			return nil
 		}
 
-		fileViolations := checkFileForArchitectureImports(path, "model", modulePath)
+		fileViolations := checkFileForArchitectureImports(path, ggconst.DirModel, modulePath)
 		violations = append(violations, fileViolations...)
 
 		return nil
@@ -176,19 +176,19 @@ func forbiddenArchitectureImportLayer(filePath, importPath, layerType, modulePat
 	}
 
 	switch layerType {
-	case "service":
-		if importLayer == "service" {
+	case ggconst.DirService:
+		if importLayer == ggconst.DirService {
 			if sameServiceModuleImport(filePath, importPath, modulePath) {
 				return ""
 			}
 			return importLayer
 		}
-	case "dao":
-		if slices.Contains([]string{"service", "router", "controller", "middleware"}, importLayer) {
+	case ggconst.DirDAO:
+		if slices.Contains([]string{ggconst.DirService, ggconst.DirRouter, "controller", ggconst.DirMiddleware}, importLayer) {
 			return importLayer
 		}
-	case "model":
-		if slices.Contains([]string{"service", "dao"}, importLayer) {
+	case ggconst.DirModel:
+		if slices.Contains([]string{ggconst.DirService, ggconst.DirDAO}, importLayer) {
 			return importLayer
 		}
 	}
@@ -218,7 +218,7 @@ func serviceModuleNameFromPath(filePath string) string {
 		return ""
 	}
 	moduleName, _, ok := strings.Cut(rel, string(filepath.Separator))
-	if !ok || moduleName == "" || strings.HasSuffix(moduleName, ".go") {
+	if !ok || moduleName == "" || strings.HasSuffix(moduleName, ggconst.ExtensionGo) {
 		return ""
 	}
 	return moduleName

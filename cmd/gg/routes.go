@@ -7,6 +7,7 @@ import (
 	"go/token"
 	"io"
 	"maps"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -199,11 +200,11 @@ func isRouterRegisterCall(call *ast.CallExpr) bool {
 		return false
 	}
 	selector, ok := index.X.(*ast.SelectorExpr)
-	if !ok || selector.Sel.Name != "Register" {
+	if !ok || selector.Sel.Name != ggconst.FuncRegister {
 		return false
 	}
 	ident, ok := selector.X.(*ast.Ident)
-	return ok && ident.Name == "router"
+	return ok && ident.Name == ggconst.PkgRouter
 }
 
 func scanModelSources(modelRoot string, ignore gghelper.ProjectIgnore) (map[string]string, error) {
@@ -217,7 +218,7 @@ func scanModelSources(modelRoot string, ignore gghelper.ProjectIgnore) (map[stri
 
 	sourceBase := filepath.Dir(modelRoot)
 	err := ignore.Walk(modelRoot, func(path string, info os.FileInfo) error {
-		if info.IsDir() || !strings.HasSuffix(info.Name(), ".go") || strings.HasSuffix(info.Name(), "_test.go") {
+		if info.IsDir() || !strings.HasSuffix(info.Name(), ggconst.ExtensionGo) || strings.HasSuffix(info.Name(), ggconst.PatternTestFile) {
 			return nil
 		}
 
@@ -525,13 +526,13 @@ func modelRouteLabel(model orderedModelRoutes, colorize bool) string {
 // route-tree, print an HTTP method in.
 func routeMethodStyle(method string) clioutput.Style {
 	switch method {
-	case "GET":
+	case http.MethodGet:
 		return clioutput.StyleInfo
-	case "POST":
+	case http.MethodPost:
 		return clioutput.StyleBlue
-	case "PUT", "PATCH":
+	case http.MethodPut, http.MethodPatch:
 		return clioutput.StyleMagenta
-	case "DELETE":
+	case http.MethodDelete:
 		return clioutput.StyleError
 	}
 	return clioutput.StylePlain
@@ -627,7 +628,7 @@ func modelRouteSourceNodeSortKey(node *modelRouteSourceNode) string {
 		// Past every path: no UTF-8 encoding starts with this byte.
 		return "\xff"
 	}
-	name := strings.TrimSuffix(node.name, ".go")
+	name := strings.TrimSuffix(node.name, ggconst.ExtensionGo)
 	kind := "1"
 	if node.group != nil {
 		kind = "0"
@@ -678,9 +679,9 @@ func routeScope(expr ast.Expr) string {
 		return "unknown"
 	}
 	switch name {
-	case "Pub":
+	case ggconst.RouterPub:
 		return "public"
-	case "Auth":
+	case ggconst.RouterAuth:
 		return "auth"
 	default:
 		return strings.ToLower(name)
@@ -702,7 +703,7 @@ func routeParamName(expr ast.Expr) string {
 			continue
 		}
 		key, ok := kv.Key.(*ast.Ident)
-		if !ok || key.Name != "ParamName" {
+		if !ok || key.Name != ggconst.GstControllerConfigParamName {
 			continue
 		}
 		value, ok := stringLiteralValue(kv.Value)

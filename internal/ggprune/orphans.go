@@ -264,7 +264,7 @@ func importedServiceDirsUnderDir(dir string, importPrefix string, ignore gghelpe
 	fset := token.NewFileSet()
 
 	err := ignore.Walk(dir, func(path string, info os.FileInfo) error {
-		if info.IsDir() || !strings.HasSuffix(path, ".go") || !live(path) {
+		if info.IsDir() || !strings.HasSuffix(path, ggconst.ExtensionGo) || !live(path) {
 			return nil
 		}
 		// Imports that do not parse fail the walk like a file that cannot be

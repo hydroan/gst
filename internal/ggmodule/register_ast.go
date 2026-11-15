@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 // existingModuleAlias returns the qualifier already used for this framework
@@ -47,7 +48,7 @@ func registeredModuleAlias(file *ast.File, module Module) (string, bool) {
 
 	for _, decl := range file.Decls {
 		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Name == nil || fn.Name.Name != "init" || fn.Body == nil {
+		if !ok || fn.Name == nil || fn.Name.Name != ggconst.FuncInit || fn.Body == nil {
 			continue
 		}
 		for _, stmt := range fn.Body.List {
@@ -56,7 +57,7 @@ func registeredModuleAlias(file *ast.File, module Module) (string, bool) {
 				continue
 			}
 			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok || sel.Sel.Name != "Register" {
+			if !ok || sel.Sel.Name != ggconst.FuncRegister {
 				continue
 			}
 			ident, ok := sel.X.(*ast.Ident)
@@ -78,7 +79,7 @@ func registeredModuleAlias(file *ast.File, module Module) (string, bool) {
 // registration has to stop the copy. add and remove stay narrow because they
 // only ever manage the zero-argument init call gg itself wrote.
 func checkModuleNotRegistered(name string) error {
-	moduleFile := filepath.Join("module", "module.go")
+	moduleFile := filepath.Join(ggconst.DirModule, "module.go")
 	src, err := os.ReadFile(moduleFile)
 	if os.IsNotExist(err) {
 		return nil
@@ -126,7 +127,7 @@ func checkModuleNotRegistered(name string) error {
 			return true
 		}
 		sel, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok || sel.Sel.Name != "Register" {
+		if !ok || sel.Sel.Name != ggconst.FuncRegister {
 			return true
 		}
 		if ident, ok := sel.X.(*ast.Ident); ok && aliases[ident.Name] {
@@ -164,7 +165,7 @@ func ensureInitCall(file *ast.File, exists func(*ast.FuncDecl) bool, stmt func(p
 func ensureInitFunc(file *ast.File) *ast.FuncDecl {
 	for _, decl := range file.Decls {
 		fn, ok := decl.(*ast.FuncDecl)
-		if ok && fn.Recv == nil && fn.Name != nil && fn.Name.Name == "init" {
+		if ok && fn.Recv == nil && fn.Name != nil && fn.Name.Name == ggconst.FuncInit {
 			if fn.Body == nil {
 				fn.Body = &ast.BlockStmt{}
 			}
@@ -172,7 +173,7 @@ func ensureInitFunc(file *ast.File) *ast.FuncDecl {
 		}
 	}
 	fn := &ast.FuncDecl{
-		Name: ast.NewIdent("init"),
+		Name: ast.NewIdent(ggconst.FuncInit),
 		Type: &ast.FuncType{Params: &ast.FieldList{}},
 		Body: &ast.BlockStmt{},
 	}
@@ -206,7 +207,7 @@ func registerCallStmt(alias string, pos token.Pos) ast.Stmt {
 	return &ast.ExprStmt{X: &ast.CallExpr{
 		Fun: &ast.SelectorExpr{
 			X:   &ast.Ident{NamePos: pos, Name: alias},
-			Sel: &ast.Ident{NamePos: pos, Name: "Register"},
+			Sel: &ast.Ident{NamePos: pos, Name: ggconst.FuncRegister},
 		},
 		Lparen: pos,
 		Rparen: pos,
@@ -220,7 +221,7 @@ func removeRegisterCall(file *ast.File, alias string) bool {
 	var changed bool
 	for _, decl := range file.Decls {
 		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Name == nil || fn.Name.Name != "init" || fn.Body == nil {
+		if !ok || fn.Name == nil || fn.Name.Name != ggconst.FuncInit || fn.Body == nil {
 			continue
 		}
 		var removedFromInit bool
@@ -275,7 +276,7 @@ func callExprFromStmt(stmt ast.Stmt) (*ast.CallExpr, bool) {
 
 func isRegisterCall(call *ast.CallExpr, alias string) bool {
 	sel, ok := call.Fun.(*ast.SelectorExpr)
-	if !ok || sel.Sel.Name != "Register" || len(call.Args) != 0 {
+	if !ok || sel.Sel.Name != ggconst.FuncRegister || len(call.Args) != 0 {
 		return false
 	}
 	ident, ok := sel.X.(*ast.Ident)

@@ -303,7 +303,7 @@ func (d *columnDependents) resolve() {
 					// A method is selected through a value, which cannot be
 					// matched by name, and an init function cannot be
 					// referred to at all.
-					if x.Recv == nil && x.Name.Name != "init" {
+					if x.Recv == nil && x.Name.Name != ggconst.FuncInit {
 						changed = d.files.omit(src.pkg, x.Name.Name) || changed
 					}
 				case *ast.GenDecl:
@@ -424,7 +424,7 @@ func (d *columnDependents) rewrite(src *columnInspectionSource, listed map[strin
 			}
 			start, end := tokenFile.Offset(x.Body.Lbrace), tokenFile.Offset(x.Body.Rbrace)+1
 			body := columnInspectionPlaceholder
-			if x.Recv == nil && x.Name.Name == "init" {
+			if x.Recv == nil && x.Name.Name == ggconst.FuncInit {
 				body = ""
 			}
 			edits = append(edits, sourceEdit{start: start, end: end, text: "{" + body + lineBreaks(src.content[start:end]) + "}"})

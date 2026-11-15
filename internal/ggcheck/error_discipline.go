@@ -195,7 +195,7 @@ func collectProject(modulePath string, ignore gghelper.ProjectIgnore) (*errDiscA
 		if info.IsDir() {
 			return nil
 		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+		if !strings.HasSuffix(path, ggconst.ExtensionGo) || strings.HasSuffix(path, ggconst.PatternTestFile) {
 			return nil
 		}
 		analysis.collectFile(path)
@@ -234,7 +234,7 @@ func (a *errDiscAnalysis) collectFile(path string) {
 		path:       filepath.ToSlash(path),
 		pkgDir:     filepath.ToSlash(filepath.Dir(path)),
 		db:         goast.ImportedNames(file, gstDatabaseImportPath, "database"),
-		gst:        goast.ImportedNames(file, ggconst.ImportPathGst, "gst"),
+		gst:        goast.ImportedNames(file, ggconst.ImportPathGst, ggconst.PkgGst),
 		model:      goast.ImportedNames(file, ggconst.ImportPathModel, ggconst.PkgModel),
 		projectPkg: map[string]string{},
 	}

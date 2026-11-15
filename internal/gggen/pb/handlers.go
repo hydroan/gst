@@ -244,7 +244,7 @@ func (w *fileWriter) modelPkgType(model *modelinfo.Model, typeName string) ast.E
 // action does not declare.
 func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Expr {
 	if typeName == "" || typeName == dsl.PayloadEmpty {
-		return star(sel(w.out.imports.fixedRef(ggconst.ImportPathModel), "Empty"))
+		return star(sel(w.out.imports.fixedRef(ggconst.ImportPathModel), ggconst.FieldEmpty))
 	}
 	name, pointer := strings.CutPrefix(typeName, "*")
 	if pointer {
@@ -514,7 +514,7 @@ func (w *fileWriter) handler(r *pbschema.RPC) {
 		var payload ast.Expr
 		var checked ast.Stmt
 		if r.Payload == nil {
-			payload = newCall(sel(w.out.imports.fixedRef(ggconst.ImportPathModel), "Empty"))
+			payload = newCall(sel(w.out.imports.fixedRef(ggconst.ImportPathModel), ggconst.FieldEmpty))
 			checked = ifStmt(define([]string{"_", "err"}, run(params, query, payload)), notNil(ident("err")), returns(ident("nil"), ident("err")))
 		} else {
 			body = append(body, define([]string{"payload", "err"}, call(w.conversionFunc(r.Payload, "FromProto"), req("payload"))), failing())
@@ -691,7 +691,9 @@ func (w *fileWriter) streamHandler(r *pbschema.RPC) {
 	// that may refuse the message; empty is the request of an action
 	// declaring no payload.
 	payloadOf := func(m ast.Expr) ast.Expr { return call(w.conversionFunc(r.Payload, "FromProto"), get(m, "payload")) }
-	empty := func() ast.Expr { return newCall(sel(w.out.imports.fixedRef(ggconst.ImportPathModel), "Empty")) }
+	empty := func() ast.Expr {
+		return newCall(sel(w.out.imports.fixedRef(ggconst.ImportPathModel), ggconst.FieldEmpty))
+	}
 	// returnPayload returns the payload of m from a receiving function: what
 	// the decoding answers, the payload or its refusal, or the empty request
 	// and no error.

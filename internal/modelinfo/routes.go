@@ -10,6 +10,7 @@ import (
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconfig"
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 // ResolveRoutes gives the models, in place, the routes gg gen registers for
@@ -192,7 +193,7 @@ func buildHierarchicalEndpoints(allModels []*Model) {
 		}
 
 		// Get the filename without extension
-		fileName := strings.TrimSuffix(path.Base(modelFilePath), ".go")
+		fileName := strings.TrimSuffix(path.Base(modelFilePath), ggconst.ExtensionGo)
 
 		// Determine the directory path that this model defines endpoint for
 		// The rule is: model file defines endpoint for the directory path formed by modelDir + fileName

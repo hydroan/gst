@@ -3,6 +3,8 @@ package goast
 import (
 	"go/ast"
 	"strings"
+
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 // IsTestCaseFunc reports whether fn is a test function the go test runner
@@ -15,7 +17,7 @@ import (
 // and for func TestCreate(t *testing.T, n int).
 func IsTestCaseFunc(fn *ast.FuncDecl) bool {
 	name := fn.Name.Name
-	if name == "TestMain" || !strings.HasPrefix(name, "Test") {
+	if name == ggconst.FuncTestMain || !strings.HasPrefix(name, "Test") {
 		return false
 	}
 	if len(name) > len("Test") {
@@ -32,7 +34,7 @@ func IsTestCaseFunc(fn *ast.FuncDecl) bool {
 //
 // and false for func TestMain(t *testing.T).
 func IsTestMainFunc(fn *ast.FuncDecl) bool {
-	return fn.Name.Name == "TestMain" && hasSingleTestingParam(fn, "M")
+	return fn.Name.Name == ggconst.FuncTestMain && hasSingleTestingParam(fn, "M")
 }
 
 // DeclaresTestMain reports whether file declares TestMain at package level

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 )
 
@@ -227,7 +228,7 @@ func (e *CopyExecution) removeEmptyRegistration(dir string, md managedDir) error
 	}
 	for _, decl := range file.Decls {
 		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Recv != nil || fn.Name == nil || fn.Name.Name != "init" || (fn.Body != nil && len(fn.Body.List) > 0) {
+		if !ok || fn.Recv != nil || fn.Name == nil || fn.Name.Name != ggconst.FuncInit || (fn.Body != nil && len(fn.Body.List) > 0) {
 			return nil
 		}
 	}

@@ -50,7 +50,7 @@ func checkActionTypeForm(ignore gghelper.ProjectIgnore) []string {
 	var packageDirs []string
 	packageFiles := make(map[string][]string)
 	err := ignore.Walk(ggconst.DirModel, func(path string, info os.FileInfo) error {
-		if info.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+		if info.IsDir() || !strings.HasSuffix(path, ggconst.ExtensionGo) || strings.HasSuffix(path, ggconst.PatternTestFile) {
 			return nil
 		}
 		if isGeneratedFileName(path) {

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"golang.org/x/tools/go/ast/astutil"
 )
@@ -369,7 +370,7 @@ func (e *CopyExecution) reconcileRegistrations(md managedDir, targetDir string, 
 	if importAlias != "" {
 		for _, decl := range file.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Recv != nil || fn.Name == nil || fn.Name.Name != "init" || fn.Body == nil {
+			if !ok || fn.Recv != nil || fn.Name == nil || fn.Name.Name != ggconst.FuncInit || fn.Body == nil {
 				continue
 			}
 			kept := make([]ast.Stmt, 0, len(fn.Body.List))
@@ -500,7 +501,7 @@ func removeRegistrations(md managedDir, dir string, handlerNames map[string]bool
 
 	for _, decl := range file.Decls {
 		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Recv != nil || fn.Name == nil || fn.Name.Name != "init" || fn.Body == nil {
+		if !ok || fn.Recv != nil || fn.Name == nil || fn.Name.Name != ggconst.FuncInit || fn.Body == nil {
 			continue
 		}
 		kept := make([]ast.Stmt, 0, len(fn.Body.List))

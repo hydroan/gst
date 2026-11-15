@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 const moduleManifestFilename = "module.json"
@@ -163,7 +164,7 @@ func cleanModuleCopyHandlers(field string, values []moduleCopyHandlerManifest) (
 		// project package of the same name with the same filename. That
 		// avoids hidden copy-time routing rules in copytest/register.go or
 		// arbitrary manifest target paths.
-		if path.Dir(sourceFile) != sourceDir || !strings.HasSuffix(path.Base(sourceFile), ".go") || strings.HasSuffix(path.Base(sourceFile), "_test.go") {
+		if path.Dir(sourceFile) != sourceDir || !strings.HasSuffix(path.Base(sourceFile), ggconst.ExtensionGo) || strings.HasSuffix(path.Base(sourceFile), ggconst.PatternTestFile) {
 			return nil, errors.Newf("%s[%d].sourceFile must match %s/*.go: %s", field, i, sourceDir, sourceFile)
 		}
 

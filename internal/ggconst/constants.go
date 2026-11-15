@@ -1,8 +1,9 @@
 // Package ggconst holds the conventions the framework's tooling shares: the
-// import paths of the framework packages, the names of the files, packages
-// and fields gg generates and reads, and the patterns it recognizes them by.
-// The dsl parser, the syntax tree helpers of goast, the code generator and
-// the gg commands all read them from here, so a convention is spelled once.
+// import paths of the framework packages, the names of the files, packages,
+// fields and symbols gg generates and reads, and the patterns it recognizes
+// them by. The dsl parser, the syntax tree helpers of goast, the code
+// generator and the gg commands all read them from here, so a convention is
+// spelled once.
 package ggconst
 
 import "github.com/hydroan/gst/internal/types"
@@ -29,6 +30,13 @@ const (
 	ExtensionGo     = ".go"
 	ExtensionProto  = ".proto"
 	PatternTestFile = "_test.go"
+	// PatternInternalTestFile ends the name of an internal test file, the
+	// test file of a package that reaches its unexported code:
+	// create_internal_test.go beside create.go.
+	PatternInternalTestFile = "_internal" + PatternTestFile
+	// SuffixTestPkg ends the name of an external test package: record_test
+	// for the package record.
+	SuffixTestPkg = "_test"
 )
 
 // FileModeGenerated is the permission gg writes project files with.
@@ -99,11 +107,15 @@ const (
 // Package names
 const (
 	PkgMain      = "main"
+	PkgGst       = "gst"
 	PkgModel     = "model"
 	PkgService   = "service"
 	PkgRouter    = "router"
 	PkgModule    = "module"
 	PkgBootstrap = "bootstrap"
+	PkgAPIDoc    = "apidoc"
+	// PkgIO names the standard library package of ImportPathIO.
+	PkgIO = "io"
 )
 
 // Model field names
@@ -113,12 +125,16 @@ const (
 	FieldEmpty    = "Empty"
 )
 
-// Function names
+// Names of the functions many packages declare, one constant a name
+// whichever package declares it: FuncInit is Go's package initializer and
+// FuncInit2 the Init a package exports, the project's router.Init among
+// them.
 const (
 	FuncInit     = "init"
 	FuncMain     = "main"
 	FuncInit2    = "Init"
 	FuncRegister = "Register"
+	FuncTestMain = "TestMain"
 )
 
 // Cache file
@@ -155,11 +171,43 @@ var ProjectImportDirs = []string{
 // the same way (see gghelper.PresentOptionalImportDirs).
 var OptionalImportDirs = []string{DirInterceptor, DirPB}
 
-// Bootstrap method names
+// Names of the bootstrap package's functions a generated main.go runs the
+// service through: bootstrap.RunOrDie over bootstrap.Bootstrap, the
+// project's router.Init and bootstrap.Run.
 const (
 	BootstrapBootstrap = "Bootstrap"
 	BootstrapRun       = "Run"
 	BootstrapRunOrDie  = "RunOrDie"
-	RouterInit         = "Init"
-	ModuleInit         = "Init"
+)
+
+// Names of the framework's exported symbols gg writes into project code and
+// recognizes there, each prefixed with the package declaring it:
+// GstServiceContext is gst.ServiceContext and ServiceBase is service.Base.
+const (
+	// GstServiceContext is the type every service method takes first.
+	GstServiceContext = "ServiceContext"
+	// GstServerStream, GstClientStream and GstBidiStream are the types the
+	// Stream method of a Stream action takes its stream as, by the side
+	// that streams.
+	GstServerStream = "ServerStream"
+	GstClientStream = "ClientStream"
+	GstBidiStream   = "BidiStream"
+	// GstNewColumn and the three after it are the functions minting a
+	// column reference: gg gen writes them into the XxxCols variables, and
+	// gg check keeps project code from calling them.
+	GstNewColumn            = "NewColumn"
+	GstNewNumericColumn     = "NewNumericColumn"
+	GstNewTimeColumn        = "NewTimeColumn"
+	GstNewJSONStringsColumn = "NewJSONStringsColumn"
+	// GstControllerConfig is the type of the configuration a route
+	// registration carries, and GstControllerConfigParamName its field
+	// naming the route parameter the resource id is read from.
+	GstControllerConfig          = "ControllerConfig"
+	GstControllerConfigParamName = "ParamName"
+	// ServiceBase is the type a service struct embeds.
+	ServiceBase = "Base"
+	// RouterAuth and RouterPub are the functions returning the route group
+	// a route registers on: the authenticated one and the public one.
+	RouterAuth = "Auth"
+	RouterPub  = "Pub"
 )

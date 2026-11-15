@@ -229,9 +229,9 @@ func genRunWithOptions(opts genRunOptions) error {
 			if dsl.GRPCOnlyAction(act.Phase.Name()) {
 				return
 			}
-			base := "Auth"
+			base := ggconst.RouterAuth
 			if act.Public {
-				base = "Pub"
+				base = ggconst.RouterPub
 			}
 			routerStmts = append(routerStmts, gggen.StmtRouterRegister(importQualifier(routerAliases, m.ImportPath(), m.ModelPkgName), m.ModelName, act.Payload, act.Result, gstModelPkg, base, route, paramName, act.Phase.Name()))
 		})
@@ -243,7 +243,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	if !opts.Quiet {
 		clioutput.Section("Generate Files")
 	}
-	modelCode, err := gggen.BuildModelFile(module, "model", modelAliases, modelStmts...)
+	modelCode, err := gggen.BuildModelFile(module, ggconst.PkgModel, modelAliases, modelStmts...)
 	if err != nil {
 		return errors.Wrap(err, "build model/model.gen.go")
 	}
@@ -258,7 +258,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	if err != nil {
 		return errors.Wrap(err, "extract api docs")
 	}
-	apidocCode, err := gggen.BuildAPIDocFile(module, "model", docEntries)
+	apidocCode, err := gggen.BuildAPIDocFile(module, ggconst.PkgModel, docEntries)
 	if err != nil {
 		return errors.Wrap(err, "build model/apidoc.gen.go")
 	}
@@ -267,7 +267,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	}
 
 	// generate service/service.gen.go
-	serviceCode, err := gggen.BuildServiceFile(module, "service", serviceAliases, serviceStmts...)
+	serviceCode, err := gggen.BuildServiceFile(module, ggconst.PkgService, serviceAliases, serviceStmts...)
 	if err != nil {
 		return errors.Wrap(err, "build service/service.gen.go")
 	}
@@ -276,7 +276,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	}
 
 	// generate router/router.gen.go
-	routerCode, err := gggen.BuildRouterFile(module, "router", routerGstModelPkg, routerAliases, routerStmts...)
+	routerCode, err := gggen.BuildRouterFile(module, ggconst.PkgRouter, routerGstModelPkg, routerAliases, routerStmts...)
 	if err != nil {
 		return errors.Wrap(err, "build router/router.gen.go")
 	}
@@ -500,8 +500,8 @@ func genRunWithOptions(opts genRunOptions) error {
 // as it is, and so is a main_test.go that exists already, its imports of the
 // optional packages following main.go's (see syncTestMainImports).
 func scaffoldServiceTests(modelInfo *modelinfo.Model, target modelinfo.ServiceTargetInfo, action *dsl.Action, route string, extraDirs []string, quiet bool) error {
-	stem := strings.TrimSuffix(target.FilePath, ".go")
-	if gghelper.FileExists(stem+ggconst.PatternTestFile) || gghelper.FileExists(stem+"_internal"+ggconst.PatternTestFile) {
+	stem := strings.TrimSuffix(target.FilePath, ggconst.ExtensionGo)
+	if gghelper.FileExists(stem+ggconst.PatternTestFile) || gghelper.FileExists(stem+ggconst.PatternInternalTestFile) {
 		return nil
 	}
 

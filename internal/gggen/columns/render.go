@@ -56,7 +56,7 @@ import (
 //		Weights:   gst.NewColumn[*Record, any]("weights"),
 //	}
 func renderColumnsFile(module string, pkgName string, source string, models []modelinspect.ModelColumns) (string, error) {
-	imports := map[string]string{ggconst.ImportPathGst: "gst"}
+	imports := map[string]string{ggconst.ImportPathGst: ggconst.PkgGst}
 	for _, m := range models {
 		for _, col := range m.Columns {
 			// A TimeColumn or JSONStringsColumn reference carries no type
@@ -289,24 +289,24 @@ func columnRefLiteral(model string, col modelinspect.ColumnInfo) (ast.Expr, erro
 	dbName := &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(col.DBName)}
 	switch {
 	case col.JSONStrings:
-		constructor := &ast.IndexExpr{X: gstSelector("NewJSONStringsColumn"), Index: modelArg}
+		constructor := &ast.IndexExpr{X: gstSelector(ggconst.GstNewJSONStringsColumn), Index: modelArg}
 		return &ast.CallExpr{Fun: constructor, Args: []ast.Expr{dbName}}, nil
 	case col.Time && col.TypeExpr != "":
-		constructor := &ast.IndexExpr{X: gstSelector("NewTimeColumn"), Index: modelArg}
+		constructor := &ast.IndexExpr{X: gstSelector(ggconst.GstNewTimeColumn), Index: modelArg}
 		return &ast.CallExpr{Fun: constructor, Args: []ast.Expr{dbName}}, nil
 	case col.Numeric && col.TypeExpr != "":
 		typeArg, err := parseTypeExpr(col.TypeExpr)
 		if err != nil {
 			return nil, err
 		}
-		constructor := &ast.IndexListExpr{X: gstSelector("NewNumericColumn"), Indices: []ast.Expr{modelArg, typeArg}}
+		constructor := &ast.IndexListExpr{X: gstSelector(ggconst.GstNewNumericColumn), Indices: []ast.Expr{modelArg, typeArg}}
 		return &ast.CallExpr{Fun: constructor, Args: []ast.Expr{dbName}}, nil
 	default:
 		typeArg, err := columnTypeParam(col)
 		if err != nil {
 			return nil, err
 		}
-		constructor := &ast.IndexListExpr{X: gstSelector("NewColumn"), Indices: []ast.Expr{modelArg, typeArg}}
+		constructor := &ast.IndexListExpr{X: gstSelector(ggconst.GstNewColumn), Indices: []ast.Expr{modelArg, typeArg}}
 		return &ast.CallExpr{Fun: constructor, Args: []ast.Expr{dbName}}, nil
 	}
 }
@@ -335,7 +335,7 @@ func columnTypeParam(col modelinspect.ColumnInfo) (ast.Expr, error) {
 // gstSelector returns the reference to name in the gst package, as in
 // gst.Column for Column.
 func gstSelector(name string) *ast.SelectorExpr {
-	return &ast.SelectorExpr{X: ast.NewIdent("gst"), Sel: ast.NewIdent(name)}
+	return &ast.SelectorExpr{X: ast.NewIdent(ggconst.PkgGst), Sel: ast.NewIdent(name)}
 }
 
 // parseTypeExpr parses a column type written as source, as the inspection

@@ -1,6 +1,7 @@
 package ggconfig
 
 import (
+	"net/http"
 	"slices"
 	"strings"
 
@@ -35,11 +36,11 @@ type RouteRule struct {
 
 // allowedRuleMethods lists the HTTP methods the generated routes can use.
 var allowedRuleMethods = map[string]struct{}{
-	"GET":    {},
-	"POST":   {},
-	"PUT":    {},
-	"PATCH":  {},
-	"DELETE": {},
+	http.MethodGet:    {},
+	http.MethodPost:   {},
+	http.MethodPut:    {},
+	http.MethodPatch:  {},
+	http.MethodDelete: {},
 }
 
 // UnmarshalYAML parses the path-to-methods mapping form of gen.routes.ignore:

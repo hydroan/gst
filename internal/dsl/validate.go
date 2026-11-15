@@ -695,7 +695,7 @@ func modelPackageType(expr ast.Expr) (*ast.Ident, bool) {
 }
 
 func isRootModelFile(file *ast.File, modelDir string, filename string) bool {
-	if file == nil || file.Name == nil || file.Name.Name != "model" {
+	if file == nil || file.Name == nil || file.Name.Name != ggconst.PkgModel {
 		return false
 	}
 	rel, err := filepath.Rel(filepath.Clean(modelDir), filepath.Clean(filename))

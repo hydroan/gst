@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/stoewer/go-strcase"
 )
 
@@ -256,7 +257,7 @@ func (a *Action) RoleName() string {
 // Create.
 func (a *Action) ServiceFilename() string {
 	if a.ServiceName != "" {
-		return strings.ToLower(a.ServiceName) + ".go"
+		return strings.ToLower(a.ServiceName) + ggconst.ExtensionGo
 	}
 	return a.Phase.Filename()
 }

@@ -75,7 +75,7 @@ func checkServiceTestCoverage(ignore gghelper.ProjectIgnore) []string {
 				return
 			}
 
-			stem := strings.TrimSuffix(filepath.Base(target.FilePath), ".go")
+			stem := strings.TrimSuffix(filepath.Base(target.FilePath), ggconst.ExtensionGo)
 			violations = append(violations, fmt.Sprintf(
 				"Service file '%s' has no matching test file (want %s_test.go or %s_internal_test.go)",
 				target.FilePath, stem, stem,
@@ -89,6 +89,6 @@ func checkServiceTestCoverage(ignore gghelper.ProjectIgnore) []string {
 // serviceTestFileExists reports whether a service file has a matching test
 // file in its directory: <stem>_test.go or its internal form <stem>_internal_test.go.
 func serviceTestFileExists(servicePath string) bool {
-	stem := strings.TrimSuffix(servicePath, ".go")
-	return gghelper.FileExists(stem+"_test.go") || gghelper.FileExists(stem+"_internal_test.go")
+	stem := strings.TrimSuffix(servicePath, ggconst.ExtensionGo)
+	return gghelper.FileExists(stem+ggconst.PatternTestFile) || gghelper.FileExists(stem+ggconst.PatternInternalTestFile)
 }

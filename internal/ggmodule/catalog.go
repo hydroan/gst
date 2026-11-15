@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen"
 )
 
@@ -91,7 +92,7 @@ func inspectModuleRegister(path string) (Module, error) {
 	info := Module{PackageName: file.Name.Name}
 	for _, decl := range file.Decls {
 		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Recv != nil || fn.Name == nil || fn.Name.Name != "Register" {
+		if !ok || fn.Recv != nil || fn.Name == nil || fn.Name.Name != ggconst.FuncRegister {
 			continue
 		}
 		info.Addable = registerCanBeCalledWithoutArgs(fn)

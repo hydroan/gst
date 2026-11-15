@@ -69,7 +69,7 @@ func ServiceOutputRel(modelFilePath, modelDir string) string {
 		// Unexpected layout; best-effort: strip modelDir prefix then apply the same collapse.
 		rel = strings.TrimPrefix(modelFilePath, modelDir+string(filepath.Separator))
 	}
-	outRel := strings.TrimSuffix(rel, ".go")
+	outRel := strings.TrimSuffix(rel, ggconst.ExtensionGo)
 	for outRel != "." && outRel != "" {
 		stem := filepath.Base(outRel)
 		parent := filepath.Dir(outRel)

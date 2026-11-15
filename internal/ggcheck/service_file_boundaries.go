@@ -28,7 +28,7 @@ func checkServiceFileBoundaries(ignore gghelper.ProjectIgnore) []string {
 	}
 
 	err := ignore.Walk(ggconst.DirService, func(path string, info os.FileInfo) error {
-		if info.IsDir() || !strings.HasSuffix(path, ".go") || strings.Contains(path, "_test.go") {
+		if info.IsDir() || !strings.HasSuffix(path, ggconst.ExtensionGo) || strings.Contains(path, ggconst.PatternTestFile) {
 			return nil
 		}
 

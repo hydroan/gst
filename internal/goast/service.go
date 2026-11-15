@@ -27,7 +27,7 @@ func IsServiceBase(file *ast.File, field *ast.Field) bool {
 	if !ok || len(instance.Indices) != 3 {
 		return false
 	}
-	return ImportedNames(file, ggconst.ImportPathService, ggconst.PkgService).Refers(instance.X, "Base")
+	return ImportedNames(file, ggconst.ImportPathService, ggconst.PkgService).Refers(instance.X, ggconst.ServiceBase)
 }
 
 // ServiceStructNames returns the names of the struct types file declares

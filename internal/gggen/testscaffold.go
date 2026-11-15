@@ -174,7 +174,7 @@ func GenerateServiceTest(info *modelinfo.Model, target modelinfo.ServiceTargetIn
 	body = append(body, example.stmts...)
 
 	file := &ast.File{
-		Name: ast.NewIdent(target.PackageName + "_test"),
+		Name: ast.NewIdent(target.PackageName + ggconst.SuffixTestPkg),
 		Decls: []ast.Decl{
 			&ast.GenDecl{Tok: token.IMPORT, Specs: example.importSpecs()},
 			&ast.FuncDecl{
@@ -562,7 +562,7 @@ func GenerateServiceTestMain(modulePath, servicePkgName string, extraDirs ...str
 		Elts: []ast.Expr{
 			keyValue("Database", sel(ident("config"), "DBSqlite"), databasePos),
 			keyValue("Redis", ident("false"), redisPos),
-			keyValue("Routes", sel(ident("router"), "Init"), routesPos),
+			keyValue("Routes", sel(ident(ggconst.PkgRouter), ggconst.FuncInit2), routesPos),
 			// The function literal keeps its one-line body when its header
 			// is positioned on the line of its key.
 			keyValue("Seed", &ast.FuncLit{
@@ -574,12 +574,12 @@ func GenerateServiceTestMain(modulePath, servicePkgName string, extraDirs ...str
 	}
 
 	file := &ast.File{
-		Name: ast.NewIdent(servicePkgName + "_test"),
+		Name: ast.NewIdent(servicePkgName + ggconst.SuffixTestPkg),
 		Decls: []ast.Decl{
 			&ast.GenDecl{Tok: token.IMPORT, Specs: specs},
 			&ast.FuncDecl{
 				Doc:  commentGroup(serviceTestMainDoc...),
-				Name: ast.NewIdent("TestMain"),
+				Name: ast.NewIdent(ggconst.FuncTestMain),
 				Type: &ast.FuncType{Params: &ast.FieldList{List: []*ast.Field{field("m", &ast.StarExpr{X: sel(ident("testing"), "M")})}}},
 				Body: &ast.BlockStmt{List: []ast.Stmt{exprStmt(call(sel(ident("testutil"), "Run"), ident("m"), server))}},
 			},
