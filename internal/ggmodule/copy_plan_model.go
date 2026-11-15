@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/modelinfo"
 )
@@ -76,7 +77,7 @@ func (p *CopyPlan) addModelFiles() error {
 // referencing an excluded model symbol still surfaces through the copied
 // project's build: the service closure walks the service tree only.
 func (p *CopyPlan) requireExcludedModelFilesUnreferenced() error {
-	modelTreePrefix := path.Join("internal", "model", p.Name) + "/"
+	modelTreePrefix := path.Join("internal", ggconst.DirModel, p.Name) + "/"
 	excludesModelSources := false
 	for _, rel := range p.ExcludeSourceFiles {
 		if strings.HasPrefix(rel, modelTreePrefix) {

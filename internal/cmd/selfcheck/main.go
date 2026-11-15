@@ -108,6 +108,21 @@
 // files of another package through golist.Packages of
 // internal/testutil/golist, which lists no directory.
 //
+// # Constant literals
+//
+// internal/ggconst spells the names the tooling shares, the packages, files
+// and symbols gg writes and recognizes, so that each is spelt once. A string
+// literal repeating one parts from the constant the day one of the two
+// changes, and nothing fails until a generated file no longer matches what
+// reads it. checkConstLiteral reports, in the packages importing
+// internal/ggconst, the string literal that spells one of its string
+// constants in full, outside a constant declaration and unless it is handed
+// to a package outside the module that takes no name or path of the
+// tooling's, a command line library or os/exec; a string spelt like a
+// constant that means something else says so at the end of its line,
+// //gst:literal <what the string means>. golangci-lint's goconst matches a
+// string against the constants of its own package alone.
+//
 // # Layout
 //
 // Each check lives in the file named after it, testplacement.go for the
@@ -152,6 +167,7 @@ var checks = []check{
 	{name: "logfields", run: checkLogFields},
 	{name: "testseams", run: checkTestSeams},
 	{name: "testlisting", run: checkTestListing},
+	{name: "constliteral", run: checkConstLiteral},
 }
 
 func main() {

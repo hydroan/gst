@@ -102,7 +102,7 @@ func loadModuleManifest(moduleDir string) (moduleManifest, error) {
 		return moduleManifest{}, errors.Wrapf(includeErr, "parse %s", manifestPath)
 	}
 	manifest.Copy.IncludeSourceFiles = includeSourceFiles
-	middleware, middlewareErr := cleanModuleCopyHandlers("middleware", manifest.Copy.Middleware)
+	middleware, middlewareErr := cleanModuleCopyHandlers("middleware", manifest.Copy.Middleware) //gst:literal the manifest field of that name
 	if middlewareErr != nil {
 		return moduleManifest{}, errors.Wrapf(middlewareErr, "parse %s", manifestPath)
 	}
@@ -152,7 +152,7 @@ func cleanModuleCopySourceFiles(field string, values []string) ([]string, error)
 // must lie in the framework directory of the same kind: middleware/*.go for
 // the middleware, interceptor/*.go for the interceptors.
 func cleanModuleCopyHandlers(field string, values []moduleCopyHandlerManifest) ([]moduleCopyHandlerManifest, error) {
-	sourceDir := map[string]string{"middleware": middlewareManagedDir.pkg, "interceptors": interceptorManagedDir.pkg}[field]
+	sourceDir := map[string]string{"middleware": middlewareManagedDir.pkg, "interceptors": interceptorManagedDir.pkg}[field] //gst:literal the manifest field of that name
 	cleaned := make([]moduleCopyHandlerManifest, 0, len(values))
 	for i, value := range values {
 		sourceFile, err := cleanModuleCopyRelativePath(value.SourceFile)

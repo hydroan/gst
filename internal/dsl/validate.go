@@ -642,7 +642,7 @@ func serviceNameRefusal(name string) string {
 		return "a service name is letters, digits and underscores, starting with a letter, naming the service file, its type and its rpc"
 	}
 	lower := strings.ToLower(name)
-	if strings.HasSuffix(lower, "_test") {
+	if strings.HasSuffix(lower, "_test") { //gst:literal the end of a test file's stem, not of a test package's name
 		return "a name ending in _test names a test file, choose another name"
 	}
 	if _, suffix, found := strings.CutLast(lower, "_"); found && (knownOS[suffix] || knownArch[suffix]) {

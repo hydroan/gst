@@ -140,8 +140,8 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 		FrameworkRoot:        frameworkRoot,
 		ModelDir:             ggconst.DirModel,
 		ServiceDir:           ggconst.DirService,
-		SourceModelDir:       filepath.Join(frameworkRoot, "internal", "model", name),
-		SourceServiceDir:     filepath.Join(frameworkRoot, "internal", "service", name),
+		SourceModelDir:       filepath.Join(frameworkRoot, "internal", ggconst.DirModel, name),
+		SourceServiceDir:     filepath.Join(frameworkRoot, "internal", ggconst.DirService, name),
 		TargetModelDir:       filepath.Join(ggconst.DirModel, name),
 		TargetServiceDir:     filepath.Join(ggconst.DirService, name),
 		TargetMiddlewareDir:  ggconst.DirMiddleware,
@@ -151,7 +151,7 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 	if sourceDirErr := plan.checkSourceDirs(); sourceDirErr != nil {
 		return nil, sourceDirErr
 	}
-	manifest, err := loadModuleManifest(filepath.Join(frameworkRoot, "module", name))
+	manifest, err := loadModuleManifest(filepath.Join(frameworkRoot, ggconst.DirModule, name))
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +235,7 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 }
 
 func (p *CopyPlan) checkSourceDirs() error {
-	if err := requireDir(filepath.Join(p.FrameworkRoot, "module", p.Name)); err != nil {
+	if err := requireDir(filepath.Join(p.FrameworkRoot, ggconst.DirModule, p.Name)); err != nil {
 		return errors.Wrapf(err, "module %q not found", p.Name)
 	}
 	if err := requireDir(p.SourceModelDir); err != nil {
@@ -333,7 +333,7 @@ func (p *CopyPlan) checkConflicts(force bool) error {
 // excluded, and must not declare a service struct: action service files are
 // copied through their DSL actions, not through the manifest.
 func (p *CopyPlan) resolveIncludeSourceFiles(includes []string) error {
-	servicePrefix := path.Join("internal", "service", p.Name) + "/"
+	servicePrefix := path.Join("internal", ggconst.DirService, p.Name) + "/"
 	for _, rel := range includes {
 		if !strings.HasPrefix(rel, servicePrefix) {
 			return errors.Newf("includeSourceFiles entry %q must live under %s", rel, servicePrefix)

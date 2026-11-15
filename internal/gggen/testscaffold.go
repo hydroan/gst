@@ -581,7 +581,7 @@ func GenerateServiceTestMain(modulePath, servicePkgName string, extraDirs ...str
 				Doc:  commentGroup(serviceTestMainDoc...),
 				Name: ast.NewIdent(ggconst.FuncTestMain),
 				Type: &ast.FuncType{Params: &ast.FieldList{List: []*ast.Field{field("m", &ast.StarExpr{X: sel(ident("testing"), "M")})}}},
-				Body: &ast.BlockStmt{List: []ast.Stmt{exprStmt(call(sel(ident("testutil"), "Run"), ident("m"), server))}},
+				Body: &ast.BlockStmt{List: []ast.Stmt{exprStmt(call(sel(ident("testutil"), "Run"), ident("m"), server))}}, //gst:literal testutil.Run, not bootstrap.Run
 			},
 		},
 	}

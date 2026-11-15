@@ -146,7 +146,7 @@ func (g *generator) registrations(out *goFile, files []*pbschema.ProtoFile) {
 			rpcs[r.Service] = append(rpcs[r.Service], r)
 		}
 		for _, service := range services {
-			args := []ast.Expr{ident("Register" + service + "Server"), compositeLit(ident(serviceTypeName(service)))}
+			args := []ast.Expr{ident("Register" + service + "Server"), compositeLit(ident(serviceTypeName(service)))} //gst:literal opens the name protoc-gen-go-grpc gives a registrar, RegisterFeedServer
 			for _, r := range rpcs[service] {
 				elts := []ast.Expr{keyValue("Name", ident(service+"_"+r.Name+"_FullMethodName"))}
 				// A streaming rpc, served over gRPC alone, is described by

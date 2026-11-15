@@ -38,8 +38,8 @@ type managedDir struct {
 }
 
 var (
-	middlewareManagedDir  = managedDir{pkg: "middleware", registrationFile: middlewareRegistrationFilename, importPath: frameworkModulePath + "/middleware"}
-	interceptorManagedDir = managedDir{pkg: "interceptor", registrationFile: "interceptor.go", importPath: frameworkModulePath + "/interceptor"}
+	middlewareManagedDir  = managedDir{pkg: ggconst.DirMiddleware, registrationFile: middlewareRegistrationFilename, importPath: frameworkModulePath + "/middleware"}
+	interceptorManagedDir = managedDir{pkg: ggconst.DirInterceptor, registrationFile: "interceptor.go", importPath: frameworkModulePath + "/interceptor"}
 )
 
 // managedDirOf returns the descriptor of the managed directory dir, told by
@@ -542,7 +542,7 @@ func isPrunedHandlerRegisterCall(call *ast.CallExpr, importAlias string, handler
 // constructor — and returns its method and handler names.
 func parseHandlerRegisterCall(call *ast.CallExpr, importAlias string) (method string, handler string, ok bool) {
 	sel, selOK := call.Fun.(*ast.SelectorExpr)
-	if !selOK || (sel.Sel.Name != "Register" && sel.Sel.Name != "RegisterAuth") || len(call.Args) != 1 {
+	if !selOK || (sel.Sel.Name != ggconst.FuncRegister && sel.Sel.Name != "RegisterAuth") || len(call.Args) != 1 {
 		return "", "", false
 	}
 	ident, identOK := sel.X.(*ast.Ident)
@@ -691,5 +691,5 @@ func handlerRegisterMethod(handler moduleCopyHandler) string {
 	if handler.Scope == moduleCopyHandlerScopeAuth {
 		return "RegisterAuth"
 	}
-	return "Register"
+	return ggconst.FuncRegister
 }

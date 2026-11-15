@@ -48,7 +48,7 @@ func ListModules() ([]Module, error) {
 }
 
 func listModulesFromRoot(frameworkRoot string) ([]Module, error) {
-	moduleRoot := filepath.Join(frameworkRoot, "module")
+	moduleRoot := filepath.Join(frameworkRoot, ggconst.DirModule)
 	entries, err := os.ReadDir(moduleRoot)
 	if err != nil {
 		return nil, err
@@ -68,7 +68,7 @@ func listModulesFromRoot(frameworkRoot string) ([]Module, error) {
 			return nil, err
 		}
 		info.Name = entry.Name()
-		info.ImportPath = filepath.ToSlash(filepath.Join(frameworkModulePath, "module", entry.Name()))
+		info.ImportPath = filepath.ToSlash(filepath.Join(frameworkModulePath, ggconst.DirModule, entry.Name()))
 		info.Copyable, err = moduleHasCopyManifest(filepath.Join(moduleRoot, entry.Name()))
 		if err != nil {
 			return nil, err
@@ -223,7 +223,7 @@ func RequiredAssembly(modules []string) ([]AssemblyCall, error) {
 
 	calls := make([]AssemblyCall, 0)
 	for _, name := range modules {
-		manifest, manifestErr := loadModuleManifest(filepath.Join(frameworkRoot, "module", name))
+		manifest, manifestErr := loadModuleManifest(filepath.Join(frameworkRoot, ggconst.DirModule, name))
 		if manifestErr != nil {
 			return nil, manifestErr
 		}

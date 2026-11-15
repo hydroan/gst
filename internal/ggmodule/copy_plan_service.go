@@ -9,6 +9,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/dsl"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/modelinfo"
 )
@@ -67,8 +68,8 @@ func (p *CopyPlan) actionServicePaths(sourceModel *modelinfo.Model, targetModel 
 	if p.FrameworkRoot == "" {
 		return filepath.Join(p.SourceServiceDir, action.ServiceFilename()), filepath.Join(p.TargetServiceDir, action.ServiceFilename())
 	}
-	modelDir := filepath.Join(p.FrameworkRoot, "internal", "model")
-	serviceDir := filepath.Join(p.FrameworkRoot, "internal", "service")
+	modelDir := filepath.Join(p.FrameworkRoot, "internal", ggconst.DirModel)
+	serviceDir := filepath.Join(p.FrameworkRoot, "internal", ggconst.DirService)
 	sourceTarget := modelinfo.ServiceTarget(sourceModel, action, modelDir, serviceDir)
 	targetTarget := modelinfo.ServiceTarget(targetModel, action, p.ModelDir, p.ServiceDir)
 	return sourceTarget.FilePath, targetTarget.FilePath

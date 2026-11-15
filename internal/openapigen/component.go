@@ -54,7 +54,7 @@ func schemaComponentNameFromPath(pkgPath, name string) string {
 	if _, below, found := strings.CutLast(pkgPath, "/model/"); found {
 		return strings.ReplaceAll(below, "/", ".") + "." + name
 	}
-	if pkgPath == "model" || strings.HasSuffix(pkgPath, "/model") {
+	if pkgPath == ggconst.DirModel || strings.HasSuffix(pkgPath, "/model") {
 		return name
 	}
 

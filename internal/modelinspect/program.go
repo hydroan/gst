@@ -114,7 +114,7 @@ func buildProjectFile(module string, models []*modelinfo.Model) (string, error) 
 		specs = append(specs, importSpec(aliases[importPath], importPath))
 	}
 	f := &ast.File{
-		Name:  ast.NewIdent("main"),
+		Name:  ast.NewIdent(ggconst.PkgMain),
 		Decls: []ast.Decl{&ast.GenDecl{Tok: token.IMPORT, Specs: specs}},
 	}
 

@@ -95,7 +95,7 @@ func checkModuleNotRegistered(name string) error {
 	}
 
 	aliases := make(map[string]bool)
-	importPath := filepath.ToSlash(filepath.Join(frameworkModulePath, "module", name))
+	importPath := filepath.ToSlash(filepath.Join(frameworkModulePath, ggconst.DirModule, name))
 	for _, spec := range file.Imports {
 		path, err := strconv.Unquote(spec.Path.Value)
 		if err != nil || path != importPath {
