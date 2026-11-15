@@ -20,6 +20,13 @@ import (
 // away.
 var ErrServerShutdown = errors.New("streamctx: the server is shutting down")
 
+// ShutdownMsg is what the client of a stream the shutdown ended is told, the
+// same sentence on both transports and in every form such a stream ends in:
+// the message of the 503 a Server-Sent Events stream that had not opened is
+// answered with, the reason a WebSocket connection is closed with, and the
+// message of the Unavailable status a gRPC stream is answered with.
+const ShutdownMsg = "the server is shutting down"
+
 type (
 	// shutdownKey carries the shutdown signal of the server a request arrived
 	// on.

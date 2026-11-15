@@ -181,7 +181,7 @@ HTTP 状态到 gRPC status 的映射（`grpcserver.StatusError`）：
 
 ## 6. 流式动作
 
-流是 gRPC 独有的一条支线：声明、生成、运行时各加一段，其余复用一元调用的 call 与错误映射。
+流是 gRPC 上的一条支线：声明、生成、运行时各加一段，其余复用一元调用的 call 与错误映射。它在 HTTP 上的入口见本节末尾。
 
 声明与生成：
 
@@ -198,6 +198,13 @@ HTTP 状态到 gRPC status 的映射（`grpcserver.StatusError`）：
 - 客户端流：`Stream(ctx, stream *gst.ClientStream[REQ]) (RSP, error)`，对方发完 Recv 答 io.EOF。
 - 双向流：`Stream(ctx, stream *gst.BidiStream[REQ, RSP]) error`。
 - ctx 取消即流结束：客户端停掉 watch 答 Canceled，不算错误，服务察觉 ctx 结束后返回 nil 也一样；进程停机时流的 ctx 同样结束，正等客户端下一条消息（或首条）的 Recv 也随之返回，调用答 Unavailable「the server is shutting down」，客户端据此换副本重连（一元调用照常排空）。
+
+HTTP 入口（`controller.StreamHandler`，router 不为它注册路由）：
+
+- 同一个 Stream 动作跑在一条 WebSocket 连接上：一帧文本是一条 JSON 消息，客户端发一帧 `null` 表示发完；服务端流的请求是客户端发的第一帧。请求逐条照 HTTP 请求体的口径解码、normalize 与校验。
+- 连接打开之前照普通请求答信封：握手被拒按拒绝的状态答，没有对应 Stream 方法答 501。
+- 连接打开之后，结果由连接的关闭码带回：正常结束 1000；`gst.Error` 是 4000 加它的 HTTP 状态，原因是 msg；其他错误 4500；停机 1001「the server is shutting down」。服务端流的请求在 `server.read_timeout` 内没到按 4408 关，请求之后再发消息按 1008 关；被拒的那条请求按 4400 关，原因是点名字段的句子。访问日志在 status（握手的 101）之外多记一个 `close_code`。
+- 与 gRPC 入口由对照用例 TestTransportsCarryAStreamAlike 逐场景比对（收到的消息、结束状态按第 4 节的映射、msg 逐字）。两线有意不同的两处：service 从上下文读到的动词，HTTP 上是握手的 `GET`，gRPC 上是 `STREAM`；没有对应 Stream 方法的动作，HTTP 在连接打开前答 501 的信封，gRPC 答流的状态 Unimplemented。另有两处只在 HTTP 上有，是传输本身带来的：服务端流的请求是连接上单独的一帧，所以才有「请求在 `server.read_timeout` 内没到按 4408 关」这一步，gRPC 的请求随调用一起到达，框架没有等它的环节；客户端可以不发请求就发 `null` 结束，这时按零值请求照常校验后调用 service，gRPC 的标准客户端发不出这样的调用。
 
 ```plantuml
 @startuml
@@ -293,4 +300,4 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 | 不写 HTTP 注解 | AIP 用 `google.api.http`、`google.api.field_behavior` 标路由与必填 | 没有 gateway，路由与 HTTP 方法由注册物描述（`grpc.Method`），必填由模型的 binding tag 决定，.proto 不标注 |
 | proto3 表达不了的形态 | proto3 的标量没有「未设置」，repeated 与 map 的元素不能为 nil，`google.protobuf.Value` 的数字是 double | 这些照 protobuf 的本性走，写在这里不另加机制：切片、map 的 nil 与空过线后分不开（nil 的 JSONSlice 经 gRPC 写库是空数组还是 null 取决于对端怎么发）；`[]*T`、`map[K]*T` 里指向消息的 nil 元素过线变成空消息、解出来是零值（指向标量的指针元素 gg gen 直接拒绝，无从表达「未设置」）；any 与 JSON 对象字段里超过 2^53 的整数经 Value 丢精度，NaN 与无穷按 Value 的 JSON 映射变成字符串 "NaN"、"Infinity"；集合、map 值与可选字段里的零值时间编成 0001-01-01 再读回零值 |
 
-这页跟着代码走：拦截器链、映射表、产物名、差异清单以仓库为准，改了代码就改这页。两线对同一输入的答复由 internal/controller 的对照用例 TestTransportsAnswerTheContractAlike 逐场景比对（状态码按第 4 节的映射、msg 逐字、落库结果），有意的差异在它的表里是显式的差异行：改了一边它先红，新增一处差异要同时写进表和这页。
+这页跟着代码走：拦截器链、映射表、产物名、差异清单以仓库为准，改了代码就改这页。两线对同一输入的答复由 internal/controller 的对照用例 TestTransportsAnswerTheContractAlike 逐场景比对（状态码按第 4 节的映射、msg 逐字、落库结果），有意的差异在它的表里是显式的差异行：改了一边它先红，新增一处差异要同时写进表和这页。流动作的两个入口由 TestTransportsCarryAStreamAlike 同样比对，差异写在第 6 节。

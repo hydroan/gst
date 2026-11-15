@@ -381,6 +381,8 @@ linters:
           alias: ginjson
         - pkg: github.com/grpc-ecosystem/go-grpc-middleware/v2
           alias: grpcmiddleware
+        - pkg: github.com/coder/websocket
+          alias: coderwebsocket
 
     misspell:
       locale: US
@@ -488,6 +490,13 @@ linters:
         linters:
           - gosec
         text: "G101"
+      # The response of a WebSocket handshake has no body to close: the
+      # library gives the connection of a handshake accepted to the Conn it
+      # returns, and of one refused it has read the part it keeps into memory
+      # and closed the rest (see Dial in github.com/coder/websocket).
+      - linters:
+          - bodyclose
+        source: 'websocket\.Dial\('
 
 formatters:
   # goimports holds every file to the imports gopls organizes on save: grouped

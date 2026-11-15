@@ -26,7 +26,9 @@ import (
 // carries, and KeyTenantID the tenant the request acts in: whatever
 // establishes the caller on the gin context writes them, and FromGin reads
 // them as they stand into the Metadata the service context and the logs
-// carry.
+// carry. KeyCloseCode holds the status the WebSocket connection of a stream
+// closed with: the handler of the stream sets it on the gin context once the
+// connection is closed, for the access log.
 const (
 	KeyRoute        = "route"
 	KeyPath         = "path"
@@ -37,6 +39,7 @@ const (
 	KeyUserID       = "user_id"
 	KeySessionID    = "session_id"
 	KeyTenantID     = "tenant_id"
+	KeyCloseCode    = "close_code"
 )
 
 // Metadata contains immutable request-scoped fields shared by logging and

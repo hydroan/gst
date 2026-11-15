@@ -32,6 +32,7 @@ import (
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/streamctx"
 	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/websocket"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -560,11 +561,12 @@ func newServer(addr string, handler http.Handler) *http.Server {
 var drainTimeout = lifecycle.StopTimeout
 
 // Stop shuts the server down: it stops accepting connections and waits for
-// the requests in flight, for up to drainTimeout and no longer than abandon
-// lasts — not at all when it has already ended, for a process that must not
-// wait on anything, see lifecycle.FailNow. The connections a drain cut short
-// leaves open are closed, their requests cut off, rather than left to run
-// past the teardown of what they use.
+// the requests in flight, then for the WebSocket connections accepted, which
+// Shutdown returns without waiting for, for up to drainTimeout in all and no
+// longer than abandon lasts — not at all when it has already ended, for a
+// process that must not wait on anything, see lifecycle.FailNow. The
+// connections a drain cut short leaves open are closed, their requests cut
+// off, rather than left to run past the teardown of what they use.
 func Stop(abandon context.Context) {
 	if server == nil {
 		return
@@ -579,6 +581,9 @@ func Stop(abandon context.Context) {
 		}
 	} else {
 		zap.S().Infow("backend server shutdown completed")
+	}
+	if cut := websocket.Drain(ctx); cut > 0 {
+		zap.S().Warnw("backend server closed the WebSocket connections its drain left open", "connections", cut, "reason", context.Cause(ctx))
 	}
 	server = nil
 }

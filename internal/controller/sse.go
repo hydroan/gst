@@ -82,7 +82,7 @@ func SSEHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 			// request.
 			answer := endedAnswer(stream.Err(), ended)
 			if errors.Is(context.Cause(stream), streamctx.ErrServerShutdown) {
-				answer = types.NewErrorWithCause(http.StatusServiceUnavailable, shutdownMsg, ended)
+				answer = types.NewErrorWithCause(http.StatusServiceUnavailable, streamctx.ShutdownMsg, ended)
 			}
 			response.Error(c, answer)
 		default:

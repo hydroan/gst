@@ -30,12 +30,6 @@ const (
 	foreignKeyMsg      = "The request refers to a record that does not exist or is still in use." // 409
 )
 
-// shutdownMsg answers, with 503, a Server-Sent Events stream the server's
-// shutdown ended before it opened: the counterpart of the grpcserver
-// package's shutdownMsg, which a gRPC stream the stop ended is answered
-// with, the same sentence on both lines.
-const shutdownMsg = "the server is shutting down"
-
 // invalidArgument returns the refusal of a request the controller could not
 // carry, err: 400 with the client-safe text of err — the message of the
 // service error err wraps, when it does, err's own text otherwise — and err

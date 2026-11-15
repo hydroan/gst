@@ -19,11 +19,12 @@ import (
 // twelve every request has — status, method, username, user id, tenant id,
 // trace id, route, path, query, ip, user agent and the duration, whose two
 // keys logfield.Duration renders from one inlined field — plus the span id of
-// a request a recording span traces, plus the error of a request that
-// reported one. The logger runs on every request and sizes its field slice
-// to it once, so the hot path never regrows it; a field added to
-// accessLogger bumps it, which the worst-case test enforces.
-const accessLogFieldCap = 14
+// a request a recording span traces, plus the status the WebSocket connection
+// of a stream closed with, plus the error of a request that reported one. The
+// logger runs on every request and sizes its field slice to it once, so the
+// hot path never regrows it; a field added to accessLogger bumps it, which
+// the worst-case test enforces.
+const accessLogFieldCap = 15
 
 func accessLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -69,6 +70,9 @@ func accessLogger() gin.HandlerFunc {
 		)
 		if spanID != "" {
 			fields = append(fields, zap.String("span_id", spanID))
+		}
+		if closeCode := c.GetInt(requestctx.KeyCloseCode); closeCode != 0 {
+			fields = append(fields, logfield.CloseCode(closeCode))
 		}
 
 		if len(c.Errors) > 0 {

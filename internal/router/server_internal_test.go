@@ -10,6 +10,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/sse"
+	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/websocket"
 	"github.com/stretchr/testify/require"
 )
 
@@ -96,6 +98,49 @@ func TestStopClosesTheConnectionsTheDrainLeftOpen(t *testing.T) {
 		require.Error(t, awaitResult(t, requested), "the request in flight must have been cut off")
 		require.ErrorIs(t, awaitResult(t, served), http.ErrServerClosed)
 	})
+}
+
+// TestStopWaitsForTheWebSocketConnections proves Stop waits for a WebSocket
+// connection the server accepted, which Shutdown returns without waiting
+// for: a stream that takes its time closing the connection, once the
+// shutdown has ended its context, has closed it by the time Stop returns,
+// and its client reads the ending it closed with.
+func TestStopWaitsForTheWebSocketConnections(t *testing.T) {
+	closed := make(chan struct{})
+	srv := newServer("", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil, time.Second)
+		if err != nil {
+			return
+		}
+		<-conn.Context().Done()
+		time.Sleep(200 * time.Millisecond)
+		conn.Close(context.Cause(conn.Context()))
+		close(closed)
+	}))
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	served := make(chan error, 1)
+	go func() { served <- srv.Serve(listener) }()
+	original := server
+	server = srv
+	t.Cleanup(func() { server = original })
+
+	conn, _, err := websocket.Dial(t.Context(), nil, "http://"+listener.Addr().String(), nil, time.Second)
+	require.NoError(t, err)
+	t.Cleanup(func() { conn.Close(nil) })
+
+	Stop(context.Background())
+	select {
+	case <-closed:
+	default:
+		t.Fatal("Stop must wait for the connection to have been closed")
+	}
+	_, err = conn.Recv()
+	var ending *types.Error
+	require.ErrorAs(t, err, &ending)
+	require.Equal(t, http.StatusServiceUnavailable, ending.Status())
+	require.Equal(t, "the server is shutting down", ending.Msg())
+	require.ErrorIs(t, awaitResult(t, served), http.ErrServerClosed)
 }
 
 // serveARequestThatStaysInFlight serves, as the package's server, a handler

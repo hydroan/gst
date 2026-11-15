@@ -111,6 +111,12 @@ func (o paramsObject) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 // grpc_code instead, the two codes sharing no number space.
 func Status(code int) zap.Field { return zap.Int(keyStatus, code) }
 
+// CloseCode is the status the WebSocket connection of a stream closed with, a
+// number: {"close_code":1000}. The entry's status is the 101 of the handshake
+// every such request is answered with; how the stream ended is told by this
+// one.
+func CloseCode(code int) zap.Field { return zap.Int(requestctx.KeyCloseCode, code) }
+
 // Threshold is the duration a slow operation was measured against, rendered
 // as the integer nanoseconds Duration renders a duration in:
 // {"threshold":200000000}.

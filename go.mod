@@ -26,6 +26,7 @@ require (
 	github.com/bufbuild/protocompile v0.14.1
 	github.com/casbin/casbin/v3 v3.11.0
 	github.com/cockroachdb/errors v1.14.0
+	github.com/coder/websocket v1.8.15
 	github.com/coocood/freecache v1.2.7
 	github.com/creasty/defaults v1.8.0
 	github.com/dgraph-io/ristretto/v2 v2.4.2

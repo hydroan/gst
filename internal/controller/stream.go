@@ -256,15 +256,23 @@ func (a *action[M, REQ, RSP]) requests(c *call, recv func() (REQ, error)) *reque
 	return r
 }
 
-// unimplemented answers a Stream call whose service, the one registered for
-// the route and the Stream phase, has no Stream method of the kind the
-// action declares — the service file was not generated, or its method was
-// changed — with Unimplemented and unimplementedMsg: the transport's own
-// refusal of a call nothing serves. Which action, on which route, is for
-// the log and the span, like the cause of any other internal failure.
+// unimplemented answers a Stream call whose service has no Stream method of
+// the kind the action declares (see unserved) with Unimplemented and
+// unimplementedMsg: the transport's own refusal of a call nothing serves.
 func (a *action[M, REQ, RSP]) unimplemented(c *call, route string) error {
-	err := errors.Newf("the Stream action of %s on %s is served by no Stream method of its kind; gg gen declares the method in the service file", a.name, route)
+	err := a.unserved(route)
 	c.log.Errorz("service operation failed", zap.Error(err))
 	gstotel.RecordError(c.span, err)
 	return status.Error(codes.Unimplemented, unimplementedMsg)
+}
+
+// unserved returns the failure of the Stream action on route whose service,
+// the one registered for the route and the Stream phase, has no Stream method
+// of the kind the action declares — the service file was not generated, or
+// its method was changed. Which action, on which route, is for the log and
+// the span, like the cause of any other internal failure: each transport
+// answers it with unimplementedMsg and its own status for what nothing
+// serves.
+func (a *action[M, REQ, RSP]) unserved(route string) error {
+	return errors.Newf("the Stream action of %s on %s is served by no Stream method of its kind; gg gen declares the method in the service file", a.name, route)
 }

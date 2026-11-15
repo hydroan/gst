@@ -400,6 +400,8 @@ const (
 	// call and then return without an error, the way a watch returns once
 	// its context is done.
 	actionAwait = "await"
+	// actionPanic makes the watch service panic.
+	actionPanic = "panic"
 )
 
 // actionEntered is signaled once the action service hangs in a call (see
@@ -702,6 +704,8 @@ func (*watchService) Stream(sc *types.ServiceContext, req *sampleActionReq, stre
 		awaitEntered <- struct{}{}
 		<-sc.Done()
 		return nil
+	case actionPanic:
+		panic("sample panic")
 	}
 	count, _ := strconv.Atoi(req.Note)
 	for i := range count {

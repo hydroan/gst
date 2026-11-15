@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/streamctx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -14,12 +15,6 @@ import (
 // server begins to stop, as opposed to the client going away: the
 // counterpart of streamctx.ErrServerShutdown for the HTTP listener's streams.
 var errServerShutdown = errors.New("grpc: the server is shutting down")
-
-// shutdownMsg is the status message a stream the stop ended is answered
-// with: the counterpart of the controller package's shutdownMsg, which a
-// Server-Sent Events stream the shutdown ended before it opened is answered
-// with over HTTP, the same sentence on both lines.
-const shutdownMsg = "the server is shutting down"
 
 // streamShutdown returns the stream interceptor closest to the handler: it
 // gives the stream a context that ends the moment the server begins to
@@ -50,7 +45,7 @@ func streamShutdown(stopping context.Context) grpc.StreamServerInterceptor {
 		case err == nil && !info.IsServerStream:
 			return nil
 		case err == nil || status.Code(err) == codes.Canceled:
-			return status.Error(codes.Unavailable, shutdownMsg)
+			return status.Error(codes.Unavailable, streamctx.ShutdownMsg)
 		}
 		return err
 	}

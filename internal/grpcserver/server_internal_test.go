@@ -19,6 +19,7 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/internal/streamctx"
 	"github.com/hydroan/gst/logger"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -467,7 +468,7 @@ func TestStopEndsTheStreamsAsTheUnaryCallsDrain(t *testing.T) {
 		select {
 		case err := <-errs:
 			require.Equal(t, codes.Unavailable, status.Code(err), "%s: %v", name, err)
-			require.Equal(t, shutdownMsg, status.Convert(err).Message(), name)
+			require.Equal(t, streamctx.ShutdownMsg, status.Convert(err).Message(), name)
 		case <-time.After(5 * time.Second):
 			t.Fatalf("the %s stream did not end when the stop began", name)
 		}

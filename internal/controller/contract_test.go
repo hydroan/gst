@@ -1713,6 +1713,8 @@ func grpcCodeOf(httpStatus int) codes.Code {
 		return codes.AlreadyExists
 	case http.StatusInternalServerError:
 		return codes.Internal
+	case http.StatusNotImplemented:
+		return codes.Unimplemented
 	case types.StatusClientClosedRequest:
 		return codes.Canceled
 	}

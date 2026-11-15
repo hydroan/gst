@@ -18,10 +18,11 @@ import (
 )
 
 // TestAccessLoggerFieldsFitTheCapacityInTheWorstCase pins accessLogFieldCap
-// to the entry of a request a recording span traces that reported an error
-// — the span id and the error, the two optional fields, present — so a field
-// added to accessLogger without bumping the capacity fails here instead of
-// regrowing the slice on every request.
+// to the entry of a request a recording span traces, whose WebSocket
+// connection closed, that reported an error — the span id, the close code
+// and the error, the three optional fields, present — so a field added to
+// accessLogger without bumping the capacity fails here instead of regrowing
+// the slice on every request.
 func TestAccessLoggerFieldsFitTheCapacityInTheWorstCase(t *testing.T) {
 	setupTracingTest(t)
 
@@ -36,6 +37,7 @@ func TestAccessLoggerFieldsFitTheCapacityInTheWorstCase(t *testing.T) {
 	router.Use(tracing(), accessLogger())
 	router.GET("/api/ping", func(c *gin.Context) {
 		_ = c.Error(errors.New("probe failed"))
+		c.Set(requestctx.KeyCloseCode, 1000)
 		c.Status(http.StatusNoContent)
 	})
 
@@ -48,6 +50,7 @@ func TestAccessLoggerFieldsFitTheCapacityInTheWorstCase(t *testing.T) {
 	require.Len(t, entries[0].Context, accessLogFieldCap,
 		"the worst case must fill the capacity exactly: a new field bumps accessLogFieldCap, a dropped one lowers it")
 	require.Contains(t, entries[0].ContextMap(), "span_id", "the worst case must carry the optional span id")
+	require.EqualValues(t, 1000, entries[0].ContextMap()["close_code"], "the status the connection closed with travels in a field of its own")
 	require.Equal(t, "probe failed", entries[0].ContextMap()["error"], "the error the request reported travels in a field of its own")
 }
 

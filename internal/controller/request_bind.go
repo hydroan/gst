@@ -91,7 +91,15 @@ func decodeJSONRequest(c *gin.Context, target any) error {
 	if trimmed := bytes.TrimSpace(raw); len(trimmed) == 0 || bytes.Equal(trimmed, jsonNull) {
 		return io.EOF
 	}
-	if err = jsonv2.Unmarshal(raw, target, json.DefaultOptionsV1(), requestDecoding); err != nil {
+	return decodeJSON(raw, target)
+}
+
+// decodeJSON decodes raw, one JSON document, into target under the options a
+// request body is decoded under (see decodeJSONRequest and requestDecoding),
+// a failure wrapped client-safely (see clientSafeBindError): the decoding of
+// a request body and of a message of a stream over HTTP alike.
+func decodeJSON(raw []byte, target any) error {
+	if err := jsonv2.Unmarshal(raw, target, json.DefaultOptionsV1(), requestDecoding); err != nil {
 		return clientSafeBindError(err)
 	}
 	return nil

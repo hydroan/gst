@@ -31,6 +31,8 @@ const (
 
 	SERVER_TRUSTED_PROXIES = "SERVER_TRUSTED_PROXIES"
 
+	SERVER_WEBSOCKET_ORIGINS = "SERVER_WEBSOCKET_ORIGINS"
+
 	SERVER_SHUTDOWN_DELAY = "SERVER_SHUTDOWN_DELAY"
 
 	SERVER_READ_TIMEOUT  = "SERVER_READ_TIMEOUT"
@@ -64,6 +66,20 @@ type Server struct {
 	// network here — until it does, every client address it records, logs and
 	// rate-limits on is the one the request asked for.
 	TrustedProxies []string `json:"trusted_proxies" mapstructure:"trusted_proxies" ini:"trusted_proxies" yaml:"trusted_proxies"`
+
+	// WebSocketOrigins lists the origins, beside the host a request is sent
+	// to, whose pages may open a WebSocket connection: host patterns as
+	// path.Match reads them, app.example.com or *.example.com, matched
+	// without regard to case against the host of the handshake's Origin
+	// header, or against its scheme and host, https://app.example.com, when
+	// the pattern carries a scheme.
+	//
+	// It is empty by default, which admits the pages of the host the request
+	// is sent to and no others. A browser sends its cookies with a handshake
+	// whichever page opens it, so a script of every origin listed here acts
+	// with the session of the user signed in. A handshake carrying no Origin
+	// header, which a browser always sends, is not held to the list.
+	WebSocketOrigins []string `json:"websocket_origins" mapstructure:"websocket_origins" ini:"websocket_origins" yaml:"websocket_origins"`
 
 	// ShutdownDelay is how long the process keeps serving after it is asked
 	// to stop, before the listener starts draining.
@@ -103,6 +119,7 @@ func (*Server) setDefaults(v *viper.Viper) {
 	v.SetDefault("server.port", 8080)
 	v.SetDefault("server.domain", "")
 	v.SetDefault("server.trusted_proxies", []string{})
+	v.SetDefault("server.websocket_origins", []string{})
 	v.SetDefault("server.shutdown_delay", 0)
 	v.SetDefault("server.read_timeout", 15*time.Second)
 	v.SetDefault("server.write_timeout", 15*time.Second)
