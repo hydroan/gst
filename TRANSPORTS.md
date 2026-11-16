@@ -30,7 +30,7 @@ gst · HTTP 与 gRPC 两条传输线
     <div class="arch-arrow">▼</div>
     <div class="arch-layer stage">
       <div class="arch-layer-title">② 生成 · gg gen</div>
-      <div class="arch-grid arch-grid-3"><div class="arch-box lane http"><b>router/router.gen.go</b><ul><li>每个动作一条 <code>router.Register[M,REQ,RSP](group, route, cfg, phase)</code>，路由串带 <code>/api</code> 前缀。</li><li><code>model/apidoc.gen.go</code>：Swagger 注释，服务启动后在 <code>/docs/index.html</code>。</li></ul></div><div class="arch-box lane shared"><b>main.go、model.gen.go、service.gen.go、骨架</b><ul><li><code>main.go</code> 空导入 configx / cronjob / middleware / interceptor / pb 并调 bootstrap。</li><li><code>model/model.gen.go</code>：模型注册与 <code>XxxCols</code> 列引用。</li><li><code>service/service.gen.go</code>：<code>service.Register[*svc](phase, "/api/…")</code>，键是 route|phase。</li><li>新 service 文件旁生成 <code>_test.go</code> 骨架（含 main_test.go），Stream 的骨架直接拨 gRPC。</li></ul></div><div class="arch-box lane grpc"><b>pb/ 镜像 model 目录</b><ul><li><code>x.proto</code>：从 Go 类型与 Design() 推导，包名 <code>&lt;app&gt;[.&lt;dir&gt;]</code>（app 是模块路径去掉主版本后缀的末段），注册路径是 app 名加 pb/ 下的路径（<code>tmpapp/board/feed.proto</code>，Buf 的「目录即包名」规则），两个服务链接进同一二进制也不撞，外部使用时把 pb/ 复制成名为 app 的目录放进 proto 根目录即可；对照已提交文件拒绝改号、改类型、删 service / rpc / 消息、改流向，请求响应消息按字段名沿用已提交号，自动写 <code>reserved</code>。</li><li>进程内 protocompile 编译，经 <code>gghelper.PinnedCommand</code> 驱动 protoc-gen-go / protoc-gen-go-grpc 得到 <code>x.pb.go</code>、<code>x_grpc.pb.go</code>。</li><li>gg 自己写 <code>x.gen.go</code>（适配层）与每个 pb 包一个的 <code>pb.gen.go</code>（注册；根目录的空导入子包，main.go 只导入根目录）。</li><li>gg check 查 pb tag，gg gen 写盘前对 pb/ 的 Go 文件做类型检查、删过期的 Go 文件，gg prune 清过期的 .proto。</li></ul></div></div>
+      <div class="arch-grid arch-grid-3"><div class="arch-box lane http"><b>router/router.gen.go</b><ul><li>每个动作一条 <code>router.Register[M,REQ,RSP](group, route, cfg, phase)</code>，路由串带 <code>/api</code> 前缀。</li><li><code>model/apidoc.gen.go</code>：Swagger 注释，服务启动后在 <code>/docs/index.html</code>。</li></ul></div><div class="arch-box lane shared"><b>main.go、model.gen.go、service.gen.go、骨架</b><ul><li><code>main.go</code> 空导入 configx / cronjob / middleware / interceptor / pb 并调 bootstrap。</li><li><code>model/model.gen.go</code>：模型注册与 <code>XxxCols</code> 列引用。</li><li><code>service/service.gen.go</code>：<code>service.Register[*svc](phase, "/api/…")</code>，键是 route|phase。</li><li>新 service 文件旁生成 <code>_test.go</code> 骨架（含 main_test.go），里面的示例请求都走 client 包，Stream 也是。</li></ul></div><div class="arch-box lane grpc"><b>pb/ 镜像 model 目录</b><ul><li><code>x.proto</code>：从 Go 类型与 Design() 推导，包名 <code>&lt;app&gt;[.&lt;dir&gt;]</code>（app 是模块路径去掉主版本后缀的末段），注册路径是 app 名加 pb/ 下的路径（<code>tmpapp/board/feed.proto</code>，Buf 的「目录即包名」规则），两个服务链接进同一二进制也不撞，外部使用时把 pb/ 复制成名为 app 的目录放进 proto 根目录即可；对照已提交文件拒绝改号、改类型、删 service / rpc / 消息、改流向，请求响应消息按字段名沿用已提交号，自动写 <code>reserved</code>。</li><li>进程内 protocompile 编译，经 <code>gghelper.PinnedCommand</code> 驱动 protoc-gen-go / protoc-gen-go-grpc 得到 <code>x.pb.go</code>、<code>x_grpc.pb.go</code>。</li><li>gg 自己写 <code>x.gen.go</code>（适配层）与每个 pb 包一个的 <code>pb.gen.go</code>（注册；根目录的空导入子包，main.go 只导入根目录）。</li><li>gg check 查 pb tag，gg gen 写盘前对 pb/ 的 Go 文件做类型检查、删过期的 Go 文件，gg prune 清过期的 .proto。</li></ul></div></div>
     </div>
     <div class="arch-arrow">▼</div>
     <div class="arch-layer stage">
@@ -143,7 +143,7 @@ handler --> client : RecordToProto；失败映射成 status
 | 模型 | `model/apidoc.gen.go` | `model/model.gen.go` | 模型文件里缺的 `pb` tag 由 gen 补号并回写 |
 | 接口定义 | Swagger 注释，运行期出 `/openapi.json` | | `pb/record.proto`：`RecordService`，每个 rpc 独享 `XxxRequest / XxxResponse`，List 请求带 filters，再按模型嵌入的 Query、Pagination、Cursor 带排序、分页、游标与 expand，Patch 带 `google.protobuf.FieldMask` |
 | 传输代码 | `router/router.gen.go` | `service/service.gen.go` | `pb/record.pb.go`、`pb/record_grpc.pb.go`（插件写），`pb/record.gen.go`（适配层：服务类型 `recordService`、`RecordToProto / RecordFromProto`），每个 pb 包一个 `pb.gen.go`（注册，根目录的空导入子包） |
-| 业务骨架 | | `service/record/<name>.go` 与同名 `_test.go`（生成一次，之后归项目） | Stream 动作的测试骨架拨 `testutil.GRPCTarget()` |
+| 业务骨架 | | `service/record/<name>.go` 与同名 `_test.go`（生成一次，之后归项目；骨架里的示例请求都走 `client` 包） | |
 | 模块代码 | `middleware/` 下模块的中间件（gg module copy） | module 的 model 与 service 子树 | `interceptor/` 下模块的拦截器（只在项目有 GRPC() 模型时复制） |
 | 清理 | | `gg gen` 删过期的 .gen.go、.pb.go，`gg prune` 删过期的 .proto | 过期的 Go 文件 gg gen 写盘时顺手删掉；.proto 带着 reserved，留给 prune，删前提醒先搬走保留号；prune 也认孤儿拦截器文件 |
 
@@ -169,7 +169,7 @@ HTTP 状态到 gRPC status 的映射（`grpcserver.StatusError`）：
 
 ## 5. 动作承载矩阵
 
-规则一句话：动作在能承载它的每种传输上都提供；只有一种传输能承载的，只在那一种上提供。Import / Export / SSE 不进 .proto；Stream 两条线都提供，HTTP 上是一条 WebSocket 连接，router.gen.go 照常为它写一条注册，接口文档与 TS 类型里没有它。
+规则一句话：动作在能承载它的每种传输上都提供；只有一种传输能承载的，只在那一种上提供。Import / Export / SSE 不进 .proto；Stream 在 HTTP 上是一条 WebSocket 连接，router.gen.go、接口文档、TS 类型和测试骨架里都照常有它；模型声明了 GRPC() 时它同时是流式 rpc，没声明就只走 WebSocket。
 
 | 动作 | HTTP | gRPC（模型声明了 GRPC()） | 说明 |
 |---|:---:|:---:|---|
@@ -177,7 +177,7 @@ HTTP 状态到 gRPC status 的映射（`grpcserver.StatusError`）：
 | CreateMany / UpdateMany / PatchMany / DeleteMany | ✓ | ✓ | 批量逐条校验，UpdateMany / PatchMany 同一个 id 出现两次即拒绝；PatchMany 的每一项就是单条 Patch 的请求（id、记录、update_mask），和单条一样以项的 id 为准、记录自带的 id 不读，项里的路由参数与外层不一致即拒绝；带版本号的模型先查完每一项的版本号，再逐项校验字段，同一批几项各有缺陷时两线拒绝同一项 |
 | Route() 里的自定义动作 | ✓ | ✓ | rpc 名 = Service 名 + 模型名；Payload 挂成 `payload`，Result 挂成 `result` |
 | Import / Export / SSE | ✓ | — | 文件流与事件流只有 HTTP 能承载；gg check 在 GRPC() 模型的其他 service 里拦住 HTTP 专属的 ServiceContext 方法（Cookie、FormFile、SSE 等），这三种动作自己的 service 文件不扫，运行期在 gRPC 调用里碰到其中任何一个，调用一律答 Internal，钩子一返回就拦：Before 钩子里的在写库之前拦下，After 钩子里的在写库之后（和 After 钩子返回错误一样，行已写入） |
-| Stream | ✓ | ✓ | 只允许自定义动作，必须 Service("name") 与 GRPC()；HTTP 上是 `GET` 握手打开的一条 WebSocket 连接；接口文档与 TS 类型里没有它 |
+| Stream | ✓ | ✓ | 只允许自定义动作，必须 Service("name")；HTTP 上是 `GET` 握手打开的一条 WebSocket 连接，接口文档里写成成功答 101 的 `GET`，说明里写明两侧各发什么消息 |
 
 ## 6. 流式动作
 

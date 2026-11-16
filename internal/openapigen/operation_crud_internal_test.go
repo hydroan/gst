@@ -3,6 +3,7 @@ package openapigen
 import (
 	"encoding/json"
 	"maps"
+	"net/http"
 	"slices"
 	"testing"
 
@@ -194,6 +195,14 @@ func TestOperationsDocumentTheFailuresTheyAnswer(t *testing.T) {
 			},
 			statuses: []string{"200", "400", "default"},
 		},
+		{
+			name: "stream",
+			set: func(p *openapi3.PathItem) *openapi3.Operation {
+				setStream[*model, *model, *model]("/api/failures/stream", "/api/failures/stream", p)
+				return p.Get
+			},
+			statuses: []string{"101", "400", "default"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -221,7 +230,7 @@ func TestOperationsDocumentTheFailuresTheyAnswer(t *testing.T) {
 // itself, with success referring to its response component record_create,
 // answers 200 with that component and every failure with the failure envelope.
 func TestResponsesOfAnswersItsExample(t *testing.T) {
-	responses := responsesOf(&openapi3.ResponseRef{Ref: "#/components/responses/record_create"}, apiaction.Create, false)
+	responses := responsesOf(http.StatusOK, &openapi3.ResponseRef{Ref: "#/components/responses/record_create"}, apiaction.Create, false)
 
 	refs := make(map[string]string)
 	for status, ref := range responses.Map() {

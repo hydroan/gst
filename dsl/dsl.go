@@ -211,8 +211,7 @@ func Migrate() { dsl.Migrate() }
 // beside the HTTP routes, both backed by the same service code. Declaring it
 // is enabling it; a model without it is HTTP only. It can only be used at
 // Design() top level, and needs at least one action gRPC can serve: Import,
-// Export and SSE are HTTP only. A model declaring a Stream action declares
-// it.
+// Export and SSE are HTTP only.
 func GRPC() { dsl.GRPC() }
 
 // Service marks the current action as requiring custom service code, and
@@ -232,7 +231,7 @@ func GRPC() { dsl.GRPC() }
 // declares the same action on several routes, since two actions named after
 // one phase would fight over one file, and for a custom action whose name
 // says what it does; a Stream action always names its service, there being
-// no default name for its rpc. Generated service log.Info messages use
+// no default name for it. Generated service log.Info messages use
 // "{model}: {label}", label being the name with underscores replaced by
 // spaces.
 //
@@ -440,20 +439,19 @@ func SSE(fn func()) { dsl.SSE(fn) }
 // streaming a bidirectional stream. A side declared neither way is
 // *model.Empty.
 //
-// A Stream is served over both transports. Over gRPC it is a streaming rpc.
-// Over HTTP it is a WebSocket connection, opened by a GET of the route, which
-// is marked as streaming the way the route of an SSE action is: every message
-// travels as one text frame holding a JSON document, a Payload is the first
-// frame the client sends, a client ends a StreamingPayload with a frame
+// Over HTTP a Stream is a WebSocket connection, opened by a GET of the route,
+// which is marked as streaming the way the route of an SSE action is: every
+// message travels as one text frame holding a JSON document, a Payload is the
+// first frame the client sends, a client ends a StreamingPayload with a frame
 // holding null, and a Result is the frame the server sends before it closes
 // the connection. The connection closes once the service returns: normally,
 // or for an error with the status 4000 plus the HTTP status the error answers
-// with, its message the reason.
+// with, its message the reason. A model declaring GRPC() serves the action
+// over gRPC as well, as a streaming rpc.
 //
 // Stream must declare a named Service("name"), there being no built-in
-// implementation and the name naming its rpc (see Service); it must not
-// declare Exact(), its route being served as declared. It needs GRPC() on
-// the model, and appears in no OpenAPI document.
+// implementation and no default name for its service (see Service); it must
+// not declare Exact(), its route being served as declared.
 //
 // Example, a server stream of the events of a feed on the route
 // feeds/watch:

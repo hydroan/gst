@@ -35,6 +35,9 @@ func TestGenTypeScriptRunWritesTheDeclarationsOfTheRoutes(t *testing.T) {
 		"export type SampleStatus = \"active\" | \"archived\";",
 		"export interface SampleArchiveReq {",
 		"export interface SampleArchiveRsp {",
+		// The messages of a Stream travel as JSON too, one a frame.
+		"export interface SampleWatchReq {",
+		"export interface SampleWatchRsp {",
 	} {
 		if !strings.Contains(declarations, want) {
 			t.Errorf("model.ts is missing %q:\n%s", want, declarations)
@@ -195,6 +198,14 @@ type SampleListRsp struct {
 	Total int 'json:"total"'
 }
 
+type SampleWatchReq struct {
+	Status SampleStatus 'json:"status"'
+}
+
+type SampleWatchRsp struct {
+	Seq int64 'json:"seq"'
+}
+
 func (Sample) TableName() string { return "samples" }
 
 func (Sample) Design() {
@@ -210,6 +221,13 @@ func (Sample) Design() {
 		dsl.Create(func() {
 			dsl.Payload[*SampleArchiveReq]()
 			dsl.Result[*SampleArchiveRsp]()
+		})
+	})
+	dsl.Route("samples/watch", func() {
+		dsl.Stream(func() {
+			dsl.Service("watch")
+			dsl.Payload[*SampleWatchReq]()
+			dsl.StreamingResult[*SampleWatchRsp]()
 		})
 	})
 }

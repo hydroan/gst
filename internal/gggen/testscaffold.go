@@ -33,18 +33,15 @@ const (
 	scaffoldImportConfig   = "github.com/hydroan/gst/config"
 	scaffoldImportTestutil = "github.com/hydroan/gst/testutil"
 	scaffoldImportRequire  = "github.com/stretchr/testify/require"
-	scaffoldImportGRPC     = "google.golang.org/grpc"
-	scaffoldImportInsecure = "google.golang.org/grpc/credentials/insecure"
 )
 
 // scaffoldImportNames lists the names the imports above take in a scaffold
 // and the variables its statements declare, which a package the scaffold
 // imports for the example must not take too.
-var scaffoldImportNames = []string{"testing", "strings", "http", "client", "config", "testutil", "require", "grpc", "insecure", "conn", "stream", "rsp", "err", "id", "events", "event"}
+var scaffoldImportNames = []string{"testing", "strings", "http", "client", "config", "testutil", "require", "cli", "stream", "rsp", "err", "id", "events", "event"}
 
-// serviceTestDoc is the part of the test scaffold's doc comment of an action
-// served over HTTP that tells how the test is written, after the line
-// naming the route.
+// serviceTestDoc is the part of the test scaffold's doc comment that tells
+// how the test is written, after the line naming the route.
 var serviceTestDoc = []string{
 	"//",
 	"// The request goes through the framework client against the test server",
@@ -54,19 +51,6 @@ var serviceTestDoc = []string{
 	"// set with client.WithToken, headers set with client.WithHeader, and the",
 	"// cookies earlier responses set, kept in its cookie jar. A rejection is",
 	"// asserted with testutil.RequireError, and rows with the testutil.Require*",
-	"// helpers.",
-}
-
-// serviceStreamTestDoc is serviceTestDoc's counterpart for a Stream action,
-// whose test calls its rpc.
-var serviceStreamTestDoc = []string{
-	"//",
-	"// The call goes through a grpc-go client against the gRPC listener of the",
-	"// test server TestMain starts, so the rpc, the service and the database are",
-	"// exercised together. A method not declared Public() goes through the auth",
-	"// interceptors the project registers, which read the credentials the call",
-	"// carries in its outgoing metadata, set with metadata.AppendToOutgoingContext.",
-	"// A refusal is asserted on its status code, and rows with the testutil.Require*",
 	"// helpers.",
 }
 
@@ -118,32 +102,30 @@ var serviceStreamTestDoc = []string{
 // batch route sends client.BatchItems or client.BatchIDs, a List without a
 // declared result decodes client.ListResult, Import uploads a file, Export
 // downloads the attachment and SSE consumes the stream. A Stream action is
-// called over gRPC, through the client the protobuf plugin generated, on a
-// connection to testutil.GRPCTarget: for the Stream action declaring
-// Service("watch"), Payload and StreamingResult on the model Feed of the
-// root model package, whose rpc is WatchFeed, the test reads
+// opened over its WebSocket connection, through the client method of its
+// kind: for the Stream action declaring Service("watch"), Payload and
+// StreamingResult on the model Feed of the root model package, registered at
+// /api/feeds/watch, the test reads
 //
-//	// TestWatch covers the WatchFeed rpc, served by Watch in watch.go.
+//	// TestWatch covers GET /api/feeds/watch, served by Watch in watch.go.
 //	//
-//	// The call goes through a grpc-go client against the gRPC listener of the
-//	// test server TestMain starts, so the rpc, the service and the database are
-//	// exercised together. A method not declared Public() goes through the auth
-//	// interceptors the project registers, which read the credentials the call
-//	// carries in its outgoing metadata, set with metadata.AppendToOutgoingContext.
-//	// A refusal is asserted on its status code, and rows with the testutil.Require*
+//	// The request goes through the framework client against the test server
+//	// TestMain starts, so the route, the service and the database are exercised
+//	// together. A route not declared Public() goes through the auth middleware the
+//	// project registers, which reads the credentials the client carries: a token
+//	// set with client.WithToken, headers set with client.WithHeader, and the
+//	// cookies earlier responses set, kept in its cookie jar. A rejection is
+//	// asserted with testutil.RequireError, and rows with the testutil.Require*
 //	// helpers.
 //	func TestWatch(t *testing.T) {
 //		t.Fatal("TestWatch is a scaffold: delete this line and finish the test below")
 //
-//		conn, err := grpc.NewClient(testutil.GRPCTarget(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+//		cli, err := client.New(testutil.BaseURL())
 //		require.NoError(t, err)
-//		t.Cleanup(func() {
-//			_ = conn.Close()
-//		})
-//		client := pb.NewFeedServiceClient(conn)
 //
-//		stream, err := client.WatchFeed(t.Context(), &pb.WatchFeedRequest{})
+//		stream, err := cli.ServerStream[model.FeedEvent](t.Context(), "/api/feeds/watch", &model.FeedWatchReq{})
 //		require.NoError(t, err)
+//		defer stream.Close()
 //		rsp, err := stream.Recv()
 //		require.NoError(t, err)
 //		require.NotNil(t, rsp)
@@ -153,15 +135,9 @@ var serviceStreamTestDoc = []string{
 // CloseAndRecv, a bidirectional one sends, reads and closes its side.
 func GenerateServiceTest(info *modelinfo.Model, target modelinfo.ServiceTargetInfo, action *dsl.Action, route string) (string, error) {
 	name := serviceTestName(action)
-	served := fmt.Sprintf("%s %s", action.Phase.HTTPMethod(), route)
-	how := serviceTestDoc
-	if action.Phase == apiaction.Stream {
-		served = fmt.Sprintf("the %s rpc", modelinfo.RPCName(info, route, action))
-		how = serviceStreamTestDoc
-	}
 	doc := append([]string{
-		fmt.Sprintf("// %s covers %s, served by %s in %s.", name, served, action.RoleName(), filepath.Base(target.FilePath)),
-	}, how...)
+		fmt.Sprintf("// %s covers %s %s, served by %s in %s.", name, action.Phase.HTTPMethod(), route, action.RoleName(), filepath.Base(target.FilePath)),
+	}, serviceTestDoc...)
 
 	example := newServiceTestExample(info, action, route)
 	body := []ast.Stmt{
@@ -215,15 +191,15 @@ type serviceTestExample struct {
 // item route reads the row's id from a placeholder variable, a batch route
 // sends client.BatchItems or client.BatchIDs, a List without a declared result
 // decodes client.ListResult, Import uploads a file, Export downloads the
-// attachment and SSE receives the first event of the stream, all through the
-// framework client; a Stream calls its rpc through a grpc-go client, see
-// newStreamTestExample. The model package is imported when the example refers
-// to it, under an alias when its name is one a scaffold import takes, and
-// under its name when the path does not tell it (see importSpecName).
+// attachment, SSE receives the first event of the stream, and a Stream is
+// opened through the client method of its kind, typed by the messages of its
+// sides — a server stream sends the request and reads the first answer, a
+// client stream sends a request and reads the answer with CloseAndRecv, a
+// bidirectional stream sends, reads and closes its side — all through the
+// framework client. The model package is imported when the example refers to
+// it, under an alias when its name is one the scaffold takes, and under its
+// name when the path does not tell it (see importSpecName).
 func newServiceTestExample(info *modelinfo.Model, action *dsl.Action, route string) *serviceTestExample {
-	if action.Phase == apiaction.Stream {
-		return newStreamTestExample(info, action, route)
-	}
 	example := &serviceTestExample{
 		setup: []ast.Stmt{
 			define(idents("cli", "err"), call(sel(ident("client"), "New"), call(sel(ident("testutil"), "BaseURL")))),
@@ -295,6 +271,39 @@ func newServiceTestExample(info *modelinfo.Model, action *dsl.Action, route stri
 			requireCall("NoError", ident("err")),
 			requireCall("NotEmpty", sel(ident("event"), "Data")),
 		)
+	case apiaction.Stream:
+		// message is one message of the request side as the client sends it,
+		// and answered the statements reading one of the response side.
+		message := &ast.UnaryExpr{Op: token.AND, X: &ast.CompositeLit{Type: valueType(action.Payload)}}
+		answered := func(recv string) []ast.Stmt {
+			return []ast.Stmt{
+				define(idents("rsp", "err"), call(sel(ident("stream"), recv))),
+				requireCall("NoError", ident("err")),
+				requireCall("NotNil", ident("rsp")),
+			}
+		}
+		var open ast.Expr
+		var exchange []ast.Stmt
+		switch {
+		case action.StreamingPayload && action.StreamingResult:
+			open = call(&ast.IndexListExpr{X: sel(ident("cli"), clientBidiStream), Indices: []ast.Expr{valueType(action.Payload), valueType(action.Result)}}, testContext(), path)
+			exchange = append(exchange, requireCall("NoError", call(sel(ident("stream"), "Send"), message)))
+			exchange = append(exchange, answered("Recv")...)
+			exchange = append(exchange, requireCall("NoError", call(sel(ident("stream"), "CloseSend"))))
+		case action.StreamingPayload:
+			open = call(&ast.IndexListExpr{X: sel(ident("cli"), clientClientStream), Indices: []ast.Expr{valueType(action.Payload), valueType(action.Result)}}, testContext(), path)
+			exchange = append(exchange, requireCall("NoError", call(sel(ident("stream"), "Send"), message)))
+			exchange = append(exchange, answered("CloseAndRecv")...)
+		default:
+			open = call(&ast.IndexExpr{X: sel(ident("cli"), clientServerStream), Index: valueType(action.Result)}, testContext(), path, requestBody(action.Payload))
+			exchange = answered("Recv")
+		}
+		stmts = append(stmts,
+			define(idents("stream", "err"), open),
+			requireCall("NoError", ident("err")),
+			&ast.DeferStmt{Call: call(sel(ident("stream"), "Close"))},
+		)
+		stmts = append(stmts, exchange...)
 	default:
 		args := []ast.Expr{testContext(), path}
 		var rspType ast.Expr
@@ -351,67 +360,13 @@ func newServiceTestExample(info *modelinfo.Model, action *dsl.Action, route stri
 	return example
 }
 
-// newStreamTestExample builds the example call of a Stream action, made over
-// gRPC: a connection to the test server's gRPC listener, the client the
-// protobuf plugin generated for the model's service, and the call of the rpc
-// in the shape of its streaming — a server stream sends the request and
-// reads the first answer, a client stream sends a request and reads the
-// answer with CloseAndRecv, a bidirectional stream sends, reads and closes
-// its side. The stubs' package is imported under an alias when its name is
-// one the scaffold takes, and under its name when the path does not tell it
-// (see importSpecName).
-func newStreamTestExample(info *modelinfo.Model, action *dsl.Action, route string) *serviceTestExample {
-	pbImportPath, pbName := modelinfo.PBPackage(info.ModulePath, info.PBDir())
-	example := &serviceTestExample{imports: map[string]string{scaffoldImportGRPC: "", scaffoldImportInsecure: ""}}
-	pbImportName := ResolveImportConflicts(map[string]string{pbImportPath: pbName}, scaffoldImportNames...)[pbImportPath]
-	qualifier := pbName
-	if pbImportName != "" {
-		qualifier = pbImportName
-	}
-	example.imports[pbImportPath] = pbImportName
-
-	rpc := modelinfo.RPCName(info, route, action)
-	request := &ast.UnaryExpr{Op: token.AND, X: &ast.CompositeLit{Type: sel(ident(qualifier), rpc+"Request")}}
-	example.setup = []ast.Stmt{
-		define(idents("conn", "err"), call(sel(ident("grpc"), "NewClient"), call(sel(ident("testutil"), "GRPCTarget")), call(sel(ident("grpc"), "WithTransportCredentials"), call(sel(ident("insecure"), "NewCredentials"))))),
-		requireCall("NoError", ident("err")),
-		exprStmt(call(sel(ident("t"), "Cleanup"), &ast.FuncLit{
-			Type: &ast.FuncType{Params: &ast.FieldList{}},
-			Body: &ast.BlockStmt{List: []ast.Stmt{&ast.AssignStmt{Lhs: []ast.Expr{ident("_")}, Tok: token.ASSIGN, Rhs: []ast.Expr{call(sel(ident("conn"), "Close"))}}}},
-		})),
-		define(idents("client"), call(sel(ident(qualifier), "New"+info.ModelName+"ServiceClient"), ident("conn"))),
-	}
-	switch {
-	case action.StreamingPayload && action.StreamingResult:
-		example.stmts = []ast.Stmt{
-			define(idents("stream", "err"), call(sel(ident("client"), rpc), testContext())),
-			requireCall("NoError", ident("err")),
-			requireCall("NoError", call(sel(ident("stream"), "Send"), request)),
-			define(idents("rsp", "err"), call(sel(ident("stream"), "Recv"))),
-			requireCall("NoError", ident("err")),
-			requireCall("NotNil", ident("rsp")),
-			requireCall("NoError", call(sel(ident("stream"), "CloseSend"))),
-		}
-	case action.StreamingPayload:
-		example.stmts = []ast.Stmt{
-			define(idents("stream", "err"), call(sel(ident("client"), rpc), testContext())),
-			requireCall("NoError", ident("err")),
-			requireCall("NoError", call(sel(ident("stream"), "Send"), request)),
-			define(idents("rsp", "err"), call(sel(ident("stream"), "CloseAndRecv"))),
-			requireCall("NoError", ident("err")),
-			requireCall("NotNil", ident("rsp")),
-		}
-	default:
-		example.stmts = []ast.Stmt{
-			define(idents("stream", "err"), call(sel(ident("client"), rpc), testContext(), request)),
-			requireCall("NoError", ident("err")),
-			define(idents("rsp", "err"), call(sel(ident("stream"), "Recv"))),
-			requireCall("NoError", ident("err")),
-			requireCall("NotNil", ident("rsp")),
-		}
-	}
-	return example
-}
+// The client methods opening the stream of a Stream action, one for each kind
+// of stream, which they are named after.
+const (
+	clientServerStream = "ServerStream"
+	clientClientStream = "ClientStream"
+	clientBidiStream   = "BidiStream"
+)
 
 // clientVerbs names the client method sending each HTTP method.
 var clientVerbs = map[string]string{

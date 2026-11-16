@@ -166,8 +166,8 @@ func TestGenRunTypeChecksTheGeneratedGoFiles(t *testing.T) {
 // opened at over HTTP; the router registers each under that path, typed by
 // the messages of its two sides, a side declaring none by *model.Empty; and
 // its services register and get their files with the Stream method of their
-// kind and a gRPC test scaffold, so the project builds serving its streams
-// over both transports.
+// kind and a test scaffold opening the stream through the framework client,
+// so the project builds serving its streams over both transports.
 func TestGenRunServesStreamActionsOverBothTransports(t *testing.T) {
 	projectDir, ok := newGenProject(t)
 	if !ok {
@@ -212,12 +212,45 @@ func TestGenRunServesStreamActionsOverBothTransports(t *testing.T) {
 	}
 	scaffold, err := os.ReadFile(filepath.Join(projectDir, ggconst.DirService, "feed", "upload_test.go"))
 	require.NoError(t, err)
-	require.Contains(t, string(scaffold), "// TestUpload covers the UploadFeedByFeed rpc, served by Upload in upload.go.")
-	require.Contains(t, string(scaffold), "client := pb.NewFeedServiceClient(conn)")
+	require.Contains(t, string(scaffold), "// TestUpload covers GET /api/feeds/:feed/upload, served by Upload in upload.go.")
+	require.Contains(t, string(scaffold), `stream, err := cli.ClientStream[model.FeedUploadReq, model.FeedUploadRsp](t.Context(), "/api/feeds/"+id+"/upload")`)
 	require.Contains(t, string(scaffold), "rsp, err := stream.CloseAndRecv()")
 	mainTest, err := os.ReadFile(filepath.Join(projectDir, ggconst.DirService, "feed", ggconst.FileMainTest))
 	require.NoError(t, err)
 	require.Contains(t, string(mainTest), `_ "tmpapp/pb"`, "TestMain registers the gRPC services the way main.go does")
+	// go vet compiles the test files, the scaffolds among them.
+	requireProjectCompiles(t)
+}
+
+// TestGenRunServesTheStreamActionsOfAModelWithoutGRPCOverHTTP pins what gg
+// gen makes of the Stream actions of a model declaring no GRPC(): the router
+// registers each on its route, and its service gets its file with the Stream
+// method of its kind and a test scaffold opening the stream through the
+// framework client, a side declaring no message typed any; the project
+// builds, its scaffolds included, with no gRPC code to refer to.
+func TestGenRunServesTheStreamActionsOfAModelWithoutGRPCOverHTTP(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	writeProtobufProject(t, projectDir, map[string]string{"model/feed.go": strings.Replace(protobufFeedModel, "\tdsl.GRPC()\n", "", 1)})
+
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+
+	router, err := os.ReadFile(filepath.Join(projectDir, ggconst.DirRouter, ggconst.FileRouterGen))
+	require.NoError(t, err)
+	require.Contains(t, string(router), `router.Register[*model.Feed, *model.FeedChatReq, *model.FeedChatRsp](router.Auth(), "/api/feeds/chat", &gst.ControllerConfig[*model.Feed]{}, service.Stream)`)
+	for name, call := range map[string]string{
+		"watch":  `stream, err := cli.ServerStream[model.FeedWatchRsp](t.Context(), "/api/feeds/watch", &model.FeedWatchReq{})`,
+		"tail":   `stream, err := cli.ServerStream[model.FeedTailRsp](t.Context(), "/api/feeds/"+id+"/tail", nil)`,
+		"upload": `stream, err := cli.ClientStream[model.FeedUploadReq, model.FeedUploadRsp](t.Context(), "/api/feeds/"+id+"/upload")`,
+		"chat":   `stream, err := cli.BidiStream[model.FeedChatReq, model.FeedChatRsp](t.Context(), "/api/feeds/chat")`,
+		"ingest": `stream, err := cli.ClientStream[model.FeedIngestReq, any](t.Context(), "/api/feeds/ingest")`,
+	} {
+		scaffold, readErr := os.ReadFile(filepath.Join(projectDir, ggconst.DirService, "feed", name+"_test.go"))
+		require.NoError(t, readErr, name)
+		require.Contains(t, string(scaffold), call, name)
+	}
 	// go vet compiles the test files, the scaffolds among them.
 	requireProjectCompiles(t)
 }

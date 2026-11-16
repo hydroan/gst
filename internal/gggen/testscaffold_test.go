@@ -87,8 +87,7 @@ func TestCreate(t *testing.T) {
 }
 
 // feedInfo is the model Feed of the root model package of helloworld, an
-// action model serving streams over gRPC; feedTarget locates one of its
-// service files.
+// action model serving streams; feedTarget locates one of its service files.
 var feedInfo = &modelinfo.Model{
 	ModulePath:    "helloworld",
 	ModelPkgName:  "model",
@@ -106,32 +105,30 @@ func feedTarget(file string) modelinfo.ServiceTargetInfo {
 // TestGenerateServiceTestOfAStream compares the test GenerateServiceTest
 // builds for the stream example of its doc comment: the Stream action
 // declaring Service("watch"), Payload and StreamingResult on the model Feed of
-// the root model package, whose rpc is WatchFeed.
+// the root model package, registered at /api/feeds/watch.
 func TestGenerateServiceTestOfAStream(t *testing.T) {
 	action := &dsl.Action{Service: true, Payload: "*FeedWatchReq", Result: "*FeedEvent", StreamingResult: true, Phase: apiaction.Stream, ServiceName: "watch"}
 	got, err := gggen.GenerateServiceTest(feedInfo, feedTarget("watch.go"), action, "/api/feeds/watch")
 	require.NoError(t, err)
-	want := `// TestWatch covers the WatchFeed rpc, served by Watch in watch.go.
+	want := `// TestWatch covers GET /api/feeds/watch, served by Watch in watch.go.
 //
-// The call goes through a grpc-go client against the gRPC listener of the
-// test server TestMain starts, so the rpc, the service and the database are
-// exercised together. A method not declared Public() goes through the auth
-// interceptors the project registers, which read the credentials the call
-// carries in its outgoing metadata, set with metadata.AppendToOutgoingContext.
-// A refusal is asserted on its status code, and rows with the testutil.Require*
+// The request goes through the framework client against the test server
+// TestMain starts, so the route, the service and the database are exercised
+// together. A route not declared Public() goes through the auth middleware the
+// project registers, which reads the credentials the client carries: a token
+// set with client.WithToken, headers set with client.WithHeader, and the
+// cookies earlier responses set, kept in its cookie jar. A rejection is
+// asserted with testutil.RequireError, and rows with the testutil.Require*
 // helpers.
 func TestWatch(t *testing.T) {
 	t.Fatal("TestWatch is a scaffold: delete this line and finish the test below")
 
-	conn, err := grpc.NewClient(testutil.GRPCTarget(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	cli, err := client.New(testutil.BaseURL())
 	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = conn.Close()
-	})
-	client := pb.NewFeedServiceClient(conn)
 
-	stream, err := client.WatchFeed(t.Context(), &pb.WatchFeedRequest{})
+	stream, err := cli.ServerStream[model.FeedEvent](t.Context(), "/api/feeds/watch", &model.FeedWatchReq{})
 	require.NoError(t, err)
+	defer stream.Close()
 	rsp, err := stream.Recv()
 	require.NoError(t, err)
 	require.NotNil(t, rsp)
@@ -410,18 +407,22 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			target:  feedTarget("watch.go"),
 			action:  &dsl.Action{Service: true, Payload: "*FeedWatchReq", Result: "*FeedEvent", StreamingResult: true, Phase: apiaction.Stream, ServiceName: "watch"},
 			route:   "/api/feeds/watch",
-			wantDoc: "// TestWatch covers the WatchFeed rpc, served by Watch in watch.go.",
+			wantDoc: "// TestWatch covers GET /api/feeds/watch, served by Watch in watch.go.",
 			wantCode: []string{
-				`	"helloworld/pb"`,
-				`	"google.golang.org/grpc"`,
-				`	"google.golang.org/grpc/credentials/insecure"`,
-				`	conn, err := grpc.NewClient(testutil.GRPCTarget(), grpc.WithTransportCredentials(insecure.NewCredentials()))`,
-				`	t.Cleanup(func() {`,
-				`		_ = conn.Close()`,
-				`	client := pb.NewFeedServiceClient(conn)`,
-				`	stream, err := client.WatchFeed(t.Context(), &pb.WatchFeedRequest{})`,
+				`	"helloworld/model"`,
+				`	stream, err := cli.ServerStream[model.FeedEvent](t.Context(), "/api/feeds/watch", &model.FeedWatchReq{})`,
+				`	defer stream.Close()`,
 				`	rsp, err := stream.Recv()`,
 			},
+		},
+		{
+			name:     "server_stream_without_a_request_sends_none",
+			info:     feedInfo,
+			target:   feedTarget("tail.go"),
+			action:   &dsl.Action{Service: true, Payload: dsl.PayloadEmpty, Result: "*FeedEvent", StreamingResult: true, Phase: apiaction.Stream, ServiceName: "tail"},
+			route:    "/api/feeds/:feed/tail",
+			wantDoc:  "// TestTail covers GET /api/feeds/:feed/tail, served by Tail in tail.go.",
+			wantCode: []string{`	id := "the ID of a row the test seeded"`, `	stream, err := cli.ServerStream[model.FeedEvent](t.Context(), "/api/feeds/"+id+"/tail", nil)`},
 		},
 		{
 			name:    "client_stream_sends_then_closes_and_reads",
@@ -429,12 +430,23 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			target:  feedTarget("upload.go"),
 			action:  &dsl.Action{Service: true, Payload: "*FeedEvent", Result: "*FeedUploadRsp", StreamingPayload: true, Phase: apiaction.Stream, ServiceName: "upload"},
 			route:   "/api/feeds/:feed/upload",
-			wantDoc: "// TestUpload covers the UploadFeedByFeed rpc, served by Upload in upload.go.",
+			wantDoc: "// TestUpload covers GET /api/feeds/:feed/upload, served by Upload in upload.go.",
 			wantCode: []string{
-				`	stream, err := client.UploadFeedByFeed(t.Context())`,
-				`	require.NoError(t, stream.Send(&pb.UploadFeedByFeedRequest{}))`,
+				`	id := "the ID of a row the test seeded"`,
+				`	stream, err := cli.ClientStream[model.FeedEvent, model.FeedUploadRsp](t.Context(), "/api/feeds/"+id+"/upload")`,
+				`	defer stream.Close()`,
+				`	require.NoError(t, stream.Send(&model.FeedEvent{}))`,
 				`	rsp, err := stream.CloseAndRecv()`,
 			},
+		},
+		{
+			name:     "client_stream_without_a_response_reads_any",
+			info:     feedInfo,
+			target:   feedTarget("ingest.go"),
+			action:   &dsl.Action{Service: true, Payload: "*FeedEvent", Result: dsl.PayloadEmpty, StreamingPayload: true, Phase: apiaction.Stream, ServiceName: "ingest"},
+			route:    "/api/feeds/ingest",
+			wantDoc:  "// TestIngest covers GET /api/feeds/ingest, served by Ingest in ingest.go.",
+			wantCode: []string{`	stream, err := cli.ClientStream[model.FeedEvent, any](t.Context(), "/api/feeds/ingest")`, `	rsp, err := stream.CloseAndRecv()`},
 		},
 		{
 			name:    "bidirectional_stream_sends_reads_and_closes_its_side",
@@ -442,16 +454,17 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			target:  feedTarget("chat.go"),
 			action:  &dsl.Action{Service: true, Payload: "*FeedEvent", Result: "*FeedEvent", StreamingPayload: true, StreamingResult: true, Phase: apiaction.Stream, ServiceName: "chat"},
 			route:   "/api/feeds/chat",
-			wantDoc: "// TestChat covers the ChatFeed rpc, served by Chat in chat.go.",
+			wantDoc: "// TestChat covers GET /api/feeds/chat, served by Chat in chat.go.",
 			wantCode: []string{
-				`	stream, err := client.ChatFeed(t.Context())`,
-				`	require.NoError(t, stream.Send(&pb.ChatFeedRequest{}))`,
+				`	stream, err := cli.BidiStream[model.FeedEvent, model.FeedEvent](t.Context(), "/api/feeds/chat")`,
+				`	defer stream.Close()`,
+				`	require.NoError(t, stream.Send(&model.FeedEvent{}))`,
 				`	rsp, err := stream.Recv()`,
 				`	require.NoError(t, stream.CloseSend())`,
 			},
 		},
 		{
-			name: "stubs_package_named_like_a_scaffold_variable_is_aliased",
+			name: "model_package_named_like_a_scaffold_variable_is_aliased",
 			info: &modelinfo.Model{
 				ModulePath:    "helloworld",
 				ModelPkgName:  "stream",
@@ -464,25 +477,24 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			target:   modelinfo.ServiceTargetInfo{Dir: "service/stream/feed", FilePath: "service/stream/feed/watch.go", ImportPath: "helloworld/service/stream/feed", PackageName: "feed"},
 			action:   &dsl.Action{Service: true, Payload: "*FeedWatchReq", Result: "*FeedEvent", StreamingResult: true, Phase: apiaction.Stream, ServiceName: "watch"},
 			route:    "/api/stream/feeds/watch",
-			wantDoc:  "// TestWatch covers the WatchFeed rpc, served by Watch in watch.go.",
-			wantCode: []string{`	pb_stream "helloworld/pb/stream"`, `	client := pb_stream.NewFeedServiceClient(conn)`},
+			wantDoc:  "// TestWatch covers GET /api/stream/feeds/watch, served by Watch in watch.go.",
+			wantCode: []string{`	model_stream "helloworld/model/stream"`, `	stream, err := cli.ServerStream[model_stream.FeedEvent](t.Context(), "/api/stream/feeds/watch", &model_stream.FeedWatchReq{})`},
 		},
 		{
-			name: "stubs_package_unlike_its_directory_is_imported_under_its_name",
+			name: "model_package_named_like_the_client_variable_is_aliased",
 			info: &modelinfo.Model{
-				ModulePath:    "helloworld",
-				ModelPkgName:  "livefeed",
-				ModelName:     "Feed",
-				ModelVarName:  "f",
-				ModelFileDir:  "model/live_feed",
-				ModelFilePath: "model/live_feed/feed.go",
-				Design:        &dsl.Design{Endpoint: "live-feed/feeds"},
+				ModulePath:   "helloworld",
+				ModelPkgName: "cli",
+				ModelName:    "Session",
+				ModelVarName: "s",
+				ModelFileDir: "model/cli",
+				Design:       &dsl.Design{},
 			},
-			target:   modelinfo.ServiceTargetInfo{Dir: "service/live_feed/feed", FilePath: "service/live_feed/feed/watch.go", ImportPath: "helloworld/service/live_feed/feed", PackageName: "feed"},
-			action:   &dsl.Action{Service: true, Payload: "*FeedWatchReq", Result: "*FeedEvent", StreamingResult: true, Phase: apiaction.Stream, ServiceName: "watch"},
-			route:    "/api/live-feed/feeds/watch",
-			wantDoc:  "// TestWatch covers the WatchFeed rpc, served by Watch in watch.go.",
-			wantCode: []string{`	livefeed "helloworld/pb/live_feed"`, `	client := livefeed.NewFeedServiceClient(conn)`},
+			target:   modelinfo.ServiceTargetInfo{Dir: "service/cli/session", FilePath: "service/cli/session/create.go", ImportPath: "helloworld/service/cli/session", PackageName: "session"},
+			action:   &dsl.Action{Service: true, Payload: "*Session", Result: "*Session", Phase: apiaction.Create},
+			route:    "/api/cli/sessions",
+			wantDoc:  "// TestCreate covers POST /api/cli/sessions, served by Creator in create.go.",
+			wantCode: []string{`	model_cli "helloworld/model/cli"`, `	rsp, err := cli.Post[model_cli.Session](t.Context(), "/api/cli/sessions", &model_cli.Session{})`},
 		},
 	}
 	for _, tt := range tests {

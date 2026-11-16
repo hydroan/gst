@@ -1537,8 +1537,8 @@ func (Record) Design() {
 
 // TestValidateStreamUsage pins the rules of a Stream action: it streams one
 // side of the call or both, each side declared either unary or streaming,
-// it is named by Service("name"), shaped by no Exact, and
-// only a model declaring GRPC() may declare one; no other action streams.
+// it is named by Service("name") and shaped by no Exact, a model declares
+// one with GRPC() or without, and no other action streams.
 func TestValidateStreamUsage(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -1571,12 +1571,12 @@ func TestValidateStreamUsage(t *testing.T) {
 		{
 			name:      "stream_without_service_name",
 			source:    validateStreamWithoutServiceNameSource,
-			wantError: `Stream action must name its service, Service("name"), which names its rpc`,
+			wantError: `Stream action must name its service, Service("name"): a stream has no default service name`,
 		},
 		{
 			name:      "stream_with_empty_service_name",
 			source:    validateStreamEmptyServiceNameSource,
-			wantError: `Stream action must name its service, Service("name"), which names its rpc`,
+			wantError: `Stream action must name its service, Service("name"): a stream has no default service name`,
 		},
 		{
 			name:      "stream_without_service",
@@ -1584,14 +1584,12 @@ func TestValidateStreamUsage(t *testing.T) {
 			wantError: "Stream action has no built-in implementation and must declare Service()",
 		},
 		{
-			name:      "stream_without_grpc",
-			source:    validateStreamWithoutGRPCSource,
-			wantError: "Record declares a Stream action but no GRPC(); gg gen scaffolds the test of a Stream action through its rpc, declare GRPC() or remove the Stream action",
+			name:   "stream_without_grpc",
+			source: validateStreamWithoutGRPCSource,
 		},
 		{
-			name:      "stream_at_the_design_top_level_without_grpc",
-			source:    validateTopLevelStreamWithoutGRPCSource,
-			wantError: "Record declares a Stream action but no GRPC(); gg gen scaffolds the test of a Stream action through its rpc, declare GRPC() or remove the Stream action",
+			name:   "stream_at_the_design_top_level_without_grpc",
+			source: validateTopLevelStreamWithoutGRPCSource,
 		},
 		{
 			name:      "streaming_result_on_create",

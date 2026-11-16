@@ -270,26 +270,27 @@ func failureStatuses(phase apiaction.Phase, custom bool) []int {
 // successful request answers 200 whichever action handled it, so a generated
 // document that says otherwise would describe a runtime that does not exist.
 func newResponses(rspKey string, phase apiaction.Phase, custom bool) *openapi3.Responses {
-	return responsesOf(&openapi3.ResponseRef{Ref: "#/components/responses/" + rspKey}, phase, custom)
+	return responsesOf(http.StatusOK, &openapi3.ResponseRef{Ref: "#/components/responses/" + rspKey}, phase, custom)
 }
 
-// responsesOf declares the responses of one action: success as its 200, the
-// statuses failureStatuses lists for the action, and the default response for
-// every other failure, each failure referring to the failure envelope
-// component. For the create of a Record in the model root package, which the
-// framework handles itself (custom false), with success referring to its
-// response component record_create:
+// responsesOf declares the responses of one action: success under status,
+// the 200 of every action but a Stream, whose request is answered by
+// switching protocols; the statuses failureStatuses lists for the action;
+// and the default response for every other failure, each failure referring
+// to the failure envelope component. For the create of a Record in the model
+// root package, which the framework handles itself (custom false), with
+// success referring to its response component record_create:
 //
 //	200: #/components/responses/record_create
 //	400: #/components/responses/Failure
 //	409: #/components/responses/Failure
 //	default: #/components/responses/Failure
-func responsesOf(success *openapi3.ResponseRef, phase apiaction.Phase, custom bool) *openapi3.Responses {
+func responsesOf(status int, success *openapi3.ResponseRef, phase apiaction.Phase, custom bool) *openapi3.Responses {
 	registerFailureResponse()
 	failure := &openapi3.ResponseRef{Ref: "#/components/responses/" + keyFailureResponse}
-	opts := []openapi3.NewResponsesOption{openapi3.WithStatus(http.StatusOK, success)}
-	for _, status := range failureStatuses(phase, custom) {
-		opts = append(opts, openapi3.WithStatus(status, failure))
+	opts := []openapi3.NewResponsesOption{openapi3.WithStatus(status, success)}
+	for _, failed := range failureStatuses(phase, custom) {
+		opts = append(opts, openapi3.WithStatus(failed, failure))
 	}
 	responses := openapi3.NewResponses(opts...)
 	responses.Set("default", failure)

@@ -227,16 +227,19 @@ func TestStreamRouteIsMarkedStreaming(t *testing.T) {
 	require.False(t, middleware.IsStreamingRoute(http.MethodPost, "/api/"+streamWatchRoute))
 }
 
-// TestStreamRouteIsLeftOutOfTheOpenAPIDocument pins that the document, which
-// describes a request and its response, holds no entry for a route answering
-// by opening a connection, beside the entries of the other routes.
-func TestStreamRouteIsLeftOutOfTheOpenAPIDocument(t *testing.T) {
+// TestStreamRouteIsDocumentedAsTheRequestOpeningItsConnection pins that the
+// OpenAPI document the server serves holds the route of every Stream action
+// as the GET that opens its connection, with the parameter its path carries.
+func TestStreamRouteIsDocumentedAsTheRequestOpeningItsConnection(t *testing.T) {
 	document := requireOpenAPIDocument(t)
 
-	require.Contains(t, document.Paths, "/api/"+pagedRecordRoute)
 	for _, path := range []string{"/api/feeds/{feed}/watch", "/api/" + streamUploadRoute, "/api/" + streamChatRoute} {
-		require.NotContains(t, document.Paths, path)
+		require.Contains(t, document.Paths[path], "get", "GET %s", path)
 	}
+	parameters := document.Paths["/api/feeds/{feed}/watch"]["get"].Parameters
+	require.Len(t, parameters, 1)
+	require.Equal(t, "feed", parameters[0].Name)
+	require.Equal(t, "path", parameters[0].In)
 }
 
 // streamContext returns the context a test opens a stream on: bound, so

@@ -1,6 +1,7 @@
 package openapigen
 
 import (
+	"net/http"
 	"reflect"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -41,5 +42,5 @@ func sseStreamResponses(custom bool) *openapi3.Responses {
 		WithContent(openapi3.Content{
 			sseMediaType: openapi3.NewMediaType().WithSchemaRef(streamSchema),
 		})
-	return responsesOf(&openapi3.ResponseRef{Value: response}, apiaction.SSE, custom)
+	return responsesOf(http.StatusOK, &openapi3.ResponseRef{Value: response}, apiaction.SSE, custom)
 }

@@ -1,6 +1,7 @@
 package openapigen
 
 import (
+	"net/http"
 	"reflect"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -148,5 +149,5 @@ func exportFileResponses(custom bool) *openapi3.Responses {
 			exportMediaTypeCSV:  openapi3.NewMediaType().WithSchemaRef(fileSchema),
 			exportMediaTypeXLSX: openapi3.NewMediaType().WithSchemaRef(fileSchema),
 		})
-	return responsesOf(&openapi3.ResponseRef{Value: response}, apiaction.Export, custom)
+	return responsesOf(http.StatusOK, &openapi3.ResponseRef{Value: response}, apiaction.Export, custom)
 }

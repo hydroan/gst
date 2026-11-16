@@ -280,10 +280,11 @@ func (Entry) Design() {
 只定义了 `MarshalText`、没有 `MarshalJSON` 的类型（`netip.Addr`、实现了它的枚举）在消息里是 `string`，按它写出的文本收发，和 JSON 里一样。
 流用 `Stream(func(){...})` 在自定义动作里声明：流的那一侧写 `StreamingPayload`/`StreamingResult`，
 另一侧写 `Payload`/`Result`，两侧都流就是双向流，service 方法收发 `gst.ServerStream`、`ClientStream`
-或 `BidiStream`。它两条线都提供：gRPC 上是带 stream 的 rpc；HTTP 上是用 `GET` 握手打开的一条 WebSocket 连接，
-一帧文本是一条 JSON 消息，调用方用 `client` 包的 `ServerStream`、`ClientStream`、`BidiStream`。
+或 `BidiStream`。流在 HTTP 上是用 `GET` 握手打开的一条 WebSocket 连接，一帧文本是一条 JSON 消息，
+调用方用 `client` 包的 `ServerStream`、`ClientStream`、`BidiStream`，`gg gen` 生成的测试骨架也这样调；
+模型声明了 `GRPC()` 时它同时是带 stream 的 rpc，没声明就只走 WebSocket。
 浏览器页面和服务不同源时，把页面的源写进 `server.websocket_origins`（如 `*.example.com`），否则握手答 403。
-测试里 `testutil.GRPCTarget()` 给出测试服务器的 gRPC 地址；测试二进制没导入 `pb` 包、一个 gRPC 服务都没注册时，它直接 panic 并点名要加的导入，`gg gen` 写测试骨架时也会为此警告。完整示例见
+测 gRPC 这一侧时 `testutil.GRPCTarget()` 给出测试服务器的 gRPC 地址；测试二进制没导入 `pb` 包、一个 gRPC 服务都没注册时，它直接 panic 并点名要加的导入，`gg gen` 每次运行都会给声明 TestMain 的测试文件补上这个导入。完整示例见
 [examples/demo/model/board](./examples/demo/model/board)。
 
 监听在 `[grpc]` 节配置，环境变量是 `GRPC_PORT` 这样的写法：`listen`、`port`（默认 8081，挨着 HTTP 的 8080）、

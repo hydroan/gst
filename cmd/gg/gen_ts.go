@@ -11,7 +11,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
@@ -127,18 +126,17 @@ func applicationName() (string, error) {
 	return config.App.AppInfo.Name, nil
 }
 
-// typeScriptRoots returns the types the routes of models exchange as the JSON
-// of a request and of its response: the Payload and Result types of every
-// enabled action. Import and Export move files and SSE streams events, a
-// Stream exchanges its messages as the frames of a connection, and
-// *model.Empty carries no data.
+// typeScriptRoots returns the types the routes of models exchange as JSON: the
+// Payload and Result types of every enabled action, the messages of a Stream
+// among them. Import and Export move files and SSE streams events, so their
+// types never travel as JSON, and *model.Empty carries no data.
 func typeScriptRoots(models []*modelinfo.Model) []ts.TypeRef {
 	seen := make(map[ts.TypeRef]bool)
 	var roots []ts.TypeRef
 	for _, m := range models {
 		pkgPath := m.ImportPath()
 		m.Design.Range(func(_ string, action *dsl.Action) {
-			if dsl.HTTPOnlyAction(action.Phase.Name()) || action.Phase == apiaction.Stream {
+			if dsl.HTTPOnlyAction(action.Phase.Name()) {
 				return
 			}
 			for _, typeName := range []string{action.Payload, action.Result} {

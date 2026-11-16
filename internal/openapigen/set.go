@@ -20,13 +20,8 @@ var (
 )
 
 // Set records one registered route for the OpenAPI document. It is the only
-// entry point route registration uses. The route of a Stream action is left
-// out: it answers by taking the connection over for the messages of the
-// stream, an exchange the document holds no entry for.
+// entry point route registration uses.
 func Set[M types.Model, REQ types.Request, RSP types.Response](path string, authRequired bool, phase apiaction.Phase) {
-	if phase == apiaction.Stream {
-		return
-	}
 	pendingMu.Lock()
 	defer pendingMu.Unlock()
 
@@ -65,6 +60,7 @@ func build() {
 // request asks for the document; this package's own tests call set directly to
 // exercise the generation.
 func set[M types.Model, REQ types.Request, RSP types.Response](path string, authRequired bool, phases ...apiaction.Phase) {
+	route := path
 	path = convertColonParamsToBraces(path)
 
 	docMutex.Lock()
@@ -116,6 +112,9 @@ func set[M types.Model, REQ types.Request, RSP types.Response](path string, auth
 			op = pathItem.Patch
 		case apiaction.SSE:
 			setSSE[M, REQ, RSP](path, pathItem)
+			op = pathItem.Get
+		case apiaction.Stream:
+			setStream[M, REQ, RSP](route, path, pathItem)
 			op = pathItem.Get
 		}
 		if !authRequired {
