@@ -89,12 +89,6 @@ type RequestParam struct {
 // /api/archive/documents/batch, carries nothing.
 func requestParams(m *modelinfo.Model, route string, action *dsl.Action) []RequestParam {
 	registered, _ := modelinfo.RouterTargetForAction(route, m.Design, action)
-	// The route of a Stream action is no path a request reaches: its
-	// parameters are named by the route as declared.
-	named := registered
-	if dsl.GRPCOnlyAction(action.Phase.Name()) {
-		named = route
-	}
 	own := strings.TrimPrefix(modelinfo.ItemParam(m.Design), ":")
 	var params []RequestParam
 	for _, param := range modelinfo.RouteParams(registered) {
@@ -102,7 +96,7 @@ func requestParams(m *modelinfo.Model, route string, action *dsl.Action) []Reque
 			params = append(params, RequestParam{Param: param, Name: "id", comment: "the id of the " + m.ModelName + ownParamPurpose(action.Phase)})
 			continue
 		}
-		params = append(params, RequestParam{Param: param, Name: protoIdentifier(param), comment: "the :" + param + " parameter of " + named})
+		params = append(params, RequestParam{Param: param, Name: protoIdentifier(param), comment: "the :" + param + " parameter of " + registered})
 	}
 	return params
 }

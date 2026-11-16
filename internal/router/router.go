@@ -20,6 +20,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/apiaction"
@@ -69,8 +70,13 @@ var (
 // unmatched path or method, the operational endpoints, and the Auth and Pub
 // route groups along with the handlers middleware.Register and
 // middleware.RegisterAuth mount through. It fails on a server.trusted_proxies
-// entry that cannot be read.
+// entry that cannot be read and on a server.websocket_origins pattern that is
+// malformed, which would otherwise show only as the refusal of the first
+// handshake from another origin.
 func Init() error {
+	if err := websocket.ValidateOrigins(config.App.Server.WebSocketOrigins); err != nil {
+		return errors.Wrap(err, "invalid server.websocket_origins")
+	}
 	gin.SetMode(gin.ReleaseMode)
 	root = gin.New()
 	if err := requestctx.ApplyTrustedProxies(root, config.App.Server.TrustedProxies); err != nil {
@@ -254,10 +260,9 @@ func Register[M types.Model, REQ types.Request, RSP types.Response](router *gin.
 	if cfg != nil {
 		routed = *cfg
 	}
-	// A phase no HTTP route serves, a hook phase such as CreateBefore or a
-	// Stream, is a mistake in the declaration: it panics before anything
-	// registers, so a process, or a test, is never left with the route half
-	// registered.
+	// A phase no HTTP route serves, a hook phase such as CreateBefore, is a
+	// mistake in the declaration: it panics before anything registers, so a
+	// process, or a test, is never left with the route half registered.
 	var unserved []string
 	for _, phase := range phases {
 		if phase.HTTPMethod() == "" {
@@ -266,7 +271,7 @@ func Register[M types.Model, REQ types.Request, RSP types.Response](router *gin.
 	}
 	if len(unserved) > 0 {
 		sort.Strings(unserved)
-		panic(fmt.Sprintf("router: register of route %q: no HTTP route serves the phase %s; a hook phase runs inside its action and a Stream is served over gRPC alone", apiaction.APIPath(route), strings.Join(unserved, ", ")))
+		panic(fmt.Sprintf("router: register of route %q: no HTTP route serves the phase %s; a hook phase runs inside its action", apiaction.APIPath(route), strings.Join(unserved, ", ")))
 	}
 	routed.Route = apiaction.APIPath(route)
 	set := make(map[apiaction.Phase]bool, len(phases))
@@ -340,12 +345,17 @@ func register[M types.Model, REQ types.Request, RSP types.Response](router *gin.
 		handle(apiaction.Export, controller.ExportHandler[M, REQ, RSP](cfg...))
 	}
 
+	// A long-lived stream, the events of an SSE action or the WebSocket
+	// connection of a Stream action, is exempt from the request-scoped
+	// treatment of a response (body capture, circuit breaking, request
+	// timeouts); the registry is how the middlewares concerned recognize one.
 	if phases[apiaction.SSE] {
 		handle(apiaction.SSE, controller.SSEHandler[M, REQ, RSP](cfg...))
-		// Streaming responses are exempt from request-scoped response
-		// treatment (body capture, circuit breaking, request timeouts); the
-		// registry is how the middlewares concerned recognize them.
 		middleware.MarkStreamingRoute(apiaction.SSE.HTTPMethod(), endpoint)
+	}
+	if phases[apiaction.Stream] {
+		handle(apiaction.Stream, controller.StreamHandler[M, REQ, RSP](cfg...))
+		middleware.MarkStreamingRoute(apiaction.Stream.HTTPMethod(), endpoint)
 	}
 }
 

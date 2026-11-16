@@ -160,14 +160,15 @@ func TestGenRunTypeChecksTheGeneratedGoFiles(t *testing.T) {
 	require.ErrorIs(t, err, pb.ErrUnchecked)
 }
 
-// TestGenRunServesStreamActionsOverGRPCAlone pins what gg gen makes of a
-// model whose actions are Stream actions alone: its rpcs are derived, each
-// streaming the side it declares and described by the route it is declared
-// on rather than a path; its services register and get their files with
-// the Stream method of their kind and a gRPC test scaffold, but no route
-// and no router registration, so the project builds with a router file
-// naming it nowhere.
-func TestGenRunServesStreamActionsOverGRPCAlone(t *testing.T) {
+// TestGenRunServesStreamActionsOverBothTransports pins what gg gen makes of
+// a model whose actions are Stream actions alone: its rpcs are derived, each
+// streaming the side it declares and described by the path its connection is
+// opened at over HTTP; the router registers each under that path, typed by
+// the messages of its two sides, a side declaring none by *model.Empty; and
+// its services register and get their files with the Stream method of their
+// kind and a gRPC test scaffold, so the project builds serving its streams
+// over both transports.
+func TestGenRunServesStreamActionsOverBothTransports(t *testing.T) {
 	projectDir, ok := newGenProject(t)
 	if !ok {
 		return
@@ -178,14 +179,23 @@ func TestGenRunServesStreamActionsOverGRPCAlone(t *testing.T) {
 
 	proto, err := os.ReadFile(filepath.Join(projectDir, "pb", "feed.proto"))
 	require.NoError(t, err)
-	require.Contains(t, string(proto), "// WatchFeed is the Stream action of Feed declared on feeds/watch, served over gRPC alone.")
+	require.Contains(t, string(proto), "// WatchFeed is the Stream action of Feed on /api/feeds/watch.")
+	require.Contains(t, string(proto), "// feed is the :feed parameter of /api/feeds/:feed/upload.")
 	require.Contains(t, string(proto), "rpc WatchFeed ( WatchFeedRequest ) returns ( stream WatchFeedResponse );")
 	require.Contains(t, string(proto), "rpc UploadFeedByFeed ( stream UploadFeedByFeedRequest ) returns ( UploadFeedByFeedResponse );")
 	require.Contains(t, string(proto), "rpc ChatFeed ( stream ChatFeedRequest ) returns ( stream ChatFeedResponse );")
 	require.Contains(t, string(proto), "rpc IngestFeed ( stream IngestFeedRequest ) returns ( IngestFeedResponse );", "a client stream declaring no Result answers an empty message")
 	router, err := os.ReadFile(filepath.Join(projectDir, ggconst.DirRouter, ggconst.FileRouterGen))
 	require.NoError(t, err)
-	require.NotContains(t, string(router), "feeds", "the router registers nothing for a Stream")
+	for _, registration := range []string{
+		`router.Register[*model.Feed, *model.FeedWatchReq, *model.FeedWatchRsp](router.Auth(), "/api/feeds/watch", &gst.ControllerConfig[*model.Feed]{}, service.Stream)`,
+		`router.Register[*model.Feed, *gstmodel.Empty, *model.FeedTailRsp](router.Auth(), "/api/feeds/:feed/tail", &gst.ControllerConfig[*model.Feed]{}, service.Stream)`,
+		`router.Register[*model.Feed, *model.FeedUploadReq, *model.FeedUploadRsp](router.Auth(), "/api/feeds/:feed/upload", &gst.ControllerConfig[*model.Feed]{}, service.Stream)`,
+		`router.Register[*model.Feed, *model.FeedChatReq, *model.FeedChatRsp](router.Auth(), "/api/feeds/chat", &gst.ControllerConfig[*model.Feed]{}, service.Stream)`,
+		`router.Register[*model.Feed, *model.FeedIngestReq, *gstmodel.Empty](router.Auth(), "/api/feeds/ingest", &gst.ControllerConfig[*model.Feed]{}, service.Stream)`,
+	} {
+		require.Contains(t, string(router), registration)
+	}
 	services, err := os.ReadFile(filepath.Join(projectDir, ggconst.DirService, ggconst.FileServiceGen))
 	require.NoError(t, err)
 	require.Contains(t, string(services), `service.Register[*feed.Watch](service.Stream, "/api/feeds/watch")`)
@@ -2411,7 +2421,7 @@ func TestConversionsGuardContainerElements(t *testing.T) {
 // protobufFeedModel declares the three kinds of Stream action, a server
 // stream (twice, one on a route with a parameter and without a Payload), a
 // client stream on a route with a parameter, and a bidirectional one, on a
-// model served over gRPC alone.
+// model declaring no other action.
 const protobufFeedModel = `package model
 
 import (

@@ -74,8 +74,6 @@ var errServicePanicked = errors.New("controller: the service of the stream panic
 // the connection closed as the server's own failure, before the recovery up
 // the chain takes the panic. The status the connection closed with is left
 // on the gin context under requestctx.KeyCloseCode, for the access log.
-//
-//gst:api the handler of a Stream action over HTTP, the counterpart of the stream calls
 func StreamHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	route := routeFromConfig(cfg...)
 	a := newAction[M, REQ, RSP](route, apiaction.Stream)

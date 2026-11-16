@@ -35,7 +35,7 @@ gst · HTTP 与 gRPC 两条传输线
     <div class="arch-arrow">▼</div>
     <div class="arch-layer stage">
       <div class="arch-layer-title">③ 注册 · 进程 init，两边写进同一张服务表</div>
-      <div class="arch-grid arch-grid-3"><div class="arch-box lane http"><b>router.Register → gin 路由</b><ul><li>每个 phase 一个 <code>controller.XxxHandler</code>（CreateHandler … DeleteManyHandler、Import / Export / SSE）。</li><li>Public 路由挂公开组，其余挂认证组；两个组都直接挂在根上，路由串自带 <code>/api</code>。</li></ul></div><div class="arch-box lane shared"><b>注册表与模块</b><ul><li>服务注册表（<code>internal/serviceregistry</code>）按 route|phase 存 service，重复注册 panic。</li><li>模型注册表；模块的 <code>Register()</code> 只注册模型与路由。</li><li>项目在 <code>middleware/middleware.go</code>、<code>interceptor/interceptor.go</code> 里显式挂认证检查。</li></ul></div><div class="arch-box lane grpc"><b>pb.gen.go → grpc.Register</b><ul><li><code>grpc.Register[S](RegisterXServiceServer, xService{}, grpc.Method{Name, HTTPMethod, Route, Public}…)</code>。</li><li><code>grpcserver</code> 记下每个 rpc 对应的 HTTP 动作与 <code>/api/…</code> 路由，供鉴权与日志用。</li></ul></div></div>
+      <div class="arch-grid arch-grid-3"><div class="arch-box lane http"><b>router.Register → gin 路由</b><ul><li>每个 phase 一个 <code>controller.XxxHandler</code>（CreateHandler … DeleteManyHandler、Import / Export / SSE / Stream）。</li><li>Public 路由挂公开组，其余挂认证组；两个组都直接挂在根上，路由串自带 <code>/api</code>。</li></ul></div><div class="arch-box lane shared"><b>注册表与模块</b><ul><li>服务注册表（<code>internal/serviceregistry</code>）按 route|phase 存 service，重复注册 panic。</li><li>模型注册表；模块的 <code>Register()</code> 只注册模型与路由。</li><li>项目在 <code>middleware/middleware.go</code>、<code>interceptor/interceptor.go</code> 里显式挂认证检查。</li></ul></div><div class="arch-box lane grpc"><b>pb.gen.go → grpc.Register</b><ul><li><code>grpc.Register[S](RegisterXServiceServer, xService{}, grpc.Method{Name, HTTPMethod, Route, Public}…)</code>。</li><li><code>grpcserver</code> 记下每个 rpc 对应的 HTTP 动作与 <code>/api/…</code> 路由，供鉴权与日志用。</li></ul></div></div>
     </div>
     <div class="arch-arrow">▼</div>
     <div class="arch-layer stage">
@@ -55,7 +55,7 @@ gst · HTTP 与 gRPC 两条传输线
     <div class="arch-arrow">▼</div>
     <div class="arch-layer stage">
       <div class="arch-layer-title">⑦ service · 业务代码只写一份</div>
-      <div class="arch-box lane shared"><b>service.Base[M, REQ, RSP] 与 Service("name") 的结构体</b><ul><li>标准动作：嵌 <code>service.Base</code>，按需覆盖钩子；自定义动作：<code>Create(ctx, req) (rsp, error)</code> 这类方法。</li><li>流式动作：<code>Stream(ctx, req, stream)</code> 三种签名之一，只在 gRPC 上被调用。</li><li>HTTP 独有的动作：SSE 的 <code>SSE(ctx) error</code>、Import 的 <code>Import(ctx, reader)</code>、Export 的 <code>Export(ctx, models…)</code> 只在 HTTP 上被调用。模型声明了 GRPC() 时，这三种动作以外的 service 用了 <code>ctx.SSE</code>、<code>FormFile</code>、<code>Data</code> 这类 HTTP 专属方法，gg check 会拦，因为 gRPC 上没有这些东西；没声明 GRPC() 的模型不受此限。</li><li>service 代码不 import gin 与 grpc；还能感知到传输的只剩 ServiceContext 元数据的取值（gRPC 上 Path 与 RequestURI 是 FullMethod，非 List/Get 动作的 Query 为空）。</li></ul></div>
+      <div class="arch-box lane shared"><b>service.Base[M, REQ, RSP] 与 Service("name") 的结构体</b><ul><li>标准动作：嵌 <code>service.Base</code>，按需覆盖钩子；自定义动作：<code>Create(ctx, req) (rsp, error)</code> 这类方法。</li><li>流式动作：<code>Stream(ctx, req, stream)</code> 三种签名之一，两条线都调用它：gRPC 的流式 rpc 和 HTTP 的 WebSocket 连接。</li><li>HTTP 独有的动作：SSE 的 <code>SSE(ctx) error</code>、Import 的 <code>Import(ctx, reader)</code>、Export 的 <code>Export(ctx, models…)</code> 只在 HTTP 上被调用。模型声明了 GRPC() 时，这三种动作以外的 service 用了 <code>ctx.SSE</code>、<code>FormFile</code>、<code>Data</code> 这类 HTTP 专属方法，gg check 会拦，因为 gRPC 上没有这些东西；没声明 GRPC() 的模型不受此限。</li><li>service 代码不 import gin 与 grpc；还能感知到传输的只剩 ServiceContext 元数据的取值（gRPC 上 Path 与 RequestURI 是 FullMethod，非 List/Get 动作的 Query 为空）。</li></ul></div>
     </div>
   </div>
 </div>
@@ -169,7 +169,7 @@ HTTP 状态到 gRPC status 的映射（`grpcserver.StatusError`）：
 
 ## 5. 动作承载矩阵
 
-规则一句话：动作在能承载它的每种传输上都提供；只有一种传输能承载的，只在那一种上提供。Import / Export / SSE 不进 .proto；Stream 不进 router.gen.go 和接口文档，service.gen.go 照常注册它的 service，它在 .proto 里的 rpc 注释写着 served over gRPC alone。
+规则一句话：动作在能承载它的每种传输上都提供；只有一种传输能承载的，只在那一种上提供。Import / Export / SSE 不进 .proto；Stream 两条线都提供，HTTP 上是一条 WebSocket 连接，router.gen.go 照常为它写一条注册，接口文档与 TS 类型里没有它。
 
 | 动作 | HTTP | gRPC（模型声明了 GRPC()） | 说明 |
 |---|:---:|:---:|---|
@@ -177,7 +177,7 @@ HTTP 状态到 gRPC status 的映射（`grpcserver.StatusError`）：
 | CreateMany / UpdateMany / PatchMany / DeleteMany | ✓ | ✓ | 批量逐条校验，UpdateMany / PatchMany 同一个 id 出现两次即拒绝；PatchMany 的每一项就是单条 Patch 的请求（id、记录、update_mask），和单条一样以项的 id 为准、记录自带的 id 不读，项里的路由参数与外层不一致即拒绝；带版本号的模型先查完每一项的版本号，再逐项校验字段，同一批几项各有缺陷时两线拒绝同一项 |
 | Route() 里的自定义动作 | ✓ | ✓ | rpc 名 = Service 名 + 模型名；Payload 挂成 `payload`，Result 挂成 `result` |
 | Import / Export / SSE | ✓ | — | 文件流与事件流只有 HTTP 能承载；gg check 在 GRPC() 模型的其他 service 里拦住 HTTP 专属的 ServiceContext 方法（Cookie、FormFile、SSE 等），这三种动作自己的 service 文件不扫，运行期在 gRPC 调用里碰到其中任何一个，调用一律答 Internal，钩子一返回就拦：Before 钩子里的在写库之前拦下，After 钩子里的在写库之后（和 After 钩子返回错误一样，行已写入） |
-| Stream | — | ✓ | 只允许自定义动作，必须 Service("name") 与 GRPC()；router 与 TS 类型跳过它，service.gen.go 照常注册 |
+| Stream | ✓ | ✓ | 只允许自定义动作，必须 Service("name") 与 GRPC()；HTTP 上是 `GET` 握手打开的一条 WebSocket 连接；接口文档与 TS 类型里没有它 |
 
 ## 6. 流式动作
 
@@ -188,7 +188,7 @@ HTTP 状态到 gRPC status 的映射（`grpcserver.StatusError`）：
 - `Stream(func(){ Service("watch"); Payload[*Req](); StreamingResult[*Rsp]() })`：Payload / Result 写一问一答的一侧，Streaming 版写流的一侧，至少一侧是流，三种组合都支持。
 - .proto：`rpc WatchFeed (WatchFeedRequest) returns (stream WatchFeedResponse)`；请求消息开头仍是路由参数。
 - `x.gen.go`：服务端流把 `srv.Send` 交给流程；路由带参数时，客户端流与双向流先用 `grpc.FirstMessage(srv.Recv)` 读首条消息取路由参数，再把它当第一条交回，不带参数的直接把 `srv.Recv` 交给流程；第二条起的消息里的路由参数留空或与首条相同放行，不同的那条让 Recv 返回 InvalidArgument（`message 3 names the feed parameter "b", the first names "a"`，`grpc.SameParams`），和批量项对外层参数的规则一样。
-- 动作：流式动作登记的 HTTP 方法是 `STREAM`，`grpc.Route(ctx)` 与访问日志的 method 都是它，路由是声明的 `/api/…` 路径。
+- 动作：流式 rpc 登记的方法是 `STREAM`，`grpc.Route(ctx)` 与 gRPC 访问日志的 method 都是它，路由是声明的 `/api/…` 路径，也就是它在 HTTP 上握手的路径。
 
 运行时与 service 签名：
 
@@ -199,12 +199,13 @@ HTTP 状态到 gRPC status 的映射（`grpcserver.StatusError`）：
 - 双向流：`Stream(ctx, stream *gst.BidiStream[REQ, RSP]) error`。
 - ctx 取消即流结束：客户端停掉 watch 答 Canceled，不算错误，服务察觉 ctx 结束后返回 nil 也一样；进程停机时流的 ctx 同样结束，正等客户端下一条消息（或首条）的 Recv 也随之返回，调用答 Unavailable「the server is shutting down」，客户端据此换副本重连（一元调用照常排空）。
 
-HTTP 入口（`controller.StreamHandler`，router 不为它注册路由）：
+HTTP 入口（`controller.StreamHandler`，router 按 `GET` 为它注册路由并标成流式路由）：
 
+- 握手是一次普通的 `GET` 请求，和别的路由一样走完整条中间件链之后才升级成连接；跨源页面的握手按 `server.websocket_origins` 放行，名单里写坏的模式启动时直接报错。
 - 同一个 Stream 动作跑在一条 WebSocket 连接上：一帧文本是一条 JSON 消息，客户端发一帧 `null` 表示发完；服务端流的请求是客户端发的第一帧。请求逐条照 HTTP 请求体的口径解码、normalize 与校验。
 - 连接打开之前照普通请求答信封：握手被拒按拒绝的状态答，没有对应 Stream 方法答 501。
 - 连接打开之后，结果由连接的关闭码带回：正常结束 1000；`gst.Error` 是 4000 加它的 HTTP 状态，原因是 msg；其他错误 4500；停机 1001「the server is shutting down」。服务端流的请求在 `server.read_timeout` 内没到按 4408 关，请求之后再发消息按 1008 关；被拒的那条请求按 4400 关，原因是点名字段的句子。访问日志在 status（握手的 101）之外多记一个 `close_code`。
-- 与 gRPC 入口由对照用例 TestTransportsCarryAStreamAlike 逐场景比对（收到的消息、结束状态按第 4 节的映射、msg 逐字）。两线有意不同的两处：service 从上下文读到的动词，HTTP 上是握手的 `GET`，gRPC 上是 `STREAM`；没有对应 Stream 方法的动作，HTTP 在连接打开前答 501 的信封，gRPC 答流的状态 Unimplemented。另有两处只在 HTTP 上有，是传输本身带来的：服务端流的请求是连接上单独的一帧，所以才有「请求在 `server.read_timeout` 内没到按 4408 关」这一步，gRPC 的请求随调用一起到达，框架没有等它的环节；客户端可以不发请求就发 `null` 结束，这时按零值请求照常校验后调用 service，gRPC 的标准客户端发不出这样的调用。
+- 与 gRPC 入口由对照用例 TestTransportsCarryAStreamAlike 逐场景比对（收到的消息、结束状态按第 4 节的映射、msg 逐字）。两线有意不同的两处：service 从上下文读到的动词，HTTP 上是握手的 `GET`，gRPC 上是 `STREAM`，按动词授权时两条线因此各认各的，放行 HTTP 握手的是（`GET`，路径），放行 gRPC 流的是（`STREAM`，路由）；没有对应 Stream 方法的动作，HTTP 在连接打开前答 501 的信封，gRPC 答流的状态 Unimplemented。另有两处只在 HTTP 上有，是传输本身带来的：服务端流的请求是连接上单独的一帧，所以才有「请求在 `server.read_timeout` 内没到按 4408 关」这一步，gRPC 的请求随调用一起到达，框架没有等它的环节；客户端可以不发请求就发 `null` 结束，这时按零值请求照常校验后调用 service，gRPC 的标准客户端发不出这样的调用。
 
 ```plantuml
 @startuml
@@ -263,7 +264,7 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 
 | 包 | 归属 | 职责 |
 |---|---|---|
-| `dsl` → `internal/dsl` | 共用 | 关键字、解析、校验；`HTTPOnlyAction`、`GRPCOnlyAction` 是「哪种传输承载」的单点 |
+| `dsl` → `internal/dsl` | 共用 | 关键字、解析、校验；`HTTPOnlyAction` 是「哪些动作只有 HTTP 承载」的单点 |
 | `internal/modelinfo` | 共用 | 模型元信息：路由、参数、`RPCName`、`PBPackage`，pb 生成与骨架共用 |
 | `internal/pbschema` | 共用 | 从模型推导 protobuf 定义并与 pb/ 下已提交的文件对账，认不出的形状与破坏线上契约的改动在这里成为诊断；gen 与 check 各自只依赖它 |
 | `internal/gggen` | 共用 | 所有生成器；子包 `pb` 把 pbschema 推导出的定义打印成 .proto、出适配层与注册文件并驱动插件 |

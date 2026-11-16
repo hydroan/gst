@@ -84,10 +84,9 @@ func Exact(phases ...apiaction.Phase) UseOption {
 
 // servedPhases returns phases once every one of them is an action an HTTP
 // route serves, panicking with the name of the first that is not, under the
-// name of the declaring call: Stream is served over gRPC alone, and a hook
-// phase is no action. A module declares its phases at registration, where
-// a wrong one is a defect of the module to fail on, not a route to go
-// missing without a word.
+// name of the declaring call: a hook phase is no action. A module declares
+// its phases at registration, where a wrong one is a defect of the module
+// to fail on, not a route to go missing without a word.
 func servedPhases(call string, phases []apiaction.Phase) []apiaction.Phase {
 	for _, p := range phases {
 		if p.HTTPMethod() == "" {

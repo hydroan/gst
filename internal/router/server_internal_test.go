@@ -106,9 +106,10 @@ func TestStopClosesTheConnectionsTheDrainLeftOpen(t *testing.T) {
 // shutdown has ended its context, has closed it by the time Stop returns,
 // and its client reads the ending it closed with.
 func TestStopWaitsForTheWebSocketConnections(t *testing.T) {
-	closed := make(chan struct{})
+	accepted, closed := make(chan error, 1), make(chan struct{})
 	srv := newServer("", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := websocket.Accept(w, r, nil, time.Second)
+		accepted <- err
 		if err != nil {
 			return
 		}
@@ -128,6 +129,8 @@ func TestStopWaitsForTheWebSocketConnections(t *testing.T) {
 	conn, _, err := websocket.Dial(t.Context(), nil, "http://"+listener.Addr().String(), nil, time.Second)
 	require.NoError(t, err)
 	t.Cleanup(func() { conn.Close(nil) })
+	// The client sees the connection open a moment before Accept returns it.
+	require.NoError(t, awaitResult(t, accepted))
 
 	Stop(context.Background())
 	select {

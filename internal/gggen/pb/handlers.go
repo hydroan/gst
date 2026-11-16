@@ -597,8 +597,7 @@ func (w *fileWriter) query(phase apiaction.Phase, req func(string) ast.Expr, has
 // FeedEvent messages under a name of its own, gets for its Service("watch")
 // Stream on feeds/watch, a Payload with a streaming Result,
 //
-//	// WatchFeed serves the Stream action of Feed declared on feeds/watch, served
-//	// over gRPC alone.
+//	// WatchFeed serves the Stream action of Feed on /api/feeds/watch.
 //	func (feedService) WatchFeed(req *WatchFeedRequest, srv FeedService_WatchFeedServer) error {
 //		payload, err := FeedWatchReqFromProto(req.GetPayload())
 //		if err != nil {
@@ -617,8 +616,8 @@ func (w *fileWriter) query(phase apiaction.Phase, req func(string) ast.Expr, has
 // Payload with a Result, whose first message carries the route parameter,
 // which every later message may leave empty or repeat,
 //
-//	// UploadFeedByFeed serves the Stream action of Feed declared on
-//	// feeds/:feed/upload, served over gRPC alone.
+//	// UploadFeedByFeed serves the Stream action of Feed on
+//	// /api/feeds/:feed/upload.
 //	func (feedService) UploadFeedByFeed(srv FeedService_UploadFeedByFeedServer) error {
 //		first, err := grpc.FirstMessage(srv.Recv)
 //		if err != nil {
@@ -653,8 +652,7 @@ func (w *fileWriter) query(phase apiaction.Phase, req func(string) ast.Expr, has
 //
 // and for its Service("chat") Stream on feeds/chat, both sides streaming,
 //
-//	// ChatFeed serves the Stream action of Feed declared on feeds/chat, served
-//	// over gRPC alone.
+//	// ChatFeed serves the Stream action of Feed on /api/feeds/chat.
 //	func (feedService) ChatFeed(srv FeedService_ChatFeedServer) error {
 //		return chatFeed(srv.Context(), nil, func() (*model.FeedChatReq, error) {
 //			msg, recvErr := srv.Recv()
@@ -788,7 +786,7 @@ func (w *fileWriter) streamHandler(r *pbschema.RPC) {
 		}
 		body = append(body, returns(run(params, recv(withFirst), send)))
 	}
-	w.out.add(r.Name+" serves the "+r.Action.Phase.Name()+" action of "+r.Model.ModelName+" declared on "+r.Route+", served over gRPC alone.", &ast.FuncDecl{
+	w.out.add(r.Name+" serves the "+r.Action.Phase.Name()+" action of "+r.Model.ModelName+" on "+apiaction.APIPath(r.Registered)+".", &ast.FuncDecl{
 		Recv: &ast.FieldList{List: []*ast.Field{{Type: ident(serviceTypeName(r.Service))}}},
 		Name: ident(r.Name),
 		Type: &ast.FuncType{Params: &ast.FieldList{List: params}, Results: &ast.FieldList{List: []*ast.Field{{Type: ident("error")}}}},

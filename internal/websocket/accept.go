@@ -4,10 +4,12 @@ import (
 	"context"
 	"maps"
 	"net/http"
+	"path"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	coderwebsocket "github.com/coder/websocket"
 	"github.com/hydroan/gst/internal/streamctx"
 	"github.com/hydroan/gst/internal/types"
@@ -56,6 +58,21 @@ func Accept(w http.ResponseWriter, r *http.Request, origins []string, writeTimeo
 	go conn.read()
 	go conn.beat(heartbeatInterval)
 	return conn, nil
+}
+
+// ValidateOrigins reports the first of origins the library could not read as
+// a pattern, the way it reads the OriginPatterns Accept hands it: lower-cased,
+// by path.Match. The library has no check of its own to call: it reads a
+// pattern only once a handshake from another origin reaches it, and refuses
+// that handshake over a malformed one, so a server validates the patterns it
+// is configured with before it serves.
+func ValidateOrigins(origins []string) error {
+	for _, pattern := range origins {
+		if _, err := path.Match(strings.ToLower(pattern), ""); err != nil {
+			return errors.Wrapf(err, "malformed origin pattern %q", pattern)
+		}
+	}
+	return nil
 }
 
 // handshake stands between the library and the response during the upgrade.

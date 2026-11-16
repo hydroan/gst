@@ -67,20 +67,21 @@ const accessLogFieldCap = 12
 // names a request's: the route and HTTP method the registration described
 // the rpc with, /api/records/:id and GET, STREAM for a Stream action (see
 // Method), so a hook, a log or a span reads the same route and method
-// whichever listener served the action; the full method as path and
-// request URI, the call's target on the wire the way a request's path is;
-// the address of the peer and whether it speaks TLS, the authority the call
-// was addressed to and the user agent; and whether the method requires
-// auth, as the registration described it (see Method.Public). A method the
-// registration described with no action, the health and reflection
-// services' among them, keeps the full method as its route and POST, the
-// method every gRPC call is on the wire, as its method. The client address
-// a proxy in front forwards is believed from the peers server.trusted_proxies
-// names alone, the stance the HTTP listener takes through gin, resolved by
+// whichever listener served the action, the method of a Stream action apart,
+// which over HTTP is the GET of its handshake; the full method as path and
+// request URI, the call's target on the wire the way a request's path is; the
+// address of the peer and whether it speaks TLS, the authority the call was
+// addressed to and the user agent; and whether the method requires auth, as
+// the registration described it (see Method.Public). A method the
+// registration described with no action, the health and reflection services'
+// among them, keeps the full method as its route and POST, the method every
+// gRPC call is on the wire, as its method. The client address a proxy in
+// front forwards is believed from the peers server.trusted_proxies names
+// alone, the stance the HTTP listener takes through gin, resolved by
 // requestctx.ClientIP the way gin resolves it, from every value a header
 // carries joined by commas, the way gin reads a header sent over several
-// lines; from any other peer the address is the peer's own. The protocol
-// such headers carry is not read: whether the connection speaks TLS is the
+// lines; from any other peer the address is the peer's own. The protocol such
+// headers carry is not read: whether the connection speaks TLS is the
 // connection's own fact.
 func requestScope(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 	scope := enterCall(ctx, info.FullMethod)

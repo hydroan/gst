@@ -211,8 +211,8 @@ func Migrate() { dsl.Migrate() }
 // beside the HTTP routes, both backed by the same service code. Declaring it
 // is enabling it; a model without it is HTTP only. It can only be used at
 // Design() top level, and needs at least one action gRPC can serve: Import,
-// Export and SSE are HTTP only. A Stream action is served over gRPC alone
-// and needs it.
+// Export and SSE are HTTP only. A model declaring a Stream action declares
+// it.
 func GRPC() { dsl.GRPC() }
 
 // Service marks the current action as requiring custom service code, and
@@ -432,20 +432,28 @@ func Export(fn func()) { dsl.Export(fn) }
 // register the GET route path itself.
 func SSE(fn func()) { dsl.SSE(fn) }
 
-// Stream defines a streaming operation, served over gRPC alone: one side of
-// the call, or both, is a stream of messages rather than one message. The
-// block declares the unary side with Payload or Result and the streaming
-// side with StreamingPayload or StreamingResult, at least one side
-// streaming: Payload with StreamingResult is a server stream,
-// StreamingPayload with Result a client stream, and both streaming a
-// bidirectional stream. A side declared neither way is *model.Empty.
+// Stream defines a streaming operation: one side of the call, or both, is a
+// stream of messages rather than one message. The block declares the unary
+// side with Payload or Result and the streaming side with StreamingPayload or
+// StreamingResult, at least one side streaming: Payload with StreamingResult
+// is a server stream, StreamingPayload with Result a client stream, and both
+// streaming a bidirectional stream. A side declared neither way is
+// *model.Empty.
+//
+// A Stream is served over both transports. Over gRPC it is a streaming rpc.
+// Over HTTP it is a WebSocket connection, opened by a GET of the route, which
+// is marked as streaming the way the route of an SSE action is: every message
+// travels as one text frame holding a JSON document, a Payload is the first
+// frame the client sends, a client ends a StreamingPayload with a frame
+// holding null, and a Result is the frame the server sends before it closes
+// the connection. The connection closes once the service returns: normally,
+// or for an error with the status 4000 plus the HTTP status the error answers
+// with, its message the reason.
 //
 // Stream must declare a named Service("name"), there being no built-in
 // implementation and the name naming its rpc (see Service); it must not
-// declare Exact(), having no HTTP route. It needs GRPC() on the model: HTTP carries
-// no stream, so a Stream of a model without GRPC() would be served nowhere,
-// and it is rejected. A Stream registers no HTTP route and appears in no
-// OpenAPI document.
+// declare Exact(), its route being served as declared. It needs GRPC() on
+// the model, and appears in no OpenAPI document.
 //
 // Example, a server stream of the events of a feed on the route
 // feeds/watch:

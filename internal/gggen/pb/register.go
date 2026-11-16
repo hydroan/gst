@@ -149,8 +149,8 @@ func (g *generator) registrations(out *goFile, files []*pbschema.ProtoFile) {
 			args := []ast.Expr{ident("Register" + service + "Server"), compositeLit(ident(serviceTypeName(service)))} //gst:literal opens the name protoc-gen-go-grpc gives a registrar, RegisterFeedServer
 			for _, r := range rpcs[service] {
 				elts := []ast.Expr{keyValue("Name", ident(service+"_"+r.Name+"_FullMethodName"))}
-				// A streaming rpc, served over gRPC alone, is described by
-				// the stream word in place of an HTTP method.
+				// A streaming rpc is described by the stream word in place
+				// of an HTTP method.
 				method := ast.Expr(sel(out.imports.fixedRef(ggconst.ImportPathGRPC), "MethodStream"))
 				if !r.Streaming() {
 					method = sel(out.imports.fixedRef(importPathHTTP), httpMethodConsts[r.Action.Phase.HTTPMethod()])

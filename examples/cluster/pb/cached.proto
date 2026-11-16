@@ -149,9 +149,9 @@ service CachedService {
   // GetCached is the Get action of Cached on /api/caches/:id.
   rpc GetCached ( GetCachedRequest ) returns ( GetCachedResponse );
 
-  // ExchangeCached is the Stream action of Cached declared on caches/exchange, served over gRPC alone.
+  // ExchangeCached is the Stream action of Cached on /api/caches/exchange.
   rpc ExchangeCached ( stream ExchangeCachedRequest ) returns ( stream ExchangeCachedResponse );
 
-  // LoadCached is the Stream action of Cached declared on caches/load, served over gRPC alone.
+  // LoadCached is the Stream action of Cached on /api/caches/load.
   rpc LoadCached ( stream LoadCachedRequest ) returns ( LoadCachedResponse );
 }

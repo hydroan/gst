@@ -73,8 +73,7 @@ func (cachedService) GetCached(ctx context.Context, req *GetCachedRequest) (*Get
 	return &GetCachedResponse{Result: p}, nil
 }
 
-// ExchangeCached serves the Stream action of Cached declared on
-// caches/exchange, served over gRPC alone.
+// ExchangeCached serves the Stream action of Cached on /api/caches/exchange.
 func (cachedService) ExchangeCached(srv CachedService_ExchangeCachedServer) error {
 	return exchangeCached(srv.Context(), nil, func() (*model.CachedKeyReq, error) {
 		msg, recvErr := srv.Recv()
@@ -91,8 +90,7 @@ func (cachedService) ExchangeCached(srv CachedService_ExchangeCachedServer) erro
 	})
 }
 
-// LoadCached serves the Stream action of Cached declared on caches/load,
-// served over gRPC alone.
+// LoadCached serves the Stream action of Cached on /api/caches/load.
 func (cachedService) LoadCached(srv CachedService_LoadCachedServer) error {
 	result, err := loadCached(srv.Context(), nil, func() (*model.CachedLoadReq, error) {
 		msg, recvErr := srv.Recv()

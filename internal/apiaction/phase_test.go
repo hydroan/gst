@@ -168,8 +168,8 @@ func TestPhase_BeforeAfter(t *testing.T) {
 
 // TestPhase_HTTPMethod pins the one table of HTTP methods (see
 // Phase.HTTPMethod): every action phase maps to the method its route is
-// registered under, and a hook phase, Stream, served over gRPC alone, and
-// any unknown phase map to no method.
+// registered under, Stream to the GET that opens its connection, and a hook
+// phase and any unknown phase map to no method.
 func TestPhase_HTTPMethod(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -197,7 +197,7 @@ func TestPhase_HTTPMethod(t *testing.T) {
 		{"export", apiaction.Export, http.MethodGet},
 		{"sse", apiaction.SSE, http.MethodGet},
 
-		{"stream", apiaction.Stream, ""},
+		{"stream", apiaction.Stream, http.MethodGet},
 		{"unknown", apiaction.Phase(""), ""},
 	}
 

@@ -30,7 +30,7 @@ message Feed {
 
 // TailFeedByFeedRequest is the request of FeedService.TailFeedByFeed.
 message TailFeedByFeedRequest {
-  // feed is the :feed parameter of feeds/:feed/tail.
+  // feed is the :feed parameter of /api/feeds/:feed/tail.
   string feed = 1;
 }
 
@@ -42,7 +42,7 @@ message TailFeedByFeedResponse {
 
 // UploadFeedByFeedRequest is the request of FeedService.UploadFeedByFeed.
 message UploadFeedByFeedRequest {
-  // feed is the :feed parameter of feeds/:feed/upload.
+  // feed is the :feed parameter of /api/feeds/:feed/upload.
   string feed = 1;
 
   // payload is the FeedEvent the action takes.
@@ -109,18 +109,18 @@ message FeedWatchReq {
 
 // FeedService serves the actions of Feed over gRPC.
 service FeedService {
-  // TailFeedByFeed is the Stream action of Feed declared on feeds/:feed/tail, served over gRPC alone.
+  // TailFeedByFeed is the Stream action of Feed on /api/feeds/:feed/tail.
   rpc TailFeedByFeed ( TailFeedByFeedRequest ) returns ( stream TailFeedByFeedResponse );
 
-  // UploadFeedByFeed is the Stream action of Feed declared on feeds/:feed/upload, served over gRPC alone.
+  // UploadFeedByFeed is the Stream action of Feed on /api/feeds/:feed/upload.
   rpc UploadFeedByFeed ( stream UploadFeedByFeedRequest ) returns ( UploadFeedByFeedResponse );
 
-  // ChatFeed is the Stream action of Feed declared on feeds/chat, served over gRPC alone.
+  // ChatFeed is the Stream action of Feed on /api/feeds/chat.
   rpc ChatFeed ( stream ChatFeedRequest ) returns ( stream ChatFeedResponse );
 
-  // IngestFeed is the Stream action of Feed declared on feeds/ingest, served over gRPC alone.
+  // IngestFeed is the Stream action of Feed on /api/feeds/ingest.
   rpc IngestFeed ( stream IngestFeedRequest ) returns ( IngestFeedResponse );
 
-  // WatchFeed is the Stream action of Feed declared on feeds/watch, served over gRPC alone.
+  // WatchFeed is the Stream action of Feed on /api/feeds/watch.
   rpc WatchFeed ( WatchFeedRequest ) returns ( stream WatchFeedResponse );
 }

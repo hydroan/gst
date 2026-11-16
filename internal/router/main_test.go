@@ -17,9 +17,13 @@ func TestMain(m *testing.M) {
 	// client, while the loopback the real connections come from speaks for
 	// itself (see clientip_test.go and clientip_internal_test.go).
 	_ = os.Setenv("SERVER_TRUSTED_PROXIES", "10.0.0.0/8")
+	// The pages of one other origin may open the streams of the server (see
+	// stream_test.go).
+	_ = os.Setenv("SERVER_WEBSOCKET_ORIGINS", "*.sample.example")
 	testutil.Run(m, testutil.Server{
 		Routes: func() error {
 			registerSSERoutes()
+			registerStreamRoutes()
 			registerDocumentedRoute()
 			registerClientIPRoute()
 

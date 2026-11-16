@@ -113,12 +113,7 @@ func (g *Schema) declareService(m *modelinfo.Model) {
 		if !ok {
 			return
 		}
-		// A Stream action is served over gRPC alone: its route names it and
-		// tells it from the other actions, but is no path a request reaches.
 		comment := name + " is the " + action.Phase.Name() + " action of " + m.ModelName + " on " + apiaction.APIPath(r.Registered) + "."
-		if dsl.GRPCOnlyAction(action.Phase.Name()) {
-			comment = name + " is the " + action.Phase.Name() + " action of " + m.ModelName + " declared on " + route + ", served over gRPC alone."
-		}
 		file.comment([]int32{fileServicesTag, int32Index(len(file.Services)), serviceMethodsTag, int32Index(len(service.Method))}, comment)
 		method := &descriptorpb.MethodDescriptorProto{
 			Name:       new(name),
@@ -199,7 +194,7 @@ func standardAction(m *modelinfo.Model, action *dsl.Action) bool {
 //	  Item item = 1;
 //	}
 func (g *Schema) rpcMessages(m *modelinfo.Model, scope *types.Scope, model *Message, file *ProtoFile, route string, action *dsl.Action, itemOf string, s jsonshape.Site) (*RPC, bool) {
-	r := &RPC{Name: modelinfo.RPCName(m, route, action), Service: m.ModelName + "Service", Model: m, Action: action, Route: route}
+	r := &RPC{Name: modelinfo.RPCName(m, route, action), Service: m.ModelName + "Service", Model: m, Action: action}
 	r.Registered, r.Param = modelinfo.RouterTargetForAction(route, m.Design, action)
 	qualified := r.Service + "." + r.Name
 	var request, response *descriptorpb.DescriptorProto
@@ -335,7 +330,6 @@ type RPC struct {
 	Service string // ItemService
 	Model   *modelinfo.Model
 	Action  *dsl.Action
-	Route   string // the route the action is declared on, records/:record/items
 	// registered is the route the router registers the action under,
 	// records/:record/items/:id for its Get, the route the call is built on
 	// and the service registry keys the service by; param is the parameter

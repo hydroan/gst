@@ -111,6 +111,6 @@ service CounterStepService {
   // ListCounterStep is the List action of CounterStep on /api/counter_steps.
   rpc ListCounterStep ( ListCounterStepRequest ) returns ( ListCounterStepResponse );
 
-  // WatchCounterStep is the Stream action of CounterStep declared on counter_steps/watch, served over gRPC alone.
+  // WatchCounterStep is the Stream action of CounterStep on /api/counter_steps/watch.
   rpc WatchCounterStep ( WatchCounterStepRequest ) returns ( stream WatchCounterStepResponse );
 }

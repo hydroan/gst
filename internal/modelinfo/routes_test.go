@@ -164,10 +164,11 @@ func TestRouterTargetForAction(t *testing.T) {
 // TestRouteConflictsNamesBothActionsOfAPath pins the example of
 // RouteConflicts and the forms the router or the service registry would
 // refuse at startup: two models resolving to one path, an Exact action on
-// the path of another, SSE beside List, one Route block written twice, two
-// Stream actions on one route, and two parameter names at one position of
-// one method's paths; the batch path beside the item path, and a route
-// naming the parameter the item path names, conflict with nothing.
+// the path of another, SSE beside List, one Route block written twice, a
+// Stream action on the path of another or of a List, and two parameter
+// names at one position of one method's paths, a Stream's among them; the
+// batch path beside the item path, and a route naming the parameter the
+// item path names, conflict with nothing.
 func TestRouteConflictsNamesBothActionsOfAPath(t *testing.T) {
 	model := func(pkg, name, design string) string {
 		return "package " + pkg + `
@@ -225,7 +226,21 @@ func (` + name + `) Design() {
 				filepath.Join("model", "feed.go"):        model("model", "Feed", "\tdsl.GRPC()\n\tdsl.Endpoint(\"feeds\")\n\tdsl.Route(\"feeds/chat\", func() {\n\t\tdsl.Stream(func() {\n\t\t\tdsl.Service(\"chat\")\n\t\t\tdsl.StreamingPayload[*FeedEvent]()\n\t\t\tdsl.StreamingResult[*FeedEvent]()\n\t\t})\n\t})\n"),
 				filepath.Join("model", "api", "feed.go"): model("api", "Feed", "\tdsl.GRPC()\n\tdsl.Endpoint(\"feeds\")\n\tdsl.Route(\"feeds/chat\", func() {\n\t\tdsl.Stream(func() {\n\t\t\tdsl.Service(\"chat\")\n\t\t\tdsl.StreamingPayload[*FeedEvent]()\n\t\t\tdsl.StreamingResult[*FeedEvent]()\n\t\t})\n\t})\n"),
 			},
-			want: []string{"model/feed.go: the Stream action of Feed registers the stream on /api/feeds/chat, as the Stream action of Feed in model/api/feed.go does; a route serves one Stream action"},
+			want: []string{"model/feed.go: the Stream action of Feed registers GET /api/feeds/chat, as the Stream action of Feed in model/api/feed.go does; a path is served by one action"},
+		},
+		{
+			name: "a Stream action on the path of a List",
+			sources: map[string]string{
+				filepath.Join("model", "feed.go"): model("model", "Feed", "\tdsl.GRPC()\n\tdsl.Endpoint(\"feeds\")\n\tdsl.List(func() {})\n\tdsl.Route(\"feeds\", func() {\n\t\tdsl.Stream(func() {\n\t\t\tdsl.Service(\"watch\")\n\t\t\tdsl.StreamingResult[*FeedEvent]()\n\t\t})\n\t})\n"),
+			},
+			want: []string{"model/feed.go: the Stream action of Feed registers GET /api/feeds, as the List action of Feed in model/feed.go does; a path is served by one action"},
+		},
+		{
+			name: "a Stream action naming a parameter differently",
+			sources: map[string]string{
+				filepath.Join("model", "feed.go"): model("model", "Feed", "\tdsl.GRPC()\n\tdsl.Endpoint(\"feeds\")\n\tdsl.Get(func() {})\n\tdsl.Route(\"feeds/:feed/tail\", func() {\n\t\tdsl.Stream(func() {\n\t\t\tdsl.Service(\"tail\")\n\t\t\tdsl.StreamingResult[*FeedEvent]()\n\t\t})\n\t})\n"),
+			},
+			want: []string{"model/feed.go: the Stream action of Feed registers GET /api/feeds/:feed/tail, naming the parameter :feed where the Get action of Feed in model/feed.go, registering GET /api/feeds/:id, names :id; the router reads one parameter name at a position"},
 		},
 		{
 			name: "two parameter names at one position",

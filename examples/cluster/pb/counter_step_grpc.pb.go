@@ -33,7 +33,7 @@ const (
 type CounterStepServiceClient interface {
 	// ListCounterStep is the List action of CounterStep on /api/counter_steps.
 	ListCounterStep(ctx context.Context, in *ListCounterStepRequest, opts ...grpc.CallOption) (*ListCounterStepResponse, error)
-	// WatchCounterStep is the Stream action of CounterStep declared on counter_steps/watch, served over gRPC alone.
+	// WatchCounterStep is the Stream action of CounterStep on /api/counter_steps/watch.
 	WatchCounterStep(ctx context.Context, in *WatchCounterStepRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchCounterStepResponse], error)
 }
 
@@ -82,7 +82,7 @@ type CounterStepService_WatchCounterStepClient = grpc.ServerStreamingClient[Watc
 type CounterStepServiceServer interface {
 	// ListCounterStep is the List action of CounterStep on /api/counter_steps.
 	ListCounterStep(context.Context, *ListCounterStepRequest) (*ListCounterStepResponse, error)
-	// WatchCounterStep is the Stream action of CounterStep declared on counter_steps/watch, served over gRPC alone.
+	// WatchCounterStep is the Stream action of CounterStep on /api/counter_steps/watch.
 	WatchCounterStep(*WatchCounterStepRequest, grpc.ServerStreamingServer[WatchCounterStepResponse]) error
 	mustEmbedUnimplementedCounterStepServiceServer()
 }

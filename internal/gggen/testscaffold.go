@@ -58,7 +58,7 @@ var serviceTestDoc = []string{
 }
 
 // serviceStreamTestDoc is serviceTestDoc's counterpart for a Stream action,
-// served over gRPC alone.
+// whose test calls its rpc.
 var serviceStreamTestDoc = []string{
 	"//",
 	"// The call goes through a grpc-go client against the gRPC listener of the",
@@ -117,11 +117,11 @@ var serviceStreamTestDoc = []string{
 // function: an item route reads the row's id from a placeholder variable, a
 // batch route sends client.BatchItems or client.BatchIDs, a List without a
 // declared result decodes client.ListResult, Import uploads a file, Export
-// downloads the attachment and SSE consumes the stream. A Stream action,
-// served over gRPC alone, is called through the client the protobuf plugin
-// generated, on a connection to testutil.GRPCTarget: for the Stream action
-// declaring Service("watch"), Payload and StreamingResult on the model Feed
-// of the root model package, whose rpc is WatchFeed, the test reads
+// downloads the attachment and SSE consumes the stream. A Stream action is
+// called over gRPC, through the client the protobuf plugin generated, on a
+// connection to testutil.GRPCTarget: for the Stream action declaring
+// Service("watch"), Payload and StreamingResult on the model Feed of the
+// root model package, whose rpc is WatchFeed, the test reads
 //
 //	// TestWatch covers the WatchFeed rpc, served by Watch in watch.go.
 //	//
@@ -351,15 +351,15 @@ func newServiceTestExample(info *modelinfo.Model, action *dsl.Action, route stri
 	return example
 }
 
-// newStreamTestExample builds the example call of a Stream action, served
-// over gRPC alone: a connection to the test server's gRPC listener, the
-// client the protobuf plugin generated for the model's service, and the
-// call of the rpc in the shape of its streaming — a server stream sends
-// the request and reads the first answer, a client stream sends a request
-// and reads the answer with CloseAndRecv, a bidirectional stream sends,
-// reads and closes its side. The stubs' package is imported under an alias
-// when its name is one the scaffold takes, and under its name when the path
-// does not tell it (see importSpecName).
+// newStreamTestExample builds the example call of a Stream action, made over
+// gRPC: a connection to the test server's gRPC listener, the client the
+// protobuf plugin generated for the model's service, and the call of the rpc
+// in the shape of its streaming — a server stream sends the request and
+// reads the first answer, a client stream sends a request and reads the
+// answer with CloseAndRecv, a bidirectional stream sends, reads and closes
+// its side. The stubs' package is imported under an alias when its name is
+// one the scaffold takes, and under its name when the path does not tell it
+// (see importSpecName).
 func newStreamTestExample(info *modelinfo.Model, action *dsl.Action, route string) *serviceTestExample {
 	pbImportPath, pbName := modelinfo.PBPackage(info.ModulePath, info.PBDir())
 	example := &serviceTestExample{imports: map[string]string{scaffoldImportGRPC: "", scaffoldImportInsecure: ""}}

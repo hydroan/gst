@@ -40,7 +40,8 @@ func APIPath(route string) string {
 //   - DELETE: Delete, DeleteMany
 //   - PUT: Update, UpdateMany
 //   - PATCH: Patch, PatchMany
-//   - GET: List, Get, Export, SSE
+//   - GET: List, Get, Export, SSE, and Stream, whose GET opens the
+//     WebSocket connection of the stream
 //
 // The route is served at the path APIPath spells for it:
 // /api/records/:rec whether written as /api/records/:rec, the way generated
@@ -48,8 +49,8 @@ func APIPath(route string) string {
 // path and the phase, so the matching service.Register call names the same
 // route; generated code derives both from one design. cfg may be nil, and it
 // is copied, so one config can serve several routes. A blank route, no
-// phases, or a phase no HTTP route serves, a hook phase such as CreateBefore
-// or Stream, panics: the mistake stops the start instead of leaving an
+// phases, or a phase no HTTP route serves, a hook phase such as
+// CreateBefore, panics: the mistake stops the start instead of leaving an
 // endpoint that answers 404 or registering nothing in silence.
 func Register[M types.Model, REQ types.Request, RSP types.Response](group *gin.RouterGroup, route string, cfg *types.ControllerConfig[M], phases ...apiaction.Phase) {
 	router.Register[M, REQ, RSP](group, route, cfg, phases...)

@@ -278,9 +278,12 @@ func (Entry) Design() {
 编译出 `pb/` 下的 Go 代码，并在 gRPC 服务上注册和 HTTP 路由相同的动作，业务代码只写 `service/` 那一份。
 字段用 `pb` tag 给消息编号（`pb:"11"`，1 到 10 留给框架：`model.Base` 的字段，以及嵌入 `tenant.Scope` 时的 `tenant_id`），缺的 `gg gen` 会补上。
 只定义了 `MarshalText`、没有 `MarshalJSON` 的类型（`netip.Addr`、实现了它的枚举）在消息里是 `string`，按它写出的文本收发，和 JSON 里一样。
-只在 gRPC 上有的是流：自定义动作里用 `Stream(func(){...})` 声明，流的那一侧写 `StreamingPayload`/`StreamingResult`，
+流用 `Stream(func(){...})` 在自定义动作里声明：流的那一侧写 `StreamingPayload`/`StreamingResult`，
 另一侧写 `Payload`/`Result`，两侧都流就是双向流，service 方法收发 `gst.ServerStream`、`ClientStream`
-或 `BidiStream`。测试里 `testutil.GRPCTarget()` 给出测试服务器的 gRPC 地址；测试二进制没导入 `pb` 包、一个 gRPC 服务都没注册时，它直接 panic 并点名要加的导入，`gg gen` 写测试骨架时也会为此警告。完整示例见
+或 `BidiStream`。它两条线都提供：gRPC 上是带 stream 的 rpc；HTTP 上是用 `GET` 握手打开的一条 WebSocket 连接，
+一帧文本是一条 JSON 消息，调用方用 `client` 包的 `ServerStream`、`ClientStream`、`BidiStream`。
+浏览器页面和服务不同源时，把页面的源写进 `server.websocket_origins`（如 `*.example.com`），否则握手答 403。
+测试里 `testutil.GRPCTarget()` 给出测试服务器的 gRPC 地址；测试二进制没导入 `pb` 包、一个 gRPC 服务都没注册时，它直接 panic 并点名要加的导入，`gg gen` 写测试骨架时也会为此警告。完整示例见
 [examples/demo/model/board](./examples/demo/model/board)。
 
 监听在 `[grpc]` 节配置，环境变量是 `GRPC_PORT` 这样的写法：`listen`、`port`（默认 8081，挨着 HTTP 的 8080）、
@@ -797,7 +800,7 @@ err := database.Select[*appmodel.Record, recordWithTags](ctx, RecordCols.ID, tag
 ## 调用其他 gst 服务
 
 `client` 包是调用另一个 gst 服务的官方入口，也是接口测试发请求的入口。它按 DSL 的形态设计：
-`Design()` 能声明的每种 HTTP 接口在这里都有对应的调用方式，响应按统一信封解析；只走 gRPC 的 Stream 用生成的 gRPC 客户端调。
+`Design()` 能声明的每种 HTTP 接口在这里都有对应的调用方式，响应按统一信封解析；Stream 在 HTTP 上是 WebSocket 连接，按它流的是哪一侧各有一个入口。
 
 | DSL 声明 | client 入口 |
 | --- | --- |
@@ -807,7 +810,10 @@ err := database.Select[*appmodel.Record, recordWithTags](ctx, RecordCols.ID, tag
 | `Route("xxx/:id/action")` | 方法加路径组合 |
 | 批量动作 | `BatchItems` / `BatchIDs` 构造 `/batch` 路由的请求体 |
 | `Export()` / `Import()` | `Download` / `Upload` |
-| SSE 响应 | `Stream` |
+| `SSE()` | `SSE`，返回的事件流用 `Recv` 逐条取 |
+| `Stream()`，响应一侧是流 | `ServerStream` |
+| `Stream()`，请求一侧是流 | `ClientStream` |
+| `Stream()`，两侧都是流 | `BidiStream` |
 | 分页、排序、展开、游标 | `WithPage` / `WithSortBy` / `WithExpand` / `WithCursor` |
 
 一个客户端对应一个服务，带着地址、凭据和连接复用，可以并发使用，在包变量里建一次反复用即可；

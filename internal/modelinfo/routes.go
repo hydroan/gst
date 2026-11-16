@@ -36,8 +36,8 @@ func ResolveRoutes(models []*Model, ignores []ggconfig.RouteRule) RouteIgnoreRes
 // RouteConflicts returns the conflicts among the routes the models
 // register, once ResolveRoutes resolved them, each as an error naming both
 // actions: two actions registering one path under one HTTP method, which
-// the router refuses at startup, two Stream actions on one route, which
-// the service registry refuses, and two paths of one method naming a
+// the router refuses at startup, a Stream action among them under the GET
+// that opens its connection, and two paths of one method naming a
 // parameter differently at one position, which the router refuses as well
 // (see parameterClash). The later action, in the order the models were
 // found and their actions are declared, is held to the earlier one. For
@@ -45,10 +45,6 @@ func ResolveRoutes(models []*Model, ignores []ggconfig.RouteRule) RouteIgnoreRes
 // declaring a List action on Endpoint("tokens"), it returns
 //
 //	model/token.go: the List action of Token registers GET /api/tokens, as the List action of Token in model/api/token.go does; a path is served by one action
-//
-// for two models declaring a Stream action on Route("feeds/chat")
-//
-//	model/feed.go: the Stream action of Feed registers the stream on /api/feeds/chat, as the Stream action of Feed in model/api/feed.go does; a route serves one Stream action
 //
 // and for a model declaring a Get action on Endpoint("records") and a List
 // action on Route("records/:record/items")
@@ -70,20 +66,14 @@ func RouteConflicts(models []*Model) []error {
 		m.Design.Range(func(route string, act *dsl.Action) {
 			path, _ := RouterTargetForAction(route, m.Design, act)
 			method := act.Phase.HTTPMethod()
-			key, registers, serves := method+" "+path, method+" "+path, "a path is served by one action"
-			if method == "" {
-				key, registers, serves = act.Phase.Name()+" "+path, "the stream on "+path, "a route serves one Stream action"
-			}
+			key := method + " " + path
 			current := registration{file: m.ModelFilePath, model: m.ModelName, action: act.Phase.Name(), path: path}
 			if earlier, ok := registered[key]; ok {
-				conflicts = append(conflicts, errors.Newf("%s: the %s action of %s registers %s, as the %s action of %s in %s does; %s",
-					current.file, current.action, current.model, registers, earlier.action, earlier.model, earlier.file, serves))
+				conflicts = append(conflicts, errors.Newf("%s: the %s action of %s registers %s, as the %s action of %s in %s does; a path is served by one action",
+					current.file, current.action, current.model, key, earlier.action, earlier.model, earlier.file))
 				return
 			}
 			registered[key] = current
-			if method == "" {
-				return
-			}
 			for _, earlier := range paths[method] {
 				if name, earlierName, clash := parameterClash(path, earlier.path); clash {
 					conflicts = append(conflicts, errors.Newf("%s: the %s action of %s registers %s %s, naming the parameter :%s where the %s action of %s in %s, registering %s %s, names :%s; the router reads one parameter name at a position",

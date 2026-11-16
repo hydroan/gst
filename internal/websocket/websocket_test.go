@@ -2,9 +2,11 @@ package websocket_test
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path"
 	"strings"
 	"sync"
 	"testing"
@@ -160,6 +162,52 @@ func TestAcceptAdmitsTheOriginsListed(t *testing.T) {
 			}
 			_, err := recv(t, dial(t, url, header))
 			require.ErrorIs(t, err, io.EOF)
+		})
+	}
+}
+
+// TestValidateOriginsReportsThePatternsTheLibraryCannotRead pins the check a
+// server runs before it serves to the library it stands in for. A handshake
+// from an origin no pattern admits is refused either way, as not authorized
+// under a pattern the library read and with a bare Forbidden over one it
+// could not, and ValidateOrigins reports, by name, exactly the patterns of
+// the second kind.
+func TestValidateOriginsReportsThePatternsTheLibraryCannotRead(t *testing.T) {
+	require.NoError(t, websocket.ValidateOrigins(nil))
+
+	for pattern, malformed := range map[string]bool{
+		"app.sample.example":           false,
+		"*.Sample.example":             false,
+		"https://[a-c].sample.example": false,
+		// The library reads a pattern lower-cased, which replaces a byte
+		// that encodes no character by one that does.
+		"[\xff].sample.example": false,
+		"[app.sample.example":   true,
+		"*.sample.example[a-":   true,
+		`app.sample.example\`:   true,
+	} {
+		t.Run(pattern, func(t *testing.T) {
+			refused := make(chan error, 1)
+			url := serve(t, func(w http.ResponseWriter, r *http.Request) {
+				conn, err := websocket.Accept(w, r, []string{pattern}, time.Second)
+				if err == nil {
+					conn.Close(nil)
+				}
+				refused <- err
+			})
+			_, _, err := websocket.Dial(t.Context(), nil, url, http.Header{"Origin": {"https://app.other.example"}}, time.Second)
+			require.Error(t, err)
+			var refusal *types.Error
+			require.ErrorAs(t, await(t, refused), &refusal)
+			require.Equal(t, malformed, refusal.Msg() == http.StatusText(http.StatusForbidden), "the library refused with %q", refusal.Msg())
+
+			err = websocket.ValidateOrigins([]string{"app.other.example", pattern})
+			if !malformed {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, path.ErrBadPattern)
+			require.ErrorContains(t, err, fmt.Sprintf("malformed origin pattern %q", pattern))
 		})
 	}
 }
@@ -553,16 +601,19 @@ func TestSendFailsWhenTheClientStopsReading(t *testing.T) {
 // TestDrainWaitsForTheConnectionsAccepted proves Drain returns once every
 // accepted connection has closed, and not before.
 func TestDrainWaitsForTheConnectionsAccepted(t *testing.T) {
-	release := make(chan struct{})
+	accepted, release := make(chan struct{}, 1), make(chan struct{})
 	url := serve(t, func(w http.ResponseWriter, r *http.Request) {
 		conn, err := websocket.Accept(w, r, nil, time.Second)
 		if err != nil {
 			return
 		}
+		accepted <- struct{}{}
 		<-release
 		conn.Close(nil)
 	})
 	conn := dial(t, url, nil)
+	// The client sees the connection open a moment before Accept returns it.
+	await(t, accepted)
 
 	drained := make(chan int, 1)
 	go func() { drained <- websocket.Drain(t.Context()) }()
@@ -582,17 +633,20 @@ func TestDrainWaitsForTheConnectionsAccepted(t *testing.T) {
 // than its context lasts: the connections still open then are cut, without
 // the closing handshake, and counted.
 func TestDrainCutsTheConnectionsItsWindowLeftOpen(t *testing.T) {
-	release := make(chan struct{})
+	accepted, release := make(chan struct{}, 1), make(chan struct{})
 	url := serve(t, func(w http.ResponseWriter, r *http.Request) {
 		conn, err := websocket.Accept(w, r, nil, time.Second)
 		if err != nil {
 			return
 		}
 		defer conn.Close(nil)
+		accepted <- struct{}{}
 		<-release
 	})
 	t.Cleanup(func() { close(release) })
 	conn := dial(t, url, nil)
+	// The client sees the connection open a moment before Accept returns it.
+	await(t, accepted)
 
 	window, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()

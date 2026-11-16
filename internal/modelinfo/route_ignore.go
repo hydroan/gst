@@ -68,11 +68,6 @@ func applyRouteIgnores(allModels []*Model, rules []ggconfig.RouteRule) RouteIgno
 		// for use inside its callback.
 		dropped := make([]*dsl.Action, 0)
 		m.Design.Range(func(route string, act *dsl.Action) {
-			// The rules name HTTP methods and paths; an action served over
-			// gRPC alone has neither.
-			if dsl.GRPCOnlyAction(act.Phase.Name()) {
-				return
-			}
 			finalRoute, _ := RouterTargetForAction(route, m.Design, act)
 			method := act.Phase.HTTPMethod()
 			for i, rule := range rules {

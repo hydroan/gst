@@ -53,8 +53,8 @@ func (counterStepService) ListCounterStep(ctx context.Context, req *ListCounterS
 	return &ListCounterStepResponse{Items: items, Total: int64(total)}, nil
 }
 
-// WatchCounterStep serves the Stream action of CounterStep declared on
-// counter_steps/watch, served over gRPC alone.
+// WatchCounterStep serves the Stream action of CounterStep on
+// /api/counter_steps/watch.
 func (counterStepService) WatchCounterStep(req *WatchCounterStepRequest, srv CounterStepService_WatchCounterStepServer) error {
 	payload, err := CounterStepWatchReqFromProto(req.GetPayload())
 	if err != nil {

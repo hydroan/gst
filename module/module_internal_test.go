@@ -37,11 +37,12 @@ func TestCRUDRoute(t *testing.T) {
 }
 
 // TestCRUDAndExactRefuseAPhaseWithoutAnHTTPRoute pins that a phase no HTTP
-// route serves, Stream, served over gRPC alone, and the hook phases, is
-// refused where the module declares it, by name, instead of registering a
-// service that no route reaches.
+// route serves, a hook phase, is refused where the module declares it, by
+// name, instead of registering a service that no route reaches, and that
+// every action is taken, the Stream among them.
 func TestCRUDAndExactRefuseAPhaseWithoutAnHTTPRoute(t *testing.T) {
-	require.PanicsWithValue(t, "module.CRUD: phase stream has no HTTP route", func() { CRUD(apiaction.List, apiaction.Stream) })
+	require.PanicsWithValue(t, "module.CRUD: phase delete_after has no HTTP route", func() { CRUD(apiaction.List, apiaction.DeleteAfter) })
 	require.PanicsWithValue(t, "module.Exact: phase create_before has no HTTP route", func() { Exact(apiaction.CreateBefore) })
 	require.NotPanics(t, func() { CRUD(apiaction.Import, apiaction.Export, apiaction.SSE) })
+	require.NotPanics(t, func() { Exact(apiaction.Stream) })
 }

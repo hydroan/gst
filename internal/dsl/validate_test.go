@@ -1586,7 +1586,12 @@ func TestValidateStreamUsage(t *testing.T) {
 		{
 			name:      "stream_without_grpc",
 			source:    validateStreamWithoutGRPCSource,
-			wantError: "Record declares a Stream action but no GRPC(); a stream is served over gRPC alone, declare GRPC() or remove the Stream action",
+			wantError: "Record declares a Stream action but no GRPC(); gg gen scaffolds the test of a Stream action through its rpc, declare GRPC() or remove the Stream action",
+		},
+		{
+			name:      "stream_at_the_design_top_level_without_grpc",
+			source:    validateTopLevelStreamWithoutGRPCSource,
+			wantError: "Record declares a Stream action but no GRPC(); gg gen scaffolds the test of a Stream action through its rpc, declare GRPC() or remove the Stream action",
 		},
 		{
 			name:      "streaming_result_on_create",
@@ -1601,7 +1606,7 @@ func TestValidateStreamUsage(t *testing.T) {
 		{
 			name:      "stream_with_exact",
 			source:    validateStreamWithExactSource,
-			wantError: "Stream action has no HTTP route for dsl.Exact() to shape; remove Exact()",
+			wantError: "Stream action is served on its route as declared, which leaves dsl.Exact() nothing to shape; remove Exact()",
 		},
 	}
 
@@ -1854,6 +1859,29 @@ func (Record) Design() {
 }
 `
 
+const validateTopLevelStreamWithoutGRPCSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+type RecordEvent struct{}
+
+func (Record) Design() {
+	Migrate()
+	Stream(func() {
+		Service("watch")
+		StreamingResult[*RecordEvent]()
+	})
+}
+`
+
 const validateStreamWithoutGRPCSource = `
 package sample
 
@@ -1949,20 +1977,6 @@ func (Record) Design() {
 	})
 }
 `
-
-// TestGRPCOnlyActionNamesTheActionsHTTPCannotServe pins the counterpart of
-// HTTPOnlyAction: Stream is served over gRPC alone, every other action over
-// HTTP.
-func TestGRPCOnlyActionNamesTheActionsHTTPCannotServe(t *testing.T) {
-	if !dsl.GRPCOnlyAction("Stream") {
-		t.Errorf("GRPCOnlyAction(%q) = false, want true", "Stream")
-	}
-	for _, name := range []string{"Create", "List", "SSE", "Import"} {
-		if dsl.GRPCOnlyAction(name) {
-			t.Errorf("GRPCOnlyAction(%q) = true, want false", name)
-		}
-	}
-}
 
 // TestKeywordPredicatesNameTheTypedKeywords pins the predicates every
 // reader of the typed keywords goes by: PayloadKeyword for the request

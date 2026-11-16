@@ -60,8 +60,8 @@ func (User) Design() {
 }
 
 // TestResolveRoutesIgnoresStreamingAndExportRoutes verifies that rules match
-// the SSE and export actions under GET, the method the framework router
-// serves them by.
+// the SSE, Export and Stream actions under GET, the method the framework
+// router serves them by.
 func TestResolveRoutesIgnoresStreamingAndExportRoutes(t *testing.T) {
 	models := findModels(t, map[string]string{filepath.Join("model", "notice", "notice.go"): `package notice
 
@@ -75,6 +75,7 @@ type Notice struct {
 }
 
 func (Notice) Design() {
+	dsl.GRPC()
 	dsl.Endpoint("notices")
 	dsl.SSE(func() {
 		dsl.Service()
@@ -83,6 +84,12 @@ func (Notice) Design() {
 		dsl.Service()
 	})
 	dsl.Create(func() {})
+	dsl.Route("notices/watch", func() {
+		dsl.Stream(func() {
+			dsl.Service("watch")
+			dsl.StreamingResult[*Notice]()
+		})
+	})
 }
 `})
 	design := findDesign(t, models, "Notice")
@@ -90,6 +97,7 @@ func (Notice) Design() {
 		t,
 		"GET /api/notice/notices",
 		"GET /api/notice/notices/export",
+		"GET /api/notices/watch",
 	)
 
 	result := modelinfo.ResolveRoutes(models, rules)

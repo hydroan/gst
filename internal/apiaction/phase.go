@@ -249,11 +249,12 @@ func (p Phase) After() Phase {
 // HTTPMethod returns the HTTP method of the route the phase is registered
 // under: Create, CreateMany and Import map to "POST", Delete and DeleteMany
 // to "DELETE", Update and UpdateMany to "PUT", Patch and PatchMany to
-// "PATCH", and List, Get, Export and SSE to "GET". A hook phase, run inside
-// its action rather than under a route of its own, Stream, served over gRPC
-// alone, and any other phase map to "", which is how the router tells the
-// phases it can serve. It is the one table of methods: the framework router
-// registers routes by it, and gg reads route methods from it.
+// "PATCH", and List, Get, Export, SSE and Stream to "GET", the request that
+// opens the WebSocket connection of a Stream being a GET. A hook phase, run
+// inside its action rather than under a route of its own, and any other
+// phase map to "", which is how the router tells the phases it can serve. It
+// is the one table of methods: the framework router registers routes by it,
+// and gg reads route methods from it.
 func (p Phase) HTTPMethod() string {
 	switch p {
 	case Create, CreateMany, Import:
@@ -264,7 +265,7 @@ func (p Phase) HTTPMethod() string {
 		return http.MethodPut
 	case Patch, PatchMany:
 		return http.MethodPatch
-	case List, Get, Export, SSE:
+	case List, Get, Export, SSE, Stream:
 		return http.MethodGet
 	}
 	return ""

@@ -24,8 +24,7 @@ var (
 	watchFeed  = grpc.ServerStreamCall[*board.Feed, *board.FeedWatchReq, *board.FeedWatchRsp]("/api/board/feeds/watch")
 )
 
-// ChatFeed serves the Stream action of Feed declared on board/feeds/chat,
-// served over gRPC alone.
+// ChatFeed serves the Stream action of Feed on /api/board/feeds/chat.
 func (feedService) ChatFeed(srv FeedService_ChatFeedServer) error {
 	return chatFeed(srv.Context(), nil, func() (*board.FeedChatReq, error) {
 		msg, recvErr := srv.Recv()
@@ -42,8 +41,7 @@ func (feedService) ChatFeed(srv FeedService_ChatFeedServer) error {
 	})
 }
 
-// UploadFeed serves the Stream action of Feed declared on
-// board/feeds/upload, served over gRPC alone.
+// UploadFeed serves the Stream action of Feed on /api/board/feeds/upload.
 func (feedService) UploadFeed(srv FeedService_UploadFeedServer) error {
 	result, err := uploadFeed(srv.Context(), nil, func() (*board.FeedUploadReq, error) {
 		msg, recvErr := srv.Recv()
@@ -62,8 +60,7 @@ func (feedService) UploadFeed(srv FeedService_UploadFeedServer) error {
 	return srv.SendAndClose(&UploadFeedResponse{Result: p})
 }
 
-// WatchFeed serves the Stream action of Feed declared on board/feeds/watch,
-// served over gRPC alone.
+// WatchFeed serves the Stream action of Feed on /api/board/feeds/watch.
 func (feedService) WatchFeed(req *WatchFeedRequest, srv FeedService_WatchFeedServer) error {
 	payload, err := FeedWatchReqFromProto(req.GetPayload())
 	if err != nil {

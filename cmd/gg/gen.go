@@ -177,11 +177,7 @@ func genRunWithOptions(opts genRunOptions) error {
 				target := modelinfo.ServiceTarget(m, a, ggconst.DirModel, ggconst.DirService)
 				servicePkgs[target.ImportPath] = target.PackageName
 			}
-			// A Stream action is served over gRPC alone: it registers no
-			// route.
-			if !dsl.GRPCOnlyAction(a.Phase.Name()) {
-				routerPkgs[m.ImportPath()] = m.ModelPkgName
-			}
+			routerPkgs[m.ImportPath()] = m.ModelPkgName
 		})
 	}
 
@@ -223,11 +219,6 @@ func genRunWithOptions(opts genRunOptions) error {
 			if act.Service {
 				target := modelinfo.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
 				serviceStmts = append(serviceStmts, gggen.StmtServiceRegister(importQualifier(serviceAliases, target.ImportPath, target.PackageName)+"."+act.RoleName(), act.Phase, route))
-			}
-			// A Stream action is served over gRPC alone: its service
-			// registers, no route does.
-			if dsl.GRPCOnlyAction(act.Phase.Name()) {
-				return
 			}
 			base := ggconst.RouterAuth
 			if act.Public {

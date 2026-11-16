@@ -20,8 +20,13 @@ var (
 )
 
 // Set records one registered route for the OpenAPI document. It is the only
-// entry point route registration uses.
+// entry point route registration uses. The route of a Stream action is left
+// out: it answers by taking the connection over for the messages of the
+// stream, an exchange the document holds no entry for.
 func Set[M types.Model, REQ types.Request, RSP types.Response](path string, authRequired bool, phase apiaction.Phase) {
+	if phase == apiaction.Stream {
+		return
+	}
 	pendingMu.Lock()
 	defer pendingMu.Unlock()
 

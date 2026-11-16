@@ -32,11 +32,11 @@ const (
 //
 // FeedService serves the actions of Feed over gRPC.
 type FeedServiceClient interface {
-	// ChatFeed is the Stream action of Feed declared on board/feeds/chat, served over gRPC alone.
+	// ChatFeed is the Stream action of Feed on /api/board/feeds/chat.
 	ChatFeed(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ChatFeedRequest, ChatFeedResponse], error)
-	// UploadFeed is the Stream action of Feed declared on board/feeds/upload, served over gRPC alone.
+	// UploadFeed is the Stream action of Feed on /api/board/feeds/upload.
 	UploadFeed(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[UploadFeedRequest, UploadFeedResponse], error)
-	// WatchFeed is the Stream action of Feed declared on board/feeds/watch, served over gRPC alone.
+	// WatchFeed is the Stream action of Feed on /api/board/feeds/watch.
 	WatchFeed(ctx context.Context, in *WatchFeedRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchFeedResponse], error)
 }
 
@@ -99,11 +99,11 @@ type FeedService_WatchFeedClient = grpc.ServerStreamingClient[WatchFeedResponse]
 //
 // FeedService serves the actions of Feed over gRPC.
 type FeedServiceServer interface {
-	// ChatFeed is the Stream action of Feed declared on board/feeds/chat, served over gRPC alone.
+	// ChatFeed is the Stream action of Feed on /api/board/feeds/chat.
 	ChatFeed(grpc.BidiStreamingServer[ChatFeedRequest, ChatFeedResponse]) error
-	// UploadFeed is the Stream action of Feed declared on board/feeds/upload, served over gRPC alone.
+	// UploadFeed is the Stream action of Feed on /api/board/feeds/upload.
 	UploadFeed(grpc.ClientStreamingServer[UploadFeedRequest, UploadFeedResponse]) error
-	// WatchFeed is the Stream action of Feed declared on board/feeds/watch, served over gRPC alone.
+	// WatchFeed is the Stream action of Feed on /api/board/feeds/watch.
 	WatchFeed(*WatchFeedRequest, grpc.ServerStreamingServer[WatchFeedResponse]) error
 	mustEmbedUnimplementedFeedServiceServer()
 }

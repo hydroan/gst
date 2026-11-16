@@ -8,16 +8,17 @@ import (
 )
 
 // The streaming route registry names the routes whose responses are
-// long-lived streams (Server-Sent Events). Request-scoped response treatment
-// is wrong for those: capturing the response body would tee an unbounded
-// stream, a circuit breaker would count a healthy connection as one
-// never-returning request and starve its half-open probe budget, and a
-// request timeout would tear the stream down mid-flight. The middlewares
-// concerned consult the registry and leave streaming requests alone.
+// long-lived streams: Server-Sent Events and the WebSocket connection of a
+// Stream action. Request-scoped response treatment is wrong for those:
+// capturing the response body would tee an unbounded stream, a circuit
+// breaker would count a healthy connection as one never-returning request
+// and starve its half-open probe budget, and a request timeout would tear
+// the stream down mid-flight. The middlewares concerned consult the registry
+// and leave streaming requests alone.
 //
 // Routes are marked as they register — the router marks every route
-// registered with the SSE phase; tests mark theirs by hand — keyed by method
-// and the route pattern gin reports as FullPath.
+// registered with the SSE or the Stream phase; tests mark theirs by hand —
+// keyed by method and the route pattern gin reports as FullPath.
 var (
 	streamingRouteMu sync.RWMutex
 	streamingRoutes  = make(map[string]struct{})

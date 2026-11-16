@@ -17,9 +17,8 @@ type Method struct {
 	Name string
 	// HTTPMethod and Route are the HTTP method and the route pattern of the
 	// same action, "GET" and "/api/records/:id"; for the rpc of a Stream
-	// action, served over gRPC alone, HTTPMethod is MethodStream and Route
-	// the path the action is declared at, "/api/feeds/watch", which nothing
-	// serves over HTTP.
+	// action HTTPMethod is MethodStream and Route the path its connection
+	// is opened at over HTTP, "/api/feeds/watch".
 	HTTPMethod string
 	Route      string
 	// Public marks the action as one declaring Public(): the interceptors
@@ -29,9 +28,9 @@ type Method struct {
 
 // MethodStream is what the registration describes the rpc of a Stream
 // action with in place of an HTTP method, and so the action word an
-// authorization policy grants a stream by: a stream has no HTTP method, and
-// a policy written for GET or POST must not let one through. The public
-// grpc.MethodStream forwards to it.
+// authorization policy grants a stream by over gRPC: the call of a stream
+// is no HTTP request, and a policy written for GET or POST must not let one
+// through. The public grpc.MethodStream forwards to it.
 const MethodStream = "STREAM"
 
 // methods are the rpcs Register described, keyed by their full name.
