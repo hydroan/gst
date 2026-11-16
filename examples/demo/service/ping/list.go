@@ -17,5 +17,5 @@ type Lister struct {
 }
 
 func (p *Lister) List(*gst.ServiceContext, *gstmodel.Empty) (*model.PingRsp, error) {
-	return &model.PingRsp{Msg: "pong", Records: dao.RecordCount()}, nil
+	return &model.PingRsp{Msg: "pong", Tickets: dao.TicketCount()}, nil
 }

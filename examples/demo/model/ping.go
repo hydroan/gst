@@ -5,8 +5,9 @@ import (
 	"github.com/hydroan/gst/model"
 )
 
-// Ping is the smallest model there is: an action with no table behind it,
-// answered by service code, open to anyone. GET /api/pings.
+// Ping answers whether the service is up. It is the smallest model there
+// is: an action with no table behind it, answered by service code, open to
+// anyone. GET /api/pings.
 type Ping struct {
 	model.Empty
 }
@@ -23,6 +24,6 @@ type (
 	// PingRsp is what a ping answers.
 	PingRsp struct {
 		Msg     string `json:"msg"`     // a word
-		Records int64  `json:"records"` // the record count the count_records job keeps in dao
+		Tickets int64  `json:"tickets"` // the ticket count the count_tickets job keeps in dao
 	}
 )

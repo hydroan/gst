@@ -15,7 +15,7 @@ var AuditCols = struct {
 	CreatedBy gst.Column[string]
 	DeletedAt gst.TimeColumn
 	ID        gst.Column[string]
-	RecordID  gst.Column[string]
+	TicketID  gst.Column[string]
 	UpdatedAt gst.TimeColumn
 	UpdatedBy gst.Column[string]
 }{
@@ -25,7 +25,7 @@ var AuditCols = struct {
 	CreatedBy: gst.NewColumn[*Audit, string]("created_by"),
 	DeletedAt: gst.NewTimeColumn[*Audit]("deleted_at"),
 	ID:        gst.NewColumn[*Audit, string]("id"),
-	RecordID:  gst.NewColumn[*Audit, string]("record_id"),
+	TicketID:  gst.NewColumn[*Audit, string]("ticket_id"),
 	UpdatedAt: gst.NewTimeColumn[*Audit]("updated_at"),
 	UpdatedBy: gst.NewColumn[*Audit, string]("updated_by"),
 }

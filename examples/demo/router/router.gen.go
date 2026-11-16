@@ -7,7 +7,7 @@ import (
 	"demo/model/archive"
 	"demo/model/archive/document"
 	"demo/model/board"
-	"demo/model/record"
+	"demo/model/ticket"
 	"demo/model/tool"
 
 	"github.com/hydroan/gst"
@@ -43,27 +43,27 @@ func Init() error {
 	router.Register[*model.Preference, *model.Preference, *model.Preference](router.Auth(), "/api/preferences/:id", &gst.ControllerConfig[*model.Preference]{ParamName: "id"}, service.Delete)
 	router.Register[*model.Preference, *model.Preference, *model.Preference](router.Auth(), "/api/preferences", &gst.ControllerConfig[*model.Preference]{}, service.List)
 	router.Register[*model.Preference, *model.PreferenceSetReq, *model.PreferenceSetRsp](router.Auth(), "/api/preferences/set", &gst.ControllerConfig[*model.Preference]{}, service.Create)
-	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "/api/records/:record/items", &gst.ControllerConfig[*record.Item]{}, service.Create)
-	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "/api/records/:record/items/:id", &gst.ControllerConfig[*record.Item]{ParamName: "id"}, service.Delete)
-	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "/api/records/:record/items/:id", &gst.ControllerConfig[*record.Item]{ParamName: "id"}, service.Update)
-	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "/api/records/:record/items/:id", &gst.ControllerConfig[*record.Item]{ParamName: "id"}, service.Patch)
-	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "/api/records/:record/items", &gst.ControllerConfig[*record.Item]{}, service.List)
-	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "/api/records/:record/items/:id", &gst.ControllerConfig[*record.Item]{ParamName: "id"}, service.Get)
-	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "/api/items/batch", &gst.ControllerConfig[*record.Item]{}, service.CreateMany)
-	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "/api/items/batch", &gst.ControllerConfig[*record.Item]{}, service.DeleteMany)
-	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "/api/items/batch", &gst.ControllerConfig[*record.Item]{}, service.UpdateMany)
-	router.Register[*record.Item, *record.Item, *record.Item](router.Auth(), "/api/items/batch", &gst.ControllerConfig[*record.Item]{}, service.PatchMany)
-	router.Register[*record.Item, *gstmodel.Empty, *record.ItemSummaryRsp](router.Auth(), "/api/items/summary", &gst.ControllerConfig[*record.Item]{}, service.List)
-	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records", &gst.ControllerConfig[*model.Record]{}, service.Create)
-	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records/:record", &gst.ControllerConfig[*model.Record]{ParamName: "record"}, service.Delete)
-	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records/:record", &gst.ControllerConfig[*model.Record]{ParamName: "record"}, service.Update)
-	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records/:record", &gst.ControllerConfig[*model.Record]{ParamName: "record"}, service.Patch)
-	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records", &gst.ControllerConfig[*model.Record]{}, service.List)
-	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records/:record", &gst.ControllerConfig[*model.Record]{ParamName: "record"}, service.Get)
-	router.Register[*model.Record, *gstmodel.Empty, *model.RecordSearchRsp](router.Auth(), "/api/records/search", &gst.ControllerConfig[*model.Record]{}, service.List)
-	router.Register[*model.Record, *gstmodel.Empty, *model.RecordSummaryRsp](router.Auth(), "/api/records/summary", &gst.ControllerConfig[*model.Record]{}, service.List)
-	router.Register[*model.Record, *gstmodel.Empty, *model.RecordTrashRsp](router.Auth(), "/api/records/trash", &gst.ControllerConfig[*model.Record]{}, service.List)
 	router.Register[*model.Tally, *model.TallySumReq, *model.TallySumRsp](router.Pub(), "/api/tallies", &gst.ControllerConfig[*model.Tally]{}, service.Stream)
-	router.Register[*tool.Entry, *tool.EntryMergeReq, *tool.EntryMergeRsp](router.Auth(), "/api/entries/merge", &gst.ControllerConfig[*tool.Entry]{}, service.Create)
+	router.Register[*ticket.Comment, *ticket.Comment, *ticket.Comment](router.Auth(), "/api/tickets/:ticket/comments", &gst.ControllerConfig[*ticket.Comment]{}, service.Create)
+	router.Register[*ticket.Comment, *ticket.Comment, *ticket.Comment](router.Auth(), "/api/tickets/:ticket/comments/:id", &gst.ControllerConfig[*ticket.Comment]{ParamName: "id"}, service.Delete)
+	router.Register[*ticket.Comment, *ticket.Comment, *ticket.Comment](router.Auth(), "/api/tickets/:ticket/comments/:id", &gst.ControllerConfig[*ticket.Comment]{ParamName: "id"}, service.Update)
+	router.Register[*ticket.Comment, *ticket.Comment, *ticket.Comment](router.Auth(), "/api/tickets/:ticket/comments/:id", &gst.ControllerConfig[*ticket.Comment]{ParamName: "id"}, service.Patch)
+	router.Register[*ticket.Comment, *ticket.Comment, *ticket.Comment](router.Auth(), "/api/tickets/:ticket/comments", &gst.ControllerConfig[*ticket.Comment]{}, service.List)
+	router.Register[*ticket.Comment, *ticket.Comment, *ticket.Comment](router.Auth(), "/api/tickets/:ticket/comments/:id", &gst.ControllerConfig[*ticket.Comment]{ParamName: "id"}, service.Get)
+	router.Register[*ticket.Comment, *ticket.Comment, *ticket.Comment](router.Auth(), "/api/comments/batch", &gst.ControllerConfig[*ticket.Comment]{}, service.CreateMany)
+	router.Register[*ticket.Comment, *ticket.Comment, *ticket.Comment](router.Auth(), "/api/comments/batch", &gst.ControllerConfig[*ticket.Comment]{}, service.DeleteMany)
+	router.Register[*ticket.Comment, *ticket.Comment, *ticket.Comment](router.Auth(), "/api/comments/batch", &gst.ControllerConfig[*ticket.Comment]{}, service.UpdateMany)
+	router.Register[*ticket.Comment, *ticket.Comment, *ticket.Comment](router.Auth(), "/api/comments/batch", &gst.ControllerConfig[*ticket.Comment]{}, service.PatchMany)
+	router.Register[*ticket.Comment, *gstmodel.Empty, *ticket.CommentSummaryRsp](router.Auth(), "/api/comments/summary", &gst.ControllerConfig[*ticket.Comment]{}, service.List)
+	router.Register[*model.Ticket, *model.Ticket, *model.Ticket](router.Auth(), "/api/tickets", &gst.ControllerConfig[*model.Ticket]{}, service.Create)
+	router.Register[*model.Ticket, *model.Ticket, *model.Ticket](router.Auth(), "/api/tickets/:ticket", &gst.ControllerConfig[*model.Ticket]{ParamName: "ticket"}, service.Delete)
+	router.Register[*model.Ticket, *model.Ticket, *model.Ticket](router.Auth(), "/api/tickets/:ticket", &gst.ControllerConfig[*model.Ticket]{ParamName: "ticket"}, service.Update)
+	router.Register[*model.Ticket, *model.Ticket, *model.Ticket](router.Auth(), "/api/tickets/:ticket", &gst.ControllerConfig[*model.Ticket]{ParamName: "ticket"}, service.Patch)
+	router.Register[*model.Ticket, *model.Ticket, *model.Ticket](router.Auth(), "/api/tickets", &gst.ControllerConfig[*model.Ticket]{}, service.List)
+	router.Register[*model.Ticket, *model.Ticket, *model.Ticket](router.Auth(), "/api/tickets/:ticket", &gst.ControllerConfig[*model.Ticket]{ParamName: "ticket"}, service.Get)
+	router.Register[*model.Ticket, *gstmodel.Empty, *model.TicketSearchRsp](router.Auth(), "/api/tickets/search", &gst.ControllerConfig[*model.Ticket]{}, service.List)
+	router.Register[*model.Ticket, *gstmodel.Empty, *model.TicketSummaryRsp](router.Auth(), "/api/tickets/summary", &gst.ControllerConfig[*model.Ticket]{}, service.List)
+	router.Register[*model.Ticket, *gstmodel.Empty, *model.TicketTrashRsp](router.Auth(), "/api/tickets/trash", &gst.ControllerConfig[*model.Ticket]{}, service.List)
+	router.Register[*tool.Label, *tool.LabelMergeReq, *tool.LabelMergeRsp](router.Auth(), "/api/labels/merge", &gst.ControllerConfig[*tool.Label]{}, service.Create)
 	return nil
 }

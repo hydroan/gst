@@ -13,7 +13,7 @@ import (
 
 // TestList covers GET /api/pings, served by Lister in list.go: the route is
 // public, so the request carries no session, and the answer carries the
-// record count the component keeps.
+// ticket count the component keeps.
 func TestList(t *testing.T) {
 	cli, err := client.New(testutil.BaseURL())
 	require.NoError(t, err)
@@ -21,5 +21,5 @@ func TestList(t *testing.T) {
 	rsp, err := cli.Get[model.PingRsp](t.Context(), "/api/pings")
 	require.NoError(t, err)
 	require.Equal(t, "pong", rsp.Msg)
-	require.Equal(t, dao.RecordCount(), rsp.Records)
+	require.Equal(t, dao.TicketCount(), rsp.Tickets)
 }

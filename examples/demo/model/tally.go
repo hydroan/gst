@@ -5,12 +5,13 @@ import (
 	"github.com/hydroan/gst/model"
 )
 
-// Tally is a WebSocket connection. A Stream action is served over HTTP as
-// one: the route is opened with a GET, and every message after that is one
-// text frame holding a JSON document. A model declaring no GRPC(), like this
-// one, serves its streams over HTTP alone. Both sides stream here: the client
-// sends amounts for as long as it likes, and each is answered with the total
-// the connection has carried so far. GET /api/tallies.
+// Tally keeps a running total for a client: the client sends amounts for as
+// long as it likes, and each is answered with the total the connection has
+// carried so far. It is a stream both ways, over WebSocket alone: a Stream
+// action is served over HTTP as a WebSocket connection, the route opened
+// with a GET and every message after that one text frame holding a JSON
+// document, and a model declaring no GRPC(), like this one, serves its
+// streams over HTTP alone. GET /api/tallies.
 type Tally struct {
 	model.Empty
 }

@@ -250,10 +250,10 @@ stress 是压测项目，只回答一个问题：框架在真实项目形态（�
 
 #### 常见接口模式
 
-- `model/record.go`：普通数据库资源 model，启用 CRUD，并通过 service hook 做当前用户过滤、返回字段补充、关联对象填充等逻辑。
-- `model/tool/entry.go`：通用工具类接口，使用 `model.Empty` 定义非数据库动作，并为当前接口单独定义请求和响应。适合条目合并、格式转换、批量转换等没有独立数据表的动作。
+- `model/ticket.go`：普通数据库资源 model，启用 CRUD，并通过 service hook 做当前用户过滤、返回字段补充、关联对象填充等逻辑。
+- `model/tool/label.go`：通用工具类接口，使用 `model.Empty` 定义非数据库动作，并为当前接口单独定义请求和响应。适合标签合并、格式转换、批量转换等没有独立数据表的动作。
 - `model/ping.go`：公开探活类接口，使用 `model.Empty` 定义动作模型，在 DSL 中声明 `Public()`，只声明 `Result`，service 返回探活结果。
-- `model/record/item.go`：嵌套资源 model，默认挂在父资源之下，再用 `Route("items")` 给同一个 model 一条全局路由。
+- `model/ticket/comment.go`：嵌套资源 model，默认挂在父资源之下，再用 `Route("comments")` 给同一个 model 一条全局路由。
 - `model/archive/document/attachment.go`：子资源动作，`model.Empty` 加 `Exact()` 挂在父资源路径下，独立的 `XXXReq`、`XXXRsp`，业务逻辑放在对应 service；`model/board/note.go` 的 `Route("board/notes/:id/publish")` 是同一资源的额外动作。
 
 #### 后端项目使用注意事项

@@ -12,5 +12,5 @@ import "github.com/hydroan/gst/cronjob"
 func init() {
 	cronjob.Register(purgeAudits, purgeAuditsSpec, purgeAuditsName)
 	cronjob.Register(reportAudits, reportAuditsSpec, reportAuditsName)
-	cronjob.RegisterPerInstance(countRecords, countRecordsSpec, countRecordsName)
+	cronjob.RegisterPerInstance(countTickets, countTicketsSpec, countTicketsName)
 }

@@ -7,7 +7,8 @@ import (
 	"github.com/hydroan/gst/model"
 )
 
-// Note is served over gRPC as well as HTTP: GRPC() has gg gen derive
+// Note is a note on the board, drafted and then published to a channel. It
+// is served over gRPC as well as HTTP: GRPC() has gg gen derive
 // pb/board/note.proto from this type and the actions below, compile it and
 // generate the gRPC service beside the HTTP routes, both driven by the same
 // service code. Every field carries a pb tag numbering it in the message;

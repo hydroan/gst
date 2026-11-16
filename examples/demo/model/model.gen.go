@@ -5,7 +5,7 @@ package model
 import (
 	"demo/model/archive"
 	"demo/model/board"
-	"demo/model/record"
+	"demo/model/ticket"
 
 	"github.com/hydroan/gst/model"
 )
@@ -15,6 +15,6 @@ func init() {
 	model.Register[*Audit]()
 	model.Register[*board.Note]()
 	model.Register[*Preference]()
-	model.Register[*record.Item]()
-	model.Register[*Record]()
+	model.Register[*ticket.Comment]()
+	model.Register[*Ticket]()
 }

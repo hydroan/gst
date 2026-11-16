@@ -10,9 +10,9 @@ import (
 	"demo/service/notice"
 	"demo/service/ping"
 	"demo/service/preference"
-	"demo/service/record"
-	"demo/service/record/item"
 	"demo/service/tally"
+	"demo/service/ticket"
+	"demo/service/ticket/comment"
 	"demo/service/tool"
 
 	"github.com/hydroan/gst/service"
@@ -34,17 +34,17 @@ func init() {
 	service.Register[*preference.Deleter](service.Delete, "/api/preferences/:id")
 	service.Register[*preference.Lister](service.List, "/api/preferences")
 	service.Register[*preference.Set](service.Create, "/api/preferences/set")
-	service.Register[*item.Creator](service.Create, "/api/records/:record/items")
-	service.Register[*item.Lister](service.List, "/api/records/:record/items")
-	service.Register[*item.Summary](service.List, "/api/items/summary")
-	service.Register[*record.Creator](service.Create, "/api/records")
-	service.Register[*record.Deleter](service.Delete, "/api/records/:record")
-	service.Register[*record.Updater](service.Update, "/api/records/:record")
-	service.Register[*record.Patcher](service.Patch, "/api/records/:record")
-	service.Register[*record.Lister](service.List, "/api/records")
-	service.Register[*record.Search](service.List, "/api/records/search")
-	service.Register[*record.Summary](service.List, "/api/records/summary")
-	service.Register[*record.Trash](service.List, "/api/records/trash")
 	service.Register[*tally.Sum](service.Stream, "/api/tallies")
-	service.Register[*tool.Merge](service.Create, "/api/entries/merge")
+	service.Register[*comment.Creator](service.Create, "/api/tickets/:ticket/comments")
+	service.Register[*comment.Lister](service.List, "/api/tickets/:ticket/comments")
+	service.Register[*comment.Summary](service.List, "/api/comments/summary")
+	service.Register[*ticket.Creator](service.Create, "/api/tickets")
+	service.Register[*ticket.Deleter](service.Delete, "/api/tickets/:ticket")
+	service.Register[*ticket.Updater](service.Update, "/api/tickets/:ticket")
+	service.Register[*ticket.Patcher](service.Patch, "/api/tickets/:ticket")
+	service.Register[*ticket.Lister](service.List, "/api/tickets")
+	service.Register[*ticket.Search](service.List, "/api/tickets/search")
+	service.Register[*ticket.Summary](service.List, "/api/tickets/summary")
+	service.Register[*ticket.Trash](service.List, "/api/tickets/trash")
+	service.Register[*tool.Merge](service.Create, "/api/labels/merge")
 }

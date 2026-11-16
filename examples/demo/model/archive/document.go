@@ -19,7 +19,9 @@ const (
 	DocumentFormatMarkdown DocumentFormat = "markdown"
 )
 
-// Document is a table-backed resource served on routes it declares itself:
+// Document is a text kept in a box of the archive, with the size and the
+// checksum of its content. It is a table-backed resource served on routes
+// it declares itself:
 // /api/archive/documents and, for the documents of one box,
 // /api/archive/boxes/:box_id/documents, a second List whose service hook
 // keeps the list to the box of the route. Its checks and derived fields are

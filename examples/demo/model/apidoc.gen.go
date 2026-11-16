@@ -6,22 +6,22 @@ import "github.com/hydroan/gst/apidoc"
 
 func init() {
 	apidoc.Register("demo/model", "Audit", apidoc.StructDoc{
-		Comment: "Audit is one row per change to a record, written by the record hooks,\nand one per login lifecycle moment, a login that succeeded or failed and\na logout, written by the login observer in module: a table with no API\nof its own, so its design declares Migrate and no action, and no route\nis generated for it. The job in cronjob purges the old rows.",
+		Comment: "Audit is one row per change to a ticket, written by the ticket hooks,\nand one per login lifecycle moment, a login that succeeded or failed and\na logout, written by the login observer in module: a table with no API\nof its own, so its design declares Migrate and no action, and no route\nis generated for it. The job in cronjob purges the old rows.",
 		Fields: map[string]string{
-			"RecordID": "empty for a login or a logout",
+			"TicketID": "empty for a login or a logout",
 		},
 	})
 	apidoc.Register("demo/model", "Notice", apidoc.StructDoc{
-		Comment: "Notice is a stream of server-sent events: a long-lived GET response a\nbrowser reads through an EventSource, or a Go program through the SSE\nmethod of client.Client. SSE always delegates to service code, which opens\nthe stream and decides what to send; how many events a stream carries here\nis configuration, see configx.Notice. GET /api/notices.",
+		Comment: "Notice is a notice pushed to whoever is listening, as a stream of\nserver-sent events: a long-lived GET response a\nbrowser reads through an EventSource, or a Go program through the SSE\nmethod of client.Client. SSE always delegates to service code, which opens\nthe stream and decides what to send; how many events a stream carries here\nis configuration, see configx.Notice. GET /api/notices.",
 	})
 	apidoc.Register("demo/model", "Ping", apidoc.StructDoc{
-		Comment: "Ping is the smallest model there is: an action with no table behind it,\nanswered by service code, open to anyone. GET /api/pings.",
+		Comment: "Ping answers whether the service is up. It is the smallest model there\nis: an action with no table behind it, answered by service code, open to\nanyone. GET /api/pings.",
 	})
 	apidoc.Register("demo/model", "PingRsp", apidoc.StructDoc{
 		Comment: "PingRsp is what a ping answers.",
 		Fields: map[string]string{
 			"Msg":     "a word",
-			"Records": "the record count the count_records job keeps in dao",
+			"Tickets": "the ticket count the count_tickets job keeps in dao",
 		},
 	})
 	apidoc.Register("demo/model", "Preference", apidoc.StructDoc{
@@ -33,23 +33,8 @@ func init() {
 	apidoc.Register("demo/model", "PreferenceSetReq", apidoc.StructDoc{
 		Comment: "PreferenceSetReq is the key to set and its value.",
 	})
-	apidoc.Register("demo/model", "Record", apidoc.StructDoc{
-		Comment: "Record is a table-backed resource with the standard actions on\n/api/records and /api/records/:record. Get is the framework's own; the\nother actions declare Service() for the hooks in service/record, which\nstamp the owner, write the audit trail, keep a list to the caller's own\nrecords and every write to them: updating, patching or deleting someone\nelse's record answers 404, as if it were not there. Embedding model.Query\nlets a list take the framework's query parameters: field[op]=value\nfilters such as type[in]=text,image, _sort_by, _page and _size, and\ncursor pagination. The binding tags validate a body before any hook runs,\na 400 naming the field. The summary route counts the records by type in\nservice code of its own, the search route is a custom List reading those\nparameters itself, and the trash route lists the records the caller\ndeleted.",
-		Fields: map[string]string{
-			"Items":    "Items are the record's items, loaded when a request asks for them:\nExpands names the association and ?_expand=items has the framework\npreload it on a list or a get. constraint:- keeps the migration from\nadding a foreign key, the preload resolving the relation in Go.",
-			"UserID":   "UserID is the owner, taken from the session when the record is created.",
-			"Username": "Username is the owner's name, filled in for the client; not a column.",
-			"Version":  "Version protects concurrent edits: a client sends back the version it\nread, an update that carries a stale one answers 409 and one that\ncarries none answers 400. A create sets it to 1, and a successful\nupdate or patch bumps it.",
-		},
-	})
-	apidoc.Register("demo/model", "RecordSearchRsp", apidoc.StructDoc{
-		Comment: "RecordSearchRsp is a page of the caller's records and how many match.",
-	})
-	apidoc.Register("demo/model", "RecordSummaryRsp", apidoc.StructDoc{
-		Comment: "RecordSummaryRsp counts the caller's records, in all and by type.",
-	})
 	apidoc.Register("demo/model", "Tally", apidoc.StructDoc{
-		Comment: "Tally is a WebSocket connection. A Stream action is served over HTTP as\none: the route is opened with a GET, and every message after that is one\ntext frame holding a JSON document. A model declaring no GRPC(), like this\none, serves its streams over HTTP alone. Both sides stream here: the client\nsends amounts for as long as it likes, and each is answered with the total\nthe connection has carried so far. GET /api/tallies.",
+		Comment: "Tally keeps a running total for a client: the client sends amounts for as\nlong as it likes, and each is answered with the total the connection has\ncarried so far. It is a stream both ways, over WebSocket alone: a Stream\naction is served over HTTP as a WebSocket connection, the route opened\nwith a GET and every message after that one text frame holding a JSON\ndocument, and a model declaring no GRPC(), like this one, serves its\nstreams over HTTP alone. GET /api/tallies.",
 	})
 	apidoc.Register("demo/model", "TallySumReq", apidoc.StructDoc{
 		Comment: "TallySumReq is an amount to add to the total.",
@@ -57,8 +42,23 @@ func init() {
 	apidoc.Register("demo/model", "TallySumRsp", apidoc.StructDoc{
 		Comment: "TallySumRsp is the total once an amount was added.",
 	})
+	apidoc.Register("demo/model", "Ticket", apidoc.StructDoc{
+		Comment: "Ticket is a request for help a user files and follows up on: it has a\ntitle, is open or closed, and belongs to the user who filed it. It is a\ntable-backed resource with the standard actions on /api/tickets and\n/api/tickets/:ticket. Get is the framework's own; the other actions\ndeclare Service() for the hooks in service/ticket, which stamp the owner,\nwrite the audit trail, keep a list to the caller's own tickets and every\nwrite to them: updating, patching or deleting someone else's ticket\nanswers 404, as if it were not there. Embedding model.Query lets a list\ntake the framework's query parameters: field[op]=value filters such as\nstatus[in]=open,closed, _sort_by, _page and _size, and cursor pagination.\nThe binding tags validate a body before any hook runs, a 400 naming the\nfield. The summary route counts the tickets by status in service code of\nits own, the search route is a custom List reading those parameters\nitself, and the trash route lists the tickets the caller deleted.",
+		Fields: map[string]string{
+			"Comments": "Comments are the ticket's comments, loaded when a request asks for them:\nExpands names the association and ?_expand=comments has the framework\npreload it on a list or a get. constraint:- keeps the migration from\nadding a foreign key, the preload resolving the relation in Go.",
+			"UserID":   "UserID is the owner, taken from the session when the ticket is created.",
+			"Username": "Username is the owner's name, filled in for the client; not a column.",
+			"Version":  "Version protects concurrent edits: a client sends back the version it\nread, an update that carries a stale one answers 409 and one that\ncarries none answers 400. A create sets it to 1, and a successful\nupdate or patch bumps it.",
+		},
+	})
+	apidoc.Register("demo/model", "TicketSearchRsp", apidoc.StructDoc{
+		Comment: "TicketSearchRsp is a page of the caller's tickets and how many match.",
+	})
+	apidoc.Register("demo/model", "TicketSummaryRsp", apidoc.StructDoc{
+		Comment: "TicketSummaryRsp counts the caller's tickets, in all and by status.",
+	})
 	apidoc.Register("demo/model/archive", "Document", apidoc.StructDoc{
-		Comment: "Document is a table-backed resource served on routes it declares itself:\n/api/archive/documents and, for the documents of one box,\n/api/archive/boxes/:box_id/documents, a second List whose service hook\nkeeps the list to the box of the route. Its checks and derived fields are\nmodel hooks, which run inside the framework's transaction whichever\naction writes the row. CSV import and export delegate to service code\nwith fixed signatures, at /api/archive/documents/import and\n/api/archive/documents/export.",
+		Comment: "Document is a text kept in a box of the archive, with the size and the\nchecksum of its content. It is a table-backed resource served on routes\nit declares itself:\n/api/archive/documents and, for the documents of one box,\n/api/archive/boxes/:box_id/documents, a second List whose service hook\nkeeps the list to the box of the route. Its checks and derived fields are\nmodel hooks, which run inside the framework's transaction whichever\naction writes the row. CSV import and export delegate to service code\nwith fixed signatures, at /api/archive/documents/import and\n/api/archive/documents/export.",
 		Fields: map[string]string{
 			"Size": "Size and Checksum derive from Content in the hooks.",
 		},
@@ -76,7 +76,7 @@ func init() {
 		},
 	})
 	apidoc.Register("demo/model/board", "Feed", apidoc.StructDoc{
-		Comment: "Feed is the streaming half of the gRPC example. A Stream action carries a\nstream of messages on one side of the call or on both; declared on a model\nwith GRPC() it is a streaming rpc as well as the WebSocket connection it is\nover HTTP, both served by one piece of service code. WatchFeed answers one\nrequest with a stream of events, UploadFeed takes a stream of events and\nanswers once, ChatFeed streams both ways. A Stream action names its\nservice with Service(\"name\") and always has service code, in\nservice/board/feed.",
+		Comment: "Feed is the stream of events of the board: a client watches the events of\na topic, uploads a run of events, or exchanges events both ways. It is the\nstreaming half of the gRPC example. A Stream action carries a stream of\nmessages on one side of the call or on both; declared on a model with\nGRPC() it is a streaming rpc as well as the WebSocket connection it is\nover HTTP, both served by one piece of service code. WatchFeed answers one\nrequest with a stream of events, UploadFeed takes a stream of events and\nanswers once, ChatFeed streams both ways. A Stream action names its\nservice with Service(\"name\") and always has service code, in\nservice/board/feed.",
 	})
 	apidoc.Register("demo/model/board", "FeedEvent", apidoc.StructDoc{
 		Comment: "FeedEvent is one event of a feed: what every stream carries, each\nunder a name of its own.",
@@ -88,7 +88,7 @@ func init() {
 		Comment: "FeedWatchReq names the topic to watch.",
 	})
 	apidoc.Register("demo/model/board", "Note", apidoc.StructDoc{
-		Comment: "Note is served over gRPC as well as HTTP: GRPC() has gg gen derive\npb/board/note.proto from this type and the actions below, compile it and\ngenerate the gRPC service beside the HTTP routes, both driven by the same\nservice code. Every field carries a pb tag numbering it in the message;\n1 to 10 belong to the framework, which numbers the fields of model.Base\nthere, so a model's own start at 11. The standard actions become the rpcs\nCreateNote, GetNote, ListNote and so on, and the publish action\nPublishNote; over HTTP they are /api/board/notes.",
+		Comment: "Note is a note on the board, drafted and then published to a channel. It\nis served over gRPC as well as HTTP: GRPC() has gg gen derive\npb/board/note.proto from this type and the actions below, compile it and\ngenerate the gRPC service beside the HTTP routes, both driven by the same\nservice code. Every field carries a pb tag numbering it in the message;\n1 to 10 belong to the framework, which numbers the fields of model.Base\nthere, so a model's own start at 11. The standard actions become the rpcs\nCreateNote, GetNote, ListNote and so on, and the publish action\nPublishNote; over HTTP they are /api/board/notes.",
 	})
 	apidoc.Register("demo/model/board", "NotePublishReq", apidoc.StructDoc{
 		Comment: "NotePublishReq names the channel a note is published to.",
@@ -96,29 +96,29 @@ func init() {
 	apidoc.Register("demo/model/board", "NotePublishRsp", apidoc.StructDoc{
 		Comment: "NotePublishRsp reports a publication.",
 	})
-	apidoc.Register("demo/model/record", "Item", apidoc.StructDoc{
-		Comment: "Item is a child resource of Record: model/record/item.go sits in the\ndirectory named after model/record.go, so its routes nest under the\nparent's, /api/records/:record/items. The nesting is the URL's; what the\nparent means to an item is the service's: Create takes the parent from\nthe route and List keeps to it, in service/record/item, while the other\nactions are the framework's own. The batch actions, declared on a route\nof their own, take and answer lists of items at /api/items/batch, and the\nsummary route counts the caller's items by the type of their record, a\nquery joining the parent.",
+	apidoc.Register("demo/model/ticket", "Comment", apidoc.StructDoc{
+		Comment: "Comment is one message of the conversation under a ticket, a question or\nan answer. It is a child resource of Ticket: model/ticket/comment.go sits\nin the directory named after model/ticket.go, so its routes nest under\nthe parent's, /api/tickets/:ticket/comments. The nesting is the URL's;\nwhat the parent means to a comment is the service's: Create takes the\nparent from the route and List keeps to it, in service/ticket/comment,\nwhile the other actions are the framework's own. The batch actions,\ndeclared on a route of their own, take and answer lists of comments at\n/api/comments/batch, and the summary route counts the caller's comments\nby the status of their ticket, a query joining the parent.",
 	})
-	apidoc.Register("demo/model/record", "ItemSummaryRsp", apidoc.StructDoc{
-		Comment: "ItemSummaryRsp counts the caller's items by the type of their record.",
+	apidoc.Register("demo/model/ticket", "CommentSummaryRsp", apidoc.StructDoc{
+		Comment: "CommentSummaryRsp counts the caller's comments by the status of their\nticket.",
 	})
-	apidoc.Register("demo/model/tool", "Entry", apidoc.StructDoc{
-		Comment: "Entry is a utility action with no table: merging key/value pairs, at\nPOST /api/entries/merge. Service(\"merge\") names the service file after the action\nrather than the phase, and Flatten puts it in the package of the model's\ndirectory, service/tool/merge.go in package tool, instead of a package of\nthe model file's own.",
+	apidoc.Register("demo/model/tool", "Label", apidoc.StructDoc{
+		Comment: "Label is the utility that works on labels, the key/value pairs things\nare tagged with: it merges sets of them by key, at POST\n/api/labels/merge. It is an action with no table: Service(\"merge\") names\nthe service file after the action rather than the phase, and Flatten puts\nit in the package of the model's directory, service/tool/merge.go in\npackage tool, instead of a package of the model file's own.",
 	})
-	apidoc.Register("demo/model/tool", "EntryMergeReq", apidoc.StructDoc{
-		Comment: "EntryMergeReq is the pairs to merge.",
+	apidoc.Register("demo/model/tool", "LabelMergeReq", apidoc.StructDoc{
+		Comment: "LabelMergeReq is the labels to merge.",
 	})
-	apidoc.Register("demo/model/tool", "EntryMergeRsp", apidoc.StructDoc{
-		Comment: "EntryMergeRsp is the pairs merged by key.",
+	apidoc.Register("demo/model/tool", "LabelMergeRsp", apidoc.StructDoc{
+		Comment: "LabelMergeRsp is the labels merged by key.",
 	})
-	apidoc.Register("demo/model/tool", "EntryPair", apidoc.StructDoc{
-		Comment: "EntryPair is one key/value pair.",
+	apidoc.Register("demo/model/tool", "LabelPair", apidoc.StructDoc{
+		Comment: "LabelPair is one label, a key and its value.",
 	})
-	apidoc.RegisterEnum("demo/model", "RecordType", apidoc.EnumDoc{
-		Comment: "RecordType tells what a record holds.",
+	apidoc.RegisterEnum("demo/model", "TicketStatus", apidoc.EnumDoc{
+		Comment: "TicketStatus tells whether a ticket is still open.",
 		Values: []apidoc.EnumValue{
-			{Value: "text"},
-			{Value: "image"},
+			{Value: "open"},
+			{Value: "closed"},
 		},
 	})
 	apidoc.RegisterEnum("demo/model/archive", "DocumentFormat", apidoc.EnumDoc{
@@ -128,11 +128,11 @@ func init() {
 			{Value: "markdown"},
 		},
 	})
-	apidoc.RegisterEnum("demo/model/record", "ItemKind", apidoc.EnumDoc{
-		Comment: "ItemKind tells where an item came from.",
+	apidoc.RegisterEnum("demo/model/ticket", "CommentKind", apidoc.EnumDoc{
+		Comment: "CommentKind tells which side of the conversation under a ticket a comment\nis.",
 		Values: []apidoc.EnumValue{
-			{Value: "input"},
-			{Value: "output"},
+			{Value: "question"},
+			{Value: "answer"},
 		},
 	})
 }
