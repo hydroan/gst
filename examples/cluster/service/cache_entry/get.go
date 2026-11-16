@@ -1,4 +1,4 @@
-package cached
+package cacheentry
 
 import (
 	"net/http"
@@ -13,13 +13,13 @@ import (
 )
 
 type Getter struct {
-	service.Base[*model.Cached, *gstmodel.Empty, *model.CachedGetRsp]
+	service.Base[*model.CacheEntry, *gstmodel.Empty, *model.CacheEntryGetRsp]
 }
 
 // Get answers with what this replica's own store holds for the key. It never
 // asks another replica, so an entry that did not propagate here reads as
 // missing rather than being fetched on the spot.
-func (g *Getter) Get(ctx *gst.ServiceContext, _ *gstmodel.Empty) (*model.CachedGetRsp, error) {
+func (g *Getter) Get(ctx *gst.ServiceContext, _ *gstmodel.Empty) (*model.CacheEntryGetRsp, error) {
 	key := ctx.Param("id")
 	if key == "" {
 		return nil, gst.NewError(http.StatusBadRequest, "a key is required")
@@ -28,5 +28,5 @@ func (g *Getter) Get(ctx *gst.ServiceContext, _ *gstmodel.Empty) (*model.CachedG
 	if err != nil {
 		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "the entry was not read", err)
 	}
-	return &model.CachedGetRsp{Replica: helper.Replica(), Key: key, Value: value, Found: found}, nil
+	return &model.CacheEntryGetRsp{Replica: helper.Replica(), Key: key, Value: value, Found: found}, nil
 }

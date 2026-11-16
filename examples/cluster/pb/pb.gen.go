@@ -9,12 +9,12 @@ import (
 )
 
 func init() {
-	grpc.Register[CachedServiceServer](RegisterCachedServiceServer, cachedService{},
-		grpc.Method{Name: CachedService_CreateCached_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/caches"},
-		grpc.Method{Name: CachedService_DeleteCached_FullMethodName, HTTPMethod: http.MethodDelete, Route: "/api/caches/:id"},
-		grpc.Method{Name: CachedService_GetCached_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/caches/:id"},
-		grpc.Method{Name: CachedService_ExchangeCached_FullMethodName, HTTPMethod: grpc.MethodStream, Route: "/api/caches/exchange"},
-		grpc.Method{Name: CachedService_LoadCached_FullMethodName, HTTPMethod: grpc.MethodStream, Route: "/api/caches/load"},
+	grpc.Register[CacheEntryServiceServer](RegisterCacheEntryServiceServer, cacheEntryService{},
+		grpc.Method{Name: CacheEntryService_CreateCacheEntry_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/cache_entries"},
+		grpc.Method{Name: CacheEntryService_DeleteCacheEntry_FullMethodName, HTTPMethod: http.MethodDelete, Route: "/api/cache_entries/:id"},
+		grpc.Method{Name: CacheEntryService_GetCacheEntry_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/cache_entries/:id"},
+		grpc.Method{Name: CacheEntryService_ExchangeCacheEntry_FullMethodName, HTTPMethod: grpc.MethodStream, Route: "/api/cache_entries/exchange"},
+		grpc.Method{Name: CacheEntryService_LoadCacheEntry_FullMethodName, HTTPMethod: grpc.MethodStream, Route: "/api/cache_entries/load"},
 	)
 	grpc.Register[CounterStepServiceServer](RegisterCounterStepServiceServer, counterStepService{},
 		grpc.Method{Name: CounterStepService_ListCounterStep_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/counter_steps"},

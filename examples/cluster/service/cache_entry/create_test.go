@@ -1,4 +1,4 @@
-package cached_test
+package cacheentry_test
 
 import (
 	"os"
@@ -40,36 +40,37 @@ func TestMain(m *testing.M) {
 	})
 }
 
-// TestCreateCachesTheEntry proves the write path of the replicated cache, over
-// HTTP and over the CreateCached rpc alike: the entry lands in the store of
-// the replica that answered, which is what its peers then catch up with. The
-// propagation between replicas is what the deployment scenarios in the README
-// check; one process can only show that the entry was cached at all.
+// TestCreateCachesTheEntry proves the write path of the replicated cache,
+// over HTTP and over the CreateCacheEntry rpc alike: the entry lands in the
+// store of the replica that answered, which is what its peers then catch up
+// with. The propagation between replicas is what the deployment scenarios
+// in the README check; one process can only show that the entry was cached
+// at all.
 func TestCreateCachesTheEntry(t *testing.T) {
 	ctx := gstgrpc.WithBearer(t.Context(), iamtest.GRPCSession(t, testsupport.Root))
 	t.Run("over HTTP", func(t *testing.T) {
 		cli := iamtest.Login(t, testsupport.Root).Client
 
-		rsp, err := cli.Post[model.CachedCreateRsp](ctx, "/api/caches", model.CachedReq{Key: "created-key", Value: "created-value"})
+		rsp, err := cli.Post[model.CacheEntryCreateRsp](ctx, "/api/cache_entries", model.CacheEntryReq{Key: "created-key", Value: "created-value"})
 		require.NoError(t, err)
 		require.Equal(t, "created-key", rsp.Key)
 		require.NotEmpty(t, rsp.Replica, "the reply names the replica that cached the entry")
 
-		read, err := cli.Get[model.CachedGetRsp](ctx, "/api/caches/created-key")
+		read, err := cli.Get[model.CacheEntryGetRsp](ctx, "/api/cache_entries/created-key")
 		require.NoError(t, err)
 		require.True(t, read.Found, "the entry is in the store of the replica that wrote it")
 		require.Equal(t, "created-value", read.Value)
 	})
 
 	t.Run("over gRPC", func(t *testing.T) {
-		caches := pb.NewCachedServiceClient(testutil.DialGRPC(t))
+		entries := pb.NewCacheEntryServiceClient(testutil.DialGRPC(t))
 
-		rsp, err := caches.CreateCached(ctx, &pb.CreateCachedRequest{Payload: &pb.CachedReq{Key: "created-over-grpc", Value: "created-value"}})
+		rsp, err := entries.CreateCacheEntry(ctx, &pb.CreateCacheEntryRequest{Payload: &pb.CacheEntryReq{Key: "created-over-grpc", Value: "created-value"}})
 		require.NoError(t, err)
 		require.Equal(t, "created-over-grpc", rsp.GetResult().GetKey())
 		require.NotEmpty(t, rsp.GetResult().GetReplica())
 
-		read, err := caches.GetCached(ctx, &pb.GetCachedRequest{Id: "created-over-grpc"})
+		read, err := entries.GetCacheEntry(ctx, &pb.GetCacheEntryRequest{Id: "created-over-grpc"})
 		require.NoError(t, err)
 		require.True(t, read.GetResult().GetFound(), "the entry is in the store of the replica that wrote it")
 		require.Equal(t, "created-value", read.GetResult().GetValue())

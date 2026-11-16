@@ -1,4 +1,4 @@
-package cached_test
+package cacheentry_test
 
 import (
 	"io"
@@ -15,31 +15,31 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestExchange covers the Stream action on /api/caches/exchange, served by
-// Exchange in exchange.go: a stream both ways, each key sent answered with
-// what this replica holds, a key it never received answered as missing, and
-// the stream ending once the client closes its side. Over gRPC it is the
-// ExchangeCached rpc, the session traveling as a bearer token; over HTTP it
-// is a WebSocket connection, the session traveling in the cookie the login
-// set.
+// TestExchange covers the Stream action on /api/cache_entries/exchange,
+// served by Exchange in exchange.go: a stream both ways, each key sent
+// answered with what this replica holds, a key it never received answered
+// as missing, and the stream ending once the client closes its side. Over
+// gRPC it is the ExchangeCacheEntry rpc, the session traveling as a bearer
+// token; over HTTP it is a WebSocket connection, the session traveling in
+// the cookie the login set.
 func TestExchange(t *testing.T) {
 	t.Run("over gRPC", func(t *testing.T) {
 		ctx := gstgrpc.WithBearer(t.Context(), iamtest.GRPCSession(t, testsupport.Root))
-		caches := pb.NewCachedServiceClient(testutil.DialGRPC(t))
-		_, err := caches.CreateCached(ctx, &pb.CreateCachedRequest{Payload: &pb.CachedReq{Key: "exchanged-key", Value: "exchanged-value"}})
+		entries := pb.NewCacheEntryServiceClient(testutil.DialGRPC(t))
+		_, err := entries.CreateCacheEntry(ctx, &pb.CreateCacheEntryRequest{Payload: &pb.CacheEntryReq{Key: "exchanged-key", Value: "exchanged-value"}})
 		require.NoError(t, err)
 
-		stream, err := caches.ExchangeCached(ctx)
+		stream, err := entries.ExchangeCacheEntry(ctx)
 		require.NoError(t, err)
 
-		require.NoError(t, stream.Send(&pb.ExchangeCachedRequest{Payload: &pb.CachedKeyReq{Key: "exchanged-key"}}))
+		require.NoError(t, stream.Send(&pb.ExchangeCacheEntryRequest{Payload: &pb.CacheEntryKeyReq{Key: "exchanged-key"}}))
 		rsp, err := stream.Recv()
 		require.NoError(t, err)
 		require.True(t, rsp.GetResult().GetFound())
 		require.Equal(t, "exchanged-value", rsp.GetResult().GetValue())
 		require.NotEmpty(t, rsp.GetResult().GetReplica())
 
-		require.NoError(t, stream.Send(&pb.ExchangeCachedRequest{Payload: &pb.CachedKeyReq{Key: "never-exchanged-key"}}))
+		require.NoError(t, stream.Send(&pb.ExchangeCacheEntryRequest{Payload: &pb.CacheEntryKeyReq{Key: "never-exchanged-key"}}))
 		rsp, err = stream.Recv()
 		require.NoError(t, err)
 		require.False(t, rsp.GetResult().GetFound(), "a key this replica never received reads as missing")
@@ -51,21 +51,21 @@ func TestExchange(t *testing.T) {
 
 	t.Run("over WebSocket", func(t *testing.T) {
 		cli := iamtest.Login(t, testsupport.Root).Client
-		_, err := cli.Post[model.CachedCreateRsp](t.Context(), "/api/caches", model.CachedReq{Key: "exchanged-over-websocket", Value: "exchanged-value"})
+		_, err := cli.Post[model.CacheEntryCreateRsp](t.Context(), "/api/cache_entries", model.CacheEntryReq{Key: "exchanged-over-websocket", Value: "exchanged-value"})
 		require.NoError(t, err)
 
-		stream, err := cli.BidiStream[model.CachedKeyReq, model.CachedExchangeRsp](t.Context(), "/api/caches/exchange")
+		stream, err := cli.BidiStream[model.CacheEntryKeyReq, model.CacheEntryExchangeRsp](t.Context(), "/api/cache_entries/exchange")
 		require.NoError(t, err)
 		defer stream.Close()
 
-		require.NoError(t, stream.Send(&model.CachedKeyReq{Key: "exchanged-over-websocket"}))
+		require.NoError(t, stream.Send(&model.CacheEntryKeyReq{Key: "exchanged-over-websocket"}))
 		rsp, err := stream.Recv()
 		require.NoError(t, err)
 		require.True(t, rsp.Found)
 		require.Equal(t, "exchanged-value", rsp.Value)
 		require.NotEmpty(t, rsp.Replica)
 
-		require.NoError(t, stream.Send(&model.CachedKeyReq{Key: "never-exchanged-key"}))
+		require.NoError(t, stream.Send(&model.CacheEntryKeyReq{Key: "never-exchanged-key"}))
 		rsp, err = stream.Recv()
 		require.NoError(t, err)
 		require.False(t, rsp.Found, "a key this replica never received reads as missing")

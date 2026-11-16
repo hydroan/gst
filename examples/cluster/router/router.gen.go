@@ -12,11 +12,11 @@ import (
 )
 
 func Init() error {
-	router.Register[*model.Cached, *model.CachedReq, *model.CachedCreateRsp](router.Auth(), "/api/caches", &gst.ControllerConfig[*model.Cached]{}, service.Create)
-	router.Register[*model.Cached, *gstmodel.Empty, *model.CachedDeleteRsp](router.Auth(), "/api/caches/:id", &gst.ControllerConfig[*model.Cached]{ParamName: "id"}, service.Delete)
-	router.Register[*model.Cached, *gstmodel.Empty, *model.CachedGetRsp](router.Auth(), "/api/caches/:id", &gst.ControllerConfig[*model.Cached]{ParamName: "id"}, service.Get)
-	router.Register[*model.Cached, *model.CachedKeyReq, *model.CachedExchangeRsp](router.Auth(), "/api/caches/exchange", &gst.ControllerConfig[*model.Cached]{}, service.Stream)
-	router.Register[*model.Cached, *model.CachedLoadReq, *model.CachedLoadRsp](router.Auth(), "/api/caches/load", &gst.ControllerConfig[*model.Cached]{}, service.Stream)
+	router.Register[*model.CacheEntry, *model.CacheEntryReq, *model.CacheEntryCreateRsp](router.Auth(), "/api/cache_entries", &gst.ControllerConfig[*model.CacheEntry]{}, service.Create)
+	router.Register[*model.CacheEntry, *gstmodel.Empty, *model.CacheEntryDeleteRsp](router.Auth(), "/api/cache_entries/:id", &gst.ControllerConfig[*model.CacheEntry]{ParamName: "id"}, service.Delete)
+	router.Register[*model.CacheEntry, *gstmodel.Empty, *model.CacheEntryGetRsp](router.Auth(), "/api/cache_entries/:id", &gst.ControllerConfig[*model.CacheEntry]{ParamName: "id"}, service.Get)
+	router.Register[*model.CacheEntry, *model.CacheEntryKeyReq, *model.CacheEntryExchangeRsp](router.Auth(), "/api/cache_entries/exchange", &gst.ControllerConfig[*model.CacheEntry]{}, service.Stream)
+	router.Register[*model.CacheEntry, *model.CacheEntryLoadReq, *model.CacheEntryLoadRsp](router.Auth(), "/api/cache_entries/load", &gst.ControllerConfig[*model.CacheEntry]{}, service.Stream)
 	router.Register[*model.CounterStep, *model.CounterStep, *model.CounterStep](router.Auth(), "/api/counter_steps", &gst.ControllerConfig[*model.CounterStep]{}, service.List)
 	router.Register[*model.CounterStep, *model.CounterStepWatchReq, *model.CounterStep](router.Auth(), "/api/counter_steps/watch", &gst.ControllerConfig[*model.CounterStep]{}, service.Stream)
 	router.Register[*model.Flag, *model.Flag, *model.Flag](router.Auth(), "/api/flags", &gst.ControllerConfig[*model.Flag]{}, service.Create)

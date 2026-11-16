@@ -11,7 +11,7 @@
 | `cronjob/cronjob.go`、`configx/jobs.go` | `tick`：每 10 秒一轮，全部署只领一次；`local_tick`：每个副本各跑；`slow`：一轮跑 `JOBS_SLOW_SECONDS` 秒（默认 20），比 15 秒的租约长，靠续期保住；把它调到大于 30 秒，`slow` 就会跑过自己的下一个时刻 |
 | `leader/leader.go`、`service/step_down/` | 常驻任务 `counter`：每秒在事务里给计数器追加下一个数字，并记下是哪一任写的；接手的副本从库里最后一个数字接着数。`POST /api/step-downs` 让当前副本的 leader 工作自己返回，用来看「工作提前返回」时框架怎么处理 |
 | `lock/lock.go`、`dao/rebuild.go`、`service/rebuild/` | `POST /api/rebuilds` 在锁 `rebuild` 下跑，同时来第二个请求立刻 409；带 `"in_transaction":true` 则演示事务里拿锁被框架拒掉 |
-| `dao/cache.go`、`component/cache.go`、`service/cached/` | 复制缓存：每个副本在开始服务之前打开缓存，`POST /api/caches` 写一条、`GET /api/caches/:id` 只读本副本自己的那份、`DELETE /api/caches/:id` 删一条；这三个动作也是 gRPC 的 `CreateCached`、`GetCached`、`DeleteCached`，另有两条流：`LoadCached` 客户端流一次灌一批，`ExchangeCached` 双向流逐个键问本副本的值，HTTP 上是 `/api/caches/load`、`/api/caches/exchange` 两条 WebSocket 路由 |
+| `dao/cache.go`、`component/cache.go`、`service/cache_entry/` | 复制缓存：每个副本在开始服务之前打开缓存，`POST /api/cache_entries` 写一条、`GET /api/cache_entries/:id` 只读本副本自己的那份、`DELETE /api/cache_entries/:id` 删一条；这三个动作也是 gRPC 的 `CreateCacheEntry`、`GetCacheEntry`、`DeleteCacheEntry`，另有两条流：`LoadCacheEntry` 客户端流一次灌一批，`ExchangeCacheEntry` 双向流逐个键问本副本的值，HTTP 上是 `/api/cache_entries/load`、`/api/cache_entries/exchange` 两条 WebSocket 路由 |
 | `model/run.go`、`dao/run.go` | 每一轮定时任务、每一次锁下的运行：开始时记一行，跑完时补上结束时间，都写在工作自己的事务里；被打断的没有结束时间。`GET /api/runs`，也是 gRPC 的 `ListRun` |
 | `model/counter_step.go`、`service/counter_step/` | 计数器的每个数字，和写它的那一任、那个副本。`GET /api/counter_steps`；`WatchCounterStep` 服务端流从某个数字之后一直推送，哪个副本都能服务，被切断的客户端换个副本从上次的数字接着读；HTTP 上是 WebSocket 路由 `/api/counter_steps/watch` |
 | `model/flag.go`、`service/flag/` | 功能开关，全部署共用一张表：十个标准动作全开，含批量和 Patch，HTTP 的 `/api/flags` 和 gRPC 的 `CreateFlag`、`PatchFlag`、`CreateManyFlag` 等一一对应，Create 钩子给打开了却没写 percent 的开关补成 100，两种传输都经过它 |
@@ -350,9 +350,9 @@ kubectl -n $NS logs "$P" -c cluster --since=60s | jq -r 'select(.msg == "lease l
 这一组三步连着做，用的是同一套小工具。缓存只在进程内存里，没有共享存储层，所以「读」只读被问的那个副本自己那份——某个副本没收到事件，这里就看得出来。
 
 ```bash
-cput() { kubectl -n $NS exec "$1" -c cluster -- curl -s -A "$UA" -b "session_id=$SESSION" -X POST localhost:8080/api/caches -H 'content-type: application/json' -d "{\"key\":\"$2\",\"value\":\"$3\"}"; echo; }
-cget() { kubectl -n $NS exec "$1" -c cluster -- curl -s -A "$UA" -b "session_id=$SESSION" "localhost:8080/api/caches/$2"; echo; }
-cdel() { kubectl -n $NS exec "$1" -c cluster -- curl -s -A "$UA" -b "session_id=$SESSION" -X DELETE "localhost:8080/api/caches/$2"; echo; }
+cput() { kubectl -n $NS exec "$1" -c cluster -- curl -s -A "$UA" -b "session_id=$SESSION" -X POST localhost:8080/api/cache_entries -H 'content-type: application/json' -d "{\"key\":\"$2\",\"value\":\"$3\"}"; echo; }
+cget() { kubectl -n $NS exec "$1" -c cluster -- curl -s -A "$UA" -b "session_id=$SESSION" "localhost:8080/api/cache_entries/$2"; echo; }
+cdel() { kubectl -n $NS exec "$1" -c cluster -- curl -s -A "$UA" -b "session_id=$SESSION" -X DELETE "localhost:8080/api/cache_entries/$2"; echo; }
 ```
 
 #### 5.1 写进去、删掉，其余副本都跟上
@@ -544,13 +544,13 @@ B 上建的开关，C 上经 gRPC、随便哪个副本经 HTTP 都读得到同�
 #### 7.3 复制缓存走流
 
 ```bash
-printf '%s\n' '{"payload":{"key":"greeting","value":"hello"}}' '{"payload":{"key":"farewell","value":"bye"}}' | rpc "$A" -d @ localhost:8081 cluster.CachedService/LoadCached
+printf '%s\n' '{"payload":{"key":"greeting","value":"hello"}}' '{"payload":{"key":"farewell","value":"bye"}}' | rpc "$A" -d @ localhost:8081 cluster.CacheEntryService/LoadCacheEntry
 sleep 2
-rpc "$B" -d '{"id":"greeting"}' localhost:8081 cluster.CachedService/GetCached
-printf '%s\n' '{"payload":{"key":"farewell"}}' '{"payload":{"key":"unknown"}}' | rpc "$C" -d @ localhost:8081 cluster.CachedService/ExchangeCached
-rpc "$B" -d '{"id":"greeting"}' localhost:8081 cluster.CachedService/DeleteCached
+rpc "$B" -d '{"id":"greeting"}' localhost:8081 cluster.CacheEntryService/GetCacheEntry
+printf '%s\n' '{"payload":{"key":"farewell"}}' '{"payload":{"key":"unknown"}}' | rpc "$C" -d @ localhost:8081 cluster.CacheEntryService/ExchangeCacheEntry
+rpc "$B" -d '{"id":"greeting"}' localhost:8081 cluster.CacheEntryService/DeleteCacheEntry
 sleep 2
-rpc "$A" -d '{"id":"greeting"}' localhost:8081 cluster.CachedService/GetCached
+rpc "$A" -d '{"id":"greeting"}' localhost:8081 cluster.CacheEntryService/GetCacheEntry
 ```
 
 客户端流一次灌两条，A 答 `count: 2`；两秒后 B 的本地存储里已经有了 `greeting`，C 的双向流每问一个键答一条，`farewell` 有、`unknown` 没有（没有 `found`）。B 上删掉，A 上也没了：走 gRPC 写进去的条目和走 HTTP 的一样在副本之间传播。
@@ -702,10 +702,10 @@ kubectl -n $NS exec "$B" -c cluster -- curl -s -A "$UA" -w ' HTTP=%{http_code}\n
 #### 9.2 三种流：gRPC 之外也走 WebSocket，业务代码还是那一份
 
 ```bash
-ws "$A" ws://localhost:8080/api/caches/load 5 '{"key":"greeting","value":"hello"}' '{"key":"farewell","value":"bye"}' null
+ws "$A" ws://localhost:8080/api/cache_entries/load 5 '{"key":"greeting","value":"hello"}' '{"key":"farewell","value":"bye"}' null
 sleep 2
-ws "$C" ws://localhost:8080/api/caches/exchange 5 '{"key":"farewell"}' '{"key":"unknown"}' null
-rpc "$B" -d '{"id":"greeting"}' localhost:8081 cluster.CachedService/GetCached
+ws "$C" ws://localhost:8080/api/cache_entries/exchange 5 '{"key":"farewell"}' '{"key":"unknown"}' null
+rpc "$B" -d '{"id":"greeting"}' localhost:8081 cluster.CacheEntryService/GetCacheEntry
 LAST=$(echo "SELECT MAX(seq) FROM counter_steps" | sqlv)
 ws "$B" ws://localhost:8080/api/counter_steps/watch 3 "{\"after\":$LAST}" | grep -o '"seq":[0-9]*'
 ```
@@ -733,18 +733,18 @@ kubectl -n $NS rollout status deployment/cluster --timeout=240s
 
 ```bash
 login "$A"; ROOT_SESSION=$SESSION; N=$(date +%s)
-# post 路径 JSON：以当前会话在 A 上 POST。grant 角色名 动作词：建一个只含「动作词 /api/caches/load」的菜单和角色，绑给 erin。
+# post 路径 JSON：以当前会话在 A 上 POST。grant 角色名 动作词：建一个只含「动作词 /api/cache_entries/load」的菜单和角色，绑给 erin。
 post() { kubectl -n $NS exec "$A" -c cluster -- curl -s -A "$UA" -b "session_id=$SESSION" -X POST "localhost:8080$1" -H 'content-type: application/json' -d "$2"; }
 grant() {
   local menu role
-  menu=$(post /api/authz/menus "{\"parent_id\":\"root\",\"label\":\"$1\",\"path\":\"/$1\",\"routes\":[{\"path\":\"/api/caches/load\",\"methods\":[\"$2\"]}]}" | jq -r '.data.id')
+  menu=$(post /api/authz/menus "{\"parent_id\":\"root\",\"label\":\"$1\",\"path\":\"/$1\",\"routes\":[{\"path\":\"/api/cache_entries/load\",\"methods\":[\"$2\"]}]}" | jq -r '.data.id')
   role=$(post /api/authz/roles "{\"name\":\"$1\",\"menu_ids\":[\"$menu\"]}" | jq -r '.data.id')
   post /api/authz/role-bindings "{\"subject_id\":\"$ERIN\",\"role_id\":\"$role\"}" > /dev/null
 }
 # load 键：以当前会话在 A 上经两个入口各开一次「批量写缓存」这条流。
 load() {
-  ws "$A" ws://localhost:8080/api/caches/load 5 "{\"key\":\"$1-ws\",\"value\":\"v\"}" null
-  echo "{\"payload\":{\"key\":\"$1-grpc\",\"value\":\"v\"}}" | rpc "$A" -d @ localhost:8081 cluster.CachedService/LoadCached 2>&1 | grep -E 'count|Code|Message'
+  ws "$A" ws://localhost:8080/api/cache_entries/load 5 "{\"key\":\"$1-ws\",\"value\":\"v\"}" null
+  echo "{\"payload\":{\"key\":\"$1-grpc\",\"value\":\"v\"}}" | rpc "$A" -d @ localhost:8081 cluster.CacheEntryService/LoadCacheEntry 2>&1 | grep -E 'count|Code|Message'
 }
 ERIN=$(post /api/iam/admin/users "{\"username\":\"erin$N\",\"password\":\"12345678\",\"must_change_password\":false}" | jq -r '.data.user.id')
 grant "cache_reader_$N" GET
@@ -752,10 +752,10 @@ login "$A" "erin$N" 12345678; load reader
 SESSION=$ROOT_SESSION; grant "cache_loader_$N" STREAM
 login "$A" "erin$N" 12345678; load loader
 SESSION=$ROOT_SESSION
-kubectl -n $NS exec "$A" -c cluster -- curl -s -A "$UA" -b "session_id=$SESSION" localhost:8080/api/authz/routes | jq -c '.data.items[] | select(.path == "/api/caches/load")'
+kubectl -n $NS exec "$A" -c cluster -- curl -s -A "$UA" -b "session_id=$SESSION" localhost:8080/api/authz/routes | jq -c '.data.items[] | select(.path == "/api/cache_entries/load")'
 ```
 
-「批量写缓存」是一条流，HTTP 上握手用的是 GET。第一次 erin 的角色只有「GET /api/caches/load」：两个入口都开不了，WebSocket 握手答 403，gRPC 答 `PermissionDenied`。授权不按握手的 GET 判：一条流在两个入口上都按 `STREAM` 这个词判，只授了 GET 的角色开不了它。第二次补上「STREAM /api/caches/load」：WebSocket 回 `{"replica":"<A>:8080","count":1}` 后正常关闭，gRPC 回 `"count": "1"`，一条策略两个入口都放行。最后一条是授权模块的路由清单，这条流列在 `STREAM` 下，照着清单授权就对。这一步的调用都打在 A 上：策略是在 A 上写的，A 当场生效，其余副本最晚一分钟后跟上，见第八组。
+「批量写缓存」是一条流，HTTP 上握手用的是 GET。第一次 erin 的角色只有「GET /api/cache_entries/load」：两个入口都开不了，WebSocket 握手答 403，gRPC 答 `PermissionDenied`。授权不按握手的 GET 判：一条流在两个入口上都按 `STREAM` 这个词判，只授了 GET 的角色开不了它。第二次补上「STREAM /api/cache_entries/load」：WebSocket 回 `{"replica":"<A>:8080","count":1}` 后正常关闭，gRPC 回 `"count": "1"`，一条策略两个入口都放行。最后一条是授权模块的路由清单，这条流列在 `STREAM` 下，照着清单授权就对。这一步的调用都打在 A 上：策略是在 A 上写的，A 当场生效，其余副本最晚一分钟后跟上，见第八组。
 
 ## 正式环境
 

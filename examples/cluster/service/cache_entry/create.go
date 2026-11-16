@@ -1,4 +1,4 @@
-package cached
+package cacheentry
 
 import (
 	"net/http"
@@ -12,18 +12,18 @@ import (
 )
 
 type Creator struct {
-	service.Base[*model.Cached, *model.CachedReq, *model.CachedCreateRsp]
+	service.Base[*model.CacheEntry, *model.CacheEntryReq, *model.CacheEntryCreateRsp]
 }
 
 // Create writes the entry into the replica's own store and publishes it to
 // the others. The reply names the replica that wrote it, which is the one
 // every other replica must catch up with.
-func (c *Creator) Create(ctx *gst.ServiceContext, req *model.CachedReq) (*model.CachedCreateRsp, error) {
+func (c *Creator) Create(ctx *gst.ServiceContext, req *model.CacheEntryReq) (*model.CacheEntryCreateRsp, error) {
 	if req.Key == "" {
 		return nil, gst.NewError(http.StatusBadRequest, "a key is required")
 	}
 	if err := dao.CacheSet(ctx, req.Key, req.Value); err != nil {
 		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "the entry was not cached", err)
 	}
-	return &model.CachedCreateRsp{Replica: helper.Replica(), Key: req.Key, Value: req.Value, Found: true}, nil
+	return &model.CacheEntryCreateRsp{Replica: helper.Replica(), Key: req.Key, Value: req.Value, Found: true}, nil
 }

@@ -5,33 +5,33 @@ package model
 import "github.com/hydroan/gst/apidoc"
 
 func init() {
-	apidoc.Register("cluster/model", "Cached", apidoc.StructDoc{
-		Comment: "Cached is an entry of the replicated cache every replica keeps: written on\nthe replica that answers the request, read back from the local store of\nwhichever replica answers the next one. It is what makes the propagation\nbetween replicas observable from outside — the store itself is process\nmemory, with no shared tier behind it.",
+	apidoc.Register("cluster/model", "CacheEntry", apidoc.StructDoc{
+		Comment: "CacheEntry is an entry of the replicated cache every replica keeps:\nwritten on the replica that answers the request, read back from the local\nstore of whichever replica answers the next one. It is what makes the\npropagation between replicas observable from outside — the store itself is\nprocess memory, with no shared tier behind it.",
 	})
-	apidoc.Register("cluster/model", "CachedCreateRsp", apidoc.StructDoc{
-		Comment: "CachedCreateRsp reports which replica wrote the entry and what it wrote.",
+	apidoc.Register("cluster/model", "CacheEntryCreateRsp", apidoc.StructDoc{
+		Comment: "CacheEntryCreateRsp reports which replica wrote the entry and what it\nwrote.",
 	})
-	apidoc.Register("cluster/model", "CachedDeleteRsp", apidoc.StructDoc{
-		Comment: "CachedDeleteRsp reports which replica removed the entry.",
+	apidoc.Register("cluster/model", "CacheEntryDeleteRsp", apidoc.StructDoc{
+		Comment: "CacheEntryDeleteRsp reports which replica removed the entry.",
 	})
-	apidoc.Register("cluster/model", "CachedExchangeRsp", apidoc.StructDoc{
-		Comment: "CachedExchangeRsp answers one key of an exchange stream: which replica\nanswered and what its own store holds for the key.",
+	apidoc.Register("cluster/model", "CacheEntryExchangeRsp", apidoc.StructDoc{
+		Comment: "CacheEntryExchangeRsp answers one key of an exchange stream: which replica\nanswered and what its own store holds for the key.",
 	})
-	apidoc.Register("cluster/model", "CachedGetRsp", apidoc.StructDoc{
-		Comment: "CachedGetRsp reports which replica answered and what its own store\nholds for the key, so a client reading every replica in turn sees the\npropagation.",
+	apidoc.Register("cluster/model", "CacheEntryGetRsp", apidoc.StructDoc{
+		Comment: "CacheEntryGetRsp reports which replica answered and what its own store\nholds for the key, so a client reading every replica in turn sees the\npropagation.",
 	})
-	apidoc.Register("cluster/model", "CachedKeyReq", apidoc.StructDoc{
-		Comment: "CachedKeyReq names an entry to look up.",
+	apidoc.Register("cluster/model", "CacheEntryKeyReq", apidoc.StructDoc{
+		Comment: "CacheEntryKeyReq names an entry to look up.",
 	})
-	apidoc.Register("cluster/model", "CachedLoadRsp", apidoc.StructDoc{
-		Comment: "CachedLoadRsp reports what a load stream did.",
+	apidoc.Register("cluster/model", "CacheEntryLoadRsp", apidoc.StructDoc{
+		Comment: "CacheEntryLoadRsp reports what a load stream did.",
 		Fields: map[string]string{
 			"Count":   "how many entries the stream wrote",
 			"Replica": "the replica that took the entries in",
 		},
 	})
-	apidoc.Register("cluster/model", "CachedReq", apidoc.StructDoc{
-		Comment: "CachedReq is the entry to write.",
+	apidoc.Register("cluster/model", "CacheEntryReq", apidoc.StructDoc{
+		Comment: "CacheEntryReq is the entry to write.",
 		Fields: map[string]string{
 			"Key":   "what the entry is filed under",
 			"Value": "what every other replica must end up holding for it",
