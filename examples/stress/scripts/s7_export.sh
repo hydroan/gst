@@ -5,7 +5,7 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 ROWS=${ROWS:-100000}
 : > "$OUT/export.tsv"
-bash "$SCRIPTS/seed.sh" records "$ROWS" | tee -a "$LOG"
+bash "$SCRIPTS/seed.sh" products "$ROWS" | tee -a "$LOG"
 measure_baseline
 start_server s7
 ROOT=$(login root)
@@ -22,7 +22,7 @@ export_once() { # name url
   printf '%s\t%s\t%s\t%s\t%s\n' "$name" "$t" "$((lines-1))" "$(awk -v a="$c0" -v b="$c1" 'BEGIN{printf "%.2f", b-a}')" "$peak" >> "$OUT/export.tsv"
 }
 log "rss at start: $(rss_mb "$SERVER_PID")MB"
-for i in 1 2 3; do export_once "s7-cat-$i" "$BASE/api/records/export?_format=csv&category=cat-07&_limit=1000000"; sleep 5; done
-for i in 1 2 3; do export_once "s7-all-$i" "$BASE/api/records/export?_format=csv&_limit=1000000"; sleep 10; done
+for i in 1 2 3; do export_once "s7-cat-$i" "$BASE/api/products/export?_format=csv&category=cat-07&_limit=1000000"; sleep 5; done
+for i in 1 2 3; do export_once "s7-all-$i" "$BASE/api/products/export?_format=csv&_limit=1000000"; sleep 10; done
 stop_server
 log "s7 done"

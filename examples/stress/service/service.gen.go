@@ -4,13 +4,13 @@ package service
 
 import (
 	"stress/service/ping"
-	"stress/service/record"
+	"stress/service/product"
 
 	"github.com/hydroan/gst/service"
 )
 
 func init() {
 	service.Register[*ping.Ping](service.List, "/api/ping")
-	service.Register[*record.Exporter](service.Export, "/api/records/export")
-	service.Register[*record.Upsert](service.Create, "/api/records/upsert")
+	service.Register[*product.Exporter](service.Export, "/api/products/export")
+	service.Register[*product.Upsert](service.Create, "/api/products/upsert")
 }

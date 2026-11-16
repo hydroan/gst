@@ -6,7 +6,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 source "$SCRIPTS/k6run.sh"
 ROWS=${ROWS:-100000}
 : > "$OUT/results-k6.tsv"
-bash "$SCRIPTS/seed.sh" records "$ROWS" | tee -a "$LOG"
+bash "$SCRIPTS/seed.sh" products "$ROWS" | tee -a "$LOG"
 measure_baseline
 start_server s5
 # Learn the user agent k6's gRPC client sends: one call with a session bound
@@ -23,4 +23,4 @@ for mode in get list create; do
   k6_case "s5-http-$mode" 15 "$K6/writes.js" http_req_duration "${H[@]}" -e MODE=$mode
 done
 stop_server
-log "s5 done: records=$(rows records)"
+log "s5 done: products=$(rows products)"

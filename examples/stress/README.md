@@ -6,7 +6,7 @@
 
 | 位置 | 内容 |
 |---|---|
-| `model/record.go`、`service/record/` | `Record`：声明了 `GRPC()`，唯一的 `code`，`category + created_at`、`created_at` 两条索引，默认 CRUD 加 `DeleteMany`，`Export`（CSV），`records/upsert` 路由按主键合并 |
+| `model/product.go`、`service/product/` | `Product`：声明了 `GRPC()`，唯一的 `code`，`category + created_at`、`created_at` 两条索引，默认 CRUD 加 `DeleteMany`，`Export`（CSV），`products/upsert` 路由按主键合并 |
 | `model/order.go`、`model/order/line.go` | `Order` 带明细 `Line`，`_expand=lines` 预加载；`orders/public` 是同一张表的公开路由，作带登录态与不带的对照 |
 | `model/ticket.go` | `Ticket` 嵌 `tenant.Scope`，按租户隔离 |
 | `model/ping.go`、`service/ping/` | 公开探活接口 |
@@ -16,7 +16,7 @@
 | `cmd/otlpsink/` | OTLP/HTTP 接收端：收下 `/v1/traces` 的每个请求、数 span，让追踪导出场景量的是导出路径本身 |
 | `out/` | 构建产物与每次运行的结果，不进版本库 |
 
-账号：`root` 由 iam 模块按环境变量 `IAM_ROOT_PASSWORD` 在第一次启动时播种；`reader`（不分租户，只读 records 与 orders）和 `member`（租户 t-03 的成员，持 `ticket_reader` 角色，只读 tickets）由 `module/seed.go` 播种，口令是 `[seed] password`（环境变量 `SEED_PASSWORD`）。脚本把两个口令都设成 `stress-root`。
+账号：`root` 由 iam 模块按环境变量 `IAM_ROOT_PASSWORD` 在第一次启动时播种；`reader`（不分租户，只读 products 与 orders）和 `member`（租户 t-03 的成员，持 `ticket_reader` 角色，只读 tickets）由 `module/seed.go` 播种，口令是 `[seed] password`（环境变量 `SEED_PASSWORD`）。脚本把两个口令都设成 `stress-root`。
 
 ## 准备
 
@@ -35,7 +35,7 @@ bash -c 'source examples/stress/scripts/lib.sh && infra_up'
 
 ## 跑一个场景
 
-每个脚本开头的注释说明它压什么、数据怎么灌。`OUT` 指定结果目录，`ROWS` 指定 records 行数：
+每个脚本开头的注释说明它压什么、数据怎么灌。`OUT` 指定结果目录，`ROWS` 指定 products 行数：
 
 ```bash
 OUT=examples/stress/out/s2 ROWS=100000 bash examples/stress/scripts/s2_data.sh
@@ -49,7 +49,7 @@ OUT=examples/stress/out/s2 ROWS=100000 bash examples/stress/scripts/s2_data.sh
 bash examples/stress/scripts/chain.sh
 ```
 
-从重新建的容器开始，按数据依赖的顺序跑完十个场景，每个场景写进 `out/<场景>`；标明表长的场景开始前，records 清空并重灌到那个行数，没灌到就停下，不带着错的数据量往下跑；约五小时。
+从重新建的容器开始，按数据依赖的顺序跑完十个场景，每个场景写进 `out/<场景>`；标明表长的场景开始前，products 清空并重灌到那个行数，没灌到就停下，不带着错的数据量往下跑；约五小时。
 
 ## 结果怎么进 STRESS.md
 

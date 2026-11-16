@@ -1,4 +1,4 @@
-package record_test
+package product_test
 
 import (
 	"os"

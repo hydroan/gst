@@ -9,14 +9,14 @@ import (
 )
 
 func init() {
-	grpc.Register[RecordServiceServer](RegisterRecordServiceServer, recordService{},
-		grpc.Method{Name: RecordService_CreateRecord_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/records"},
-		grpc.Method{Name: RecordService_DeleteRecord_FullMethodName, HTTPMethod: http.MethodDelete, Route: "/api/records/:id"},
-		grpc.Method{Name: RecordService_UpdateRecord_FullMethodName, HTTPMethod: http.MethodPut, Route: "/api/records/:id"},
-		grpc.Method{Name: RecordService_PatchRecord_FullMethodName, HTTPMethod: http.MethodPatch, Route: "/api/records/:id"},
-		grpc.Method{Name: RecordService_ListRecord_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/records"},
-		grpc.Method{Name: RecordService_GetRecord_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/records/:id"},
-		grpc.Method{Name: RecordService_DeleteManyRecord_FullMethodName, HTTPMethod: http.MethodDelete, Route: "/api/records/batch"},
-		grpc.Method{Name: RecordService_UpsertRecord_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/records/upsert"},
+	grpc.Register[ProductServiceServer](RegisterProductServiceServer, productService{},
+		grpc.Method{Name: ProductService_CreateProduct_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/products"},
+		grpc.Method{Name: ProductService_DeleteProduct_FullMethodName, HTTPMethod: http.MethodDelete, Route: "/api/products/:id"},
+		grpc.Method{Name: ProductService_UpdateProduct_FullMethodName, HTTPMethod: http.MethodPut, Route: "/api/products/:id"},
+		grpc.Method{Name: ProductService_PatchProduct_FullMethodName, HTTPMethod: http.MethodPatch, Route: "/api/products/:id"},
+		grpc.Method{Name: ProductService_ListProduct_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/products"},
+		grpc.Method{Name: ProductService_GetProduct_FullMethodName, HTTPMethod: http.MethodGet, Route: "/api/products/:id"},
+		grpc.Method{Name: ProductService_DeleteManyProduct_FullMethodName, HTTPMethod: http.MethodDelete, Route: "/api/products/batch"},
+		grpc.Method{Name: ProductService_UpsertProduct_FullMethodName, HTTPMethod: http.MethodPost, Route: "/api/products/upsert"},
 	)
 }

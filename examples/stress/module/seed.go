@@ -16,7 +16,7 @@ import (
 
 // The accounts the scenarios log in as beside root, which the iam module seeds
 // from IAM_ROOT_PASSWORD; both get the password [seed] password names. reader
-// holds the reader role alone, which selects the read routes of the records
+// holds the reader role alone, which selects the read routes of the products
 // and the orders: the authorization path of an ordinary session. member
 // belongs to the tenant memberTenant, holding the ticket reader role there:
 // the path of a session acting in a tenant, whose rows the tenant scope
@@ -59,8 +59,8 @@ func seed(ctx context.Context, _ map[string][]string) error {
 		// the tenant it grants them in.
 		for _, m := range []*authz.Menu{
 			{ID: menuRead, ParentID: "root", Label: "Read", Path: "/read", Routes: []authz.Route{
-				{Path: "/api/records", Methods: []string{http.MethodGet}},
-				{Path: "/api/records/{id}", Methods: []string{http.MethodGet}},
+				{Path: "/api/products", Methods: []string{http.MethodGet}},
+				{Path: "/api/products/{id}", Methods: []string{http.MethodGet}},
 				{Path: "/api/orders", Methods: []string{http.MethodGet}},
 				{Path: "/api/orders/{id}", Methods: []string{http.MethodGet}},
 			}},

@@ -11,6 +11,6 @@ import (
 func init() {
 	model.Register[*order.Line]()
 	model.Register[*Order]()
-	model.Register[*Record]()
+	model.Register[*Product]()
 	model.Register[*Ticket]()
 }

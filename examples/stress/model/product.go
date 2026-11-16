@@ -5,16 +5,16 @@ import (
 	"github.com/hydroan/gst/model"
 )
 
-// Record is the table the data scenarios read and write: a row of a
+// Product is the table the data scenarios read and write: a row of a
 // realistic size (a code, a title, a category, two numbers and a body of a
-// few hundred bytes) behind the standard actions on /api/records and, the
-// model declaring GRPC(), the RecordService rpcs. Embedding model.Query takes
+// few hundred bytes) behind the standard actions on /api/products and, the
+// model declaring GRPC(), the ProductService rpcs. Embedding model.Query takes
 // the list parameters: field filters, _sort_by, _page and _size, and the
 // cursor. The code is unique, so a create carrying a taken code is refused
 // by the index; the category carries the index a list filters by, the status
 // carries none, so a filter on it scans the table, and the score carries none,
 // so a sort by it sorts the table.
-type Record struct {
+type Product struct {
 	Code     string `json:"code" query:"code" gorm:"size:32;not null" binding:"required,max=32" pb:"11"`
 	Title    string `json:"title" query:"title" gorm:"size:200" binding:"max=200" pb:"12"`
 	Category string `json:"category" query:"category" gorm:"size:32;not null" binding:"required,max=32" pb:"13"`
@@ -26,13 +26,13 @@ type Record struct {
 	model.Base
 }
 
-func (Record) TableName() string { return "records" }
+func (Product) TableName() string { return "products" }
 
 // Indexes declares the code unique, the index a list filtering by category
 // and sorting by creation time reads, and the one the default order of an
 // unfiltered list reads; the status and the score have none, so a filter on
 // the status scans the table and a sort by the score sorts it.
-func (Record) Indexes() []model.Index {
+func (Product) Indexes() []model.Index {
 	return []model.Index{
 		{Fields: []string{"Code"}, Unique: true},
 		{Fields: []string{"Category", "CreatedAt"}},
@@ -40,10 +40,10 @@ func (Record) Indexes() []model.Index {
 	}
 }
 
-func (Record) Design() {
+func (Product) Design() {
 	GRPC()
 	Migrate()
-	Endpoint("records")
+	Endpoint("products")
 
 	Create(func() {})
 	Delete(func() {})
@@ -56,18 +56,18 @@ func (Record) Design() {
 		Service()
 	})
 
-	Route("records/upsert", func() {
+	Route("products/upsert", func() {
 		Create(func() {
 			Service("upsert")
-			Payload[*RecordUpsertReq]()
-			Result[*Record]()
+			Payload[*ProductUpsertReq]()
+			Result[*Product]()
 		})
 	})
 }
 
-// RecordUpsertReq is the body of POST /api/records/upsert: the record to
+// ProductUpsertReq is the body of POST /api/products/upsert: the product to
 // insert, or to overwrite where its code is taken.
-type RecordUpsertReq struct {
+type ProductUpsertReq struct {
 	Code     string `json:"code" binding:"required,max=32" pb:"1"`
 	Title    string `json:"title" binding:"max=200" pb:"2"`
 	Category string `json:"category" binding:"required,max=32" pb:"3"`

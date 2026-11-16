@@ -11,13 +11,13 @@ function pad(n) { return String(n).padStart(8, '0'); }
 
 export default function () {
   const n = 1 + ((__ITER * Number(__ENV.VUS || 50) + (__VU - 1)) % ROWS);
-  const r1 = http.get(`${BASE}/api/records?category=cat-${String(n % 20).padStart(2, '0')}&_size=20&_sort_by=created_at`, params);
-  const r2 = http.get(`${BASE}/api/records/rec-${pad(n)}`, params);
-  const r3 = http.get(`${BASE}/api/records/rec-${pad(1 + ((n + 7) % ROWS))}`, params);
-  const r4 = http.put(`${BASE}/api/records/rec-${pad(n)}`, JSON.stringify({ code: pad(n), title: `Record ${n} soak`, category: `cat-${String(n % 20).padStart(2, '0')}`, status: n % 5, score: __ITER % 1000, body }), params);
+  const r1 = http.get(`${BASE}/api/products?category=cat-${String(n % 20).padStart(2, '0')}&_size=20&_sort_by=created_at`, params);
+  const r2 = http.get(`${BASE}/api/products/sku-${pad(n)}`, params);
+  const r3 = http.get(`${BASE}/api/products/sku-${pad(1 + ((n + 7) % ROWS))}`, params);
+  const r4 = http.put(`${BASE}/api/products/sku-${pad(n)}`, JSON.stringify({ code: pad(n), title: `Widget ${n} soak`, category: `cat-${String(n % 20).padStart(2, '0')}`, status: n % 5, score: __ITER % 1000, body }), params);
   check(r1, { list: (r) => r.status === 200 }); check(r2, { get: (r) => r.status === 200 }); check(r3, { get2: (r) => r.status === 200 }); check(r4, { update: (r) => r.status === 200 });
   if (__ITER % 100 === 0) {
-    const r5 = http.post(`${BASE}/api/records`, JSON.stringify({ code: `soak-${__VU}-${__ITER}-${Date.now()}`, title: 'soak', category: 'cat-k6', status: 1, score: 1, body }), params);
+    const r5 = http.post(`${BASE}/api/products`, JSON.stringify({ code: `soak-${__VU}-${__ITER}-${Date.now()}`, title: 'soak', category: 'cat-k6', status: 1, score: 1, body }), params);
     check(r5, { create: (r) => r.status === 200 });
   }
 }

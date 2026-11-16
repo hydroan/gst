@@ -8,8 +8,8 @@ ROWS=${ROWS:-100000}
 # MODES picks the variants to run, all when empty: MODES="delete deletemany".
 want() { [ -z "${MODES:-}" ] || [[ " $MODES " == *" $1 "* ]]; }
 : > "$OUT/results-k6.tsv"
-bash "$SCRIPTS/seed.sh" records "$ROWS" | tee -a "$LOG"
-log "s3 start: records=$(rows records)"
+bash "$SCRIPTS/seed.sh" products "$ROWS" | tee -a "$LOG"
+log "s3 start: products=$(rows products)"
 measure_baseline
 start_server s3
 SESSION=$(UA='Grafana k6/2.3.0' login root)
@@ -30,15 +30,15 @@ pool_fill() { # start
   s=$start
   while [ "$s" -le "$end" ]; do e=$((s+99999)); [ "$e" -gt "$end" ] && e=$end
     $MYSQL -N -e "SET SESSION cte_max_recursion_depth = 200000;
-INSERT INTO records (id, code, title, category, status, score, body, created_by, updated_by, created_at, updated_at, deleted_at)
+INSERT INTO products (id, code, title, category, status, score, body, created_by, updated_by, created_at, updated_at, deleted_at)
 WITH RECURSIVE n(i) AS (SELECT $s UNION ALL SELECT i+1 FROM n WHERE i < $e)
 SELECT CONCAT('del-', LPAD(i, 8, '0')), CONCAT('d', LPAD(i, 8, '0')), CONCAT('Pool ', i), 'cat-del', 0, 0, 'pool', 'seed', 'seed', NOW(3), NOW(3), NULL FROM n;" 2>/dev/null
     s=$((e+1))
   done
 }
-pool_drop() { $MYSQL -N -e "DELETE FROM records WHERE id LIKE 'del-%';" 2>/dev/null; }
+pool_drop() { $MYSQL -N -e "DELETE FROM products WHERE id LIKE 'del-%';" 2>/dev/null; }
 DELPOS=0
-before_delete() { pool_drop; pool_fill 1; DELPOS=0; log "pool ready: $(rows records) rows"; }
+before_delete() { pool_drop; pool_fill 1; DELPOS=0; log "pool ready: $(rows products) rows"; }
 BEFORE_ROUND=before_delete
 # delete: VU v iteration i -> del-(i*VUS+v); deletemany: 10 ids per request.
 POOL=1200000; want delete && k6_case s3-delete 15 "$W" http_req_duration "${E[@]}" -e MODE=delete -e DELSTART=0
@@ -46,4 +46,4 @@ POOL=3000000; want deletemany && k6_case s3-deletemany 15 "$W" http_req_duration
 BEFORE_ROUND=
 pool_drop
 stop_server
-log "s3 done: records=$(rows records)"
+log "s3 done: products=$(rows products)"

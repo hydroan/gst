@@ -17,11 +17,11 @@ func init() {
 	apidoc.Register("stress/model", "PingRsp", apidoc.StructDoc{
 		Comment: "PingRsp is the answer of GET /api/ping.",
 	})
-	apidoc.Register("stress/model", "Record", apidoc.StructDoc{
-		Comment: "Record is the table the data scenarios read and write: a row of a\nrealistic size (a code, a title, a category, two numbers and a body of a\nfew hundred bytes) behind the standard actions on /api/records and, the\nmodel declaring GRPC(), the RecordService rpcs. Embedding model.Query takes\nthe list parameters: field filters, _sort_by, _page and _size, and the\ncursor. The code is unique, so a create carrying a taken code is refused\nby the index; the category carries the index a list filters by, the status\ncarries none, so a filter on it scans the table, and the score carries none,\nso a sort by it sorts the table.",
+	apidoc.Register("stress/model", "Product", apidoc.StructDoc{
+		Comment: "Product is the table the data scenarios read and write: a row of a\nrealistic size (a code, a title, a category, two numbers and a body of a\nfew hundred bytes) behind the standard actions on /api/products and, the\nmodel declaring GRPC(), the ProductService rpcs. Embedding model.Query takes\nthe list parameters: field filters, _sort_by, _page and _size, and the\ncursor. The code is unique, so a create carrying a taken code is refused\nby the index; the category carries the index a list filters by, the status\ncarries none, so a filter on it scans the table, and the score carries none,\nso a sort by it sorts the table.",
 	})
-	apidoc.Register("stress/model", "RecordUpsertReq", apidoc.StructDoc{
-		Comment: "RecordUpsertReq is the body of POST /api/records/upsert: the record to\ninsert, or to overwrite where its code is taken.",
+	apidoc.Register("stress/model", "ProductUpsertReq", apidoc.StructDoc{
+		Comment: "ProductUpsertReq is the body of POST /api/products/upsert: the product to\ninsert, or to overwrite where its code is taken.",
 	})
 	apidoc.Register("stress/model", "Ticket", apidoc.StructDoc{
 		Comment: "Ticket is the tenant's resource of the multi-tenant scenario: embedding\ntenant.Scope brings the tenant_id column the framework stamps on insert\nand narrows every statement by, so a list reaches the caller's tenant\nalone. The standard actions serve /api/tickets. The code is unique within\na tenant, which the index on the tenant and the code declares; the index\non the tenant and the creation time serves the default order of a list.",

@@ -23,6 +23,6 @@ export const options = {
 const params = { headers: { Cookie: `session_id=${__ENV.SESSION}` } };
 
 export default function () {
-  const r = http.get(`${__ENV.BASE}/api/records?category=cat-07&_size=20&_sort_by=created_at`, params);
+  const r = http.get(`${__ENV.BASE}/api/products?category=cat-07&_size=20&_sort_by=created_at`, params);
   check(r, { ok: (x) => x.status === 200 });
 }

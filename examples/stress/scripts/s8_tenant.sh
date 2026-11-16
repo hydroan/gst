@@ -1,8 +1,8 @@
 #!/bin/bash
 # Scenario 8: the tenant scope. 1M tickets over 10 tenants (5000 per tenant
-# and category, the cardinality a category has in 100k records); a member of
+# and category, the cardinality a category has in 100k products); a member of
 # tenant t-03 lists and gets its tickets, beside root making the same
-# requests on the records table, which carries no tenant. Root itself is not
+# requests on the products table, which carries no tenant. Root itself is not
 # used on tickets: holding the system role it reads across every tenant and
 # the scope adds no condition for it.
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
@@ -20,7 +20,7 @@ SELECT CONCAT('tk-', LPAD(i, 8, '0')), LPAD(i, 8, '0'), CONCAT('Ticket ', i), CO
   done
   echo "tickets now $(rows tickets)"
 }
-bash "$SCRIPTS/seed.sh" records 100000 | tee -a "$LOG"
+bash "$SCRIPTS/seed.sh" products 100000 | tee -a "$LOG"
 seed_tickets 1000000 | tee -a "$LOG"
 measure_baseline
 start_server s8
@@ -29,8 +29,8 @@ ROOT=$(login root)
 log "member session ${MEMBER:0:8} root session ${ROOT:0:8}; tickets of t-03/cat-07: $($MYSQL -N -e "SELECT COUNT(*) FROM tickets WHERE tenant_id='t-03' AND category='cat-07';" 2>/dev/null)"
 curl -s -A "$UA" -b "session_id=$MEMBER" "$BASE/api/tickets?category=cat-07&_size=2" | cut -c1-300 | tee -a "$LOG"; echo
 run_case s8-tickets-list 15 "$BASE/api/tickets?category=cat-07&_size=20&_sort_by=created_at" -H "Cookie: session_id=$MEMBER"
-run_case s8-records-list 15 "$BASE/api/records?category=cat-07&_size=20&_sort_by=created_at" -H "Cookie: session_id=$ROOT"
+run_case s8-products-list 15 "$BASE/api/products?category=cat-07&_size=20&_sort_by=created_at" -H "Cookie: session_id=$ROOT"
 run_case s8-tickets-get 15 "$BASE/api/tickets/tk-00050003" -H "Cookie: session_id=$MEMBER"
-run_case s8-records-get 15 "$BASE/api/records/rec-00050000" -H "Cookie: session_id=$ROOT"
+run_case s8-products-get 15 "$BASE/api/products/sku-00050000" -H "Cookie: session_id=$ROOT"
 stop_server
 log "s8 done"

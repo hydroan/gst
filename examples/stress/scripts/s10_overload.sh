@@ -7,7 +7,7 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 ROWS=${ROWS:-100000}
 : > "$OUT/results.tsv"; : > "$OUT/allocs.tsv"
-bash "$SCRIPTS/seed.sh" records "$ROWS" | tee -a "$LOG"
+bash "$SCRIPTS/seed.sh" products "$ROWS" | tee -a "$LOG"
 measure_baseline
 # PART picks a half: sweep (connections and arrival rates) or soak; all when empty.
 if [ "${PART:-all}" != soak ]; then
@@ -15,7 +15,7 @@ start_server s10
 ROOT=$(login root); C=(-H "Cookie: session_id=$ROOT")
 ROUNDS=1; ALLOCS=0
 for c in 50 200 500 1000; do
-  CONC=$c run_case "s10-list-c$c" 20 "$BASE/api/records?category=cat-07&_size=20&_sort_by=created_at" "${C[@]}"
+  CONC=$c run_case "s10-list-c$c" 20 "$BASE/api/products?category=cat-07&_size=20&_sort_by=created_at" "${C[@]}"
   log "after c=$c: rss $(rss_mb "$SERVER_PID")MB goroutines $(curl -s "$PPROF/debug/pprof/goroutine?debug=1" | head -1) mysql threads $($MYSQL -N -e "SHOW STATUS LIKE 'Threads_connected';" 2>/dev/null | awk '{print $2}')"
 done
 # The open-loop ladder: a fixed arrival rate for 30s per step, the latency it
@@ -65,4 +65,4 @@ print(f"SOAK rss MB first/max/last={rss[0]}/{max(rss)}/{rss[-1]} goroutines firs
 PY
 stop_server
 fi
-log "s10 done: records=$(rows records)"
+log "s10 done: products=$(rows products)"
