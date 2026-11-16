@@ -6,6 +6,7 @@ import (
 	"cluster/service/cached"
 	counterstep "cluster/service/counter_step"
 	"cluster/service/flag"
+	"cluster/service/notice"
 	"cluster/service/rebuild"
 	stepdown "cluster/service/step_down"
 
@@ -20,6 +21,8 @@ func init() {
 	service.Register[*cached.Load](service.Stream, "/api/caches/load")
 	service.Register[*counterstep.Watch](service.Stream, "/api/counter_steps/watch")
 	service.Register[*flag.Creator](service.Create, "/api/flags")
+	service.Register[*notice.Creator](service.Create, "/api/notices")
+	service.Register[*notice.Watch](service.Stream, "/api/notices/watch")
 	service.Register[*rebuild.Creator](service.Create, "/api/rebuilds")
 	service.Register[*stepdown.Creator](service.Create, "/api/step-downs")
 }

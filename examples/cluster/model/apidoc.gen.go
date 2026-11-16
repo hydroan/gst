@@ -56,6 +56,25 @@ func init() {
 			"Percent": "the share of traffic the flag applies to, 0 to 100",
 		},
 	})
+	apidoc.Register("cluster/model", "Notice", apidoc.StructDoc{
+		Comment: "Notice is a message for every client that is watching, whichever replica\nits connection is on. A WebSocket connection stays with the replica that\naccepted it, so a notice published on one replica reaches the clients of\nthe others only through something the replicas share: publishing sends it\nto a redis channel, and the watch stream of every connection is subscribed\nto that channel. The model declares no GRPC(), so its stream is served over\nWebSocket alone.",
+	})
+	apidoc.Register("cluster/model", "NoticeCreateRsp", apidoc.StructDoc{
+		Comment: "NoticeCreateRsp reports which replica published the notice and how many\nconnections were watching.",
+		Fields: map[string]string{
+			"Watchers": "the watching connections redis handed the notice to, over every replica",
+		},
+	})
+	apidoc.Register("cluster/model", "NoticeReq", apidoc.StructDoc{
+		Comment: "NoticeReq is the notice to publish.",
+	})
+	apidoc.Register("cluster/model", "NoticeWatchRsp", apidoc.StructDoc{
+		Comment: "NoticeWatchRsp is a notice as a watching client receives it.",
+		Fields: map[string]string{
+			"From":    "the replica that published it",
+			"Replica": "the replica this connection is on, which passed the notice on",
+		},
+	})
 	apidoc.Register("cluster/model", "Rebuild", apidoc.StructDoc{
 		Comment: "Rebuild is the action a client triggers: work that must not run twice at\nonce across the deployment. The service runs it under the \"rebuild\" lock.",
 	})

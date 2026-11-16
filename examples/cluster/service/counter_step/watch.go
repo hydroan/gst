@@ -15,11 +15,12 @@ import (
 // writes one a second.
 const watchInterval = 200 * time.Millisecond
 
-// Watch serves the WatchCounterStep rpc, a server stream: the numbers after
-// the one asked for, those already written first and then each new one as
-// the leader writes it, until the client hangs up. It reads the table, the
-// counter being in the database and the leader possibly another replica, so
-// any replica serves it, and a client cut off by a rolling update resumes on
+// Watch serves the watch stream of the counter, the WatchCounterStep rpc over
+// gRPC and a WebSocket connection over HTTP: the numbers after the one asked
+// for, those already written first and then each new one as the leader
+// writes it, until the client hangs up. It reads the table, the counter
+// being in the database and the leader possibly another replica, so any
+// replica serves it, and a client cut off by a replica stopping resumes on
 // another replica by asking for the numbers after the last one it saw.
 type Watch struct {
 	service.Base[*model.CounterStep, *model.CounterStepWatchReq, *model.CounterStep]

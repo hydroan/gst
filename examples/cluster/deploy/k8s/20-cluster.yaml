@@ -9,8 +9,9 @@
 #     requests to a terminating pod; the gRPC health service answers
 #     NOT_SERVING from the same moment, for the process and for each service
 #     by name, so a gRPC client or probe checking either stops sending too,
-#     and a gRPC stream still open ends as the listeners close, answered
-#     Unavailable, so its client resumes on another pod;
+#     and a stream still open ends as the listeners close — a gRPC stream
+#     answered Unavailable, a WebSocket connection closed with the code 1001
+#     — so its client resumes on another pod;
 #   - the gRPC listener is a second port, grpc, behind the same Service; a
 #     client inside the cluster connects to the headless Service cluster-grpc,
 #     which resolves to the pods themselves, so that its connections spread
@@ -73,7 +74,8 @@ data:
   GRPC_MAX_CONNECTION_AGE: 1m
   GRPC_MAX_CONNECTION_AGE_GRACE: 10s
   SERVER_SHUTDOWN_DELAY: 5s
-  # The iam module keeps the sessions in redis, shared by every replica.
+  # The iam module keeps the sessions in redis, shared by every replica, and
+  # the notices reach the WebSocket connections of every replica through it.
   REDIS_ENABLED: "true"
   REDIS_ADDR: redis:6379
   LOGGER_OUTPUT: stdout

@@ -29,6 +29,8 @@ func Init() error {
 	router.Register[*model.Flag, *model.Flag, *model.Flag](router.Auth(), "/api/flags/batch", &gst.ControllerConfig[*model.Flag]{}, service.DeleteMany)
 	router.Register[*model.Flag, *model.Flag, *model.Flag](router.Auth(), "/api/flags/batch", &gst.ControllerConfig[*model.Flag]{}, service.UpdateMany)
 	router.Register[*model.Flag, *model.Flag, *model.Flag](router.Auth(), "/api/flags/batch", &gst.ControllerConfig[*model.Flag]{}, service.PatchMany)
+	router.Register[*model.Notice, *model.NoticeReq, *model.NoticeCreateRsp](router.Auth(), "/api/notices", &gst.ControllerConfig[*model.Notice]{}, service.Create)
+	router.Register[*model.Notice, *gstmodel.Empty, *model.NoticeWatchRsp](router.Auth(), "/api/notices/watch", &gst.ControllerConfig[*model.Notice]{}, service.Stream)
 	router.Register[*model.Rebuild, *model.RebuildReq, *model.RebuildRsp](router.Auth(), "/api/rebuilds", &gst.ControllerConfig[*model.Rebuild]{}, service.Create)
 	router.Register[*model.Run, *model.Run, *model.Run](router.Auth(), "/api/runs", &gst.ControllerConfig[*model.Run]{}, service.List)
 	router.Register[*model.StepDown, *gstmodel.Empty, *model.StepDownRsp](router.Auth(), "/api/step-downs", &gst.ControllerConfig[*model.StepDown]{}, service.Create)

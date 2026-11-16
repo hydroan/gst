@@ -1,6 +1,6 @@
 # cluster：多副本部署示例
 
-一个用 `gg` 生成的最小项目，演示同一份代码在 Kubernetes 里起多个副本时框架的协调能力：定时任务每个调度时刻全部署只领一次、被打断的一轮换个副本再跑一次、常驻任务同一时刻只有一个副本在跑、一件事同一时刻只做一次、多个副本同时对空库建表、一个副本写进复制缓存的条目其余副本都跟上。定时任务、选主和锁都建在主库的租约表 `gst_leases` 上，协调能力本身不需要 Redis 或 etcd；复制缓存另外需要 Kafka 广播，示例的 iam 会话另外需要 Redis。
+一个用 `gg` 生成的最小项目，演示同一份代码在 Kubernetes 里起多个副本时框架的协调能力：定时任务每个调度时刻全部署只领一次、被打断的一轮换个副本再跑一次、常驻任务同一时刻只有一个副本在跑、一件事同一时刻只做一次、多个副本同时对空库建表、一个副本写进复制缓存的条目其余副本都跟上。定时任务、选主和锁都建在主库的租约表 `gst_leases` 上，协调能力本身不需要 Redis 或 etcd；复制缓存另外需要 Kafka 广播，示例的 iam 会话和跨副本的通知另外需要 Redis。
 
 每个场景都给了制造故障和核对结果的命令，可以拿它在真实集群里检验这些能力。
 
@@ -13,12 +13,13 @@
 | `lock/lock.go`、`dao/rebuild.go`、`service/rebuild/` | `POST /api/rebuilds` 在锁 `rebuild` 下跑，同时来第二个请求立刻 409；带 `"in_transaction":true` 则演示事务里拿锁被框架拒掉 |
 | `dao/cache.go`、`component/cache.go`、`service/cached/` | 复制缓存：每个副本在开始服务之前打开缓存，`POST /api/caches` 写一条、`GET /api/caches/:id` 只读本副本自己的那份、`DELETE /api/caches/:id` 删一条；这三个动作也是 gRPC 的 `CreateCached`、`GetCached`、`DeleteCached`，另有两条流：`LoadCached` 客户端流一次灌一批，`ExchangeCached` 双向流逐个键问本副本的值，HTTP 上是 `/api/caches/load`、`/api/caches/exchange` 两条 WebSocket 路由 |
 | `model/run.go`、`dao/run.go` | 每一轮定时任务、每一次锁下的运行：开始时记一行，跑完时补上结束时间，都写在工作自己的事务里；被打断的没有结束时间。`GET /api/runs`，也是 gRPC 的 `ListRun` |
-| `model/counter_step.go`、`service/counter_step/` | 计数器的每个数字，和写它的那一任、那个副本。`GET /api/counter_steps`；`WatchCounterStep` 服务端流从某个数字之后一直推送，哪个副本都能服务，被切断的客户端换个副本从上次的数字接着读 |
+| `model/counter_step.go`、`service/counter_step/` | 计数器的每个数字，和写它的那一任、那个副本。`GET /api/counter_steps`；`WatchCounterStep` 服务端流从某个数字之后一直推送，哪个副本都能服务，被切断的客户端换个副本从上次的数字接着读；HTTP 上是 WebSocket 路由 `/api/counter_steps/watch` |
 | `model/flag.go`、`service/flag/` | 功能开关，全部署共用一张表：十个标准动作全开，含批量和 Patch，HTTP 的 `/api/flags` 和 gRPC 的 `CreateFlag`、`PatchFlag`、`CreateManyFlag` 等一一对应，Create 钩子给打开了却没写 percent 的开关补成 100，两种传输都经过它 |
+| `model/notice.go`、`service/notice/` | 通知：`POST /api/notices` 把一条通知发到 Redis 频道，`/api/notices/watch` 是一条 WebSocket 连接，把连接打开期间发布的通知逐条推给客户端。连接接在哪个副本上就一直在哪个副本上，通知靠频道送到每个副本的连接。这个模型没写 `GRPC()`，它的流只走 WebSocket |
 | `module/module.go`、`middleware/middleware.go`、`interceptor/interceptor.go` | iam 模块的登录和会话，authz 模块的角色、绑定和授权判定；会话检查和授权在 HTTP 上挂 `middleware.IAMSession()`、`middleware.Authz()`，在 gRPC 上挂 `interceptor.IAMSession()`、`interceptor.Authz()`。会话存在 Redis 里，三个副本共用，在哪个副本登录都算数；策略每个副本各存一份内存副本，一分钟从主库重载一次。内置的 root 账号由 iam 模块在第一次启动时播种，口令来自 `IAM_ROOT_PASSWORD` |
 | `interceptor/served_by.go` | 项目自己的 gRPC 拦截器：每个经过项目拦截器的调用（健康与反射不经过）响应头带 `x-served-by`，写的是答话的副本，和行里的 `replica` 对得上 |
 | `pb/` | `gg gen` 从声明了 `GRPC()` 的模型推导的 `.proto` 和 Go 代码，提交进仓库 |
-| `Dockerfile` | 镜像：以非 root 用户运行，配置全部来自环境变量；PID 1 是 tini，方便从 Pod 里给进程发信号；带 curl 和 grpcurl，场景里在 Pod 里调本副本或集群内地址 |
+| `Dockerfile` | 镜像：以非 root 用户运行，配置全部来自环境变量；PID 1 是 tini，方便从 Pod 里给进程发信号；带 curl、grpcurl 和 websocat，场景里在 Pod 里调本副本或集群内地址 |
 | `deploy/k8s/` | 纯 YAML 清单：命名空间（强制 restricted 安全标准）、MySQL、Redis、单 broker Kafka（KRaft，给复制缓存广播用）、三副本 Deployment（探针、资源、只读根文件系统、停机宽限、滚动更新策略）、Service（HTTP 与 gRPC 两个端口）、集群内 gRPC 客户端用的 headless Service `cluster-grpc`、PodDisruptionBudget |
 | `scripts/up.sh`、`scripts/down.sh` | 构建镜像、apply 清单、等就绪；整套删掉 |
 | `scripts/collect-logs.sh` | 把每个副本、每一代容器的日志存到本地，供事后核对 |
@@ -117,7 +118,7 @@ logs '.level == "WARN" or .level == "ERROR"' | jq -r '[.level, .logger, .msg] | 
 
 场景本身会带来的，各场景里都写了：
 
-- 停机打断的 `cronjob interrupted`、跑超时跳过的 `cronjob skipped instants`；
+- 停机打断的 `cronjob interrupted`、再跑的一轮让位给下一个时刻的 `cronjob gave up a round cut short`、跑超时跳过的 `cronjob skipped instants`；
 - 数据库出故障时的 `lease renewal failed`、`lease lost`（带 `reason`）、`sql failed`、`slow sql detected`、`leader campaign failed`；
 - 认领没答上来时的 `cronjob could not claim its instant, trying again`，以及重试到下一个时刻还没成的 `cronjob could not claim its instant`；
 - 一轮跑过下一个时刻时的 `cronjob round is still running at its next instant`；
@@ -130,6 +131,12 @@ logs '.level == "WARN" or .level == "ERROR"' | jq -r '[.level, .logger, .msg] | 
 
 ```bash
 logs '.logger == "grpc" and .grpc_code != "OK"' | jq -r '[.grpc_code, .path, .error] | @tsv' | sort | uniq -c
+```
+
+WebSocket 的每条连接在 `access` 那一路记一条，`status` 是握手的 101，`close_code` 是连接结束时的关闭码。第九组里出现的只有三种：1000 是正常结束，1001 是副本停机，1006 是客户端没发关闭帧就走了（`timeout` 结束 websocat 就是这样）。别的关闭码都值得查清楚：
+
+```bash
+logs '.logger == "access" and .close_code != null' | jq -r '[.close_code, .path] | @tsv' | sort | uniq -c
 ```
 
 ## 场景
@@ -657,6 +664,70 @@ for i in $(seq 1 14); do echo "$(date +%T) A=$(code "$A" '/api/flags?_size=1') B
 ```
 
 A 当场答 403，B、C 最多一分钟后跟上（实测 55 秒和 60 秒）。这一分钟是框架的取舍：策略在内存里判定，每个请求不查库；跨副本的延迟由重载周期封顶，而不是靠副本之间互相通知。要立刻收回，就把会话一起吊销（`DELETE /api/iam/admin/users/:id/sessions`），会话存在 Redis 里，三个副本下一个请求就都看不到它了。
+
+### 九、WebSocket
+
+`Stream` 动作在 HTTP 端口上是一条 WebSocket 连接：握手是一次普通的 GET，会话检查和授权都在升级之前；之后一帧文本是一条 JSON 消息，客户端发一帧 `null` 表示自己发完了。一条连接接在哪个副本上，就一直在哪个副本上。这一组看由此带来的三件事：会话和消息怎么跨副本，同一份业务代码在 gRPC 之外是不是也走得通 WebSocket，副本停机时连接怎么收尾。前三个副本记为 A、B、C，会话在 A 上登录：
+
+```bash
+A=$(pods | sed -n 1p); B=$(pods | sed -n 2p); C=$(pods | sed -n 3p)
+login "$A"
+# ws POD 地址 秒数 [消息...]：在 POD 里用镜像自带的 websocat 连一条 WebSocket 路由，带上会话，最多连这么多秒。
+# 每条消息发一帧；收到的每一帧打印一行；服务端关掉连接时，最后一行是它给的关闭码和原因。
+# 地址 ws://localhost:8080 是这个副本自己，ws://cluster:8080 是集群内的 Service。
+ws() {
+  local pod=$1 url=$2 seconds=$3; shift 3
+  { [ $# -eq 0 ] || printf '%s\n' "$@"; } \
+    | kubectl -n $NS exec -i "$pod" -c cluster -- sh -c 'timeout "$0" websocat -n -v -H="User-Agent: $1" -H="Cookie: session_id=$2" "$3" 2>&1 || true' "$seconds" "$UA" "$SESSION" "$url" \
+    | sed -n -E -e '/^\{/p' -e 's/.*close message //p' -e '/WebSocketError/p'
+}
+```
+
+websocat 的 `-n` 是发完消息后不主动关连接、等服务端来关，`-v` 让它把收到的关闭帧记进日志。日志和消息在 Pod 里就并成一路（`2>&1`），两者的先后才和实际一致；到时间由 `timeout` 结束不算失败（`|| true`）；`sed` 只留下收到的消息和关闭帧那一行。
+
+#### 9.1 在 A 登录、在 A 发通知，B 和 C 上的连接都收到
+
+```bash
+ws "$B" ws://localhost:8080/api/notices/watch 6 > watch-b.out & WB=$!
+ws "$C" ws://localhost:8080/api/notices/watch 6 > watch-c.out & WC=$!
+sleep 2
+kubectl -n $NS exec "$A" -c cluster -- curl -s -A "$UA" -b "session_id=$SESSION" -X POST localhost:8080/api/notices -H 'content-type: application/json' -d '{"text":"hello"}'; echo
+wait $WB $WC
+cat watch-b.out watch-c.out
+kubectl -n $NS exec "$B" -c cluster -- curl -s -A "$UA" -w ' HTTP=%{http_code}\n' localhost:8080/api/notices/watch
+```
+
+会话是在 A 上登录的，B、C 照样让它握手：会话在 Redis 里，哪个副本都认。通知发在 A 上，A 答 `"watchers":2`，Redis 把它交给了两条连接各自的订阅；B、C 上的连接各收到一行 `{"text":"hello","from":"<A>:8080","replica":"<B>:8080"}`，`from` 是发布它的副本，`replica` 是这条连接所在的副本。框架只管一条连接上的收发，不替项目把消息送到别的副本：要让连在别的副本上的客户端也收到，得像 `service/notice/` 这样，经副本共用的东西（这里是 Redis 频道）送过去。六秒到了 `timeout` 结束 websocat，连接随之断开。最后一条没带会话：握手在升级之前就被会话检查拒掉，答的是普通的 JSON 答复，`"msg":"no session"`，HTTP 401。
+
+#### 9.2 三种流：gRPC 之外也走 WebSocket，业务代码还是那一份
+
+```bash
+ws "$A" ws://localhost:8080/api/caches/load 5 '{"key":"greeting","value":"hello"}' '{"key":"farewell","value":"bye"}' null
+sleep 2
+ws "$C" ws://localhost:8080/api/caches/exchange 5 '{"key":"farewell"}' '{"key":"unknown"}' null
+rpc "$B" -d '{"id":"greeting"}' localhost:8081 cluster.CachedService/GetCached
+LAST=$(echo "SELECT MAX(seq) FROM counter_steps" | sqlv)
+ws "$B" ws://localhost:8080/api/counter_steps/watch 3 "{\"after\":$LAST}" | grep -o '"seq":[0-9]*'
+```
+
+和 7.3、7.5 是同一组流、同一份 `service/` 代码，只换了传输。客户端流：两帧各一个条目，一帧 `null` 表示发完，A 回一帧 `{"replica":"<A>:8080","count":2}` 后正常关闭，`(code 1000, reason "")`。两秒后 C 的双向流每问一个键答一帧，`farewell` 有、`unknown` 没有，收到 `null` 后同样以 1000 关闭；B 上经 gRPC 读 `greeting` 也读得到——经 WebSocket 写进去的条目，和别的写法一样在副本之间传播。服务端流：请求是第一帧，B 从 `$LAST` 之后每秒推一个数字，客户端不走它就一直推，这里三秒后由 `timeout` 结束。
+
+#### 9.3 连接所在的副本停机：收到 1001，换个副本从上次的数字接着读
+
+```bash
+IP=$(kubectl -n $NS get pod "$B" -o jsonpath='{.status.podIP}')
+LAST=$(echo "SELECT MAX(seq) FROM counter_steps" | sqlv)
+ws "$A" "ws://$IP:8080/api/counter_steps/watch" 60 "{\"after\":$LAST}" > watch.out & W=$!
+sleep 3; kubectl -n $NS delete pod "$B" --wait=false; wait $W
+tail -n 3 watch.out | grep -o -E '"seq":[0-9]*|\(code.*'
+LAST=$(grep -o '"seq":[0-9]*' watch.out | tail -1 | tr -dc '0-9')
+ws "$A" ws://cluster:8080/api/counter_steps/watch 3 "{\"after\":$LAST}" | grep -o '"seq":[0-9]*'
+sleep 2
+logs '.logger == "access" and .path == "/api/counter_steps/watch"' | jq -c '{instance, status, close_code}' | tail -2
+kubectl -n $NS rollout status deployment/cluster --timeout=240s
+```
+
+客户端在 A 里、连的是 B 的 Pod 地址，所以删掉 B 带不走客户端。B 收到 SIGTERM 后先摘流量，`SERVER_SHUTDOWN_DELAY` 的 5 秒里连接照常推数字；5 秒后监听关闭，框架给还开着的 WebSocket 连接发关闭帧，`watch.out` 的最后一行就是它：`(code 1001, reason "the server is shutting down")`。客户端拿最后看到的数字经 Service 重连——Service 已经不往停机中的 B 上转发——连上的是别的副本，紧接着的数字就来了，不重不漏。访问日志里一条连接记一行，`status` 是握手的 101，`close_code` 是连接结束时的关闭码：B 上那条是 1001；重连的那条在另一个 `instance` 上，是 1006，因为三秒后 `timeout` 结束了 websocat，它没发关闭帧就走了。
 
 ## 正式环境
 

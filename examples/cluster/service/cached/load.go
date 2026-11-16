@@ -13,9 +13,10 @@ import (
 	"github.com/hydroan/gst/service"
 )
 
-// Load serves the LoadCached rpc, a client stream: entries in, one count
-// out. Every entry is written to the store of this replica the way a single
-// Create is, so its peers catch up with all of them.
+// Load serves the load stream of the cache, the LoadCached rpc over gRPC and
+// a WebSocket connection over HTTP: entries in, one count out. Every entry is
+// written to the store of this replica the way a single Create is, so its
+// peers catch up with all of them.
 type Load struct {
 	service.Base[*model.Cached, *model.CachedLoadReq, *model.CachedLoadRsp]
 }

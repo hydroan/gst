@@ -1,7 +1,8 @@
-# A redis for the example alone, where the iam module keeps the sessions: a
-# session established on one replica is read by every other. A real
-# deployment brings its own redis; the replicas only need REDIS_ADDR to point
-# at it.
+# A redis for the example alone, where the iam module keeps the sessions — a
+# session established on one replica is read by every other — and whose
+# channel carries a notice from the replica that publishes it to the
+# WebSocket connections of the others. A real deployment brings its own
+# redis; the replicas only need REDIS_ADDR to point at it.
 apiVersion: v1
 kind: Service
 metadata:

@@ -272,18 +272,125 @@ func (Entry) Design() {
 - 只声明 `Create(func(){})`、`List(func(){})` 等 action 就会启用对应接口；
   不需要的接口不声明即可。
 
+### 流与 WebSocket
+
+要在一条长连接上来回发消息（聊天、实时推送、分批上传），用 `Stream` 动作。它在 HTTP 上就是一条 WebSocket
+连接：路由用 `GET` 握手打开，之后一帧文本是一条 JSON 消息。用它不需要开 gRPC；模型另外声明了 `GRPC()` 时，
+同一个动作同时是带 stream 的 rpc，service 代码还是那一份。
+
+```go
+// Tally answers every amount the client sends with the total so far.
+type Tally struct {
+	model.Empty
+}
+
+// TallySumReq is an amount to add to the total.
+type TallySumReq struct {
+	Amount int64 `json:"amount"`
+}
+
+// TallySumRsp is the total once an amount was added.
+type TallySumRsp struct {
+	Total int64 `json:"total"`
+}
+
+func (Tally) Design() {
+	Stream(func() {
+		Public()
+		Service("sum")
+		StreamingPayload[*TallySumReq]()
+		StreamingResult[*TallySumRsp]()
+	})
+}
+```
+
+`Stream` 必须用 `Service("name")` 起名，不能写 `Exact()`。每一侧要么是一条消息（`Payload`、`Result`），
+要么是一串消息（`StreamingPayload`、`StreamingResult`），至少有一侧是一串：
+
+| 声明 | 谁发什么 | service 方法 |
+| --- | --- | --- |
+| `Payload` 加 `StreamingResult` | 客户端发一条请求，服务端发一串 | `Stream(ctx, req, stream *gst.ServerStream[RSP]) error` |
+| `StreamingPayload` 加 `Result` | 客户端发一串，服务端最后回一条 | `Stream(ctx, stream *gst.ClientStream[REQ]) (RSP, error)` |
+| `StreamingPayload` 加 `StreamingResult` | 两边各发各的 | `Stream(ctx, stream *gst.BidiStream[REQ, RSP]) error` |
+
+service 方法一返回，连接就关闭：返回 nil 是正常关闭，返回错误按下面的关闭码关。想让连接一直开着，就在方法里
+循环：`stream.Recv()` 返回 `io.EOF` 表示客户端说它发完了；客户端直接走了或服务在停机时，`Recv`、`Send`
+返回错误，方法照常返回即可。
+
+```go
+func (s *Sum) Stream(_ *gst.ServiceContext, stream *gst.BidiStream[*model.TallySumReq, *model.TallySumRsp]) error {
+	var total int64
+	for {
+		req, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return gst.NewErrorWithCause(http.StatusBadRequest, "failed to read the amount", err)
+		}
+		total += req.Amount
+		if err := stream.Send(&model.TallySumRsp{Total: total}); err != nil {
+			return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to send the total", err)
+		}
+	}
+}
+```
+
+前端或别的客户端照下面的约定连：
+
+- 握手是 `GET /api/<路由>`，和普通请求一样先过中间件。握手被拒时答的是普通的 JSON 错误；浏览器的 WebSocket
+  读不到这次失败的状态码，只会看到连接失败（关闭码 1006）。
+- 一帧文本是一条 JSON 消息，不套响应信封；单条最大 4 MiB，不接受二进制帧。
+- 客户端发完自己这一侧时发一帧 `null`，之后还可以继续收。
+- 怎么结束看关闭码：`1000` 是正常结束；`4000` 加 HTTP 状态是 service 返回的错误，`gst.NewError(404, ...)`
+  就是 `4404`，关闭原因里是提示文字，某条消息没通过解码或校验是 `4400`；`4500` 是服务端自己的故障；
+  `1001` 是服务在停机，过一会儿重连。
+- 心跳由框架每 15 秒发一次，客户端不用处理。
+
+浏览器里：
+
+```js
+const ws = new WebSocket("wss://api.example.com/api/tallies");
+ws.onmessage = (event) => console.log(JSON.parse(event.data).total);
+ws.onclose = (event) => console.log(event.code, event.reason);
+ws.onopen = () => ws.send(JSON.stringify({ amount: 2 }));
+```
+
+Go 里用 `client` 包，接口测试也这样写，`gg gen` 给新的流生成的测试骨架就是这个形状：
+
+```go
+stream, err := cli.BidiStream[model.TallySumReq, model.TallySumRsp](ctx, "/api/tallies")
+if err != nil {
+	return err
+}
+defer stream.Close()
+if err = stream.Send(&model.TallySumReq{Amount: 2}); err != nil {
+	return err
+}
+rsp, err := stream.Recv() // rsp.Total 是 2
+```
+
+三点要留意：
+
+- 跨源：页面和服务同源时直接能连。页面在别的站点上时，把它的源写进 `[server]` 节的 `websocket_origins`
+  （环境变量 `SERVER_WEBSOCKET_ORIGINS`，如 `*.example.com`，多个用逗号隔开），否则握手答 403；
+  模式写坏了启动时直接报错。
+- 认证与权限：握手就是一次普通的 `GET`，没声明 `Public()` 的流照常过认证中间件，权限按「`GET` 加路径」判。
+  会话放在 Cookie 里的项目（iam 模块），浏览器握手时会自动带上；浏览器的 WebSocket 带不了自定义请求头，
+  所以靠 `Authorization` 请求头认证的项目（`middleware.JwtAuth`）在浏览器里握手会被拒，程序里用 `client` 包不受影响。
+- 多副本：一条连接接在哪个副本上，就一直在哪个副本上，框架只管这条连接上的收发。要让连在别的副本上的客户端
+  也收到消息，得经副本共用的东西送过去，比如 Redis 频道；副本停机时它的连接收到 `1001`，客户端重连就落到别的副本上。
+  做法和核对步骤见 [examples/cluster](./examples/cluster/README.md) 的「WebSocket」一章。
+
+完整示例见 [examples/demo/model/tally.go](./examples/demo/model/tally.go) 和它的 service、测试。
+
 ### gRPC
 
 模型顶层声明 `GRPC()`，它就同时走 gRPC：`gg gen` 从 Go 类型和 `Design()` 推导 `.proto`，进程内
 编译出 `pb/` 下的 Go 代码，并在 gRPC 服务上注册和 HTTP 路由相同的动作，业务代码只写 `service/` 那一份。
 字段用 `pb` tag 给消息编号（`pb:"11"`，1 到 10 留给框架：`model.Base` 的字段，以及嵌入 `tenant.Scope` 时的 `tenant_id`），缺的 `gg gen` 会补上。
 只定义了 `MarshalText`、没有 `MarshalJSON` 的类型（`netip.Addr`、实现了它的枚举）在消息里是 `string`，按它写出的文本收发，和 JSON 里一样。
-流用 `Stream(func(){...})` 在自定义动作里声明：流的那一侧写 `StreamingPayload`/`StreamingResult`，
-另一侧写 `Payload`/`Result`，两侧都流就是双向流，service 方法收发 `gst.ServerStream`、`ClientStream`
-或 `BidiStream`。流在 HTTP 上是用 `GET` 握手打开的一条 WebSocket 连接，一帧文本是一条 JSON 消息，
-调用方用 `client` 包的 `ServerStream`、`ClientStream`、`BidiStream`，`gg gen` 生成的测试骨架也这样调；
-模型声明了 `GRPC()` 时它同时是带 stream 的 rpc，没声明就只走 WebSocket。
-浏览器页面和服务不同源时，把页面的源写进 `server.websocket_origins`（如 `*.example.com`），否则握手答 403。
+`Stream` 动作（见上一节）在声明了 `GRPC()` 的模型上同时是带 stream 的 rpc，和它的 WebSocket 连接由同一份 service 代码提供。
 测 gRPC 这一侧时 `testutil.GRPCTarget()` 给出测试服务器的 gRPC 地址；测试二进制没导入 `pb` 包、一个 gRPC 服务都没注册时，它直接 panic 并点名要加的导入，`gg gen` 每次运行都会给声明 TestMain 的测试文件补上这个导入。完整示例见
 [examples/demo/model/board](./examples/demo/model/board)。
 
@@ -1200,8 +1307,9 @@ prune 删什么、不删什么、按什么顺序删、什么时候问你，完�
 - [Service("name") 与 Flatten：工具类动作](./examples/demo/model/tool/entry.go)
 - [公开动作：Ping](./examples/demo/model/ping.go)
 - [SSE：Notice](./examples/demo/model/notice.go)
+- [WebSocket 流：Tally](./examples/demo/model/tally.go)
 - [gRPC 模型：Note](./examples/demo/model/board/note.go)
-- [gRPC 流：Feed](./examples/demo/model/board/feed.go)
+- [两条线都提供的流：Feed](./examples/demo/model/board/feed.go)
 - [资源 service hook](./examples/demo/service/record/create.go)
 - [自定义动作 service](./examples/demo/service/tool/merge.go)
 - [生成的路由注册](./examples/demo/router/router.gen.go)、[service 注册](./examples/demo/service/service.gen.go)、[gRPC 注册](./examples/demo/pb/board/pb.gen.go)

@@ -13,9 +13,9 @@ import (
 	"github.com/hydroan/gst/service"
 )
 
-// Exchange serves the ExchangeCached rpc, a stream both ways: keys in, and
-// for each what this replica's own store holds, for as long as the client
-// keeps asking.
+// Exchange serves the exchange stream of the cache, the ExchangeCached rpc
+// over gRPC and a WebSocket connection over HTTP: keys in, and for each what
+// this replica's own store holds, for as long as the client keeps asking.
 type Exchange struct {
 	service.Base[*model.Cached, *model.CachedKeyReq, *model.CachedExchangeRsp]
 }

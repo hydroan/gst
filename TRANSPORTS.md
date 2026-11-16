@@ -181,7 +181,7 @@ HTTP 状态到 gRPC status 的映射（`grpcserver.StatusError`）：
 
 ## 6. 流式动作
 
-流是 gRPC 上的一条支线：声明、生成、运行时各加一段，其余复用一元调用的 call 与错误映射。它在 HTTP 上的入口见本节末尾。
+流在两条线上各有一个入口，service 代码是同一份：HTTP 上是一条 WebSocket 连接，不需要 GRPC()；模型声明了 GRPC() 时它同时是流式 rpc。下面先讲 gRPC 这条支线，它的声明、生成、运行时各加一段，其余复用一元调用的 call 与错误映射；HTTP 上的入口在本节末尾。
 
 声明与生成：
 
@@ -246,7 +246,7 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 
 - bootstrap 顺序：配置 → 日志 → 数据库与 redis 等 → `router.Init()`（内建链、路由、模块）→ `RegisterGo(router.Run, grpcserver.Run)`。
 - gRPC 监听只在有注册服务时启动；启动时若有非 Public 方法却没挂鉴权拦截器，打一条 Warn。
-- 停机：`controller.Probe.Drain()` 让 `/-/readyz` 答 503，`grpcserver.Drain()` 让 health 答 NOT_SERVING，等 shutdown_delay 过去，再跑 cleanup：`router.Stop` 与 `grpcserver.Stop` 并发、共用一个 30 秒窗口（HTTP 等在途请求、SSE 流即刻结束；gRPC 的 GracefulStop 等一元调用、在途流的 ctx 即刻结束并答 Unavailable，窗口用完强制断开），之后组件在自己的 30 秒窗口里停。
+- 停机：`controller.Probe.Drain()` 让 `/-/readyz` 答 503，`grpcserver.Drain()` 让 health 答 NOT_SERVING，等 shutdown_delay 过去，再跑 cleanup：`router.Stop` 与 `grpcserver.Stop` 并发、共用一个 30 秒窗口（HTTP 等在途请求、SSE 流即刻结束，WebSocket 连接的 ctx 即刻结束、各自以 1001 关闭，窗口用完还开着的直接切断；gRPC 的 GracefulStop 等一元调用、在途流的 ctx 即刻结束并答 Unavailable，窗口用完强制断开），之后组件在自己的 30 秒窗口里停。
 - 多副本下客户端靠这两个探针切走流量；k8s 的 readinessProbe 打 HTTP，gRPC 的 native health probe 打 health 服务，可指名一个服务。
 
 观测两边对齐：
@@ -279,7 +279,7 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 | `internal/requestctx`、`internal/types` | 共用 | 请求元数据与 `ServiceContext`、流对象接口，两种传输各自填充 |
 | `authz/rbac` | 共用 | `Enforce`：授权判定的唯一实现 |
 | `testutil` | 共用 | 真容器、两个监听、`GRPCTarget()` |
-| `examples/demo`、`examples/cluster` | 共用 | demo 是入门示例（gRPC 示例在 model/board），cluster 是多副本、gRPC 与会话认证的实弹验证项目 |
+| `examples/demo`、`examples/cluster` | 共用 | demo 是入门示例（gRPC 示例在 model/board），cluster 是多副本、gRPC、WebSocket 与会话认证的实弹验证项目 |
 
 ## 9. 与 AIP、Buf 的有意差异
 
