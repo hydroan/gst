@@ -116,6 +116,24 @@ func TestAcceptHoldsBackTheRefusalOfAHandshake(t *testing.T) {
 	})
 }
 
+// TestDialKeepsTheWholeAnswerOfAHandshakeRefused proves Dial returns the
+// answer of a handshake the server refuses whole, where the library keeps
+// its first kilobyte: the status, and a body longer than that.
+func TestDialKeepsTheWholeAnswerOfAHandshakeRefused(t *testing.T) {
+	answer := strings.Repeat("a", 5000)
+	url := serve(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = io.WriteString(w, answer)
+	})
+
+	_, rsp, err := websocket.Dial(t.Context(), nil, url, nil, time.Second)
+	require.Error(t, err)
+	require.Equal(t, http.StatusForbidden, rsp.StatusCode)
+	body, err := io.ReadAll(rsp.Body)
+	require.NoError(t, err)
+	require.Equal(t, answer, string(body))
+}
+
 // TestAcceptAdmitsTheOriginsListed proves which pages may open a connection:
 // a request carrying no origin, the pages of the host the request is sent to,
 // and those of the origins listed, by host or by scheme and host.

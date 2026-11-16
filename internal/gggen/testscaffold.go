@@ -31,7 +31,6 @@ const (
 	scaffoldImportHTTP     = "net/http"
 	scaffoldImportClient   = "github.com/hydroan/gst/client"
 	scaffoldImportConfig   = "github.com/hydroan/gst/config"
-	scaffoldImportSSE      = "github.com/hydroan/gst/sse"
 	scaffoldImportTestutil = "github.com/hydroan/gst/testutil"
 	scaffoldImportRequire  = "github.com/stretchr/testify/require"
 	scaffoldImportGRPC     = "google.golang.org/grpc"
@@ -41,7 +40,7 @@ const (
 // scaffoldImportNames lists the names the imports above take in a scaffold
 // and the variables its statements declare, which a package the scaffold
 // imports for the example must not take too.
-var scaffoldImportNames = []string{"testing", "strings", "http", "client", "config", "sse", "testutil", "require", "grpc", "insecure", "conn", "stream", "rsp", "err", "id"}
+var scaffoldImportNames = []string{"testing", "strings", "http", "client", "config", "testutil", "require", "grpc", "insecure", "conn", "stream", "rsp", "err", "id", "events", "event"}
 
 // serviceTestDoc is the part of the test scaffold's doc comment of an action
 // served over HTTP that tells how the test is written, after the line
@@ -216,11 +215,11 @@ type serviceTestExample struct {
 // item route reads the row's id from a placeholder variable, a batch route
 // sends client.BatchItems or client.BatchIDs, a List without a declared result
 // decodes client.ListResult, Import uploads a file, Export downloads the
-// attachment and SSE consumes the stream, all through the framework client; a
-// Stream calls its rpc through a grpc-go client, see newStreamTestExample. The
-// model package is imported when the example refers to it, under an alias
-// when its name is one a scaffold import takes, and under its name when the
-// path does not tell it (see importSpecName).
+// attachment and SSE receives the first event of the stream, all through the
+// framework client; a Stream calls its rpc through a grpc-go client, see
+// newStreamTestExample. The model package is imported when the example refers
+// to it, under an alias when its name is one a scaffold import takes, and
+// under its name when the path does not tell it (see importSpecName).
 func newServiceTestExample(info *modelinfo.Model, action *dsl.Action, route string) *serviceTestExample {
 	if action.Phase == apiaction.Stream {
 		return newStreamTestExample(info, action, route)
@@ -288,17 +287,13 @@ func newServiceTestExample(info *modelinfo.Model, action *dsl.Action, route stri
 		)
 	case apiaction.SSE:
 		example.imports[scaffoldImportHTTP] = ""
-		example.imports[scaffoldImportSSE] = ""
-		callback := &ast.FuncLit{
-			Type: &ast.FuncType{
-				Params:  &ast.FieldList{List: []*ast.Field{field("event", sel(ident("sse"), "Event"))}},
-				Results: &ast.FieldList{List: []*ast.Field{{Type: ident("error")}}},
-			},
-			Body: &ast.BlockStmt{List: []ast.Stmt{Returns(sel(ident("client"), "ErrStopStream"))}},
-		}
 		stmts = append(stmts,
-			&ast.AssignStmt{Lhs: []ast.Expr{ident("err")}, Tok: token.ASSIGN, Rhs: []ast.Expr{call(sel(ident("cli"), "Stream"), testContext(), sel(ident("http"), "MethodGet"), path, ident("nil"), callback)}},
+			define(idents("events", "err"), call(sel(ident("cli"), "SSE"), testContext(), sel(ident("http"), "MethodGet"), path, ident("nil"))),
 			requireCall("NoError", ident("err")),
+			&ast.DeferStmt{Call: call(sel(ident("events"), "Close"))},
+			define(idents("event", "err"), call(sel(ident("events"), "Recv"))),
+			requireCall("NoError", ident("err")),
+			requireCall("NotEmpty", sel(ident("event"), "Data")),
 		)
 	default:
 		args := []ast.Expr{testContext(), path}

@@ -12,7 +12,7 @@ func init() {
 		},
 	})
 	apidoc.Register("demo/model", "Notice", apidoc.StructDoc{
-		Comment: "Notice is a stream of server-sent events: a long-lived GET response a\nbrowser reads through an EventSource, or a Go program through\nclient.Stream. SSE always delegates to service code, which opens the\nstream and decides what to send; how many events a stream carries here is\nconfiguration, see configx.Notice. GET /api/notices.",
+		Comment: "Notice is a stream of server-sent events: a long-lived GET response a\nbrowser reads through an EventSource, or a Go program through the SSE\nmethod of client.Client. SSE always delegates to service code, which opens\nthe stream and decides what to send; how many events a stream carries here\nis configuration, see configx.Notice. GET /api/notices.",
 	})
 	apidoc.Register("demo/model", "Ping", apidoc.StructDoc{
 		Comment: "Ping is the smallest model there is: an action with no table behind it,\nanswered by service code, open to anyone. GET /api/pings.",

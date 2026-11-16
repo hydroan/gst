@@ -2,11 +2,11 @@ package notice_test
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"testing"
 
 	"github.com/hydroan/gst/client"
-	"github.com/hydroan/gst/sse"
 	"github.com/hydroan/gst/testutil"
 	"github.com/stretchr/testify/require"
 )
@@ -17,12 +17,18 @@ func TestSSE(t *testing.T) {
 	cli, err := client.New(testutil.BaseURL())
 	require.NoError(t, err)
 
+	events, err := cli.SSE(t.Context(), http.MethodGet, "/api/notices", nil)
+	require.NoError(t, err)
+	defer events.Close()
+
 	var data []string
-	err = cli.Stream(t.Context(), http.MethodGet, "/api/notices", nil, func(event sse.Event) error {
+	for range 2 {
+		event, recvErr := events.Recv()
+		require.NoError(t, recvErr)
 		require.Equal(t, "notice", event.Event)
 		data = append(data, fmt.Sprint(event.Data))
-		return nil
-	})
-	require.NoError(t, err)
+	}
 	require.Equal(t, []string{"1", "2"}, data)
+	_, err = events.Recv()
+	require.ErrorIs(t, err, io.EOF)
 }

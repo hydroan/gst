@@ -278,8 +278,10 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			route:   "/api/records",
 			wantDoc: "// TestSSE covers GET /api/records, served by Streamer in sse.go.",
 			wantCode: []string{
-				`	err = cli.Stream(t.Context(), http.MethodGet, "/api/records", nil, func(event sse.Event) error {`,
-				`		return client.ErrStopStream`,
+				`	events, err := cli.SSE(t.Context(), http.MethodGet, "/api/records", nil)`,
+				`	defer events.Close()`,
+				`	event, err := events.Recv()`,
+				`	require.NotEmpty(t, event.Data)`,
 			},
 		},
 		{
@@ -342,7 +344,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 			wantDoc: "// TestSSE covers GET /api/records/:rec/items, served by Streamer in sse.go.",
 			wantCode: []string{
 				`	id := "the ID of a row the test seeded"`,
-				`	err = cli.Stream(t.Context(), http.MethodGet, "/api/records/"+id+"/items", nil, func(event sse.Event) error {`,
+				`	events, err := cli.SSE(t.Context(), http.MethodGet, "/api/records/"+id+"/items", nil)`,
 			},
 		},
 		{

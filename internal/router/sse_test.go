@@ -1,6 +1,7 @@
 package router_test
 
 import (
+	"io"
 	"net/http"
 	"strconv"
 	"testing"
@@ -84,17 +85,17 @@ func TestSSERouteStreamsEvents(t *testing.T) {
 	cli, err := client.New(baseURL)
 	require.NoError(t, err)
 
-	var events []sse.Event
-	err = cli.Stream(t.Context(), http.MethodGet, "/api/"+sseStreamRoute, nil, func(event sse.Event) error {
-		events = append(events, event)
-		return nil
-	})
+	events, err := cli.SSE(t.Context(), http.MethodGet, "/api/"+sseStreamRoute, nil)
 	require.NoError(t, err)
-	require.Len(t, events, 3)
-	for i, event := range events {
+	defer events.Close()
+	for i := range 3 {
+		event, recvErr := events.Recv()
+		require.NoError(t, recvErr)
 		require.Equal(t, "notice", event.Event)
 		require.Equal(t, strconv.Itoa(i+1), event.Data)
 	}
+	_, err = events.Recv()
+	require.ErrorIs(t, err, io.EOF, "the stream ends once the service returns")
 }
 
 func TestSSERouteIsMarkedStreaming(t *testing.T) {
@@ -107,14 +108,11 @@ func TestSSEStreamStopsOnClientRequest(t *testing.T) {
 	cli, err := client.New(baseURL)
 	require.NoError(t, err)
 
-	var seen int
-	err = cli.Stream(t.Context(), http.MethodGet, "/api/"+sseEndlessRoute, nil, func(sse.Event) error {
-		seen++
-		if seen == 2 {
-			return client.ErrStopStream
-		}
-		return nil
-	})
-	require.NoError(t, err, "ErrStopStream ends consumption without surfacing an error")
-	require.Equal(t, 2, seen)
+	events, err := cli.SSE(t.Context(), http.MethodGet, "/api/"+sseEndlessRoute, nil)
+	require.NoError(t, err)
+	for range 2 {
+		_, err = events.Recv()
+		require.NoError(t, err)
+	}
+	require.NoError(t, events.Close(), "closing the stream ends consumption without surfacing an error")
 }

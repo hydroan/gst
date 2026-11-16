@@ -1,7 +1,6 @@
 // Package client is the official HTTP client for gst backends, designed as
 // the client-side pairing of the framework's DSL: every HTTP interface shape
-// a model's Design() can declare has a first-class counterpart here; the
-// Stream action is served over gRPC alone and has none.
+// a model's Design() can declare has a first-class counterpart here.
 //
 //	DSL declaration                       client entry
 //	-----------------------------------   ------------------------------------------
@@ -12,7 +11,10 @@
 //	batch actions (items/ids bodies)      verbs + BatchItems/BatchIDs on /batch
 //	Export()                              Download
 //	Import()                              Upload
-//	SSE responses                         Stream
+//	SSE()                                 SSE
+//	Stream() with a StreamingResult       ServerStream
+//	Stream() with a StreamingPayload      ClientStream
+//	Stream() with both                    BidiStream
 //	model.Pagination / Query / Cursor     WithPage/WithSortBy/WithExpand/WithCursor
 //	envelope (msg/data/trace_id)          Envelope on success, *Error on rejection
 //
@@ -24,6 +26,7 @@
 // call first — in a service, the service context itself — whose deadline and
 // cancellation bound the request. The verbs whose result needs a type
 // parameter (Get/Post/Put/Patch/Delete) are parameterized methods, so a call
-// reads cli.Get[XxxRsp](ctx, path); entries that need no type parameter (Do,
-// Download, Upload, Stream) are plain methods.
+// reads cli.Get[XxxRsp](ctx, path), and so are the three that open a stream
+// (ServerStream/ClientStream/BidiStream); entries that need no type parameter
+// (Do, Download, Upload, SSE) are plain methods.
 package client
