@@ -48,6 +48,15 @@ func init() {
 	apidoc.Register("demo/model", "RecordSummaryRsp", apidoc.StructDoc{
 		Comment: "RecordSummaryRsp counts the caller's records, in all and by type.",
 	})
+	apidoc.Register("demo/model", "Tally", apidoc.StructDoc{
+		Comment: "Tally is a WebSocket connection. A Stream action is served over HTTP as\none: the route is opened with a GET, and every message after that is one\ntext frame holding a JSON document. A model declaring no GRPC(), like this\none, serves its streams over HTTP alone. Both sides stream here: the client\nsends amounts for as long as it likes, and each is answered with the total\nthe connection has carried so far. GET /api/tallies.",
+	})
+	apidoc.Register("demo/model", "TallySumReq", apidoc.StructDoc{
+		Comment: "TallySumReq is an amount to add to the total.",
+	})
+	apidoc.Register("demo/model", "TallySumRsp", apidoc.StructDoc{
+		Comment: "TallySumRsp is the total once an amount was added.",
+	})
 	apidoc.Register("demo/model/archive", "Document", apidoc.StructDoc{
 		Comment: "Document is a table-backed resource served on routes it declares itself:\n/api/archive/documents and, for the documents of one box,\n/api/archive/boxes/:box_id/documents, a second List whose service hook\nkeeps the list to the box of the route. Its checks and derived fields are\nmodel hooks, which run inside the framework's transaction whichever\naction writes the row. CSV import and export delegate to service code\nwith fixed signatures, at /api/archive/documents/import and\n/api/archive/documents/export.",
 		Fields: map[string]string{
@@ -67,7 +76,7 @@ func init() {
 		},
 	})
 	apidoc.Register("demo/model/board", "Feed", apidoc.StructDoc{
-		Comment: "Feed is the streaming half of the gRPC example: a Stream action carries a\nstream of messages on one side of the call or on both, over gRPC as a\nstreaming rpc and over HTTP on a WebSocket connection. WatchFeed answers\none request with a stream of events, UploadFeed takes a stream of events\nand answers once, ChatFeed streams both ways. A Stream action names its rpc\nwith Service(\"name\") and always has service code, in service/board/feed.",
+		Comment: "Feed is the streaming half of the gRPC example. A Stream action carries a\nstream of messages on one side of the call or on both; declared on a model\nwith GRPC() it is a streaming rpc as well as the WebSocket connection it is\nover HTTP, both served by one piece of service code. WatchFeed answers one\nrequest with a stream of events, UploadFeed takes a stream of events and\nanswers once, ChatFeed streams both ways. A Stream action names its\nservice with Service(\"name\") and always has service code, in\nservice/board/feed.",
 	})
 	apidoc.Register("demo/model/board", "FeedEvent", apidoc.StructDoc{
 		Comment: "FeedEvent is one event of a feed: what every stream carries, each\nunder a name of its own.",

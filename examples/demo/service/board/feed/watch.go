@@ -10,8 +10,8 @@ import (
 	"github.com/hydroan/gst/service"
 )
 
-// Watch serves the WatchFeed rpc, a server stream: one request in, a stream
-// of events out.
+// Watch serves the watch stream of a feed, the WatchFeed rpc over gRPC and a
+// WebSocket connection over HTTP: one request in, a stream of events out.
 type Watch struct {
 	service.Base[*board.Feed, *board.FeedWatchReq, *board.FeedWatchRsp]
 }

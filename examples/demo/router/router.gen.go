@@ -63,6 +63,7 @@ func Init() error {
 	router.Register[*model.Record, *gstmodel.Empty, *model.RecordSearchRsp](router.Auth(), "/api/records/search", &gst.ControllerConfig[*model.Record]{}, service.List)
 	router.Register[*model.Record, *gstmodel.Empty, *model.RecordSummaryRsp](router.Auth(), "/api/records/summary", &gst.ControllerConfig[*model.Record]{}, service.List)
 	router.Register[*model.Record, *gstmodel.Empty, *model.RecordTrashRsp](router.Auth(), "/api/records/trash", &gst.ControllerConfig[*model.Record]{}, service.List)
+	router.Register[*model.Tally, *model.TallySumReq, *model.TallySumRsp](router.Pub(), "/api/tallies", &gst.ControllerConfig[*model.Tally]{}, service.Stream)
 	router.Register[*tool.Entry, *tool.EntryMergeReq, *tool.EntryMergeRsp](router.Auth(), "/api/entries/merge", &gst.ControllerConfig[*tool.Entry]{}, service.Create)
 	return nil
 }

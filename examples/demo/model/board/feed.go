@@ -5,12 +5,14 @@ import (
 	"github.com/hydroan/gst/model"
 )
 
-// Feed is the streaming half of the gRPC example: a Stream action carries a
-// stream of messages on one side of the call or on both, over gRPC as a
-// streaming rpc and over HTTP on a WebSocket connection. WatchFeed answers
-// one request with a stream of events, UploadFeed takes a stream of events
-// and answers once, ChatFeed streams both ways. A Stream action names its rpc
-// with Service("name") and always has service code, in service/board/feed.
+// Feed is the streaming half of the gRPC example. A Stream action carries a
+// stream of messages on one side of the call or on both; declared on a model
+// with GRPC() it is a streaming rpc as well as the WebSocket connection it is
+// over HTTP, both served by one piece of service code. WatchFeed answers one
+// request with a stream of events, UploadFeed takes a stream of events and
+// answers once, ChatFeed streams both ways. A Stream action names its
+// service with Service("name") and always has service code, in
+// service/board/feed.
 type Feed struct {
 	model.Empty
 }

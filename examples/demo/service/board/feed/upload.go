@@ -11,8 +11,8 @@ import (
 	"github.com/hydroan/gst/service"
 )
 
-// Upload serves the UploadFeed rpc, a client stream: a stream of events in,
-// one answer out.
+// Upload serves the upload stream of a feed, the UploadFeed rpc over gRPC and
+// a WebSocket connection over HTTP: a stream of events in, one answer out.
 type Upload struct {
 	service.Base[*board.Feed, *board.FeedUploadReq, *board.FeedUploadRsp]
 }

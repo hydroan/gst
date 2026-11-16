@@ -11,8 +11,8 @@ import (
 	"github.com/hydroan/gst/service"
 )
 
-// Chat serves the ChatFeed rpc, a bidirectional stream: events in and out,
-// in no fixed order.
+// Chat serves the chat stream of a feed, the ChatFeed rpc over gRPC and a
+// WebSocket connection over HTTP: events in and out, in no fixed order.
 type Chat struct {
 	service.Base[*board.Feed, *board.FeedChatReq, *board.FeedChatRsp]
 }

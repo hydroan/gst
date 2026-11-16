@@ -12,6 +12,7 @@ import (
 	"demo/service/preference"
 	"demo/service/record"
 	"demo/service/record/item"
+	"demo/service/tally"
 	"demo/service/tool"
 
 	"github.com/hydroan/gst/service"
@@ -44,5 +45,6 @@ func init() {
 	service.Register[*record.Search](service.List, "/api/records/search")
 	service.Register[*record.Summary](service.List, "/api/records/summary")
 	service.Register[*record.Trash](service.List, "/api/records/trash")
+	service.Register[*tally.Sum](service.Stream, "/api/tallies")
 	service.Register[*tool.Merge](service.Create, "/api/entries/merge")
 }

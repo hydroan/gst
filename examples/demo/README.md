@@ -8,7 +8,7 @@ gst 的入门示例：一个用 `gg new` 生成、按框架推荐写法补齐的
 
 | 路径 | 内容 |
 | --- | --- |
-| `model/` | 模型与接口声明（DSL）。根目录和 `record/`、`archive/`、`tool/` 是 HTTP 示例；`board/` 是 gRPC 示例，模型声明了 `GRPC()`，标准动作同时也走 HTTP，Stream 动作在 HTTP 上是 WebSocket 连接 |
+| `model/` | 模型与接口声明（DSL）。根目录和 `record/`、`archive/`、`tool/` 是 HTTP 示例；`board/` 是 gRPC 示例，模型声明了 `GRPC()`，同一个动作两条线都提供 |
 | `service/` | 业务实现和它的测试，目录镜像 `model/`；只有声明了 `Service()` 的动作才有文件 |
 | `pb/` | `gg gen` 从 `model/board/` 推导的 `.proto` 和 Go 代码，提交进仓库 |
 | `configx/` `cronjob/` `component/` `middleware/` `interceptor/` `module/` | 扩展点：每一项一个文件，在各自的 `xxx.go` 的 `init()` 里注册 |
@@ -49,7 +49,8 @@ gst 的入门示例：一个用 `gg new` 生成、按框架推荐写法补齐的
 | `Public` | `model/ping.go` |
 | `SSE` | `model/notice.go` |
 | `GRPC`、`pb` tag、gRPC 上的标准动作和自定义动作 | `model/board/note.go` |
-| `Stream` `StreamingPayload` `StreamingResult` | `model/board/feed.go` |
+| `Stream` `StreamingPayload` `StreamingResult`：三种流，gRPC 上是流式 rpc，HTTP 上是 WebSocket 连接 | `model/board/feed.go` |
+| 不写 `GRPC()` 的 `Stream`：只走 WebSocket | `model/tally.go` |
 
 每个文件开头的注释说明了这个模型演示什么、路由长什么样。
 
@@ -74,6 +75,26 @@ gst 的入门示例：一个用 `gg new` 生成、按框架推荐写法补齐的
 ```bash
 redis-cli PUBLISH demo:notices hello
 ```
+
+## 看一眼 WebSocket
+
+`Stream` 动作在 HTTP 上是一条 WebSocket 连接，`GET` 握手打开，之后一帧文本是一条 JSON 消息。
+打开 http://localhost:8090/docs/index.html ，在浏览器控制台里粘贴（同源的页面才连得上，别的站点的页面要先写进 `[server]` 节的 `websocket_origins`）：
+
+```js
+const ws = new WebSocket("ws://localhost:8090/api/tallies");
+ws.onmessage = (event) => console.log(event.data);
+ws.onclose = (event) => console.log("closed", event.code);
+ws.onopen = () => {
+  ws.send(JSON.stringify({ amount: 2 }));
+  ws.send(JSON.stringify({ amount: 3 }));
+  ws.send("null");
+};
+```
+
+控制台依次打印 `{"total":2}`、`{"total":5}`、`closed 1000`：最后那帧 `null` 是「我发完了」，
+service 的 `Recv` 得到 `io.EOF` 后返回，连接随之正常关闭。Go 里的调用写法见 `service/tally/sum_test.go`，
+需要登录的流见 `service/board/feed/chat_test.go`（会话在登录时种下的 Cookie 里，握手时自动带上）。
 
 ## 看一眼 gRPC
 
