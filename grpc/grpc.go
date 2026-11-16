@@ -31,7 +31,9 @@ type Interceptor = grpcserver.Interceptor
 
 // MethodStream is what the registration describes the rpc of a Stream
 // action with in place of an HTTP method, Route answering it for such a
-// call, and so the action word an authorization policy grants a stream by.
+// call, and so the action word an authorization policy grants a stream by,
+// on both listeners: router.Route answers it for the request opening the
+// connection of the same action over HTTP.
 const MethodStream = grpcserver.MethodStream
 
 // Method describes one rpc of a registered service the way the generated

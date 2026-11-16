@@ -188,7 +188,7 @@ HTTP 状态到 gRPC status 的映射（`grpcserver.StatusError`）：
 - `Stream(func(){ Service("watch"); Payload[*Req](); StreamingResult[*Rsp]() })`：Payload / Result 写一问一答的一侧，Streaming 版写流的一侧，至少一侧是流，三种组合都支持。
 - .proto：`rpc WatchFeed (WatchFeedRequest) returns (stream WatchFeedResponse)`；请求消息开头仍是路由参数。
 - `x.gen.go`：服务端流把 `srv.Send` 交给流程；路由带参数时，客户端流与双向流先用 `grpc.FirstMessage(srv.Recv)` 读首条消息取路由参数，再把它当第一条交回，不带参数的直接把 `srv.Recv` 交给流程；第二条起的消息里的路由参数留空或与首条相同放行，不同的那条让 Recv 返回 InvalidArgument（`message 3 names the feed parameter "b", the first names "a"`，`grpc.SameParams`），和批量项对外层参数的规则一样。
-- 动作：流式 rpc 登记的方法是 `STREAM`，`grpc.Route(ctx)` 与 gRPC 访问日志的 method 都是它，路由是声明的 `/api/…` 路径，也就是它在 HTTP 上握手的路径。
+- 动作：流式 rpc 登记的方法是 `STREAM`，`grpc.Route(ctx)` 与 gRPC 访问日志的 method 都是它，路由是声明的 `/api/…` 路径，也就是它在 HTTP 上握手的路径。HTTP 上握手用的是 `GET`，但路由清单 `router.Routes()` 把这条路由列在 `STREAM` 下，`router.Route(c)` 对打到这条路由的请求答的也是 `STREAM`，按路由登记判、不看请求头：按动作词授权时两条线认同一个词。
 
 运行时与 service 签名：
 
@@ -205,7 +205,7 @@ HTTP 入口（`controller.StreamHandler`，router 按 `GET` 为它注册路由�
 - 同一个 Stream 动作跑在一条 WebSocket 连接上：一帧文本是一条 JSON 消息，客户端发一帧 `null` 表示发完；服务端流的请求是客户端发的第一帧。请求逐条照 HTTP 请求体的口径解码、normalize 与校验。
 - 连接打开之前照普通请求答信封：握手被拒按拒绝的状态答，没有对应 Stream 方法答 501。
 - 连接打开之后，结果由连接的关闭码带回：正常结束 1000；`gst.Error` 是 4000 加它的 HTTP 状态，原因是 msg；其他错误 4500；停机 1001「the server is shutting down」。服务端流的请求在 `server.read_timeout` 内没到按 4408 关，请求之后再发消息按 1008 关；被拒的那条请求按 4400 关，原因是点名字段的句子。访问日志在 status（握手的 101）之外多记一个 `close_code`。
-- 与 gRPC 入口由对照用例 TestTransportsCarryAStreamAlike 逐场景比对（收到的消息、结束状态按第 4 节的映射、msg 逐字）。两线有意不同的两处：service 从上下文读到的动词，HTTP 上是握手的 `GET`，gRPC 上是 `STREAM`，按动词授权时两条线因此各认各的，放行 HTTP 握手的是（`GET`，路径），放行 gRPC 流的是（`STREAM`，路由）；没有对应 Stream 方法的动作，HTTP 在连接打开前答 501 的信封，gRPC 答流的状态 Unimplemented。另有两处只在 HTTP 上有，是传输本身带来的：服务端流的请求是连接上单独的一帧，所以才有「请求在 `server.read_timeout` 内没到按 4408 关」这一步，gRPC 的请求随调用一起到达，框架没有等它的环节；客户端可以不发请求就发 `null` 结束，这时按零值请求照常校验后调用 service，gRPC 的标准客户端发不出这样的调用。
+- 与 gRPC 入口由对照用例 TestTransportsCarryAStreamAlike 逐场景比对（收到的消息、结束状态按第 4 节的映射、msg 逐字）。两线有意不同的两处：service 从上下文读到的动词，HTTP 上是握手的 `GET`，gRPC 上是 `STREAM`，授权不读这个动词，两条线都按 `STREAM` 判（HTTP 上由 `router.Route` 给出），一条写着 `STREAM` 的策略同时放行两条线，写着 `GET` 的放行不了任何一条；没有对应 Stream 方法的动作，HTTP 在连接打开前答 501 的信封，gRPC 答流的状态 Unimplemented。另有两处只在 HTTP 上有，是传输本身带来的：服务端流的请求是连接上单独的一帧，所以才有「请求在 `server.read_timeout` 内没到按 4408 关」这一步，gRPC 的请求随调用一起到达，框架没有等它的环节；客户端可以不发请求就发 `null` 结束，这时按零值请求照常校验后调用 service，gRPC 的标准客户端发不出这样的调用。
 
 ```plantuml
 @startuml

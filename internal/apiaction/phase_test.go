@@ -211,6 +211,15 @@ func TestPhase_HTTPMethod(t *testing.T) {
 	}
 }
 
+// TestMethodStream pins the word a Stream action is listed and authorized
+// by. The policies a deployment stores carry it, so a different word would
+// leave every policy granting a stream granting nothing.
+func TestMethodStream(t *testing.T) {
+	if apiaction.MethodStream != "STREAM" {
+		t.Errorf("MethodStream = %q, want %q", apiaction.MethodStream, "STREAM")
+	}
+}
+
 func TestPhase_Filename(t *testing.T) {
 	tests := []struct {
 		name  string

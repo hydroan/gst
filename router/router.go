@@ -1,7 +1,8 @@
 // Package router registers a project's HTTP routes and the hooks that run
 // once they are ready. The generated route registrations call Register on the
-// Auth or Pub group, a project seeds its data from OnRoutesReady, and Routes
-// lists what was registered. The server itself — building the engine,
+// Auth or Pub group, a project seeds its data from OnRoutesReady, Routes
+// lists what was registered and Route tells a middleware what the request
+// in hand was registered as. The server itself — building the engine,
 // serving, shutting down — is the framework's to run.
 //
 // This package forwards to the framework-internal implementation and adds no
@@ -102,8 +103,25 @@ func OnRoutesReady(fn func(ctx context.Context, routes map[string][]string) erro
 // Route parameters are converted from Gin's ":id" format to "{id}" so the
 // returned paths can be reused as authorization policy objects and menu route
 // bindings; "{id}" is the placeholder the RBAC matcher reads as one path
-// segment. Mutating the returned map or method slices does not affect router
-// state.
+// segment. A route is listed with the methods serving it, and the route of a
+// Stream action with "STREAM" in place of the GET that opens its connection:
+// the word Route answers for a request to it and the gRPC listener judges
+// the call of the same action by, so a policy written from the list grants
+// the stream however it is reached. Mutating the returned map or method
+// slices does not affect router state.
 func Routes() map[string][]string {
 	return router.Routes()
+}
+
+// Route returns the method and the route the request's action is registered
+// under, for a middleware that decides by them: the HTTP method of the
+// request and the route pattern, "GET" and "/api/records/:id". For a request
+// to the route of a Stream action the method is "STREAM" in place of the
+// GET that opens its connection, the word Routes lists the route under and
+// grpc.Route answers for a call of the same action. It goes by the route the
+// request matched, never by what the request says of itself: a handshake
+// spelled to pass for a plain GET is still the opening of a stream. The
+// route is empty for a request no route matched.
+func Route(c *gin.Context) (method, route string) {
+	return router.Route(c)
 }

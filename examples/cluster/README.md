@@ -729,6 +729,34 @@ kubectl -n $NS rollout status deployment/cluster --timeout=240s
 
 客户端在 A 里、连的是 B 的 Pod 地址，所以删掉 B 带不走客户端。B 收到 SIGTERM 后先摘流量，`SERVER_SHUTDOWN_DELAY` 的 5 秒里连接照常推数字；5 秒后监听关闭，框架给还开着的 WebSocket 连接发关闭帧，`watch.out` 的最后一行就是它：`(code 1001, reason "the server is shutting down")`。客户端拿最后看到的数字经 Service 重连——Service 已经不往停机中的 B 上转发——连上的是别的副本，紧接着的数字就来了，不重不漏。访问日志里一条连接记一行，`status` 是握手的 101，`close_code` 是连接结束时的关闭码：B 上那条是 1001；重连的那条在另一个 `instance` 上，是 1006，因为三秒后 `timeout` 结束了 websocat，它没发关闭帧就走了。
 
+#### 9.4 流的权限：两个入口认同一条策略
+
+```bash
+login "$A"; ROOT_SESSION=$SESSION; N=$(date +%s)
+# post 路径 JSON：以当前会话在 A 上 POST。grant 角色名 动作词：建一个只含「动作词 /api/caches/load」的菜单和角色，绑给 erin。
+post() { kubectl -n $NS exec "$A" -c cluster -- curl -s -A "$UA" -b "session_id=$SESSION" -X POST "localhost:8080$1" -H 'content-type: application/json' -d "$2"; }
+grant() {
+  local menu role
+  menu=$(post /api/authz/menus "{\"parent_id\":\"root\",\"label\":\"$1\",\"path\":\"/$1\",\"routes\":[{\"path\":\"/api/caches/load\",\"methods\":[\"$2\"]}]}" | jq -r '.data.id')
+  role=$(post /api/authz/roles "{\"name\":\"$1\",\"menu_ids\":[\"$menu\"]}" | jq -r '.data.id')
+  post /api/authz/role-bindings "{\"subject_id\":\"$ERIN\",\"role_id\":\"$role\"}" > /dev/null
+}
+# load 键：以当前会话在 A 上经两个入口各开一次「批量写缓存」这条流。
+load() {
+  ws "$A" ws://localhost:8080/api/caches/load 5 "{\"key\":\"$1-ws\",\"value\":\"v\"}" null
+  echo "{\"payload\":{\"key\":\"$1-grpc\",\"value\":\"v\"}}" | rpc "$A" -d @ localhost:8081 cluster.CachedService/LoadCached 2>&1 | grep -E 'count|Code|Message'
+}
+ERIN=$(post /api/iam/admin/users "{\"username\":\"erin$N\",\"password\":\"12345678\",\"must_change_password\":false}" | jq -r '.data.user.id')
+grant "cache_reader_$N" GET
+login "$A" "erin$N" 12345678; load reader
+SESSION=$ROOT_SESSION; grant "cache_loader_$N" STREAM
+login "$A" "erin$N" 12345678; load loader
+SESSION=$ROOT_SESSION
+kubectl -n $NS exec "$A" -c cluster -- curl -s -A "$UA" -b "session_id=$SESSION" localhost:8080/api/authz/routes | jq -c '.data.items[] | select(.path == "/api/caches/load")'
+```
+
+「批量写缓存」是一条流，HTTP 上握手用的是 GET。第一次 erin 的角色只有「GET /api/caches/load」：两个入口都开不了，WebSocket 握手答 403，gRPC 答 `PermissionDenied`。授权不按握手的 GET 判：一条流在两个入口上都按 `STREAM` 这个词判，只授了 GET 的角色开不了它。第二次补上「STREAM /api/caches/load」：WebSocket 回 `{"replica":"<A>:8080","count":1}` 后正常关闭，gRPC 回 `"count": "1"`，一条策略两个入口都放行。最后一条是授权模块的路由清单，这条流列在 `STREAM` 下，照着清单授权就对。这一步的调用都打在 A 上：策略是在 A 上写的，A 当场生效，其余副本最晚一分钟后跟上，见第八组。
+
 ## 正式环境
 
 - 这里三个副本都开着 `DATABASE_AUTO_MIGRATE=true`，是为了演示同时建表。正式环境的做法是：先用 `gg migrate` 建表，副本一律设成 `DATABASE_AUTO_MIGRATE=false`，让表结构变更走评审，而不是作为启动的副作用。

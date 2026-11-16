@@ -8,15 +8,21 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/requestctx"
 	"github.com/hydroan/gst/response"
+	"github.com/hydroan/gst/router"
 )
 
 // Authz authorizes requests using RBAC, through rbac.Enforce, the one
 // decision path the gRPC interceptor of the module takes as well: the
-// subject is read off the gin context, the object and action are the
-// request path and method, and a refusal is answered in the API envelope
-// with the status and message the service error carries. Authz must be
-// called before config.Init so config.Init can read AUTH_RBAC_ENABLED from
-// the environment and enable RBAC initialization.
+// subject is read off the gin context, the object is the request path and
+// the action the method the request's route is registered under
+// (router.Route) — the HTTP method of the request, and STREAM for the
+// request opening the connection of a Stream action, the word the
+// interceptor judges the call of the same action by, so one policy grants a
+// stream on both listeners and a policy written for GET grants it on
+// neither. A refusal is answered in the API envelope with the status and
+// message the service error carries. Authz must be called before
+// config.Init so config.Init can read AUTH_RBAC_ENABLED from the
+// environment and enable RBAC initialization.
 //
 // Authz must run after an authentication middleware that populates
 // requestctx.KeyUserID. When using built-in IAM sessions, register IAMSession
@@ -40,7 +46,8 @@ func Authz() gin.HandlerFunc {
 			Username: c.GetString(requestctx.KeyUsername),
 			TenantID: c.GetString(requestctx.KeyTenantID),
 		}
-		ctx, tenantID, err := rbac.Enforce(c.Request.Context(), subject, c.Request.URL.Path, c.Request.Method)
+		method, _ := router.Route(c)
+		ctx, tenantID, err := rbac.Enforce(c.Request.Context(), subject, c.Request.URL.Path, method)
 		if err != nil {
 			response.Abort(c, err)
 			return

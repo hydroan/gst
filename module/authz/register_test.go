@@ -84,7 +84,9 @@ func TestMain(m *testing.M) {
 			internalmiddleware.RegisterAuth(middleware.Authz())
 			grpcserver.UseAuth(interceptor.Authz())
 		},
-		Seed: seedBaseline,
+		// The probe's Stream action over HTTP, see stream_test.go.
+		Routes: registerProbeStream,
+		Seed:   seedBaseline,
 	})
 }
 

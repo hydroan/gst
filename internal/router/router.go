@@ -301,7 +301,13 @@ func register[M types.Model, REQ types.Request, RSP types.Response](router *gin.
 	handle := func(phase apiaction.Phase, handler gin.HandlerFunc) {
 		method := phase.HTTPMethod()
 		router.Handle(method, relativePath, handler)
-		registerRoute(endpoint, method, authRequired)
+		// The route of a Stream action is listed, and answered by Route,
+		// under the stream word rather than the GET opening its connection.
+		listed := method
+		if phase == apiaction.Stream {
+			listed = apiaction.MethodStream
+		}
+		registerRoute(endpoint, listed, authRequired)
 		middleware.RouteManager.Add(endpoint)
 		openapigen.Set[M, REQ, RSP](endpoint, authRequired, phase)
 	}
@@ -385,8 +391,9 @@ func routesSnapshot() map[string][]string {
 }
 
 // Routes returns a snapshot of the registered API routes, keyed by path with
-// parameters written "{id}"; the public router.Routes forwards to it and
-// documents the contract.
+// parameters written "{id}", each with the methods it is listed under, the
+// route of a Stream action under apiaction.MethodStream; the public
+// router.Routes forwards to it and documents the contract.
 func Routes() map[string][]string {
 	snapshot := routesSnapshot()
 	result := make(map[string][]string, len(snapshot))
@@ -395,6 +402,25 @@ func Routes() map[string][]string {
 		result[template] = sortedHTTPMethods(methods)
 	}
 	return result
+}
+
+// Route returns the method and the route the request's action is registered
+// under: the HTTP method of the request and the route pattern gin matched,
+// "GET" and "/api/records/:id", and apiaction.MethodStream in place of the
+// GET for a request to the route of a Stream action, whatever the request
+// says of itself. The route is empty for a request no route matched. The
+// public router.Route forwards to it and documents the contract.
+func Route(c *gin.Context) (method, route string) {
+	method, route = c.Request.Method, c.FullPath()
+	if method != http.MethodGet || route == "" {
+		return method, route
+	}
+	routeMu.RLock()
+	defer routeMu.RUnlock()
+	if slices.Contains(routes[route], apiaction.MethodStream) {
+		method = apiaction.MethodStream
+	}
+	return method, route
 }
 
 // sortedHTTPMethods returns methods upper-cased and trimmed, blanks and repeats

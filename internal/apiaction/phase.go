@@ -270,3 +270,12 @@ func (p Phase) HTTPMethod() string {
 	}
 	return ""
 }
+
+// MethodStream is the word a Stream action is listed and authorized by in
+// place of an HTTP method, on both listeners. Over HTTP the connection of a
+// stream is opened with a GET and over gRPC its call is no HTTP request at
+// all, and a policy written for GET or POST must let neither through: the
+// router lists the route of a Stream action under this word and answers it
+// as the method of a request to that route (see router.Route), and the gRPC
+// registration describes the rpc of the action with it.
+const MethodStream = "STREAM"

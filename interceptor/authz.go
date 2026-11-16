@@ -30,12 +30,11 @@ var routeParam = regexp.MustCompile(`:([a-zA-Z0-9_]+)`)
 // the route. A policy written with /*, or naming a static path, decides alike
 // on both listeners as well, while one spelling a parameter :id, the way the
 // router registers a route, matches neither: the matcher reads :id as text. The
-// route list, GET /api/authz/routes, lists the routes as HTTP serves them, a
-// Stream action under the GET that opens its connection, so the policy
-// granting the call of a Stream action over gRPC is written by hand in the
-// same form: STREAM, and the route with every parameter written {name}. Authz
-// must be called before config.Init so config.Init can read AUTH_RBAC_ENABLED
-// from the environment and enable RBAC initialization.
+// route list, GET /api/authz/routes, lists a Stream action under STREAM, the
+// word the middleware judges the request opening its connection by as well,
+// so the policy written from the list grants the stream on both listeners.
+// Authz must be called before config.Init so config.Init can read
+// AUTH_RBAC_ENABLED from the environment and enable RBAC initialization.
 //
 // Authz must run after an authentication interceptor, IAMSession or JwtAuth,
 // that establishes the caller; registered ahead of one, it refuses every
