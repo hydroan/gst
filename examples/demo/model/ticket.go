@@ -18,11 +18,11 @@ const (
 // Ticket is a request for help a user files and follows up on: it has a
 // title, is open or closed, and belongs to the user who filed it. It is a
 // table-backed resource with the standard actions on /api/tickets and
-// /api/tickets/:ticket. Get is the framework's own; the other actions
-// declare Service() for the hooks in service/ticket, which stamp the owner,
-// write the audit trail, keep a list to the caller's own tickets and every
-// write to them: updating, patching or deleting someone else's ticket
-// answers 404, as if it were not there. Embedding model.Query lets a list
+// /api/tickets/:ticket. Every action declares Service() for the hooks in
+// service/ticket, which stamp the owner, write the audit trail and keep a
+// list, a read and every write to the caller's own tickets: reading,
+// updating, patching or deleting someone else's ticket answers 404, as if it
+// were not there. Embedding model.Query lets a list
 // take the framework's query parameters: field[op]=value filters such as
 // status[in]=open,closed, _sort_by, _page and _size, and cursor pagination.
 // The binding tags validate a body before any hook runs, a 400 naming the
@@ -75,7 +75,9 @@ func (Ticket) Design() {
 	List(func() {
 		Service()
 	})
-	Get(func() {})
+	Get(func() {
+		Service()
+	})
 
 	Route("tickets/summary", func() {
 		List(func() {

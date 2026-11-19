@@ -43,6 +43,7 @@ func init() {
 	service.Register[*ticket.Updater](service.Update, "/api/tickets/:ticket")
 	service.Register[*ticket.Patcher](service.Patch, "/api/tickets/:ticket")
 	service.Register[*ticket.Lister](service.List, "/api/tickets")
+	service.Register[*ticket.Getter](service.Get, "/api/tickets/:ticket")
 	service.Register[*ticket.Search](service.List, "/api/tickets/search")
 	service.Register[*ticket.Summary](service.List, "/api/tickets/summary")
 	service.Register[*ticket.Trash](service.List, "/api/tickets/trash")
