@@ -2,6 +2,7 @@ package types_test
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"runtime"
 	"strings"
@@ -159,6 +160,43 @@ func TestServerFailureTellsTheServersFailuresFromTheClients(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			require.Equal(t, tc.want, types.ServerFailure(tc.err))
+		})
+	}
+}
+
+// TestFailureLevelFollowsTheStatus pins the level a failure is logged at,
+// from the status it is answered with: error for the server's own failure,
+// an error carrying no service error or one answering 500 or above; warn for
+// a permission refused, a request that did not arrive in time, a
+// precondition not met and a rate exceeded; info for every other failure the
+// client brought on itself, a conflict among them whatever caused it.
+func TestFailureLevelFollowsTheStatus(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want slog.Level
+	}{
+		{"400", types.NewError(http.StatusBadRequest, "bad request"), slog.LevelInfo},
+		{"401", types.NewError(http.StatusUnauthorized, "who are you"), slog.LevelInfo},
+		{"403", types.NewError(http.StatusForbidden, "not yours"), slog.LevelWarn},
+		{"404", types.NewError(http.StatusNotFound, "no such record"), slog.LevelInfo},
+		{"408", types.NewError(http.StatusRequestTimeout, "too slow"), slog.LevelWarn},
+		{"409", types.NewError(http.StatusConflict, "taken"), slog.LevelInfo},
+		{"409 carrying a cause", types.NewErrorWithCause(http.StatusConflict, "reload", errors.New("the record was modified by another operation")), slog.LevelInfo},
+		{"412", types.NewError(http.StatusPreconditionFailed, "not yet"), slog.LevelWarn},
+		{"422", types.NewError(http.StatusUnprocessableEntity, "cannot"), slog.LevelInfo},
+		{"429", types.NewError(http.StatusTooManyRequests, "slow down"), slog.LevelWarn},
+		{"499", types.NewError(types.StatusClientClosedRequest, "gone"), slog.LevelInfo},
+		{"500", types.NewError(http.StatusInternalServerError, "broken"), slog.LevelError},
+		{"501", types.NewError(http.StatusNotImplemented, "not here"), slog.LevelError},
+		{"503", types.NewError(http.StatusServiceUnavailable, "later"), slog.LevelError},
+		{"504", types.NewError(http.StatusGatewayTimeout, "upstream"), slog.LevelError},
+		{"a wrapped service error", errors.Wrap(types.NewError(http.StatusForbidden, "not yours"), "create sample"), slog.LevelWarn},
+		{"a typed nil service error", (*types.Error)(nil), slog.LevelError},
+		{"any other error", errors.New("dial tcp: connection refused"), slog.LevelError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, types.FailureLevel(tc.err))
 		})
 	}
 }

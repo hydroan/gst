@@ -7,7 +7,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/types"
 	gstotel "github.com/hydroan/gst/otel"
@@ -58,7 +57,7 @@ func notFound(cause error) *types.Error {
 
 // reportFailure reports a failure the controller answers, by the answer it
 // is given: it logs it under msg, with fields and, when there is one, err as
-// the error, at the level answer calls for (see grpcserver.StatusLevel), and
+// the error, at the level answer calls for (see types.FailureLevel), and
 // returns answer, the error the failure is answered with. The server's own
 // failure is logged at error and err recorded on span, the controller span
 // of the request or of the call; a failure the client brought on itself is
@@ -71,7 +70,7 @@ func reportFailure(log types.Logger, span trace.Span, msg string, err, answer er
 	if err != nil {
 		fields = append(fields, zap.Error(err))
 	}
-	switch level := grpcserver.StatusLevel(answer); {
+	switch level := types.FailureLevel(answer); {
 	case level >= slog.LevelError:
 		log.Errorz(msg, fields...)
 		gstotel.RecordError(span, err)

@@ -170,8 +170,8 @@ func TestUseAfterRunPanics(t *testing.T) {
 // the cause it wraps kept out of the answer; any other error as Internal with
 // the server failure message. Every error but a status error goes to the
 // framework's log first, cause included, at the level its answer calls for
-// (see StatusLevel) and carrying the call's trace id, where the listener's
-// own warnings go; the access log keeps its one entry a call.
+// (see types.FailureLevel) and carrying the call's trace id, where the
+// listener's own warnings go; the access log keeps its one entry a call.
 func TestARefusalFromAProjectInterceptorAnswersItsStatus(t *testing.T) {
 	reset(t)
 	core, frameworkLog := observer.New(zapcore.DebugLevel)

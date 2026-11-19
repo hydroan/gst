@@ -1,6 +1,7 @@
 package types
 
 import (
+	"log/slog"
 	"net/http"
 	"runtime"
 	"strings"
@@ -209,6 +210,34 @@ func (e *Error) Msg() string {
 func ServerFailure(err error) bool {
 	var serviceErr *Error
 	return !errors.As(err, &serviceErr) || serviceErr.Status() >= http.StatusInternalServerError
+}
+
+// FailureLevel returns the level a failure answered with err is logged at,
+// the same on either transport: error for the server's own failure (see
+// ServerFailure); warn for a failure the client brought on itself that is
+// worth a look, a permission refused (403), a request that did not arrive in
+// time (408), a precondition not met (412) or a rate exceeded (429); and
+// info for any other of the client's, a request that is malformed,
+// unauthenticated, canceled or in conflict, or that names a record that is
+// missing.
+//
+// The four statuses logged at warn are ones whose gRPC codes the logging
+// interceptors of go-grpc-middleware log at warn. Their table is not called
+// here: it is keyed by the code, which only the gRPC transport's mapping
+// gives a failure, and that mapping tells one conflict from another by the
+// database's errors, out of this package's reach. The status is what the
+// answer carries on both transports, so the level is read from it, and a
+// conflict is logged at info whatever caused it.
+func FailureLevel(err error) slog.Level {
+	var serviceErr *Error
+	if ServerFailure(err) || !errors.As(err, &serviceErr) {
+		return slog.LevelError
+	}
+	switch serviceErr.Status() {
+	case http.StatusForbidden, http.StatusRequestTimeout, http.StatusPreconditionFailed, http.StatusTooManyRequests:
+		return slog.LevelWarn
+	}
+	return slog.LevelInfo
 }
 
 func normalizeErrorStatus(status int) (int, bool) {

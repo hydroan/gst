@@ -368,9 +368,9 @@ func (c *call) failService(err error) error {
 	if ended != nil {
 		return reportFailure(c.log, c.span, "service operation failed", err, ended)
 	}
-	// The error is reported before it is mapped: a 408 and a 504 map to one
-	// code, and only the status tells the client's failure from the
-	// server's.
+	// The error is reported before it is mapped: the level is read from the
+	// status the service error carries, which the code it maps to no longer
+	// tells, a 408 and a 504 mapping to one.
 	return grpcserver.StatusError(reportFailure(c.log, c.span, "service operation failed", err, err))
 }
 

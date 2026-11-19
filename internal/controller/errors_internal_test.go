@@ -185,7 +185,7 @@ func (r *entryRecorder) Errorz(msg string, fields ...zap.Field) {
 // failure by the answer it is given. The server's own failure, an answer
 // carrying no service error or one of 500 or above, is logged at error and
 // recorded on the span; a failure the client brought on itself is logged at
-// the level its answer calls for (see grpcserver.StatusLevel), warn or info,
+// the level its answer calls for (see types.FailureLevel), warn or info,
 // and leaves the span as it was. Either way the entry carries the fields it
 // was given and the error after them, a failure reported without an error
 // the fields alone, and the answer is returned.
@@ -205,9 +205,11 @@ func TestReportFailureFollowsTheAnswer(t *testing.T) {
 		{"a 400", badRequest("the request is malformed"), zapcore.InfoLevel},
 		{"a 404", notFound(nil), zapcore.InfoLevel},
 		{"a 409 of a duplicate", databaseError(errors.Wrap(database.ErrDuplicatedKey, "create sample")), zapcore.InfoLevel},
-		{"a 409 of a stale object", databaseError(errors.Wrap(database.ErrStaleObject, "update sample")), zapcore.WarnLevel},
+		{"a 409 of a stale object", databaseError(errors.Wrap(database.ErrStaleObject, "update sample")), zapcore.InfoLevel},
+		{"a 409 of a foreign key", databaseError(errors.Wrap(database.ErrForeignKeyViolated, "create sample")), zapcore.InfoLevel},
 		{"a 403", types.NewError(http.StatusForbidden, "not yours"), zapcore.WarnLevel},
 		{"a 408", types.NewError(http.StatusRequestTimeout, requestTimeoutMsg), zapcore.WarnLevel},
+		{"a 429", types.NewError(http.StatusTooManyRequests, "slow down"), zapcore.WarnLevel},
 		{"a 499", types.NewError(types.StatusClientClosedRequest, "context canceled"), zapcore.InfoLevel},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
