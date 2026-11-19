@@ -94,8 +94,7 @@ func (a *action[M, REQ, RSP]) deleteFlow(ctx context.Context, newServiceContext 
 	if !setID(m, id) {
 		// An id the model rejects cannot match any row; answer 404 instead
 		// of passing an unset id to the database layer.
-		log.Errorz("route id rejected by model", zap.String("id", id))
-		return notFound(nil)
+		return reportFailure(log, trace.SpanFromContext(ctx), "route id rejected by model", nil, notFound(nil), zap.String("id", id))
 	}
 
 	// 1.Perform business logic processing before delete resource.

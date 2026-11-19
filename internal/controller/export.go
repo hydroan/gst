@@ -15,8 +15,6 @@ import (
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/hydroan/gst/logger"
-	gstotel "github.com/hydroan/gst/otel"
-	"go.uber.org/zap"
 )
 
 // Export format identifiers accepted via the types.QueryFormat parameter.
@@ -88,9 +86,7 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		paging = append(paging, matchQueryKeys(query, listCursorQueryKeys)...)
 		if len(paging) > 0 {
 			err := urlquery.UnsupportedParameterError(paging)
-			log.Errorz("parse query parameter failed", zap.Error(err))
-			response.Error(c, invalidArgument(err))
-			gstotel.RecordError(span, err)
+			response.Error(c, reportFailure(log, span, "parse query parameter failed", err, invalidArgument(err)))
 			return
 		}
 
@@ -112,9 +108,7 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				var err error
 				if limit, err = strconv.Atoi(raw); err != nil {
 					err = errors.Newf("invalid query parameter %q: expect a numeric value, got %q", types.QueryLimit, raw)
-					log.Errorz("parse query parameter failed", zap.Error(err))
-					response.Error(c, invalidArgument(err))
-					gstotel.RecordError(span, err)
+					response.Error(c, reportFailure(log, span, "parse query parameter failed", err, invalidArgument(err)))
 					return
 				}
 			}
@@ -130,25 +124,19 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			// path: rejecting it keeps the export from running with a silently
 			// dropped condition set.
 			if err = urlquery.Decode(query, m); err != nil {
-				log.Errorz("parse query parameter failed", zap.Error(err))
-				response.Error(c, invalidArgument(err))
-				gstotel.RecordError(span, err)
+				response.Error(c, reportFailure(log, span, "parse query parameter failed", err, invalidArgument(err)))
 				return
 			}
 			var filters []types.Filter
 			if filters, err = urlquery.Filters(query, m); err != nil {
-				log.Errorz("parse query parameter failed", zap.Error(err))
-				response.Error(c, invalidArgument(err))
-				gstotel.RecordError(span, err)
+				response.Error(c, reportFailure(log, span, "parse query parameter failed", err, invalidArgument(err)))
 				return
 			}
 			present := urlquery.PresentFields(query)
 
 			var orders []types.Order
 			if orders, err = urlquery.Orders(query, m); err != nil {
-				log.Errorz("parse query parameter failed", zap.Error(err))
-				response.Error(c, invalidArgument(err))
-				gstotel.RecordError(span, err)
+				response.Error(c, reportFailure(log, span, "parse query parameter failed", err, invalidArgument(err)))
 				return
 			}
 

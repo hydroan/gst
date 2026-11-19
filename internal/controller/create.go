@@ -13,7 +13,6 @@ import (
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
-	gstotel "github.com/hydroan/gst/otel"
 	"go.uber.org/zap"
 )
 
@@ -49,9 +48,7 @@ func CreateHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			// Creating a resource requires a body, so an absent one is refused
 			// rather than answered as a success that wrote nothing.
 			reqErr = requiredBodyError(reqErr)
-			log.Errorz("bind request body failed", zap.Error(reqErr))
-			response.Error(c, invalidArgument(reqErr))
-			gstotel.RecordError(span, reqErr)
+			response.Error(c, reportFailure(log, span, "bind request body failed", reqErr, invalidArgument(reqErr)))
 			return
 		}
 

@@ -13,7 +13,6 @@ import (
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
-	"go.uber.org/zap"
 )
 
 // maxImportSize is the largest upload an import accepts, 5 MiB.
@@ -51,9 +50,7 @@ func ImportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		// frontend.
 		file, err := c.FormFile("file")
 		if err != nil {
-			log.Errorz("read upload file failed", zap.Error(err))
-			response.Error(c, badRequest(missingUploadFileMsg))
-			gstotel.RecordError(span, err)
+			response.Error(c, reportFailure(log, span, "read upload file failed", err, badRequest(missingUploadFileMsg)))
 			return
 		}
 		// check file size.
@@ -65,18 +62,14 @@ func ImportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		}
 		fd, err := file.Open()
 		if err != nil {
-			log.Errorz("read upload file failed", zap.Error(err))
-			response.Error(c, err)
-			gstotel.RecordError(span, err)
+			response.Error(c, reportFailure(log, span, "read upload file failed", err, err))
 			return
 		}
 		defer fd.Close()
 
 		buf := new(bytes.Buffer)
 		if _, err = io.Copy(buf, fd); err != nil {
-			log.Errorz("read upload file failed", zap.Error(err))
-			response.Error(c, err)
-			gstotel.RecordError(span, err)
+			response.Error(c, reportFailure(log, span, "read upload file failed", err, err))
 			return
 		}
 		ml, err := traceServiceCall(ctrlSpanCtx, a.serviceSpan(apiaction.Import), a.name, func(spanCtx context.Context) ([]M, error) {

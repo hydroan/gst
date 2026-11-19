@@ -9,8 +9,11 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/tenant"
+	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/hydroan/gst/internal/types"
+	gstotel "github.com/hydroan/gst/otel"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/codes"
 	"go.uber.org/zap"
 )
 
@@ -145,5 +148,63 @@ func TestFailWithTellsACancellationFromAPassedDeadline(t *testing.T) {
 		require.ErrorIs(t, got, cause)
 		require.Equal(t, []string{"database operation failed"}, rec.errors, "the server did not answer in time: its failure, not the client's")
 		require.Empty(t, rec.infos)
+	})
+}
+
+// fieldRecorder records the entries reportFailure logs at error, the fields
+// of each under its message.
+type fieldRecorder struct {
+	nopControllerLogger
+	errors map[string][]zap.Field
+}
+
+func (r *fieldRecorder) Errorz(msg string, fields ...zap.Field) {
+	if r.errors == nil {
+		r.errors = make(map[string][]zap.Field)
+	}
+	r.errors[msg] = fields
+}
+
+// TestReportFailureLogsRecordsAndAnswers pins what reportFailure makes of a
+// failure: it logs it at error under the message, the fields it was given
+// first and the error after them, records the error on the span, and returns
+// the answer; a failure reported without an error logs the fields alone and
+// leaves the span as it was.
+func TestReportFailureLogsRecordsAndAnswers(t *testing.T) {
+	oteltest.Enable(t)
+	recorder := oteltest.Record(t)
+	answer := notFound(nil)
+
+	t.Run("an error is logged after the fields and recorded on the span", func(t *testing.T) {
+		rec := &fieldRecorder{}
+		_, span := gstotel.StartSpan(context.Background(), "report with an error")
+		cause := errors.New("the id is no integer")
+
+		got := reportFailure(rec, span, "route id rejected by model", cause, answer, zap.String("id", "7abc"))
+		span.End()
+
+		require.Same(t, answer, got)
+		require.Equal(t, map[string][]zap.Field{
+			"route id rejected by model": {zap.String("id", "7abc"), zap.Error(cause)},
+		}, rec.errors)
+		ended := oteltest.EndedNamed(t, recorder, "report with an error")
+		require.Equal(t, codes.Error, ended.Status().Code)
+		require.Len(t, ended.Events(), 1, "the error is recorded as one exception event")
+	})
+
+	t.Run("no error logs the fields alone and leaves the span as it was", func(t *testing.T) {
+		rec := &fieldRecorder{}
+		_, span := gstotel.StartSpan(context.Background(), "report without an error")
+
+		got := reportFailure(rec, span, "route id rejected by model", nil, answer, zap.String("id", "7abc"))
+		span.End()
+
+		require.Same(t, answer, got)
+		require.Equal(t, map[string][]zap.Field{
+			"route id rejected by model": {zap.String("id", "7abc")},
+		}, rec.errors)
+		ended := oteltest.EndedNamed(t, recorder, "report without an error")
+		require.Equal(t, codes.Unset, ended.Status().Code)
+		require.Empty(t, ended.Events())
 	})
 }

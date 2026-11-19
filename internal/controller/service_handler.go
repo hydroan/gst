@@ -12,8 +12,6 @@ import (
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
-	gstotel "github.com/hydroan/gst/otel"
-	"go.uber.org/zap"
 )
 
 // This file holds the handler of an action served by its phase service's
@@ -63,9 +61,7 @@ func (a *action[M, REQ, RSP]) serviceHandler() gin.HandlerFunc {
 				}
 			}
 			if reqErr != nil {
-				log.Errorz("bind request body failed", zap.Error(reqErr))
-				response.Error(c, invalidArgument(reqErr))
-				gstotel.RecordError(span, reqErr)
+				response.Error(c, reportFailure(log, span, "bind request body failed", reqErr, invalidArgument(reqErr)))
 				return
 			}
 		}

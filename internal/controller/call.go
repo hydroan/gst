@@ -17,9 +17,7 @@ import (
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/hydroan/gst/logger"
-	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/zap"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -301,9 +299,7 @@ func (c *call) end() { c.span.End() }
 // grpcserver.StatusError), err logged and recorded on the span the way the HTTP
 // handler treats a bind failure.
 func (c *call) refuse(answer, err error) error {
-	c.log.Errorz("request message rejected", zap.Error(err))
-	gstotel.RecordError(c.span, err)
-	return grpcserver.StatusError(answer)
+	return grpcserver.StatusError(reportFailure(c.log, c.span, "request message rejected", err, answer))
 }
 
 // invalid refuses the request for err with the message err carries, the
@@ -368,12 +364,11 @@ func (c *call) failService(err error) error {
 	if status.Code(ended) == codes.Canceled {
 		return ended
 	}
-	c.log.Errorz("service operation failed", zap.Error(err))
-	gstotel.RecordError(c.span, err)
-	if ended != nil {
-		return ended
+	answer := ended
+	if answer == nil {
+		answer = grpcserver.StatusError(err)
 	}
-	return grpcserver.StatusError(err)
+	return reportFailure(c.log, c.span, "service operation failed", err, answer)
 }
 
 // ended returns the status of the call's context once the call ended, nil
@@ -419,9 +414,7 @@ func (c *call) finish() error {
 		if err == nil {
 			continue
 		}
-		c.log.Errorz("service operation failed", zap.Error(err))
-		gstotel.RecordError(c.span, err)
-		return grpcserver.StatusError(err)
+		return reportFailure(c.log, c.span, "service operation failed", err, grpcserver.StatusError(err))
 	}
 	return nil
 }

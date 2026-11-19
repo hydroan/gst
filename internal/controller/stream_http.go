@@ -19,10 +19,8 @@ import (
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/websocket"
 	"github.com/hydroan/gst/logger"
-	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/zap"
 )
 
 // This file holds the handler of a Stream action over HTTP, the counterpart
@@ -92,17 +90,13 @@ func StreamHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		bidi, isBidi := svc.(types.BidiStreamer[REQ, RSP])
 		if !isServer && !isClient && !isBidi {
 			err := a.unserved(route)
-			log.Errorz("service operation failed", zap.Error(err))
-			gstotel.RecordError(span, err)
-			response.Error(c, types.NewErrorWithCause(http.StatusNotImplemented, unimplementedMsg, err))
+			response.Error(c, reportFailure(log, span, "service operation failed", err, types.NewErrorWithCause(http.StatusNotImplemented, unimplementedMsg, err)))
 			return
 		}
 
 		conn, err := websocket.Accept(c.Writer, c.Request, config.App.Server.WebSocketOrigins, config.App.Server.WriteTimeout)
 		if err != nil {
-			log.Errorz("request rejected", zap.Error(err))
-			gstotel.RecordError(span, err)
-			response.Error(c, err)
+			response.Error(c, reportFailure(log, span, "request rejected", err, err))
 			return
 		}
 		// Nothing but the handler closes a connection taken over from the
@@ -165,17 +159,14 @@ func StreamHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		var ending error
 		switch refused := in.refusal(); {
 		case refused != nil:
-			log.Errorz("request rejected", zap.Error(refused))
-			gstotel.RecordError(span, refused)
-			ending = refused
+			ending = reportFailure(log, span, "request rejected", refused, refused)
 		case stream.Err() != nil:
 			cause := context.Cause(stream)
 			shutdown := errors.Is(cause, streamctx.ErrServerShutdown)
 			if !shutdown && !errors.Is(cause, stream.Err()) {
 				// What the client sent closed the connection, with the status
 				// the protocol gives it (see websocket.Conn).
-				log.Errorz("request rejected", zap.Error(cause))
-				gstotel.RecordError(span, cause)
+				_ = reportFailure(log, span, "request rejected", cause, cause)
 				break
 			}
 			span.AddEvent("interrupted", trace.WithAttributes(attribute.String("reason", streamEndReason(stream))))

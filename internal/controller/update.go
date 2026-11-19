@@ -14,7 +14,7 @@ import (
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
-	gstotel "github.com/hydroan/gst/otel"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
 
@@ -48,9 +48,7 @@ func UpdateHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			// A full update replaces the resource, so an absent body is refused
 			// rather than tolerated as "nothing to change".
 			reqErr = requiredBodyError(reqErr)
-			log.Errorz("bind request body failed", zap.Error(reqErr))
-			response.Error(c, invalidArgument(reqErr))
-			gstotel.RecordError(span, reqErr)
+			response.Error(c, reportFailure(log, span, "bind request body failed", reqErr, invalidArgument(reqErr)))
 			return
 		}
 
@@ -124,8 +122,7 @@ func (a *action[M, REQ, RSP]) updateFlow(ctx context.Context, newServiceContext 
 	if !setID(m, id) {
 		// An id the model rejects cannot match any row; answer 404 without
 		// touching the database.
-		log.Errorz("route id rejected by model", zap.String("id", id))
-		return notFound(nil)
+		return reportFailure(log, trace.SpanFromContext(ctx), "route id rejected by model", nil, notFound(nil), zap.String("id", id))
 	}
 	req.ClearID()
 	req.SetID(id)

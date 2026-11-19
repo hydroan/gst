@@ -49,22 +49,16 @@ func PatchManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg 
 		var req batch[M]
 		body, err := readJSONRequestBody(c)
 		if err != nil {
-			log.Errorz("bind request body failed", zap.Error(err))
-			response.Error(c, invalidArgument(err))
-			gstotel.RecordError(span, err)
+			response.Error(c, reportFailure(log, span, "bind request body failed", err, invalidArgument(err)))
 			return
 		}
 		fieldSets, fieldErr := patchManyFieldSetsFromJSONBody(a.typ, body)
 		if fieldErr != nil && !errors.Is(fieldErr, io.EOF) {
-			log.Errorz("bind request body failed", zap.Error(fieldErr))
-			response.Error(c, invalidArgument(fieldErr))
-			gstotel.RecordError(span, fieldErr)
+			response.Error(c, reportFailure(log, span, "bind request body failed", fieldErr, invalidArgument(fieldErr)))
 			return
 		}
 		if reqErr := decodeJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
-			log.Errorz("bind request body failed", zap.Error(reqErr))
-			response.Error(c, invalidArgument(reqErr))
-			gstotel.RecordError(span, reqErr)
+			response.Error(c, reportFailure(log, span, "bind request body failed", reqErr, invalidArgument(reqErr)))
 			return
 		}
 		normalizeBatch(&req)
@@ -95,9 +89,7 @@ func PatchManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg 
 		for i, item := range req.Items {
 			if fieldErr := validatePatchFields(item, fieldsOf(i)); fieldErr != nil {
 				fieldErr = clientSafeItemBindError(i, fieldErr)
-				log.Errorz("bind request body failed", zap.Error(fieldErr))
-				response.Error(c, invalidArgument(fieldErr))
-				gstotel.RecordError(span, fieldErr)
+				response.Error(c, reportFailure(log, span, "bind request body failed", fieldErr, invalidArgument(fieldErr)))
 				return
 			}
 		}

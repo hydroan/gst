@@ -100,8 +100,7 @@ func (a *action[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext ser
 		// An id the model rejects cannot match any row; answer 404 before
 		// the raw value reaches SQL, where implicit string-to-integer
 		// coercion could match an unintended row.
-		log.Errorz("route id rejected by model", zap.String("id", id))
-		return zero, notFound(nil)
+		return zero, reportFailure(log, trace.SpanFromContext(ctx), "route id rejected by model", nil, notFound(nil), zap.String("id", id))
 	}
 	expands := parseExpandQuery(requestctx.QueryValues(ctx), m)
 

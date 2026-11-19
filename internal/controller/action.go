@@ -21,7 +21,6 @@ import (
 	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/zap"
 )
 
 // action is one action of a model on a route as the framework serves it,
@@ -192,9 +191,7 @@ func (a *action[M, REQ, RSP]) beginRequest(c *gin.Context) (context.Context, tra
 		}
 	}, a.itemParam)
 	if err != nil {
-		logger.Controller.WithContext(c.Request.Context(), a.phase).Errorz("request rejected", zap.Error(err))
-		gstotel.RecordError(span, err)
-		response.Error(c, invalidArgument(err))
+		response.Error(c, reportFailure(logger.Controller.WithContext(c.Request.Context(), a.phase), span, "request rejected", err, invalidArgument(err)))
 		return spanCtx, span, false
 	}
 	return spanCtx, span, true

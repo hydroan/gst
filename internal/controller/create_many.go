@@ -14,7 +14,6 @@ import (
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
-	gstotel "github.com/hydroan/gst/otel"
 	"go.uber.org/zap"
 )
 
@@ -44,9 +43,7 @@ func CreateManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg
 
 		var req batch[M]
 		if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
-			log.Errorz("bind request body failed", zap.Error(reqErr))
-			response.Error(c, invalidArgument(reqErr))
-			gstotel.RecordError(span, reqErr)
+			response.Error(c, reportFailure(log, span, "bind request body failed", reqErr, invalidArgument(reqErr)))
 			return
 		}
 

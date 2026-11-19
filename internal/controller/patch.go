@@ -17,6 +17,7 @@ import (
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
 
@@ -49,25 +50,19 @@ func PatchHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		req := a.newModel()
 		body, err := readJSONRequestBody(c)
 		if err != nil {
-			log.Errorz("bind request body failed", zap.Error(err))
-			response.Error(c, invalidArgument(err))
-			gstotel.RecordError(span, err)
+			response.Error(c, reportFailure(log, span, "bind request body failed", err, invalidArgument(err)))
 			return
 		}
 		fields, err := patchFieldSetFromJSONBody(a.typ, body)
 		if err != nil && !errors.Is(err, io.EOF) {
-			log.Errorz("bind request body failed", zap.Error(err))
-			response.Error(c, invalidArgument(err))
-			gstotel.RecordError(span, err)
+			response.Error(c, reportFailure(log, span, "bind request body failed", err, invalidArgument(err)))
 			return
 		}
 		if err = decodeJSONRequest(c, &req); err != nil {
 			// A single-resource patch without a body patches nothing; refuse it
 			// with a stable message instead of the bare io.EOF text.
 			err = requiredBodyError(err)
-			log.Errorz("bind request body failed", zap.Error(err))
-			response.Error(c, invalidArgument(err))
-			gstotel.RecordError(span, err)
+			response.Error(c, reportFailure(log, span, "bind request body failed", err, invalidArgument(err)))
 			return
 		}
 		// A versioned model must carry the version it was read with on every
@@ -88,9 +83,7 @@ func PatchHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		a.normalizeModel(&req)
 		if err = validatePatchFields(req, fields); err != nil {
 			err = clientSafeBindError(err)
-			log.Errorz("bind request body failed", zap.Error(err))
-			response.Error(c, invalidArgument(err))
-			gstotel.RecordError(span, err)
+			response.Error(c, reportFailure(log, span, "bind request body failed", err, invalidArgument(err)))
 			return
 		}
 		id, ok := routeID(c, cfg, log, span)
@@ -178,8 +171,7 @@ func (a *action[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceContext s
 	if !setID(m, id) {
 		// An id the model rejects cannot match any row; answer 404 without
 		// relying on the empty-query safety net below.
-		log.Errorz("route id rejected by model", zap.String("id", id))
-		return zero, notFound(nil)
+		return zero, reportFailure(log, trace.SpanFromContext(ctx), "route id rejected by model", nil, notFound(nil), zap.String("id", id))
 	}
 
 	// Make sure the record already exists. The read is pinned to the
@@ -190,8 +182,7 @@ func (a *action[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceContext s
 		return zero, failDatabase(ctx, log, err)
 	}
 	if len(data) != 1 {
-		log.Errorz("records matched by id is not exactly one", zap.Int("count", len(data)), zap.String("id", id))
-		return zero, notFound(nil)
+		return zero, reportFailure(log, trace.SpanFromContext(ctx), "records matched by id is not exactly one", nil, notFound(nil), zap.Int("count", len(data)), zap.String("id", id))
 	}
 	newVal := reflect.ValueOf(req).Elem()
 	oldVal := reflect.ValueOf(data[0]).Elem()

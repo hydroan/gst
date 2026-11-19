@@ -54,6 +54,28 @@ func notFound(cause error) *types.Error {
 	return types.NewErrorWithCause(http.StatusNotFound, notFoundMsg, cause)
 }
 
+// reportFailure reports a failure the controller answers: it logs it at
+// error under msg, with fields and, when there is one, err as the error;
+// records err on span, the controller span of the request or of the call;
+// and returns answer, the error the failure is answered with. A handler, a
+// flow and a call report through it alike, so that a failure reads the same
+// in the log and on the span whichever transport carried the request.
+//
+// An error it records is an error it logs. The refusals whose span records
+// an error their log entry does not carry are therefore reported where they
+// are made, by hand: a request naming no record (see routeID), an upload
+// over the size limit (see ImportHandler), a versioned record patched
+// without its version (see PatchHandler and PatchManyHandler), and a record
+// read back empty (see getFlow).
+func reportFailure(log types.Logger, span trace.Span, msg string, err, answer error, fields ...zap.Field) error {
+	if err != nil {
+		fields = append(fields, zap.Error(err))
+	}
+	log.Errorz(msg, fields...)
+	gstotel.RecordError(span, err)
+	return answer
+}
+
 // failWith logs err under msg, records it on the controller span ctx
 // carries, and returns answer, the error the flow's failure answers with.
 //
@@ -72,12 +94,10 @@ func failWith(ctx context.Context, log types.Logger, msg string, err, answer err
 		log.Infoz(msg, zap.Error(err))
 		return endedAnswer(ended, err)
 	}
-	log.Errorz(msg, zap.Error(err))
-	gstotel.RecordError(trace.SpanFromContext(ctx), err)
 	if ended != nil {
-		return endedAnswer(ended, err)
+		answer = endedAnswer(ended, err)
 	}
-	return answer
+	return reportFailure(log, trace.SpanFromContext(ctx), msg, err, answer)
 }
 
 // endedAnswer returns the answer of a request whose context ended, ended

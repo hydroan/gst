@@ -10,8 +10,6 @@ import (
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/types"
-	gstotel "github.com/hydroan/gst/otel"
-	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -239,9 +237,7 @@ func (a *action[M, REQ, RSP]) requests(c *call, recv func() (REQ, error)) *reque
 			// code. It is answered as the refusal it is, whatever the
 			// service makes of the error its Recv gave it.
 			if status.Code(err) == codes.InvalidArgument {
-				c.log.Errorz("request message rejected", zap.Error(err))
-				gstotel.RecordError(c.span, err)
-				r.refuse(err)
+				r.refuse(reportFailure(c.log, c.span, "request message rejected", err, err))
 			}
 			return req, err
 		}
@@ -260,10 +256,7 @@ func (a *action[M, REQ, RSP]) requests(c *call, recv func() (REQ, error)) *reque
 // the kind the action declares (see unserved) with Unimplemented and
 // unimplementedMsg: the transport's own refusal of a call nothing serves.
 func (a *action[M, REQ, RSP]) unimplemented(c *call, route string) error {
-	err := a.unserved(route)
-	c.log.Errorz("service operation failed", zap.Error(err))
-	gstotel.RecordError(c.span, err)
-	return status.Error(codes.Unimplemented, unimplementedMsg)
+	return reportFailure(c.log, c.span, "service operation failed", a.unserved(route), status.Error(codes.Unimplemented, unimplementedMsg))
 }
 
 // unserved returns the failure of the Stream action on route whose service,

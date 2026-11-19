@@ -46,9 +46,7 @@ func DeleteManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg
 
 		var req batch[M]
 		if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
-			log.Errorz("bind request body failed", zap.Error(reqErr))
-			response.Error(c, invalidArgument(reqErr))
-			gstotel.RecordError(span, reqErr)
+			response.Error(c, reportFailure(log, span, "bind request body failed", reqErr, invalidArgument(reqErr)))
 			return
 		}
 
@@ -115,8 +113,7 @@ func (a *action[M, REQ, RSP]) deleteManyFlow(ctx context.Context, newServiceCont
 		if !setID(m, id) {
 			// An id the model rejects names no record, and every id of the
 			// batch must name one: answer 404 with nothing deleted.
-			log.Errorz("batch delete with an id the model rejects", zap.String("id", id))
-			return notFound(nil)
+			return reportFailure(log, trace.SpanFromContext(ctx), "batch delete with an id the model rejects", nil, notFound(nil), zap.String("id", id))
 		}
 		req.Items = append(req.Items, m)
 	}
