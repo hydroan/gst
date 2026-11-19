@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
@@ -102,11 +103,23 @@ func attachReplicas(db *gorm.DB, cfg config.Postgres) (*gorm.DB, error) {
 // offset. Under any other zone, filters and cursors would shift by the
 // offset, buckets would split days at that zone's midnight, and responses
 // would carry that offset instead of UTC's, so the zone is not configurable.
+//
+// Every configured value is written quoted (see dsnValue): the driver reads
+// the string as keywords and values, and a space ends a value that is not
+// quoted, so a password holding one would be cut there and the words after it
+// read as further keywords.
 func buildDSN(cfg config.Postgres) string {
 	return fmt.Sprintf(
 		"host=%s user=%s password=%s dbname=%s port=%d sslmode=%s TimeZone=UTC default_query_exec_mode=simple_protocol",
-		cfg.Host, cfg.Username, cfg.Password, cfg.Database, cfg.Port, cfg.SSLMode,
+		dsnValue(cfg.Host), dsnValue(cfg.Username), dsnValue(cfg.Password), dsnValue(cfg.Database), cfg.Port, dsnValue(cfg.SSLMode),
 	)
+}
+
+// dsnValue writes s as a value of a keyword/value connection string: in
+// single quotes, a backslash before every backslash and single quote inside.
+// For example, p w'd becomes 'p w\'d'.
+func dsnValue(s string) string {
+	return "'" + strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(s) + "'"
 }
 
 // errCodes are the errors of the constraints a client's data breaks that the
