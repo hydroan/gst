@@ -9,9 +9,13 @@ import (
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
+	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // traceSample is a model for the tracing helpers alone: never registered and
@@ -43,7 +47,7 @@ func TestOperationSpanAttributesFitTheCapacityInTheWorstCase(t *testing.T) {
 	// growing past its capacity is not hidden by the other shrinking.
 	batches := oteltest.AttributesByKey(t, span.Attributes(),
 		[]attribute.Key{"component", "database.operation", "database.model", "database.dry_run", "database.batch_size"},
-		[]attribute.Key{"database.duration_ms", "database.record_not_found", "database.canceled", "error"},
+		[]attribute.Key{"database.duration_ms", "database.record_not_found", "database.stale_object", "database.canceled", "error"},
 	)
 	require.Len(t, batches[0], operationStartAttrCap, "the worst case must fill the start batch exactly: a new attribute bumps operationStartAttrCap")
 	require.Len(t, batches[1], operationOutcomeAttrCap, "the worst case must fill the outcome batch exactly: a new attribute bumps operationOutcomeAttrCap")
@@ -61,8 +65,9 @@ func TestOperationLogFieldsFitTheCapacityInTheWorstCase(t *testing.T) {
 }
 
 // TestOperationLogFieldsReadTheOutcome pins the outcome field of an
-// operation's log entry: record_not_found for a missing row, canceled for an
-// operation its context canceled, and the error for a failure alone.
+// operation's log entry: record_not_found for a missing row, stale_object
+// for a versioned write that matched none, canceled for an operation its
+// context canceled, and the error for a failure alone.
 func TestOperationLogFieldsReadTheOutcome(t *testing.T) {
 	keys := func(err error) map[string]bool {
 		got := make(map[string]bool)
@@ -73,10 +78,67 @@ func TestOperationLogFieldsReadTheOutcome(t *testing.T) {
 	}
 
 	require.True(t, keys(ErrRecordNotFound)["record_not_found"])
+	stale := keys(errors.Wrap(ErrStaleObject, "update sample"))
+	require.True(t, stale["stale_object"])
+	require.False(t, stale["error"], "a stale object carries no error")
 	canceled := keys(errors.Wrap(context.Canceled, "sample"))
 	require.True(t, canceled["canceled"])
 	require.False(t, canceled["error"], "a canceled operation carries no error")
 	require.True(t, keys(errors.New("sample failure"))["error"])
+}
+
+// loggedOutcome is the level and message of one entry an operation logged.
+type loggedOutcome struct {
+	level zapcore.Level
+	msg   string
+}
+
+// outcomeLogger stands in for the database stream's logger and records the
+// level and message of each entry an operation logs through it.
+type outcomeLogger struct {
+	types.Logger
+	logged *[]loggedOutcome
+}
+
+func (l outcomeLogger) WithContext(context.Context, apiaction.Phase) types.Logger { return l }
+
+func (l outcomeLogger) Debugz(msg string, _ ...zap.Field) {
+	*l.logged = append(*l.logged, loggedOutcome{zapcore.DebugLevel, msg})
+}
+
+func (l outcomeLogger) Errorz(msg string, _ ...zap.Field) {
+	*l.logged = append(*l.logged, loggedOutcome{zapcore.ErrorLevel, msg})
+}
+
+// TestOperationLogLevelFollowsTheOutcome pins the level an operation's entry
+// is logged at: debug for an operation that completed, the missing row and
+// the stale object among the outcomes it completes with, and for one its
+// context canceled; error for a failure alone.
+func TestOperationLogLevelFollowsTheOutcome(t *testing.T) {
+	var logged []loggedOutcome
+	original := logger.Database
+	logger.Database = outcomeLogger{Logger: original, logged: &logged}
+	t.Cleanup(func() { logger.Database = original })
+
+	for _, err := range []error{
+		nil,
+		errors.Wrap(ErrRecordNotFound, "get sample"),
+		errors.Wrap(ErrStaleObject, "update sample"),
+		errors.Wrap(context.Canceled, "list samples"),
+		errors.New("sample failure"),
+	} {
+		db := &database[*traceSample]{ins: DB(), ctx: context.Background()}
+		done, _ := db.traceAs("TraceSample", apiaction.Update)
+		done(err)
+	}
+
+	require.Equal(t, []loggedOutcome{
+		{zapcore.DebugLevel, "database operation completed"},
+		{zapcore.DebugLevel, "database operation completed"},
+		{zapcore.DebugLevel, "database operation completed"},
+		{zapcore.DebugLevel, "database operation canceled"},
+		{zapcore.ErrorLevel, "database operation failed"},
+	}, logged)
 }
 
 // TestHookSpanAttributesFitTheCapacityInTheWorstCase pins hookOutcomeAttrCap

@@ -10,6 +10,7 @@ import (
 
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
+	gstotel "github.com/hydroan/gst/otel"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/sdk/trace"
@@ -55,10 +56,11 @@ func TestTraceModelHookSpansOnlyOverriddenHooks(t *testing.T) {
 }
 
 // TestTraceSpanReadsOutcomeLikeTheLog pins that the operation span reads an
-// outcome the way the log does: a completed operation and a missing row are
-// normal outcomes, which leave the span's status unset the way
-// instrumentation does, the missing row carrying database.record_not_found
-// and no recorded error, while a real failure records the error and marks
+// outcome the way the log does: a completed operation, a missing row and a
+// stale object are normal outcomes, which leave the span's status unset the
+// way instrumentation does, the missing row carrying
+// database.record_not_found, the stale object database.stale_object, and
+// neither a recorded error, while a real failure records the error and marks
 // the span failed.
 func TestTraceSpanReadsOutcomeLikeTheLog(t *testing.T) {
 	oteltest.Enable(t)
@@ -85,6 +87,23 @@ func TestTraceSpanReadsOutcomeLikeTheLog(t *testing.T) {
 		attrs := spanAttributes(span)
 		notFound, ok := attrs["database.record_not_found"].(bool)
 		require.True(t, ok && notFound, "the span must carry database.record_not_found")
+		require.NotContains(t, attrs, "error")
+	})
+
+	t.Run("a stale object leaves the span's status unset and marks it stale_object", func(t *testing.T) {
+		setupVersionedNotes(t)
+		mustCreateNote(t, "note-trace-stale", "v1")
+		stale := &versionedNote{Title: "stale-write", Version: 7}
+		stale.ID = "note-trace-stale"
+		err := database.Database[*versionedNote](context.Background()).Update(stale)
+		require.ErrorIs(t, err, database.ErrStaleObject)
+
+		span := lastEndedNamed(t, recorder, gstotel.FrameworkSpanName("database", "versionedNote", "Update"))
+		require.Equal(t, codes.Unset, span.Status().Code)
+		require.Empty(t, span.Events(), "a stale object must not be recorded as an exception")
+		attrs := spanAttributes(span)
+		staleObject, ok := attrs["database.stale_object"].(bool)
+		require.True(t, ok && staleObject, "the span must carry database.stale_object")
 		require.NotContains(t, attrs, "error")
 	})
 
