@@ -2,10 +2,12 @@ package controller
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/types"
 	gstotel "github.com/hydroan/gst/otel"
@@ -54,47 +56,49 @@ func notFound(cause error) *types.Error {
 	return types.NewErrorWithCause(http.StatusNotFound, notFoundMsg, cause)
 }
 
-// reportFailure reports a failure the controller answers: it logs it at
-// error under msg, with fields and, when there is one, err as the error;
-// records err on span, the controller span of the request or of the call;
-// and returns answer, the error the failure is answered with. A handler, a
-// flow and a call report through it alike, so that a failure reads the same
-// in the log and on the span whichever transport carried the request.
-//
-// An error it records is an error it logs. The refusals whose span records
-// an error their log entry does not carry are therefore reported where they
-// are made, by hand: a request naming no record (see routeID), an upload
-// over the size limit (see ImportHandler), a versioned record patched
-// without its version (see PatchHandler and PatchManyHandler), and a record
-// read back empty (see getFlow).
+// reportFailure reports a failure the controller answers, by the answer it
+// is given: it logs it under msg, with fields and, when there is one, err as
+// the error, at the level answer calls for (see grpcserver.StatusLevel), and
+// returns answer, the error the failure is answered with. The server's own
+// failure is logged at error and err recorded on span, the controller span
+// of the request or of the call; a failure the client brought on itself is
+// logged at warn or info and leaves the span as it is, the way a server span
+// keeps its failed status for the server's failures (see the tracing
+// middleware). A handler, a flow and a call report through it alike, so that
+// a failure reads the same in the log and on the span whichever transport
+// carried the request.
 func reportFailure(log types.Logger, span trace.Span, msg string, err, answer error, fields ...zap.Field) error {
 	if err != nil {
 		fields = append(fields, zap.Error(err))
 	}
-	log.Errorz(msg, fields...)
-	gstotel.RecordError(span, err)
+	switch level := grpcserver.StatusLevel(answer); {
+	case level >= slog.LevelError:
+		log.Errorz(msg, fields...)
+		gstotel.RecordError(span, err)
+	case level >= slog.LevelWarn:
+		log.Warnz(msg, fields...)
+	default:
+		log.Infoz(msg, fields...)
+	}
 	return answer
 }
 
-// failWith logs err under msg, records it on the controller span ctx
-// carries, and returns answer, the error the flow's failure answers with.
+// failWith reports err under msg (see reportFailure), on the controller span
+// ctx carries, and returns answer, the error the flow's failure answers
+// with, or, once ctx ended, the answer of the ending (see endedAnswer), by
+// which the failure is then reported.
 //
 // A ctx the client canceled — it went away before the answer — makes the
-// failure the client's doing, not the server's: err is logged at info and
-// kept off the span, and the failure is answered as the cancellation,
-// types.StatusClientClosedRequest with the context's own message, which
-// gRPC answers Canceled (see call.ended). A ctx whose deadline passed is
-// the server failing to answer within the request's time budget, whoever
-// set it, which the tracing conventions count as the server's error: it is
-// logged and recorded like any failure, and answered 504 with the context's
-// message, what gRPC answers DeadlineExceeded.
+// failure the client's doing, not the server's: answered as the
+// cancellation, types.StatusClientClosedRequest with the context's own
+// message, which gRPC answers Canceled (see call.ended), it is logged at
+// info and kept off the span. A ctx whose deadline passed is the server
+// failing to answer within the request's time budget, whoever set it, which
+// the tracing conventions count as the server's error: answered 504 with
+// the context's message, what gRPC answers DeadlineExceeded, it is logged at
+// error and recorded like any failure of the server's.
 func failWith(ctx context.Context, log types.Logger, msg string, err, answer error) error {
-	ended := ctx.Err()
-	if errors.Is(ended, context.Canceled) {
-		log.Infoz(msg, zap.Error(err))
-		return endedAnswer(ended, err)
-	}
-	if ended != nil {
+	if ended := ctx.Err(); ended != nil {
 		answer = endedAnswer(ended, err)
 	}
 	return reportFailure(log, trace.SpanFromContext(ctx), msg, err, answer)

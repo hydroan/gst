@@ -123,7 +123,6 @@ logs '.level == "WARN" or .level == "ERROR"' | jq -r '[.level, .logger, .msg] | 
 - 认领没答上来时的 `cronjob could not claim its instant, trying again`，以及重试到下一个时刻还没成的 `cronjob could not claim its instant`；
 - 一轮跑过下一个时刻时的 `cronjob round is still running at its next instant`；
 - 事务被数据库拖住超过 5 秒时的 `transaction held its connection for a long time`；
-- 锁被占时接口返回 409，controller 那一路照例记一条 ERROR `service operation failed`（`a rebuild is already running`）；经 gRPC 抢锁被拒的一样记这条，调用方看到的是 `AlreadyExists`。
 - 会话无效的调用：`iam session rejected`（WARN，`reason` 写明原因，Redis 连不上时是连接错误）；没带会话的调用不记 WARN，只在 gRPC 访问日志里记 `Unauthenticated`。
 - 读到客户端截止时间的流（7.5 用 `-max-time 3` 读 `WatchCounterStep`）：gRPC 访问日志记 `DeadlineExceeded`，controller 那一路照例记一条 ERROR `service operation failed`（`context deadline exceeded`）；客户端自己停掉的流只记 `Canceled`，不记 ERROR。
 
@@ -566,7 +565,7 @@ L=$(holder leader:counter); rpc "$L" -d '{}' localhost:8081 cluster.StepDownServ
 sleep 8; holder leader:counter
 ```
 
-A、B 同时抢同一把锁，一个跑了，另一个当场被拒：HTTP 上的 409 在 gRPC 上是 `AlreadyExists: a rebuild is already running`，controller 日志里同样一条 ERROR。跑完的那次在 `runs` 里记着是哪个副本、`ended_at` 已填。正持有 `leader:counter` 的副本收到 `CreateStepDown` 答 `asked: true`，几秒后租约到了别的副本手里。
+A、B 同时抢同一把锁，一个跑了，另一个当场被拒：HTTP 上的 409 在 gRPC 上是 `AlreadyExists: a rebuild is already running`，controller 日志里同样一条 INFO。跑完的那次在 `runs` 里记着是哪个副本、`ended_at` 已填。正持有 `leader:counter` 的副本收到 `CreateStepDown` 答 `asked: true`，几秒后租约到了别的副本手里。
 
 #### 7.5 流被滚动更新切断，换个副本接着读
 

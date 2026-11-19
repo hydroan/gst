@@ -16,7 +16,6 @@ import (
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
-	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
@@ -74,9 +73,7 @@ func PatchHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 		// request costs no database work. See modelschema.Version.
 		if versionField, versioned := modelschema.VersionFieldName(req); versioned {
 			if _, carried := fields[versionField]; !carried {
-				log.Errorz("versioned model patched without its version", zap.String("field", versionField))
-				response.Error(c, databaseError(database.ErrVersionRequired))
-				gstotel.RecordError(span, database.ErrVersionRequired)
+				response.Error(c, reportFailure(log, span, "versioned model patched without its version", nil, databaseError(database.ErrVersionRequired), zap.String("field", versionField)))
 				return
 			}
 		}

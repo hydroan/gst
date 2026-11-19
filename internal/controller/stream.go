@@ -235,9 +235,13 @@ func (a *action[M, REQ, RSP]) requests(c *call, recv func() (REQ, error)) *reque
 			// value a field cannot hold (see grpc.Narrow): the transport's
 			// own errors, the stream ending or failing, never carry that
 			// code. It is answered as the refusal it is, whatever the
-			// service makes of the error its Recv gave it.
+			// service makes of the error its Recv gave it, and reported as
+			// the 400 it stands for: a status error carries no service
+			// error for the report to read the client's failure from (see
+			// reportFailure).
 			if status.Code(err) == codes.InvalidArgument {
-				r.refuse(reportFailure(c.log, c.span, "request message rejected", err, err))
+				_ = reportFailure(c.log, c.span, "request message rejected", err, invalidArgument(err))
+				r.refuse(err)
 			}
 			return req, err
 		}

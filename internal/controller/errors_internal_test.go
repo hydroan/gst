@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // TestDatabaseErrorMapsEachDatabaseErrorToItsAnswer pins the canonical
@@ -94,14 +95,17 @@ func TestInvalidArgumentCarriesTheClientSafeText(t *testing.T) {
 	}
 }
 
-// levelRecorder records the messages failWith logs at info and at error.
+// levelRecorder records the messages a failure is logged under at info, at
+// warn and at error.
 type levelRecorder struct {
 	nopControllerLogger
 	infos  []string
+	warns  []string
 	errors []string
 }
 
 func (r *levelRecorder) Infoz(msg string, _ ...zap.Field)  { r.infos = append(r.infos, msg) }
+func (r *levelRecorder) Warnz(msg string, _ ...zap.Field)  { r.warns = append(r.warns, msg) }
 func (r *levelRecorder) Errorz(msg string, _ ...zap.Field) { r.errors = append(r.errors, msg) }
 
 // TestFailWithTellsACancellationFromAPassedDeadline pins what failWith
@@ -151,59 +155,92 @@ func TestFailWithTellsACancellationFromAPassedDeadline(t *testing.T) {
 	})
 }
 
-// fieldRecorder records the entries reportFailure logs at error, the fields
-// of each under its message.
-type fieldRecorder struct {
+// loggedEntry is one entry reportFailure logged: its level, its message and
+// its fields.
+type loggedEntry struct {
+	level  zapcore.Level
+	msg    string
+	fields []zap.Field
+}
+
+// entryRecorder records the entries reportFailure logs.
+type entryRecorder struct {
 	nopControllerLogger
-	errors map[string][]zap.Field
+	entries []loggedEntry
 }
 
-func (r *fieldRecorder) Errorz(msg string, fields ...zap.Field) {
-	if r.errors == nil {
-		r.errors = make(map[string][]zap.Field)
-	}
-	r.errors[msg] = fields
+func (r *entryRecorder) Infoz(msg string, fields ...zap.Field) {
+	r.entries = append(r.entries, loggedEntry{zapcore.InfoLevel, msg, fields})
 }
 
-// TestReportFailureLogsRecordsAndAnswers pins what reportFailure makes of a
-// failure: it logs it at error under the message, the fields it was given
-// first and the error after them, records the error on the span, and returns
-// the answer; a failure reported without an error logs the fields alone and
-// leaves the span as it was.
-func TestReportFailureLogsRecordsAndAnswers(t *testing.T) {
+func (r *entryRecorder) Warnz(msg string, fields ...zap.Field) {
+	r.entries = append(r.entries, loggedEntry{zapcore.WarnLevel, msg, fields})
+}
+
+func (r *entryRecorder) Errorz(msg string, fields ...zap.Field) {
+	r.entries = append(r.entries, loggedEntry{zapcore.ErrorLevel, msg, fields})
+}
+
+// TestReportFailureFollowsTheAnswer pins what reportFailure makes of a
+// failure by the answer it is given. The server's own failure, an answer
+// carrying no service error or one of 500 or above, is logged at error and
+// recorded on the span; a failure the client brought on itself is logged at
+// the level its answer calls for (see grpcserver.StatusLevel), warn or info,
+// and leaves the span as it was. Either way the entry carries the fields it
+// was given and the error after them, a failure reported without an error
+// the fields alone, and the answer is returned.
+func TestReportFailureFollowsTheAnswer(t *testing.T) {
 	oteltest.Enable(t)
 	recorder := oteltest.Record(t)
-	answer := notFound(nil)
+	cause := errors.New("the cause of the failure")
 
-	t.Run("an error is logged after the fields and recorded on the span", func(t *testing.T) {
-		rec := &fieldRecorder{}
-		_, span := gstotel.StartSpan(context.Background(), "report with an error")
-		cause := errors.New("the id is no integer")
+	for _, tt := range []struct {
+		name   string
+		answer error
+		want   zapcore.Level
+	}{
+		{"an error carrying no status", errors.New("dial tcp: connection refused"), zapcore.ErrorLevel},
+		{"a 500", types.NewError(http.StatusInternalServerError, "broken"), zapcore.ErrorLevel},
+		{"a 504", types.NewError(http.StatusGatewayTimeout, "context deadline exceeded"), zapcore.ErrorLevel},
+		{"a 400", badRequest("the request is malformed"), zapcore.InfoLevel},
+		{"a 404", notFound(nil), zapcore.InfoLevel},
+		{"a 409 of a duplicate", databaseError(errors.Wrap(database.ErrDuplicatedKey, "create sample")), zapcore.InfoLevel},
+		{"a 409 of a stale object", databaseError(errors.Wrap(database.ErrStaleObject, "update sample")), zapcore.WarnLevel},
+		{"a 403", types.NewError(http.StatusForbidden, "not yours"), zapcore.WarnLevel},
+		{"a 408", types.NewError(http.StatusRequestTimeout, requestTimeoutMsg), zapcore.WarnLevel},
+		{"a 499", types.NewError(types.StatusClientClosedRequest, "context canceled"), zapcore.InfoLevel},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := &entryRecorder{}
+			_, span := gstotel.StartSpan(context.Background(), tt.name)
 
-		got := reportFailure(rec, span, "route id rejected by model", cause, answer, zap.String("id", "7abc"))
-		span.End()
+			got := reportFailure(rec, span, "sample operation failed", cause, tt.answer, zap.String("id", "7abc"))
+			span.End()
 
-		require.Same(t, answer, got)
-		require.Equal(t, map[string][]zap.Field{
-			"route id rejected by model": {zap.String("id", "7abc"), zap.Error(cause)},
-		}, rec.errors)
-		ended := oteltest.EndedNamed(t, recorder, "report with an error")
-		require.Equal(t, codes.Error, ended.Status().Code)
-		require.Len(t, ended.Events(), 1, "the error is recorded as one exception event")
-	})
+			require.Same(t, tt.answer, got)
+			require.Equal(t, []loggedEntry{{tt.want, "sample operation failed", []zap.Field{zap.String("id", "7abc"), zap.Error(cause)}}}, rec.entries)
+			ended := oteltest.EndedNamed(t, recorder, tt.name)
+			if tt.want == zapcore.ErrorLevel {
+				require.Equal(t, codes.Error, ended.Status().Code)
+				require.Len(t, ended.Events(), 1, "the error is recorded as one exception event")
+				return
+			}
+			require.Equal(t, codes.Unset, ended.Status().Code, "what the client brought on itself is no failure of the server")
+			require.Empty(t, ended.Events())
+		})
+	}
 
-	t.Run("no error logs the fields alone and leaves the span as it was", func(t *testing.T) {
-		rec := &fieldRecorder{}
-		_, span := gstotel.StartSpan(context.Background(), "report without an error")
+	t.Run("a failure reported without an error logs the fields alone", func(t *testing.T) {
+		rec := &entryRecorder{}
+		_, span := gstotel.StartSpan(context.Background(), "a failure without an error")
+		answer := notFound(nil)
 
 		got := reportFailure(rec, span, "route id rejected by model", nil, answer, zap.String("id", "7abc"))
 		span.End()
 
 		require.Same(t, answer, got)
-		require.Equal(t, map[string][]zap.Field{
-			"route id rejected by model": {zap.String("id", "7abc")},
-		}, rec.errors)
-		ended := oteltest.EndedNamed(t, recorder, "report without an error")
+		require.Equal(t, []loggedEntry{{zapcore.InfoLevel, "route id rejected by model", []zap.Field{zap.String("id", "7abc")}}}, rec.entries)
+		ended := oteltest.EndedNamed(t, recorder, "a failure without an error")
 		require.Equal(t, codes.Unset, ended.Status().Code)
 		require.Empty(t, ended.Events())
 	})

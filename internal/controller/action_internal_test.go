@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/modelregistry"
@@ -15,6 +16,8 @@ import (
 	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/sdk/trace"
 )
 
 // registeredTestServices records the routes and phases registerTestService
@@ -132,6 +135,52 @@ func TestTraceServiceHookSpansOnlyOverriddenHooks(t *testing.T) {
 		names := oteltest.EndedNames(recorder)
 		require.Contains(t, names, "service.HandlerRouteModel.ListBefore")
 		require.NotContains(t, names, "service.HandlerRouteModel.ListAfter")
+	})
+}
+
+// TestServiceSpanIsMarkedFailedForTheServersFailuresAlone pins the status of
+// the span a service hook or operation runs in: an error that is the
+// server's own failure is recorded on it and marks it failed, while a
+// refusal the client brought on itself, a service error answering below 500,
+// leaves the status unset and records nothing; the span reports the hook
+// unsuccessful either way.
+func TestServiceSpanIsMarkedFailedForTheServersFailuresAlone(t *testing.T) {
+	oteltest.Enable(t)
+	recorder := oteltest.Record(t)
+	a := newAction[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel]("samples", apiaction.List, apiaction.ListBefore, apiaction.ListAfter)
+	unsuccessful := func(span trace.ReadOnlySpan) bool {
+		for _, attr := range span.Attributes() {
+			if attr.Key == "hook.success" {
+				return !attr.Value.AsBool()
+			}
+		}
+		return false
+	}
+
+	t.Run("a refusal leaves the status unset", func(t *testing.T) {
+		refusal := types.NewError(http.StatusForbidden, "not yours")
+		_, err := traceServiceCall(context.Background(), a.serviceSpan(apiaction.ListBefore), a.name, func(context.Context) (struct{}, error) {
+			return struct{}{}, refusal
+		})
+		require.Same(t, refusal, err)
+
+		span := oteltest.EndedNamed(t, recorder, "service.HandlerRouteModel.ListBefore")
+		require.Equal(t, codes.Unset, span.Status().Code, "what the client brought on itself is no failure of the server")
+		require.Empty(t, span.Events())
+		require.True(t, unsuccessful(span))
+	})
+
+	t.Run("the server's own failure is recorded and marks the span failed", func(t *testing.T) {
+		failure := errors.New("dial tcp: connection refused")
+		_, err := traceServiceCall(context.Background(), a.serviceSpan(apiaction.ListAfter), a.name, func(context.Context) (struct{}, error) {
+			return struct{}{}, failure
+		})
+		require.Same(t, failure, err)
+
+		span := oteltest.EndedNamed(t, recorder, "service.HandlerRouteModel.ListAfter")
+		require.Equal(t, codes.Error, span.Status().Code)
+		require.Len(t, span.Events(), 1, "the error is recorded as one exception event")
+		require.True(t, unsuccessful(span))
 	})
 }
 

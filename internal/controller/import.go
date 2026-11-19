@@ -5,14 +5,12 @@ import (
 	"context"
 	"io"
 
-	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
-	gstotel "github.com/hydroan/gst/otel"
 )
 
 // maxImportSize is the largest upload an import accepts, 5 MiB.
@@ -55,9 +53,7 @@ func ImportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		}
 		// check file size.
 		if file.Size > int64(maxImportSize) {
-			log.Errorz(tooLargeFileMsg)
-			response.Error(c, badRequest(tooLargeFileMsg))
-			gstotel.RecordError(span, errors.New(tooLargeFileMsg))
+			response.Error(c, reportFailure(log, span, tooLargeFileMsg, nil, badRequest(tooLargeFileMsg)))
 			return
 		}
 		fd, err := file.Open()

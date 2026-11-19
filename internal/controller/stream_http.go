@@ -165,8 +165,9 @@ func StreamHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			shutdown := errors.Is(cause, streamctx.ErrServerShutdown)
 			if !shutdown && !errors.Is(cause, stream.Err()) {
 				// What the client sent closed the connection, with the status
-				// the protocol gives it (see websocket.Conn).
-				_ = reportFailure(log, span, "request rejected", cause, cause)
+				// the protocol gives it (see websocket.Conn): the client's
+				// doing, reported as the refusal of a request.
+				_ = reportFailure(log, span, "request rejected", cause, invalidArgument(cause))
 				break
 			}
 			span.AddEvent("interrupted", trace.WithAttributes(attribute.String("reason", streamEndReason(stream))))

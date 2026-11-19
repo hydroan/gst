@@ -252,8 +252,8 @@ type call struct {
 // the HTTP handler starts one on the request, described by the method and
 // route the call carries, the action's as the registration described it;
 // the caller ends the span through end. A route parameter the call may not
-// carry (see routeParamError) is reported once the call began, so the caller
-// refuses it on the call, its span recording the refusal, the way
+// carry (see routeParamError) is returned once the call began, so the caller
+// refuses it on the call, which reports the refusal (see refuse), the way
 // beginRequest refuses one on a request. The parameter carrying the id of a
 // standard item action (see action.itemParam) is left to the caller when
 // empty: the generated handler fills it from the id field of the message, so
@@ -296,8 +296,8 @@ func (c *call) end() { c.span.End() }
 // refuse answers a request the action cannot run — a query its rendering
 // refuses (see Query.values), a model or payload failing validation, a message
 // naming no record — with the status answer maps to (see
-// grpcserver.StatusError), err logged and recorded on the span the way the HTTP
-// handler treats a bind failure.
+// grpcserver.StatusError), err reported by that answer the way the HTTP
+// handler reports a bind failure (see reportFailure).
 func (c *call) refuse(answer, err error) error {
 	return grpcserver.StatusError(reportFailure(c.log, c.span, "request message rejected", err, answer))
 }
@@ -343,9 +343,9 @@ func (c *call) missingRecord() error {
 	return c.refuse(badRequest(missingRecordMsg), errors.New(missingRecordMsg))
 }
 
-// fail answers a flow's failure, which the flow logged and recorded already,
-// with the status it maps to (see grpcserver.StatusError), or with the
-// status of the call's context once the call ended (see ended).
+// fail answers a flow's failure, which the flow reported already, with the
+// status it maps to (see grpcserver.StatusError), or with the status of the
+// call's context once the call ended (see ended).
 func (c *call) fail(err error) error {
 	if ended := c.ended(); ended != nil {
 		return ended
@@ -354,21 +354,24 @@ func (c *call) fail(err error) error {
 }
 
 // failService answers a delegated service's error the way the HTTP handler
-// does: logged and recorded on the span, then the status it maps to (see
-// grpcserver.StatusError). A call the client canceled is answered Canceled
-// with the error unlogged, the client's doing; one whose deadline passed is
-// the server's failure to answer in time, logged and recorded like any
-// other and answered DeadlineExceeded (see ended).
+// does: reported by its answer (see reportFailure), then the status it maps
+// to (see grpcserver.StatusError). A call the client canceled is answered
+// Canceled with the error unlogged, the client's doing; one whose deadline
+// passed is the server's failure to answer in time, logged at error and
+// recorded like any other of its failures and answered DeadlineExceeded
+// (see ended).
 func (c *call) failService(err error) error {
 	ended := c.ended()
 	if status.Code(ended) == codes.Canceled {
 		return ended
 	}
-	answer := ended
-	if answer == nil {
-		answer = grpcserver.StatusError(err)
+	if ended != nil {
+		return reportFailure(c.log, c.span, "service operation failed", err, ended)
 	}
-	return reportFailure(c.log, c.span, "service operation failed", err, answer)
+	// The error is reported before it is mapped: a 408 and a 504 map to one
+	// code, and only the status tells the client's failure from the
+	// server's.
+	return grpcserver.StatusError(reportFailure(c.log, c.span, "service operation failed", err, err))
 }
 
 // ended returns the status of the call's context once the call ended, nil

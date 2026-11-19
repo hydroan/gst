@@ -1,6 +1,7 @@
 package grpcserver_test
 
 import (
+	"log/slog"
 	"net/http"
 	"testing"
 
@@ -109,4 +110,47 @@ func TestStatusErrorAnswersServiceErrorsAndHidesTheRest(t *testing.T) {
 	require.Equal(t, types.FailureMsg, broken.Message())
 
 	require.NoError(t, grpcserver.StatusError(nil))
+}
+
+// TestStatusLevelTellsTheServersFailuresFromTheClients pins the level a
+// failure is logged at, from the error StatusError answers it by: error for
+// the server's own failure, an error carrying no service error — a status
+// error among them, StatusError answering it Internal — or one answering
+// 500 or above; and, for a failure the client brought on itself, the level
+// the logging interceptors of go-grpc-middleware give the code it answers
+// with, info or warn. The two timeouts share a code and part by status: the
+// 408 of a client slow to send keeps the warn of its code, the 504 is the
+// server's failure.
+func TestStatusLevelTellsTheServersFailuresFromTheClients(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want slog.Level
+	}{
+		{"400", types.NewError(http.StatusBadRequest, "bad request"), slog.LevelInfo},
+		{"401", types.NewError(http.StatusUnauthorized, "who are you"), slog.LevelInfo},
+		{"403", types.NewError(http.StatusForbidden, "not yours"), slog.LevelWarn},
+		{"404", types.NewError(http.StatusNotFound, "no such record"), slog.LevelInfo},
+		{"408", types.NewError(http.StatusRequestTimeout, "too slow"), slog.LevelWarn},
+		{"409", types.NewError(http.StatusConflict, "taken"), slog.LevelInfo},
+		{"409 of a stale object", types.NewErrorWithCause(http.StatusConflict, "reload", errors.Wrap(database.ErrStaleObject, "update sample")), slog.LevelWarn},
+		{"409 of a foreign key", types.NewErrorWithCause(http.StatusConflict, "refers", errors.Wrap(database.ErrForeignKeyViolated, "create sample")), slog.LevelWarn},
+		{"412", types.NewError(http.StatusPreconditionFailed, "not yet"), slog.LevelWarn},
+		{"422", types.NewError(http.StatusUnprocessableEntity, "cannot"), slog.LevelInfo},
+		{"429", types.NewError(http.StatusTooManyRequests, "slow down"), slog.LevelWarn},
+		{"499", types.NewError(types.StatusClientClosedRequest, "gone"), slog.LevelInfo},
+		{"500", types.NewError(http.StatusInternalServerError, "broken"), slog.LevelError},
+		{"501", types.NewError(http.StatusNotImplemented, "not here"), slog.LevelError},
+		{"502", types.NewError(http.StatusBadGateway, "upstream broke"), slog.LevelError},
+		{"503", types.NewError(http.StatusServiceUnavailable, "later"), slog.LevelError},
+		{"504", types.NewError(http.StatusGatewayTimeout, "upstream"), slog.LevelError},
+		{"a wrapped service error", errors.Wrap(types.NewError(http.StatusNotFound, "no such record"), "get sample"), slog.LevelInfo},
+		{"a typed nil service error", (*types.Error)(nil), slog.LevelError},
+		{"any other error", errors.New("dial tcp: connection refused"), slog.LevelError},
+		{"a status error", status.Error(codes.NotFound, "no such record"), slog.LevelError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, grpcserver.StatusLevel(tc.err))
+		})
+	}
 }

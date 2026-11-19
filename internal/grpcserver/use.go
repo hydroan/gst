@@ -2,6 +2,7 @@ package grpcserver
 
 import (
 	"context"
+	"log/slog"
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware/v2"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors"
@@ -140,13 +141,21 @@ func streamOf(ic Interceptor) grpc.StreamServerInterceptor {
 // would answer any other error as Unknown with its text, the wrapped cause
 // included. The error goes to the framework's log first, where the
 // listener's own warnings go, with the call's trace id and the cause the
-// answer leaves out, the way a failing service operation is logged before
-// it is mapped; the access log keeps its one entry for the call.
+// answer leaves out, at the level its answer calls for (see StatusLevel),
+// the way a failing service operation is logged before it is mapped; the
+// access log keeps its one entry for the call.
 func refused(ctx context.Context, err error) error {
 	if _, ok := status.FromError(err); ok {
 		return err
 	}
-	zap.L().Error("interceptor refused the call", zap.Error(err), logfield.TraceID(execctx.FromContext(ctx).TraceID))
+	log := zap.L().Info
+	switch level := StatusLevel(err); {
+	case level >= slog.LevelError:
+		log = zap.L().Error
+	case level >= slog.LevelWarn:
+		log = zap.L().Warn
+	}
+	log("interceptor refused the call", zap.Error(err), logfield.TraceID(execctx.FromContext(ctx).TraceID))
 	return StatusError(err)
 }
 

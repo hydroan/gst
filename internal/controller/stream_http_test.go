@@ -8,13 +8,16 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/middleware"
@@ -22,7 +25,10 @@ import (
 	"github.com/hydroan/gst/internal/streamctx"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/websocket"
+	"github.com/hydroan/gst/logger"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -40,7 +46,9 @@ import (
 // the request is taken at its word, one ending them without a request sends
 // the zero request, a stream ends with its client leaving or the server
 // shutting down, and a service that panics leaves its connection closed, as
-// the server's failure.
+// the server's failure. Each of these endings that is a failure is logged at
+// the level its answer calls for: what the client brought on itself at info
+// or warn, the server's own at error.
 func TestStreamHandlerStreamsTheResponsesOfARequest(t *testing.T) {
 	target, closeCodes := streamServer(t, watchRoute)
 
@@ -64,19 +72,22 @@ func TestStreamHandlerStreamsTheResponsesOfARequest(t *testing.T) {
 		request string
 		status  int
 		msg     string
+		logged  loggedFailure
 	}{
-		{name: "a request failing validation closes the stream as the refusal", request: `{}`, status: http.StatusBadRequest, msg: "note is a required field"},
-		{name: "a request that is no JSON closes the stream as the refusal", request: `{"note":`, status: http.StatusBadRequest, msg: "request body is not valid JSON"},
-		{name: "the service's error closes the stream with its status", request: `{"note":"` + actionRefuse + `"}`, status: http.StatusForbidden, msg: "not yours"},
-		{name: "any other error closes the stream as the server's failure", request: `{"note":"` + actionBreak + `"}`, status: http.StatusInternalServerError, msg: types.FailureMsg},
+		{name: "a request failing validation closes the stream as the refusal", request: `{}`, status: http.StatusBadRequest, msg: "note is a required field", logged: loggedFailure{zapcore.InfoLevel, "request rejected"}},
+		{name: "a request that is no JSON closes the stream as the refusal", request: `{"note":`, status: http.StatusBadRequest, msg: "request body is not valid JSON", logged: loggedFailure{zapcore.InfoLevel, "request rejected"}},
+		{name: "the service's error closes the stream with its status", request: `{"note":"` + actionRefuse + `"}`, status: http.StatusForbidden, msg: "not yours", logged: loggedFailure{zapcore.WarnLevel, "service operation failed"}},
+		{name: "any other error closes the stream as the server's failure", request: `{"note":"` + actionBreak + `"}`, status: http.StatusInternalServerError, msg: types.FailureMsg, logged: loggedFailure{zapcore.ErrorLevel, "service operation failed"}},
 	}
 	for _, tt := range refusals {
 		t.Run(tt.name, func(t *testing.T) {
+			logged := recordControllerLog(t)
 			conn := dialStream(t, target)
 			require.NoError(t, conn.Send([]byte(tt.request)))
 			_, err := nextMessage(t, conn)
 			requireEnding(t, err, tt.status, tt.msg)
 			require.Equal(t, 4000+tt.status, awaitCloseCode(t, closeCodes))
+			require.Equal(t, []loggedFailure{tt.logged}, logged(), "a failure is logged at the level its answer calls for")
 		})
 	}
 
@@ -101,6 +112,7 @@ func TestStreamHandlerStreamsTheResponsesOfARequest(t *testing.T) {
 	})
 
 	t.Run("a message after the request closes the stream as a violation", func(t *testing.T) {
+		logged := recordControllerLog(t)
 		conn := dialStream(t, target)
 		require.NoError(t, conn.Send([]byte(`{"note":"`+actionAwait+`"}`)))
 		awaitService(t)
@@ -108,6 +120,7 @@ func TestStreamHandlerStreamsTheResponsesOfARequest(t *testing.T) {
 		_, err := nextMessage(t, conn)
 		require.Error(t, err)
 		require.Equal(t, 1008, awaitCloseCode(t, closeCodes))
+		require.Equal(t, []loggedFailure{{zapcore.InfoLevel, "request rejected"}}, logged(), "what the client sent is the client's doing")
 	})
 
 	t.Run("a request that does not arrive in time closes the stream as a 408", func(t *testing.T) {
@@ -115,10 +128,12 @@ func TestStreamHandlerStreamsTheResponsesOfARequest(t *testing.T) {
 		config.App.Server.ReadTimeout = 50 * time.Millisecond
 		t.Cleanup(func() { config.App.Server.ReadTimeout = original })
 
+		logged := recordControllerLog(t)
 		conn := dialStream(t, target)
 		_, err := nextMessage(t, conn)
 		requireEnding(t, err, http.StatusRequestTimeout, "the request of the stream did not arrive in time")
 		require.Equal(t, 4408, awaitCloseCode(t, closeCodes))
+		require.Equal(t, []loggedFailure{{zapcore.WarnLevel, "request rejected"}}, logged(), "the client was slow to send: a warning, not the error of a deadline the server missed")
 	})
 
 	t.Run("a client leaving ends the stream", func(t *testing.T) {
@@ -498,5 +513,52 @@ func awaitService(t *testing.T) {
 	case <-awaitEntered:
 	case <-time.After(10 * time.Second):
 		t.Fatal("the service did not start waiting for the client")
+	}
+}
+
+// loggedFailure is the level and message of one entry the controller logged.
+type loggedFailure struct {
+	level zapcore.Level
+	msg   string
+}
+
+// failureLog stands in for the controller's logger and records the level and
+// message of each entry logged through it at info, warn or error.
+type failureLog struct {
+	types.Logger
+	mu      *sync.Mutex
+	entries *[]loggedFailure
+}
+
+func (l failureLog) WithContext(context.Context, apiaction.Phase) types.Logger { return l }
+
+func (l failureLog) Infoz(msg string, _ ...zap.Field) { l.record(zapcore.InfoLevel, msg) }
+
+func (l failureLog) Warnz(msg string, _ ...zap.Field) { l.record(zapcore.WarnLevel, msg) }
+
+func (l failureLog) Errorz(msg string, _ ...zap.Field) { l.record(zapcore.ErrorLevel, msg) }
+
+func (l failureLog) record(level zapcore.Level, msg string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	*l.entries = append(*l.entries, loggedFailure{level, msg})
+}
+
+// recordControllerLog has the controller log through a recorder for the rest
+// of the test, and returns what reads the entries recorded so far.
+func recordControllerLog(t *testing.T) func() []loggedFailure {
+	t.Helper()
+
+	var (
+		mu      sync.Mutex
+		entries []loggedFailure
+	)
+	original := logger.Controller
+	logger.Controller = failureLog{Logger: original, mu: &mu, entries: &entries}
+	t.Cleanup(func() { logger.Controller = original })
+	return func() []loggedFailure {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(entries)
 	}
 }

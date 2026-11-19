@@ -16,7 +16,6 @@ import (
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
-	gstotel "github.com/hydroan/gst/otel"
 	"go.uber.org/zap"
 )
 
@@ -79,10 +78,8 @@ func PatchManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg 
 		}
 		for i := range req.Items {
 			if _, ok := fieldsOf(i)[versionField]; versioned && !ok {
-				log.Errorz("versioned model patched without its version",
-					zap.Int("item", i), zap.String("field", versionField))
-				response.Error(c, databaseError(database.ErrVersionRequired))
-				gstotel.RecordError(span, database.ErrVersionRequired)
+				response.Error(c, reportFailure(log, span, "versioned model patched without its version", nil, databaseError(database.ErrVersionRequired),
+					zap.Int("item", i), zap.String("field", versionField)))
 				return
 			}
 		}

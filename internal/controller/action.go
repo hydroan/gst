@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"iter"
+	"log/slog"
 	"reflect"
 	"strings"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/requestctx"
@@ -175,8 +177,9 @@ func (a *action[M, REQ, RSP]) service() types.Service[M, REQ, RSP] {
 // c serves (see startSpan), rebinds the request context so downstream
 // layers nest under it, and reports whether the action serves the request:
 // a route parameter it may not carry (see routeParamError) is refused with
-// 400, the way beginCall refuses one on a call, its span recording the
-// refusal. The caller ends the span either way.
+// 400, the way beginCall refuses one on a call, the refusal reported like
+// any the controller answers (see reportFailure). The caller ends the span
+// either way.
 func (a *action[M, REQ, RSP]) beginRequest(c *gin.Context) (context.Context, trace.Span, bool) {
 	spanCtx, span := a.startSpan(c.Request.Context(), c.Request.Method, c.FullPath())
 
@@ -282,10 +285,13 @@ func (a *action[M, REQ, RSP]) traceServiceOperation(parentCtx context.Context, p
 	return traceServiceCall(parentCtx, a.serviceSpan(phase), a.name, fn)
 }
 
-// traceServiceCall runs fn inside a service span and records duration, success,
-// and error attributes. It is the shared core of the traceService* methods; the
-// duration and success attribute keys carry the "hook." prefix for every
-// service call, the keys dashboards and queries select on.
+// traceServiceCall runs fn inside a service span and records its duration
+// and whether it succeeded, and, when it failed as the server's own failure
+// (see grpcserver.StatusLevel), the error: a refusal the client brought on
+// itself leaves the span's status unset. It is the shared core of the
+// traceService* methods; the duration and success attribute keys carry the
+// "hook." prefix for every service call, the keys dashboards and queries
+// select on.
 func traceServiceCall[T any](parentCtx context.Context, span phaseSpan, modelName string, fn func(context.Context) (T, error)) (T, error) {
 	spanCtx, s := gstotel.StartSpan(parentCtx, span.name)
 	defer s.End()
@@ -315,7 +321,9 @@ func traceServiceCall[T any](parentCtx context.Context, span phaseSpan, modelNam
 				attribute.Int64("hook.duration_ms", duration.Milliseconds()),
 				attribute.Bool("hook.success", err == nil),
 			)
-			if err != nil {
+			// Marked failed for the server's failures alone, like the
+			// controller span the call runs in (see reportFailure).
+			if err != nil && grpcserver.StatusLevel(err) >= slog.LevelError {
 				gstotel.RecordError(s, err)
 			}
 		}

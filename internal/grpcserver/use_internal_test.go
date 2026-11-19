@@ -169,9 +169,9 @@ func TestUseAfterRunPanics(t *testing.T) {
 // error with the code its HTTP status maps to and its client-safe message,
 // the cause it wraps kept out of the answer; any other error as Internal with
 // the server failure message. Every error but a status error goes to the
-// framework's log first, cause included, as an error carrying the call's
-// trace id, where the listener's own warnings go; the access log keeps its
-// one entry a call.
+// framework's log first, cause included, at the level its answer calls for
+// (see StatusLevel) and carrying the call's trace id, where the listener's
+// own warnings go; the access log keeps its one entry a call.
 func TestARefusalFromAProjectInterceptorAnswersItsStatus(t *testing.T) {
 	reset(t)
 	core, frameworkLog := observer.New(zapcore.DebugLevel)
@@ -213,10 +213,13 @@ func TestARefusalFromAProjectInterceptorAnswersItsStatus(t *testing.T) {
 
 	logged := frameworkLog.FilterMessage("interceptor refused the call").All()
 	require.Len(t, logged, 3, "every error but a status error is logged before it is mapped")
+	levels := make([]zapcore.Level, 0, len(logged))
 	for _, entry := range logged {
-		require.Equal(t, zapcore.ErrorLevel, entry.Level)
+		levels = append(levels, entry.Level)
 		require.NotEmpty(t, entry.ContextMap()[execctx.KeyTraceID])
 	}
+	require.Equal(t, []zapcore.Level{zapcore.WarnLevel, zapcore.InfoLevel, zapcore.ErrorLevel}, levels,
+		"a permission refused, a credential missing, the server's own failure: each at the level its answer calls for")
 	require.Contains(t, logged[1].ContextMap()["error"], "session store unreachable")
 	entries := accessLog.All()
 	require.Len(t, entries, 4, "the access log keeps one entry a call, the refused ones included")

@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
@@ -13,7 +12,6 @@ import (
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
-	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
@@ -126,10 +124,7 @@ func (a *action[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext ser
 	// missing row already failed above with ErrRecordNotFound), so answer
 	// 404 instead of an empty resource.
 	if len(m.GetID()) == 0 || m.GetCreatedAt().Equal(time.Time{}) {
-		log.Errorz(notFoundMsg)
-		err := errors.New(notFoundMsg)
-		gstotel.RecordError(trace.SpanFromContext(ctx), err)
-		return zero, notFound(err)
+		return zero, reportFailure(log, trace.SpanFromContext(ctx), notFoundMsg, nil, notFound(nil))
 	}
 
 	// 4.record operation log to database.

@@ -2,11 +2,13 @@ package controller
 
 import (
 	"context"
+	"net/http"
 	"net/url"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
@@ -143,12 +145,46 @@ func TestQueryValuesRefuseBeforeParsing(t *testing.T) {
 	}
 }
 
+// TestACallRefusedForItsMessageIsReportedAsTheClients pins the level the
+// refusals of a call's own making are logged at: a message naming no record
+// and a stream message the decoding refused are the client's doing, logged
+// at info under the message of a rejected request; the decoding's refusal
+// stays the status the stream answers, as it was received.
+func TestACallRefusedForItsMessageIsReportedAsTheClients(t *testing.T) {
+	span := trace.SpanFromContext(context.Background())
+
+	t.Run("a message naming no record", func(t *testing.T) {
+		rec := &levelRecorder{}
+		c := &call{ctx: context.Background(), span: span, log: rec}
+		require.Equal(t, codes.InvalidArgument, status.Code(c.missingID()))
+		require.Equal(t, []string{"request message rejected"}, rec.infos)
+		require.Empty(t, rec.errors, "a refusal the client brought on itself is not a failure of the server")
+	})
+
+	t.Run("a stream message the decoding refused", func(t *testing.T) {
+		rec := &levelRecorder{}
+		c := &call{ctx: context.Background(), span: span, log: rec}
+		a := newAction[*flowSample, *flowSample, *flowSample]("flow-samples", apiaction.Stream)
+		refusal := status.Error(codes.InvalidArgument, "invalid value for field 'rank'")
+		in := a.requests(c, func() (*flowSample, error) { return nil, refusal })
+
+		_, err := in.recv()
+
+		require.Same(t, refusal, err)
+		require.Same(t, refusal, in.refusal())
+		require.Equal(t, []string{"request message rejected"}, rec.infos)
+		require.Empty(t, rec.errors, "a refusal the client brought on itself is not a failure of the server")
+	})
+}
+
 // TestFailServiceTellsACancellationFromAPassedDeadline pins what failService
 // makes of a delegated service's error once the call ended: a call the
 // client canceled answers Canceled with the error unlogged, a call whose
 // deadline passed answers DeadlineExceeded with the error logged, the
 // server's failure to answer in time; a live call answers the status the
-// error maps to, logged as well.
+// error maps to, logged at the level that answer calls for, the 408 of a
+// client slow to send at warn though it answers the code of a deadline that
+// passed.
 func TestFailServiceTellsACancellationFromAPassedDeadline(t *testing.T) {
 	cause := errors.New("dial tcp: connection refused")
 	span := trace.SpanFromContext(context.Background())
@@ -158,6 +194,22 @@ func TestFailServiceTellsACancellationFromAPassedDeadline(t *testing.T) {
 		c := &call{ctx: context.Background(), span: span, log: rec}
 		require.Equal(t, codes.Internal, status.Code(c.failService(cause)))
 		require.Equal(t, []string{"service operation failed"}, rec.errors)
+	})
+
+	t.Run("a live call the service refused answers the refusal and logs below error", func(t *testing.T) {
+		rec := &levelRecorder{}
+		c := &call{ctx: context.Background(), span: span, log: rec}
+		require.Equal(t, codes.NotFound, status.Code(c.failService(types.NewError(http.StatusNotFound, "no such record"))))
+		require.Equal(t, []string{"service operation failed"}, rec.infos)
+		require.Empty(t, rec.errors, "a refusal the client brought on itself is not a failure of the server")
+	})
+
+	t.Run("a live call answering 408 logs a warning, not the error of a passed deadline", func(t *testing.T) {
+		rec := &levelRecorder{}
+		c := &call{ctx: context.Background(), span: span, log: rec}
+		require.Equal(t, codes.DeadlineExceeded, status.Code(c.failService(types.NewError(http.StatusRequestTimeout, requestTimeoutMsg))))
+		require.Equal(t, []string{"service operation failed"}, rec.warns)
+		require.Empty(t, rec.errors, "the client was slow to send: its doing, not the server's")
 	})
 
 	t.Run("a canceled call answers Canceled unlogged", func(t *testing.T) {

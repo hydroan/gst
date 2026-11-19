@@ -1,9 +1,11 @@
 package grpcserver
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/cockroachdb/errors"
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/types"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
@@ -88,4 +90,32 @@ func codeOf(httpStatus int, err error) codes.Code {
 		return codes.Internal
 	}
 	return codes.InvalidArgument
+}
+
+// StatusLevel returns the level the failure StatusError answers err for is
+// logged at, the same on either transport. The server's own failure — err
+// carrying no service error, which StatusError answers Internal, or one
+// answering 500 or above — is logged at error. A failure the client brought
+// on itself is logged at the level the logging interceptors of
+// go-grpc-middleware log a call ending with its code at (see
+// logging.DefaultServerCodeToLevel and codeOf): info for a request that is
+// malformed, unauthenticated or canceled, or that names a record that is
+// missing or exists already; warn for one refused permission, a
+// precondition, a concurrent change or its rate, or that took too long to
+// arrive.
+//
+// The table is read for the client's failures alone. It grades two of the
+// server's warn, DeadlineExceeded and Unavailable, which the tracing
+// conventions count as the server's error, and DeadlineExceeded is the code
+// of a 408 as well, the client not sending in time, which is the client's:
+// the status tells a 408 from a 504, so it is read before the code. A
+// failure is thus logged at error exactly when its answer is the server's,
+// which is when a server span is marked failed for it.
+func StatusLevel(err error) slog.Level {
+	var serviceErr *types.Error
+	if !errors.As(err, &serviceErr) || serviceErr.Status() >= http.StatusInternalServerError {
+		return slog.LevelError
+	}
+	// The library's levels are slog's own, value for value.
+	return slog.Level(logging.DefaultServerCodeToLevel(codeOf(serviceErr.Status(), err)))
 }
