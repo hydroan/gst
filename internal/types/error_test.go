@@ -135,3 +135,30 @@ func TestNewInvalidValueNamesTheField(t *testing.T) {
 	require.Equal(t, "invalid value for field 'items[1].rank': 300 does not fit int8", err.Error())
 	require.Equal(t, "invalid value for field 'rank'", types.NewInvalidValue("rank", "300 is out of range", nil).Error())
 }
+
+// TestServerFailureTellsTheServersFailuresFromTheClients pins the line the
+// framework's own records of a failure turn on: an error carrying no service
+// error, or one answering 500 or above, is the server's own failure; a
+// service error answering below 500, wherever it sits in the wrap chain, is
+// one the client brought on itself.
+func TestServerFailureTellsTheServersFailuresFromTheClients(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"an error carrying no service error", errors.New("dial tcp: connection refused"), true},
+		{"a typed nil service error", (*types.Error)(nil), true},
+		{"a 500", types.NewError(http.StatusInternalServerError, "broken"), true},
+		{"a 503", types.NewError(http.StatusServiceUnavailable, "later"), true},
+		{"a 400", types.NewError(http.StatusBadRequest, "bad request"), false},
+		{"a 404", types.NewError(http.StatusNotFound, "no such record"), false},
+		{"a 499", types.NewError(types.StatusClientClosedRequest, "gone"), false},
+		{"a wrapped 403", errors.Wrap(types.NewError(http.StatusForbidden, "not yours"), "create sample"), false},
+		{"a 409 carrying a cause", types.NewErrorWithCause(http.StatusConflict, "taken", errors.New("duplicate entry")), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, types.ServerFailure(tc.err))
+		})
+	}
+}

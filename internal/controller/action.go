@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"iter"
-	"log/slog"
 	"reflect"
 	"strings"
 	"time"
@@ -12,7 +11,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/requestctx"
@@ -287,7 +285,7 @@ func (a *action[M, REQ, RSP]) traceServiceOperation(parentCtx context.Context, p
 
 // traceServiceCall runs fn inside a service span and records its duration
 // and whether it succeeded, and, when it failed as the server's own failure
-// (see grpcserver.StatusLevel), the error: a refusal the client brought on
+// (see types.ServerFailure), the error: a refusal the client brought on
 // itself leaves the span's status unset. It is the shared core of the
 // traceService* methods; the duration and success attribute keys carry the
 // "hook." prefix for every service call, the keys dashboards and queries
@@ -323,7 +321,7 @@ func traceServiceCall[T any](parentCtx context.Context, span phaseSpan, modelNam
 			)
 			// Marked failed for the server's failures alone, like the
 			// controller span the call runs in (see reportFailure).
-			if err != nil && grpcserver.StatusLevel(err) >= slog.LevelError {
+			if err != nil && types.ServerFailure(err) {
 				gstotel.RecordError(s, err)
 			}
 		}

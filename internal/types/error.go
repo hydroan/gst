@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/errbase"
 )
 
@@ -197,6 +198,17 @@ func (e *Error) Msg() string {
 		return FailureMsg
 	}
 	return e.msg
+}
+
+// ServerFailure reports whether err, what a request or an operation failed
+// with, is the server's own failure rather than one the client brought on
+// itself: it carries no Error, or one answering 500 or above. It is the line
+// the framework's own records of a failure turn on, the level a failure is
+// logged at and whether a span is marked failed for it, so that every layer
+// draws it the same way.
+func ServerFailure(err error) bool {
+	var serviceErr *Error
+	return !errors.As(err, &serviceErr) || serviceErr.Status() >= http.StatusInternalServerError
 }
 
 func normalizeErrorStatus(status int) (int, bool) {

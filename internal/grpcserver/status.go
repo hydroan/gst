@@ -93,11 +93,11 @@ func codeOf(httpStatus int, err error) codes.Code {
 }
 
 // StatusLevel returns the level the failure StatusError answers err for is
-// logged at, the same on either transport. The server's own failure — err
-// carrying no service error, which StatusError answers Internal, or one
-// answering 500 or above — is logged at error. A failure the client brought
-// on itself is logged at the level the logging interceptors of
-// go-grpc-middleware log a call ending with its code at (see
+// logged at, the same on either transport. The server's own failure (see
+// types.ServerFailure) — err carrying no service error, which StatusError
+// answers Internal, or one answering 500 or above — is logged at error. A
+// failure the client brought on itself is logged at the level the logging
+// interceptors of go-grpc-middleware log a call ending with its code at (see
 // logging.DefaultServerCodeToLevel and codeOf): info for a request that is
 // malformed, unauthenticated or canceled, or that names a record that is
 // missing or exists already; warn for one refused permission, a
@@ -113,7 +113,7 @@ func codeOf(httpStatus int, err error) codes.Code {
 // which is when a server span is marked failed for it.
 func StatusLevel(err error) slog.Level {
 	var serviceErr *types.Error
-	if !errors.As(err, &serviceErr) || serviceErr.Status() >= http.StatusInternalServerError {
+	if types.ServerFailure(err) || !errors.As(err, &serviceErr) {
 		return slog.LevelError
 	}
 	// The library's levels are slog's own, value for value.
