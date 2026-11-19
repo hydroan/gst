@@ -162,6 +162,41 @@ func TestTracingSkipsRecordingOnlyStateWhenSamplerDrops(t *testing.T) {
 	require.NotEmpty(t, w.Header().Get(execctx.HeaderTraceID))
 }
 
+// TestTracingNamesTheSpanAfterTheRoutePattern pins the name of the request
+// root span to the OpenTelemetry HTTP semantic conventions: the method and
+// the route pattern gin matched, so every request to one route shares one
+// name, and the method alone for a request no route matched, whose path is
+// whatever the client sent and would give a tracing backend one operation
+// per path. That path stays on the span as http.target.
+func TestTracingNamesTheSpanAfterTheRoutePattern(t *testing.T) {
+	setupTracingTest(t)
+	recorder := oteltest.Record(t)
+
+	router := gin.New()
+	router.Use(tracing())
+	router.GET("/api/samples/:id", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+
+	paths := []string{"/api/samples/1", "/api/samples/2", "/unregistered/1", "/unregistered/2"}
+	for _, path := range paths {
+		router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, path, nil))
+	}
+
+	require.Equal(t,
+		[]string{"GET /api/samples/:id", "GET /api/samples/:id", "GET", "GET"},
+		oteltest.EndedNames(recorder),
+	)
+
+	targets := make([]string, 0, len(paths))
+	for _, span := range recorder.Ended() {
+		for _, attr := range span.Attributes() {
+			if attr.Key == "http.target" {
+				targets = append(targets, attr.Value.AsString())
+			}
+		}
+	}
+	require.Equal(t, paths, targets)
+}
+
 // TestTracingSetsTheSpanStatusTheWayTheGRPCLineDoes pins the status of the
 // request root span to the OpenTelemetry HTTP semantic conventions, which
 // otelgrpc holds the gRPC line's server spans to as well: a successful

@@ -45,10 +45,16 @@ func tracing() gin.HandlerFunc {
 
 		// If OTEL is enabled, create OpenTelemetry span and use its trace ID
 		if gstotel.IsEnabled() {
-			// Create span name from HTTP method and route
-			spanName := c.Request.Method + " " + c.FullPath()
-			if c.FullPath() == "" {
-				spanName = c.Request.Method + " " + c.Request.URL.Path
+			// The span is named after the method and the route pattern gin
+			// matched, so every request to one route shares one name. A
+			// request no route matched is named after its method alone, the
+			// name the OpenTelemetry HTTP semantic conventions give it: its
+			// path is whatever the client sent, and a name per path would
+			// hand the tracing backend an unbounded set of operations. The
+			// path stays on the span as http.target.
+			spanName := c.Request.Method
+			if route := c.FullPath(); route != "" {
+				spanName += " " + route
 			}
 
 			// Extract the upstream trace context before starting the server
