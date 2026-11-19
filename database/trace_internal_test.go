@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"net/http"
 	"testing"
 	"time"
 
@@ -14,6 +15,8 @@ import (
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/sdk/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -47,7 +50,7 @@ func TestOperationSpanAttributesFitTheCapacityInTheWorstCase(t *testing.T) {
 	// growing past its capacity is not hidden by the other shrinking.
 	batches := oteltest.AttributesByKey(t, span.Attributes(),
 		[]attribute.Key{"component", "database.operation", "database.model", "database.dry_run", "database.batch_size"},
-		[]attribute.Key{"database.duration_ms", "database.record_not_found", "database.stale_object", "database.canceled", "error"},
+		[]attribute.Key{"database.duration_ms", "database.record_not_found", "database.stale_object", "database.canceled", "database.refused", "error"},
 	)
 	require.Len(t, batches[0], operationStartAttrCap, "the worst case must fill the start batch exactly: a new attribute bumps operationStartAttrCap")
 	require.Len(t, batches[1], operationOutcomeAttrCap, "the worst case must fill the outcome batch exactly: a new attribute bumps operationOutcomeAttrCap")
@@ -67,7 +70,8 @@ func TestOperationLogFieldsFitTheCapacityInTheWorstCase(t *testing.T) {
 // TestOperationLogFieldsReadTheOutcome pins the outcome field of an
 // operation's log entry: record_not_found for a missing row, stale_object
 // for a versioned write that matched none, canceled for an operation its
-// context canceled, and the error for a failure alone.
+// context canceled, refused for one a model hook refused, and the error for
+// a failure alone.
 func TestOperationLogFieldsReadTheOutcome(t *testing.T) {
 	keys := func(err error) map[string]bool {
 		got := make(map[string]bool)
@@ -84,6 +88,9 @@ func TestOperationLogFieldsReadTheOutcome(t *testing.T) {
 	canceled := keys(errors.Wrap(context.Canceled, "sample"))
 	require.True(t, canceled["canceled"])
 	require.False(t, canceled["error"], "a canceled operation carries no error")
+	refused := keys(types.NewError(http.StatusForbidden, "not yours"))
+	require.True(t, refused["refused"])
+	require.False(t, refused["error"], "an operation a hook refused carries no error")
 	require.True(t, keys(errors.New("sample failure"))["error"])
 }
 
@@ -112,8 +119,10 @@ func (l outcomeLogger) Errorz(msg string, _ ...zap.Field) {
 
 // TestOperationLogLevelFollowsTheOutcome pins the level an operation's entry
 // is logged at: debug for an operation that completed, the missing row and
-// the stale object among the outcomes it completes with, and for one its
-// context canceled; error for a failure alone.
+// the stale object among the outcomes it completes with, for one its context
+// canceled, and for one a model hook refused, a service error answering
+// below 500; error for a failure alone, a hook's service error of 500 or
+// above among them.
 func TestOperationLogLevelFollowsTheOutcome(t *testing.T) {
 	var logged []loggedOutcome
 	original := logger.Database
@@ -125,6 +134,8 @@ func TestOperationLogLevelFollowsTheOutcome(t *testing.T) {
 		errors.Wrap(ErrRecordNotFound, "get sample"),
 		errors.Wrap(ErrStaleObject, "update sample"),
 		errors.Wrap(context.Canceled, "list samples"),
+		types.NewError(http.StatusForbidden, "not yours"),
+		types.NewError(http.StatusInternalServerError, "broken"),
 		errors.New("sample failure"),
 	} {
 		db := &database[*traceSample]{ins: DB(), ctx: context.Background()}
@@ -137,8 +148,67 @@ func TestOperationLogLevelFollowsTheOutcome(t *testing.T) {
 		{zapcore.DebugLevel, "database operation completed"},
 		{zapcore.DebugLevel, "database operation completed"},
 		{zapcore.DebugLevel, "database operation canceled"},
+		{zapcore.DebugLevel, "database operation refused"},
+		{zapcore.ErrorLevel, "database operation failed"},
 		{zapcore.ErrorLevel, "database operation failed"},
 	}, logged)
+}
+
+// TestAnOperationAHookRefusedIsNoFailureOfTheDatabase pins what the spans of
+// the database layer make of a model hook's error. A refusal, a service
+// error answering below 500 that the hook chose for the client, marks
+// neither the operation's span nor the hook's failed and records no error
+// on them: the operation's carries database.refused, and the hook's reports
+// the hook unsuccessful. An error that is the server's own failure is
+// recorded on both and marks both failed.
+func TestAnOperationAHookRefusedIsNoFailureOfTheDatabase(t *testing.T) {
+	attributes := func(span trace.ReadOnlySpan) map[attribute.Key]attribute.Value {
+		attrs := make(map[attribute.Key]attribute.Value, len(span.Attributes()))
+		for _, attr := range span.Attributes() {
+			attrs[attr.Key] = attr.Value
+		}
+		return attrs
+	}
+	run := func(t *testing.T, hookErr error) (operation, hook trace.ReadOnlySpan) {
+		t.Helper()
+		oteltest.Enable(t)
+		recorder := oteltest.Record(t)
+
+		db := &database[*traceSample]{ins: DB(), ctx: context.Background()}
+		done, span := db.traceAs("TraceSample", apiaction.Create)
+		err := traceModelHook[*traceSample](db.ctx, apiaction.CreateBefore, span, func(context.Context) error { return hookErr })
+		done(err)
+
+		require.Same(t, hookErr, err)
+		return oteltest.EndedNamed(t, recorder, "database.TraceSample.Create"), oteltest.EndedNamed(t, recorder, "model.TraceSample.CreateBefore")
+	}
+
+	t.Run("a refusal leaves both spans unset", func(t *testing.T) {
+		operation, hook := run(t, types.NewError(http.StatusForbidden, "not yours"))
+
+		require.Equal(t, codes.Unset, operation.Status().Code)
+		require.Empty(t, operation.Events(), "a refusal must not be recorded as an exception")
+		require.True(t, attributes(operation)["database.refused"].AsBool())
+		require.NotContains(t, attributes(operation), attribute.Key("error"))
+
+		require.Equal(t, codes.Unset, hook.Status().Code)
+		require.Empty(t, hook.Events(), "a refusal must not be recorded as an exception")
+		require.False(t, attributes(hook)["model.success"].AsBool(), "a hook that refused did not succeed")
+		require.NotContains(t, attributes(hook), attribute.Key("error"))
+	})
+
+	t.Run("the server's own failure marks both spans failed", func(t *testing.T) {
+		operation, hook := run(t, errors.New("sample hook failure"))
+
+		require.Equal(t, codes.Error, operation.Status().Code)
+		require.Len(t, operation.Events(), 1, "the error is recorded as one exception event")
+		require.True(t, attributes(operation)["error"].AsBool())
+		require.NotContains(t, attributes(operation), attribute.Key("database.refused"))
+
+		require.Equal(t, codes.Error, hook.Status().Code)
+		require.Len(t, hook.Events(), 1, "the error is recorded as one exception event")
+		require.True(t, attributes(hook)["error"].AsBool())
+	})
 }
 
 // TestHookSpanAttributesFitTheCapacityInTheWorstCase pins hookOutcomeAttrCap
