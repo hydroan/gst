@@ -72,7 +72,8 @@
 //   - List, Get: Read operations
 //   - Import, Export: Data transfer operations, HTTP only
 //   - SSE: Server-Sent Events streaming operations, HTTP only
-//   - Stream: gRPC streaming operations, on a model declaring GRPC()
+//   - Stream: Streaming operations, a WebSocket connection over HTTP and,
+//     on a model declaring GRPC(), a streaming rpc too
 //
 // Model Types:
 //   - Models with model.Base: Full-featured models with database persistence
@@ -404,8 +405,11 @@ func PatchMany(fn func()) { dsl.PatchMany(fn) }
 // Used for bulk data ingestion from external sources.
 //
 // Import must not declare Payload or Result: the controller reads the
-// uploaded multipart form file, delegates to the fixed service method
-// Import(ctx, io.Reader) ([]M, error), and responds with a bare status code.
+// uploaded multipart form file, hands it to the fixed service method
+// Import(ctx, io.Reader) ([]M, error), stores the records the method returns
+// in one transaction, a record with an id replacing the stored one and a
+// record without an id being created, and answers the success envelope with
+// no data.
 func Import(fn func()) { dsl.Import(fn) }
 
 // Export defines the configuration for data export operations.

@@ -117,7 +117,7 @@ type Design struct {
 
 	// Streaming operations
 	SSE    *Action // Server-Sent Events streaming operation configuration
-	Stream *Action // gRPC streaming operation configuration (see Stream)
+	Stream *Action // Stream operation configuration, over WebSocket and gRPC (see Stream)
 }
 
 // Range iterates over the actions the Design declares and calls the provided function

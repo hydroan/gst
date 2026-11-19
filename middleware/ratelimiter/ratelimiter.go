@@ -78,7 +78,10 @@ func newConfig(opts []Option) *config {
 // Use functional options (WithBucket, WithKeyFunc, WithSkipFunc) to customize behavior;
 // a request over the limit is refused with 429.
 // Every call builds a limiter with buckets of its own, so two limiters never
-// share a bucket even when their key functions return the same key.
+// share a bucket even when their key functions return the same key. The
+// buckets live in the process: every replica of a deployment limits on its
+// own, and the replicas behind one balancer together let through as many
+// times the limit as there are replicas.
 //
 // Example, from an init function (see middleware.Register): a limiter that lets
 // each client IP burst 20 requests and then keep up ten a second, leaving GET

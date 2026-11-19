@@ -49,11 +49,16 @@ func WithBucket(capacity int, refillEvery time.Duration) Option {
 //
 // Common keys:
 //
-//	c.ClientIP()                                 per client IP (default)
-//	c.GetString("user_id")                       per authenticated user
-//	c.FullPath()                                 per route
-//	c.GetHeader("X-API-Key")                     per API key
-//	c.FullPath() + ":" + c.GetString("user_id")  per user per route
+//	c.ClientIP()                                             per client IP (default)
+//	c.GetString(requestctx.KeyUserID)                        per authenticated user
+//	c.FullPath()                                             per route
+//	c.GetHeader("X-API-Key")                                 per API key
+//	c.FullPath() + ":" + c.GetString(requestctx.KeyUserID)   per user per route
+//
+// A key read from the authenticated caller is there only once the
+// authentication middleware has run: a limiter keyed by it is mounted with
+// middleware.RegisterAuth after that middleware, since before it every request
+// reads the empty string and all of them spend one bucket.
 func WithKeyFunc(keyFunc func(c *gin.Context) string) Option {
 	return func(conf *config) {
 		if conf == nil || keyFunc == nil {

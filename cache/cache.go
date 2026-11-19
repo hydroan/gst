@@ -9,18 +9,17 @@
 //
 // # Available Backends (internal/cache)
 //
-// | Package     | Expiration Strategy  | Storage        |
-// |-------------|----------------------|----------------|
-// | lru         | No expiration        | Live values    |
-// | cmap        | No expiration        | Live values    |
-// | smap        | No expiration        | Live values    |
-// | freelru     | Per-entry expiration | Live values    |
-// | ccache      | Per-entry expiration | Live values    |
-// | otter       | Per-entry expiration | Live values    |
-// | ristretto   | Per-entry expiration | Live values    |
-// | fastcache   | No expiration        | Serialized     |
-// | bigcache    | No expiration        | Serialized     |
-// | freecache   | Per-entry expiration | Serialized     |
+//	Package     Expiration Strategy    Storage
+//	lru         No expiration          Live values
+//	cmap        No expiration          Live values
+//	smap        No expiration          Live values
+//	freelru     Per-entry expiration   Live values
+//	ccache      Per-entry expiration   Live values
+//	otter       Per-entry expiration   Live values
+//	ristretto   Per-entry expiration   Live values
+//	fastcache   No expiration          Serialized
+//	bigcache    No expiration          Serialized
+//	freecache   Per-entry expiration   Serialized
 //
 // A backend that cannot honor a lifetime rejects it with ErrTTLNotSupported
 // rather than storing the entry on different terms. That is why the "No

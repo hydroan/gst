@@ -15,8 +15,8 @@ const (
 	minCap = 16
 )
 
-// List represents a resizable array-backend list.
-// Call New or NewFromSlice default creates a list witout concurrent safety.
+// List represents a resizable array-backed list.
+// Call New or NewFromSlice default creates a list without concurrent safety.
 // Call New or NewFromSlice with `WithSafe` option to make the List safe for concurrent use.
 type List[E any] struct {
 	elements []E

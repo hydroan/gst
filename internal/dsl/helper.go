@@ -70,7 +70,7 @@ func stringLiteral(expr ast.Expr) (value string, ok bool) {
 // endpointSegment returns the path segment Endpoint(value) declares: value
 // without its leading slashes and with each slash left written as a hyphen,
 // so Endpoint("/iam/users") declares iam-users and Endpoint("/") declares
-// nothing, "", which leaves the model on its default segment.
+// nothing, "", which validateEndpointOrParam refuses.
 func endpointSegment(value string) string {
 	return strings.ReplaceAll(strings.TrimLeft(value, "/"), "/", "-")
 }

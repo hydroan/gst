@@ -54,8 +54,6 @@ func Init() error {
 		Name:      "uptime",
 		Help:      "The uptime of the backend",
 	})
-	// HttpRequestsTotal.WithLabelValues("GET").Inc()
-	// HttpRequestsTotal.WithLabelValues("POST").Inc()
 	HTTPRequestsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: NAMESPACE,

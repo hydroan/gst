@@ -35,12 +35,17 @@ func WithHeader(header http.Header) Option {
 	}
 }
 
+// WithDebug has the client write every request it sends, headers and body
+// included, and every response it reads to its logger at debug level (see
+// WithLogger).
 func WithDebug() Option {
 	return func(c *Client) {
 		c.debug = true
 	}
 }
 
+// WithLogger sets the logger the output of WithDebug goes to; a nil logger
+// keeps the client's own.
 func WithLogger(logger types.Logger) Option {
 	return func(c *Client) {
 		if logger != nil {
@@ -64,6 +69,7 @@ func WithTimeout(timeout time.Duration) Option {
 	}
 }
 
+// WithUserAgent sets the User-Agent header of every request.
 func WithUserAgent(userAgent string) Option {
 	return func(c *Client) {
 		if c.header == nil {
@@ -86,6 +92,9 @@ func WithCookie(cookie *http.Cookie) Option {
 	}
 }
 
+// WithBasicAuth has every request carry HTTP basic credentials; a username
+// that is blank once trimmed sets none. A token set with WithToken takes
+// their place: the Authorization header then carries the bearer token.
 func WithBasicAuth(username, password string) Option {
 	return func(c *Client) {
 		if username = strings.TrimSpace(username); len(username) != 0 {
@@ -95,6 +104,8 @@ func WithBasicAuth(username, password string) Option {
 	}
 }
 
+// WithToken has every request carry token as a bearer token in the
+// Authorization header; a token that is blank once trimmed sets none.
 func WithToken(token string) Option {
 	return func(c *Client) {
 		if token = strings.TrimSpace(token); len(token) != 0 {

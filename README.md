@@ -134,6 +134,8 @@ type Record struct {
 	model.Base
 }
 
+func (Record) TableName() string { return "records" }
+
 func (Record) Design() {
 	Migrate()
 	Endpoint("records")
@@ -1130,6 +1132,18 @@ system root、网关头、gRPC、请求之外、工具链。
 `leader`、`lock`、`component` 包的 godoc 示例（`example_*_test.go`）逐个演示了这些用法和容易踩的坑。[examples/cluster](./examples/cluster/README.md)
 把定时任务、选主和锁部署成三个副本，给了在 Kubernetes 里制造故障、核对结果的命令。
 
+### 部署到 Kubernetes 时要配的
+
+- `server.shutdown_delay`（默认 0）：进程收到停止信号后就绪探针立刻失败，再等这么久才开始排空。
+  设成负载均衡发现并摘掉这个副本所需的时间（探针间隔加余量）；保持 0 时，滚动发布期间仍会有新连接被送到正在关闭的副本上。
+- `terminationGracePeriodSeconds`：要大于框架停机的最长用时：`shutdown_delay`，加最多 30 秒等在途请求，
+  再加最多 30 秒等在途任务，开了链路追踪或调试端点的各再加最多 5 秒。Kubernetes 默认只给 30 秒，
+  不够时进程在收尾中途被强制结束，它持有的租约要等到期才被别的副本接手。
+- `enableServiceLinks: false`：Kubernetes 默认把同一命名空间里每个 Service 的地址注入成环境变量，
+  例如 `MYSQL_PORT=tcp://10.96.0.10:3306`，名字和框架的配置键 `mysql.port` 的环境变量相同，进程会把它当配置读，因为不是数字而启动失败。
+- 只在本进程内的能力不跨副本：`sse.Hub` 只推给连在本副本上的订阅者，要推给所有副本上的订阅者得自己经 Redis 这类共享通道转发，
+  [examples/cluster](./examples/cluster/README.md) 第九章的通知就是这个做法；`middleware/ratelimiter` 的额度按副本各自计，总额度随副本数成倍。
+
 ### 保证与边界
 
 框架对这几种能力保证什么、管不到什么，逐条列在仓库根目录的 [LEASE_PROTOCOL.md](LEASE_PROTOCOL.md#保证与边界)。写业务代码时最容易
@@ -1255,6 +1269,21 @@ gen:
 - 未匹配到任何路由的条目会在生成时输出 warning，提示配置可能已过期。
 - 忽略不影响 model 的 `Migrate` 注册：表结构照常创建，模块内部逻辑
   （如登录查询用户表）不受影响。
+
+`gen.models.ignore` 让 `gg gen` 不为指定的 model 生成 `model.Register` 注册：
+这个 model 的路由、service 和生成文件照常保留，只是不再注册，表也就不再由它创建。
+
+```yaml
+gen:
+  models:
+    ignore:
+      # 键是 model 的 Go 结构体名
+      Widget:
+      # 对象形式：from 限定只忽略声明在该目录下的 model，
+      # 别处声明的同名 model 照常注册
+      Profile:
+        from: model/iam
+```
 
 **`gg prune`（以及 `gg gen --prune`）只动 `service/`、`middleware/`、`interceptor/` 和 `pb/` 四个目录**，
 项目其他地方一个文件都不删、不改。它清理停用 action 的 service 文件连同配对的测试

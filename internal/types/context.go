@@ -173,9 +173,9 @@ func (sc *ServiceContext) Data(code int, contentType string, data []byte) {
 // error response). Without a response to stream on it records the attempt for
 // HTTPOnlyMethodCalled and reports the failure.
 //
-// Example:
+// Example, in the SSE method of a service:
 //
-//	return nil, ctx.SSE(func(conn *sse.Conn) error {
+//	return ctx.SSE(func(conn *sse.Conn) error {
 //		for {
 //			select {
 //			case <-conn.Context().Done():

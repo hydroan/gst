@@ -66,7 +66,8 @@ var getVerbActionMethodNames = map[string]bool{
 // fixedContractActionSignatures are actions whose service methods have fixed
 // signatures that never bind Payload or Result types, mapped to those
 // signatures for error reporting. The Import controller reads the uploaded
-// multipart form file and responds with a bare status code; the Export
+// multipart form file, stores the records the service parses out of it and
+// answers the success envelope with no data; the Export
 // controller handles an HTTP GET request, reads filters from query
 // parameters, and writes the returned bytes as a file attachment; the SSE
 // controller handles an HTTP GET request whose response is the event stream
