@@ -2,29 +2,28 @@ package interceptor
 
 import (
 	"context"
+	"strings"
 
 	"github.com/hydroan/gst/authn/jwt"
 	gstgrpc "github.com/hydroan/gst/grpc"
-	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/requestctx"
-	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
-// keySessionID is the metadata carrying the session id JwtAuth pairs with a
-// token, the X-Session-Id header of the HTTP listener, in the lowercase gRPC
-// metadata keeps its keys in.
-const keySessionID = "x-session-id"
+// keySessionID is the metadata the session id arrives under:
+// jwt.HeaderSessionID, lowercased once here. Metadata lowercases a key on
+// every read, and allocates to do it when the key is not lowercase already.
+var keySessionID = strings.ToLower(jwt.HeaderSessionID)
 
 // JwtAuth authenticates a call from the bearer token in its authorization
 // metadata, the way middleware.JwtAuth authenticates a request from the
 // Authorization header, with the same token: "authorization: Bearer <token>",
-// the x-session-id metadata standing for the X-Session-Id header. A call it
-// refuses, its token missing, malformed, expired or signed by something else,
-// is answered Unauthenticated with the one message "invalid token", the reason
-// kept to the log.
+// the x-session-id metadata standing for the X-Session-Id header (see
+// jwt.HeaderSessionID). A call it refuses, its token missing, malformed,
+// expired or signed by something else, is answered Unauthenticated with one
+// fixed message, the reason kept to the log (see jwt.LogRefusal).
 //
 // The token answers for itself: it is verified from its signature and
 // claims, with nothing read from storage. Revoking one before it expires
@@ -43,14 +42,8 @@ func JwtAuth() gstgrpc.Interceptor {
 			err = jwt.Verify(claims)
 		}
 		if err != nil {
-			// The reasons this layer rejects for are graded — missing,
-			// malformed, expired, signed by something else — and answering
-			// each in its own words hands the bearer of a stolen token a probe
-			// it can read the server's checks off of, so only the log keeps
-			// the distinction.
 			meta := requestctx.FromContext(ctx)
-			zap.L().Warn("jwt authentication rejected", zap.String("error", err.Error()), logfield.Path(meta.Path()), logfield.Method(meta.Method()))
-			return nil, status.Error(codes.Unauthenticated, "invalid token")
+			return nil, status.Error(codes.Unauthenticated, jwt.LogRefusal(err, meta.Path(), meta.Method()))
 		}
 		var sessionID string
 		if md, _ := metadata.FromIncomingContext(ctx); len(md.Get(keySessionID)) > 0 {

@@ -10,6 +10,9 @@ import (
 	"github.com/hydroan/gst/authn/jwt"
 	"github.com/hydroan/gst/config"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 const (
@@ -313,4 +316,25 @@ func signSampleToken(t *testing.T, claims gojwt.Claims) string {
 	token, err := gojwt.NewWithClaims(gojwt.SigningMethodHS256, claims).SignedString([]byte(sampleSigningKey))
 	require.NoError(t, err)
 	return token
+}
+
+// TestLogRefusalKeepsTheReasonInTheLogAndReturnsOneMessage pins what both
+// JwtAuth adapters record a refused token through: the reason goes to the
+// log as a warning, with the path and method of the request or call that
+// carried the token, and what comes back is the one message they answer
+// with, whatever the reason.
+func TestLogRefusalKeepsTheReasonInTheLogAndReturnsOneMessage(t *testing.T) {
+	core, logs := observer.New(zapcore.DebugLevel)
+	t.Cleanup(zap.ReplaceGlobals(zap.New(core)))
+
+	for _, reason := range []error{jwt.ErrTokenExpired, jwt.ErrTokenMalformed} {
+		require.Equal(t, "invalid token", jwt.LogRefusal(reason, "/api/records", http.MethodGet))
+	}
+
+	entries := logs.All()
+	require.Len(t, entries, 2)
+	require.Equal(t, zapcore.WarnLevel, entries[0].Level)
+	require.Equal(t, "jwt authentication rejected", entries[0].Message)
+	require.Equal(t, map[string]any{"error": "token expired", "path": "/api/records", "method": http.MethodGet}, entries[0].ContextMap())
+	require.Equal(t, "token malformed", entries[1].ContextMap()["error"])
 }

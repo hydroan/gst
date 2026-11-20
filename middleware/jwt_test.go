@@ -13,6 +13,9 @@ import (
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/middleware"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 // TestJwtAuthAdmitsABearerTokenAndNamesTheCaller pins the admitting path: a
@@ -33,20 +36,26 @@ func TestJwtAuthAdmitsABearerTokenAndNamesTheCaller(t *testing.T) {
 
 // TestJwtAuthRefusesWhatItCannotVerify pins the refusing path: no
 // Authorization header, a scheme other than Bearer, a token that does not
-// parse and one signed with another key are all answered 401 with one fixed
-// message, and the handler behind the middleware never runs; the reasons
-// stay in the log, the way the gRPC interceptor keeps them from a caller
-// probing the checks.
+// parse, one signed with another key and a refresh token, which parses and
+// names no user, are all answered 401 with one fixed message, and the handler
+// behind the middleware never runs; the reasons stay in the log, one entry a
+// refusal with the path and method of the request, the way the gRPC
+// interceptor keeps them from a caller probing the checks.
 func TestJwtAuthRefusesWhatItCannotVerify(t *testing.T) {
+	core, logs := observer.New(zapcore.DebugLevel)
+	t.Cleanup(zap.ReplaceGlobals(zap.New(core)))
 	withSigningKey(t, "another-signing-key")
 	foreign, _, err := jwt.GenTokens("u-1", "alice")
 	require.NoError(t, err)
 	withSigningKey(t, "test-signing-key")
+	_, refresh, err := jwt.GenTokens("u-1", "alice")
+	require.NoError(t, err)
 	for name, header := range map[string]http.Header{
 		"without authorization":            {},
 		"with another scheme":              {"Authorization": {"Basic YWxpY2U6cGFzcw=="}},
 		"with a token that does not parse": {"Authorization": {"Bearer not-a-token"}},
 		"with a token signed elsewhere":    {"Authorization": {"Bearer " + foreign}},
+		"with a refresh token":             {"Authorization": {"Bearer " + refresh}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			w := serveJwtAuth(t, header)
@@ -57,6 +66,13 @@ func TestJwtAuthRefusesWhatItCannotVerify(t *testing.T) {
 			}
 			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope), w.Body.String())
 			require.Equal(t, "invalid token", envelope.Msg)
+			entries := logs.TakeAll()
+			require.Len(t, entries, 1)
+			require.Equal(t, "jwt authentication rejected", entries[0].Message)
+			fields := entries[0].ContextMap()
+			require.NotEmpty(t, fields["error"])
+			require.Equal(t, "/api/jwt", fields[requestctx.KeyPath])
+			require.Equal(t, http.MethodGet, fields[requestctx.KeyMethod])
 		})
 	}
 }

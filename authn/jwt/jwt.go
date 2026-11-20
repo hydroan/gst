@@ -8,7 +8,9 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/types"
+	"go.uber.org/zap"
 )
 
 const (
@@ -258,6 +260,31 @@ func ParseTokenFromHeader(header http.Header) (token string, claims *Claims, err
 	token = items[1]
 	claims, err = ParseToken(items[1])
 	return token, claims, err
+}
+
+// HeaderSessionID is the header carrying the session id presented beside a
+// token: X-Session-Id on a request, and the metadata of a call under the
+// same name, which gRPC keeps in lower case.
+const HeaderSessionID = "X-Session-Id"
+
+// LogRefusal logs why a token was refused, with the path and method of the
+// request or call that carried it, and returns the one message every such
+// refusal is answered with, each transport answering it its own way: 401 in
+// the envelope of a request, Unauthenticated as the status of a call.
+//
+// The reasons a token is refused for are graded — missing, malformed,
+// expired, signed by something else — and answering each of them in its own
+// words hands the bearer of a stolen token a probe it can read the server's
+// checks off of. The holder of a valid token is told nothing by the
+// distinction either, so only the log keeps it.
+func LogRefusal(reason error, path, method string) string {
+	zap.L().Warn(
+		"jwt authentication rejected",
+		zap.String("error", reason.Error()),
+		logfield.Path(path),
+		logfield.Method(method),
+	)
+	return "invalid token"
 }
 
 // Token is the OAuth 2.0 token response of RFC 6749 section 5.1, plus the

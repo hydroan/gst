@@ -9,9 +9,9 @@ import (
 )
 
 // keyUserAgent is the metadata the User-Agent header arrives as, in the
-// lowercase gRPC metadata keeps its keys in. It is declared here rather than
-// beside keySessionID because gg module copy copies this file alone into a
-// project, where it must compile on its own.
+// lowercase gRPC metadata keeps its keys in. It is declared in this file
+// because gg module copy copies the file alone into a project, where it must
+// compile on its own.
 const keyUserAgent = "user-agent"
 
 // IAMSession authenticates a call from the IAM session it names as

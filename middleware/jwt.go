@@ -6,33 +6,16 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/apidoc"
 	"github.com/hydroan/gst/authn/jwt"
-	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
-	"go.uber.org/zap"
 )
 
-// abortUnauthenticatedJWT refuses the request with one fixed message and keeps
-// the reason in the log.
-//
-// The reasons this layer rejects for are graded — malformed, expired, signed by
-// something else — and answering each of them in its own words hands the bearer
-// of a stolen token a probe it can read the server's checks off of. The holder
-// of a valid token is told nothing by the distinction either, so only the log
-// keeps it.
-func abortUnauthenticatedJWT(c *gin.Context, err error) {
-	zap.L().Warn(
-		"jwt authentication rejected",
-		zap.String("error", err.Error()),
-		logfield.Path(c.Request.URL.Path),
-		logfield.Method(c.Request.Method),
-	)
-	response.Abort(c, types.NewError(http.StatusUnauthorized, "invalid token"))
-}
-
 // JwtAuth authenticates a request from the bearer token in its Authorization
-// header.
+// header, and the X-Session-Id header as its session (see
+// jwt.HeaderSessionID). A request it refuses, its token missing, malformed,
+// expired or signed by something else, is answered 401 with one fixed
+// message, the reason kept to the log (see jwt.LogRefusal).
 //
 // The token answers for itself: it is verified from its signature and claims,
 // with nothing read from storage. Revoking one before it expires therefore is
@@ -44,12 +27,11 @@ func JwtAuth() gin.HandlerFunc {
 	apidoc.RegisterSecurityScheme("bearerAuth", apidoc.SecurityScheme{Type: "http", Scheme: "bearer"})
 	return func(c *gin.Context) {
 		_, claims, err := jwt.ParseTokenFromHeader(c.Request.Header)
-		if err != nil {
-			abortUnauthenticatedJWT(c, err)
-			return
+		if err == nil {
+			err = jwt.Verify(claims)
 		}
-		if err := jwt.Verify(claims); err != nil {
-			abortUnauthenticatedJWT(c, err)
+		if err != nil {
+			response.Abort(c, types.NewError(http.StatusUnauthorized, jwt.LogRefusal(err, c.Request.URL.Path, c.Request.Method)))
 			return
 		}
 
@@ -57,6 +39,6 @@ func JwtAuth() gin.HandlerFunc {
 		// so that later handlers can read the current user through c.Get("username").
 		c.Set(requestctx.KeyUserID, claims.UserID)
 		c.Set(requestctx.KeyUsername, claims.Username)
-		c.Set(requestctx.KeySessionID, c.GetHeader("X-Session-Id"))
+		c.Set(requestctx.KeySessionID, c.GetHeader(jwt.HeaderSessionID))
 	}
 }

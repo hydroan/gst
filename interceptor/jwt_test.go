@@ -2,6 +2,7 @@ package interceptor_test
 
 import (
 	"context"
+	"net/http"
 	"testing"
 	"time"
 
@@ -10,6 +11,9 @@ import (
 	"github.com/hydroan/gst/interceptor"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -49,29 +53,43 @@ func TestJwtAuthAdmitsABearerTokenAndNamesTheCaller(t *testing.T) {
 
 // TestJwtAuthRefusesWhatItCannotVerify pins the refusing path: no
 // authorization metadata, a scheme other than Bearer, a token that does not
-// parse and one signed with another key are all answered Unauthenticated
-// with one fixed message and no context to go on with; the reasons stay in
-// the log, the way the HTTP middleware keeps them from a caller probing the
-// checks.
+// parse, one signed with another key and a refresh token, which parses and
+// names no user, are all answered Unauthenticated with one fixed message and
+// no context to go on with; the reasons stay in the log, one entry a refusal
+// with the path and method of the call, the way the HTTP middleware keeps
+// them from a caller probing the checks.
 func TestJwtAuthRefusesWhatItCannotVerify(t *testing.T) {
+	core, logs := observer.New(zapcore.DebugLevel)
+	t.Cleanup(zap.ReplaceGlobals(zap.New(core)))
 	withSigningKey(t, "another-signing-key")
 	foreign, _, err := jwt.GenTokens("u-1", "alice")
 	require.NoError(t, err)
 	withSigningKey(t, "test-signing-key")
+	_, refresh, err := jwt.GenTokens("u-1", "alice")
+	require.NoError(t, err)
 	for name, md := range map[string]metadata.MD{
 		"without authorization":            {},
 		"with another scheme":              metadata.Pairs("authorization", "Basic YWxpY2U6cGFzcw=="),
 		"with a token that does not parse": metadata.Pairs("authorization", "Bearer not-a-token"),
 		"with a token signed elsewhere":    metadata.Pairs("authorization", "Bearer "+foreign),
+		"with a refresh token":             metadata.Pairs("authorization", "Bearer "+refresh),
 	} {
 		t.Run(name, func(t *testing.T) {
 			ctx := metadata.NewIncomingContext(context.Background(), md)
+			ctx = requestctx.WithMetadata(ctx, requestctx.New(requestctx.Fields{Path: "/gst.test.Echo/Get", Method: http.MethodGet}))
 
 			admitted, err := interceptor.JwtAuth()(ctx)
 
 			require.Equal(t, codes.Unauthenticated, status.Code(err))
 			require.Equal(t, "invalid token", status.Convert(err).Message())
 			require.Nil(t, admitted)
+			entries := logs.TakeAll()
+			require.Len(t, entries, 1)
+			require.Equal(t, "jwt authentication rejected", entries[0].Message)
+			fields := entries[0].ContextMap()
+			require.NotEmpty(t, fields["error"])
+			require.Equal(t, "/gst.test.Echo/Get", fields[requestctx.KeyPath])
+			require.Equal(t, http.MethodGet, fields[requestctx.KeyMethod])
 		})
 	}
 }
