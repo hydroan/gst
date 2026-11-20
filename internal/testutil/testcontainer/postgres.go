@@ -87,6 +87,7 @@ func SetupStandalonePostgres(database, username, password string) (config.Postgr
 		// postgres restarts itself once during initdb, so it only counts as
 		// ready after logging readiness twice and after the port is served.
 		postgres.BasicWaitStrategies(),
+		patientStart(),
 	)
 	if err != nil {
 		return config.Postgres{}, nil, errors.Wrap(err, "failed to start standalone postgres container")
@@ -125,6 +126,7 @@ func setupDedicatedPostgres() (func() error, error) {
 		// postgres restarts itself once during initdb, so it only counts as
 		// ready after logging readiness twice and after the port is served.
 		postgres.BasicWaitStrategies(),
+		patientStart(),
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to start postgres container")
@@ -174,6 +176,7 @@ func setupSharedPostgres() (func() error, error) {
 			// as ready after logging readiness twice and after the port is
 			// served.
 			postgres.BasicWaitStrategies(),
+			patientStart(),
 			reuseAcrossRuns(containerName),
 		)
 		if err != nil {

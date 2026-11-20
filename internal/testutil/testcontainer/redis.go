@@ -53,7 +53,7 @@ func setupDedicatedRedis() (func() error, error) {
 	muteContainerLog()
 	ctx := context.Background()
 
-	c, err := redis.Run(ctx, redisImage)
+	c, err := redis.Run(ctx, redisImage, patientStart())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to start redis container")
 	}
@@ -94,6 +94,7 @@ func setupSharedRedis() (func() error, error) {
 		c, err := redis.Run(
 			ctx, redisImage,
 			testcontainers.WithCmdArgs(redisSharedArgs...),
+			patientStart(),
 			reuseAcrossRuns(containerName),
 		)
 		if err != nil {

@@ -22,6 +22,11 @@ const kafkaImage = "confluentinc/confluent-local:7.5.0"
 // topics and consumer groups apart by construction. Not being reused, it is
 // left to testcontainers alone: should the binary die before calling the
 // returned function, the reaper removes the container.
+//
+// It is the one container started here that is not given readyTimeout: the
+// module waits for the broker inside a hook of its own, a minute for the
+// port and a minute for the line the broker logs once it runs, with
+// strategies it builds there, which no option reaches (see patientStart).
 func SetupKafka() (func() error, error) {
 	muteContainerLog()
 	ctx := context.Background()

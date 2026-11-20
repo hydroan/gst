@@ -6,7 +6,6 @@ import (
 	"net"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
@@ -32,13 +31,10 @@ const (
 	// it. The broker prints its boot line before its registration with the
 	// name server has completed; the first completed one follows some ten
 	// seconds later, and until then no route resolves, so the readiness wait
-	// is for this line rather than for the boot lines.
+	// is for this line rather than for the boot lines. It takes some twenty
+	// seconds on a warm machine, and is given readyTimeout.
 	rocketmqBrokerLog      = "/home/rocketmq/logs/rocketmqlogs/broker.log"
 	rocketmqRegisteredLine = "Registering current broker to name server completed"
-
-	// rocketmqReadyTimeout bounds the wait for rocketmqRegisteredLine; it
-	// takes some twenty seconds on a warm machine.
-	rocketmqReadyTimeout = 2 * time.Minute
 )
 
 // rocketmqBrokerConf is the broker's configuration file, filled with the
@@ -133,7 +129,7 @@ func SetupRocketMQ() (func() error, error) {
 			FileMode:          0o644,
 		}},
 		WaitingFor: wait.ForExec([]string{"grep", "-q", rocketmqRegisteredLine, rocketmqBrokerLog}).
-			WithStartupTimeout(rocketmqReadyTimeout),
+			WithStartupTimeout(readyTimeout),
 	})
 	if err != nil {
 		err = errors.Wrap(err, "failed to start rocketmq container")

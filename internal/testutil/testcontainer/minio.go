@@ -36,7 +36,7 @@ func setupDedicatedMinio() (func() error, error) {
 	muteContainerLog()
 	ctx := context.Background()
 
-	c, err := minio.Run(ctx, minioImage)
+	c, err := minio.Run(ctx, minioImage, patientStart())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to start minio container")
 	}
@@ -73,7 +73,7 @@ func setupSharedMinio() (func() error, error) {
 		bucket                   string
 	)
 	err := withSharedContainerLock(containerName, func() error {
-		c, err := minio.Run(ctx, minioImage, reuseAcrossRuns(containerName))
+		c, err := minio.Run(ctx, minioImage, patientStart(), reuseAcrossRuns(containerName))
 		if err != nil {
 			return errors.Wrap(err, "failed to start the shared minio container")
 		}

@@ -39,7 +39,7 @@ func SetupElasticsearch() (func() error, error) {
 	c, err := elasticsearch.Run(ctx, elasticsearchImage, testcontainers.WithEnv(map[string]string{
 		"xpack.security.enabled": "false",
 		"ES_JAVA_OPTS":           elasticsearchHeapOptions,
-	}))
+	}), patientStart())
 	if err != nil {
 		err = errors.Wrap(err, "failed to start elasticsearch container")
 		if c != nil {

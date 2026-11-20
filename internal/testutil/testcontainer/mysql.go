@@ -90,6 +90,7 @@ func setupDedicatedMySQL() (func() error, error) {
 		mysql.WithDatabase(mysqlDatabase),
 		mysql.WithUsername(mysqlUsername),
 		mysql.WithPassword(mysqlPassword),
+		patientStart(),
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to start mysql container")
@@ -128,6 +129,7 @@ func SetupStandaloneMySQL(database, username, password string) (config.MySQL, fu
 	options := []testcontainers.ContainerCustomizer{
 		mysql.WithDatabase(database),
 		mysql.WithPassword(password),
+		patientStart(),
 	}
 	// The mysql module refuses to provision root as a plain user; root works
 	// through the root password alone.
@@ -179,6 +181,7 @@ func setupSharedMySQL() (func() error, func(), error) {
 			mysql.WithUsername(mysqlRootUsername),
 			mysql.WithPassword(mysqlPassword),
 			testcontainers.WithCmdArgs(mysqlSharedArgs...),
+			patientStart(),
 			reuseAcrossRuns(containerName),
 		)
 		if err != nil {

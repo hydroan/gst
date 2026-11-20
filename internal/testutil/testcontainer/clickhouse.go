@@ -112,6 +112,7 @@ func setupDedicatedClickhouse() (config.Clickhouse, func() error, error) {
 		clickhouse.WithUsername(clickhouseUsername),
 		clickhouse.WithPassword(clickhousePassword),
 		clickhouse.WithConfigFile(configFile),
+		patientStart(),
 	)
 	if err != nil {
 		return config.Clickhouse{}, nil, errors.Wrap(err, "failed to start clickhouse container")
@@ -155,6 +156,7 @@ func setupSharedClickhouse() (config.Clickhouse, func() error, error) {
 			clickhouse.WithUsername(clickhouseUsername),
 			clickhouse.WithPassword(clickhousePassword),
 			clickhouse.WithConfigFile(configFile),
+			patientStart(),
 			reuseAcrossRuns(containerName),
 		)
 		if err != nil {
