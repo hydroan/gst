@@ -258,7 +258,11 @@ type openapiCustomBatchResponse struct {
 	Result string `json:"result"`
 }
 
-func TestSetCustomBatchDocumentsResponseEnvelope(t *testing.T) {
+// TestSetCustomBatchDocumentsTheServiceTypes pins that a batch action a
+// service serves is documented with the service's own types: the request
+// body is its request type, the batch delete's included, and the response
+// the envelope around its response type, answered 200.
+func TestSetCustomBatchDocumentsTheServiceTypes(t *testing.T) {
 	tests := []struct {
 		name       string
 		set        func(*openapi3.PathItem)
@@ -321,6 +325,11 @@ func TestSetCustomBatchDocumentsResponseEnvelope(t *testing.T) {
 			data := schema.Properties["data"]
 			if data == nil || data.Value == nil || data.Value.Properties["result"] == nil {
 				t.Fatalf("response data schema = %#v, want the custom response shape", data)
+			}
+
+			body := registeredRequestBodySchema(t, op.RequestBody)
+			if len(body.Properties) != 1 || body.Properties["name"] == nil {
+				t.Fatalf("request body properties = %v, want the custom request shape", slices.Sorted(maps.Keys(body.Properties)))
 			}
 		})
 	}
