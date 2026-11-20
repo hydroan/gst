@@ -87,7 +87,10 @@ type Service[M Model, REQ Request, RSP Response] interface {
 	// condition, then return both. Returning an error aborts the request — the
 	// correct behavior when loading the caller's data scope fails. The
 	// controller calls Filter once and shares the result between List and
-	// Count, so both always see the same condition set.
+	// Count, so both always see the same condition set. Filter narrows what
+	// a List and an Export return and nothing else: no other action runs it,
+	// so a rule about who may read or change one record is checked in the
+	// hooks of the actions on that record as well.
 	Filter(*ServiceContext, M, QueryOptions) (M, QueryOptions, error)
 
 	Logger
