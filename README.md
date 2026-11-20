@@ -253,7 +253,8 @@ func (Entry) Design() {
 
 ### 路由和可见性
 
-- `Endpoint("records")` 定义默认资源路径。
+- `Endpoint("records")` 定义默认资源路径，只写一段：开头的斜杠会被去掉，其余位置带斜杠
+  （如 `Endpoint("archive/records")`）时 gg gen 报错，多段路径用 `Route`。
 - `Route("/archive/documents", func() {...})` 定义额外路径或完全自定义路径。
 - `Public()` 表示公开接口，不走认证中间件；默认不写则需要认证。
 - `Exact()` 表示当前 action 按声明路径原样注册，不追加默认的 `/:id`、`/batch` 等后缀。
@@ -262,7 +263,8 @@ func (Entry) Design() {
   从请求体或当前用户判断；所以这时至少要声明 `Payload[T]()`、`Result[T]()`
   其中一个（Get 不能有请求体，要声明 `Result[T]()`），动作才交给自定义 service，
   否则 gg gen 报错。
-- `Payload[T]()` 定义请求体类型；`Result[T]()` 定义响应体类型。
+- `Payload[T]()` 定义请求体类型；`Result[T]()` 定义响应体类型。声明了其中任何一个的
+  action 要同时写 `Service()`：这两个类型是自定义 service 方法的类型，漏写时 gg gen 报错。
 - `List`、`Get` 是 HTTP GET 接口，没有请求体，禁止声明 `Payload[T]()`；
   只声明 `Result[T]()` 即成为自定义动作，生成的请求类型固定为 `*model.Empty`，
   查询参数通过 `ctx.Query()`、路径参数通过 `ctx.Param()` 读取。
@@ -1377,7 +1379,8 @@ prune 删什么、不删什么、按什么顺序删、什么时候问你，完�
 ### 什么时候需要 Service()？
 
 默认 CRUD 没有额外业务逻辑时不需要。需要 hook、过滤、返回补充、复杂查询，或当前
-action 是自定义动作时再开启 `Service()`。
+action 是自定义动作时再开启 `Service()`。声明了 `Payload[T]()` 或 `Result[T]()` 的 action
+必须写 `Service()`，漏写时 gg gen 报错。
 
 ### 为什么我写了 service 的 Create 方法但没有被调用？
 

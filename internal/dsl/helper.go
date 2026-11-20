@@ -67,12 +67,14 @@ func stringLiteral(expr ast.Expr) (value string, ok bool) {
 	return value, err == nil
 }
 
-// endpointSegment returns the path segment Endpoint(value) declares: value
-// without its leading slashes and with each slash left written as a hyphen,
-// so Endpoint("/iam/users") declares iam-users and Endpoint("/") declares
-// nothing, "", which validateEndpointOrParam refuses.
-func endpointSegment(value string) string {
-	return strings.ReplaceAll(strings.TrimLeft(value, "/"), "/", "-")
+// declaredPath returns the path Endpoint(value) or Route(value, block)
+// declares: value without its leading slashes, so Endpoint("//user2")
+// declares user2, Route("/iam/users", block) declares iam/users, and a value
+// of slashes alone, "/", declares nothing, "", which validateEndpointOrParam
+// and validateRouteCall refuse. An Endpoint declares one segment, so the
+// former refuses a path still holding a slash as well, Endpoint("iam/users").
+func declaredPath(value string) string {
+	return strings.TrimLeft(value, "/")
 }
 
 // paramName returns the route parameter name Param(value) declares: value
@@ -83,11 +85,4 @@ func paramName(value string) string {
 	return strings.TrimFunc(value, func(r rune) bool {
 		return r == ' ' || r == '{' || r == '}' || r == '[' || r == ']' || r == ':'
 	})
-}
-
-// routePath returns the path Route(value, block) declares: value without its
-// leading slashes, so Route("/archive/items", block) declares archive/items
-// and Route("/", block) declares nothing, "".
-func routePath(value string) string {
-	return strings.TrimLeft(value, "/")
 }

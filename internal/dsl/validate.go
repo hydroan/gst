@@ -279,15 +279,19 @@ func validateDesignFunc(fn *ast.FuncDecl, modelName string, rootModelFile, virtu
 // validateEndpointOrParam reports an Endpoint or Param call at Design() top
 // level the parser cannot take a value from: an argument that is not a
 // string literal, or a value that declares nothing once read the way the
-// parser reads it (see endpointSegment and paramName), Endpoint("/") or
+// parser reads it (see declaredPath and paramName), Endpoint("/") or
 // Param(":"), either of which would leave the model on its default without a
 // word, a Param of "" besides registering a route the router refuses at
-// startup. The argument count is the compiler's to report.
+// startup. An Endpoint read to more than one path segment,
+// Endpoint("iam/users"), is refused as well: it names the one segment the
+// model takes in the path of its routes, the segments before it coming from
+// the directory of the model file, and a path of several segments is a
+// Route's to declare. The argument count is the compiler's to report.
 func validateEndpointOrParam(call *ast.CallExpr, name, modelName, filename string) []error {
 	if len(call.Args) != 1 {
 		return nil
 	}
-	reads, names, placeholder := endpointSegment, "path", "path"
+	reads, names, placeholder := declaredPath, "path segment", "segment"
 	if name == "Param" {
 		reads, names, placeholder = paramName, "route parameter", "name"
 	}
@@ -295,8 +299,12 @@ func validateEndpointOrParam(call *ast.CallExpr, name, modelName, filename strin
 	if !ok {
 		return []error{errors.Newf("%s: %s gives %s something other than a string literal; write %s(%q)", filename, modelName, name, name, placeholder)}
 	}
-	if reads(value) == "" {
+	declared := reads(value)
+	if declared == "" {
 		return []error{errors.Newf("%s: %s declares %s %q, which names no %s; write %s(%q) or omit %s for the default", filename, modelName, name, value, names, name, placeholder, name)}
+	}
+	if name == "Endpoint" && strings.Contains(declared, "/") {
+		return []error{errors.Newf("%s: %s declares Endpoint %q, which is not one path segment; write Endpoint(\"segment\") for a single segment, or Route(\"path\", func() {...}) for a path of several", filename, modelName, value)}
 	}
 	return nil
 }
@@ -322,7 +330,7 @@ func functionLiteralArg(call *ast.CallExpr, i int) *ast.FuncLit {
 // serve as that literal segment, is refused with "the
 // Route("archive/boxes/{box}/documents") of Record writes the parameter box
 // as {box}; write :box, the form the router reads". A path that is not a
-// string literal, or one that trims to nothing (see routePath), Route("/",
+// string literal, or one that trims to nothing (see declaredPath), Route("/",
 // block), is refused as well: the parser would declare no route for it
 // without a word.
 func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virtual bool, filename string) (grpcServable bool, errs []error) {
@@ -335,7 +343,7 @@ func validateRouteCall(call *ast.CallExpr, modelName string, rootModelFile, virt
 	if !isLiteral {
 		return false, []error{errors.Newf("%s: %s gives Route something other than a string literal; write Route(\"path\", func() {...})", filename, modelName)}
 	}
-	if routePath(route) == "" {
+	if declaredPath(route) == "" {
 		return false, []error{errors.Newf("%s: %s declares Route %q, which names no path; write Route(\"path\", func() {...})", filename, modelName, route)}
 	}
 	errs = make([]error, 0)
@@ -487,12 +495,23 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile, vi
 	if virtual && actionName == apiaction.List.Name() && !info.result {
 		errs = append(errs, errors.Newf("%s: %s action on a virtual model relies on the built-in list controller, but a virtual model has no table to list from; declare Result with a custom service method", filename, actionName))
 	}
-	// These actions have no built-in implementation able to answer a request
-	// on its own: SSE's stream, Import's parsing, and Export's rendering all
-	// live in the custom service, so a block without Service() registers a
-	// route that can only answer "not implemented".
-	if serviceRequiredActionMethodNames[actionName] && !info.service {
-		errs = append(errs, errors.Newf("%s: %s action has no built-in implementation and must declare Service()", filename, actionName))
+	if !info.service {
+		switch {
+		// These actions have no built-in implementation able to answer a
+		// request on its own: SSE's stream, Import's parsing, and Export's
+		// rendering all live in the custom service, so a block without
+		// Service() registers a route that can only answer "not implemented".
+		case serviceRequiredActionMethodNames[actionName]:
+			errs = append(errs, errors.Newf("%s: %s action has no built-in implementation and must declare Service()", filename, actionName))
+		// Payload and Result are the types of a custom service method, which
+		// Service() generates and registers, so an action declaring them
+		// without it has no such method. Where the types are not the model
+		// itself, its route is registered for them with no service behind
+		// it, and a request is answered by the empty service of the
+		// registry: a success carrying no data.
+		case info.payload || info.result:
+			errs = append(errs, errors.Newf("%s: %s action declares Payload or Result, the types of a custom service method, but not Service(), which generates and registers that service; add Service() to the %s block", filename, actionName, actionName))
+		}
 	}
 	// A Stream streams one side of the call or both, and each side is
 	// either one message or a stream of them; its service is named by

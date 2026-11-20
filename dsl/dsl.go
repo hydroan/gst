@@ -91,15 +91,17 @@ import (
 	"github.com/hydroan/gst/internal/dsl"
 )
 
-// Endpoint sets a custom endpoint path for the model's API routes.
+// Endpoint sets the path segment the model takes in its API routes.
 // If not specified, defaults to the pluralized snake_case form of the model name,
 // e.g. "sample_records" for a SampleRecord model.
-// Leading slashes are automatically removed and forward slashes are replaced with hyphens.
-// Example: Endpoint("users") for a User model, Endpoint("/iam/users") becomes "iam-users"
+// Leading slashes are removed, so Endpoint("users") and Endpoint("/users")
+// both declare users for a User model; a path of several segments is declared
+// with Route.
 //
 // gg refuses a Design() that declares Endpoint twice, gives it anything but a
-// string literal, or gives it a path that trims to nothing, Endpoint("/").
-func Endpoint(path string) { dsl.Endpoint(path) }
+// string literal, gives it a segment that trims to nothing, Endpoint("/"), or
+// gives it more than one segment, Endpoint("iam/users").
+func Endpoint(segment string) { dsl.Endpoint(segment) }
 
 // Param defines a path parameter for dynamic routing in RESTful APIs.
 // It adds a URL parameter segment to the endpoint, enabling hierarchical resource access.
@@ -254,6 +256,10 @@ func GRPC() { dsl.GRPC() }
 // marker only controls service generation and registration for the current
 // action; it does not change Payload, Result, Public, Exact, Flatten or route
 // generation semantics.
+//
+// An action declaring Payload or Result declares Service as well: the two
+// are the types of its custom service method, and gg refuses the action
+// without the service that implements it.
 func Service(name ...string) { dsl.Service(name...) }
 
 // Flatten changes the service output layout for the current action.
@@ -334,6 +340,9 @@ func Exact() { dsl.Exact() }
 // Payload, Result, StreamingPayload and StreamingResult take an exported type
 // of the model package, T or *T: the generated code refers to it from another
 // package, so gg refuses any other form.
+//
+// Payload and Result are the types of the action's custom service method, so
+// an action declaring either declares Service as well (see Service).
 func Payload[T any]() { dsl.Payload[T]() }
 
 // Result specifies the response result type for the current action.
@@ -342,6 +351,8 @@ func Payload[T any]() { dsl.Payload[T]() }
 //
 // Result must not be declared on Import and Export actions: they delegate to
 // fixed service method signatures that never bind a response type.
+//
+// An action declaring Result declares Service as well (see Payload).
 func Result[T any]() { dsl.Result[T]() }
 
 // Create defines the configuration for the create operation.

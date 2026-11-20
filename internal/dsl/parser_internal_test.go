@@ -25,7 +25,7 @@ func TestParse(t *testing.T) {
 			code: userSource,
 			want: map[string]*Design{
 				"User": {
-					Endpoint: "iam-user2",
+					Endpoint: "user2",
 					Param:    ":user",
 					Migrate:  true,
 					GRPC:     true,
@@ -211,8 +211,8 @@ func TestParseDecodesStringArguments(t *testing.T) {
 	// decode, and a raw string is taken as written.
 	design := parseDesignFromSource(t, escapedStringArgumentSource, "Record")
 
-	if design.Endpoint != "sample-records" {
-		t.Errorf("expected Endpoint 'sample-records', got %q", design.Endpoint)
+	if design.Endpoint != "sample_records" {
+		t.Errorf("expected Endpoint 'sample_records', got %q", design.Endpoint)
 	}
 	if design.Param != ":rec" {
 		t.Errorf("expected Param ':rec', got %q", design.Param)
@@ -242,7 +242,7 @@ type Record struct {
 }
 
 func (Record) Design() {
-	Endpoint("sample\u002frecords")
+	Endpoint("sample\u005frecords")
 	Param(` + "`rec`" + `)
 	Route("sample\u002frecords/archive", func() {
 		Create(func() {

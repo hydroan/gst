@@ -2750,20 +2750,20 @@ func TestValidateRejectsActionTypesOutsideTheModelPackage(t *testing.T) {
 
 // TestValidateRejectsPathKeywordsTheParserCannotRead pins that Endpoint and
 // Param are declared once at Design() top level and that they and Route are
-// given a string literal spelling a path or a parameter name: the parser
-// takes a value from nothing else, so a second call, a variable or a value
-// that trims to nothing would leave the model on its default, or declare no
-// route, without a word, and a Param of "" would besides register a route
-// the router refuses at startup. The argument count is the compiler's to
-// report, so no case covers it.
+// given a string literal spelling a path segment, a parameter name or a
+// path: the parser takes a value from nothing else, so a second call, a
+// variable or a value that trims to nothing would leave the model on its
+// default, or declare no route, without a word, and a Param of "" would
+// besides register a route the router refuses at startup. The argument count
+// is the compiler's to report, so no case covers it.
 func TestValidateRejectsPathKeywordsTheParserCannotRead(t *testing.T) {
 	for _, tt := range []struct{ name, source, wantError string }{
 		{name: "endpoint_twice", source: validateEndpointTwiceSource, wantError: "Record declares Endpoint twice at Design() top level; declare it once"},
 		{name: "param_twice", source: validateParamTwiceSource, wantError: "Record declares Param twice at Design() top level; declare it once"},
-		{name: "endpoint_variable", source: validateEndpointVariableSource, wantError: `Record gives Endpoint something other than a string literal; write Endpoint("path")`},
+		{name: "endpoint_variable", source: validateEndpointVariableSource, wantError: `Record gives Endpoint something other than a string literal; write Endpoint("segment")`},
 		{name: "param_constant", source: validateParamConstantSource, wantError: `Record gives Param something other than a string literal; write Param("name")`},
 		{name: "route_variable", source: validateRouteVariableSource, wantError: `Record gives Route something other than a string literal; write Route("path", func() {...})`},
-		{name: "endpoint_slash_alone", source: validateEndpointSlashSource, wantError: `Record declares Endpoint "/", which names no path; write Endpoint("path") or omit Endpoint for the default`},
+		{name: "endpoint_slash_alone", source: validateEndpointSlashSource, wantError: `Record declares Endpoint "/", which names no path segment; write Endpoint("segment") or omit Endpoint for the default`},
 		{name: "param_empty", source: validateParamEmptySource, wantError: `Record declares Param "", which names no route parameter; write Param("name") or omit Param for the default`},
 		{name: "param_colon_alone", source: validateParamColonSource, wantError: `Record declares Param ":", which names no route parameter; write Param("name") or omit Param for the default`},
 		{name: "route_slash_alone", source: validateRouteSlashSource, wantError: `Record declares Route "/", which names no path; write Route("path", func() {...})`},
@@ -2771,6 +2771,54 @@ func TestValidateRejectsPathKeywordsTheParserCannotRead(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) { requireValidateError(t, tt.source, tt.wantError) })
 	}
+}
+
+// TestValidateRejectsAnEndpointOfMoreThanOneSegment pins that Endpoint names
+// one path segment, the one the model takes in the path of its routes: a
+// slash left in its value once the leading ones are dropped, between two
+// names or after the last, is refused, pointing at Route for a path of
+// several segments. Leading slashes alone are dropped, as a Route's are.
+func TestValidateRejectsAnEndpointOfMoreThanOneSegment(t *testing.T) {
+	for _, tt := range []struct{ name, source, wantError string }{
+		{name: "two_segments", source: validateEndpointTwoSegmentsSource, wantError: `Record declares Endpoint "archive/records", which is not one path segment; write Endpoint("segment") for a single segment, or Route("path", func() {...}) for a path of several`},
+		{name: "trailing_slash", source: validateEndpointTrailingSlashSource, wantError: `Record declares Endpoint "records/", which is not one path segment; write Endpoint("segment") for a single segment, or Route("path", func() {...}) for a path of several`},
+		{name: "leading_slashes", source: validateEndpointLeadingSlashesSource},
+	} {
+		t.Run(tt.name, func(t *testing.T) { requireValidateError(t, tt.source, tt.wantError) })
+	}
+}
+
+// TestValidateRejectsActionTypesWithoutAService pins that an action declaring
+// Payload or Result declares Service() as well: the two are the types of a
+// custom service method, and without the service implementing it a route
+// registered for types of its own has nothing behind it but the empty
+// service of the registry, which answers a success carrying no data. Either
+// type alone needs the service, at Design() top level and in a Route block
+// alike, the model itself named as the type included. An action that has no
+// built-in implementation is reported once, by the rule that says so.
+func TestValidateRejectsActionTypesWithoutAService(t *testing.T) {
+	for _, tt := range []struct{ name, source, wantError string }{
+		{name: "payload_and_result", source: validateActionTypesWithoutServiceSource, wantError: "Create action declares Payload or Result, the types of a custom service method, but not Service(), which generates and registers that service; add Service() to the Create block"},
+		{name: "payload_alone_in_a_route", source: validatePayloadWithoutServiceInRouteSource, wantError: "Patch action declares Payload or Result, the types of a custom service method, but not Service(), which generates and registers that service; add Service() to the Patch block"},
+		{name: "result_alone", source: validateResultWithoutServiceSource, wantError: "List action declares Payload or Result, the types of a custom service method, but not Service(), which generates and registers that service; add Service() to the List block"},
+		{name: "the_model_itself_as_the_type", source: validateModelAsActionTypeWithoutServiceSource, wantError: "Update action declares Payload or Result, the types of a custom service method, but not Service(), which generates and registers that service; add Service() to the Update block"},
+	} {
+		t.Run(tt.name, func(t *testing.T) { requireValidateError(t, tt.source, tt.wantError) })
+	}
+
+	t.Run("an_action_without_a_built_in_implementation_is_reported_once", func(t *testing.T) {
+		file, err := parser.ParseFile(token.NewFileSet(), "/repo/model/sample/record.go", validateStreamTypesWithoutServiceSource, parser.ParseComments)
+		require.NoError(t, err)
+
+		var got []string
+		for _, err := range dsl.Validate(file, "/repo/model", "/repo/model/sample/record.go") {
+			got = append(got, err.Error())
+		}
+		require.Equal(t, []string{
+			"/repo/model/sample/record.go: Stream action has no built-in implementation and must declare Service()",
+			`/repo/model/sample/record.go: Stream action must name its service, Service("name"): a stream has no default service name`,
+		}, got)
+	})
 }
 
 // requireValidateError validates source as /repo/model/sample/record.go and
@@ -3167,6 +3215,60 @@ func (Record) Design() {
 }
 `
 
+const validateEndpointTwoSegmentsSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Endpoint("archive/records")
+	Create(func() {})
+}
+`
+
+const validateEndpointTrailingSlashSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Endpoint("records/")
+	Create(func() {})
+}
+`
+
+const validateEndpointLeadingSlashesSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Endpoint("//records")
+	Create(func() {})
+}
+`
+
 const validateParamEmptySource = `
 package sample
 
@@ -3312,6 +3414,119 @@ func (Record) Design() {
 			Payload[*ProbeReq]()
 			Result[probeRsp]()
 		})
+	})
+}
+`
+
+const validateActionTypesWithoutServiceSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+type RecordCreateReq struct{}
+
+type RecordCreateRsp struct{}
+
+func (Record) Design() {
+	Create(func() {
+		Payload[*RecordCreateReq]()
+		Result[*RecordCreateRsp]()
+	})
+}
+`
+
+const validatePayloadWithoutServiceInRouteSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+type RecordPatchReq struct{}
+
+func (Record) Design() {
+	Route("archive/records", func() {
+		Patch(func() {
+			Payload[*RecordPatchReq]()
+		})
+	})
+}
+`
+
+const validateResultWithoutServiceSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+type RecordListRsp struct{}
+
+func (Record) Design() {
+	List(func() {
+		Result[*RecordListRsp]()
+	})
+}
+`
+
+const validateModelAsActionTypeWithoutServiceSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+func (Record) Design() {
+	Update(func() {
+		Payload[*Record]()
+		Result[*Record]()
+	})
+}
+`
+
+const validateStreamTypesWithoutServiceSource = `
+package sample
+
+import (
+	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/model"
+)
+
+type Record struct {
+	model.Base
+}
+
+type RecordWatchReq struct{}
+
+type RecordEvent struct{}
+
+func (Record) Design() {
+	GRPC()
+	Stream(func() {
+		Payload[*RecordWatchReq]()
+		StreamingResult[*RecordEvent]()
 	})
 }
 `

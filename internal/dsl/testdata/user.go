@@ -18,7 +18,7 @@ func (User) Design() {
 	// gRPC is off by default; declaring GRPC() serves the model over it too.
 	GRPC()
 	// Default Endpoint is the pluralized snake_case form of the model name.
-	Endpoint("//iam/user2")
+	Endpoint("//user2")
 	Param("user")
 
 	Route("/iam/users", func() {

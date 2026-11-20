@@ -169,6 +169,7 @@ func (Sample) Design() {
 	dsl.Route("samples", func() {
 		dsl.Create(func() {})
 		dsl.List(func() {
+			dsl.Service()
 			dsl.Result[*SampleListRsp]()
 		})
 	})

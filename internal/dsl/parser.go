@@ -35,8 +35,8 @@ var pluralizeCli = pluralize.NewClient()
 //	}
 //
 // The parser supports various DSL patterns:
-//   - Global settings: Endpoint("path"), Migrate()
-//   - Action configuration: Create(func() { Payload[Type](); Result[Type]() })
+//   - Global settings: Endpoint("segment"), Migrate()
+//   - Action configuration: Create(func() { Service(); Payload[Type](); Result[Type]() })
 //   - Service and visibility: Service(), Public()
 func Parse(file *ast.File) map[string]*Design {
 	designBase, designEmpty := parse(file)
@@ -199,7 +199,8 @@ func parse(file *ast.File) (map[string]*ast.FuncDecl, map[string]*ast.FuncDecl) 
 
 // parseDesign parses a Design method's AST declaration and extracts the DSL configuration.
 // It analyzes the function body to find DSL calls like Endpoint(), Migrate(),
-// and action configurations like Create(func() { Payload[Type](); Result[Type]() }).
+// and action configurations like
+// Create(func() { Service(); Payload[Type](); Result[Type]() }).
 //
 // Parameters:
 //   - fn: The AST function declaration for the Design() method
@@ -263,7 +264,7 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 		// Parse "Endpoint()".
 		if funcName == "Endpoint" && len(call.Args) == 1 {
 			if value, ok := stringLiteral(call.Args[0]); ok {
-				defaults.Endpoint = endpointSegment(value)
+				defaults.Endpoint = declaredPath(value)
 			}
 		}
 
@@ -288,7 +289,7 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 		if funcName == "Route" && len(call.Args) == 2 {
 			var route string
 			if value, ok := stringLiteral(call.Args[0]); ok {
-				route = routePath(value)
+				route = declaredPath(value)
 			}
 			if len(route) > 0 {
 				if defaults.routes == nil {

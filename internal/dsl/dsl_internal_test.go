@@ -60,7 +60,7 @@ type OrderSample struct {
 }
 
 func (OrderSample) Design() {
-	Endpoint("sample/records")
+	Endpoint("records")
 	Get(func() {
 	})
 	Export(func() {

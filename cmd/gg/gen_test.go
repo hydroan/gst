@@ -463,8 +463,8 @@ func init() {
 			// The root model package and a package named model below it are
 			// both aliased; the sample package keeps its name. The framework
 			// model package, imported for the model.Empty request of a List
-			// declaring only its result, keeps the gstmodel alias it has
-			// always taken when a routed project package is named model.
+			// declaring its result, keeps the gstmodel alias it has always
+			// taken when a routed project package is named model.
 			name: "router_file_aliases_every_package_sharing_a_name",
 			files: map[string]string{
 				"model/record.go": `package model
@@ -483,6 +483,7 @@ type RecordListRsp struct{}
 func (Record) Design() {
 	dsl.Endpoint("records")
 	dsl.List(func() {
+		dsl.Service()
 		dsl.Result[*RecordListRsp]()
 	})
 }

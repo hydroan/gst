@@ -214,11 +214,13 @@ func (Sample) Design() {
 		dsl.Create(func() {})
 		dsl.Get(func() {})
 		dsl.List(func() {
+			dsl.Service()
 			dsl.Result[*SampleListRsp]()
 		})
 	})
 	dsl.Route("samples/archive", func() {
 		dsl.Create(func() {
+			dsl.Service("archive")
 			dsl.Payload[*SampleArchiveReq]()
 			dsl.Result[*SampleArchiveRsp]()
 		})
