@@ -102,11 +102,11 @@ func TestStopClosesTheConnectionsTheDrainLeftOpen(t *testing.T) {
 
 // TestStopWaitsForTheWebSocketConnections proves Stop waits for a WebSocket
 // connection the server accepted, which Shutdown returns without waiting
-// for: a stream that takes its time closing the connection, once the
-// shutdown has ended its context, has closed it by the time Stop returns,
-// and its client reads the ending it closed with.
+// for: while a stream has yet to close the connection, the shutdown having
+// ended its context, Stop does not return; it returns once the stream has
+// closed it, and the client reads the ending the stream closed with.
 func TestStopWaitsForTheWebSocketConnections(t *testing.T) {
-	accepted, closed := make(chan error, 1), make(chan struct{})
+	accepted, release := make(chan error, 1), make(chan struct{})
 	srv := newServer("", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := websocket.Accept(w, r, nil, time.Second)
 		accepted <- err
@@ -114,9 +114,8 @@ func TestStopWaitsForTheWebSocketConnections(t *testing.T) {
 			return
 		}
 		<-conn.Context().Done()
-		time.Sleep(200 * time.Millisecond)
+		<-release
 		conn.Close(context.Cause(conn.Context()))
-		close(closed)
 	}))
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
@@ -132,11 +131,22 @@ func TestStopWaitsForTheWebSocketConnections(t *testing.T) {
 	// The client sees the connection open a moment before Accept returns it.
 	require.NoError(t, awaitResult(t, accepted))
 
-	Stop(context.Background())
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		Stop(context.Background())
+	}()
 	select {
-	case <-closed:
-	default:
-		t.Fatal("Stop must wait for the connection to have been closed")
+	case <-stopped:
+		t.Fatal("Stop must wait for the connection its stream has yet to close")
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	close(release)
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Stop must return once the stream has closed the connection")
 	}
 	_, err = conn.Recv()
 	var ending *types.Error
