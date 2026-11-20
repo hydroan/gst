@@ -384,6 +384,52 @@ func TestSetMarksTheFieldsABindingRequires(t *testing.T) {
 	require.ElementsMatch(t, []string{"id"}, item.Required)
 }
 
+// TestSetBatchRequiresTheEntriesOfTheBatch pins that the body documented for
+// a batch request the framework's own flow serves requires the list the
+// batch acts on, its items or the ids of a batch delete, holding at least
+// one entry: the flow refuses a batch carrying none.
+func TestSetBatchRequiresTheEntriesOfTheBatch(t *testing.T) {
+	tests := []struct {
+		name string
+		key  string
+		body func(t *testing.T) *openapi3.Schema
+	}{
+		{name: "create many", key: "items", body: func(t *testing.T) *openapi3.Schema {
+			t.Helper()
+			item := &openapi3.PathItem{}
+			setCreateMany[*openapiRequiredModel, *openapiRequiredModel, *openapiRequiredModel]("/api/entries/create-many", item)
+			return registeredRequestBodySchema(t, item.Post.RequestBody)
+		}},
+		{name: "update many", key: "items", body: func(t *testing.T) *openapi3.Schema {
+			t.Helper()
+			item := &openapi3.PathItem{}
+			setUpdateMany[*openapiRequiredModel, *openapiRequiredModel, *openapiRequiredModel]("/api/entries/update-many", item)
+			return registeredRequestBodySchema(t, item.Put.RequestBody)
+		}},
+		{name: "patch many", key: "items", body: func(t *testing.T) *openapi3.Schema {
+			t.Helper()
+			item := &openapi3.PathItem{}
+			setPatchMany[*openapiRequiredModel, *openapiRequiredModel, *openapiRequiredModel]("/api/entries/patch-many", item)
+			return registeredRequestBodySchema(t, item.Patch.RequestBody)
+		}},
+		{name: "delete many", key: "ids", body: func(t *testing.T) *openapi3.Schema {
+			t.Helper()
+			item := &openapi3.PathItem{}
+			setDeleteMany[*openapiRequiredModel, *openapiRequiredModel, *openapiRequiredModel]("/api/entries/delete-many", item)
+			return registeredRequestBodySchema(t, item.Delete.RequestBody)
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := tt.body(t)
+			require.Equal(t, []string{tt.key}, body.Required)
+			require.NotNil(t, body.Properties[tt.key])
+			require.NotNil(t, body.Properties[tt.key].Value)
+			require.Equal(t, uint64(1), body.Properties[tt.key].Value.MinItems)
+		})
+	}
+}
+
 // openapiScopedModel's records each belong to one tenant.
 type openapiScopedModel struct {
 	Name string `json:"name"`

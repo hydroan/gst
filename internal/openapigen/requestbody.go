@@ -94,6 +94,19 @@ func bodyKey(model reflect.Type, index []int) (key string, base, ok bool) {
 	return key, base, key != ""
 }
 
+// requireEntries documents that the array the batch request body schemaRef
+// describes holds under key, the items of a batch write or the ids of a
+// batch delete, carries at least one entry, as the framework's own batch
+// flows refuse a batch carrying none.
+func requireEntries(schemaRef *openapi3.SchemaRef, key string) {
+	if schemaRef == nil || schemaRef.Value == nil {
+		return
+	}
+	if entries := schemaRef.Value.Properties[key]; entries != nil && entries.Value != nil {
+		entries.Value.MinItems = 1
+	}
+}
+
 // batchItemSchema returns the element schema of the items array a batch request
 // body carries, or nil when the body does not describe one.
 func batchItemSchema(schema *openapi3.Schema) *openapi3.Schema {

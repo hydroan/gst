@@ -1,11 +1,12 @@
 package openapigen
 
 // The Go shapes the documented request and response bodies are generated from:
-// the payload wrapper of a batch request, and the success envelope the
-// controllers answer with in its single-record, list and batch forms.
+// the payload wrapper of a batch request, whose items the flow requires, and
+// the success envelope the controllers answer with in its single-record,
+// list and batch forms.
 
 type apiBatchRequest[T any] struct {
-	Items []T `json:"items"`
+	Items []T `json:"items" binding:"required"`
 }
 
 type apiResponse[T any] struct {

@@ -124,6 +124,7 @@ func setCreateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 	var rspSchemaRef *openapi3.SchemaRef
 	if !custom {
 		reqSchemaRef = newSchemaRefWithDocs(apiBatchRequest[REQ]{})
+		requireEntries(reqSchemaRef, "items")
 		hideUnwrittenFields(reqSchemaRef, typ, apiaction.CreateMany)
 		rspSchemaRef = newSchemaRefWithDocs(apiBatchResponse[RSP]{})
 	} else {
@@ -145,9 +146,11 @@ func setDeleteMany[M types.Model, REQ types.Request, RSP types.Response](path st
 	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, apiaction.DeleteMany)
 	reqSchemaRef := deleteManyIDsRequestSchema()
 	rspSchemaRef := newSchemaRefWithDocs(apiResponse[RSP]{})
-	// The framework's own batch delete answers without data, like the single
-	// delete; only a service's batch delete answers with its response type.
+	// The framework's own batch delete refuses a batch naming no id and
+	// answers without data, like the single delete; only a service's batch
+	// delete answers with its response type.
 	if !custom {
+		requireEntries(reqSchemaRef, "ids")
 		markEmptyResponseData(rspSchemaRef)
 	}
 	registerSchema[M, REQ, RSP](reqKey, rspKey, reqSchemaRef, rspSchemaRef)
@@ -192,6 +195,7 @@ func setUpdateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 	var rspSchemaRef *openapi3.SchemaRef
 	if !custom {
 		reqSchemaRef = newSchemaRefWithDocs(apiBatchRequest[REQ]{})
+		requireEntries(reqSchemaRef, "items")
 		hideUnwrittenFields(reqSchemaRef, typ, apiaction.UpdateMany)
 		rspSchemaRef = newSchemaRefWithDocs(apiBatchResponse[RSP]{})
 	} else {
@@ -216,6 +220,7 @@ func setPatchMany[M types.Model, REQ types.Request, RSP types.Response](path str
 	var rspSchemaRef *openapi3.SchemaRef
 	if !custom {
 		reqSchemaRef = newSchemaRefWithDocs(apiBatchRequest[REQ]{})
+		requireEntries(reqSchemaRef, "items")
 		hideUnwrittenFields(reqSchemaRef, typ, apiaction.PatchMany)
 		rspSchemaRef = newSchemaRefWithDocs(apiBatchResponse[RSP]{})
 	} else {
