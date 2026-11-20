@@ -250,7 +250,7 @@ stress 是压测项目，只回答一个问题：框架在真实项目形态（�
 
 #### 常见接口模式
 
-- `model/ticket.go`：普通数据库资源 model，启用 CRUD，并通过 service hook 做当前用户过滤、返回字段补充、关联对象填充等逻辑。
+- `model/ticket.go`：普通数据库资源 model。新建和修改声明自己的请求类型，只列客户端能填的字段，由 service 组装模型并写库；删除、列表、读取走框架默认流程，通过 service hook 做当前用户过滤、返回字段补充、关联对象填充等逻辑。
 - `model/tool/label.go`：通用工具类接口，使用 `model.Empty` 定义非数据库动作，并为当前接口单独定义请求和响应。适合标签合并、格式转换、批量转换等没有独立数据表的动作。
 - `model/ping.go`：公开探活类接口，使用 `model.Empty` 定义动作模型，在 DSL 中声明 `Public()`，只声明 `Result`，service 返回探活结果。
 - `model/ticket/comment.go`：嵌套资源 model，默认挂在父资源之下，再用 `Route("comments")` 给同一个 model 一条全局路由。
