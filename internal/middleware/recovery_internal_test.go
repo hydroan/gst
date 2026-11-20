@@ -8,9 +8,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
@@ -107,4 +111,38 @@ func TestRecoveryLogsThePanicToTheRecoveryLogger(t *testing.T) {
 	require.Contains(t, entries[0].Message, "GET /panic")
 	require.Contains(t, entries[0].Message, "goroutine ", "the stack of the panic")
 	require.Equal(t, "trace-panic", entries[0].ContextMap()[execctx.KeyTraceID])
+}
+
+// TestRecoveryRecordsThePanicOnTheRequestSpan pins what a recovered panic
+// leaves on the span of its request: the exception event of the error
+// describing it, the Error status, and the attributes that tell a panic from
+// any other failure, the way the gRPC listener's recovery leaves them on the
+// span of a call.
+func TestRecoveryRecordsThePanicOnTheRequestSpan(t *testing.T) {
+	setupTracingTest(t)
+	recorder := oteltest.Record(t)
+
+	engine := gin.New()
+	engine.Use(tracing(), recoveryWithTracing(nil, false))
+	engine.GET("/panic", func(*gin.Context) { panic("boom") })
+	engine.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/panic", nil))
+
+	span := oteltest.EndedNamed(t, recorder, "GET /panic")
+	require.Equal(t, codes.Error, span.Status().Code)
+	attrs := make(map[attribute.Key]any, len(span.Attributes()))
+	for _, attr := range span.Attributes() {
+		attrs[attr.Key] = attr.Value.AsInterface()
+	}
+	require.Equal(t, true, attrs["error.panic"])
+	require.Equal(t, "boom", attrs["error.recovered"])
+	events := span.Events()
+	require.Len(t, events, 1)
+	require.Equal(t, semconv.ExceptionEventName, events[0].Name, "the panic is recorded as the span's exception event")
+	message := ""
+	for _, attr := range events[0].Attributes {
+		if attr.Key == semconv.ExceptionMessageKey {
+			message = attr.Value.AsString()
+		}
+	}
+	require.Equal(t, "panic recovered: boom", message)
 }

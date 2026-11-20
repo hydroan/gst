@@ -175,6 +175,58 @@ func TestRecordErrorFallsBackToRecordSiteStackTrace(t *testing.T) {
 	require.Contains(t, stackTrace, "TestRecordErrorFallsBackToRecordSiteStackTrace")
 }
 
+// TestRecordPanicRecordsThePanicOnTheSpan pins what a recovered panic leaves
+// on a recording span, whatever was recovered: the exception event of the
+// error describing it, whose stack starts at the caller that recovered it,
+// RecordPanic being no frame of it; the Error status; and the two attributes
+// that tell a panic from any other failure. The error is returned, for the
+// caller to report further.
+func TestRecordPanicRecordsThePanicOnTheSpan(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		recovered any
+		text      string
+	}{
+		{name: "a string", recovered: "boom", text: "boom"},
+		{name: "an error", recovered: errors.New("sample failure"), text: "sample failure"},
+		{name: "a number", recovered: 42, text: "42"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			recorder := tracetest.NewSpanRecorder()
+			provider := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))
+			t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
+
+			_, span := provider.Tracer("test").Start(context.Background(), "operation")
+			err := RecordPanic(span, tt.recovered)
+			span.End()
+
+			require.EqualError(t, err, "panic recovered: "+tt.text)
+			spans := recorder.Ended()
+			require.Len(t, spans, 1)
+			require.Equal(t, codes.Error, spans[0].Status().Code)
+			require.Equal(t, "panic recovered: "+tt.text, spans[0].Status().Description)
+			attrs := make(map[attribute.Key]any, len(spans[0].Attributes()))
+			for _, attr := range spans[0].Attributes() {
+				attrs[attr.Key] = attr.Value.AsInterface()
+			}
+			require.Equal(t, map[attribute.Key]any{"error.panic": true, "error.recovered": tt.text}, attrs)
+			origin, _, _ := strings.Cut(exceptionStackTrace(t, spans[0]), "\n")
+			require.Contains(t, origin, "TestRecordPanicRecordsThePanicOnTheSpan", "the stack starts at the caller that recovered the panic")
+		})
+	}
+}
+
+// TestRecordPanicReturnsTheErrorWithNoSpanToRecordOn pins that a span not
+// recording, or none at all, is left alone, and the error describing the
+// panic is returned all the same.
+func TestRecordPanicReturnsTheErrorWithNoSpanToRecordOn(t *testing.T) {
+	idle := &attributeCountingSpan{}
+	require.EqualError(t, RecordPanic(idle, "boom"), "panic recovered: boom")
+	require.Zero(t, idle.setAttributesCalls)
+
+	require.EqualError(t, RecordPanic(nil, "boom"), "panic recovered: boom")
+}
+
 func TestFrameworkSpanNameUsesDottedGoNames(t *testing.T) {
 	tests := []struct {
 		name      string

@@ -5,13 +5,11 @@ import (
 	"fmt"
 	"runtime/debug"
 
-	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -19,19 +17,18 @@ import (
 )
 
 // recovered is the recovery handler of both chains. It records the panic on
-// the call's span the way the HTTP recovery middleware does on the request's,
-// logs it with the method, the trace id and the stack to the recovery log,
-// the one the HTTP listener's panics go to, and answers codes.Internal with
-// the fixed message StatusError answers the server's own failures with;
-// what the panic was stays in the log and the span, and the caller quotes
-// back the trace id the response header carries.
+// the call's span the way the HTTP recovery middleware does on the request's
+// (see otel.RecordPanic), logs it with the method, the trace id and the
+// stack to the recovery log, the one the HTTP listener's panics go to, and
+// answers codes.Internal with the fixed message StatusError answers the
+// server's own failures with; what the panic was stays in the log and the
+// span, and the caller quotes back the trace id the response header carries.
 func recovered(ctx context.Context, p any) error {
+	// RecordPanic builds the error describing the panic for its caller
+	// whether or not the span records; nothing here reads that error, so a
+	// call no span records skips it.
 	if span := trace.SpanFromContext(ctx); span.IsRecording() {
-		gstotel.RecordError(span, errors.Newf("panic recovered: %v", p))
-		span.SetAttributes(
-			attribute.Bool("error.panic", true),
-			attribute.String("error.recovered", fmt.Sprintf("%v", p)),
-		)
+		_ = gstotel.RecordPanic(span, p)
 	}
 	if logger.Recovery != nil {
 		method, _ := grpc.Method(ctx)

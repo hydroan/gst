@@ -37,6 +37,7 @@ package otel
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"net/url"
 	"strconv"
@@ -525,4 +526,28 @@ func RecordError(span trace.Span, err error) {
 		span.RecordError(err, trace.WithStackTrace(true))
 	}
 	span.SetStatus(codes.Error, err.Error())
+}
+
+// The attributes RecordPanic sets on a span beside the exception event:
+// panicKey marks the failure as a panic, recoveredKey carries what was
+// recovered, as %v renders it.
+const (
+	panicKey     = attribute.Key("error.panic")
+	recoveredKey = attribute.Key("error.recovered")
+)
+
+// RecordPanic records on span a panic its caller recovered: the error
+// describing the panic, the way RecordError records one, its stack starting
+// at the caller, so the span points at the recovery and, below it, at where
+// the panic was raised; and the attributes that tell a panic from any other
+// failure, error.panic and, as error.recovered, what was recovered. It
+// returns the error describing the panic, for the caller to report further,
+// whether or not span records.
+func RecordPanic(span trace.Span, recovered any) error {
+	err := errors.NewWithDepthf(1, "panic recovered: %v", recovered)
+	if IsSpanRecording(span) {
+		RecordError(span, err)
+		span.SetAttributes(panicKey.Bool(true), recoveredKey.String(fmt.Sprint(recovered)))
+	}
+	return err
 }

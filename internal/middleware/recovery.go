@@ -17,7 +17,6 @@ import (
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
-	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 )
 
@@ -40,17 +39,9 @@ func recovery() gin.HandlerFunc {
 // easy to find where the error occurs but the stack info is too large.
 func recoveryWithTracing(log *zap.Logger, stack bool) gin.HandlerFunc {
 	return gin.CustomRecoveryWithWriter(nil, func(c *gin.Context, recovered any) {
-		panicErr := errors.Newf("panic recovered: %v", recovered)
-
-		// Record panic in tracing span
-		span := requestSpan(c)
-		if span != nil && span.IsRecording() {
-			gstotel.RecordError(span, panicErr)
-			span.SetAttributes(
-				attribute.Bool("error.panic", true),
-				attribute.String("error.recovered", fmt.Sprintf("%v", recovered)),
-			)
-		}
+		// The panic goes on the request's span; the error describing it is
+		// what a response that has begun reports on the context below.
+		panicErr := gstotel.RecordPanic(requestSpan(c), recovered)
 
 		// Check for a broken connection, as it is not really a
 		// condition that warrants a panic stack trace.
