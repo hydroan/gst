@@ -89,6 +89,24 @@ func (fields patchFieldSet) covers(name string) bool {
 	return false
 }
 
+// versionOmitted reports whether fields, the set a patch of m applies,
+// leaves out the Version m declares, and the Go field name of that Version
+// when it does. A versioned model carries the version it was read with on
+// every partial update, exactly like Update: the merge would otherwise keep
+// the freshly loaded row's version and the lock would silently check the
+// row against itself, so either transport refuses a patch omitting it. A
+// model declaring no Version omits none. See modelschema.Version.
+func versionOmitted(m any, fields patchFieldSet) (field string, omitted bool) {
+	field, versioned := modelschema.VersionFieldName(m)
+	if !versioned {
+		return "", false
+	}
+	if _, named := fields[field]; named {
+		return "", false
+	}
+	return field, true
+}
+
 // patchFieldTables caches the table of each model type: the table is read
 // off the type alone, its struct tags and the columns gorm resolves from
 // them, so it is computed once per type and read-only from then on.

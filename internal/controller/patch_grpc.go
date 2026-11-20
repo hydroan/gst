@@ -7,7 +7,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 )
 
@@ -39,10 +38,8 @@ func PatchCall[M types.Model](route string) func(ctx context.Context, params map
 		if err != nil {
 			return zero, c.invalid(err)
 		}
-		if versionField, versioned := modelschema.VersionFieldName(m); versioned {
-			if _, ok := fields[versionField]; !ok {
-				return zero, c.refuse(databaseError(database.ErrVersionRequired), errors.Wrapf(database.ErrVersionRequired, "patch %s without its %s", a.name, versionField))
-			}
+		if versionField, omitted := versionOmitted(m, fields); omitted {
+			return zero, c.refuse(databaseError(database.ErrVersionRequired), errors.Wrapf(database.ErrVersionRequired, "patch %s without its %s", a.name, versionField))
 		}
 		if err = validatePatchFields(m, fields); err != nil {
 			return zero, c.invalidMessage(err)

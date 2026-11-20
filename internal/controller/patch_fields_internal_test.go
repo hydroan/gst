@@ -11,6 +11,7 @@ import (
 
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -273,6 +274,55 @@ func TestPatchFieldSetsLeaveTheColumnsAnUpdateLeavesAloneOut(t *testing.T) {
 	newRecord := &patchFieldsSealedRecord{Name: "after", Code: "forged", Mark: "forged"}
 	applyPatch(nopControllerLogger{}, typ, reflect.ValueOf(oldRecord).Elem(), reflect.ValueOf(newRecord).Elem())
 	require.Equal(t, patchFieldsSealedRecord{ID: "kept", Name: "after", Code: "original", Mark: "stored"}, *oldRecord)
+}
+
+// patchFieldsVersionedRecord is a model under optimistic locking, whose
+// version a patch names like any field of its own.
+type patchFieldsVersionedRecord struct {
+	Name    string              `json:"name"`
+	Version modelschema.Version `json:"version,omitempty" gorm:"not null;default:1"`
+
+	modelregistry.Base
+}
+
+// TestVersionOmittedReportsTheVersionAPatchDoesNotName pins the one check
+// both transports make of the fields a patch of a versioned model names: a
+// body or a mask naming the version omits none, one naming other fields
+// alone omits it, as does a set naming nothing, the version reported by its
+// Go field name; and a model declaring no Version omits none, whatever the
+// patch names.
+func TestVersionOmittedReportsTheVersionAPatchDoesNotName(t *testing.T) {
+	typ := reflect.TypeFor[patchFieldsVersionedRecord]()
+	versioned := &patchFieldsVersionedRecord{}
+
+	for _, patch := range []struct {
+		body    string
+		mask    []string
+		field   string
+		omitted bool
+	}{
+		{body: `{"name":"renamed","version":3}`, mask: []string{"name", "version"}},
+		{body: `{"version":3}`, mask: []string{"version"}},
+		{body: `{"name":"renamed"}`, mask: []string{"name"}, field: "Version", omitted: true},
+	} {
+		fromBody, err := patchFieldSetFromJSONBody(typ, []byte(patch.body))
+		require.NoError(t, err)
+		fromMask, err := maskFieldSet(typ, patch.mask)
+		require.NoError(t, err)
+		for _, fields := range []patchFieldSet{fromBody, fromMask} {
+			field, omitted := versionOmitted(versioned, fields)
+			require.Equal(t, patch.omitted, omitted, patch.body)
+			require.Equal(t, patch.field, field, patch.body)
+		}
+	}
+
+	field, omitted := versionOmitted(versioned, nil)
+	require.True(t, omitted, "a set naming nothing names no version")
+	require.Equal(t, "Version", field)
+
+	field, omitted = versionOmitted(&patchFieldsRecord{}, patchFieldSet{"Name": {}})
+	require.False(t, omitted, "a model declaring no Version omits none")
+	require.Empty(t, field)
 }
 
 func TestApplyPatchAppliesExplicitZeroValues(t *testing.T) {

@@ -7,7 +7,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
@@ -56,23 +55,22 @@ func PatchManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg 
 			return
 		}
 		normalizeBatch(&req)
-		// A versioned model must carry a version on every item, exactly like
-		// the single-resource patch; failing the whole batch up front keeps
-		// the all-or-nothing shape a defective request deserves. See
-		// modelschema.Version. Each item is then validated on the fields it
+		// A versioned model is patched with its version on every item, exactly
+		// like the single-resource patch (see versionOmitted); failing the
+		// whole batch up front keeps the all-or-nothing shape a defective
+		// request deserves. Each item is then validated on the fields it
 		// names, like the single-resource patch too. Every version is checked
 		// before any item is validated, the order the call checks a batch in,
 		// so a batch defective in several items is refused for the same one
 		// on both transports.
-		versionField, versioned := modelschema.VersionFieldName(a.newModel())
 		fieldsOf := func(i int) patchFieldSet {
 			if i < len(fieldSets) {
 				return fieldSets[i]
 			}
 			return patchFieldSet{}
 		}
-		for i := range req.Items {
-			if _, ok := fieldsOf(i)[versionField]; versioned && !ok {
+		for i, item := range req.Items {
+			if versionField, omitted := versionOmitted(item, fieldsOf(i)); omitted {
 				response.Error(c, reportFailure(log, span, "versioned model patched without its version", nil, databaseError(database.ErrVersionRequired),
 					zap.Int("item", i), zap.String("field", versionField)))
 				return

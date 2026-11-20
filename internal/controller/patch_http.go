@@ -7,7 +7,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
@@ -58,18 +57,14 @@ func PatchHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*
 			response.Error(c, reportFailure(log, span, "bind request body failed", err, invalidArgument(err)))
 			return
 		}
-		// A versioned model must carry the version it was read with on every
-		// partial update, exactly like Update: the merge would otherwise keep
-		// the freshly loaded row's version and the lock would silently check
-		// the row against itself. Checked once the body is read, so that a
-		// request carrying no record is refused for the record it lacks, the
-		// way a call is, and before the existence query, so that a defective
-		// request costs no database work. See modelschema.Version.
-		if versionField, versioned := modelschema.VersionFieldName(req); versioned {
-			if _, carried := fields[versionField]; !carried {
-				response.Error(c, reportFailure(log, span, "versioned model patched without its version", nil, databaseError(database.ErrVersionRequired), zap.String("field", versionField)))
-				return
-			}
+		// A versioned model is patched with its version (see versionOmitted).
+		// Checked once the body is read, so that a request carrying no record
+		// is refused for the record it lacks, the way a call is, and before
+		// the existence query, so that a defective request costs no database
+		// work.
+		if versionField, omitted := versionOmitted(req, fields); omitted {
+			response.Error(c, reportFailure(log, span, "versioned model patched without its version", nil, databaseError(database.ErrVersionRequired), zap.String("field", versionField)))
+			return
 		}
 		a.normalizeModel(&req)
 		if err = validatePatchFields(req, fields); err != nil {

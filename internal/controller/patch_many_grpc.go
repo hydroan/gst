@@ -7,7 +7,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 )
 
@@ -47,11 +46,9 @@ func PatchManyCall[M types.Model](route string) func(ctx context.Context, params
 			}
 			fieldSets[i] = fields
 		}
-		if versionField, versioned := modelschema.VersionFieldName(a.newModel()); versioned {
-			for i, itemFields := range fieldSets {
-				if _, ok := itemFields[versionField]; !ok {
-					return nil, c.refuse(databaseError(database.ErrVersionRequired), errors.Wrapf(database.ErrVersionRequired, "patch many %s item %d without its %s", a.name, i, versionField))
-				}
+		for i, item := range req.Items {
+			if versionField, omitted := versionOmitted(item, fieldSets[i]); omitted {
+				return nil, c.refuse(databaseError(database.ErrVersionRequired), errors.Wrapf(database.ErrVersionRequired, "patch many %s item %d without its %s", a.name, i, versionField))
 			}
 		}
 		for i, item := range req.Items {

@@ -256,9 +256,9 @@ func versionTagMissing(tag reflect.StructTag) []string {
 func IsVersioned(m any) bool { return versionFieldOf(m).has }
 
 // VersionFieldName reports the Go field name of m's Version declaration, and
-// whether m declares one. The partial-update controllers key their body field
-// sets by Go field name, and use this to require the version on every patch
-// of a versioned model.
+// whether m declares one. The partial-update controllers key the set of
+// fields a patch applies by Go field name, and use this to require the
+// version on every patch of a versioned model.
 func VersionFieldName(m any) (string, bool) {
 	info := versionFieldOf(m)
 	if !info.has {
