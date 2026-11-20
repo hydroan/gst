@@ -13,7 +13,7 @@ import (
 // returns it as the API answered.
 func createTicket(t *testing.T, account *iamtest.Account, title string, status model.TicketStatus) *model.Ticket {
 	t.Helper()
-	ticket, err := account.Client.Post[model.Ticket](t.Context(), "/api/tickets", &model.Ticket{Title: title, Status: status})
+	ticket, err := account.Client.Post[model.Ticket](t.Context(), "/api/tickets", &model.TicketCreateReq{Title: title, Status: status})
 	require.NoError(t, err)
 	return ticket
 }

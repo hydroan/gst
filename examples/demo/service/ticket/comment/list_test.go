@@ -17,7 +17,7 @@ func TestList(t *testing.T) {
 	account := testsupport.Login(t)
 	parents := make([]*model.Ticket, 0, 2)
 	for _, title := range []string{"one", "two"} {
-		parent, err := account.Client.Post[model.Ticket](t.Context(), "/api/tickets", &model.Ticket{Title: title})
+		parent, err := account.Client.Post[model.Ticket](t.Context(), "/api/tickets", &model.TicketCreateReq{Title: title})
 		require.NoError(t, err)
 		parents = append(parents, parent)
 		for _, content := range []string{title + " a", title + " b"} {

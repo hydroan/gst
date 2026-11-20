@@ -5,7 +5,7 @@ import (
 	"github.com/hydroan/gst/model"
 )
 
-// Audit is one row per change to a ticket, written by the ticket hooks,
+// Audit is one row per ticket filed, written by the service that files it,
 // and one per login lifecycle moment, a login that succeeded or failed and
 // a logout, written by the login observer in module: a table with no API
 // of its own, so its design declares Migrate and no action, and no route

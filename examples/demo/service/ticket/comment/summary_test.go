@@ -19,7 +19,7 @@ func TestSummary(t *testing.T) {
 		model.TicketStatusOpen:   {"one", "two"},
 		model.TicketStatusClosed: {"three"},
 	} {
-		parent, err := account.Client.Post[model.Ticket](t.Context(), "/api/tickets", &model.Ticket{Title: string(status), Status: status})
+		parent, err := account.Client.Post[model.Ticket](t.Context(), "/api/tickets", &model.TicketCreateReq{Title: string(status), Status: status})
 		require.NoError(t, err)
 		for _, content := range contents {
 			_, err := account.Client.Post[ticket.Comment](t.Context(), "/api/tickets/"+parent.ID+"/comments", &ticket.Comment{Kind: ticket.CommentKindQuestion, Content: content})
@@ -27,7 +27,7 @@ func TestSummary(t *testing.T) {
 		}
 	}
 	other := testsupport.Login(t)
-	parent, err := other.Client.Post[model.Ticket](t.Context(), "/api/tickets", &model.Ticket{Title: "someone else's"})
+	parent, err := other.Client.Post[model.Ticket](t.Context(), "/api/tickets", &model.TicketCreateReq{Title: "someone else's"})
 	require.NoError(t, err)
 	_, err = other.Client.Post[ticket.Comment](t.Context(), "/api/tickets/"+parent.ID+"/comments", &ticket.Comment{Kind: ticket.CommentKindAnswer, Content: "theirs"})
 	require.NoError(t, err)

@@ -35,7 +35,7 @@ gst 的入门示例：一个用 `gg new` 生成、按框架推荐写法补齐的
 
 | 关键字 | 文件 |
 | --- | --- |
-| `Migrate` `Endpoint` `Param` `Create` `Delete` `Update` `Patch` `List` `Get` `Route` `Service` `Result` | `model/ticket.go`（工单） |
+| `Migrate` `Endpoint` `Param` `Create` `Delete` `Update` `Patch` `List` `Get` `Route` `Service` `Payload` `Result` | `model/ticket.go`（工单）：新建和修改声明自己的请求类型，删除、列表、读取用框架默认流程加 hook |
 | 关联预加载 `Expands()`（请求带 `_expand=comments`）、乐观锁 `model.Version`、`binding` 校验 tag | `model/ticket.go` |
 | 回收站：`WithDeleted` 读软删除的行 | `model/ticket.go` 的 trash 路由，`service/ticket/trash.go` |
 | 分析查询 `database.Select`：分组计数 | `service/ticket/summary.go` |

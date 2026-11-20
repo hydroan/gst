@@ -13,8 +13,10 @@ type Getter struct {
 	service.Base[*model.Ticket, *model.Ticket, *model.Ticket]
 }
 
-// GetBefore keeps the ticket the caller's (see ownTicket); the model of a
-// read names the id alone.
+// GetBefore keeps the ticket the caller's (see ownTicket), before the
+// framework reads it: the model of a read names the id alone, and checking
+// here answers someone else's ticket exactly as a missing one, the same
+// status and the same message.
 func (r *Getter) GetBefore(ctx *gst.ServiceContext, ticket *model.Ticket) error {
 	_, err := ownTicket(ctx, ticket.ID)
 	return err

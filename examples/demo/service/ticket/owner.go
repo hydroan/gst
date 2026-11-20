@@ -12,8 +12,9 @@ import (
 
 // ownTicket reads the stored ticket id names and answers it only when it is
 // the caller's: a ticket of someone else's, like one that does not exist,
-// is not there, 404. The hook of the read and the hooks of every write share
-// it, so a ticket is the caller's by one rule.
+// is not there, 404, answered the same either way. The update, the patch
+// and the hooks of the read and the delete share it, so a ticket is the
+// caller's by one rule.
 func ownTicket(ctx *gst.ServiceContext, id string) (*model.Ticket, error) {
 	stored := new(model.Ticket)
 	if err := database.Database[*model.Ticket](ctx).Get(stored, id); err != nil {

@@ -14,7 +14,7 @@ import (
 // create.go: the comment belongs to the ticket of the route.
 func TestCreate(t *testing.T) {
 	account := testsupport.Login(t)
-	parent, err := account.Client.Post[model.Ticket](t.Context(), "/api/tickets", &model.Ticket{Title: "parent"})
+	parent, err := account.Client.Post[model.Ticket](t.Context(), "/api/tickets", &model.TicketCreateReq{Title: "parent"})
 	require.NoError(t, err)
 
 	comment, err := account.Client.Post[ticket.Comment](t.Context(), "/api/tickets/"+parent.ID+"/comments", &ticket.Comment{Kind: ticket.CommentKindQuestion, Content: "one"})

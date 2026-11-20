@@ -6,7 +6,7 @@ import "github.com/hydroan/gst/apidoc"
 
 func init() {
 	apidoc.Register("demo/model", "Audit", apidoc.StructDoc{
-		Comment: "Audit is one row per change to a ticket, written by the ticket hooks,\nand one per login lifecycle moment, a login that succeeded or failed and\na logout, written by the login observer in module: a table with no API\nof its own, so its design declares Migrate and no action, and no route\nis generated for it. The job in cronjob purges the old rows.",
+		Comment: "Audit is one row per ticket filed, written by the service that files it,\nand one per login lifecycle moment, a login that succeeded or failed and\na logout, written by the login observer in module: a table with no API\nof its own, so its design declares Migrate and no action, and no route\nis generated for it. The job in cronjob purges the old rows.",
 		Fields: map[string]string{
 			"TicketID": "empty for a login or a logout",
 		},
@@ -43,19 +43,28 @@ func init() {
 		Comment: "TallySumRsp is the total once an amount was added.",
 	})
 	apidoc.Register("demo/model", "Ticket", apidoc.StructDoc{
-		Comment: "Ticket is a request for help a user files and follows up on: it has a\ntitle, is open or closed, and belongs to the user who filed it. It is a\ntable-backed resource with the standard actions on /api/tickets and\n/api/tickets/:ticket. Every action declares Service() for the hooks in\nservice/ticket, which stamp the owner, write the audit trail and keep a\nlist, a read and every write to the caller's own tickets: reading,\nupdating, patching or deleting someone else's ticket answers 404, as if it\nwere not there. Embedding model.Query lets a list\ntake the framework's query parameters: field[op]=value filters such as\nstatus[in]=open,closed, _sort_by, _page and _size, and cursor pagination.\nThe binding tags validate a body before any hook runs, a 400 naming the\nfield. The summary route counts the tickets by status in service code of\nits own, the search route is a custom List reading those parameters\nitself, and the trash route lists the tickets the caller deleted.",
+		Comment: "Ticket is a request for help a user files and follows up on: it has a\ntitle, is open or closed, and belongs to the user who filed it. It is a\ntable-backed resource on /api/tickets and /api/tickets/:ticket, served in\nthe two ways a resource is. Filing and changing a ticket are actions with\nrequest types of their own, which list the fields a client may set and\nnothing else — the owner is the session's, and no body has a field to name\nit — so the services in service/ticket build the row, keep a change to\nthe caller's own tickets and answer a stale version with 409. Deleting,\nlisting and reading are the framework's own, with a hook each: a list is\nkept to the caller's tickets, and a read or a delete of someone else's\nticket answers 404, as if it were not there. Embedding model.Query lets a\nlist take the framework's query parameters: field[op]=value filters such\nas status[in]=open,closed, _sort_by, _page and _size, and cursor\npagination. The summary route counts the tickets by status in service\ncode of its own, the search route is a custom List reading those\nparameters itself, and the trash route lists the tickets the caller\ndeleted.",
 		Fields: map[string]string{
 			"Comments": "Comments are the ticket's comments, loaded when a request asks for them:\nExpands names the association and ?_expand=comments has the framework\npreload it on a list or a get. constraint:- keeps the migration from\nadding a foreign key, the preload resolving the relation in Go.",
 			"UserID":   "UserID is the owner, taken from the session when the ticket is created.",
 			"Username": "Username is the owner's name, filled in for the client; not a column.",
-			"Version":  "Version protects concurrent edits: a client sends back the version it\nread, an update that carries a stale one answers 409 and one that\ncarries none answers 400. A create sets it to 1, and a successful\nupdate or patch bumps it.",
+			"Version":  "Version protects concurrent edits: a client sends back the version it\nread, a change that carries a stale one answers 409 and one that\ncarries none answers 400. A create sets it to 1, and a successful\nchange bumps it.",
 		},
+	})
+	apidoc.Register("demo/model", "TicketCreateReq", apidoc.StructDoc{
+		Comment: "TicketCreateReq is what a client files a ticket with: its title and,\nwhen it is not to start open, its status. The binding tags validate\nthe body before the service runs, a 400 naming the field.",
+	})
+	apidoc.Register("demo/model", "TicketPatchReq", apidoc.StructDoc{
+		Comment: "TicketPatchReq changes the fields it names, under the version the\nclient read: a pointer tells a field the body leaves out, which stays\nas stored, from one it names. A title named empty is refused, as a\nticket is never filed without one.",
 	})
 	apidoc.Register("demo/model", "TicketSearchRsp", apidoc.StructDoc{
 		Comment: "TicketSearchRsp is a page of the caller's tickets and how many match.",
 	})
 	apidoc.Register("demo/model", "TicketSummaryRsp", apidoc.StructDoc{
 		Comment: "TicketSummaryRsp counts the caller's tickets, in all and by status.",
+	})
+	apidoc.Register("demo/model", "TicketUpdateReq", apidoc.StructDoc{
+		Comment: "TicketUpdateReq replaces what a client may change of a ticket, its\ntitle and its status, under the version the client read.",
 	})
 	apidoc.Register("demo/model/archive", "Document", apidoc.StructDoc{
 		Comment: "Document is a text kept in a box of the archive, with the size and the\nchecksum of its content. It is a table-backed resource served on routes\nit declares itself:\n/api/archive/documents and, for the documents of one box,\n/api/archive/boxes/:box_id/documents, a second List whose service hook\nkeeps the list to the box of the route. Its checks and derived fields are\nmodel hooks, which run inside the framework's transaction whichever\naction writes the row. CSV import and export delegate to service code\nwith fixed signatures, at /api/archive/documents/import and\n/api/archive/documents/export.",

@@ -7,22 +7,23 @@ import (
 	"github.com/hydroan/gst/service"
 )
 
-// Updater hooks the framework's own Update, which replaces the row with the
-// body: the hook keeps the update to the caller's own tickets and the owner
-// what it was. The version check is the framework's, at the write that
-// follows the hook: a body carrying a stale version answers 409, one
-// carrying none 400.
+// Updater serves PUT /api/tickets/:ticket: an action with a request type of
+// its own, the fields a client may replace and the version it read.
 type Updater struct {
-	service.Base[*model.Ticket, *model.Ticket, *model.Ticket]
+	service.Base[*model.Ticket, *model.TicketUpdateReq, *model.TicketUpdateRsp]
 }
 
-// UpdateBefore keeps the ticket the caller's (see ownTicket) and restores
-// the owner into the body, which names none or another.
-func (r *Updater) UpdateBefore(ctx *gst.ServiceContext, ticket *model.Ticket) error {
-	stored, err := ownTicket(ctx, ticket.ID)
+// Update replaces the title and the status of the caller's ticket (see
+// ownTicket), which the route names, and writes it back under the version
+// the body carries (see saveTicket).
+func (r *Updater) Update(ctx *gst.ServiceContext, req *model.TicketUpdateReq) (*model.TicketUpdateRsp, error) {
+	ticket, err := ownTicket(ctx, ctx.Param("ticket"))
 	if err != nil {
-		return err
+		return nil, err
 	}
-	ticket.UserID = stored.UserID
-	return nil
+	ticket.Title, ticket.Status, ticket.Version = req.Title, req.Status, req.Version
+	if err := saveTicket(ctx, ticket); err != nil {
+		return nil, err
+	}
+	return ticket, nil
 }
