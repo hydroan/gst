@@ -5,98 +5,16 @@ import (
 	"encoding/json"
 	"reflect"
 
-	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
-
-// UpdateHandler returns a Gin handler that replaces one resource.
-//
-// When M, REQ, and RSP are the same type, the handler binds the JSON body into
-// M, reads the resource id from the configured route parameter (the id carried
-// by the body is ignored), and runs the update flow (see updateFlow), which
-// answers with the replacement.
-//
-// When REQ or RSP differs from M, the handler is the phase service's (see
-// serviceHandler): its Update method runs on the bound payload.
-func UpdateHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), apiaction.Update, apiaction.UpdateBefore, apiaction.UpdateAfter)
-	if !a.typesEqual {
-		return a.serviceHandler()
-	}
-	return func(c *gin.Context) {
-		// The span context lives on in the request context the span start
-		// rebinds, which requestContext reads for the flow.
-		_, span, ok := a.beginRequest(c)
-		defer span.End()
-		if !ok {
-			return
-		}
-
-		log := logger.Controller.WithContext(c.Request.Context(), apiaction.Update)
-
-		req := a.newModel()
-		if reqErr := bindJSONRequest(c, &req); reqErr != nil {
-			// A full update replaces the resource, so an absent body is refused
-			// rather than tolerated as "nothing to change".
-			reqErr = requiredBodyError(reqErr)
-			response.Error(c, reportFailure(log, span, "bind request body failed", reqErr, invalidArgument(reqErr)))
-			return
-		}
-
-		id, ok := routeID(c, cfg, log, span)
-		if !ok {
-			return
-		}
-
-		if err := a.updateFlow(requestContext(c), ginServiceContext(c), id, req); err != nil {
-			response.Error(c, err)
-			return
-		}
-		response.JSON(c, req)
-	}
-}
-
-// UpdateCall returns the update call of M on route, the counterpart of the
-// handler UpdateHandler returns for the generated handler of an Update rpc:
-// given the route parameters, the id the request message names the record
-// by and the replacement it decoded into, it validates the replacement the
-// way the handler validates a bound body, runs the update flow (see
-// updateFlow) and answers with the replacement as stored, or with the
-// status the failure maps to (see call).
-func UpdateCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string, m M) (M, error) {
-	a := newAction[M, M, M](route, apiaction.Update, apiaction.UpdateBefore, apiaction.UpdateAfter)
-	return func(ctx context.Context, params map[string]string, id string, m M) (M, error) {
-		var zero M
-		c, err := a.beginCall(ctx, params, nil)
-		defer c.end()
-		if err != nil {
-			return zero, c.invalid(err)
-		}
-		if reflect.ValueOf(m).IsNil() {
-			return zero, c.missingRecord()
-		}
-		a.normalizeModel(&m)
-		if err := validateRequest(m); err != nil {
-			return zero, c.invalidMessage(err)
-		}
-		if id == "" {
-			return zero, c.missingID()
-		}
-		if err := a.updateFlow(c.ctx, c.serviceContext, id, m); err != nil {
-			return zero, c.fail(err)
-		}
-		return answer(c, m)
-	}
-}
 
 // updateFlow runs the update flow, replacing the record id names with req: it
 // clears the creator and updater req carries (see clearAudit), runs the

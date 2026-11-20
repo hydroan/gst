@@ -3,91 +3,15 @@ package controller
 import (
 	"context"
 	"encoding/json"
-	"reflect"
 
-	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
-	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 )
-
-// CreateHandler returns a Gin handler that creates one resource.
-//
-// When M, REQ, and RSP are the same type, the handler binds the JSON body into
-// M, runs the create flow (see createFlow), and returns the created model.
-// Creating a resource requires a body: an absent one is refused, and a client
-// wanting a resource with all defaults states that intent with an explicit {}
-// body.
-//
-// When REQ or RSP differs from M, the handler is the phase service's (see
-// serviceHandler): its Create method runs on the bound payload, a multipart
-// form left unbound for the service to read itself.
-func CreateHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), apiaction.Create, apiaction.CreateBefore, apiaction.CreateAfter)
-	if !a.typesEqual {
-		return a.serviceHandler()
-	}
-	return func(c *gin.Context) {
-		// The span context lives on in the request context the span start
-		// rebinds, which requestContext reads for the flow.
-		_, span, ok := a.beginRequest(c)
-		defer span.End()
-		if !ok {
-			return
-		}
-
-		log := logger.Controller.WithContext(c.Request.Context(), apiaction.Create)
-
-		req := a.newModel()
-		if reqErr := bindJSONRequest(c, &req); reqErr != nil {
-			// Creating a resource requires a body, so an absent one is refused
-			// rather than answered as a success that wrote nothing.
-			reqErr = requiredBodyError(reqErr)
-			response.Error(c, reportFailure(log, span, "bind request body failed", reqErr, invalidArgument(reqErr)))
-			return
-		}
-
-		if err := a.createFlow(requestContext(c), ginServiceContext(c), req); err != nil {
-			response.Error(c, err)
-			return
-		}
-		response.JSON(c, req)
-	}
-}
-
-// CreateCall returns the create call of M on route, the counterpart of the
-// handler CreateHandler returns for the generated handler of a Create rpc:
-// given the route parameters and the model the request message decoded
-// into, it validates the model the way the handler validates a bound body,
-// runs the create flow (see createFlow) and answers with the model created,
-// or with the status the failure maps to (see call).
-func CreateCall[M types.Model](route string) func(ctx context.Context, params map[string]string, m M) (M, error) {
-	a := newAction[M, M, M](route, apiaction.Create, apiaction.CreateBefore, apiaction.CreateAfter)
-	return func(ctx context.Context, params map[string]string, m M) (M, error) {
-		var zero M
-		c, err := a.beginCall(ctx, params, nil)
-		defer c.end()
-		if err != nil {
-			return zero, c.invalid(err)
-		}
-		if reflect.ValueOf(m).IsNil() {
-			return zero, c.missingRecord()
-		}
-		a.normalizeModel(&m)
-		if err := validateRequest(m); err != nil {
-			return zero, c.invalidMessage(err)
-		}
-		if err := a.createFlow(c.ctx, c.serviceContext, m); err != nil {
-			return zero, c.fail(err)
-		}
-		return answer(c, m)
-	}
-}
 
 // createFlow runs the create flow on req: it clears the creator and updater
 // req carries (see clearAudit), runs the create hooks around the write,

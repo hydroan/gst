@@ -391,22 +391,6 @@ func (c *call) ended() error {
 	return nil
 }
 
-// httpOnlyMethodCalled returns the error of a service that called a method
-// of sc only an HTTP request can serve — wrote a body, a stream or a cookie
-// it believes answered, read a cookie, a form value or a file that was never
-// there — while sc carried no HTTP request (see types.HTTPOnlyMethodCalled),
-// naming the methods, and nil when it called none. A call answers Internal
-// for it, right after the hook that called it (see traceServiceHook) or
-// once its service method returned (see finish); gg check reports the call
-// at generation time, this is the transport's own refusal. A context of an
-// HTTP request carries the request, so its hooks never trip it.
-func httpOnlyMethodCalled(sc *types.ServiceContext) error {
-	if !types.HTTPOnlyMethodCalled(sc) {
-		return nil
-	}
-	return errors.Newf("the service called a method of its context only an HTTP request can serve: an action served over gRPC must not call %s", strings.Join(types.HTTPOnlyMethods, ", "))
-}
-
 // finish ends a call whose flow or service returned, checking the service
 // contexts it built the way traceServiceHook checks each hook's (see
 // httpOnlyMethodCalled): what a service method called on its context is
@@ -531,22 +515,6 @@ func PathError(path string, err error) error {
 	return err
 }
 
-// Element returns the path of the element at index i of the repeated field
-// at path, points[1]: what a generated conversion names a refused element by
-// (see PathError), as the contract spells an index. The public grpc.Element
-// forwards to it.
-func Element(path string, i int) string {
-	return pathStep(path, strconv.Itoa(i))
-}
-
-// Entry returns the path of the value under key of the map field at path,
-// costs.k1, and by_rank[7] for a key of digits alone, which encoding/json
-// spells like an index on the HTTP side: what a generated conversion names a
-// refused map value by (see PathError). The public grpc.Entry forwards to it.
-func Entry[K comparable](path string, key K) string {
-	return pathStep(path, fmt.Sprint(key))
-}
-
 // ItemError names the item at index i of a batch in err, the refusal a
 // generated FromProto answered the item's record with: the field refused,
 // rank, becomes the item's, items[1].rank (see PathError and Element), the
@@ -556,27 +524,6 @@ func Entry[K comparable](path string, key K) string {
 // grpc.ItemError forwards to it.
 func ItemError(i int, err error) error {
 	return PathError(Element("items", i), err)
-}
-
-// itemPrefix is what the field of the item at index i of a batch is named
-// behind, items[1]., in a refusal naming it.
-func itemPrefix(i int) string {
-	return Element("items", i) + "."
-}
-
-// pathStep spells step appended to path the way the contract spells a field
-// path: a step of digits alone, an index or a numeric map key, in brackets,
-// points[1], since encoding/json spells the two alike on the HTTP side (see
-// indexedJSONPath) and the contract writes an index so; any other step
-// behind a dot, meta.score; step alone when path is empty.
-func pathStep(path, step string) string {
-	if step != "" && strings.Trim(step, "0123456789") == "" {
-		return path + "[" + step + "]"
-	}
-	if path == "" {
-		return step
-	}
-	return path + "." + step
 }
 
 // disagreeingParam returns the first route parameter, by name, that given

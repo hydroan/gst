@@ -4,82 +4,15 @@ import (
 	"context"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
-
-// GetHandler returns a Gin handler that retrieves one resource.
-//
-// When M, REQ, and RSP are the same type, the handler reads the configured
-// route parameter as the resource id, runs the get flow (see getFlow), and
-// returns the model.
-//
-// When REQ or RSP differs from M, the handler is the phase service's (see
-// serviceHandler): its Get method runs on a zero-value REQ, the GET request
-// carrying no body; the service reads ServiceContext.Query() and Param().
-func GetHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), apiaction.Get, apiaction.GetBefore, apiaction.GetAfter)
-	if !a.typesEqual {
-		return a.serviceHandler()
-	}
-	return func(c *gin.Context) {
-		// The span context lives on in the request context the span start
-		// rebinds, which requestContext reads for the flow.
-		_, span, ok := a.beginRequest(c)
-		defer span.End()
-		if !ok {
-			return
-		}
-
-		log := logger.Controller.WithContext(c.Request.Context(), apiaction.Get)
-		id, ok := routeID(c, cfg, log, span)
-		if !ok {
-			return
-		}
-
-		m, err := a.getFlow(requestContext(c), ginServiceContext(c), id)
-		if err != nil {
-			response.Error(c, err)
-			return
-		}
-		response.JSON(c, m)
-	}
-}
-
-// GetCall returns the get call of M on route, the counterpart of the handler
-// GetHandler returns for the generated handler of a Get rpc: given the route
-// parameters, the id the request message names the record by and its
-// expansion query, it runs the get flow (see getFlow) and answers with the
-// model, or with the status the failure maps to (see call); a message
-// naming no record is refused the way a request missing its route parameter
-// is.
-func GetCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string, query Query) (M, error) {
-	a := newAction[M, M, M](route, apiaction.Get, apiaction.GetBefore, apiaction.GetAfter)
-	return func(ctx context.Context, params map[string]string, id string, query Query) (M, error) {
-		var zero M
-		c, err := a.beginQueryCall(ctx, params, query)
-		defer c.end()
-		if err != nil {
-			return zero, c.invalid(err)
-		}
-		if id == "" {
-			return zero, c.missingID()
-		}
-		m, err := a.getFlow(c.ctx, c.serviceContext, id)
-		if err != nil {
-			return zero, c.fail(err)
-		}
-		return answer(c, m)
-	}
-}
 
 // getFlow runs the get flow on the record id names: it applies the expansion
 // and depth query options the request carries, runs the get hooks around the

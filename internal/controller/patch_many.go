@@ -3,158 +3,17 @@ package controller
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"reflect"
 
 	"github.com/cockroachdb/errors"
-	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
-	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 )
-
-// PatchManyHandler returns a Gin handler that partially updates multiple
-// resources.
-//
-// When M, REQ, and RSP are the same type, the handler binds the JSON body into
-// batch[M] along with the set of fields each item carried, and runs the
-// batch patch flow (see patchManyFlow), which answers with the patched
-// records.
-//
-// When REQ or RSP differs from M, the handler is the phase service's (see
-// serviceHandler): its PatchMany method runs on the bound payload.
-func PatchManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), apiaction.PatchMany, apiaction.PatchManyBefore, apiaction.PatchManyAfter)
-	if !a.typesEqual {
-		return a.serviceHandler()
-	}
-	return func(c *gin.Context) {
-		// The span context lives on in the request context the span start
-		// rebinds, which requestContext reads for the flow.
-		_, span, ok := a.beginRequest(c)
-		defer span.End()
-		if !ok {
-			return
-		}
-
-		log := logger.Controller.WithContext(c.Request.Context(), apiaction.PatchMany)
-
-		var req batch[M]
-		body, err := readJSONRequestBody(c)
-		if err != nil {
-			response.Error(c, reportFailure(log, span, "bind request body failed", err, invalidArgument(err)))
-			return
-		}
-		fieldSets, fieldErr := patchManyFieldSetsFromJSONBody(a.typ, body)
-		if fieldErr != nil && !errors.Is(fieldErr, io.EOF) {
-			response.Error(c, reportFailure(log, span, "bind request body failed", fieldErr, invalidArgument(fieldErr)))
-			return
-		}
-		if reqErr := decodeJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
-			response.Error(c, reportFailure(log, span, "bind request body failed", reqErr, invalidArgument(reqErr)))
-			return
-		}
-		normalizeBatch(&req)
-		// A versioned model must carry a version on every item, exactly like
-		// the single-resource patch; failing the whole batch up front keeps
-		// the all-or-nothing shape a defective request deserves. See
-		// modelschema.Version. Each item is then validated on the fields it
-		// names, like the single-resource patch too. Every version is checked
-		// before any item is validated, the order the call checks a batch in,
-		// so a batch defective in several items is refused for the same one
-		// on both transports.
-		versionField, versioned := modelschema.VersionFieldName(a.newModel())
-		fieldsOf := func(i int) patchFieldSet {
-			if i < len(fieldSets) {
-				return fieldSets[i]
-			}
-			return patchFieldSet{}
-		}
-		for i := range req.Items {
-			if _, ok := fieldsOf(i)[versionField]; versioned && !ok {
-				response.Error(c, reportFailure(log, span, "versioned model patched without its version", nil, databaseError(database.ErrVersionRequired),
-					zap.Int("item", i), zap.String("field", versionField)))
-				return
-			}
-		}
-		for i, item := range req.Items {
-			if fieldErr := validatePatchFields(item, fieldsOf(i)); fieldErr != nil {
-				fieldErr = clientSafeItemBindError(i, fieldErr)
-				response.Error(c, reportFailure(log, span, "bind request body failed", fieldErr, invalidArgument(fieldErr)))
-				return
-			}
-		}
-
-		rsp, err := a.patchManyFlow(requestContext(c), ginServiceContext(c), &req, fieldSets)
-		if err != nil {
-			response.Error(c, err)
-			return
-		}
-		response.JSON(c, rsp)
-	}
-}
-
-// PatchManyCall returns the batch patch call of M on route, the counterpart
-// of the handler PatchManyHandler returns for the generated handler of a
-// PatchMany rpc: given the route parameters, the items the request message
-// decoded into and the paths of each item's update mask, one mask per item
-// in order (see maskFieldSet), it validates each item on the fields its mask
-// names the way the handler validates the fields each item names (see
-// validatePatchFields), refuses a versioned model whose item carries no
-// version the way the handler does, runs the batch patch flow (see
-// patchManyFlow) and answers with the records patched, or with the status
-// the failure maps to (see call).
-func PatchManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, items []M, paths [][]string) ([]M, error) {
-	a := newAction[M, M, M](route, apiaction.PatchMany, apiaction.PatchManyBefore, apiaction.PatchManyAfter)
-	return func(ctx context.Context, params map[string]string, items []M, paths [][]string) ([]M, error) {
-		c, err := a.beginCall(ctx, params, nil)
-		defer c.end()
-		if err != nil {
-			return nil, c.invalid(err)
-		}
-		for i, item := range items {
-			if reflect.ValueOf(item).IsNil() {
-				return nil, c.invalid(errors.Newf("items[%d] carries no record", i))
-			}
-		}
-		req := batch[M]{Items: items}
-		normalizeBatch(&req)
-		if len(paths) != len(req.Items) {
-			return nil, c.invalid(errors.Newf("%d items carry %d update masks; each item names the fields to apply in a mask of its own", len(req.Items), len(paths)))
-		}
-		fieldSets := make([]patchFieldSet, len(paths))
-		for i, itemPaths := range paths {
-			fields, maskErr := maskFieldSet(a.typ, itemPaths)
-			if maskErr != nil {
-				return nil, c.invalid(errors.Wrapf(maskErr, "items[%d]", i))
-			}
-			fieldSets[i] = fields
-		}
-		if versionField, versioned := modelschema.VersionFieldName(a.newModel()); versioned {
-			for i, itemFields := range fieldSets {
-				if _, ok := itemFields[versionField]; !ok {
-					return nil, c.refuse(databaseError(database.ErrVersionRequired), errors.Wrapf(database.ErrVersionRequired, "patch many %s item %d without its %s", a.name, i, versionField))
-				}
-			}
-		}
-		for i, item := range req.Items {
-			if err = validatePatchFields(item, fieldSets[i]); err != nil {
-				return nil, c.invalidItemMessage(i, err)
-			}
-		}
-		rsp, err := a.patchManyFlow(c.ctx, c.serviceContext, &req, fieldSets)
-		if err != nil {
-			return nil, c.fail(err)
-		}
-		return answer(c, rsp.Items)
-	}
-}
 
 // patchManyFlow runs the batch patch flow on the items of req: it loads the
 // record each item names, copies the fields the item carried (fieldSets, one

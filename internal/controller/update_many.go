@@ -3,85 +3,17 @@ package controller
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"reflect"
 
 	"github.com/cockroachdb/errors"
-	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
-	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 )
-
-// UpdateManyHandler returns a Gin handler that replaces multiple resources.
-//
-// When M, REQ, and RSP are the same type, the handler binds the JSON body into
-// batch[M], runs the batch update flow (see updateManyFlow), and
-// returns the request data.
-//
-// When REQ or RSP differs from M, the handler is the phase service's (see
-// serviceHandler): its UpdateMany method runs on the bound payload.
-func UpdateManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), apiaction.UpdateMany, apiaction.UpdateManyBefore, apiaction.UpdateManyAfter)
-	if !a.typesEqual {
-		return a.serviceHandler()
-	}
-	return func(c *gin.Context) {
-		// The span context lives on in the request context the span start
-		// rebinds, which requestContext reads for the flow.
-		_, span, ok := a.beginRequest(c)
-		defer span.End()
-		if !ok {
-			return
-		}
-
-		log := logger.Controller.WithContext(c.Request.Context(), apiaction.UpdateMany)
-
-		var req batch[M]
-		if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
-			response.Error(c, reportFailure(log, span, "bind request body failed", reqErr, invalidArgument(reqErr)))
-			return
-		}
-
-		if err := a.updateManyFlow(requestContext(c), ginServiceContext(c), &req); err != nil {
-			response.Error(c, err)
-			return
-		}
-		response.JSON(c, req)
-	}
-}
-
-// UpdateManyCall returns the batch update call of M on route, the
-// counterpart of the handler UpdateManyHandler returns for the generated
-// handler of an UpdateMany rpc: given the route parameters and the items the
-// request message decoded into, it validates the batch the way the handler
-// validates a bound body, runs the batch update flow (see updateManyFlow)
-// and answers with the items as stored, or with the status the failure maps
-// to (see call).
-func UpdateManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, items []M) ([]M, error) {
-	a := newAction[M, M, M](route, apiaction.UpdateMany, apiaction.UpdateManyBefore, apiaction.UpdateManyAfter)
-	return func(ctx context.Context, params map[string]string, items []M) ([]M, error) {
-		c, err := a.beginCall(ctx, params, nil)
-		defer c.end()
-		if err != nil {
-			return nil, c.invalid(err)
-		}
-		req := batch[M]{Items: items}
-		normalizeBatch(&req)
-		if err := validateRequest(&req); err != nil {
-			return nil, c.invalidMessage(err)
-		}
-		if err := a.updateManyFlow(c.ctx, c.serviceContext, &req); err != nil {
-			return nil, c.fail(err)
-		}
-		return answer(c, req.Items)
-	}
-}
 
 // updateManyFlow runs the batch update flow on the items of req: it refuses
 // a batch naming one record twice (see repeatedID) and an item naming no

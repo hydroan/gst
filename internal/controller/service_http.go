@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"strings"
 
@@ -18,7 +17,8 @@ import (
 // method: the one CreateHandler and its kind return when M, REQ and RSP
 // differ, an action declaring a Payload or Result of its own having no flow
 // of the framework's, the service doing the work. Its gRPC counterpart is
-// ServiceCall (see call.go); serviceMethod is what both dispatch through.
+// ServiceCall (see call_grpc.go); both dispatch through serviceMethod (see
+// action.go).
 
 // serviceHandler returns the handler of a's action for a request whose
 // payload and result are the service's own types. It binds the JSON body
@@ -77,36 +77,4 @@ func (a *action[M, REQ, RSP]) serviceHandler() gin.HandlerFunc {
 			response.JSON(c, rsp)
 		}
 	}
-}
-
-// serviceMethod returns the method of a service serving phase, the one the
-// handler and the call of an action with a payload or result of its own
-// dispatch to. The HTTP-only actions Import, Export and SSE, served by
-// handlers of their own, and the hook phases have no such method, so it
-// panics; only a gRPC ServiceCall can name one of them here, the HTTP
-// handler being built for actions with a payload or result alone.
-func serviceMethod[M types.Model, REQ types.Request, RSP types.Response](phase apiaction.Phase) func(svc types.Service[M, REQ, RSP], sc *types.ServiceContext, req REQ) (RSP, error) {
-	switch phase {
-	case apiaction.Create:
-		return types.Service[M, REQ, RSP].Create
-	case apiaction.Delete:
-		return types.Service[M, REQ, RSP].Delete
-	case apiaction.Update:
-		return types.Service[M, REQ, RSP].Update
-	case apiaction.Patch:
-		return types.Service[M, REQ, RSP].Patch
-	case apiaction.List:
-		return types.Service[M, REQ, RSP].List
-	case apiaction.Get:
-		return types.Service[M, REQ, RSP].Get
-	case apiaction.CreateMany:
-		return types.Service[M, REQ, RSP].CreateMany
-	case apiaction.DeleteMany:
-		return types.Service[M, REQ, RSP].DeleteMany
-	case apiaction.UpdateMany:
-		return types.Service[M, REQ, RSP].UpdateMany
-	case apiaction.PatchMany:
-		return types.Service[M, REQ, RSP].PatchMany
-	}
-	panic(fmt.Sprintf("controller: phase %q has no rpc; ServiceCall serves the actions of a model's gRPC service", phase))
 }

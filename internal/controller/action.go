@@ -9,15 +9,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
-	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -171,31 +167,36 @@ func (a *action[M, REQ, RSP]) service() types.Service[M, REQ, RSP] {
 	return serviceregistry.Resolve[M, REQ, RSP](a.serviceKey)
 }
 
-// beginRequest starts the span for the controller operation of the request
-// c serves (see startSpan), rebinds the request context so downstream
-// layers nest under it, and reports whether the action serves the request:
-// a route parameter it may not carry (see routeParamError) is refused with
-// 400, the way beginCall refuses one on a call, the refusal reported like
-// any the controller answers (see reportFailure). The caller ends the span
-// either way.
-func (a *action[M, REQ, RSP]) beginRequest(c *gin.Context) (context.Context, trace.Span, bool) {
-	spanCtx, span := a.startSpan(c.Request.Context(), c.Request.Method, c.FullPath())
-
-	// Update request context with new span context
-	c.Request = c.Request.WithContext(requestctx.WithMetadata(spanCtx, requestctx.FromGin(c)))
-
-	err := routeParamError(func(yield func(string, string) bool) {
-		for _, param := range c.Params {
-			if !yield(param.Key, param.Value) {
-				return
-			}
-		}
-	}, a.itemParam)
-	if err != nil {
-		response.Error(c, reportFailure(logger.Controller.WithContext(c.Request.Context(), a.phase), span, "request rejected", err, invalidArgument(err)))
-		return spanCtx, span, false
+// serviceMethod returns the method of a service serving phase, the one the
+// handler and the call of an action with a payload or result of its own
+// dispatch to. The HTTP-only actions Import, Export and SSE, served by
+// handlers of their own, and the hook phases have no such method, so it
+// panics; only a gRPC ServiceCall can name one of them here, the HTTP
+// handler being built for actions with a payload or result alone.
+func serviceMethod[M types.Model, REQ types.Request, RSP types.Response](phase apiaction.Phase) func(svc types.Service[M, REQ, RSP], sc *types.ServiceContext, req REQ) (RSP, error) {
+	switch phase {
+	case apiaction.Create:
+		return types.Service[M, REQ, RSP].Create
+	case apiaction.Delete:
+		return types.Service[M, REQ, RSP].Delete
+	case apiaction.Update:
+		return types.Service[M, REQ, RSP].Update
+	case apiaction.Patch:
+		return types.Service[M, REQ, RSP].Patch
+	case apiaction.List:
+		return types.Service[M, REQ, RSP].List
+	case apiaction.Get:
+		return types.Service[M, REQ, RSP].Get
+	case apiaction.CreateMany:
+		return types.Service[M, REQ, RSP].CreateMany
+	case apiaction.DeleteMany:
+		return types.Service[M, REQ, RSP].DeleteMany
+	case apiaction.UpdateMany:
+		return types.Service[M, REQ, RSP].UpdateMany
+	case apiaction.PatchMany:
+		return types.Service[M, REQ, RSP].PatchMany
 	}
-	return spanCtx, span, true
+	panic(fmt.Sprintf("controller: phase %q has no rpc; ServiceCall serves the actions of a model's gRPC service", phase))
 }
 
 // routeParamError reports the route parameter a request or a call may not
@@ -276,6 +277,22 @@ func (a *action[M, REQ, RSP]) traceServiceHook(parentCtx context.Context, phase 
 		return struct{}{}, run(spanCtx)
 	})
 	return err
+}
+
+// httpOnlyMethodCalled returns the error of a service that called a method
+// of sc only an HTTP request can serve — wrote a body, a stream or a cookie
+// it believes answered, read a cookie, a form value or a file that was never
+// there — while sc carried no HTTP request (see types.HTTPOnlyMethodCalled),
+// naming the methods, and nil when it called none. A call answers Internal
+// for it, right after the hook that called it (see traceServiceHook) or
+// once its service method returned (see finish); gg check reports the call
+// at generation time, this is the transport's own refusal. A context of an
+// HTTP request carries the request, so its hooks never trip it.
+func httpOnlyMethodCalled(sc *types.ServiceContext) error {
+	if !types.HTTPOnlyMethodCalled(sc) {
+		return nil
+	}
+	return errors.Newf("the service called a method of its context only an HTTP request can serve: an action served over gRPC must not call %s", strings.Join(types.HTTPOnlyMethods, ", "))
 }
 
 // traceServiceOperation traces a delegated service operation returning RSP.

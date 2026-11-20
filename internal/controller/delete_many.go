@@ -3,15 +3,12 @@ package controller
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
-	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
@@ -19,70 +16,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
-
-// DeleteManyHandler returns a Gin handler that deletes multiple resources.
-//
-// When M, REQ, and RSP are the same type, the handler binds the JSON body into
-// batch[M], runs the batch delete flow (see deleteManyFlow), and
-// returns a success response.
-//
-// When REQ or RSP differs from M, the handler is the phase service's (see
-// serviceHandler): its DeleteMany method runs on the bound payload.
-func DeleteManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), apiaction.DeleteMany, apiaction.DeleteManyBefore, apiaction.DeleteManyAfter)
-	if !a.typesEqual {
-		return a.serviceHandler()
-	}
-	return func(c *gin.Context) {
-		// The span context lives on in the request context the span start
-		// rebinds, which requestContext reads for the flow.
-		_, span, ok := a.beginRequest(c)
-		defer span.End()
-		if !ok {
-			return
-		}
-
-		log := logger.Controller.WithContext(c.Request.Context(), apiaction.DeleteMany)
-
-		var req batch[M]
-		if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
-			response.Error(c, reportFailure(log, span, "bind request body failed", reqErr, invalidArgument(reqErr)))
-			return
-		}
-
-		if err := a.deleteManyFlow(requestContext(c), ginServiceContext(c), &req); err != nil {
-			response.Error(c, err)
-			return
-		}
-		response.JSON(c)
-	}
-}
-
-// DeleteManyCall returns the batch delete call of M on route, the
-// counterpart of the handler DeleteManyHandler returns for the generated
-// handler of a DeleteMany rpc: given the route parameters and the ids the
-// request message carries, it validates the batch the way the handler
-// validates a bound body, runs the batch delete flow (see deleteManyFlow)
-// and answers nothing, or the status the failure maps to (see call).
-func DeleteManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, ids []string) error {
-	a := newAction[M, M, M](route, apiaction.DeleteMany, apiaction.DeleteManyBefore, apiaction.DeleteManyAfter)
-	return func(ctx context.Context, params map[string]string, ids []string) error {
-		c, err := a.beginCall(ctx, params, nil)
-		defer c.end()
-		if err != nil {
-			return c.invalid(err)
-		}
-		req := batch[M]{IDs: ids}
-		normalizeBatch(&req)
-		if err := validateRequest(&req); err != nil {
-			return c.invalidMessage(err)
-		}
-		if err := a.deleteManyFlow(c.ctx, c.serviceContext, &req); err != nil {
-			return c.fail(err)
-		}
-		return c.finish()
-	}
-}
 
 // deleteManyFlow runs the batch delete flow on the ids of req: it converts
 // them into model instances, which become the items of req, runs the batch

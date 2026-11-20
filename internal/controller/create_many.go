@@ -3,84 +3,15 @@ package controller
 import (
 	"context"
 	"encoding/json"
-	"io"
 
-	"github.com/cockroachdb/errors"
-	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
-	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 )
-
-// CreateManyHandler returns a Gin handler that creates multiple resources.
-//
-// When M, REQ, and RSP are the same type, the handler binds the JSON body into
-// batch[M], runs the batch create flow (see createManyFlow), and
-// returns the request data.
-//
-// When REQ or RSP differs from M, the handler is the phase service's (see
-// serviceHandler): its CreateMany method runs on the bound payload.
-func CreateManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), apiaction.CreateMany, apiaction.CreateManyBefore, apiaction.CreateManyAfter)
-	if !a.typesEqual {
-		return a.serviceHandler()
-	}
-	return func(c *gin.Context) {
-		// The span context lives on in the request context the span start
-		// rebinds, which requestContext reads for the flow.
-		_, span, ok := a.beginRequest(c)
-		defer span.End()
-		if !ok {
-			return
-		}
-
-		log := logger.Controller.WithContext(c.Request.Context(), apiaction.CreateMany)
-
-		var req batch[M]
-		if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
-			response.Error(c, reportFailure(log, span, "bind request body failed", reqErr, invalidArgument(reqErr)))
-			return
-		}
-
-		if err := a.createManyFlow(requestContext(c), ginServiceContext(c), &req); err != nil {
-			response.Error(c, err)
-			return
-		}
-		response.JSON(c, req)
-	}
-}
-
-// CreateManyCall returns the batch create call of M on route, the
-// counterpart of the handler CreateManyHandler returns for the generated
-// handler of a CreateMany rpc: given the route parameters and the items the
-// request message decoded into, it validates the batch the way the handler
-// validates a bound body, runs the batch create flow (see createManyFlow)
-// and answers with the items created, or with the status the failure maps
-// to (see call).
-func CreateManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, items []M) ([]M, error) {
-	a := newAction[M, M, M](route, apiaction.CreateMany, apiaction.CreateManyBefore, apiaction.CreateManyAfter)
-	return func(ctx context.Context, params map[string]string, items []M) ([]M, error) {
-		c, err := a.beginCall(ctx, params, nil)
-		defer c.end()
-		if err != nil {
-			return nil, c.invalid(err)
-		}
-		req := batch[M]{Items: items}
-		normalizeBatch(&req)
-		if err := validateRequest(&req); err != nil {
-			return nil, c.invalidMessage(err)
-		}
-		if err := a.createManyFlow(c.ctx, c.serviceContext, &req); err != nil {
-			return nil, c.fail(err)
-		}
-		return answer(c, req.Items)
-	}
-}
 
 // createManyFlow runs the batch create flow on the items of req: it clears
 // the creator and updater every item carries (see clearAudit), runs the

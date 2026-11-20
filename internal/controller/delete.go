@@ -5,11 +5,9 @@ import (
 	"encoding/json"
 
 	"github.com/cockroachdb/errors"
-	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
-	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
@@ -17,66 +15,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
-
-// DeleteHandler returns a Gin handler that deletes one resource.
-//
-// When M, REQ, and RSP are the same type, the handler reads the resource id
-// from the configured route parameter (batch deletion uses the DeleteMany
-// action instead), runs the delete flow (see deleteFlow), and returns a
-// success response.
-//
-// When REQ or RSP differs from M, the handler is the phase service's (see
-// serviceHandler): its Delete method runs on the bound payload.
-func DeleteHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), apiaction.Delete, apiaction.DeleteBefore, apiaction.DeleteAfter)
-	if !a.typesEqual {
-		return a.serviceHandler()
-	}
-	return func(c *gin.Context) {
-		// The span context lives on in the request context the span start
-		// rebinds, which requestContext reads for the flow.
-		_, span, ok := a.beginRequest(c)
-		defer span.End()
-		if !ok {
-			return
-		}
-
-		log := logger.Controller.WithContext(c.Request.Context(), apiaction.Delete)
-		id, ok := routeID(c, cfg, log, span)
-		if !ok {
-			return
-		}
-
-		if err := a.deleteFlow(requestContext(c), ginServiceContext(c), id); err != nil {
-			response.Error(c, err)
-			return
-		}
-		response.JSON(c)
-	}
-}
-
-// DeleteCall returns the delete call of M on route, the counterpart of the
-// handler DeleteHandler returns for the generated handler of a Delete rpc:
-// given the route parameters and the id the request message names the
-// record by, it runs the delete flow (see deleteFlow) and answers nothing,
-// or the status the failure maps to (see call).
-func DeleteCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string) error {
-	a := newAction[M, M, M](route, apiaction.Delete, apiaction.DeleteBefore, apiaction.DeleteAfter)
-	return func(ctx context.Context, params map[string]string, id string) error {
-		c, err := a.beginCall(ctx, params, nil)
-		defer c.end()
-		if err != nil {
-			return c.invalid(err)
-		}
-		if id == "" {
-			return c.missingID()
-		}
-		if err := a.deleteFlow(c.ctx, c.serviceContext, id); err != nil {
-			return c.fail(err)
-		}
-		return c.finish()
-	}
-}
 
 // deleteFlow runs the delete flow on the record id names: it runs the delete
 // hooks around the write, reads the record first when the operation log

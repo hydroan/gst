@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 
-	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/execctx"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
@@ -19,23 +18,14 @@ import (
 // its hooks through a function the transport supplies, which is all a
 // transport contributes to it. The HTTP handlers of this package bind the
 // request, run the flow and write its answer; the gRPC calls do the same
-// with the request message (see call.go). A flow's failure is the error of
-// errors.go, which the transport renders.
+// with the request message (see call_grpc.go). A flow's failure is the
+// error of errors.go, which the transport renders.
 
 // serviceContextFunc builds the service context of one hook or service call
 // from the context of that call and its phase. Only the transport knows what
 // else the service context should carry — the HTTP handler's gin context,
 // nothing at all for a transport without one — so the transport supplies it.
 type serviceContextFunc func(ctx context.Context, phase apiaction.Phase) *types.ServiceContext
-
-// ginServiceContext returns the serviceContextFunc of the HTTP handler
-// serving c: its service contexts carry the gin context, so the response
-// helpers of ServiceContext keep working inside the hooks.
-func ginServiceContext(c *gin.Context) serviceContextFunc {
-	return func(ctx context.Context, phase apiaction.Phase) *types.ServiceContext {
-		return types.NewServiceContext(c, ctx, phase)
-	}
-}
 
 // clearAudit clears the creator and updater of records, what a client sent
 // in them: who created or updated a record is the server's to write. The
@@ -64,4 +54,22 @@ func operationLog(ctx context.Context, model string) *modellogmgmt.OperationLog 
 		Method:    meta.Method(),
 		UserAgent: meta.UserAgent(),
 	}
+}
+
+// setID copies the id the request names a record by — the route parameter
+// over HTTP, the id field of the message over gRPC — into the model and
+// reports whether the model accepted it. UUID-keyed models (Base) accept any
+// non-empty string, so the check never changes their behavior. Integer-keyed
+// models (AutoBase) leave the id unset when the raw value does not parse
+// into their key type; handlers must answer such requests with "not found"
+// before any database access, because an unset id would silently drop the
+// intended row filter and passing the raw value to SQL would rely on the
+// database's implicit string-to-integer coercion (MySQL matches id=7 for
+// '7abc').
+//
+// The caller must pass a non-empty id: UUID-keyed models generate a fresh id
+// when given an empty value.
+func setID(m types.Model, id string) bool {
+	m.SetID(id)
+	return len(m.GetID()) > 0
 }

@@ -1,16 +1,12 @@
 package controller
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"io"
 	"reflect"
 	"slices"
 	"strings"
 	"sync"
 
-	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
@@ -22,8 +18,9 @@ import (
 const idFieldName = "ID"
 
 // This file holds how a patch names the fields it applies and how they are
-// applied: over HTTP the keys of the JSON body name them, over gRPC the
-// paths of the update mask, both by the JSON keys of the model; the fields
+// applied: over HTTP the keys of the JSON body name them (see
+// patch_fields_http.go), over gRPC the paths of the update mask (see
+// patch_fields_grpc.go), both by the JSON keys of the model; the fields
 // named are copied from the values the request carries onto the record as
 // stored, each as a whole, whatever its type.
 
@@ -330,103 +327,4 @@ func patchValue(v reflect.Value) any {
 		return v.Elem().Interface()
 	}
 	return v.Interface()
-}
-
-// patchFieldSetFromJSONBody returns the fields of typ the keys of the JSON
-// object body name, io.EOF for an empty body and a client-safe error for a
-// malformed one.
-func patchFieldSetFromJSONBody(typ reflect.Type, body []byte) (patchFieldSet, error) {
-	if len(bytes.TrimSpace(body)) == 0 {
-		return patchFieldSet{}, io.EOF
-	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(body, &fields); err != nil {
-		return nil, clientSafeBindError(err)
-	}
-	return patchFieldSetFromJSONFields(typ, fields), nil
-}
-
-// patchManyFieldSetsFromJSONBody returns the fields of typ each item of the
-// JSON batch body names, one set per item in order, io.EOF for an empty
-// body and a client-safe error for a malformed one.
-func patchManyFieldSetsFromJSONBody(typ reflect.Type, body []byte) ([]patchFieldSet, error) {
-	if len(bytes.TrimSpace(body)) == 0 {
-		return nil, io.EOF
-	}
-	var req struct {
-		Items []json.RawMessage `json:"items"`
-	}
-	if err := json.Unmarshal(body, &req); err != nil {
-		return nil, clientSafeBindError(err)
-	}
-	// A null item is dropped by the decoding of the batch (see
-	// normalizeBatch), so it gets no field set either, keeping the sets
-	// beside the items that remain.
-	fieldSets := make([]patchFieldSet, 0, len(req.Items))
-	for _, raw := range req.Items {
-		if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
-			continue
-		}
-		var item map[string]json.RawMessage
-		if err := json.Unmarshal(raw, &item); err != nil {
-			return nil, clientSafeBindError(err)
-		}
-		fieldSets = append(fieldSets, patchFieldSetFromJSONFields(typ, item))
-	}
-	return fieldSets, nil
-}
-
-// patchFieldSetFromJSONFields returns the fields of typ the keys of fields
-// name, each key read the way the JSON decoder reads it (see lookup); a key
-// no field encodes to names nothing and is left out, the way the decoder
-// ignores an unknown key.
-func patchFieldSetFromJSONFields(typ reflect.Type, fields map[string]json.RawMessage) patchFieldSet {
-	if len(fields) == 0 {
-		return patchFieldSet{}
-	}
-	table := patchFieldsOf(typ)
-	fieldSet := make(patchFieldSet, len(fields))
-	for key := range fields {
-		if field, ok := table.lookup(key); ok {
-			fieldSet[field.name] = struct{}{}
-		}
-	}
-	return fieldSet
-}
-
-// maskFieldSet returns the fields of typ the paths of an update mask name,
-// as the message names them, the JSON keys of the model: what a Patch rpc
-// applies of the values it carries. A path naming a field the framework
-// manages, the primary key, the audit columns or another column an update
-// leaves alone, is passed over, the way the HTTP handler passes over the
-// key, and the way a mask naming an output-only field is read (AIP-161,
-// AIP-203). Every other path must name a field the patch applies, as a
-// whole: a path into a field, address.city, is refused and told the field
-// to name instead, and so is a path naming a field the model does not have,
-// a key the HTTP handler passes over. The mask must leave at least one field
-// to apply, a Patch applying nothing being a mistake to report rather than a
-// record to answer unchanged, where the HTTP handler writes the record back
-// as stored.
-func maskFieldSet(typ reflect.Type, paths []string) (patchFieldSet, error) {
-	table := patchFieldsOf(typ)
-	fields := make(patchFieldSet, len(paths))
-	for _, path := range paths {
-		if _, managed := table.managed[path]; managed {
-			continue
-		}
-		if head, _, into := strings.Cut(path, "."); into {
-			if _, ok := table.byKey[head]; ok {
-				return nil, errors.Newf("update_mask names %q, a part of a field; a patch applies %q as a whole", path, head)
-			}
-		}
-		field, ok := table.byKey[path]
-		if !ok {
-			return nil, errors.Newf("update_mask names %q, which is no field a patch applies", path)
-		}
-		fields[field.name] = struct{}{}
-	}
-	if len(fields) == 0 {
-		return nil, errors.New("update_mask must name at least one field a patch applies")
-	}
-	return fields, nil
 }

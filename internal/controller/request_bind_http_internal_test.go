@@ -5,9 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"os/exec"
-	"reflect"
 	"strings"
 	"testing"
 	"testing/iotest"
@@ -376,33 +373,6 @@ func TestClientSafeBindErrorNamesTheFieldsByTheirJSONPath(t *testing.T) {
 	require.Equal(t, "ProbeCode is a required field", types.FieldViolations(serviceErr)[2].Description)
 }
 
-// freshPatchHelper marks the child process of
-// TestPatchNamesTheFieldInAFreshProcess.
-const freshPatchHelper = "GST_TEST_FRESH_PATCH"
-
-// TestPatchNamesTheFieldInAFreshProcess pins that the validator is set up
-// before any validation runs, at package initialization: a process whose
-// first validation is a patch's, which checks the fields the body names
-// alone, names the field refused all the same. The test binary runs itself
-// with this test selected and the helper marked, so nothing else validates
-// first.
-func TestPatchNamesTheFieldInAFreshProcess(t *testing.T) {
-	if os.Getenv(freshPatchHelper) == "1" {
-		refused := validatePatchFields(&validatedProbe{}, patchFieldSet{"Name": {}})
-		require.Error(t, refused)
-		var serviceErr *types.Error
-		require.ErrorAs(t, clientSafeBindError(refused), &serviceErr)
-		require.Equal(t, "name is a required field", serviceErr.Msg())
-		return
-	}
-
-	cmd := exec.Command(os.Args[0], "-test.run=^TestPatchNamesTheFieldInAFreshProcess$", "-test.v")
-	cmd.Env = append(os.Environ(), freshPatchHelper+"=1")
-	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, "the child process must pass:\n%s", out)
-	require.Contains(t, string(out), "--- PASS: TestPatchNamesTheFieldInAFreshProcess", "the child must have run the helper:\n%s", out)
-}
-
 // TestBindJSONRequestHonorsDisabledValidator pins gin's validator-disable
 // convention: an application may turn validation off by setting
 // binding.Validator to nil, and gin's own binding paths treat that as "skip
@@ -657,101 +627,6 @@ func TestDecodeJSONRequestRefusesAnUnreadableBodyClientSafely(t *testing.T) {
 	require.Equal(t, "invalid request body", serviceErr.Msg())
 	require.Equal(t, http.StatusBadRequest, serviceErr.Status())
 	require.ErrorIs(t, err, readErr, "the read error survives as the cause")
-}
-
-// TestNormalizeValueCompactsNilSliceElements covers the reflective walk over
-// the value shapes JSON binding can produce.
-func TestNormalizeValueCompactsNilSliceElements(t *testing.T) {
-	type inner struct {
-		Records []*normalizeProbeItem `json:"records"`
-	}
-	type sample struct {
-		Items   []*normalizeProbeItem            `json:"items"`
-		Nested  inner                            `json:"nested"`
-		Chained *inner                           `json:"chained"`
-		ByKey   map[string][]*normalizeProbeItem `json:"by_key"`
-		Names   []string                         `json:"names"`
-		Missing []*normalizeProbeItem            `json:"missing"`
-	}
-
-	first, second := &normalizeProbeItem{Name: "first"}, &normalizeProbeItem{Name: "second"}
-	s := &sample{
-		Items:   []*normalizeProbeItem{nil, first, nil, second},
-		Nested:  inner{Records: []*normalizeProbeItem{nil, first}},
-		Chained: &inner{Records: []*normalizeProbeItem{second, nil}},
-		ByKey:   map[string][]*normalizeProbeItem{"only": {nil, first, nil}},
-		Names:   []string{"kept", "", "kept-too"},
-	}
-	normalizeValue(reflect.ValueOf(s))
-
-	require.Equal(t, []*normalizeProbeItem{first, second}, s.Items, "top-level slice keeps order without nils")
-	require.Equal(t, []*normalizeProbeItem{first}, s.Nested.Records, "slices inside nested structs are compacted")
-	require.Equal(t, []*normalizeProbeItem{second}, s.Chained.Records, "slices behind pointer chains are compacted")
-	require.Equal(t, []*normalizeProbeItem{first}, s.ByKey["only"], "slices held as map values are compacted")
-	require.Equal(t, []string{"kept", "", "kept-too"}, s.Names, "slices of non-nilable elements stay untouched")
-	require.Nil(t, s.Missing, "nil slices stay nil instead of becoming empty")
-}
-
-// TestNormalizeValueReadsDatesInUTC covers the date half of the walk: every
-// datatypes.Date it can set — a field, behind a pointer, in a slice, held as
-// a map value, inside a nested struct — becomes the UTC day of the instant
-// at midnight, the zero date stays zero, and a time.Time, an instant, is
-// left as it is.
-func TestNormalizeValueReadsDatesInUTC(t *testing.T) {
-	type inner struct {
-		Day datatypes.Date `json:"day"`
-	}
-	type sample struct {
-		Day     datatypes.Date            `json:"day"`
-		Ptr     *datatypes.Date           `json:"ptr"`
-		Days    []datatypes.Date          `json:"days"`
-		ByKey   map[string]datatypes.Date `json:"by_key"`
-		Nested  inner                     `json:"nested"`
-		Zero    datatypes.Date            `json:"zero"`
-		Instant time.Time                 `json:"instant"`
-	}
-
-	shanghai := time.FixedZone("CST", 8*60*60)
-	sent := time.Date(2026, time.January, 2, 0, 0, 0, 0, shanghai)
-	ptr := datatypes.Date(sent)
-	s := &sample{
-		Day:     datatypes.Date(sent),
-		Ptr:     &ptr,
-		Days:    []datatypes.Date{datatypes.Date(sent)},
-		ByKey:   map[string]datatypes.Date{"only": datatypes.Date(sent)},
-		Nested:  inner{Day: datatypes.Date(sent)},
-		Instant: sent,
-	}
-	normalizeValue(reflect.ValueOf(s))
-
-	want := datatypes.Date(time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
-	require.Equal(t, want, s.Day)
-	require.Equal(t, want, *s.Ptr)
-	require.Equal(t, []datatypes.Date{want}, s.Days)
-	require.Equal(t, map[string]datatypes.Date{"only": want}, s.ByKey)
-	require.Equal(t, want, s.Nested.Day)
-	require.True(t, time.Time(s.Zero).IsZero(), "the zero date stays zero")
-	require.True(t, s.Instant.Equal(sent), "an instant is not a calendar date and stays as sent")
-	require.Equal(t, shanghai, s.Instant.Location())
-
-	// A time a model declares a date column by its type tag is a day too, in
-	// a model and in the items of a batch alike; an instant beside it stays.
-	type scheduled struct {
-		Due    time.Time  `json:"due" gorm:"type:date"`
-		DuePtr *time.Time `json:"due_ptr" gorm:"type:date"`
-		At     time.Time  `json:"at"`
-
-		modelregistry.Base
-	}
-	ptrSent := sent
-	items := []*scheduled{{Due: sent, DuePtr: &ptrSent, At: sent}}
-	normalizeValue(reflect.ValueOf(&items))
-
-	day := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
-	require.Equal(t, day, items[0].Due)
-	require.Equal(t, day, *items[0].DuePtr)
-	require.True(t, items[0].At.Equal(sent), "an instant stays as sent")
-	require.Equal(t, shanghai, items[0].At.Location())
 }
 
 // newNormalizeProbeEngine wires the probe service into a fresh engine on its

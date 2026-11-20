@@ -3,81 +3,15 @@ package controller
 import (
 	"context"
 
-	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 )
-
-// ListHandler returns a Gin handler that lists resources.
-//
-// When M, REQ, and RSP are the same type, the handler runs the list flow (see
-// listFlow) and returns the items with a total count, zero under cursor
-// pagination, which counts nothing.
-//
-// The automatic listing branch supports model schema fields plus framework
-// query parameters for pagination, cursor pagination, expansion, depth,
-// ordering, and field operator filters.
-//
-// When REQ or RSP differs from M, the handler is the phase service's (see
-// serviceHandler): its List method runs on a zero-value REQ, the GET request
-// carrying no body; the service reads ServiceContext.Query().
-func ListHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
-	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), apiaction.List, apiaction.ListBefore, apiaction.ListAfter)
-	if !a.typesEqual {
-		return a.serviceHandler()
-	}
-	return func(c *gin.Context) {
-		// The span context lives on in the request context the span start
-		// rebinds, which requestContext reads for the flow.
-		_, span, ok := a.beginRequest(c)
-		defer span.End()
-		if !ok {
-			return
-		}
-
-		items, total, err := a.listFlow(requestContext(c), ginServiceContext(c))
-		if err != nil {
-			response.Error(c, err)
-			return
-		}
-		response.JSON(c, gin.H{
-			"items": items,
-			"total": total,
-		})
-	}
-}
-
-// ListCall returns the list call of M on route, the counterpart of the
-// handler ListHandler returns for the generated handler of a List rpc: given
-// the route parameters and the query the request message carries, it runs
-// the list flow (see listFlow) on the query rendered as the HTTP one (see
-// Query) and answers with the items and the total, or with the status the
-// failure maps to (see call).
-func ListCall[M types.Model](route string) func(ctx context.Context, params map[string]string, query Query) ([]M, int, error) {
-	a := newAction[M, M, M](route, apiaction.List, apiaction.ListBefore, apiaction.ListAfter)
-	return func(ctx context.Context, params map[string]string, query Query) ([]M, int, error) {
-		c, err := a.beginQueryCall(ctx, params, query)
-		defer c.end()
-		if err != nil {
-			return nil, 0, c.invalid(err)
-		}
-		items, total, err := a.listFlow(c.ctx, c.serviceContext)
-		if err != nil {
-			return nil, 0, c.fail(err)
-		}
-		if err := c.finish(); err != nil {
-			return nil, 0, err
-		}
-		return items, total, nil
-	}
-}
 
 // listFlow runs the list flow: it decodes the query parameters the request
 // carries into the model's own query fields and the framework's pagination,

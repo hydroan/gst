@@ -24,14 +24,15 @@ import (
 )
 
 // This file holds the handler of a Stream action over HTTP, the counterpart
-// of the stream calls gRPC serves the action through (see stream.go). The
-// stream travels on a WebSocket connection, every message one text frame
-// holding a JSON document (see the websocket package): the request of a
-// server stream is the first message the client sends, the requests of the
-// other two kinds are the client's messages up to the frame that ends them,
-// and every response is a message the server sends. A request is decoded,
-// normalized and validated the way a request body is bound (see
-// bindJSONRequest), each one of a request stream as it is read.
+// of the stream calls gRPC serves the action through (see stream_grpc.go;
+// stream.go holds what the two share). The stream travels on a WebSocket
+// connection, every message one text frame holding a JSON document (see the
+// websocket package): the request of a server stream is the first message
+// the client sends, the requests of the other two kinds are the client's
+// messages up to the frame that ends them, and every response is a message
+// the server sends. A request is decoded, normalized and validated the way a
+// request body is bound (see bindJSONRequest), each one of a request stream
+// as it is read.
 
 // requestTimeoutMsg closes, as a 408, a server stream whose client did not
 // send its request in time (see awaitRequest).

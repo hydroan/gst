@@ -6,16 +6,46 @@ import (
 	"io"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
+	"github.com/hydroan/gst/logger"
 	"go.opentelemetry.io/otel/trace"
 )
 
-// This file holds what a handler reads off its request before the flow
-// runs: the route the action registered under, the id the request names a
-// record by, the body's bytes, and the context the flow runs on.
+// This file holds how a handler begins and what it reads off its request
+// before the flow runs: the controller span it opens, the route the action
+// registered under, the id the request names a record by, the body's bytes,
+// the context the flow runs on and the service contexts its hooks get.
+
+// beginRequest starts the span for the controller operation of the request
+// c serves (see startSpan), rebinds the request context so downstream
+// layers nest under it, and reports whether the action serves the request:
+// a route parameter it may not carry (see routeParamError) is refused with
+// 400, the way beginCall refuses one on a call, the refusal reported like
+// any the controller answers (see reportFailure). The caller ends the span
+// either way.
+func (a *action[M, REQ, RSP]) beginRequest(c *gin.Context) (context.Context, trace.Span, bool) {
+	spanCtx, span := a.startSpan(c.Request.Context(), c.Request.Method, c.FullPath())
+
+	// Update request context with new span context
+	c.Request = c.Request.WithContext(requestctx.WithMetadata(spanCtx, requestctx.FromGin(c)))
+
+	err := routeParamError(func(yield func(string, string) bool) {
+		for _, param := range c.Params {
+			if !yield(param.Key, param.Value) {
+				return
+			}
+		}
+	}, a.itemParam)
+	if err != nil {
+		response.Error(c, reportFailure(logger.Controller.WithContext(c.Request.Context(), a.phase), span, "request rejected", err, invalidArgument(err)))
+		return spanCtx, span, false
+	}
+	return spanCtx, span, true
+}
 
 // missingRouteParamMsg answers, with 400, a request whose configured route
 // parameter is absent.
@@ -48,24 +78,6 @@ func routeID[M types.Model](c *gin.Context, cfg []*types.ControllerConfig[M], lo
 	return id, true
 }
 
-// setID copies the id the request names a record by — the route parameter
-// over HTTP, the id field of the message over gRPC — into the model and
-// reports whether the model accepted it. UUID-keyed models (Base) accept any
-// non-empty string, so the check never changes their behavior. Integer-keyed
-// models (AutoBase) leave the id unset when the raw value does not parse
-// into their key type; handlers must answer such requests with "not found"
-// before any database access, because an unset id would silently drop the
-// intended row filter and passing the raw value to SQL would rely on the
-// database's implicit string-to-integer coercion (MySQL matches id=7 for
-// '7abc').
-//
-// The caller must pass a non-empty id: UUID-keyed models generate a fresh id
-// when given an empty value.
-func setID(m types.Model, id string) bool {
-	m.SetID(id)
-	return len(m.GetID()) > 0
-}
-
 // readJSONRequestBody reads the request body whole and puts it back for the
 // binding that follows; a failure to read it is client-safe (see
 // clientSafeBindError), and a request without a body reads as io.EOF.
@@ -89,4 +101,13 @@ func requestContext(c *gin.Context) context.Context {
 		return context.Background()
 	}
 	return requestctx.WithMetadata(c.Request.Context(), requestctx.FromGin(c))
+}
+
+// ginServiceContext returns the serviceContextFunc of the HTTP handler
+// serving c: its service contexts carry the gin context, so the response
+// helpers of ServiceContext keep working inside the hooks.
+func ginServiceContext(c *gin.Context) serviceContextFunc {
+	return func(ctx context.Context, phase apiaction.Phase) *types.ServiceContext {
+		return types.NewServiceContext(c, ctx, phase)
+	}
 }
