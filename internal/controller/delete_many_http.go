@@ -1,9 +1,6 @@
 package controller
 
 import (
-	"io"
-
-	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/response"
@@ -15,7 +12,8 @@ import (
 //
 // When M, REQ, and RSP are the same type, the handler binds the JSON body into
 // batch[M], runs the batch delete flow (see deleteManyFlow), and
-// returns a success response.
+// returns a success response. A batch delete requires a body: an absent one
+// is refused, like a body whose ids the flow finds empty.
 //
 // When REQ or RSP differs from M, the handler is the phase service's (see
 // serviceHandler): its DeleteMany method runs on the bound payload.
@@ -36,7 +34,11 @@ func DeleteManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg
 		log := logger.Controller.WithContext(c.Request.Context(), apiaction.DeleteMany)
 
 		var req batch[M]
-		if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
+		if reqErr := bindJSONRequest(c, &req); reqErr != nil {
+			// A batch delete names the records to delete in its body, so an
+			// absent one is refused rather than answered as a success that
+			// deleted nothing.
+			reqErr = requiredBodyError(reqErr)
 			response.Error(c, reportFailure(log, span, "bind request body failed", reqErr, invalidArgument(reqErr)))
 			return
 		}

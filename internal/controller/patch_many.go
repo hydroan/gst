@@ -22,10 +22,11 @@ import (
 // around the write, which names the caller the request carries as the
 // updater, records the operation, and returns the batch with the patched
 // records, as the hooks left them, in place of the items. The batch patches
-// all of its items or none, as a batch update does: a batch naming one
-// record twice (see repeatedID) and an item without an id fail the whole
-// batch with 400 before any record is read, and an item whose record does
-// not exist fails it with 404 before anything is written.
+// all of its items or none, as a batch update does: a batch carrying no item
+// (see missingItemsMsg), a batch naming one record twice (see repeatedID)
+// and an item without an id fail the whole batch with 400 before any record
+// is read, and an item whose record does not exist fails it with 404 before
+// anything is written.
 //
 // Each write is the whole record loaded, not only the fields its item
 // carried, so concurrent patches of one record resolve as last writer wins
@@ -37,6 +38,9 @@ func (a *action[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceConte
 	log := logger.Controller.WithContext(ctx, apiaction.PatchMany)
 	svc := a.service()
 
+	if len(req.Items) == 0 {
+		return zero, failWith(ctx, log, "batch patch without items", nil, badRequest(missingItemsMsg))
+	}
 	if err := req.repeatedID(); err != nil {
 		return zero, failWith(ctx, log, "batch patch naming a record twice", err, invalidArgument(err))
 	}
@@ -84,8 +88,7 @@ func (a *action[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceConte
 	// 2.Batch partial update resource in database. The rows were loaded
 	// above, so ErrRecordNotFound only fires when one vanished in between;
 	// unique-key collisions from the patched values render 409. Either way
-	// the transaction rolls the whole batch back. A batch without items
-	// writes nothing.
+	// the transaction rolls the whole batch back.
 	if err := database.Database[M](ctx).Update(patched...); err != nil {
 		return zero, failDatabase(ctx, log, err)
 	}

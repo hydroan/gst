@@ -16,17 +16,21 @@ import (
 )
 
 // updateManyFlow runs the batch update flow on the items of req: it refuses
-// a batch naming one record twice (see repeatedID) and an item naming no
-// record (see itemWithoutID) with 400, clears the creator and updater every
-// item carries (see clearAudit), runs the batch update hooks around the
-// write, which names the caller the request carries as the updater, and
-// records the operation. The items are req's own, as the write and the hooks
-// left them, with the columns an update leaves alone, the creation audit
-// among them, as stored (see backfillUnwrittenColumns).
+// a batch carrying no item (see missingItemsMsg), a batch naming one record
+// twice (see repeatedID) and an item naming no record (see itemWithoutID)
+// with 400, clears the creator and updater every item carries (see
+// clearAudit), runs the batch update hooks around the write, which names the
+// caller the request carries as the updater, and records the operation. The
+// items are req's own, as the write and the hooks left them, with the
+// columns an update leaves alone, the creation audit among them, as stored
+// (see backfillUnwrittenColumns).
 func (a *action[M, REQ, RSP]) updateManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *batch[M]) error {
 	log := logger.Controller.WithContext(ctx, apiaction.UpdateMany)
 	svc := a.service()
 
+	if len(req.Items) == 0 {
+		return failWith(ctx, log, "batch update without items", nil, badRequest(missingItemsMsg))
+	}
 	if err := req.repeatedID(); err != nil {
 		return failWith(ctx, log, "batch update naming a record twice", err, invalidArgument(err))
 	}
@@ -49,8 +53,7 @@ func (a *action[M, REQ, RSP]) updateManyFlow(ctx context.Context, newServiceCont
 	}
 	// 2.Batch update resource in database. Pure UPDATE with one transaction
 	// around the batch: an item without a live row renders 404 and rolls the
-	// batch back, so the batch endpoint can never insert rows. A batch
-	// without items writes nothing.
+	// batch back, so the batch endpoint can never insert rows.
 	if err := database.Database[M](ctx).Update(req.Items...); err != nil {
 		return failDatabase(ctx, log, err)
 	}

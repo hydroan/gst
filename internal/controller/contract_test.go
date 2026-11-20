@@ -74,6 +74,13 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 	// Each transport words the refusal by what its request lacks: a body,
 	// a record.
 	noRecord := contractWant{status: http.StatusBadRequest, msg: "request body is required", grpc: &grpcAnswer{code: codes.InvalidArgument, msg: "record is required"}}
+	// A batch carrying none of what it acts on is refused for the list it
+	// leaves empty, the same on both transports; a request carrying no
+	// batch at all is worded by what it lacks, a body or the list.
+	noItems := contractWant{status: http.StatusBadRequest, msg: "items is required"}
+	noIDs := contractWant{status: http.StatusBadRequest, msg: "ids is required"}
+	noBatchOfItems := contractWant{status: http.StatusBadRequest, msg: "request body is required", grpc: &grpcAnswer{code: codes.InvalidArgument, msg: "items is required"}}
+	noBatchOfIDs := contractWant{status: http.StatusBadRequest, msg: "request body is required", grpc: &grpcAnswer{code: codes.InvalidArgument, msg: "ids is required"}}
 	// A patch naming no field to apply: HTTP writes the record back as
 	// stored, gRPC refuses the mask.
 	noField := &grpcAnswer{code: codes.InvalidArgument, msg: "update_mask must name at least one field a patch applies"}
@@ -921,6 +928,15 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
+			name: "CreateMany refuses a batch carrying no items before any hook runs", fixture: refusals, phase: apiaction.CreateMany,
+			input: contractInput{items: []map[string]any{}},
+			want:  noItems,
+		},
+		{
+			name: "CreateMany refuses a request carrying no batch", fixture: refusals, phase: apiaction.CreateMany,
+			want: noBatchOfItems,
+		},
+		{
 			name: "UpdateMany replaces the items for the caller", fixture: samples, phase: apiaction.UpdateMany,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
@@ -999,6 +1015,15 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				t.Helper()
 				requireSampleName(t, stringOf(in.items[0]["id"]), "contract-update-many-refused")
 			},
+		},
+		{
+			name: "UpdateMany refuses a batch carrying no items before any hook runs", fixture: refusals, phase: apiaction.UpdateMany,
+			input: contractInput{items: []map[string]any{}},
+			want:  noItems,
+		},
+		{
+			name: "UpdateMany refuses a request carrying no batch", fixture: refusals, phase: apiaction.UpdateMany,
+			want: noBatchOfItems,
 		},
 		{
 			name: "PatchMany applies the fields each item names", fixture: samples, phase: apiaction.PatchMany,
@@ -1133,6 +1158,15 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
+			name: "PatchMany refuses a batch carrying no items before any hook runs", fixture: refusals, phase: apiaction.PatchMany,
+			input: contractInput{items: []map[string]any{}},
+			want:  noItems,
+		},
+		{
+			name: "PatchMany refuses a request carrying no batch", fixture: refusals, phase: apiaction.PatchMany,
+			want: noBatchOfItems,
+		},
+		{
 			name: "DeleteMany removes the records", fixture: samples, phase: apiaction.DeleteMany,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
@@ -1185,6 +1219,15 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				t.Helper()
 				requireSampleName(t, in.ids[0], "contract-delete-many-refused")
 			},
+		},
+		{
+			name: "DeleteMany refuses a batch carrying no ids before any hook runs", fixture: refusals, phase: apiaction.DeleteMany,
+			input: contractInput{ids: []string{}},
+			want:  noIDs,
+		},
+		{
+			name: "DeleteMany refuses a request carrying no batch", fixture: refusals, phase: apiaction.DeleteMany,
+			want: noBatchOfIDs,
 		},
 		{
 			name: "A custom action answers the service's result for the caller", fixture: actionFixture, phase: apiaction.Create,
@@ -1536,7 +1579,7 @@ func overHTTP(t *testing.T, f contractFixture, phase apiaction.Phase, in contrac
 	}
 	var body string
 	switch {
-	case phase == apiaction.DeleteMany:
+	case phase == apiaction.DeleteMany && in.ids != nil:
 		body = encodeJSON(map[string]any{"ids": in.ids})
 	case in.items != nil:
 		body = encodeJSON(map[string]any{"items": in.items})

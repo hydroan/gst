@@ -21,16 +21,20 @@ import (
 // them into model instances, which become the items of req, runs the batch
 // delete hooks around the write, reads the records in one statement first
 // when the operation log records batch deletes, and records the operation
-// with the records as they were. The batch is all or nothing: an empty id,
-// or one of whitespace alone, is a defective request refused before anything
-// is deleted; an id the model rejects names no record and answers 404 with
-// nothing deleted, as does an id no stored record carries, which the
-// database layer reports as ErrRecordNotFound. Whether the rows are purged
-// is the model's decision (its Purge method), never the request's.
+// with the records as they were. The batch is all or nothing: a batch naming
+// no id (see missingIDsMsg) and an empty id, or one of whitespace alone, are
+// defective requests refused before anything is deleted; an id the model
+// rejects names no record and answers 404 with nothing deleted, as does an
+// id no stored record carries, which the database layer reports as
+// ErrRecordNotFound. Whether the rows are purged is the model's decision
+// (its Purge method), never the request's.
 func (a *action[M, REQ, RSP]) deleteManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *batch[M]) error {
 	log := logger.Controller.WithContext(ctx, apiaction.DeleteMany)
 	svc := a.service()
 
+	if len(req.IDs) == 0 {
+		return failWith(ctx, log, "batch delete without ids", nil, badRequest(missingIDsMsg))
+	}
 	// 1.Perform business logic processing before batch delete resources.
 	req.Items = make([]M, 0, len(req.IDs))
 	for _, id := range req.IDs {
@@ -73,9 +77,9 @@ func (a *action[M, REQ, RSP]) deleteManyFlow(ctx context.Context, newServiceCont
 			}
 		}
 	}
-	// 2.Batch delete resources in database. A batch without items deletes
-	// nothing; every id must name a live record (see database.Delete), so
-	// ErrRecordNotFound renders 404 with nothing deleted.
+	// 2.Batch delete resources in database. Every id must name a live record
+	// (see database.Delete), so ErrRecordNotFound renders 404 with nothing
+	// deleted.
 	if err := database.Database[M](ctx).Delete(req.Items...); err != nil {
 		return failDatabase(ctx, log, err)
 	}

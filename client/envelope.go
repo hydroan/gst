@@ -49,8 +49,10 @@ type IDsPayload struct {
 	IDs []string `json:"ids"`
 }
 
-// BatchItems builds the items body for the standard /batch routes.
+// BatchItems builds the items body for the standard /batch routes, which
+// refuse a batch carrying no item with 400.
 func BatchItems[T any](items []T) ItemsPayload[T] { return ItemsPayload[T]{Items: items} }
 
-// BatchIDs builds the ids body for the standard batch delete route.
+// BatchIDs builds the ids body for the standard batch delete route, which
+// refuses a batch naming no id with 400.
 func BatchIDs(ids []string) IDsPayload { return IDsPayload{IDs: ids} }

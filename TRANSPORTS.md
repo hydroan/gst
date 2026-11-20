@@ -174,7 +174,7 @@ HTTP 状态到 gRPC status 的映射（`grpcserver.StatusError`）：
 | 动作 | HTTP | gRPC（模型声明了 GRPC()） | 说明 |
 |---|:---:|:---:|---|
 | Create / Get / List / Update / Patch / Delete | ✓ | ✓ | rpc 名 = 动作名 + 模型名，嵌套路由加 `By<参数>`；不要求 Service() |
-| CreateMany / UpdateMany / PatchMany / DeleteMany | ✓ | ✓ | 批量逐条校验，UpdateMany / PatchMany 同一个 id 出现两次即拒绝；PatchMany 的每一项就是单条 Patch 的请求（id、记录、update_mask），和单条一样以项的 id 为准、记录自带的 id 不读，项里的路由参数与外层不一致即拒绝；带版本号的模型先查完每一项的版本号，再逐项校验字段，同一批几项各有缺陷时两线拒绝同一项 |
+| CreateMany / UpdateMany / PatchMany / DeleteMany | ✓ | ✓ | 批量逐条校验，`items`（DeleteMany 是 `ids`）一项都没有即拒绝、不进钩子，UpdateMany / PatchMany 同一个 id 出现两次即拒绝；PatchMany 的每一项就是单条 Patch 的请求（id、记录、update_mask），和单条一样以项的 id 为准、记录自带的 id 不读，项里的路由参数与外层不一致即拒绝；带版本号的模型先查完每一项的版本号，再逐项校验字段，同一批几项各有缺陷时两线拒绝同一项 |
 | Route() 里的自定义动作 | ✓ | ✓ | rpc 名 = Service 名 + 模型名；Payload 挂成 `payload`，Result 挂成 `result` |
 | Import / Export / SSE | ✓ | — | 文件流与事件流只有 HTTP 能承载；gg check 在 GRPC() 模型的其他 service 里拦住 HTTP 专属的 ServiceContext 方法（Cookie、FormFile、SSE 等），这三种动作自己的 service 文件不扫，运行期在 gRPC 调用里碰到其中任何一个，调用一律答 Internal，钩子一返回就拦：Before 钩子里的在写库之前拦下，After 钩子里的在写库之后（和 After 钩子返回错误一样，行已写入） |
 | Stream | ✓ | ✓ | 只允许自定义动作，必须 Service("name")；HTTP 上是 `GET` 握手打开的一条 WebSocket 连接，接口文档里写成成功答 101 的 `GET`，说明里写明两侧各发什么消息 |
@@ -293,7 +293,7 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 | 过滤 | AIP-160 是一段字符串表达式 | `filters` 是结构化的 `{field, op, values}`，和 HTTP 的 `field[op]=value` 一一对应，运行期同一套拒绝规则；同一个过滤给两次，两线都答「duplicate query parameter: name[eq]」。两线有意不同的一处：值为空的过滤，gRPC 答 InvalidArgument（`values` 为空答 `filter "name" has no value`，含空串答 `filter "name" has an empty value`），HTTP 的空参数（`name=`）表示不按它过滤——查询串里留空的参数是常见写法，消息里明写一个过滤却留空是写错了 |
 | update_mask | AIP-134 允许省略（省略即按已填字段）、必须支持 `*`；AIP-161 要求整字段与子字段路径都合法 | 必填，不认 `*`（等于 Update），只认顶层键、不点进字段内部，路径必须和 JSON 名精确相同（HTTP 的 body 键照 encoding/json 的规则匹配，只差大小写也算同一个键）：点名的字段整体替换，和 HTTP 的 PATCH 一致；点到 id、created_at 这类框架管理的字段或只在创建时写入的字段（如 tenant_id）时跳过（AIP-161/203 对只读字段的规定）、点到模型没有的字段拒绝（AIP-161） |
 | 什么都没点到的补丁 | AIP-134 的掩码省略即按已填字段；RFC 7396 的空补丁 `{}` 合法、表示不改 | HTTP 的 `{}` 与只含模型没有的键的 body 照 encoding/json 的惯例忽略未知键、整行按原样写回并刷新 updated_at；gRPC 的掩码不剩可改字段时拒绝。两线有意不同的地方之一；每一处有意的差异都是 internal/controller 对照用例里显式的差异行，也都登记在这页 |
-| 缺记录的请求 | AIP-203 把必填字段缺失定为 INVALID_ARGUMENT | 两线都答 400 / InvalidArgument，提示文字各按自己缺的东西说：HTTP 缺 body 答「request body is required」，gRPC 缺 record 字段答「record is required」 |
+| 缺记录的请求 | AIP-203 把必填字段缺失定为 INVALID_ARGUMENT | 两线都答 400 / InvalidArgument，提示文字各按自己缺的东西说：HTTP 缺 body 答「request body is required」，gRPC 缺 record 字段答「record is required」。批量请求同理：`items`（批量删除是 `ids`）一项都没有，两线都答「items is required」「ids is required」；HTTP 连 body 都没有时仍答「request body is required」 |
 | 请求里的租户 | AIP-203：OUTPUT_ONLY 字段出现在请求里时，服务端清掉它、不得因此报错；IMMUTABLE 字段被要求改动时应答 INVALID_ARGUMENT | gRPC 的 `tenant_id` 只出不进，生成的 FromProto 不读它，请求带了也照常处理、租户不变。HTTP 的请求体能带 `tenant_id`：创建时照样写成调用方的租户；整条更新（含批量）带了别的租户答 400，固定文案「The request contains invalid parameters.」，因为这一列只在创建时写，答成功会让客户端以为记录挪了租户；补丁两线都跳过这个键（它是框架管理的字段）。跨租户身份经 HTTP 创建时可以在请求体里点名租户，经 gRPC 点不了；没有可退回的请求租户又没点名时，两线都答 400 / InvalidArgument |
 | 包名无版本段 | Buf 的 PACKAGE_VERSION_SUFFIX 要 `v1` 这样的后缀 | gst 没有 API 版本，包名就是项目名加目录 |
 | 不生成枚举 | AIP-126 用 enum | 字符串枚举保持 string，取值列在字段注释里，HTTP 与数据库里都是字符串 |

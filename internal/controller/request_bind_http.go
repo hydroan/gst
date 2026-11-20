@@ -53,9 +53,11 @@ func bindJSONRequest(c *gin.Context, target any) error {
 // decodeJSONRequest decodes the JSON request body into target, read through
 // readJSONRequestBody, so a body failing to read is refused client-safely
 // like any bind failure. A body that is empty or a literal JSON null carries
-// no request data, so both report io.EOF — the sentinel the handlers already
-// tolerate for empty bodies. This also keeps the null body away from gin's
-// validator, which panics on the nil pointer such a body would decode into.
+// no request data, so both report io.EOF — the sentinel a handler requiring
+// a body answers with its refusal (see requiredBodyError) and one whose
+// request may carry none reads as "no body". This also keeps the null body
+// away from gin's validator, which panics on the nil pointer such a body
+// would decode into.
 //
 // The body is decoded from the bytes already read rather than handed back to
 // gin as a reader: binding through gin wraps those bytes in a reader and drives
@@ -177,11 +179,12 @@ var strictTimeOfDay = jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, t *da
 
 // requiredBodyError translates the io.EOF sentinel of an absent request body
 // into a client-safe rejection, for the model-path handlers that require a
-// body: create, full update, and single-resource patch, where an empty body
-// would fabricate, zero, or skip the whole resource. Handlers that tolerate
-// an empty body keep treating io.EOF as "no body" and never call this.
-// Non-EOF errors pass through unchanged — they were already wrapped at the
-// decoding entry points.
+// body: the create, the full update and the patch of one resource, where an
+// empty body would fabricate, zero, or skip the whole resource, and the
+// batch create, update, patch and delete, where it would act on nothing. A
+// handler whose request may carry no body keeps treating io.EOF as "no
+// body" and never calls this. Non-EOF errors pass through unchanged — they
+// were already wrapped at the decoding entry points.
 func requiredBodyError(err error) error {
 	if errors.Is(err, io.EOF) {
 		return types.NewErrorWithCause(http.StatusBadRequest, "request body is required", err)

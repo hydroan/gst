@@ -8,7 +8,8 @@ import (
 )
 
 // batch is the body of a batch request: the items to create, update or
-// patch, or the ids to delete.
+// patch, or the ids to delete, at least one of them (see missingItemsMsg and
+// missingIDsMsg).
 //
 // TODO: decide whether a batch update or patch may skip the items whose
 // record does not exist and apply the rest, instead of failing whole. A
@@ -27,6 +28,20 @@ type batch[M types.Model] struct {
 	// instead, see validatePatchFields.
 	Items []M `json:"items,omitempty" binding:"dive"`
 }
+
+// The messages a batch carrying none of what its action works on is refused
+// with, 400 on both transports, before any hook runs: a batch acting on
+// nothing would answer success to a request that asked for nothing, which is
+// how a body lost on the way to the server would read as done. Each names
+// the member of the body left without an entry. The flows refuse it rather
+// than a binding rule, which a project turning validation off would lift.
+const (
+	// missingItemsMsg answers a batch create, update or patch carrying no
+	// item.
+	missingItemsMsg = "items is required"
+	// missingIDsMsg answers a batch delete naming no record.
+	missingIDsMsg = "ids is required"
+)
 
 // itemIDs returns the ids the items of req carry, in order.
 func (req *batch[M]) itemIDs() []string {

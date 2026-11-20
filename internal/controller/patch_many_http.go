@@ -19,7 +19,8 @@ import (
 // When M, REQ, and RSP are the same type, the handler binds the JSON body into
 // batch[M] along with the set of fields each item carried, and runs the
 // batch patch flow (see patchManyFlow), which answers with the patched
-// records.
+// records. A batch patch requires a body: an absent one is refused, like a
+// body whose items the flow finds empty.
 //
 // When REQ or RSP differs from M, the handler is the phase service's (see
 // serviceHandler): its PatchMany method runs on the bound payload.
@@ -50,7 +51,10 @@ func PatchManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg 
 			response.Error(c, reportFailure(log, span, "bind request body failed", fieldErr, invalidArgument(fieldErr)))
 			return
 		}
-		if reqErr := decodeJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
+		if reqErr := decodeJSONRequest(c, &req); reqErr != nil {
+			// A batch patch carries the items to patch, so an absent body is
+			// refused rather than answered as a success that patched nothing.
+			reqErr = requiredBodyError(reqErr)
 			response.Error(c, reportFailure(log, span, "bind request body failed", reqErr, invalidArgument(reqErr)))
 			return
 		}

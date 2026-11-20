@@ -208,6 +208,72 @@ func TestUpdateHandlerRequiresBody(t *testing.T) {
 		"an absent body must render the stable message, not the bare io.EOF text")
 }
 
+// TestBatchHandlersRequireABodyAndEntries pins the model-path batch contract:
+// a batch request carries what it acts on. One without a body, or whose body
+// is a literal null, is refused for the body it lacks, with the message a
+// single-resource write refuses it with; one whose items, the ids of a batch
+// delete, are absent, null or empty, and one whose items are all null, is
+// refused for the entries it lacks, instead of answered as a success that
+// acted on nothing. A null among the ids of a batch delete is an empty id,
+// refused as the defective id it is.
+func TestBatchHandlersRequireABodyAndEntries(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	engine := gin.New()
+	engine.POST("/required-batch-probes/batch",
+		CreateManyHandler[*normalizeProbeModel, *normalizeProbeModel, *normalizeProbeModel]())
+	engine.PUT("/required-batch-probes/batch",
+		UpdateManyHandler[*normalizeProbeModel, *normalizeProbeModel, *normalizeProbeModel]())
+	engine.PATCH("/required-batch-probes/batch",
+		PatchManyHandler[*normalizeProbeModel, *normalizeProbeModel, *normalizeProbeModel]())
+	engine.DELETE("/required-batch-probes/batch",
+		DeleteManyHandler[*normalizeProbeModel, *normalizeProbeModel, *normalizeProbeModel]())
+
+	const noBody, noItems, noIDs = "request body is required", "items is required", "ids is required"
+	tests := []struct {
+		name   string
+		method string
+		body   string
+		msg    string
+	}{
+		{name: "create without a body", method: http.MethodPost, body: ``, msg: noBody},
+		{name: "create with a null body", method: http.MethodPost, body: `null`, msg: noBody},
+		{name: "create without items", method: http.MethodPost, body: `{}`, msg: noItems},
+		{name: "create with null items", method: http.MethodPost, body: `{"items":null}`, msg: noItems},
+		{name: "create with empty items", method: http.MethodPost, body: `{"items":[]}`, msg: noItems},
+		{name: "create with items all null", method: http.MethodPost, body: `{"items":[null]}`, msg: noItems},
+		{name: "update without a body", method: http.MethodPut, body: ``, msg: noBody},
+		{name: "update with a null body", method: http.MethodPut, body: `null`, msg: noBody},
+		{name: "update without items", method: http.MethodPut, body: `{}`, msg: noItems},
+		{name: "update with null items", method: http.MethodPut, body: `{"items":null}`, msg: noItems},
+		{name: "update with empty items", method: http.MethodPut, body: `{"items":[]}`, msg: noItems},
+		{name: "update with items all null", method: http.MethodPut, body: `{"items":[null]}`, msg: noItems},
+		{name: "patch without a body", method: http.MethodPatch, body: ``, msg: noBody},
+		{name: "patch with a null body", method: http.MethodPatch, body: `null`, msg: noBody},
+		{name: "patch without items", method: http.MethodPatch, body: `{}`, msg: noItems},
+		{name: "patch with null items", method: http.MethodPatch, body: `{"items":null}`, msg: noItems},
+		{name: "patch with empty items", method: http.MethodPatch, body: `{"items":[]}`, msg: noItems},
+		{name: "patch with items all null", method: http.MethodPatch, body: `{"items":[null]}`, msg: noItems},
+		{name: "delete without a body", method: http.MethodDelete, body: ``, msg: noBody},
+		{name: "delete with a null body", method: http.MethodDelete, body: `null`, msg: noBody},
+		{name: "delete without ids", method: http.MethodDelete, body: `{}`, msg: noIDs},
+		{name: "delete with null ids", method: http.MethodDelete, body: `{"ids":null}`, msg: noIDs},
+		{name: "delete with empty ids", method: http.MethodDelete, body: `{"ids":[]}`, msg: noIDs},
+		{name: "delete with a null id", method: http.MethodDelete, body: `{"ids":[null]}`, msg: invalidArgumentMsg},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			req := httptest.NewRequest(tt.method, "/required-batch-probes/batch", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			engine.ServeHTTP(recorder, req)
+
+			require.Equal(t, http.StatusBadRequest, recorder.Code)
+			require.Contains(t, recorder.Body.String(), `"msg":"`+tt.msg+`"`)
+		})
+	}
+}
+
 // TestDeleteManyHandlerBindFailureRendersClientSafeMessage pins the model-path
 // batch-delete bind failure to the ordinary invalid-parameter envelope: the
 // envelope renders the bind error the handler checked, so a body that fails

@@ -1,9 +1,6 @@
 package controller
 
 import (
-	"io"
-
-	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/response"
@@ -15,7 +12,8 @@ import (
 //
 // When M, REQ, and RSP are the same type, the handler binds the JSON body into
 // batch[M], runs the batch create flow (see createManyFlow), and
-// returns the request data.
+// returns the request data. A batch create requires a body: an absent one is
+// refused, like a body whose items the flow finds empty.
 //
 // When REQ or RSP differs from M, the handler is the phase service's (see
 // serviceHandler): its CreateMany method runs on the bound payload.
@@ -36,7 +34,10 @@ func CreateManyHandler[M types.Model, REQ types.Request, RSP types.Response](cfg
 		log := logger.Controller.WithContext(c.Request.Context(), apiaction.CreateMany)
 
 		var req batch[M]
-		if reqErr := bindJSONRequest(c, &req); reqErr != nil && !errors.Is(reqErr, io.EOF) {
+		if reqErr := bindJSONRequest(c, &req); reqErr != nil {
+			// A batch create carries the items to create, so an absent body is
+			// refused rather than answered as a success that wrote nothing.
+			reqErr = requiredBodyError(reqErr)
 			response.Error(c, reportFailure(log, span, "bind request body failed", reqErr, invalidArgument(reqErr)))
 			return
 		}
