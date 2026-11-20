@@ -3,6 +3,7 @@ package grpcserver
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -33,6 +34,14 @@ func look(seen chan<- observed) {
 		seen <- observed{meta: requestctx.FromContext(ctx), identity: execctx.FromContext(ctx)}
 		return nil
 	}})
+}
+
+// TestTraceIDTravelsUnderTheSharedHeaderInLowerCase pins the metadata key
+// of the trace id: the header the HTTP listener carries it in, already in
+// lower case. Metadata lowercases a key on every read and write, and
+// allocates to do it for a key that is not, twice a call here.
+func TestTraceIDTravelsUnderTheSharedHeaderInLowerCase(t *testing.T) {
+	require.Equal(t, strings.ToLower(execctx.HeaderTraceID), keyTraceID)
 }
 
 // TestCallsCarryTheRequestMetadataAndTraceID pins what a handler finds on
