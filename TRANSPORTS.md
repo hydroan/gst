@@ -273,7 +273,7 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 | `internal/gghelper` | 共用 | gg 的运行帮手；`PinnedCommand` 把固定版本的 protoc 插件与 golangci-lint 编到用户缓存目录再运行 |
 | `router` → `internal/router` | HTTP | gin 引擎、路由注册、认证组、Run / Stop |
 | `middleware` → `internal/middleware` | HTTP | 内建链、`Register / RegisterAuth`；公开包另带项目挂的中间件 |
-| `internal/controller` | 共用 | HTTP handler、gRPC 调用工厂、流的运行时、十个 CRUD 流程、校验与错误映射 |
+| `internal/controller` | 共用 | HTTP handler、gRPC 调用工厂、流的运行时、十个 CRUD 流程、校验与错误映射；文件名以 `_http.go` 结尾的只服务 HTTP，以 `_grpc.go` 结尾的只服务 gRPC，其余两条线共用，引用方向由 lint 守住 |
 | `grpc` → `internal/grpcserver`（调用函数与流经 `internal/controller`；转换函数与 `Bearer` 实现在本包） | gRPC | 生成代码与项目用的入口：`Register`、`Method`、十个 `XxxCall`、`ServiceCall`、三种流的调用、转换函数、`Bearer / WithCaller / CallerOf / Route / StatusError` |
 | `interceptor` → `internal/grpcserver`（`Register / RegisterAuth`；项目挂的拦截器实现在本包） | gRPC | `Register / RegisterAuth` 与项目挂的拦截器，随 module copy 复制进项目的拦截器也以本包为源 |
 | `internal/grpcserver` | gRPC | 监听、拦截器链、requestScope、recovery、指标、health 与反射、状态映射、Drain / Stop |

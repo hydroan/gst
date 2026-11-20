@@ -124,11 +124,11 @@ linters:
         # ones written as project code: godoc examples, the module sources
         # gg module copy copies into a project (internal/model/<module> and
         # internal/service/<module>), the programs gg embeds and builds inside
-        # a project (internal/gghelper/program), the middleware source files
-        # the module manifests name, and module/helloworld, the module example
-        # projects are pointed to; so are the external tests of a forwarding
-        # package, which import the package they test. A trailing $ matches
-        # the package itself and not the packages under it.
+        # a project (internal/gghelper/program), the middleware and interceptor
+        # source files the module manifests name, and module/helloworld, the
+        # module example projects are pointed to; so are the external tests of
+        # a forwarding package, which import the package they test. A trailing
+        # $ matches the package itself and not the packages under it.
         forwarders:
           files:
             - "$all"
@@ -193,10 +193,7 @@ linters:
             - "!**/internal/model/**"
             - "!**/internal/service/**"
             - "!**/module/helloworld/**"
-            - "!**/module/iam/register_test.go"
-            - "!**/module/authz/register_test.go"
-            - "!**/module/logmgmt/register_test.go"
-            - "!**/module/mfa/register_test.go"
+            - "!**/module/*/register_test.go"
           deny:
             - pkg: "github.com/hydroan/gst/middleware$"
               desc: "framework code imports github.com/hydroan/gst/internal/middleware; only the handlers of the modules come from the public package, mounted by the project"
@@ -209,10 +206,8 @@ linters:
         interceptor-forwarder:
           files:
             - "$all"
-            - "!**/interceptor/interceptor_test.go"
-            - "!**/interceptor/jwt_test.go"
-            - "!**/module/iam/register_test.go"
-            - "!**/module/authz/register_test.go"
+            - "!**/interceptor/*_test.go"
+            - "!**/module/*/register_test.go"
           deny:
             - pkg: "github.com/hydroan/gst/interceptor$"
               desc: "framework code imports github.com/hydroan/gst/internal/grpcserver; only the interceptors of the modules come from the public package, mounted by the project"
@@ -226,8 +221,7 @@ linters:
             - "$all"
             - "!**/grpc/*_test.go"
             - "!**/interceptor/*.go"
-            - "!**/module/iam/interceptor_test.go"
-            - "!**/module/authz/interceptor_test.go"
+            - "!**/module/*/interceptor_test.go"
           deny:
             - pkg: "github.com/hydroan/gst/grpc$"
               desc: "framework code imports github.com/hydroan/gst/internal/grpcserver and github.com/hydroan/gst/internal/controller; the public package forwards to them for the generated code and the project"
@@ -241,20 +235,21 @@ linters:
           deny:
             - pkg: "github.com/hydroan/gst/internal/clioutput$"
               desc: "only the gg command prints; return the result, or take a progress callback the command passes"
-        # The HTTP line and the gRPC line share no code (CLAUDE.md, the two
-        # transports never touch each other): the packages serving HTTP
-        # requests, the router, its middleware and the registration of the
-        # modules, never import the gRPC listener or its interceptors, and the
-        # packages serving gRPC calls never import the router or its
-        # middleware; bootstrap alone wires both. The tests are left out, the
-        # module tests mounting both lines the way a project does. depguard
-        # matches the absolute path of a file, so a pattern names a package by
-        # its directory's name, which names the public package and the
-        # internal one under it alike.
+        # The HTTP line and the gRPC line never import each other (CLAUDE.md,
+        # the two transports never touch each other): the packages serving
+        # HTTP requests, the router, its middleware, the envelope and the
+        # registration of the modules, never import the gRPC listener or its
+        # interceptors, and the packages serving gRPC calls never import the
+        # router, its middleware or the envelope; bootstrap alone wires both.
+        # The tests are left out, the module tests mounting both lines the way
+        # a project does. depguard matches the absolute path of a file, so a
+        # pattern names a package by its directory's name, which names the
+        # public package and the internal one under it alike.
         http-line:
           files:
             - "**/middleware/**"
             - "**/router/**"
+            - "**/response/**"
             - "**/module/*/register.go"
             - "!$test"
           deny:
@@ -279,6 +274,104 @@ linters:
               desc: "the gRPC line never imports the HTTP line; the router is bootstrap's to wire"
             - pkg: "github.com/hydroan/gst/internal/router$"
               desc: "the gRPC line never imports the HTTP line; the router is bootstrap's to wire"
+            - pkg: "github.com/hydroan/gst/response$"
+              desc: "the gRPC line never imports the HTTP line; the envelope is what the HTTP listener answers in"
+            - pkg: "github.com/hydroan/gst/internal/response$"
+              desc: "the gRPC line never imports the HTTP line; the envelope is what the HTTP listener answers in"
+        # What both lines follow lives in a package neither line owns, so a
+        # rule, a type or a helper of both cannot settle in one line's package
+        # for the code they share to reach into. The three rules below hold
+        # the code outside both lines to that, the lines themselves being held
+        # by the two above, so the files of both are left out of each. The
+        # gRPC listener is imported, beside its own line, by the files of the
+        # controller written for it, which their name says, by bootstrap and
+        # by the test support that starts a server.
+        shared-not-grpc:
+          files:
+            - "$all"
+            - "!$test"
+            - "!**/middleware/**"
+            - "!**/router/**"
+            - "!**/response/**"
+            - "!**/module/*/register.go"
+            - "!**/grpc/**"
+            - "!**/grpcserver/**"
+            - "!**/interceptor/**"
+            - "!**/bootstrap/**"
+            - "!**/internal/testutil/**"
+            - "!**/internal/controller/*_grpc.go"
+          deny:
+            - pkg: "github.com/hydroan/gst/internal/grpcserver$"
+              desc: "code both lines share never imports the gRPC listener; what both lines follow lives in a package neither owns, internal/types for one"
+        # The router and its middleware are imported, beside their own line,
+        # by bootstrap and by the file registering the routes of the modules.
+        shared-not-http:
+          files:
+            - "$all"
+            - "!$test"
+            - "!**/middleware/**"
+            - "!**/router/**"
+            - "!**/response/**"
+            - "!**/module/*/register.go"
+            - "!**/grpc/**"
+            - "!**/grpcserver/**"
+            - "!**/interceptor/**"
+            - "!**/bootstrap/**"
+            - "!**/module/module.go"
+          deny:
+            - pkg: "github.com/hydroan/gst/internal/middleware$"
+              desc: "code both lines share never imports the HTTP middleware; what both lines follow lives in a package neither owns, internal/types for one"
+            - pkg: "github.com/hydroan/gst/internal/router$"
+              desc: "code both lines share never imports the router; what both lines follow lives in a package neither owns, internal/apiaction for one"
+        # The envelope is imported, beside its own line, by the test support
+        # reading an answer and by the files of the controller written for
+        # HTTP, which their name says.
+        shared-not-envelope:
+          files:
+            - "$all"
+            - "!$test"
+            - "!**/middleware/**"
+            - "!**/router/**"
+            - "!**/response/**"
+            - "!**/module/*/register.go"
+            - "!**/grpc/**"
+            - "!**/grpcserver/**"
+            - "!**/interceptor/**"
+            - "!**/internal/testutil/**"
+            - "!**/internal/controller/*_http.go"
+          deny:
+            - pkg: "github.com/hydroan/gst/internal/response$"
+              desc: "code both lines share never imports the HTTP envelope; what both lines follow lives in a package neither owns, internal/types for one"
+        # The controller holds both lines, and the name of a file says which it
+        # is written for: one ending in _http serves HTTP, one ending in _grpc
+        # serves gRPC, and any other holds what both run. So gin and the
+        # WebSocket package are imported by the files ending in _http alone,
+        # and the gRPC libraries by those ending in _grpc alone, which keeps a
+        # flow, a rule or a helper of both free of either transport. The
+        # validator both lines check a value with is gin's binding package,
+        # which any file may import.
+        controller-not-http:
+          files:
+            - "**/internal/controller/*.go"
+            - "!$test"
+            - "!**/internal/controller/*_http.go"
+          deny:
+            - pkg: "github.com/gin-gonic/gin$"
+              desc: "in the controller a file ending in _http serves HTTP, and no other imports gin"
+            - pkg: "github.com/hydroan/gst/internal/websocket$"
+              desc: "in the controller a file ending in _http serves HTTP, and no other imports the WebSocket package"
+        controller-not-grpc:
+          files:
+            - "**/internal/controller/*.go"
+            - "!$test"
+            - "!**/internal/controller/*_grpc.go"
+          deny:
+            - pkg: "google.golang.org/grpc"
+              desc: "in the controller a file ending in _grpc serves gRPC, and no other imports the gRPC libraries"
+            - pkg: "google.golang.org/genproto"
+              desc: "in the controller a file ending in _grpc serves gRPC, and no other imports the gRPC libraries"
+            - pkg: "google.golang.org/protobuf"
+              desc: "in the controller a file ending in _grpc serves gRPC, and no other imports the gRPC libraries"
 
     errcheck:
       check-type-assertions: true
