@@ -25,11 +25,11 @@ import (
 )
 
 // The metadata keys the request scope reads, in the lowercase gRPC metadata
-// keeps its keys in: keyTraceID carries the trace id in and out, the HTTP
-// listener's X-Trace-ID header; keyUserAgent and keyAuthority are what the
-// User-Agent header and the request's host arrive as.
+// keeps its keys in: keyUserAgent and keyAuthority are what the User-Agent
+// header and the request's host arrive as. The trace id travels in and out
+// under execctx.HeaderTraceID, the header the HTTP listener carries it in,
+// which metadata lowercases on the way in and on the way out.
 const (
-	keyTraceID   = "x-trace-id"
 	keyUserAgent = "user-agent"
 	keyAuthority = ":authority"
 )
@@ -128,7 +128,7 @@ func enterCall(ctx context.Context, fullMethod string) *callScope {
 		traceID = sc.TraceID().String()
 		ctx = gstotel.ContextWithRequestRootSpan(ctx)
 	} else {
-		traceID = requestctx.TraceIDOf(first(md, keyTraceID))
+		traceID = requestctx.TraceIDOf(first(md, execctx.HeaderTraceID))
 	}
 	ctx = execctx.WithTraceID(ctx, traceID)
 	address, tls := peerOf(ctx)
@@ -158,7 +158,7 @@ func enterCall(ctx context.Context, fullMethod string) *callScope {
 	ctx = requestctx.WithMetadata(context.WithValue(ctx, callRecordKey{}, c), meta)
 	// SetHeader fails only on a context carrying no call, which the
 	// server's own contexts never are.
-	_ = grpc.SetHeader(ctx, metadata.Pairs(keyTraceID, traceID))
+	_ = grpc.SetHeader(ctx, metadata.Pairs(execctx.HeaderTraceID, traceID))
 	return &callScope{ctx: ctx, fullMethod: fullMethod, record: c, meta: meta, traceID: traceID, start: start}
 }
 
