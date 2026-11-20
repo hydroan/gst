@@ -18,18 +18,25 @@ const (
 	reportAuditsSpec = "0 0 8 * * *"
 )
 
-// reportAudits logs how many audit rows the last day brought, by action.
+// reportAudits logs how many audit rows the last day brought, by action. The
+// database counts them: database.Select projects the action as the group
+// key and a count beside it, so one row per action comes back, not the
+// day's rows.
 func reportAudits(ctx context.Context) error {
 	since := time.Now().UTC().Add(-24 * time.Hour)
-	audits := make([]*model.Audit, 0)
-	if err := database.Database[*model.Audit](ctx).
-		WithQuery(&model.Audit{}, gst.QueryOptions{Filters: []gst.Filter{model.AuditCols.CreatedAt.Gte(since)}}).
-		List(&audits); err != nil {
+	type auditsOfAction struct {
+		Action string
+		Total  int
+	}
+	rows := make([]auditsOfAction, 0)
+	if err := database.Select[*model.Audit, auditsOfAction](ctx, model.AuditCols.Action.Group(), gst.Count().As("total")).
+		Where(model.AuditCols.CreatedAt.Gte(since)).
+		Scan(&rows); err != nil {
 		return err
 	}
-	digest := make(map[string]int)
-	for _, audit := range audits {
-		digest[audit.Action]++
+	digest := make(map[string]int, len(rows))
+	for _, row := range rows {
+		digest[row.Action] = row.Total
 	}
 	logger.App.Infoz("audit digest", zap.Any("actions", digest))
 	return nil
