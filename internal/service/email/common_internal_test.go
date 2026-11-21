@@ -466,7 +466,7 @@ func TestVerificationResendCreate(t *testing.T) {
 	svc.Logger = logger.Fallback("service")
 	ctx := types.NewServiceContext(nil, nil, service.Create)
 
-	rsp, err := svc.Create(ctx, &modelemail.VerificationResendReq{Email: "user@example.com"})
+	rsp, err := svc.Create(ctx, &modelemail.VerificationResendReq{Email: " USER@example.com "})
 	require.NoError(t, err)
 	require.Equal(t, publicAcceptedMessage(iamEmailFlowKindVerification), rsp.Msg)
 	require.Equal(t, "user@example.com", sender.last.To)
@@ -746,7 +746,7 @@ func TestChangeResendCreate(t *testing.T) {
 	svc.Logger = logger.Fallback("service")
 	ctx := newEmailServiceContext("user-change-3")
 
-	rsp, err := svc.Create(ctx, &modelemail.ChangeResendReq{NewEmail: "new@example.com"})
+	rsp, err := svc.Create(ctx, &modelemail.ChangeResendReq{NewEmail: " NEW@example.com "})
 	require.NoError(t, err)
 	require.Equal(t, "email change confirmation resent successfully", rsp.Msg)
 	require.Equal(t, 1, flowCache.Len())
@@ -983,6 +983,70 @@ func TestChangeRequestCreateClearsCancellationMarker(t *testing.T) {
 	canceled, err := emailChangeCanceled(context.Background(), "user-change-8", oldEmail, "new@example.com")
 	require.NoError(t, err)
 	require.False(t, canceled)
+}
+
+// TestFlowsRefuseWhatIsNoEmailAddress pins that every flow taking an email
+// address refuses what is none once the whitespace around it is dropped: text
+// that is no address, an address under a display name, and whitespace alone.
+// The refusal comes before an account is looked up, a throttle slot reserved,
+// a flow issued or a mail sent.
+func TestFlowsRefuseWhatIsNoEmailAddress(t *testing.T) {
+	flowCache := newTestCache[iamEmailFlowState]()
+	throttleCache := newTestCache[emailThrottleRecord]()
+	now := time.Date(2026, 3, 31, 14, 30, 0, 0, time.UTC)
+	restore := stubEmailGlobals(flowCache, throttleCache, now, bytes.NewReader(bytes.Repeat([]byte{31}, 64)))
+	t.Cleanup(restore)
+
+	sender := new(testEmailSender)
+	activeEmailSender = sender
+
+	SetAccountGateway(testAccountGateway{
+		getByID: func(_ *types.ServiceContext, userID string) (*AccountSnapshot, error) {
+			return testEmailAccount(userID, "old@example.com", true), nil
+		},
+		findByEmail: func(_ *types.ServiceContext, email string) (*AccountSnapshot, error) {
+			t.Errorf("an account was looked up by %q", email)
+			return nil, ErrAccountNotFound
+		},
+	})
+
+	verificationRequest := &VerificationRequestService{}
+	verificationRequest.Logger = logger.Fallback("service")
+	verificationResend := &VerificationResendService{}
+	verificationResend.Logger = logger.Fallback("service")
+	passwordResetRequest := &PasswordResetRequestService{}
+	passwordResetRequest.Logger = logger.Fallback("service")
+	changeRequest := &ChangeRequestService{}
+	changeRequest.Logger = logger.Fallback("service")
+	changeResend := &ChangeResendService{}
+	changeResend.Logger = logger.Fallback("service")
+	publicCtx := types.NewServiceContext(nil, nil, service.Create)
+	accountCtx := newEmailServiceContext("user-refused-1")
+
+	for _, tt := range []struct {
+		address    string
+		wantPublic string
+		wantChange string
+	}{
+		{"not-an-address", "email must be a valid email address", "new email must be a valid email address"},
+		{"Sample <user@example.com>", "email must be a valid email address", "new email must be a valid email address"},
+		{"   ", "email must be a valid email address", "new email is required"},
+	} {
+		_, err := verificationRequest.Create(publicCtx, &modelemail.VerificationRequestReq{Email: tt.address})
+		requireServiceError(t, err, http.StatusBadRequest, tt.wantPublic)
+		_, err = verificationResend.Create(publicCtx, &modelemail.VerificationResendReq{Email: tt.address})
+		requireServiceError(t, err, http.StatusBadRequest, tt.wantPublic)
+		_, err = passwordResetRequest.Create(publicCtx, &modelemail.PasswordResetRequestReq{Email: tt.address})
+		requireServiceError(t, err, http.StatusBadRequest, tt.wantPublic)
+		_, err = changeRequest.Create(accountCtx, &modelemail.ChangeRequestReq{NewEmail: tt.address, CurrentPassword: "current-pass9"})
+		requireServiceError(t, err, http.StatusBadRequest, tt.wantChange)
+		_, err = changeResend.Create(accountCtx, &modelemail.ChangeResendReq{NewEmail: tt.address})
+		requireServiceError(t, err, http.StatusBadRequest, tt.wantChange)
+	}
+
+	require.Equal(t, 0, flowCache.Len(), "no flow is issued")
+	require.Equal(t, 0, throttleCache.Len(), "no throttle slot is reserved")
+	require.Empty(t, sender.deliveries, "no mail is sent")
 }
 
 func TestPasswordResetRequestCreate(t *testing.T) {

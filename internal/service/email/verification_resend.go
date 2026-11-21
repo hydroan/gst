@@ -18,14 +18,16 @@ type VerificationResendService struct {
 }
 
 // Create resends a verification email for an eligible account while keeping the
-// response stable for unknown or already verified accounts.
+// response stable for unknown or already verified accounts. An address that is
+// no email address (see isEmailAddress) is refused before any of it: the
+// refusal reads the request alone and tells nothing of an account.
 func (s *VerificationResendService) Create(ctx *gst.ServiceContext, req *modelemail.VerificationResendReq) (rsp *modelemail.VerificationResendRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 	rsp = &modelemail.VerificationResendRsp{Msg: publicAcceptedMessage(iamEmailFlowKindVerification)}
 
 	email := normalizeEmailScope(req.Email)
-	if email == "" {
-		return rsp, nil
+	if !isEmailAddress(email) {
+		return nil, gst.NewError(http.StatusBadRequest, "email must be a valid email address")
 	}
 
 	if _, err = reserveEmailThrottle(ctx, iamEmailFlowKindVerification, emailThrottleResend, email, 0); err != nil {

@@ -19,14 +19,16 @@ type PasswordResetRequestService struct {
 // Create starts the password reset flow for the provided email address.
 // It always returns the same public-facing message for accepted requests so the
 // caller cannot infer whether the account exists, while still enforcing throttle
-// limits before any token is created or email is sent.
+// limits before any token is created or email is sent. An address that is no
+// email address (see isEmailAddress) is refused before any of it: the refusal
+// reads the request alone and tells nothing of an account.
 func (s *PasswordResetRequestService) Create(ctx *gst.ServiceContext, req *modelemail.PasswordResetRequestReq) (rsp *modelemail.PasswordResetRequestRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 	rsp = &modelemail.PasswordResetRequestRsp{Msg: publicAcceptedMessage(iamEmailFlowKindPasswordReset)}
 
 	email := normalizeEmailScope(req.Email)
-	if email == "" {
-		return rsp, nil
+	if !isEmailAddress(email) {
+		return nil, gst.NewError(http.StatusBadRequest, "email must be a valid email address")
 	}
 
 	if _, err = reserveEmailThrottle(ctx, iamEmailFlowKindPasswordReset, emailThrottleRequest, email, 0); err != nil {

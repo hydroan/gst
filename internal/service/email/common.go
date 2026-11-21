@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/go-playground/validator/v10"
 	"github.com/hydroan/gst"
 	gstredis "github.com/hydroan/gst/redis"
 )
@@ -243,6 +244,20 @@ func normalizeEmailScope(scope string) string {
 // normalizeAccountEmail normalizes an email address loaded from the host user store.
 func normalizeAccountEmail(email string) string {
 	return normalizeEmailScope(email)
+}
+
+// addressRules judges an address by the rules of go-playground/validator,
+// the library a binding tag is read by.
+var addressRules = validator.New()
+
+// isEmailAddress reports whether email, an address normalized by
+// normalizeEmailScope, is an email address, by the rule a binding tag names
+// email. The flows judge the address here and the request types declare it
+// required and no more: a rule of theirs would judge the address as it was
+// sent, the whitespace around it included, where a flow takes the address it
+// holds.
+func isEmailAddress(email string) bool {
+	return addressRules.Var(email, "required,email") == nil
 }
 
 func validEmailFlowKind(kind iamEmailFlowKind) bool {

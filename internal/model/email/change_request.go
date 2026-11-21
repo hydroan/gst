@@ -8,7 +8,7 @@ import (
 // ChangeRequestReq is the payload for POST /api/iam/email/change-request.
 // It carries the target email address and the current password for re-authentication.
 type ChangeRequestReq struct {
-	NewEmail        string `json:"new_email" binding:"required,email"`
+	NewEmail        string `json:"new_email" binding:"required"`
 	CurrentPassword string `json:"current_password" binding:"required"`
 }
 

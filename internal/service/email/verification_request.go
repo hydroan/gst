@@ -18,14 +18,16 @@ type VerificationRequestService struct {
 }
 
 // Create starts an email verification flow and returns a generic acceptance
-// message so callers cannot infer whether the target account exists.
+// message so callers cannot infer whether the target account exists. An
+// address that is no email address (see isEmailAddress) is refused before any
+// of it: the refusal reads the request alone and tells nothing of an account.
 func (s *VerificationRequestService) Create(ctx *gst.ServiceContext, req *modelemail.VerificationRequestReq) (rsp *modelemail.VerificationRequestRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 	rsp = &modelemail.VerificationRequestRsp{Msg: publicAcceptedMessage(iamEmailFlowKindVerification)}
 
 	email := normalizeEmailScope(req.Email)
-	if email == "" {
-		return rsp, nil
+	if !isEmailAddress(email) {
+		return nil, gst.NewError(http.StatusBadRequest, "email must be a valid email address")
 	}
 
 	if _, err = reserveEmailThrottle(ctx, iamEmailFlowKindVerification, emailThrottleRequest, email, 0); err != nil {

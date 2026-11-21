@@ -21,8 +21,8 @@
 ## 通用机制
 
 - 所有 email 流程都依赖统一的 email flow token 存储能力，令牌状态保存在缓存中。
-- 请求字段先按声明的规则校验，不满足时返回 400 并点名字段，不进入后面的流程：接口总览里列出的请求字段都必填；`email`、`new_email` 必须是邮箱地址，首尾带空格不算；`new_password` 至少 6 个字符。校验只看请求本身的写法，不透露账号是否存在。
-- 通过校验的邮箱地址统一转成小写，再用于查找账号、发信、生成 flow state 和 throttle scope。
+- 请求字段先按声明的规则校验，不满足时返回 400 并点名字段，不进入后面的流程：接口总览里列出的请求字段都必填；`new_password` 至少 6 个字符。
+- 邮箱地址会先做 trim 与小写归一化，再判断是不是邮箱地址，不是则返回 400；之后用归一化后的地址查找账号、发信、生成 flow state 和 throttle scope。这些校验只看请求本身的写法，不透露账号是否存在。
 - `request` / `resend` 类接口在发信前会做节流控制，避免短时间重复发送邮件。默认 request cooldown 为 1 分钟，resend cooldown 为 30 秒。
 - token 默认有效期按流程区分：邮箱验证 24 小时，密码重置 30 分钟，邮箱变更确认/取消 30 分钟。
 - 公开申请接口返回通用 `msg`，避免暴露账号是否存在、邮箱是否可用、账号是否已验证等敏感信息。账号未知、账号不符合条件或被节流时，接口仍返回同类 accepted message，并且不会创建 token 或发信。
@@ -125,7 +125,7 @@ API --> Client : 密码重置结果
 
 ### 说明
 
-- `change-request`：登录账号提交 `new_email` 和 `current_password`。接口会校验当前账号存在且处于 active 状态、当前邮箱存在、新邮箱非空且不同于当前邮箱、新邮箱未被其他账号占用，并通过当前密码重新认证。成功后向新邮箱发送确认邮件，向旧邮箱发送取消邮件。
+- `change-request`：登录账号提交 `new_email` 和 `current_password`。接口会校验当前账号存在且处于 active 状态、当前邮箱存在、新邮箱非空、是邮箱地址且不同于当前邮箱、新邮箱未被其他账号占用，并通过当前密码重新认证。成功后向新邮箱发送确认邮件，向旧邮箱发送取消邮件。
 - `change-resend`：登录账号提交 `new_email`。接口会重新校验当前账号和目标邮箱，并在 resend throttle 允许时重新签发一个确认 token，只向新邮箱发送确认邮件；不会重新发送取消邮件。被 resend throttle 命中时仍返回 `email change confirmation resent successfully`，但不创建 token 或发信。
 - `change-confirm`：消费确认 token；如果对应邮箱变更已被取消，则返回 `changed=false`。否则加载账号，要求账号当前邮箱仍为旧邮箱，或已经等于新邮箱；确认成功时将账号邮箱切换为新邮箱，并设置 `email_verified=true`、`email_verified_at`、`last_email_changed_at`。
 - `change-cancel`：消费取消 token；如果账号当前邮箱仍为旧邮箱，则写入一个短期 cancellation marker，阻止匹配的确认 token 后续完成变更。它不会更新用户表，也不是删除数据库中的 pending 记录。

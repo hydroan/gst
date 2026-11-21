@@ -8,7 +8,7 @@ import (
 // PasswordResetRequestReq is the payload for POST /api/iam/email/password-reset-request.
 // It accepts the email address that should receive the password reset message.
 type PasswordResetRequestReq struct {
-	Email string `json:"email" binding:"required,email"`
+	Email string `json:"email" binding:"required"`
 }
 
 // PasswordResetRequestRsp is the response for POST /api/iam/email/password-reset-request.

@@ -24,6 +24,9 @@ func validateEmailChangeTarget(ctx *gst.ServiceContext, user *AccountSnapshot, n
 	if newEmail == "" {
 		return gst.NewError(http.StatusBadRequest, "new email is required")
 	}
+	if !isEmailAddress(newEmail) {
+		return gst.NewError(http.StatusBadRequest, "new email must be a valid email address")
+	}
 	if newEmail == currentEmail {
 		return gst.NewError(http.StatusBadRequest, "new email must be different from current email")
 	}
