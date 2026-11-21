@@ -3,12 +3,24 @@
 /**
  * Envelope is the JSON body of every API response. A successful request
  * answers 200 with the data of the route; a failed one answers its 4xx or 5xx
- * status with the error message and data null.
+ * status with the error message and, as data, the fields the request was
+ * refused on when the failure names any, { field_violations: FieldViolation[] },
+ * and null otherwise.
  */
 export interface Envelope<T> {
   data: T;
   msg: string;
   trace_id: string;
+}
+
+/**
+ * FieldViolation is one field a request was refused on: the field by its
+ * JSON key path, address.city or items[1].name, and the description of what
+ * it failed.
+ */
+export interface FieldViolation {
+  field: string;
+  description: string;
 }
 
 /** ListResult is the data of the default List action. */
