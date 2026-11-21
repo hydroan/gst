@@ -2,8 +2,10 @@ package middleware
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -15,6 +17,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -23,12 +26,27 @@ import (
 // test, which is what keeps it honest when an attribute is added.
 const (
 	// requestSpanAttrCap is the most attributes the request batch carries:
-	// the eight every request has, plus its content type and content length.
+	// the five every request has — its method, path, scheme, server address
+	// and client address — plus the port its Host names, its query string,
+	// its route, its user agent and the size of its body.
 	requestSpanAttrCap = 10
 	// responseSpanAttrCap is the most attributes the response batch carries:
-	// the status code, the response size and content type, the duration, and
-	// the error flag of a failed request.
-	responseSpanAttrCap = 5
+	// the status code, the duration, the size of the body, and the error
+	// flag of a failed request.
+	responseSpanAttrCap = 4
+)
+
+// The root span describes the request by the attributes of the OpenTelemetry
+// HTTP semantic conventions, built by the semconv package. Headers are not
+// among them: the conventions leave capturing one to an explicit choice, and
+// a header attribute is an array of strings, which costs a traced request
+// several times what a scalar attribute does.
+//
+// The scheme of a request is one of two values, so both attributes are built
+// once.
+var (
+	schemeHTTP  = semconv.URLScheme("http")
+	schemeHTTPS = semconv.URLScheme("https")
 )
 
 // tracing returns the middleware that opens the request root span, stamps
@@ -51,9 +69,10 @@ func tracing() gin.HandlerFunc {
 			// name the OpenTelemetry HTTP semantic conventions give it: its
 			// path is whatever the client sent, and a name per path would
 			// hand the tracing backend an unbounded set of operations. The
-			// path stays on the span as http.target.
+			// path stays on the span as url.path.
+			route := c.FullPath()
 			spanName := c.Request.Method
-			if route := c.FullPath(); route != "" {
+			if route != "" {
 				spanName += " " + route
 			}
 
@@ -87,25 +106,40 @@ func tracing() gin.HandlerFunc {
 			// values a backend already has.
 			recording = gstotel.IsSpanRecording(span)
 			if recording {
+				// The scheme is the one the client used: TLS on this
+				// connection or the one a proxy in front declares, the
+				// answer a service reads as IsHTTPS.
+				scheme := schemeHTTP
+				if requestctx.GinTLS(c) {
+					scheme = schemeHTTPS
+				}
+				host, port := splitHostPort(c.Request.Host)
 				attrs := make([]attribute.KeyValue, 0, requestSpanAttrCap)
 				attrs = append(
 					attrs,
-					attribute.String("http.method", c.Request.Method),
-					attribute.String("http.url", c.Request.URL.String()),
-					attribute.String("http.scheme", c.Request.URL.Scheme),
-					attribute.String("http.host", c.Request.Host),
-					attribute.String("http.target", c.Request.URL.Path),
-					attribute.String("http.route", c.FullPath()),
-					attribute.String("http.user_agent", c.Request.UserAgent()),
-					attribute.String("http.remote_addr", requestctx.GinClientIP(c)),
+					semconv.HTTPRequestMethodKey.String(c.Request.Method),
+					semconv.URLPath(c.Request.URL.Path),
+					scheme,
+					semconv.ServerAddress(host),
+					semconv.ClientAddress(requestctx.GinClientIP(c)),
 				)
 
-				// Add request headers as attributes (selective)
-				if contentType := c.Request.Header.Get("Content-Type"); contentType != "" {
-					attrs = append(attrs, attribute.String("http.request.content_type", contentType))
+				// What a request does not carry is left off the span, as the
+				// conventions ask, rather than recorded empty.
+				if port > 0 {
+					attrs = append(attrs, semconv.ServerPort(port))
 				}
-				if contentLength := c.Request.Header.Get("Content-Length"); contentLength != "" {
-					attrs = append(attrs, attribute.String("http.request.content_length", contentLength))
+				if query := c.Request.URL.RawQuery; query != "" {
+					attrs = append(attrs, semconv.URLQuery(query))
+				}
+				if route != "" {
+					attrs = append(attrs, semconv.HTTPRoute(route))
+				}
+				if userAgent := c.Request.UserAgent(); userAgent != "" {
+					attrs = append(attrs, semconv.UserAgentOriginal(userAgent))
+				}
+				if c.Request.ContentLength > 0 {
+					attrs = append(attrs, semconv.HTTPRequestBodySizeKey.Int64(c.Request.ContentLength))
 				}
 				span.SetAttributes(attrs...)
 
@@ -126,11 +160,12 @@ func tracing() gin.HandlerFunc {
 					attrs := make([]attribute.KeyValue, 0, responseSpanAttrCap)
 					attrs = append(
 						attrs,
-						attribute.Int("http.status_code", statusCode),
-						attribute.Int("http.response.size", c.Writer.Size()),
-						attribute.String("http.response.content_type", c.Writer.Header().Get("Content-Type")),
+						semconv.HTTPResponseStatusCode(statusCode),
 						attribute.Int64("http.duration_ms", time.Since(start).Milliseconds()),
 					)
+					if size := c.Writer.Size(); size > 0 {
+						attrs = append(attrs, semconv.HTTPResponseBodySize(size))
+					}
 
 					// The status follows the OpenTelemetry HTTP semantic
 					// conventions, which otelgrpc holds the gRPC line's server
@@ -187,6 +222,29 @@ func tracing() gin.HandlerFunc {
 		// above, so no SetAttributes call is made here.
 		c.Next()
 	}
+}
+
+// splitHostPort splits the Host a request names its server by into the
+// address and the port the span carries apart (server.address, server.port):
+// "sample.test:8080" into "sample.test" and 8080, "[2001:db8::1]:8080" into
+// "2001:db8::1" and 8080. A Host naming no port, "sample.test" or
+// "[2001:db8::1]", gives port 0, as does one whose port is no port number.
+func splitHostPort(hostport string) (host string, port int) {
+	// No colon after the address, bracketed or not: the Host names no port,
+	// which net.SplitHostPort would answer with an error allocated on every
+	// such request.
+	if strings.LastIndexByte(hostport, ':') <= strings.LastIndexByte(hostport, ']') {
+		return strings.TrimSuffix(strings.TrimPrefix(hostport, "["), "]"), 0
+	}
+	host, portText, err := net.SplitHostPort(hostport)
+	if err != nil {
+		return hostport, 0
+	}
+	parsed, err := strconv.ParseUint(portText, 10, 16)
+	if err != nil {
+		return host, 0
+	}
+	return host, int(parsed)
 }
 
 // requestSpan returns the server span tracing opened for the request or,

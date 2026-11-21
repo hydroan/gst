@@ -167,7 +167,7 @@ func TestTracingSkipsRecordingOnlyStateWhenSamplerDrops(t *testing.T) {
 // the route pattern gin matched, so every request to one route shares one
 // name, and the method alone for a request no route matched, whose path is
 // whatever the client sent and would give a tracing backend one operation
-// per path. That path stays on the span as http.target.
+// per path. That path stays on the span as url.path.
 func TestTracingNamesTheSpanAfterTheRoutePattern(t *testing.T) {
 	setupTracingTest(t)
 	recorder := oteltest.Record(t)
@@ -189,7 +189,7 @@ func TestTracingNamesTheSpanAfterTheRoutePattern(t *testing.T) {
 	targets := make([]string, 0, len(paths))
 	for _, span := range recorder.Ended() {
 		for _, attr := range span.Attributes() {
-			if attr.Key == "http.target" {
+			if attr.Key == "url.path" {
 				targets = append(targets, attr.Value.AsString())
 			}
 		}
@@ -240,11 +240,98 @@ func TestTracingMarksHTTPSpanAsRequestRoot(t *testing.T) {
 	require.Contains(t, source, "ctx = gstotel.ContextWithRequestRootSpan(ctx)")
 }
 
+// TestTracingDescribesTheRequestByTheHTTPConventions pins the attributes of
+// the request root span to the names and types the OpenTelemetry HTTP
+// semantic conventions give them: the method, the path and the query string
+// apart, the scheme the client used, the Host split into address and port,
+// the route, the user agent, the client address and the body sizes in bytes.
+// What a request or its answer does not carry — a query string, a port in
+// the Host, a matched route, a user agent, a body — is left off the span
+// rather than recorded empty, and no header is captured, the content type
+// included.
+func TestTracingDescribesTheRequestByTheHTTPConventions(t *testing.T) {
+	setupTracingTest(t)
+	recorder := oteltest.Record(t)
+
+	router := gin.New()
+	router.Use(tracing())
+	router.POST("/api/samples/:id", func(c *gin.Context) { c.String(http.StatusCreated, "created") })
+
+	t.Run("a request carrying everything the span describes", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/samples/7?_page=2&name=a", strings.NewReader("{}"))
+		req.Host = "sample.test:8443"
+		req.RemoteAddr = "192.0.2.10:54321"
+		req.Header.Set("X-Forwarded-Proto", "https")
+		req.Header.Set("User-Agent", "sample-agent/1.0")
+		req.Header.Set("Content-Type", "application/json")
+		router.ServeHTTP(httptest.NewRecorder(), req)
+
+		require.Equal(t, map[attribute.Key]any{
+			"http.request.method":       "POST",
+			"url.path":                  "/api/samples/7",
+			"url.query":                 "_page=2&name=a",
+			"url.scheme":                "https",
+			"server.address":            "sample.test",
+			"server.port":               int64(8443),
+			"http.route":                "/api/samples/:id",
+			"user_agent.original":       "sample-agent/1.0",
+			"client.address":            "192.0.2.10",
+			"http.request.body.size":    int64(2),
+			"http.response.status_code": int64(http.StatusCreated),
+			"http.response.body.size":   int64(len("created")),
+		}, spanAttributeValues(t, oteltest.EndedNamed(t, recorder, "POST /api/samples/:id").Attributes()))
+	})
+
+	t.Run("a request carrying none of the optional parts", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodDelete, "/unregistered", nil)
+		req.Host = "sample.test"
+		req.RemoteAddr = "192.0.2.10:54321"
+		router.ServeHTTP(httptest.NewRecorder(), req)
+
+		require.Equal(t, map[attribute.Key]any{
+			"http.request.method":       "DELETE",
+			"url.path":                  "/unregistered",
+			"url.scheme":                "http",
+			"server.address":            "sample.test",
+			"client.address":            "192.0.2.10",
+			"http.response.status_code": int64(http.StatusNotFound),
+		}, spanAttributeValues(t, oteltest.EndedNamed(t, recorder, "DELETE").Attributes()))
+	})
+}
+
+// TestSplitHostPort pins how the Host a request names its server by is split
+// into the address and the port the span carries apart: the port a Host
+// names is read off it, brackets come off an IPv6 address, and a Host naming
+// no port, or one that is no port number, gives no port.
+func TestSplitHostPort(t *testing.T) {
+	for _, tt := range []struct {
+		hostport string
+		host     string
+		port     int
+	}{
+		{"sample.test", "sample.test", 0},
+		{"sample.test:8080", "sample.test", 8080},
+		{"192.0.2.10:443", "192.0.2.10", 443},
+		{"[2001:db8::1]:8080", "2001:db8::1", 8080},
+		{"[2001:db8::1]", "2001:db8::1", 0},
+		{"sample.test:", "sample.test", 0},
+		{"sample.test:http", "sample.test", 0},
+		{"sample.test:70000", "sample.test", 0},
+		{"2001:db8::1", "2001:db8::1", 0},
+		{"", "", 0},
+	} {
+		host, port := splitHostPort(tt.hostport)
+		require.Equal(t, tt.host, host, tt.hostport)
+		require.Equal(t, tt.port, port, tt.hostport)
+	}
+}
+
 // TestTracingSpanAttributesFitTheCapacityInTheWorstCase pins the two batches
-// the root span carries — a request with a content type and length, a failed
-// response — plus one attribute per error the handler reported, so an
-// attribute added without bumping its capacity fails here instead of
-// regrowing the slice on every traced request.
+// the root span carries — a request with a query string, a port in its Host,
+// a user agent and a body, a failed response with a body — plus one
+// attribute per error the handler reported, so an attribute added without
+// bumping its capacity fails here instead of regrowing the slice on every
+// traced request.
 func TestTracingSpanAttributesFitTheCapacityInTheWorstCase(t *testing.T) {
 	setupTracingTest(t)
 	recorder := oteltest.Record(t)
@@ -254,13 +341,14 @@ func TestTracingSpanAttributesFitTheCapacityInTheWorstCase(t *testing.T) {
 	router.POST("/api/samples", func(c *gin.Context) {
 		_ = c.Error(errors.New("first sample failure"))
 		_ = c.Error(errors.New("second sample failure"))
-		c.Status(http.StatusInternalServerError)
+		c.String(http.StatusInternalServerError, "failed")
 	})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/samples", strings.NewReader("{}"))
+	req := httptest.NewRequest(http.MethodPost, "/api/samples?name=a", strings.NewReader("{}"))
+	req.Host = "sample.test:8080"
+	req.Header.Set("User-Agent", "sample-agent/1.0")
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Content-Length", "2")
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusInternalServerError, w.Code)
 
@@ -271,8 +359,8 @@ func TestTracingSpanAttributesFitTheCapacityInTheWorstCase(t *testing.T) {
 	// response batch already carries; a span keeps one value per key.
 	const errorsReported = 2
 	batches := oteltest.AttributesByKey(t, span.Attributes(),
-		[]attribute.Key{"http.method", "http.url", "http.scheme", "http.host", "http.target", "http.route", "http.user_agent", "http.remote_addr", "http.request.content_type", "http.request.content_length"},
-		[]attribute.Key{"http.status_code", "http.response.size", "http.response.content_type", "http.duration_ms", "error"},
+		[]attribute.Key{"http.request.method", "url.path", "url.query", "url.scheme", "server.address", "server.port", "http.route", "user_agent.original", "client.address", "http.request.body.size"},
+		[]attribute.Key{"http.response.status_code", "http.response.body.size", "http.duration_ms", "error"},
 		[]attribute.Key{"error.0", "error.1"},
 	)
 	require.Len(t, batches[0], requestSpanAttrCap, "the worst case must fill the request batch exactly: a new attribute bumps requestSpanAttrCap")
@@ -295,4 +383,19 @@ func readMiddlewareSource(t *testing.T, filename string) string {
 	source, err := os.ReadFile(filename)
 	require.NoError(t, err)
 	return string(source)
+}
+
+// spanAttributeValues returns the attributes of a span as plain values by
+// key, without the duration, which no two runs share; the duration must be
+// there.
+func spanAttributeValues(t *testing.T, attrs []attribute.KeyValue) map[attribute.Key]any {
+	t.Helper()
+
+	values := make(map[attribute.Key]any, len(attrs))
+	for _, attr := range attrs {
+		values[attr.Key] = attr.Value.AsInterface()
+	}
+	require.Contains(t, values, attribute.Key("http.duration_ms"))
+	delete(values, "http.duration_ms")
+	return values
 }

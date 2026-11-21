@@ -342,6 +342,11 @@ func ginConnection(c *gin.Context) connection {
 // forwarding headers included, from the request's memoized connection fields.
 func GinClientIP(c *gin.Context) string { return ginConnection(c).clientIP }
 
+// GinTLS reports whether the request arrived over TLS, directly or as the
+// forwarding headers of a proxy in front declare (see requestTLS), from the
+// request's memoized connection fields.
+func GinTLS(c *gin.Context) bool { return ginConnection(c).tls }
+
 // requestTLS reports whether r arrived over TLS, either directly or as the
 // forwarding headers of a proxy in front declare.
 func requestTLS(r *http.Request) bool {

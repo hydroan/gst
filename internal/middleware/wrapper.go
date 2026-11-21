@@ -9,6 +9,7 @@ import (
 	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -75,9 +76,9 @@ func middlewareWrapper(name string, middleware gin.HandlerFunc) gin.HandlerFunc 
 			// Set span attributes
 			span.SetAttributes(
 				attribute.String("middleware.name", name),
-				attribute.String("http.method", c.Request.Method),
-				attribute.String("http.path", c.Request.URL.Path),
-				attribute.String("http.route", c.FullPath()),
+				semconv.HTTPRequestMethodKey.String(c.Request.Method),
+				semconv.URLPath(c.Request.URL.Path),
+				semconv.HTTPRoute(c.FullPath()),
 			)
 
 			// Record start time
@@ -100,7 +101,7 @@ func middlewareWrapper(name string, middleware gin.HandlerFunc) gin.HandlerFunc 
 				attrs,
 				attribute.Int64("middleware.duration_ms", duration.Milliseconds()),
 				attribute.Int64("middleware.duration_ns", duration.Nanoseconds()),
-				attribute.Int("http.status_code", status),
+				semconv.HTTPResponseStatusCode(status),
 			)
 
 			// A middleware answering a server error failed; one refusing the

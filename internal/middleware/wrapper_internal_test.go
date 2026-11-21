@@ -14,6 +14,7 @@ import (
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/middleware/ratelimiter"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -209,11 +210,20 @@ func TestMiddlewareWrapperSpanAttributesFitTheCapacityInTheWorstCase(t *testing.
 	require.Equal(t, http.StatusForbidden, w.Code)
 
 	span := oteltest.EndedNamed(t, recorder, "middleware.Sample")
-	// middleware.name, http.method, http.path and http.route are set as the
-	// span starts; the outcome batch adds the rest.
+	// middleware.name, http.request.method, url.path and http.route are set
+	// as the span starts; the outcome batch adds the rest.
 	const startAttrs = 4
 	require.Len(t, span.Attributes(), startAttrs+middlewareOutcomeAttrCap,
 		"the worst case must fill the outcome batch exactly: a new attribute bumps middlewareOutcomeAttrCap")
+
+	keys := make([]attribute.Key, 0, len(span.Attributes()))
+	for _, attr := range span.Attributes() {
+		keys = append(keys, attr.Key)
+	}
+	require.ElementsMatch(t, []attribute.Key{
+		"middleware.name", "http.request.method", "url.path", "http.route",
+		"middleware.duration_ms", "middleware.duration_ns", "http.response.status_code", "middleware.error", "service.name",
+	}, keys, "what the span says of the request goes by the names of the OpenTelemetry HTTP conventions")
 }
 
 func performWrapperRequest(router *gin.Engine) *httptest.ResponseRecorder {

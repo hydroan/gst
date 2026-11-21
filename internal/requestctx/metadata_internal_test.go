@@ -282,6 +282,7 @@ func TestGinConnectionMemoizesTheResolvedFields(t *testing.T) {
 
 	require.Equal(t, "203.0.113.5", GinClientIP(ginCtx),
 		"the resolution must be gin's own, forwarding headers included")
+	require.True(t, GinTLS(ginCtx), "the proxy in front declared TLS")
 
 	stored, ok := ginCtx.Get(keyGinConnection)
 	require.True(t, ok, "the resolved fields must be memoized for the rest of the request")
@@ -295,8 +296,10 @@ func TestGinConnectionMemoizesTheResolvedFields(t *testing.T) {
 	// Rewriting what the fields were resolved from proves the second call
 	// reuses the stored answer rather than resolving again.
 	ginCtx.Request.Header.Set("X-Forwarded-For", "198.51.100.7")
+	ginCtx.Request.Header.Set("X-Forwarded-Proto", "http")
 	ginCtx.Request.Header.Set("User-Agent", "other-agent/2.0")
 	require.Equal(t, "203.0.113.5", GinClientIP(ginCtx))
+	require.True(t, GinTLS(ginCtx))
 	require.Equal(t, "sample-agent/1.0", FromGin(ginCtx).UserAgent())
 }
 
@@ -307,6 +310,7 @@ func TestGinConnectionWithoutRequestMemoizesNothing(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	require.Empty(t, GinClientIP(nil))
+	require.False(t, GinTLS(nil))
 
 	ginCtx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	require.Empty(t, GinClientIP(ginCtx))
@@ -316,6 +320,7 @@ func TestGinConnectionWithoutRequestMemoizesNothing(t *testing.T) {
 	ginCtx.Request = httptest.NewRequest(http.MethodGet, "/api/records", nil)
 	ginCtx.Request.RemoteAddr = "192.0.2.10:54321"
 	require.Equal(t, "192.0.2.10", GinClientIP(ginCtx))
+	require.False(t, GinTLS(ginCtx), "a plain connection with no forwarding header is not TLS")
 }
 
 func TestMetadataContextRoundTrip(t *testing.T) {
