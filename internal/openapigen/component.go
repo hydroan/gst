@@ -212,8 +212,9 @@ func newRequestBody[REQ types.Request](reqKey string) *openapi3.RequestBodyRef {
 }
 
 // keyFailureResponse names the response component every failure refers to:
-// the envelope with msg and trace_id and data null, the one body a failed
-// request of any action answers with.
+// the envelope with msg and trace_id and, as data, the fields the request
+// was refused on when the failure names any, null otherwise, the one body a
+// failed request of any action answers with.
 const keyFailureResponse = "Failure"
 
 // registerFailureResponse registers the failure response component, once.
@@ -226,8 +227,8 @@ func registerFailureResponse() {
 	if _, ok := doc.Components.Responses[keyFailureResponse]; ok {
 		return
 	}
-	schemaRef := newSchemaRefWithDocs(apiResponse[struct{}]{})
-	markEmptyResponseData(schemaRef)
+	schemaRef := newSchemaRefWithDocs(apiResponse[failureData]{})
+	describeFailureData(schemaRef)
 	doc.Components.Responses[keyFailureResponse] = &openapi3.ResponseRef{
 		Value: &openapi3.Response{
 			Description: new("Failure Response"),
@@ -295,6 +296,20 @@ func responsesOf(status int, success *openapi3.ResponseRef, phase apiaction.Phas
 	responses := openapi3.NewResponses(opts...)
 	responses.Set("default", failure)
 	return responses
+}
+
+// describeFailureData documents the data member of the failure envelope: the
+// fields the request was refused on, each by its path and the description of
+// what it failed, or null for a failure naming none.
+func describeFailureData(schemaRef *openapi3.SchemaRef) {
+	data := schemaRef.Value.Properties["data"].Value
+	data.Nullable = true
+	data.Description = "The fields the request was refused on, when the failure names any; null otherwise."
+	violations := data.Properties["field_violations"].Value
+	violations.Description = "One entry per field the request was refused on."
+	violation := violations.Items.Value
+	violation.Properties["field"].Value.Description = "The field, by its JSON key path: address.city, items[1].name."
+	violation.Properties["description"].Value.Description = "What the field failed, in words a client may show."
 }
 
 // markEmptyResponseData rewrites the data member of an envelope whose action

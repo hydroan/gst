@@ -219,8 +219,16 @@ func TestOperationsDocumentTheFailuresTheyAnswer(t *testing.T) {
 			envelope := registeredResponseSchema(t, failure)
 			require.ElementsMatch(t, []string{"data", "msg", "trace_id"}, propertyNames(envelope))
 			data := dataSchema(t, envelope)
-			require.True(t, data.Nullable, "a failure answers data null")
-			require.Nil(t, data.Type)
+			require.True(t, data.Nullable, "a failure naming no field answers data null")
+			require.ElementsMatch(t, []string{"field_violations"}, propertyNames(data), "a failure naming fields lists them as its data")
+			violations := data.Properties["field_violations"].Value
+			require.True(t, violations.Type.Is(openapi3.TypeArray))
+			violation := violations.Items.Value
+			require.ElementsMatch(t, []string{"field", "description"}, propertyNames(violation))
+			for name, property := range violation.Properties {
+				require.True(t, property.Value.Type.Is(openapi3.TypeString), name)
+				require.NotEmpty(t, property.Value.Description, name)
+			}
 		})
 	}
 }

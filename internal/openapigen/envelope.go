@@ -1,9 +1,12 @@
 package openapigen
 
+import "github.com/hydroan/gst/internal/types"
+
 // The Go shapes the documented request and response bodies are generated from:
-// the payload wrapper of a batch request, whose items the flow requires, and
-// the success envelope the controllers answer with in its single-record,
-// list and batch forms.
+// the payload wrapper of a batch request, whose items the flow requires, the
+// success envelope the controllers answer with in its single-record, list
+// and batch forms, and the data of a failure naming the fields the request
+// was refused on.
 
 type apiBatchRequest[T any] struct {
 	Items []T `json:"items" binding:"required"`
@@ -34,4 +37,8 @@ type apiBatchResponse[T any] struct {
 
 type batchData[T any] struct {
 	Items []T `json:"items"`
+}
+
+type failureData struct {
+	FieldViolations []types.FieldViolation `json:"field_violations"`
 }
