@@ -29,11 +29,12 @@ const (
 // realistic size (a code, a title, a category, two numbers and a body of a
 // few hundred bytes) behind the standard actions on /api/products and, the
 // model declaring GRPC(), the ProductService rpcs. Embedding model.Query takes
-// the list parameters: field filters, _sort_by, _page and _size, and the
-// cursor. The code is unique, so a create carrying a taken code is refused
-// by the index; the category carries the index a list filters by, the status
-// carries none, so a filter on it scans the table, and the score carries none,
-// so a sort by it sorts the table.
+// the operator filters and _sort_by; the list pages by _page and _size, as
+// every list does, and ProductFeed reads the same table by cursor. The code
+// is unique, so a create carrying a taken code is refused by the index; the
+// category carries the index a list filters by, the status carries none, so
+// a filter on it scans the table, and the score carries none, so a sort by
+// it sorts the table.
 type Product struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The identifier of the record, assigned when it is created.
@@ -560,16 +561,10 @@ type ListProductRequest struct {
 	Page uint32 `protobuf:"varint,3,opt,name=page,proto3" json:"page,omitempty"`
 	// size is the page size, as the _size query parameter, 20 when unset and at most 100.
 	Size uint32 `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
-	// cursor_field is the cursor column, as the _cursor_field query parameter.
-	CursorField string `protobuf:"bytes,5,opt,name=cursor_field,json=cursorField,proto3" json:"cursor_field,omitempty"`
-	// cursor_value is the cursor position, as the _cursor_value query parameter.
-	CursorValue string `protobuf:"bytes,6,opt,name=cursor_value,json=cursorValue,proto3" json:"cursor_value,omitempty"`
-	// cursor_next is whether to list past the cursor, as the _cursor_next query parameter.
-	CursorNext bool `protobuf:"varint,7,opt,name=cursor_next,json=cursorNext,proto3" json:"cursor_next,omitempty"`
 	// expand is the associations to expand, as the _expand query parameter names them.
-	Expand []string `protobuf:"bytes,8,rep,name=expand,proto3" json:"expand,omitempty"`
+	Expand []string `protobuf:"bytes,5,rep,name=expand,proto3" json:"expand,omitempty"`
 	// depth is the depth of the expansion, as the _depth query parameter, at most 10.
-	Depth         uint32 `protobuf:"varint,9,opt,name=depth,proto3" json:"depth,omitempty"`
+	Depth         uint32 `protobuf:"varint,6,opt,name=depth,proto3" json:"depth,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -630,27 +625,6 @@ func (x *ListProductRequest) GetSize() uint32 {
 		return x.Size
 	}
 	return 0
-}
-
-func (x *ListProductRequest) GetCursorField() string {
-	if x != nil {
-		return x.CursorField
-	}
-	return ""
-}
-
-func (x *ListProductRequest) GetCursorValue() string {
-	if x != nil {
-		return x.CursorValue
-	}
-	return ""
-}
-
-func (x *ListProductRequest) GetCursorNext() bool {
-	if x != nil {
-		return x.CursorNext
-	}
-	return false
 }
 
 func (x *ListProductRequest) GetExpand() []string {
@@ -1202,18 +1176,14 @@ const file_stress_product_proto_rawDesc = "" +
 	"\vupdate_mask\x18\x03 \x01(\v2\x1a.google.protobuf.FieldMaskR\n" +
 	"updateMask\"A\n" +
 	"\x14PatchProductResponse\x12)\n" +
-	"\aproduct\x18\x01 \x01(\v2\x0f.stress.ProductR\aproduct\"\xef\x02\n" +
+	"\aproduct\x18\x01 \x01(\v2\x0f.stress.ProductR\aproduct\"\x88\x02\n" +
 	"\x12ListProductRequest\x12;\n" +
 	"\afilters\x18\x01 \x03(\v2!.stress.ListProductRequest.FilterR\afilters\x12\x17\n" +
 	"\asort_by\x18\x02 \x03(\tR\x06sortBy\x12\x12\n" +
 	"\x04page\x18\x03 \x01(\rR\x04page\x12\x12\n" +
-	"\x04size\x18\x04 \x01(\rR\x04size\x12!\n" +
-	"\fcursor_field\x18\x05 \x01(\tR\vcursorField\x12!\n" +
-	"\fcursor_value\x18\x06 \x01(\tR\vcursorValue\x12\x1f\n" +
-	"\vcursor_next\x18\a \x01(\bR\n" +
-	"cursorNext\x12\x16\n" +
-	"\x06expand\x18\b \x03(\tR\x06expand\x12\x14\n" +
-	"\x05depth\x18\t \x01(\rR\x05depth\x1aF\n" +
+	"\x04size\x18\x04 \x01(\rR\x04size\x12\x16\n" +
+	"\x06expand\x18\x05 \x03(\tR\x06expand\x12\x14\n" +
+	"\x05depth\x18\x06 \x01(\rR\x05depth\x1aF\n" +
 	"\x06Filter\x12\x14\n" +
 	"\x05field\x18\x01 \x01(\tR\x05field\x12\x0e\n" +
 	"\x02op\x18\x02 \x01(\tR\x02op\x12\x16\n" +

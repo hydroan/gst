@@ -23,9 +23,7 @@ type Search struct {
 // List lists the caller's tickets the query parameters select, a page of
 // them with the count of all that match: status=open is a field of the model,
 // status[in]=open,closed or title[startswith]=draft a filter, _sort_by=title
-// desc an order, _page and _size the page. Cursor pagination, _cursor_field
-// and _cursor_value, is read with QueryCursor and passed to WithCursor in
-// place of the page.
+// desc an order, _page and _size the page.
 func (s *Search) List(ctx *gst.ServiceContext, _ *gstmodel.Empty) (*model.TicketSearchRsp, error) {
 	query, err := s.QueryModel(ctx)
 	if err != nil {

@@ -121,20 +121,11 @@ message ListTicketRequest {
   // size is the page size, as the _size query parameter, 20 when unset and at most 100.
   uint32 size = 4;
 
-  // cursor_field is the cursor column, as the _cursor_field query parameter.
-  string cursor_field = 5;
-
-  // cursor_value is the cursor position, as the _cursor_value query parameter.
-  string cursor_value = 6;
-
-  // cursor_next is whether to list past the cursor, as the _cursor_next query parameter.
-  bool cursor_next = 7;
-
   // expand is the associations to expand, as the _expand query parameter names them.
-  repeated string expand = 8;
+  repeated string expand = 5;
 
   // depth is the depth of the expansion, as the _depth query parameter, at most 10.
-  uint32 depth = 9;
+  uint32 depth = 6;
 
   // Filter is one filter of filters: field names the column by its query name, op is the operator, none for the equality every model answers, and values is its value, several for in and notin.
   message Filter {

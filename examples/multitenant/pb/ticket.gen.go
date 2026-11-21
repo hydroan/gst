@@ -91,15 +91,12 @@ func (ticketService) PatchTicket(ctx context.Context, req *PatchTicketRequest) (
 // ListTicket serves the List action of Ticket on /api/tickets.
 func (ticketService) ListTicket(ctx context.Context, req *ListTicketRequest) (*ListTicketResponse, error) {
 	models, total, more, err := listTicket(ctx, nil, grpc.Query{
-		Filters:     grpc.Filters(req.GetFilters()),
-		SortBy:      req.GetSortBy(),
-		Page:        req.GetPage(),
-		Size:        req.GetSize(),
-		CursorField: req.GetCursorField(),
-		CursorValue: req.GetCursorValue(),
-		CursorNext:  req.GetCursorNext(),
-		Expand:      req.GetExpand(),
-		Depth:       req.GetDepth(),
+		Filters: grpc.Filters(req.GetFilters()),
+		SortBy:  req.GetSortBy(),
+		Page:    req.GetPage(),
+		Size:    req.GetSize(),
+		Expand:  req.GetExpand(),
+		Depth:   req.GetDepth(),
 	})
 	if err != nil {
 		return nil, err

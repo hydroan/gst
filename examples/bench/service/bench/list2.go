@@ -17,7 +17,7 @@ type List2 struct {
 
 // List replays the standard framework List action's full query chain in dry
 // run end to end, producing no database I/O: query parsing (model conditions,
-// operator filters, ordering, cursor, present fields, pagination) and
+// operator filters, ordering, present fields, pagination) and
 // condition building (WithQuery model and filter parameters, SELECT and COUNT
 // generation) all run for real; only the final execution is skipped. It
 // benchmarks the framework's query machinery free of database cost.
@@ -25,7 +25,6 @@ func (l *List2) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *bench.List
 	var m *bench.Bench
 	var filters []gst.Filter
 	var orders []gst.Order
-	var cursor gst.Cursor
 
 	if m, err = l.QueryModel(ctx); err != nil {
 		return nil, gst.NewError(http.StatusBadRequest, err.Error())
@@ -34,9 +33,6 @@ func (l *List2) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *bench.List
 		return nil, gst.NewError(http.StatusBadRequest, err.Error())
 	}
 	if orders, err = l.QueryOrders(ctx); err != nil {
-		return nil, gst.NewError(http.StatusBadRequest, err.Error())
-	}
-	if cursor, err = l.QueryCursor(ctx); err != nil {
 		return nil, gst.NewError(http.StatusBadRequest, err.Error())
 	}
 	page, size := l.QueryPagination(ctx)
@@ -51,7 +47,6 @@ func (l *List2) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *bench.List
 		WithDryRun().
 		WithPagination(page, size).
 		WithQuery(m, opts).
-		WithCursor(cursor).
 		WithOrder(orders...).
 		List(&items); err != nil {
 		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "build list query failed", err)

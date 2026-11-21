@@ -18,7 +18,7 @@ run_case s2-list-cat-deep 15 "$BASE/api/products?category=cat-07&_size=20&_sort_
 run_case s2-list-status 15 "$BASE/api/products?status=3&_size=20&_sort_by=created_at" "${C[@]}"
 run_case s2-list-all 15 "$BASE/api/products?_size=20&_sort_by=created_at" "${C[@]}"
 run_case s2-list-all-deep 15 "$BASE/api/products?_size=20&_sort_by=created_at&_page=1000" "${C[@]}"
-run_case s2-list-cursor 15 "$BASE/api/products?category=cat-07&_size=20&_cursor_value=sku-00050000&_cursor_next=true" "${C[@]}"
+run_case s2-list-cursor 15 "$BASE/api/product-feed?category=cat-07&_size=20&_cursor_value=sku-00050000&_cursor_next=true" "${C[@]}"
 run_case s2-list-sort-noindex 15 "$BASE/api/products?_size=20&_sort_by=score" "${C[@]}"
 run_case s2-get 15 "$BASE/api/products/sku-00050000" "${C[@]}"
 # CPU and allocation profiles of the filtered list and the get, under load.

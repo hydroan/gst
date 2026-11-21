@@ -95,15 +95,12 @@ func (flagService) PatchFlag(ctx context.Context, req *PatchFlagRequest) (*Patch
 // ListFlag serves the List action of Flag on /api/flags.
 func (flagService) ListFlag(ctx context.Context, req *ListFlagRequest) (*ListFlagResponse, error) {
 	models, total, more, err := listFlag(ctx, nil, grpc.Query{
-		Filters:     grpc.Filters(req.GetFilters()),
-		SortBy:      req.GetSortBy(),
-		Page:        req.GetPage(),
-		Size:        req.GetSize(),
-		CursorField: req.GetCursorField(),
-		CursorValue: req.GetCursorValue(),
-		CursorNext:  req.GetCursorNext(),
-		Expand:      req.GetExpand(),
-		Depth:       req.GetDepth(),
+		Filters: grpc.Filters(req.GetFilters()),
+		SortBy:  req.GetSortBy(),
+		Page:    req.GetPage(),
+		Size:    req.GetSize(),
+		Expand:  req.GetExpand(),
+		Depth:   req.GetDepth(),
 	})
 	if err != nil {
 		return nil, err

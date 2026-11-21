@@ -96,6 +96,8 @@ func (noteService) PatchNote(ctx context.Context, req *PatchNoteRequest) (*Patch
 func (noteService) ListNote(ctx context.Context, req *ListNoteRequest) (*ListNoteResponse, error) {
 	models, total, more, err := listNote(ctx, nil, grpc.Query{
 		Filters: grpc.Filters(req.GetFilters()),
+		Page:    req.GetPage(),
+		Size:    req.GetSize(),
 	})
 	if err != nil {
 		return nil, err

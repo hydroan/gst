@@ -18,7 +18,10 @@ func init() {
 		Comment: "PingRsp is the answer of GET /api/ping.",
 	})
 	apidoc.Register("stress/model", "Product", apidoc.StructDoc{
-		Comment: "Product is the table the data scenarios read and write: a row of a\nrealistic size (a code, a title, a category, two numbers and a body of a\nfew hundred bytes) behind the standard actions on /api/products and, the\nmodel declaring GRPC(), the ProductService rpcs. Embedding model.Query takes\nthe list parameters: field filters, _sort_by, _page and _size, and the\ncursor. The code is unique, so a create carrying a taken code is refused\nby the index; the category carries the index a list filters by, the status\ncarries none, so a filter on it scans the table, and the score carries none,\nso a sort by it sorts the table.",
+		Comment: "Product is the table the data scenarios read and write: a row of a\nrealistic size (a code, a title, a category, two numbers and a body of a\nfew hundred bytes) behind the standard actions on /api/products and, the\nmodel declaring GRPC(), the ProductService rpcs. Embedding model.Query takes\nthe operator filters and _sort_by; the list pages by _page and _size, as\nevery list does, and ProductFeed reads the same table by cursor. The code\nis unique, so a create carrying a taken code is refused by the index; the\ncategory carries the index a list filters by, the status carries none, so\na filter on it scans the table, and the score carries none, so a sort by\nit sorts the table.",
+	})
+	apidoc.Register("stress/model", "ProductFeed", apidoc.StructDoc{
+		Comment: "ProductFeed reads the products table as a feed: embedding model.Cursor has\nits list, GET /api/product-feed, read by cursor in place of pages, the\nlisting a table too large to page through takes. It answers the columns of\nProduct and declares no table of its own.",
 	})
 	apidoc.Register("stress/model", "ProductUpsertReq", apidoc.StructDoc{
 		Comment: "ProductUpsertReq is the body of POST /api/products/upsert: the product to\ninsert, or to overwrite where its code is taken.",

@@ -32,6 +32,7 @@ func Init() error {
 	router.Register[*model.Product, *model.Product, *model.Product](router.Auth(), "/api/products/:id", &gst.ControllerConfig[*model.Product]{ParamName: "id"}, service.Get)
 	router.Register[*model.Product, *model.Product, *model.Product](router.Auth(), "/api/products/batch", &gst.ControllerConfig[*model.Product]{}, service.DeleteMany)
 	router.Register[*model.Product, *model.ProductUpsertReq, *model.Product](router.Auth(), "/api/products/upsert", &gst.ControllerConfig[*model.Product]{}, service.Create)
+	router.Register[*model.ProductFeed, *model.ProductFeed, *model.ProductFeed](router.Auth(), "/api/product-feed", &gst.ControllerConfig[*model.ProductFeed]{}, service.List)
 	router.Register[*model.Ticket, *model.Ticket, *model.Ticket](router.Auth(), "/api/tickets", &gst.ControllerConfig[*model.Ticket]{}, service.Create)
 	router.Register[*model.Ticket, *model.Ticket, *model.Ticket](router.Auth(), "/api/tickets/:id", &gst.ControllerConfig[*model.Ticket]{ParamName: "id"}, service.Delete)
 	router.Register[*model.Ticket, *model.Ticket, *model.Ticket](router.Auth(), "/api/tickets/:id", &gst.ControllerConfig[*model.Ticket]{ParamName: "id"}, service.Update)

@@ -9,11 +9,12 @@ import (
 // realistic size (a code, a title, a category, two numbers and a body of a
 // few hundred bytes) behind the standard actions on /api/products and, the
 // model declaring GRPC(), the ProductService rpcs. Embedding model.Query takes
-// the list parameters: field filters, _sort_by, _page and _size, and the
-// cursor. The code is unique, so a create carrying a taken code is refused
-// by the index; the category carries the index a list filters by, the status
-// carries none, so a filter on it scans the table, and the score carries none,
-// so a sort by it sorts the table.
+// the operator filters and _sort_by; the list pages by _page and _size, as
+// every list does, and ProductFeed reads the same table by cursor. The code
+// is unique, so a create carrying a taken code is refused by the index; the
+// category carries the index a list filters by, the status carries none, so
+// a filter on it scans the table, and the score carries none, so a sort by
+// it sorts the table.
 type Product struct {
 	Code     string `json:"code" query:"code" gorm:"size:32;not null" binding:"required,max=32" pb:"11"`
 	Title    string `json:"title" query:"title" gorm:"size:200" binding:"max=200" pb:"12"`
