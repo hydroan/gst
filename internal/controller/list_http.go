@@ -41,10 +41,16 @@ func ListHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			response.Error(c, err)
 			return
 		}
-		response.JSON(c, gin.H{
-			"items":    items,
-			"total":    total,
-			"has_more": hasMore,
-		})
+		response.JSON(c, listData[M]{Items: items, Total: total, HasMore: hasMore})
 	}
+}
+
+// listData is the data of a list response: the items of the page, the total,
+// and whether records lie past the page. A struct rather than a map: the
+// encoder walks its fields as declared, with no keys to sort and no value to
+// box.
+type listData[M types.Model] struct {
+	Items   []M  `json:"items"`
+	Total   int  `json:"total"`
+	HasMore bool `json:"has_more"`
 }
