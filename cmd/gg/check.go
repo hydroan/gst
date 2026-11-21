@@ -47,6 +47,7 @@ var projectChecks = []ggcheck.Check{
 	ggcheck.LogFieldBoundedness,
 	ggcheck.ModelTableNameDeclaration,
 	ggcheck.GormTagIndexBan,
+	ggcheck.ValidateTagBan,
 	ggcheck.IndexDeclarations,
 	ggcheck.FrameworkColumns,
 	ggcheck.TenantUniqueIndexes,
@@ -96,7 +97,7 @@ func projectChecksWithout(names ...string) []ggcheck.Check {
 }
 
 // projectCheckSkips closes the gg check help: what the checks leave out.
-const projectCheckSkips = `Model and service subtrees owned by copyable framework modules are skipped by Service test coverage, Service test organization, Log field boundedness, Model table name declaration, Gorm tag index ban, Index declarations, Framework columns, Tenant unique indexes, Query names, ID accessors, Version field declaration and Column reference minting, and their service subtrees by Detached context: copied module code is tested inside the framework repository.
+const projectCheckSkips = `Model and service subtrees owned by copyable framework modules are skipped by Service test coverage, Service test organization, Log field boundedness, Model table name declaration, Gorm tag index ban, Validate tag ban, Index declarations, Framework columns, Tenant unique indexes, Query names, ID accessors, Version field declaration and Column reference minting, and their service subtrees by Detached context: copied module code is tested inside the framework repository.
 Paths ignored by the project's Git ignore rules are skipped by every check, so runtime artifacts such as log directories never fail checks.`
 
 // projectCheckHelp renders the gg check help from projectChecks: one numbered
