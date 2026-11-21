@@ -678,6 +678,22 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			want:  contractWant{status: http.StatusBadRequest, msg: `unsupported query parameter "_sort_by"`},
 		},
 		{
+			// A feed takes no order at all, so it says so before it reads
+			// the order: a client is not led to correct a column of an
+			// order the list refuses whole.
+			name: "List refuses an order on a feed ahead of the column it misnames", fixture: feeds, phase: apiaction.List,
+			input: contractInput{query: controller.Query{SortBy: []string{"missing"}}},
+			want:  contractWant{status: http.StatusBadRequest, msg: `unsupported query parameter "_sort_by"`},
+		},
+		{
+			name: "List refuses a page number on a feed ahead of a filter it cannot read", fixture: feeds, phase: apiaction.List,
+			input: contractInput{query: controller.Query{
+				Page:    2,
+				Filters: []controller.Filter{{Field: "missing", Op: "eq", Values: []string{"value"}}},
+			}},
+			want: contractWant{status: http.StatusBadRequest, msg: `unsupported query parameter "_page"`},
+		},
+		{
 			name: "List refuses a date filter it cannot read", fixture: dated, phase: apiaction.List,
 			input: contractInput{query: controller.Query{Filters: []controller.Filter{{Field: "day", Op: "eq", Values: []string{"not-a-date"}}}}},
 			want:  contractWant{status: http.StatusBadRequest},

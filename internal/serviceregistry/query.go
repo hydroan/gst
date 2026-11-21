@@ -32,9 +32,11 @@ import (
 // Which parameters a request may use is decided by the model: every model
 // pages, model.Query opts in to sorting, expansion and the operator filters
 // and model.Cursor to the cursor, and a parameter the model did not opt in
-// to is ignored rather than rejected.
-// Malformed filters are the one exception and always fail, because silently
-// dropping a mistyped filter would widen the result set.
+// to is ignored rather than rejected. Two things always fail: a malformed
+// filter, because silently dropping a mistyped filter would widen the result
+// set, and a page or an order beside the cursor of a model embedding
+// model.Cursor, which QueryCursor refuses the way the framework's own list
+// does, a feed taking neither.
 //
 // A typical list service builds its query like this:
 //
@@ -118,19 +120,20 @@ func (Base[M, REQ, RSP]) QueryOrders(ctx *types.ServiceContext) ([]types.Order, 
 // QueryPagination returns the page and size arguments of the request, ready to
 // be passed to Database.WithPagination: the size of _size, 20 when left out
 // and 100 at most, the listener refusing a larger one, and the page of
-// _page, which a model embedding model.Cursor, read by cursor, never takes.
-// The returned page is always at least 1, so a service slicing in-memory
-// pages or computing offsets itself can use it without normalizing again.
+// _page. The returned page is always at least 1, so a service slicing
+// in-memory pages or computing offsets itself can use it without normalizing
+// again.
 func (Base[M, REQ, RSP]) QueryPagination(ctx *types.ServiceContext) (page, size int) {
-	return urlquery.Pagination(requestctx.QueryValues(ctx), zeroModel[M]())
+	return urlquery.Pagination(requestctx.QueryValues(ctx))
 }
 
 // QueryCursor returns the cursor position of the request, ready to be passed
 // to Database.WithCursor. Models that did not embed model.Cursor yield a zero
 // cursor, which WithCursor treats as a no-op; a request without _cursor_value
 // yields the feed's first page, ordered but unbounded. An unknown cursor
-// column, or a cursor value the column's Go type cannot represent, is a
-// client error and is reported as such.
+// column, a cursor value the column's Go type cannot represent, and a _page
+// or a _sort_by beside the cursor, a feed being read from its cursor on in
+// the cursor's order, are client errors and are reported as such.
 func (Base[M, REQ, RSP]) QueryCursor(ctx *types.ServiceContext) (types.Cursor, error) {
 	return urlquery.Cursor(requestctx.QueryValues(ctx), zeroModel[M]())
 }

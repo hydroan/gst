@@ -1,8 +1,10 @@
-package urlquery
+package urlquery_test
 
 import (
 	"net/url"
 	"testing"
+
+	"github.com/hydroan/gst/internal/urlquery"
 )
 
 // BenchmarkPagination measures reading the page and size of a request that
@@ -12,6 +14,6 @@ func BenchmarkPagination(b *testing.B) {
 
 	b.ReportAllocs()
 	for b.Loop() {
-		Pagination(query, &plainTestModel{})
+		urlquery.Pagination(query)
 	}
 }

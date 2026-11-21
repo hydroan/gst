@@ -13,9 +13,10 @@
 // operator filters. The parameter readers (Pagination, Cursor, Orders) read
 // what the model takes and leave the rest alone; refusing the parameters of
 // a capability the model lacks is the list controller's job, not this
-// package's. Keys that map to nothing are different and always fail — in
-// Decode and Filters alike — because silently dropping a mistyped filter
-// would widen the result set.
+// package's, but for the page and the order of a feed, which Cursor refuses
+// wherever a feed is read. Keys that map to nothing are different and always
+// fail — in Decode and Filters alike — because silently dropping a mistyped
+// filter would widen the result set.
 package urlquery
 
 import (

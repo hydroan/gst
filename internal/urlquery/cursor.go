@@ -21,6 +21,13 @@ import (
 // the feed's order and the row a client pages on from is the row the order
 // puts last.
 //
+// A feed is read from its cursor on, in the order the cursor defines, so the
+// request of one carrying _page or _sort_by is refused with
+// UnsupportedParameterError, both listed when it carries both: here, where
+// the list of the framework and a service listing with the query helpers
+// both read the cursor, rather than left for the database to refuse as a
+// cursor beside an order.
+//
 // The cursor column is validated against the model's filterable columns, on
 // the first page as on any other, and the cursor value against that
 // column's Go type, so an unknown column or a mistyped value fails here
@@ -41,6 +48,15 @@ import (
 func Cursor(q url.Values, m types.Model) (types.Cursor, error) {
 	if !modelregistry.IsCursorable(m) {
 		return types.Cursor{}, nil
+	}
+	var untaken []string
+	for _, key := range [...]string{types.QueryPage, types.QuerySortBy} {
+		if q.Has(key) {
+			untaken = append(untaken, key)
+		}
+	}
+	if len(untaken) > 0 {
+		return types.Cursor{}, UnsupportedParameterError(untaken)
 	}
 	value := q.Get(types.QueryCursorValue)
 

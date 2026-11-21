@@ -36,6 +36,12 @@ func (a *action[M, REQ, RSP]) listFlow(ctx context.Context, newServiceContext se
 	if err := decodeListQuery(m, query); err != nil {
 		return nil, 0, false, failWith(ctx, log, "parse query parameter failed", err, invalidArgument(err))
 	}
+	// The cursor is read ahead of the filters and the order: a feed refuses
+	// a page or an order whole, whatever they or the rest of the query hold.
+	cursor, err := urlquery.Cursor(query, m)
+	if err != nil {
+		return nil, 0, false, failWith(ctx, log, "parse query parameter failed", err, invalidArgument(err))
+	}
 	filters, err := urlquery.Filters(query, m)
 	if err != nil {
 		return nil, 0, false, failWith(ctx, log, "parse query parameter failed", err, invalidArgument(err))
@@ -43,11 +49,6 @@ func (a *action[M, REQ, RSP]) listFlow(ctx context.Context, newServiceContext se
 	present := urlquery.PresentFields(query)
 
 	orders, err := urlquery.Orders(query, m)
-	if err != nil {
-		return nil, 0, false, failWith(ctx, log, "parse query parameter failed", err, invalidArgument(err))
-	}
-
-	cursor, err := urlquery.Cursor(query, m)
 	if err != nil {
 		return nil, 0, false, failWith(ctx, log, "parse query parameter failed", err, invalidArgument(err))
 	}
@@ -83,7 +84,7 @@ func (a *action[M, REQ, RSP]) listFlow(ctx context.Context, newServiceContext se
 	// 3.List resources from database. A feed counts nothing (see below), so
 	// it reads one record past the page to tell whether records lie past it:
 	// no second query, and no empty page for the client to ask for.
-	page, size := urlquery.Pagination(query, m)
+	page, size := urlquery.Pagination(query)
 	limit := size
 	if cursor.Enabled() {
 		limit++

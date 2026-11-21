@@ -491,7 +491,8 @@ if err = database.Database[*appmodel.Sample](ctx).
 
 cursor 分页自带 ORDER BY，首页也是：不带 `_cursor_value` 的请求按游标列升序返回第一页，之后用
 末行的值接着翻。嵌了 `model.Cursor` 的 model，框架的列表接口只按 cursor 翻页，传 `_page` 或
-`_sort_by` 直接返回 400；`Database` 链上 `WithCursor` 与 `WithOrder` 同时出现也会报错。
+`_sort_by` 直接返回 400；自己写的列表用 `QueryCursor` 读游标时同样如此，它会返回这个错误，照上面的写法
+答 400 即可；`Database` 链上 `WithCursor` 与 `WithOrder` 同时出现也会报错。
 
 #### OR 查询
 

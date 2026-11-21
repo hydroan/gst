@@ -31,6 +31,7 @@ type querySnapshot struct {
 	Code       string    `query:"code"`
 	SnapshotAt time.Time `json:"snapshot_at" query:"snapshot_at"`
 
+	modelregistry.Query
 	modelregistry.Cursor
 	modelregistry.Base
 }
@@ -160,13 +161,6 @@ func TestBaseQueryPagination(t *testing.T) {
 		require.Equal(t, 1, page, "the page always normalizes to at least 1")
 		require.Equal(t, 20, size, "a size left out is the default page size")
 	})
-
-	t.Run("AFeedReadsNoPage", func(t *testing.T) {
-		var feed querySnapshotService
-		page, size := feed.QueryPagination(newQueryContext(t, apiaction.List, "/samples?_page=2&_size=50"))
-		require.Equal(t, 1, page, "a model embedding model.Cursor is read from its cursor on")
-		require.Equal(t, 50, size)
-	})
 }
 
 func TestBaseQueryOrders(t *testing.T) {
@@ -233,6 +227,21 @@ func TestBaseQueryCursor(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, cursor.Enabled(), "the feed is ordered from its first page on")
 		require.False(t, cursor.Bounded())
+	})
+
+	t.Run("AFeedTakesNeitherAPageNorAnOrder", func(t *testing.T) {
+		// A service listing a feed with the helpers answers the request
+		// carrying a page or an order the way the framework's own list
+		// does, rather than hand the database a cursor beside an order.
+		_, err := svc.QueryCursor(newQueryContext(t, apiaction.List, "/snapshots?_sort_by=code"))
+		require.EqualError(t, err, `unsupported query parameter "_sort_by"`)
+
+		_, err = svc.QueryCursor(newQueryContext(t, apiaction.List, "/snapshots?_page=3"))
+		require.EqualError(t, err, `unsupported query parameter "_page"`)
+
+		orders, err := svc.QueryOrders(newQueryContext(t, apiaction.Export, "/snapshots/export?_sort_by=code"))
+		require.NoError(t, err)
+		require.Len(t, orders, 1, "an export of the model is no feed and sorts")
 	})
 
 	t.Run("AFeedReadsItsFirstPageFromAPlainRequest", func(t *testing.T) {

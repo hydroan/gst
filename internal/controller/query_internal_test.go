@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/stretchr/testify/require"
 )
 
@@ -73,13 +74,14 @@ func TestDecodeListQueryGatesQueryKeys(t *testing.T) {
 	})
 }
 
-// TestDecodeListQueryTakesOneWayOfPagingPerModel pins the paging parameters
-// a list takes by what its model embeds: page numbers, unless the model
-// embeds Cursor, which makes its list a feed read by cursor alone, and a
-// page size either way. The parameters of the other way of paging are
-// refused, a page beside a cursor as either alone, and so is _sort_by on a
-// feed, whose order the cursor defines.
-func TestDecodeListQueryTakesOneWayOfPagingPerModel(t *testing.T) {
+// TestListQueryTakesOneWayOfPagingPerModel pins the paging parameters a list
+// takes by what its model embeds, as the list flow reads them, the gate of
+// decodeListQuery and then the cursor: page numbers, unless the model embeds
+// Cursor, which makes its list a feed read by cursor alone, and a page size
+// either way. The parameters of the other way of paging are refused, a page
+// beside a cursor as either alone, and so is _sort_by on a feed, whose order
+// the cursor defines.
+func TestListQueryTakesOneWayOfPagingPerModel(t *testing.T) {
 	type plainModel struct {
 		Name string `query:"name"`
 
@@ -128,6 +130,9 @@ func TestDecodeListQueryTakesOneWayOfPagingPerModel(t *testing.T) {
 			require.NoError(t, err)
 
 			err = decodeListQuery(tt.model, query)
+			if err == nil {
+				_, err = urlquery.Cursor(query, tt.model)
+			}
 			if tt.refusal == "" {
 				require.NoError(t, err)
 				return

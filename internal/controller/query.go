@@ -3,7 +3,6 @@ package controller
 import (
 	"net/url"
 	"reflect"
-	"slices"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -26,14 +25,6 @@ var listQueryKeys = map[string]struct{}{
 	types.QuerySortBy: {},
 }
 
-// feedRefusedQueryKeys are the List parameters a feed, the list of a model
-// embedding model.Cursor, takes from no model: the page, a feed being read
-// from its cursor on, and the order, which its cursor defines.
-var feedRefusedQueryKeys = map[string]struct{}{
-	types.QueryPage:   {},
-	types.QuerySortBy: {},
-}
-
 // listPagingQueryKeys are the List parameters a list pages by: the size of
 // every list, and the page of one that is no feed. An export, which lists
 // every record the query matches, refuses them beside the cursor's.
@@ -42,33 +33,26 @@ var listPagingQueryKeys = map[string]struct{}{
 	types.QuerySize: {},
 }
 
-// listCursorQueryKeys are the List parameters a feed alone takes.
+// listCursorQueryKeys are the List parameters a feed alone takes, the list of
+// a model embedding model.Cursor.
 var listCursorQueryKeys = map[string]struct{}{
 	types.QueryCursorValue: {},
 	types.QueryCursorField: {},
 	types.QueryCursorNext:  {},
 }
 
-// decodeListQuery rejects the framework query keys the list of the model
-// does not take, then decodes the remaining URL query parameters into the
-// model's own query fields. A list pages one way: by _page, or, the model
-// embedding model.Cursor, by its cursor, and the parameters of the other way
-// are refused, as _sort_by is on a feed; _size is every list's. The keys of
-// model.Query are refused a model not embedding it. The explicit gate
-// reports every such key in one error, _page included, which urlquery.Decode
-// leaves to urlquery.Pagination.
+// decodeListQuery rejects the framework query keys the model has not opted
+// in to, the keys of model.Query and those of model.Cursor, then decodes the
+// remaining URL query parameters into the model's own query fields. The
+// explicit gate reports every such key in one error. _page and _size are
+// every list's but a feed's page, which urlquery.Cursor refuses beside
+// _sort_by when the flow reads the cursor.
 func decodeListQuery[M types.Model](m M, query map[string][]string) error {
 	rejected := make([]string, 0)
 	if !modelregistry.IsQueryable(m) {
 		rejected = append(rejected, matchQueryKeys(query, listQueryKeys)...)
 	}
-	if modelregistry.IsCursorable(m) {
-		for _, key := range matchQueryKeys(query, feedRefusedQueryKeys) {
-			if !slices.Contains(rejected, key) {
-				rejected = append(rejected, key)
-			}
-		}
-	} else {
+	if !modelregistry.IsCursorable(m) {
 		rejected = append(rejected, matchQueryKeys(query, listCursorQueryKeys)...)
 	}
 	if len(rejected) > 0 {

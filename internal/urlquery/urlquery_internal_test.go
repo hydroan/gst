@@ -1046,30 +1046,24 @@ type queryAutoTestModel struct {
 	modelregistry.AutoBase
 }
 
-// TestPagination pins the page and the size a list reads: every model reads
-// both, a page or a size left out, empty or zero being the first page and
-// the default size, while the list of a model embedding Cursor is a feed and
-// reads no page. A size past the cap never reaches Pagination, the listeners
-// refusing it at the door (see ParseCount).
+// TestPagination pins the page and the size a list reads off the query,
+// whatever its model: a page or a size left out, empty or zero is the first
+// page and the default size. A size past the cap never reaches Pagination, the
+// listeners refusing it at the door (see ParseCount), and neither does the
+// page of a feed, which Cursor refuses.
 func TestPagination(t *testing.T) {
-	t.Run("EveryModelReadsThePageAndTheSize", func(t *testing.T) {
-		page, size := Pagination(url.Values{"_page": {"2"}, "_size": {"50"}}, &plainTestModel{})
+	t.Run("ReadsThePageAndTheSize", func(t *testing.T) {
+		page, size := Pagination(url.Values{"_page": {"2"}, "_size": {"50"}})
 		require.Equal(t, 2, page)
 		require.Equal(t, 50, size)
 	})
 
 	t.Run("APageOrSizeLeftOutIsTheFirstPageAndTheDefaultSize", func(t *testing.T) {
 		for _, q := range []url.Values{{}, {"_page": {"0"}, "_size": {"0"}}, {"_page": {""}, "_size": {""}}} {
-			page, size := Pagination(q, &plainTestModel{})
+			page, size := Pagination(q)
 			require.Equal(t, 1, page, "%v", q)
 			require.Equal(t, DefaultPageSize, size, "%v", q)
 		}
-	})
-
-	t.Run("AFeedReadsNoPage", func(t *testing.T) {
-		page, size := Pagination(url.Values{"_page": {"2"}, "_size": {"50"}}, &cursorTestModel{})
-		require.Equal(t, 1, page, "a feed is read from the cursor on, with no page to skip to")
-		require.Equal(t, 50, size)
 	})
 }
 
@@ -1229,6 +1223,25 @@ func TestCursor(t *testing.T) {
 		cursor, err := Cursor(url.Values{"_cursor_next": {"true"}}, &queryTestModel{})
 		require.NoError(t, err)
 		require.False(t, cursor.Enabled(), "Query brings no cursor: a list is a feed by embedding Cursor alone")
+	})
+
+	t.Run("AFeedTakesNeitherAPageNorAnOrder", func(t *testing.T) {
+		// A feed is read from its cursor on, in the order the cursor defines,
+		// so the request of one carrying a page or an order is refused, by
+		// the list of the framework and by a service reading the cursor
+		// alike, every such parameter listed.
+		_, err := Cursor(url.Values{"_page": {"2"}}, &cursorTestModel{})
+		require.EqualError(t, err, `unsupported query parameter "_page"`)
+
+		_, err = Cursor(url.Values{"_sort_by": {"name"}, "_cursor_next": {"true"}}, &filterTestModel{})
+		require.EqualError(t, err, `unsupported query parameter "_sort_by"`, "Query beside Cursor sorts no feed")
+
+		_, err = Cursor(url.Values{"_sort_by": {"name"}, "_page": {"2"}, "_cursor_value": {"abc"}}, &filterTestModel{})
+		require.EqualError(t, err, `unsupported query parameters "_page", "_sort_by"`)
+
+		cursor, err := Cursor(url.Values{"_sort_by": {"name"}, "_page": {"2"}}, &queryTestModel{})
+		require.NoError(t, err)
+		require.False(t, cursor.Enabled(), "a model that is no feed keeps both")
 	})
 
 	t.Run("AFeedReadsItsFirstPageFromAPlainRequest", func(t *testing.T) {
