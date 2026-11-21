@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -90,6 +91,42 @@ func TestStrictQueryRejectsMalformedQueries(t *testing.T) {
 	}
 }
 
+// TestStrictQueryRefusesAPageOrSizeThatIsNoCount pins that _page and _size
+// carry a count, zero or more, wherever a request gives them: one that is no
+// integer, or a negative one, is refused at the gate, before a list flow or
+// a service reads it as the default, in the words a list of the framework's
+// own answers a value its model cannot decode, naming the parameter and
+// echoing the value alone. Zero and an empty value are admitted, each read
+// as the parameter left out, and so is a size past the cap, which the list
+// brings down to it.
+func TestStrictQueryRefusesAPageOrSizeThatIsNoCount(t *testing.T) {
+	for _, tt := range []struct{ name, method, rawQuery, wantMsg string }{
+		{name: "page that is no number", method: http.MethodGet, rawQuery: "_page=abc", wantMsg: `invalid query parameter "_page": expect a numeric value, got "abc"`},
+		{name: "negative page", method: http.MethodGet, rawQuery: "_page=-1", wantMsg: `invalid query parameter "_page": expect a numeric value, got "-1"`},
+		{name: "size that is no integer", method: http.MethodGet, rawQuery: "_size=1.5", wantMsg: `invalid query parameter "_size": expect a numeric value, got "1.5"`},
+		{name: "negative size", method: http.MethodGet, rawQuery: "_size=-5", wantMsg: `invalid query parameter "_size": expect a numeric value, got "-5"`},
+		{name: "page past what an int holds", method: http.MethodGet, rawQuery: "_page=18446744073709551615", wantMsg: `invalid query parameter "_page": expect a numeric value, got "18446744073709551615"`},
+		{name: "page of a request that lists nothing", method: http.MethodPost, rawQuery: "_page=abc", wantMsg: `invalid query parameter "_page": expect a numeric value, got "abc"`},
+		{name: "zero page and size", method: http.MethodGet, rawQuery: "_page=0&_size=0"},
+		{name: "empty page and size", method: http.MethodGet, rawQuery: "_page=&_size="},
+		{name: "size past the cap", method: http.MethodGet, rawQuery: "_page=2&_size=500"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			status, body := strictQueryResult(t, tt.method, tt.rawQuery)
+			if tt.wantMsg == "" {
+				require.Equal(t, http.StatusOK, status)
+				return
+			}
+			require.Equal(t, http.StatusBadRequest, status)
+			var envelope struct {
+				Msg string `json:"msg"`
+			}
+			require.NoError(t, json.Unmarshal([]byte(body), &envelope))
+			require.Equal(t, tt.wantMsg, envelope.Msg)
+		})
+	}
+}
+
 // TestStrictQueryCoversEveryMethod pins that the gate judges the query string
 // regardless of the verb: a POST carrying a polluted query is refused the same
 // way a GET is.
@@ -111,7 +148,7 @@ func TestStrictQueryRefusalUsesEnvelope(t *testing.T) {
 // BenchmarkStrictQuery prices the gate per request. The parse it performs is
 // the request's one memoized parse (the chain parsed the query once before the
 // gate existed too), so the admit cases price the gate's own additions: the
-// duplicate scan and the memo write.
+// duplicate scan, the read of the page and the size, and the memo write.
 func BenchmarkStrictQuery(b *testing.B) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()

@@ -30,13 +30,18 @@ const (
 // A model opts in to client-controlled paging by embedding model.Pagination
 // (page and size) or model.Cursor (size only); a parameter the model did not
 // opt in to is ignored and falls back to the framework default. The returned
-// page is always at least 1 — an unset, non-positive or unparsable page means
-// the first page — so a caller can compute offsets or slice in-memory pages
-// without normalizing again. An unset size defaults to a small first page and
-// an oversized one clamps to the cap, while a model without client size
-// control keeps the full-table safety limit. A request reading the feed
-// through a cursor (see cursorRequested), its first page included, resets
-// page to 1 so offset paging cannot stack on top of cursor filtering.
+// page is always at least 1 — an unset or zero page means the first page — so
+// a caller can compute offsets or slice in-memory pages without normalizing
+// again. An unset or zero size defaults to a small first page and an
+// oversized one clamps to the cap, while a model without client size control
+// keeps the full-table safety limit. A request reading the feed through a
+// cursor (see cursorRequested), its first page included, resets page to 1 so
+// offset paging cannot stack on top of cursor filtering.
+//
+// Pagination has no error to answer with, so what it reads is a count
+// already: an HTTP request whose _page or _size is no integer, or a negative
+// one, is refused at the door (see the strictQuery middleware), and the
+// fields of a gRPC request message are unsigned.
 func Pagination(q url.Values, m types.Model) (page, size int) {
 	paginatable := modelregistry.IsPaginatable(m)
 	cursorable := modelregistry.IsCursorable(m)

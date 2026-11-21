@@ -289,62 +289,65 @@ type expandQueryTestEntry struct {
 
 // TestParseExpandQueryResolvesTheExpandableAssociations pins how _expand and
 // _depth name the associations a read preloads: names match the model's
-// expands ignoring case and snake case, all selects every one, a name the
-// model does not expand is dropped, and the depth repeats an association
-// holding the model itself, up to ten and one outside that, while any other
-// association ignores it.
+// expands ignoring case, snake case and the spaces around them, all selects
+// every one wherever it stands among the names, an item left empty names
+// nothing, and the depth repeats an association holding the model itself,
+// one to ten, zero read as the depth left out, while any other association
+// ignores it.
 func TestParseExpandQueryResolvesTheExpandableAssociations(t *testing.T) {
-	t.Run("DepthRepeatsAnAssociationHoldingTheModel", func(t *testing.T) {
-		c := newTestGetContext(t, "/items?_expand=Children&_depth=3")
-		require.Equal(t, []string{"Children.Children.Children"}, parseExpandQuery(c.Request.URL.Query(), &expandQueryTestModel{}))
-	})
-
-	t.Run("ASingleValuedAssociationIgnoresDepth", func(t *testing.T) {
-		c := newTestGetContext(t, "/items?_expand=Parent&_depth=3")
-		require.Equal(t, []string{"Parent"}, parseExpandQuery(c.Request.URL.Query(), &expandQueryTestModel{}))
-	})
-
-	t.Run("AnAssociationOfAnotherModelIgnoresDepth", func(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		target string
+		want   []string
+	}{
+		{"DepthRepeatsAnAssociationHoldingTheModel", "/items?_expand=Children&_depth=3", []string{"Children.Children.Children"}},
+		{"ASingleValuedAssociationIgnoresDepth", "/items?_expand=Parent&_depth=3", []string{"Parent"}},
 		// An entry holds no entries: repeating the association would name a
 		// relation the entry's model does not have, which gorm refuses.
-		c := newTestGetContext(t, "/items?_expand=Entries&_depth=3")
-		require.Equal(t, []string{"Entries"}, parseExpandQuery(c.Request.URL.Query(), &expandQueryTestModel{}))
-	})
+		{"AnAssociationOfAnotherModelIgnoresDepth", "/items?_expand=Entries&_depth=3", []string{"Entries"}},
+		{"AllSelectsEveryModelExpand", "/items?_expand=all", []string{"Children", "Parent", "ChildItems", "Entries"}},
+		{"AllAmongTheNamesSelectsEveryModelExpand", "/items?_expand=parent,all", []string{"Children", "Parent", "ChildItems", "Entries"}},
+		{"ExpandMatchesCaseInsensitively", "/items?_expand=children", []string{"Children"}},
+		{"ExpandMatchesSnakeCaseName", "/items?_expand=child_items", []string{"ChildItems"}},
+		{"NamesAreReadWithoutTheSpacesAroundThem", "/items?_expand=parent,%20children", []string{"Children", "Parent"}},
+		{"AllIsReadWithoutTheSpacesAroundIt", "/items?_expand=parent,%20all", []string{"Children", "Parent", "ChildItems", "Entries"}},
+		{"AnItemOfSpacesNamesNothing", "/items?_expand=children,%20", []string{"Children"}},
+		{"ANameGivenTwiceIsExpandedOnce", "/items?_expand=children,Children", []string{"Children"}},
+		{"AnEmptyItemNamesNothing", "/items?_expand=children,", []string{"Children"}},
+		{"DepthAcceptsUpperBoundTen", "/items?_expand=Children&_depth=10", []string{strings.Repeat("Children.", 9) + "Children"}},
+		{"ZeroDepthReadsAsTheDepthLeftOut", "/items?_expand=Children&_depth=0", []string{"Children"}},
+		{"AnEmptyExpandExpandsNothing", "/items?_expand=", nil},
+		{"NoExpandParameterExpandsNothing", "/items", nil},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			expands, err := parseExpandQuery(newTestGetContext(t, tt.target).Request.URL.Query(), &expandQueryTestModel{})
+			require.NoError(t, err)
+			require.Equal(t, tt.want, expands)
+		})
+	}
+}
 
-	t.Run("AllSelectsEveryModelExpand", func(t *testing.T) {
-		c := newTestGetContext(t, "/items?_expand=all")
-		require.Equal(t, []string{"Children", "Parent", "ChildItems", "Entries"}, parseExpandQuery(c.Request.URL.Query(), &expandQueryTestModel{}))
-	})
-
-	t.Run("ExpandMatchesCaseInsensitively", func(t *testing.T) {
-		c := newTestGetContext(t, "/items?_expand=children")
-		require.Equal(t, []string{"Children"}, parseExpandQuery(c.Request.URL.Query(), &expandQueryTestModel{}))
-	})
-
-	t.Run("ExpandMatchesSnakeCaseName", func(t *testing.T) {
-		c := newTestGetContext(t, "/items?_expand=child_items")
-		require.Equal(t, []string{"ChildItems"}, parseExpandQuery(c.Request.URL.Query(), &expandQueryTestModel{}))
-	})
-
-	t.Run("DepthAcceptsUpperBoundTen", func(t *testing.T) {
-		c := newTestGetContext(t, "/items?_expand=Children&_depth=10")
-		require.Equal(t, []string{strings.Repeat("Children.", 9) + "Children"}, parseExpandQuery(c.Request.URL.Query(), &expandQueryTestModel{}))
-	})
-
-	t.Run("UnknownExpandDropped", func(t *testing.T) {
-		c := newTestGetContext(t, "/items?_expand=Bogus")
-		require.Empty(t, parseExpandQuery(c.Request.URL.Query(), &expandQueryTestModel{}))
-	})
-
-	t.Run("OutOfRangeDepthFallsBackToOne", func(t *testing.T) {
-		c := newTestGetContext(t, "/items?_expand=Children&_depth=11")
-		require.Equal(t, []string{"Children"}, parseExpandQuery(c.Request.URL.Query(), &expandQueryTestModel{}))
-	})
-
-	t.Run("NoExpandParameterReturnsNothing", func(t *testing.T) {
-		c := newTestGetContext(t, "/items")
-		require.Empty(t, parseExpandQuery(c.Request.URL.Query(), &expandQueryTestModel{}))
-	})
+// TestParseExpandQueryRefusesWhatItCannotRead pins that an expansion naming
+// an association the model does not expand, or a depth that is no number or
+// runs past the cap, is refused rather than read as no expansion or as the
+// depth left out: the answer names the parameter and echoes the value alone,
+// a depth that is no number in the words the model decode answers one. The
+// depth is read whether or not the request expands anything.
+func TestParseExpandQueryRefusesWhatItCannotRead(t *testing.T) {
+	for _, tt := range []struct{ name, target, want string }{
+		{"UnknownAssociation", "/items?_expand=Bogus", `invalid query parameter "_expand": unknown association "Bogus"`},
+		{"UnknownAssociationAmongKnownOnes", "/items?_expand=children,bogus", `invalid query parameter "_expand": unknown association "bogus"`},
+		{"UnknownAssociationBesideAll", "/items?_expand=all,bogus", `invalid query parameter "_expand": unknown association "bogus"`},
+		{"DepthPastTheCap", "/items?_expand=Children&_depth=11", `invalid query parameter "_depth": expect a value from 1 to 10, got "11"`},
+		{"DepthThatIsNoNumber", "/items?_expand=Children&_depth=abc", `invalid query parameter "_depth": expect a numeric value, got "abc"`},
+		{"NegativeDepth", "/items?_expand=Children&_depth=-1", `invalid query parameter "_depth": expect a numeric value, got "-1"`},
+		{"DepthPastTheCapWithNothingToExpand", "/items?_depth=11", `invalid query parameter "_depth": expect a value from 1 to 10, got "11"`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseExpandQuery(newTestGetContext(t, tt.target).Request.URL.Query(), &expandQueryTestModel{})
+			require.EqualError(t, err, tt.want)
+		})
+	}
 }
 
 // newTestGetContext builds a gin context carrying a GET request with the given

@@ -22,8 +22,8 @@ type Query struct {
 	Pagination
 	Cursor
 
-	Expand *string `json:"-" gorm:"-" query:"_expand" url:"_expand,omitempty"`   // Expand lists model associations to preload, separated by commas.
-	Depth  *uint   `json:"-" gorm:"-" query:"_depth" url:"_depth,omitempty"`     // Depth is how many levels an expanded association holding the model itself, the children of a tree, is preloaded to; any other association is one level.
+	Expand *string `json:"-" gorm:"-" query:"_expand" url:"_expand,omitempty"`   // Expand lists model associations to preload, separated by commas; a name the model does not expand is refused.
+	Depth  *uint   `json:"-" gorm:"-" query:"_depth" url:"_depth,omitempty"`     // Depth is how many levels an expanded association holding the model itself, the children of a tree, is preloaded to, one to ten, zero meaning one and a larger value refused; any other association is one level.
 	SortBy string  `json:"-" gorm:"-" query:"_sort_by" url:"_sort_by,omitempty"` // SortBy is the comma-separated ORDER BY expression; the List controller validates its columns and turns it into typed orders.
 }
 
@@ -51,13 +51,16 @@ type queryable interface {
 // as business filter fields on embedding models.
 //
 // Neither parameter can be used to retrieve a whole table. A size the client
-// does not set, or sets to zero or less, becomes the default page size; a size
-// above the cap is clamped to it rather than refused, which is what keeps a
-// client asking for everything from being served everything. Bulk retrieval is
-// the Export action's job, and it is the only one that answers unbounded.
+// does not set, or sets to zero, becomes the default page size; a size above
+// the cap is clamped to it rather than refused, which is what keeps a client
+// asking for everything from being served everything. Bulk retrieval is the
+// Export action's job, and it is the only one that answers unbounded.
+//
+// A request gives each parameter as a count, zero or more: one that is no
+// integer, or a negative one, is refused with 400 before any list reads it.
 type Pagination struct {
-	Page int `json:"-" gorm:"-" query:"_page" url:"_page,omitempty"` // Page is the one-based page number; non-positive values use the first page.
-	Size int `json:"-" gorm:"-" query:"_size" url:"_size,omitempty"` // Size is the page size; non-positive values use the default page size and oversized ones clamp to the cap.
+	Page int `json:"-" gorm:"-" query:"_page" url:"_page,omitempty"` // Page is the one-based page number; zero is the first page, and a negative value is refused.
+	Size int `json:"-" gorm:"-" query:"_size" url:"_size,omitempty"` // Size is the page size; zero is the default page size, an oversized one clamps to the cap, and a negative value is refused.
 }
 
 // paginationEnabled marks models that opt in to page and size query parameters.

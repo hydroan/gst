@@ -52,8 +52,12 @@ func (a *action[M, REQ, RSP]) listFlow(ctx context.Context, newServiceContext se
 		return nil, 0, failWith(ctx, log, "parse query parameter failed", err, invalidArgument(err))
 	}
 
+	expands, err := parseExpandQuery(query, m)
+	if err != nil {
+		return nil, 0, failWith(ctx, log, "parse query parameter failed", err, invalidArgument(err))
+	}
+
 	data := make([]M, 0)
-	expands := parseExpandQuery(query, m)
 
 	// 1.Perform business logic processing before list resources.
 	if err = a.traceServiceHook(ctx, apiaction.ListBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {

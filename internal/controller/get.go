@@ -19,7 +19,8 @@ import (
 // read, records the operation, and returns the model. id must not be empty:
 // a UUID-keyed model mints a fresh id for an empty one (see setID). An
 // id the model rejects, and a read that finds no stored record, both answer
-// 404 (see notFound).
+// 404 (see notFound); an expansion or a depth the request spells wrong
+// answers 400 (see parseExpandQuery).
 func (a *action[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext serviceContextFunc, id string) (M, error) {
 	var zero M
 	log := logger.Controller.WithContext(ctx, apiaction.Get)
@@ -33,7 +34,10 @@ func (a *action[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext ser
 		// coercion could match an unintended row.
 		return zero, reportFailure(log, trace.SpanFromContext(ctx), "route id rejected by model", nil, notFound(nil), zap.String("id", id))
 	}
-	expands := parseExpandQuery(requestctx.QueryValues(ctx), m)
+	expands, err := parseExpandQuery(requestctx.QueryValues(ctx), m)
+	if err != nil {
+		return zero, failWith(ctx, log, "parse query parameter failed", err, invalidArgument(err))
+	}
 
 	// 1.Perform business logic processing before get resource.
 	if err := a.traceServiceHook(ctx, apiaction.GetBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"strconv"
 
-	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/filetype"
@@ -107,7 +106,7 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			if raw := c.Query(types.QueryLimit); raw != "" {
 				var err error
 				if limit, err = strconv.Atoi(raw); err != nil {
-					err = errors.Newf("invalid query parameter %q: expect a numeric value, got %q", types.QueryLimit, raw)
+					err = notNumericError(types.QueryLimit, raw)
 					response.Error(c, reportFailure(log, span, "parse query parameter failed", err, invalidArgument(err)))
 					return
 				}
@@ -140,7 +139,11 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				return
 			}
 
-			expands := parseExpandQuery(query, m)
+			var expands []string
+			if expands, err = parseExpandQuery(query, m); err != nil {
+				response.Error(c, reportFailure(log, span, "parse query parameter failed", err, invalidArgument(err)))
+				return
+			}
 			svcCtx := types.NewServiceContext(c, nil, apiaction.Export)
 			// The list hooks of an export run on contexts of the Export phase,
 			// the phase of the action they serve.

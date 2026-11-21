@@ -1040,8 +1040,8 @@ func TestPagination(t *testing.T) {
 		require.Equal(t, 1, page, "an unset page normalizes to the first page")
 		require.Equal(t, DefaultPageSize, size, "adjustable models default to a small page")
 
-		page, _ = Pagination(url.Values{"_page": {"-5"}}, &paginatableTestModel{})
-		require.Equal(t, 1, page, "a non-positive page normalizes to the first page")
+		page, _ = Pagination(url.Values{"_page": {"0"}}, &paginatableTestModel{})
+		require.Equal(t, 1, page, "a zero page normalizes to the first page")
 
 		_, size = Pagination(url.Values{"_size": {"0"}}, &paginatableTestModel{})
 		require.Equal(t, DefaultPageSize, size)
@@ -1050,9 +1050,9 @@ func TestPagination(t *testing.T) {
 		require.Equal(t, MaxPageSize, size, "oversized page size clamps to the cap")
 	})
 
-	t.Run("UnparsableValuesFallBackToDefaults", func(t *testing.T) {
-		page, size := Pagination(url.Values{"_page": {""}, "_size": {"abc"}}, &paginatableTestModel{})
-		require.Equal(t, 1, page, "an unparsable page normalizes to the first page")
+	t.Run("EmptyValuesFallBackToDefaults", func(t *testing.T) {
+		page, size := Pagination(url.Values{"_page": {""}, "_size": {""}}, &paginatableTestModel{})
+		require.Equal(t, 1, page, "an empty page is the page left out, the first one")
 		require.Equal(t, DefaultPageSize, size)
 	})
 

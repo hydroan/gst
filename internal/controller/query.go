@@ -99,50 +99,78 @@ func checkCursorOrderConflict(cursor types.Cursor, orders []types.Order) error {
 	return nil
 }
 
-// maxExpandDepth is the largest _depth a request may ask for; a value
-// outside 1 to maxExpandDepth falls back to 1 (see parseExpandQuery). Every
-// depth level becomes one more recursive preload query, so the cap keeps a
-// single request from fanning out unbounded database work.
+// maxExpandDepth is the largest _depth a request may ask for (see
+// parseExpandQuery). Every depth level becomes one more recursive preload
+// query, so the cap keeps a single request from fanning out unbounded
+// database work.
 const maxExpandDepth = 10
 
+// notNumericError is the refusal of a query parameter that takes a number
+// and is given none, in the words urlquery's decode answers one a model
+// field cannot hold: for _limit=abc, "invalid query parameter "_limit":
+// expect a numeric value, got "abc"".
+func notNumericError(key, raw string) error {
+	return errors.Newf("invalid query parameter %q: expect a numeric value, got %q", key, raw)
+}
+
 // parseExpandQuery resolves the _expand and _depth parameters of the parsed
-// query against the model's expandable association paths. Expand names are
-// matched against m.Expands() ignoring case and snake case punctuation, so
-// "childItems" and "child_items" both select "ChildItems"; "_expand=all"
-// selects every expandable path. _depth (default 1; a value outside 1 to
-// maxExpandDepth falls back to 1) repeats the to-many associations holding
-// the model itself for recursive preloading (see
+// query against the model's expandable association paths, which come back
+// in the order m.Expands() lists them. Expand names are matched against
+// m.Expands() ignoring case, snake case punctuation and the spaces around
+// them, so "childItems" and "child_items" both select "ChildItems"; all
+// selects every expandable path, wherever it stands among the names; an
+// item left empty names nothing; and a name the model does not expand is
+// refused, "invalid query parameter "_expand": unknown association
+// "bogus"". _depth (default 1, as is a depth of zero) repeats the to-many
+// associations holding the model itself for recursive preloading (see
 // modelschema.RecursiveAssociations), e.g. expand "Children" with depth 3
 // becomes "Children.Children.Children"; every other association ignores
-// depth, its rows having no such association to descend into.
-func parseExpandQuery(query url.Values, m types.Model) []string {
-	if !query.Has(types.QueryExpand) {
-		return nil
-	}
+// depth, its rows having no such association to descend into. A depth that
+// is no number is refused the way notNumericError words it, and one past
+// maxExpandDepth with "invalid query parameter "_depth": expect a value
+// from 1 to 10, got "11"", whether or not the request expands anything.
+func parseExpandQuery(query url.Values, m types.Model) ([]string, error) {
 	depth := 1
-	if query.Has(types.QueryDepth) {
-		depth, _ = strconv.Atoi(query.Get(types.QueryDepth))
-		if depth < 1 || depth > maxExpandDepth {
-			depth = 1
+	if raw := query.Get(types.QueryDepth); raw != "" {
+		asked, err := strconv.ParseUint(raw, 10, 0)
+		switch {
+		case err != nil:
+			return nil, notNumericError(types.QueryDepth, raw)
+		case asked > maxExpandDepth:
+			return nil, errors.Newf("invalid query parameter %q: expect a value from 1 to %d, got %q", types.QueryDepth, maxExpandDepth, raw)
+		case asked > 0:
+			depth = int(asked)
 		}
 	}
-
-	items := strings.Split(query.Get(types.QueryExpand), ",")
-	if len(items) > 0 && items[0] == expandAll { // expand all fields
-		items = m.Expands()
+	raw := query.Get(types.QueryExpand)
+	if raw == "" {
+		return nil, nil
 	}
-	var matched []string
-	for _, e := range m.Expands() {
-		for _, item := range items {
-			if strings.EqualFold(strcase.SnakeCase(item), strcase.SnakeCase(e)) {
-				matched = append(matched, e)
+
+	expandable := m.Expands()
+	selected := make([]bool, len(expandable))
+	for item := range strings.SplitSeq(raw, ",") {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		known := item == expandAll
+		for i, e := range expandable {
+			if item == expandAll || strings.EqualFold(strcase.SnakeCase(item), strcase.SnakeCase(e)) {
+				selected[i], known = true, true
 			}
+		}
+		if !known {
+			return nil, errors.Newf("invalid query parameter %q: unknown association %q", types.QueryExpand, item)
 		}
 	}
 
 	recursive := modelschema.RecursiveAssociations(reflect.TypeOf(m))
 	var expands []string
-	for _, e := range matched {
+	for at, e := range expandable {
+		if !selected[at] {
+			continue
+		}
 		if _, ok := recursive[e]; !ok {
 			expands = append(expands, e)
 			continue
@@ -155,5 +183,5 @@ func parseExpandQuery(query url.Values, m types.Model) []string {
 		// "Children.Children.Children".
 		expands = append(expands, strings.Join(t, "."))
 	}
-	return expands
+	return expands, nil
 }
