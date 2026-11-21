@@ -123,6 +123,16 @@
 // //gst:literal <what the string means>. golangci-lint's goconst matches a
 // string against the constants of its own package alone.
 //
+// # Validate tags
+//
+// The framework validates a model or a payload by the rules its fields
+// declare under the binding tag, the one gin's validator reads: rules under
+// the validate tag read like validation and never run. gg check refuses the
+// tag in the model files a project writes and skips the subtrees gg module
+// copy writes there, copied module code being checked here, so
+// checkValidateTag reports a struct field carrying a validate tag in the
+// model sources of the framework's modules, under internal/model.
+//
 // # Layout
 //
 // Each check lives in the file named after it, testplacement.go for the
@@ -168,6 +178,7 @@ var checks = []check{
 	{name: "testseams", run: checkTestSeams},
 	{name: "testlisting", run: checkTestListing},
 	{name: "constliteral", run: checkConstLiteral},
+	{name: "validatetag", run: checkValidateTag},
 }
 
 func main() {
