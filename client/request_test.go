@@ -67,6 +67,28 @@ func TestDoReturnsStructuredErrorOnRejection(t *testing.T) {
 	require.Equal(t, "permission denied", respErr.Msg)
 	require.Equal(t, "trace-2", respErr.TraceID)
 	require.NotEmpty(t, respErr.Body)
+	require.Nil(t, respErr.FieldViolations, "a rejection naming no field carries none")
+}
+
+// TestDoReturnsTheFieldsARejectionNames pins that a rejection naming the
+// fields the request was refused on, in the data of its envelope, carries
+// them on the *Error, each by its path and its description, in the order the
+// server lists them.
+func TestDoReturnsTheFieldsARejectionNames(t *testing.T) {
+	srv, _ := newEnvelopeServer(t, http.StatusBadRequest,
+		`{"data":{"field_violations":[{"field":"name","description":"name is a required field"},{"field":"items[1].rank","description":"300 is out of range"}]},"msg":"name is a required field; invalid value","trace_id":"trace-3"}`)
+
+	cli, err := client.New(srv.URL)
+	require.NoError(t, err)
+
+	_, err = cli.Do(t.Context(), http.MethodPost, "/api/records", nil)
+	var respErr *client.Error
+	require.True(t, errors.As(err, &respErr), "error: %v", err)
+	require.Equal(t, http.StatusBadRequest, respErr.StatusCode)
+	require.Equal(t, []client.FieldViolation{
+		{Field: "name", Description: "name is a required field"},
+		{Field: "items[1].rank", Description: "300 is out of range"},
+	}, respErr.FieldViolations)
 }
 
 func TestClientKeepsSessionCookieAcrossRequests(t *testing.T) {
