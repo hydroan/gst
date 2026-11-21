@@ -103,9 +103,10 @@ func WithCursor(field, value string, next bool) RequestOption {
 
 // WithTimeRange adds the framework's time-window filter on column, encoded
 // in the "field[op]=value" operator syntax as column[gte] and column[lte].
-// Bounds are formatted as RFC3339, the only layout the framework accepts for
-// URL time filtering. A zero time leaves that bound unset; a blank column
-// adds nothing.
+// Bounds are formatted as RFC 3339 with the fractional seconds they carry
+// (time.RFC3339Nano), the only layout the framework accepts for URL time
+// filtering, so a bound reaches the server as exact as it is given. A zero
+// time leaves that bound unset; a blank column adds nothing.
 func WithTimeRange(column string, from, to time.Time) RequestOption {
 	return func(c *requestConfig) {
 		column = strings.TrimSpace(column)
@@ -113,10 +114,10 @@ func WithTimeRange(column string, from, to time.Time) RequestOption {
 			return
 		}
 		if !from.IsZero() {
-			c.values.Add(column+"[gte]", from.Format(time.RFC3339))
+			c.values.Add(column+"[gte]", from.Format(time.RFC3339Nano))
 		}
 		if !to.IsZero() {
-			c.values.Add(column+"[lte]", to.Format(time.RFC3339))
+			c.values.Add(column+"[lte]", to.Format(time.RFC3339Nano))
 		}
 	}
 }

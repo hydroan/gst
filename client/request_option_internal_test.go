@@ -67,14 +67,19 @@ func TestRequestConfigEncodesNothingByDefault(t *testing.T) {
 	require.Empty(t, encoded)
 }
 
+// TestWithTimeRangeEncodesBothBoundsAsRFC3339 pins the layout of both
+// bounds: RFC 3339 with the fractional seconds the time carries, so a bound
+// of 23:59:59.999 reaches the server whole instead of cut to the second,
+// and a time on the second is spelled without a fraction.
 func TestWithTimeRangeEncodesBothBoundsAsRFC3339(t *testing.T) {
 	from := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
-	cfg := newRequestConfig([]RequestOption{WithTimeRange("created_at", from, from.Add(48*time.Hour))})
+	to := time.Date(2026, 1, 4, 23, 59, 59, 999_000_000, time.UTC)
+	cfg := newRequestConfig([]RequestOption{WithTimeRange("created_at", from, to)})
 
 	encoded, err := cfg.encode()
 	require.NoError(t, err)
 	require.Contains(t, encoded, "created_at%5Bgte%5D=2026-01-02T03%3A04%3A05Z")
-	require.Contains(t, encoded, "created_at%5Blte%5D=2026-01-04T03%3A04%3A05Z")
+	require.Contains(t, encoded, "created_at%5Blte%5D=2026-01-04T23%3A59%3A59.999Z")
 }
 
 func TestWithTimeRangeLeavesAZeroBoundUnset(t *testing.T) {
