@@ -71,12 +71,12 @@ func TestDoReturnsStructuredErrorOnRejection(t *testing.T) {
 }
 
 // TestDoReturnsTheFieldsARejectionNames pins that a rejection naming the
-// fields the request was refused on, in the data of its envelope, carries
-// them on the *Error, each by its path and its description, in the order the
-// server lists them.
+// fields the request was refused on, in the error member of its envelope,
+// carries them on the *Error, each by its path and its description, in the
+// order the server lists them.
 func TestDoReturnsTheFieldsARejectionNames(t *testing.T) {
 	srv, _ := newEnvelopeServer(t, http.StatusBadRequest,
-		`{"data":{"field_violations":[{"field":"name","description":"name is a required field"},{"field":"items[1].rank","description":"300 is out of range"}]},"msg":"name is a required field; invalid value","trace_id":"trace-3"}`)
+		`{"data":null,"msg":"name is a required field; invalid value","trace_id":"trace-3","error":{"field_violations":[{"field":"name","description":"name is a required field"},{"field":"items[1].rank","description":"300 is out of range"}]}}`)
 
 	cli, err := client.New(srv.URL)
 	require.NoError(t, err)

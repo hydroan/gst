@@ -73,10 +73,11 @@ func TestJSONEncodesWithStandardLibrary(t *testing.T) {
 // TestErrorAnswersServiceErrorsAndHidesTheRest pins the failure envelope: a
 // service error, wherever it sits in the wrap chain, answers with the status
 // and client-safe message it was constructed with, its cause kept out of the
-// body; one naming the fields the request was refused on lists them as its
-// data, each by its path and its description, where every other failure
-// answers data null; and any other error is the server's own failure and
-// answers 500 with the fixed message, its text kept out of the body as well.
+// body, and data null; one naming the fields the request was refused on
+// lists them in the error member of the envelope, each by its path and its
+// description, a member no other answer carries; and any other error is the
+// server's own failure and answers 500 with the fixed message, its text kept
+// out of the body as well.
 func TestErrorAnswersServiceErrorsAndHidesTheRest(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cause := errors.New("database password leaked")
@@ -97,14 +98,14 @@ func TestErrorAnswersServiceErrorsAndHidesTheRest(t *testing.T) {
 			"refused fields",
 			types.NewInvalidFields([]types.FieldViolation{{Field: "name", Description: "name is a required field"}, {Field: "items[1].rank", Description: "items[1].rank must be 1 or greater"}}, cause),
 			http.StatusBadRequest,
-			`{"data":{"field_violations":[{"field":"name","description":"name is a required field"},{"field":"items[1].rank","description":"items[1].rank must be 1 or greater"}]},"msg":"name is a required field; items[1].rank must be 1 or greater","trace_id":""}`,
+			`{"data":null,"msg":"name is a required field; items[1].rank must be 1 or greater","trace_id":"","error":{"field_violations":[{"field":"name","description":"name is a required field"},{"field":"items[1].rank","description":"items[1].rank must be 1 or greater"}]}}`,
 			cause.Error(),
 		},
 		{
 			"wrapped value a field cannot hold",
 			errors.Wrap(types.NewInvalidValue("rank", "300 is out of range", cause), "bind the record"),
 			http.StatusBadRequest,
-			`{"data":{"field_violations":[{"field":"rank","description":"300 is out of range"}]},"msg":"invalid value for field 'rank'","trace_id":""}`,
+			`{"data":null,"msg":"invalid value for field 'rank'","trace_id":"","error":{"field_violations":[{"field":"rank","description":"300 is out of range"}]}}`,
 			cause.Error(),
 		},
 		{"other error", internal, http.StatusInternalServerError, `{"data":null,"msg":"The server could not process the request.","trace_id":""}`, internal.Error()},

@@ -177,14 +177,23 @@ func prelude() string {
 /**
  * Envelope is the JSON body of every API response. A successful request
  * answers 200 with the data of the route; a failed one answers its 4xx or 5xx
- * status with the error message and, as data, the fields the request was
- * refused on when the failure names any, { field_violations: FieldViolation[] },
- * and null otherwise.
+ * status with the error message, data null and, when the failure carries
+ * details, error. The status tells a failure from a success: a failure
+ * carrying no details has no error member.
  */
 export interface Envelope<T> {
   data: T;
   msg: string;
   trace_id: string;
+  error?: ErrorDetails;
+}
+
+/**
+ * ErrorDetails is what a failed request carries beyond its message: the
+ * fields the request was refused on, when the failure names any.
+ */
+export interface ErrorDetails {
+  field_violations?: FieldViolation[];
 }
 
 /**

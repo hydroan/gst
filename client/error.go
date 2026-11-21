@@ -9,7 +9,7 @@ type Error struct {
 	StatusCode      int              // HTTP status code of the response
 	Msg             string           // message from the response envelope
 	TraceID         string           // trace id from the response envelope
-	FieldViolations []FieldViolation // fields the request was refused on, from the data of the response envelope; nil when the rejection names none
+	FieldViolations []FieldViolation // fields the request was refused on, from the error member of the response envelope; nil when the rejection names none
 	Body            []byte           // raw response body, kept for debugging
 }
 

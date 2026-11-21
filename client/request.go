@@ -122,9 +122,9 @@ func (c *Client) roundTrip(req *http.Request) (*Envelope, error) {
 
 // parseEnvelope turns one HTTP response into an Envelope, or an *Error when
 // the server rejected the request with a non-2xx status, carrying the fields
-// the rejection names in the data of its envelope. The envelope decode is
-// best-effort so a non-JSON error page still produces an *Error carrying the
-// raw body.
+// the rejection names in the error member of its envelope. The envelope
+// decode is best-effort so a non-JSON error page still produces an *Error
+// carrying the raw body.
 func parseEnvelope(httpRsp *http.Response, body []byte) (*Envelope, error) {
 	res := new(Envelope)
 	if len(body) > 0 {
@@ -132,19 +132,21 @@ func parseEnvelope(httpRsp *http.Response, body []byte) (*Envelope, error) {
 	}
 
 	if httpRsp.StatusCode < 200 || httpRsp.StatusCode >= 300 {
-		// The data of a rejection is null or the fields it names; one
-		// carrying neither names none.
+		// A rejection naming fields lists them in the error member of its
+		// envelope; one carrying no such member names none.
 		var refused struct {
-			FieldViolations []FieldViolation `json:"field_violations"`
+			Error struct {
+				FieldViolations []FieldViolation `json:"field_violations"`
+			} `json:"error"`
 		}
-		if len(res.Data) > 0 {
-			_ = json.Unmarshal(res.Data, &refused)
+		if len(body) > 0 {
+			_ = json.Unmarshal(body, &refused)
 		}
 		return nil, &Error{
 			StatusCode:      httpRsp.StatusCode,
 			Msg:             res.Msg,
 			TraceID:         res.TraceID,
-			FieldViolations: refused.FieldViolations,
+			FieldViolations: refused.Error.FieldViolations,
 			Body:            body,
 		}
 	}

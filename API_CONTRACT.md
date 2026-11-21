@@ -146,9 +146,10 @@ query 名不要以 `_` 开头。反过来，所有裸名参数都属于业务字
   请求方自己中途取消（页面跳转、连接断开）答 `499`，`msg` 是 `context canceled`，不算服务端故障；
   请求的截止时间到了答 `504`，算服务端故障；
   响应的 `data` 编码不成 JSON（例如 NaN）也算服务端故障，返回 `500`，不会出现 `200` 空响应。
-- 请求因为某些字段被拒（校验不过、值放不进字段）时，失败响应的 `data` 逐个列出这些字段，
-  前端据此把错误标到对应的输入项：`{"field_violations":[{"field":"items[1].name","description":"items[1].name is a required field"}]}`。
-  `field` 的路径写法与 `msg` 里点名字段的写法相同，`description` 可直接展示；其余失败 `data` 为 `null`。
+- 失败时 `data` 恒为 `null`。请求因为某些字段被拒（校验不过、值放不进字段）时，响应多一个 `error` 成员，逐个列出这些字段，
+  前端据此把错误标到对应的输入项：`"error":{"field_violations":[{"field":"items[1].name","description":"items[1].name is a required field"}]}`。
+  `field` 的路径写法与 `msg` 里点名字段的写法相同，`description` 可直接展示。其余失败没有 `error` 成员，
+  所以判断成败只看 HTTP 状态码，不看 `error` 在不在。
 - `trace_id` 用于排障，反馈接口问题时请带上。
 - 每个接口会答的失败状态（`400`、`404`、`409`）与失败信封的形状写在 Swagger 里，其余失败走 `default` 响应。
 - 删除不存在的记录（含已删除的）返回 `404`；批量删除时任一 `id` 不存在，整批返回 `404`，一条都不删。
@@ -198,9 +199,9 @@ query 名不要以 `_` 开头。反过来，所有裸名参数都属于业务字
   嵌套字段写路径 `address.city`，批量请求的项写 `items[1].name`；字段名是 JSON 名，没有 json 名的
   嵌入结构体不占路径一层，它的字段按 JSON 提升后的名字写。校验器没有现成句子的规则（含项目自己注册的）
   写成 `host failed the hostname check`，规则带参数时带上：`tag failed the startswith=ab check`。
-  每个被拒的字段同时列在 `data.field_violations` 里，`description` 就是 `msg` 里它的那一句。
+  每个被拒的字段同时列在 `error.field_violations` 里，`description` 就是 `msg` 里它的那一句。
 - 值放不进字段（整数越界、该是数字却给了字符串、时刻不是 RFC 3339、时段没写成 `15:04:05`）同样返回 `400`，`msg` 点名字段：`invalid value for field 'rank'`，
-  路径写法和校验失败一样，嵌套字段写 `address.floor`，批量请求的项写 `items[1].rank`。这个字段同样列在 `data.field_violations` 里，
+  路径写法和校验失败一样，嵌套字段写 `address.floor`，批量请求的项写 `items[1].rank`。这个字段同样列在 `error.field_violations` 里，
   `description` 说明这个值为什么放不进（如 `number 300 does not fit the field`）。批量全量更新、批量部分更新的项没带 `id`
   返回 `400`，`msg` 是 `items[1] names no id`。
 

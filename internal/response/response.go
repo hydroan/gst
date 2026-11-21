@@ -32,39 +32,34 @@ func JSON(c *gin.Context, data ...any) {
 	if len(data) > 0 {
 		payload = data[0]
 	}
-	envelope(c, http.StatusOK, SuccessMsg, payload)
+	envelope(c, http.StatusOK, SuccessMsg, payload, nil)
 }
 
 // Error writes err in the failure envelope: a service error, anywhere in the
 // wrap chain, answers with the status and client-safe message it was
 // constructed with and, when it names the fields the request was refused on
-// (see types.FieldViolations), with those fields as its data, the list a
-// gRPC status carries as its google.rpc.BadRequest detail:
+// (see types.FieldViolations), with those fields in the error member of the
+// envelope, the list a gRPC status carries as its google.rpc.BadRequest
+// detail:
 //
-//	{"data":{"field_violations":[{"field":"items[1].name","description":"items[1].name is a required field"}]},"msg":"items[1].name is a required field","trace_id":"..."}
+//	{"data":null,"msg":"items[1].name is a required field","trace_id":"...","error":{"field_violations":[{"field":"items[1].name","description":"items[1].name is a required field"}]}}
 //
-// A failure naming no field answers data null, and any other error is the
-// server's own failure and answers 500 with failureMsg. Internal error text
-// — database drivers naming tables and columns, third-party client output —
-// never reaches the envelope; callers log the full error themselves before
-// answering it here.
+// The data of a failure is null, a failure carrying no details has no error
+// member, and any other error is the server's own failure and answers 500
+// with failureMsg. Internal error text — database drivers naming tables and
+// columns, third-party client output — never reaches the envelope; callers
+// log the full error themselves before answering it here.
 func Error(c *gin.Context, err error) {
 	var serviceErr *types.Error
 	if errors.As(err, &serviceErr) {
-		var data any
+		var details *errorDetails
 		if violations := types.FieldViolations(serviceErr); len(violations) > 0 {
-			data = failureData{FieldViolations: violations}
+			details = &errorDetails{FieldViolations: violations}
 		}
-		envelope(c, serviceErr.Status(), serviceErr.Msg(), data)
+		envelope(c, serviceErr.Status(), serviceErr.Msg(), nil, details)
 		return
 	}
-	envelope(c, failureStatus, failureMsg, nil)
-}
-
-// failureData is the data of a failure envelope naming the fields the
-// request was refused on.
-type failureData struct {
-	FieldViolations []types.FieldViolation `json:"field_violations"`
+	envelope(c, failureStatus, failureMsg, nil, nil)
 }
 
 // Abort refuses the request with err, written in the failure envelope the
@@ -93,8 +88,9 @@ var envelopeBuffers = sync.Pool{
 	New: func() any { return new(bytes.Buffer) },
 }
 
-// envelope writes the API envelope — msg, data and the trace id — with
-// status. It is encoded with encoding/json whatever JSON codec gin was built
+// envelope writes the API envelope — msg, data, the trace id and, for a
+// failure carrying them, its details — with status. It is encoded with
+// encoding/json whatever JSON codec gin was built
 // with: the codecs gin's jsoniter, go_json and sonic build tags select encode
 // differently (the first two ignore omitzero), and the framework's wire
 // contract is the encoding/json one, written here as json.Marshal writes it,
@@ -105,10 +101,17 @@ var envelopeBuffers = sync.Pool{
 // handler chain stopped, where an encoding failing under gin's render would
 // leave the status already written, a 200 with an empty body that reads as a
 // success with nothing in it.
-func envelope(c *gin.Context, status int, msg string, data any) {
+func envelope(c *gin.Context, status int, msg string, data any, details *errorDetails) {
 	traceID := c.GetString(execctx.KeyTraceID)
+	// Nearly every answer carries no details, and an envelope type holding
+	// the error member costs each of them its encoding, so only a failure
+	// carrying details is encoded as the envelope with the member.
+	var answer any = apiEnvelope{Data: data, Msg: msg, TraceID: traceID}
+	if details != nil {
+		answer = detailedEnvelope{Data: data, Msg: msg, TraceID: traceID, Error: details}
+	}
 	body := envelopeBuffers.Get().(*bytes.Buffer) //nolint:errcheck // the pool holds nothing else
-	if err := jsonv2.MarshalWrite(body, apiEnvelope{Data: data, Msg: msg, TraceID: traceID}, json.DefaultOptionsV1()); err != nil {
+	if err := jsonv2.MarshalWrite(body, answer, json.DefaultOptionsV1()); err != nil {
 		_ = c.Error(err)
 		c.Abort()
 		status = failureStatus
@@ -133,6 +136,20 @@ type apiEnvelope struct {
 	Data    any    `json:"data"`
 	Msg     string `json:"msg"`
 	TraceID string `json:"trace_id"`
+}
+
+// detailedEnvelope is the envelope of a failure carrying details: the
+// members of every envelope and, after them, error.
+type detailedEnvelope struct {
+	apiEnvelope
+
+	Error *errorDetails `json:"error"`
+}
+
+// errorDetails is the error member of a failure envelope: what the failure
+// carries beyond its msg, the fields the request was refused on.
+type errorDetails struct {
+	FieldViolations []types.FieldViolation `json:"field_violations,omitempty"`
 }
 
 // jsonContentType is the Content-Type of a JSON response, the value gin's own

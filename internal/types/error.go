@@ -42,8 +42,8 @@ type Error struct {
 	// NewInvalidFields, one per field the validator refused, and by
 	// NewInvalidValue, the one field holding a value it cannot hold, and read
 	// through FieldViolations; both answers list them, the gRPC one as its
-	// details and the HTTP one as the data of its envelope, beside the msg
-	// NewInvalidFields joins from their descriptions.
+	// details and the HTTP one in the error member of its envelope, beside
+	// the msg NewInvalidFields joins from their descriptions.
 	violations []FieldViolation
 	// stack holds the program counters captured at the construction site,
 	// exposed through StackTrace so error-stack consumers such as
@@ -174,8 +174,8 @@ func (e *Error) Unwrap() error {
 // for any other error, and for nil. It is a package function rather than a
 // method so it stays out of the public alias of Error: only the framework's
 // own answers read the fields, the gRPC one to list them as its details and
-// the HTTP one as the data of its envelope, and the type they come as is the
-// framework's own.
+// the HTTP one in the error member of its envelope, and the type they come
+// as is the framework's own.
 func FieldViolations(err *Error) []FieldViolation {
 	if err == nil {
 		return nil

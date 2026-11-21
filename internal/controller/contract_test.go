@@ -1494,7 +1494,7 @@ type contractInput struct {
 // contractAnswer is what a transport answered: the HTTP status and the msg
 // of the envelope, or the gRPC code and message; the data answered, the
 // envelope's data or the response message; and the fields a refusal names,
-// the field_violations of the envelope's data or of the status's
+// the field_violations of the envelope's error member or of the status's
 // google.rpc.BadRequest detail.
 type contractAnswer struct {
 	status     int
@@ -1674,16 +1674,17 @@ func overHTTP(t *testing.T, f contractFixture, phase apiaction.Phase, in contrac
 		answer.msg, answer.data = envelope.Msg, envelope.Data
 	}
 	if rsp.Code != http.StatusOK {
-		// The data of a refusal is null or the fields it names; a body
-		// holding neither names none.
+		// A refusal naming fields lists them in the error member of the
+		// envelope; one carrying no such member names none.
 		var refusal struct {
-			Data struct {
+			Error struct {
 				FieldViolations []types.FieldViolation `json:"field_violations"`
-			} `json:"data"`
+			} `json:"error"`
 		}
 		if err := json.Unmarshal(rsp.Body.Bytes(), &refusal); err == nil {
-			answer.violations = refusal.Data.FieldViolations
+			answer.violations = refusal.Error.FieldViolations
 		}
+		require.Nil(t, envelope.Data, "a refusal answers data null")
 	}
 	return answer
 }
