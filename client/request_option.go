@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/go-querystring/query"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/types"
 )
 
 // RequestOption populates per-request state such as query parameters. Options
@@ -18,9 +19,16 @@ type RequestOption func(*requestConfig)
 
 // requestConfig carries the per-request state RequestOption can populate.
 type requestConfig struct {
-	// query holds framework-owned query parameters. Parameter names come from
-	// the url tags on modelregistry.Query, the single authority for those names.
-	query modelregistry.Query
+	// query holds the framework-owned query parameters a model declares.
+	// Their names come from the url tags on modelregistry.Query and
+	// modelregistry.Cursor, the single authority for those names.
+	query struct {
+		modelregistry.Query
+		modelregistry.Cursor
+	}
+	// page and size are the paging parameters every list takes, which no
+	// model declares; zero leaves one out.
+	page, size int
 	// values holds free-form business filter parameters set by WithQuery.
 	values url.Values
 }
@@ -40,6 +48,12 @@ func (c *requestConfig) encode() (string, error) {
 	vals, err := query.Values(&c.query)
 	if err != nil {
 		return "", err
+	}
+	if c.page != 0 {
+		vals.Set(types.QueryPage, strconv.Itoa(c.page))
+	}
+	if c.size != 0 {
+		vals.Set(types.QuerySize, strconv.Itoa(c.size))
 	}
 	for key, list := range c.values {
 		for _, value := range list {
@@ -68,8 +82,8 @@ func WithQuery(keyValues ...any) RequestOption {
 // WithPage sets the framework offset pagination parameters (_page, _size).
 func WithPage(page, size int) RequestOption {
 	return func(c *requestConfig) {
-		c.query.Page = page
-		c.query.Size = size
+		c.page = page
+		c.size = size
 	}
 }
 

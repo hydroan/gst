@@ -308,15 +308,12 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 //	// ListRecord serves the List action of Record on /api/records.
 //	func (recordService) ListRecord(ctx context.Context, req *ListRecordRequest) (*ListRecordResponse, error) {
 //		models, total, more, err := listRecord(ctx, nil, grpc.Query{
-//			Filters:     grpc.Filters(req.GetFilters()),
-//			SortBy:      req.GetSortBy(),
-//			Page:        req.GetPage(),
-//			Size:        req.GetSize(),
-//			CursorField: req.GetCursorField(),
-//			CursorValue: req.GetCursorValue(),
-//			CursorNext:  req.GetCursorNext(),
-//			Expand:      req.GetExpand(),
-//			Depth:       req.GetDepth(),
+//			Filters: grpc.Filters(req.GetFilters()),
+//			SortBy:  req.GetSortBy(),
+//			Page:    req.GetPage(),
+//			Size:    req.GetSize(),
+//			Expand:  req.GetExpand(),
+//			Depth:   req.GetDepth(),
 //		})
 //		if err != nil {
 //			return nil, err

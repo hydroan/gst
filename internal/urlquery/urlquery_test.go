@@ -17,22 +17,29 @@ func TestWithoutExportKeys(t *testing.T) {
 }
 
 // TestParseCount guards the examples of ParseCount and pins what a count is:
-// a whole number of zero or more that an int holds. A negative one is
-// refused as one, and anything else it cannot read in the words of
+// a whole number of zero or more, up to the most its parameter takes. A
+// negative one is refused as one, one past the most with the range the
+// parameter takes, and anything else it cannot read in the words of
 // NotNumericError.
 func TestParseCount(t *testing.T) {
 	for raw, want := range map[string]int{"0": 0, "7": 7, strconv.Itoa(math.MaxInt): math.MaxInt} {
-		count, err := urlquery.ParseCount("_page", raw)
+		count, err := urlquery.ParseCount("_page", raw, math.MaxInt)
 		require.NoError(t, err, raw)
 		require.Equal(t, want, count, raw)
 	}
 
-	_, err := urlquery.ParseCount("_page", "-1")
+	_, err := urlquery.ParseCount("_page", "-1", math.MaxInt)
 	require.EqualError(t, err, `invalid query parameter "_page": expect a non-negative value, got "-1"`)
 
 	pastInt := strconv.FormatUint(uint64(math.MaxInt)+1, 10)
 	for _, raw := range []string{"abc", "1.5", "", pastInt} {
-		_, err := urlquery.ParseCount("_page", raw)
+		_, err = urlquery.ParseCount("_page", raw, math.MaxInt)
 		require.EqualError(t, err, urlquery.NotNumericError("_page", raw).Error(), raw)
 	}
+
+	count, err := urlquery.ParseCount("_size", "100", urlquery.MaxPageSize)
+	require.NoError(t, err, "the most a parameter takes is a count it takes")
+	require.Equal(t, 100, count)
+	_, err = urlquery.ParseCount("_size", "500", urlquery.MaxPageSize)
+	require.EqualError(t, err, `invalid query parameter "_size": expect a value from 1 to 100, got "500"`)
 }

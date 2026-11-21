@@ -14,14 +14,12 @@ import (
 // Cursor returns the cursor position of the request, ready to be passed to
 // Database.WithCursor.
 //
-// A model opts in to cursor pagination by embedding model.Cursor; any other
-// model yields a zero cursor, which WithCursor treats as a no-op, and so does
-// a request that does not read the feed through a cursor (see
-// cursorRequested): a plain request on a model that also pages by offset, or
-// one sorted by the client. A request with a cursor parameter but no
-// _cursor_value is the feed's first page: a cursor with the column and no
-// boundary, so the first page comes back in the feed's order and the row a
-// client pages on from is the row the order puts last.
+// The list of a model embedding model.Cursor is a feed, read by cursor
+// alone; any other model yields a zero cursor, which WithCursor treats as a
+// no-op. A request without a _cursor_value reads the feed's first page: a
+// cursor with the column and no boundary, so the first page comes back in
+// the feed's order and the row a client pages on from is the row the order
+// puts last.
 //
 // The cursor column is validated against the model's filterable columns, on
 // the first page as on any other, and the cursor value against that
@@ -41,7 +39,7 @@ import (
 // feed is a service-side cursor, built with types.CursorForward on a Desc
 // order.
 func Cursor(q url.Values, m types.Model) (types.Cursor, error) {
-	if !cursorRequested(q, m) {
+	if !modelregistry.IsCursorable(m) {
 		return types.Cursor{}, nil
 	}
 	value := q.Get(types.QueryCursorValue)
@@ -106,27 +104,6 @@ func Cursor(q url.Values, m types.Model) (types.Cursor, error) {
 		return types.CursorForward(types.Asc(column), value), nil
 	}
 	return types.CursorBackward(types.Asc(column), value), nil
-}
-
-// cursorRequested reports whether the request reads the feed of m through a
-// cursor. It does when the request carries a boundary value, or a cursor
-// parameter without one, which asks for the feed's first page; a model that
-// pages by cursor alone has nothing but the feed, so a request naming no
-// cursor parameter reads its first page too. A request sorted by the client
-// is a list, not the feed, unless it carries a boundary value, which the
-// list controller refuses beside _sort_by. Pagination reads the same answer,
-// so offset paging never stacks on top of a cursor.
-func cursorRequested(q url.Values, m types.Model) bool {
-	if !modelregistry.IsCursorable(m) {
-		return false
-	}
-	if len(q.Get(types.QueryCursorValue)) > 0 {
-		return true
-	}
-	if len(q.Get(types.QuerySortBy)) > 0 {
-		return false
-	}
-	return q.Has(types.QueryCursorField) || q.Has(types.QueryCursorNext) || !modelregistry.IsPaginatable(m)
 }
 
 // normalizeCursorValue checks the boundary value against what the cursor

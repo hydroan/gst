@@ -97,15 +97,12 @@ func (recordService) PatchRecord(ctx context.Context, req *PatchRecordRequest) (
 // ListRecord serves the List action of Record on /api/records.
 func (recordService) ListRecord(ctx context.Context, req *ListRecordRequest) (*ListRecordResponse, error) {
 	models, total, more, err := listRecord(ctx, nil, grpc.Query{
-		Filters:     grpc.Filters(req.GetFilters()),
-		SortBy:      req.GetSortBy(),
-		Page:        req.GetPage(),
-		Size:        req.GetSize(),
-		CursorField: req.GetCursorField(),
-		CursorValue: req.GetCursorValue(),
-		CursorNext:  req.GetCursorNext(),
-		Expand:      req.GetExpand(),
-		Depth:       req.GetDepth(),
+		Filters: grpc.Filters(req.GetFilters()),
+		SortBy:  req.GetSortBy(),
+		Page:    req.GetPage(),
+		Size:    req.GetSize(),
+		Expand:  req.GetExpand(),
+		Depth:   req.GetDepth(),
 	})
 	if err != nil {
 		return nil, err
@@ -231,15 +228,12 @@ func (recordService) PatchManyRecord(ctx context.Context, req *PatchManyRecordRe
 // /api/owners/:owner/records.
 func (recordService) ListRecordByOwner(ctx context.Context, req *ListRecordByOwnerRequest) (*ListRecordByOwnerResponse, error) {
 	models, total, more, err := listRecordByOwner(ctx, map[string]string{"owner": req.GetOwner()}, grpc.Query{
-		Filters:     grpc.Filters(req.GetFilters()),
-		SortBy:      req.GetSortBy(),
-		Page:        req.GetPage(),
-		Size:        req.GetSize(),
-		CursorField: req.GetCursorField(),
-		CursorValue: req.GetCursorValue(),
-		CursorNext:  req.GetCursorNext(),
-		Expand:      req.GetExpand(),
-		Depth:       req.GetDepth(),
+		Filters: grpc.Filters(req.GetFilters()),
+		SortBy:  req.GetSortBy(),
+		Page:    req.GetPage(),
+		Size:    req.GetSize(),
+		Expand:  req.GetExpand(),
+		Depth:   req.GetDepth(),
 	})
 	if err != nil {
 		return nil, err

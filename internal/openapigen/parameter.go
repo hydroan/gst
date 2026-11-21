@@ -1,6 +1,7 @@
 package openapigen
 
 import (
+	"fmt"
 	"reflect"
 	"regexp"
 	"sort"
@@ -51,9 +52,11 @@ func parseParametersFromPath(path string) []*openapi3.ParameterRef {
 // reads. A parameter taking its bare key is documented under it, the
 // operators its column takes listed in its description; a column taking its
 // operators alone is documented under each of them, the key as the URL spells
-// it, expires_at[gte]. An operation that pages its records, a List, takes the
-// parameters of model.Pagination and model.Cursor too; an export, which lists
-// every record the query matches, refuses them and documents none.
+// it, expires_at[gte]. An operation that pages its records, a List, documents
+// how it pages too: by _page and _size, or, its model embedding
+// model.Cursor, by the cursor's parameters and _size, a feed taking no
+// _sort_by either; an export, which lists every record the query matches,
+// refuses the paging parameters and documents none.
 func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op *openapi3.Operation, paged bool) {
 	// Model-field query filters are available only to the default CRUD path.
 	if !modelregistry.AreTypesEqual[M, REQ, RSP]() {
@@ -75,7 +78,10 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 	queries := make([]*openapi3.ParameterRef, 0, len(params))
 	for _, param := range params {
 		field, owner := structFieldAt(typ, param.Index)
-		if !paged && (owner == reflect.TypeFor[modelregistry.Pagination]() || owner == reflect.TypeFor[modelregistry.Cursor]()) {
+		if !paged && owner == reflect.TypeFor[modelregistry.Cursor]() {
+			continue
+		}
+		if paged && param.Name == types.QuerySortBy && modelregistry.IsCursorable(m) {
 			continue
 		}
 		description := openAPIDocComment(field.Name, modelFieldDocs(reflect.New(owner).Interface())[field.Name])
@@ -102,12 +108,20 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 		queries = append(queries, queryParameter(param.Name, schemaRef, description))
 	}
 
-	// Cursor-only models accept _size as the batch size, but the field with
-	// its query tag lives in Pagination, so the parameter is synthesized.
-	if paged && modelregistry.IsCursorable(m) && !modelregistry.IsPaginatable(m) {
-		queries = append(queries, queryParameter(types.QuerySize,
-			&openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeInteger}}},
-			"Batch size for cursor pagination."))
+	// The page and the size are read off the query, no model holding a field
+	// for them, so they are documented here: the page of a list that is no
+	// feed, and the size of every list.
+	if paged {
+		count := func() *openapi3.SchemaRef {
+			return &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeInteger}}}
+		}
+		if !modelregistry.IsCursorable(m) {
+			queries = append(queries, queryParameter(types.QueryPage, count(),
+				"The one-based page number; zero is the first page, and a negative value is refused."))
+		}
+		queries = append(queries, queryParameter(types.QuerySize, count(), fmt.Sprintf(
+			"The page size; zero is the default of %d, and a negative value or one past %d is refused.",
+			urlquery.DefaultPageSize, urlquery.MaxPageSize)))
 	}
 
 	// Business filter columns always come first; framework parameters keep a

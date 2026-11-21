@@ -557,13 +557,13 @@ var listQueryFieldNames = func() []string {
 
 // queryFields returns the fields a request of the phase holds for the query
 // parameters gst reads on it, with their comments and nested types, numbered
-// by the caller: List's filters, with the nested Filter, and the fields of
-// the controls the model reads (see queryControls), the orderings and the
-// expansion of a model embedding model.Query, the page of one embedding
-// model.Pagination, the cursor of one embedding model.Cursor and the size of
-// either; Get's expansion, which the get flow reads for every model;
-// nothing for the other phases. The request of a custom List carries every
-// control, its service reading the query itself.
+// by the caller: List's filters, with the nested Filter, its size, and the
+// fields of the controls the model reads (see queryControls), the page,
+// unless the model embeds model.Cursor, whose list carries the cursor
+// instead, and the expansion and the orderings of a model embedding
+// model.Query, a feed taking no ordering; Get's expansion, which the get
+// flow reads for every model; nothing for the other phases. The request of
+// a custom List carries every control, its service reading the query itself.
 //
 // The List action of Record on records, Record embedding model.Query, gets,
 // its fields numbered from 1 as the route has no parameter,
@@ -582,20 +582,11 @@ var listQueryFieldNames = func() []string {
 //	  // size is the page size, as the _size query parameter, 20 when unset and at most 100.
 //	  uint32 size = 4;
 //
-//	  // cursor_field is the cursor column, as the _cursor_field query parameter.
-//	  string cursor_field = 5;
-//
-//	  // cursor_value is the cursor position, as the _cursor_value query parameter.
-//	  string cursor_value = 6;
-//
-//	  // cursor_next is whether to list past the cursor, as the _cursor_next query parameter.
-//	  bool cursor_next = 7;
-//
 //	  // expand is the associations to expand, as the _expand query parameter names them.
-//	  repeated string expand = 8;
+//	  repeated string expand = 5;
 //
 //	  // depth is the depth of the expansion, as the _depth query parameter, at most 10.
-//	  uint32 depth = 9;
+//	  uint32 depth = 6;
 //
 //	  // Filter is one filter of filters: field names the column by its query name, op is the operator, none for the equality every model answers, and values is its value, several for in and notin.
 //	  message Filter {
@@ -607,13 +598,19 @@ var listQueryFieldNames = func() []string {
 //	  }
 //	}
 //
-// and the List action of Pin on pins, Pin embedding no marker, gets the
-// filters alone:
+// and the List action of Pin on pins, Pin embedding no marker, pages by
+// number as every list does:
 //
 //	// ListPinRequest is the request of PinService.ListPin.
 //	message ListPinRequest {
 //	  // filters is the filters to apply, each one field[op]=value of the HTTP query.
 //	  repeated Filter filters = 1;
+//
+//	  // page is the page to list, as the _page query parameter.
+//	  uint32 page = 2;
+//
+//	  // size is the page size, as the _size query parameter, 20 when unset and at most 100.
+//	  uint32 size = 3;
 //
 //	  // Filter is one filter of filters: field names the column by its query name, op is the operator, none for the equality every model answers, and values is its value, several for in and notin.
 //	  message Filter {
@@ -641,19 +638,17 @@ func queryFields(phase apiaction.Phase, controls queryControls) (fields []*descr
 		filter.Name = new(filterMessage)
 		fields = append(fields, repeatedMessageField("filters", filterMessage))
 		comments = append(comments, "the filters to apply, each one field[op]=value of the HTTP query")
-		if controls.queryable {
+		if controls.sort {
 			fields = append(fields, repeatedStringField("sort_by", 0))
 			comments = append(comments, "the orderings, as the _sort_by query parameter names them")
 		}
-		if controls.paginatable {
+		if controls.page {
 			fields = append(fields, scalarField("page", 0, descriptorpb.FieldDescriptorProto_TYPE_UINT32))
 			comments = append(comments, "the page to list, as the _page query parameter")
 		}
-		if controls.paginatable || controls.cursorable {
-			fields = append(fields, scalarField("size", 0, descriptorpb.FieldDescriptorProto_TYPE_UINT32))
-			comments = append(comments, "the page size, as the _size query parameter, "+strconv.Itoa(urlquery.DefaultPageSize)+" when unset and at most "+strconv.Itoa(urlquery.MaxPageSize))
-		}
-		if controls.cursorable {
+		fields = append(fields, scalarField("size", 0, descriptorpb.FieldDescriptorProto_TYPE_UINT32))
+		comments = append(comments, "the page size, as the _size query parameter, "+strconv.Itoa(urlquery.DefaultPageSize)+" when unset and at most "+strconv.Itoa(urlquery.MaxPageSize))
+		if controls.cursor {
 			fields = append(fields,
 				stringField("cursor_field", 0),
 				stringField("cursor_value", 0),
@@ -665,7 +660,7 @@ func queryFields(phase apiaction.Phase, controls queryControls) (fields []*descr
 				"whether to list past the cursor, as the _cursor_next query parameter",
 			)
 		}
-		if controls.queryable {
+		if controls.expand {
 			fields = append(fields, expansion...)
 			comments = append(comments, expansionComments...)
 		}

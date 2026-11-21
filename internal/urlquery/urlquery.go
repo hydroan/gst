@@ -7,14 +7,15 @@
 // services, so both the framework list controllers and application services
 // parse a request exactly the same way.
 //
-// Which parameters a request may use is decided by the model: capabilities are
-// opted in to by embedding model.Query, model.Pagination or model.Cursor. The
-// parameter readers (Pagination, Cursor, Orders) ignore parameters the model
-// did not opt in to and fall back to the framework defaults rather than
-// failing the request; rejecting those capability keys is the list
-// controller's job, not this package's. Keys that map to nothing are different
-// and always fail — in Decode and Filters alike — because silently dropping a
-// mistyped filter would widen the result set.
+// Which parameters a request may use is decided by the model: every list
+// pages by number, a model embedding model.Cursor has its list read by
+// cursor instead, and model.Query opts in to sorting, expansion and the
+// operator filters. The parameter readers (Pagination, Cursor, Orders) read
+// what the model takes and leave the rest alone; refusing the parameters of
+// a capability the model lacks is the list controller's job, not this
+// package's. Keys that map to nothing are different and always fail — in
+// Decode and Filters alike — because silently dropping a mistyped filter
+// would widen the result set.
 package urlquery
 
 import (
@@ -71,18 +72,26 @@ func PresentFields(q url.Values) map[string]struct{} {
 const MaxExpandDepth = 10
 
 // ParseCount reads the count a query parameter carries, the value of _page,
-// _size or _depth: a whole number of zero or more that an int, the type the
-// readers of a count hold it in, has room for. It reads the way
+// _size or _depth: a whole number of zero or more, up to most, the largest
+// the parameter takes, math.MaxInt for one without a cap, an int being the
+// type the readers of a count hold it in. It reads the way
 // modelschema.ParseUint reads an unsigned integer and refuses in its words
 // under the parameter's name: given "_page" and "-1" it reports
 //
 //	invalid query parameter "_page": expect a non-negative value, got "-1"
 //
-// and given a value that is no number, what NotNumericError reports.
-func ParseCount(key, raw string) (int, error) {
-	count, err := modelschema.ParseUint(raw, strconv.IntSize-1)
+// given a value that is no number, what NotNumericError reports, and given
+// "_size", "500" and a most of 100, zero being the parameter left out,
+//
+//	invalid query parameter "_size": expect a value from 1 to 100, got "500"
+func ParseCount(key, raw string, most int) (int, error) {
+	parsed, err := modelschema.ParseUint(raw, strconv.IntSize-1)
 	if err != nil {
 		return 0, errors.New(invalidParameterMessage(key, err))
 	}
-	return int(count), nil //nolint:gosec // G115: read into one bit less than an int has, the count is within its range.
+	count := int(parsed) //nolint:gosec // G115: read into one bit less than an int has, the count is within its range.
+	if count > most {
+		return 0, errors.Newf("invalid query parameter %q: expect a value from 1 to %d, got %q", key, most, raw)
+	}
+	return count, nil
 }

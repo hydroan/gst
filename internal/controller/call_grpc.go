@@ -91,8 +91,10 @@ type Filter struct {
 // runs (see urlquery.DuplicateParameterError). It refuses as well a filter
 // without a field, or with one named like the framework's own parameters;
 // several values under an operator taking one; a member of an in, a notin, a
-// sort or an expansion holding a comma, which the parsers would split; and a
-// filter without a value or with an empty one (see Filter.value).
+// sort or an expansion holding a comma, which the parsers would split; a
+// filter without a value or with an empty one (see Filter.value); and a size
+// past urlquery.MaxPageSize, in the words the HTTP listener refuses one at
+// its door (see urlquery.ParseCount).
 //
 // The query
 //
@@ -160,7 +162,14 @@ func (q Query) values() (url.Values, error) {
 		values.Set(types.QueryPage, strconv.FormatUint(uint64(q.Page), 10))
 	}
 	if q.Size != 0 {
-		values.Set(types.QuerySize, strconv.FormatUint(uint64(q.Size), 10))
+		// The size is held to its cap here, the door of the call, as the
+		// HTTP listener holds _size at its own (see the strictQuery
+		// middleware).
+		size := strconv.FormatUint(uint64(q.Size), 10)
+		if _, err := urlquery.ParseCount(types.QuerySize, size, urlquery.MaxPageSize); err != nil {
+			return nil, err
+		}
+		values.Set(types.QuerySize, size)
 	}
 	if q.CursorField != "" {
 		values.Set(types.QueryCursorField, q.CursorField)

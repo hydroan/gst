@@ -97,9 +97,9 @@ func TestStrictQueryRejectsMalformedQueries(t *testing.T) {
 // a service reads it as the default, naming the parameter and echoing the
 // value alone: one that is no integer in the words a list of the
 // framework's own answers a value its model cannot decode, a negative one
-// as one. Zero and an empty value are admitted, each read as the parameter
-// left out, and so is a size past the cap, which the list brings down to
-// it.
+// as one. A size past the cap is refused with the range a size takes. Zero
+// and an empty value are admitted, each read as the parameter left out, and
+// so is a size at the cap.
 func TestStrictQueryRefusesAPageOrSizeThatIsNoCount(t *testing.T) {
 	for _, tt := range []struct{ name, method, rawQuery, wantMsg string }{
 		{name: "page that is no number", method: http.MethodGet, rawQuery: "_page=abc", wantMsg: `invalid query parameter "_page": expect a numeric value, got "abc"`},
@@ -110,7 +110,8 @@ func TestStrictQueryRefusesAPageOrSizeThatIsNoCount(t *testing.T) {
 		{name: "page of a request that lists nothing", method: http.MethodPost, rawQuery: "_page=abc", wantMsg: `invalid query parameter "_page": expect a numeric value, got "abc"`},
 		{name: "zero page and size", method: http.MethodGet, rawQuery: "_page=0&_size=0"},
 		{name: "empty page and size", method: http.MethodGet, rawQuery: "_page=&_size="},
-		{name: "size past the cap", method: http.MethodGet, rawQuery: "_page=2&_size=500"},
+		{name: "size past the cap", method: http.MethodGet, rawQuery: "_page=2&_size=500", wantMsg: `invalid query parameter "_size": expect a value from 1 to 100, got "500"`},
+		{name: "size at the cap", method: http.MethodGet, rawQuery: "_page=2&_size=100"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			status, body := strictQueryResult(t, tt.method, tt.rawQuery)

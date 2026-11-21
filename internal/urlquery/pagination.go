@@ -8,17 +8,13 @@ import (
 	"github.com/hydroan/gst/internal/types"
 )
 
-// defaultLimit is the full-table safety bottom line for list queries whose
-// model exposes no client-adjustable page size, embedding neither Pagination
-// nor Cursor.
-const defaultLimit = 1000
-
-// DefaultPageSize and MaxPageSize bound the _size parameter on models that
-// embed Pagination or Cursor: an unset size defaults to a small first page
-// and oversized values clamp to the cap instead of erroring, matching common
-// API practice (bulk retrieval belongs to the Export action). The pb
-// generator quotes both in the comment of a List request's size field, so
-// a gRPC caller reads the bounds off the message.
+// DefaultPageSize and MaxPageSize bound the _size parameter of every list:
+// a size left out, or zero, is a small first page, and one past the cap is
+// refused rather than brought down to it, so a client is never answered
+// fewer records than it asked for without being told (bulk retrieval belongs
+// to the Export action). The pb generator quotes both in the comment of a
+// List request's size field, so a gRPC caller reads the bounds off the
+// message.
 const (
 	DefaultPageSize = 20
 	MaxPageSize     = 100
@@ -27,47 +23,32 @@ const (
 // Pagination returns the page and size arguments of the request, ready to be
 // passed to Database.WithPagination.
 //
-// A model opts in to client-controlled paging by embedding model.Pagination
-// (page and size) or model.Cursor (size only); a parameter the model did not
-// opt in to is ignored and falls back to the framework default. The returned
-// page is always at least 1 — an unset or zero page means the first page — so
-// a caller can compute offsets or slice in-memory pages without normalizing
-// again. An unset or zero size defaults to a small first page and an
-// oversized one clamps to the cap, while a model without client size control
-// keeps the full-table safety limit. A request reading the feed through a
-// cursor (see cursorRequested), its first page included, resets page to 1 so
-// offset paging cannot stack on top of cursor filtering.
+// Every list pages: it reads its size from _size, DefaultPageSize when the
+// parameter is left out or zero, and its page from _page, the first one when
+// left out or zero, so a caller can compute offsets or slice in-memory pages
+// without normalizing again. The list of a model embedding model.Cursor is a
+// feed, read from the cursor on, so its page is always 1: offset paging
+// cannot stack on top of cursor filtering.
 //
-// Pagination has no error to answer with, so what it reads is a count
-// already: an HTTP request whose _page or _size is no integer, or a negative
-// one, is refused at the door (see the strictQuery middleware, which reads
-// both by ParseCount), and the fields of a gRPC request message are
-// unsigned.
+// Pagination has no error to answer with, so what it reads is a count within
+// its cap already: an HTTP request whose _page or _size is no integer, a
+// negative one, or a size past MaxPageSize is refused at the door (see the
+// strictQuery middleware, which reads both by ParseCount), and so is the
+// size of a gRPC request message past the cap, its fields being unsigned.
 func Pagination(q url.Values, m types.Model) (page, size int) {
-	paginatable := modelregistry.IsPaginatable(m)
-	cursorable := modelregistry.IsCursorable(m)
-
-	if raw := q.Get(types.QueryPage); paginatable && len(raw) > 0 {
+	// A parameter left out is not parsed: strconv allocates the error it
+	// refuses an empty string with.
+	if raw := q.Get(types.QueryPage); raw != "" && !modelregistry.IsCursorable(m) {
 		page, _ = strconv.Atoi(raw)
 	}
 	if page <= 0 {
 		page = 1
 	}
-	if paginatable || cursorable {
-		if raw := q.Get(types.QuerySize); len(raw) > 0 {
-			size, _ = strconv.Atoi(raw)
-		}
-		switch {
-		case size <= 0:
-			size = DefaultPageSize
-		case size > MaxPageSize:
-			size = MaxPageSize
-		}
-	} else {
-		size = defaultLimit
+	if raw := q.Get(types.QuerySize); raw != "" {
+		size, _ = strconv.Atoi(raw)
 	}
-	if cursorRequested(q, m) {
-		page = 1
+	if size <= 0 {
+		size = DefaultPageSize
 	}
 	return page, size
 }

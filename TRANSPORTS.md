@@ -141,7 +141,7 @@ handler --> client : RecordToProto；失败映射成 status
 |---|---|---|---|
 | 入口 | | `main.go`（导入与注册），`main_test.go` | main.go 多两行空导入：`pb`、`interceptor` |
 | 模型 | `model/apidoc.gen.go` | `model/model.gen.go` | 模型文件里缺的 `pb` tag 由 gen 补号并回写 |
-| 接口定义 | Swagger 注释，运行期出 `/openapi.json` | | `pb/record.proto`：`RecordService`，每个 rpc 独享 `XxxRequest / XxxResponse`，List 请求带 filters，再按模型嵌入的 Query、Pagination、Cursor 带排序、分页、游标与 expand，Patch 带 `google.protobuf.FieldMask` |
+| 接口定义 | Swagger 注释，运行期出 `/openapi.json` | | `pb/record.proto`：`RecordService`，每个 rpc 独享 `XxxRequest / XxxResponse`，List 请求带 filters 与 size，没嵌 Cursor 的带 page、嵌了的带游标，嵌 Query 的带 expand 与排序（游标列表不带排序），Patch 带 `google.protobuf.FieldMask` |
 | 传输代码 | `router/router.gen.go` | `service/service.gen.go` | `pb/record.pb.go`、`pb/record_grpc.pb.go`（插件写），`pb/record.gen.go`（适配层：服务类型 `recordService`、`RecordToProto / RecordFromProto`），每个 pb 包一个 `pb.gen.go`（注册，根目录的空导入子包） |
 | 业务骨架 | | `service/record/<name>.go` 与同名 `_test.go`（生成一次，之后归项目；骨架里的示例请求都走 `client` 包） | |
 | 模块代码 | `middleware/` 下模块的中间件（gg module copy） | module 的 model 与 service 子树 | `interceptor/` 下模块的拦截器（只在项目有 GRPC() 模型时复制） |
@@ -289,7 +289,7 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 | 差异 | 规范怎么说 | gst 怎么做、为什么 |
 |---|---|---|
 | rpc 名单数、批量用 Many | AIP-132 要 `ListRecords` 复数，AIP-231/233/234/235 批量要 `Batch` 前缀 | rpc 名 = DSL 动作名 + 模型名（`ListRecord`、`CreateManyRecord`），和 HTTP 路由用同一套动作名，一个动作在两条线上一个名字 |
-| 列表响应与分页 | AIP-132/158 要 `<resources>` 复数字段、不透明的 `next_page_token`、`total_size` | 响应是 `items`、`total` 加布尔 `has_more`（到没到头由它说，不发令牌），请求按模型嵌入的 Query、Pagination、Cursor 带 `page`、`size`、`cursor_*`，和 HTTP 契约同形，走同一个 urlquery 解析 |
+| 列表响应与分页 | AIP-132/158 要 `<resources>` 复数字段、不透明的 `next_page_token`、`total_size` | 响应是 `items`、`total` 加布尔 `has_more`（到没到头由它说，不发令牌），请求都带 `size`，按页码翻页的带 `page`、模型嵌 Cursor 的带 `cursor_*`，和 HTTP 契约同形，走同一个 urlquery 解析 |
 | 过滤 | AIP-160 是一段字符串表达式 | `filters` 是结构化的 `{field, op, values}`，和 HTTP 的 `field[op]=value` 一一对应，运行期同一套拒绝规则；同一个过滤给两次，两线都答「duplicate query parameter: name[eq]」。两线有意不同的一处：值为空的过滤，gRPC 答 InvalidArgument（`values` 为空答 `filter "name" has no value`，含空串答 `filter "name" has an empty value`），HTTP 的空参数（`name=`）表示不按它过滤——查询串里留空的参数是常见写法，消息里明写一个过滤却留空是写错了 |
 | update_mask | AIP-134 允许省略（省略即按已填字段）、必须支持 `*`；AIP-161 要求整字段与子字段路径都合法 | 必填，不认 `*`（等于 Update），只认顶层键、不点进字段内部，路径必须和 JSON 名精确相同（HTTP 的 body 键照 encoding/json 的规则匹配，只差大小写也算同一个键）：点名的字段整体替换，和 HTTP 的 PATCH 一致；点到 id、created_at 这类框架管理的字段或只在创建时写入的字段（如 tenant_id）时跳过（AIP-161/203 对只读字段的规定）、点到模型没有的字段拒绝（AIP-161） |
 | 什么都没点到的补丁 | AIP-134 的掩码省略即按已填字段；RFC 7396 的空补丁 `{}` 合法、表示不改 | HTTP 的 `{}` 与只含模型没有的键的 body 照 encoding/json 的惯例忽略未知键、整行按原样写回并刷新 updated_at；gRPC 的掩码不剩可改字段时拒绝。两线有意不同的地方之一；每一处有意的差异都是 internal/controller 对照用例里显式的差异行，也都登记在这页 |

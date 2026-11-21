@@ -12,6 +12,6 @@ func BenchmarkPagination(b *testing.B) {
 
 	b.ReportAllocs()
 	for b.Loop() {
-		Pagination(query, &paginatableTestModel{})
+		Pagination(query, &plainTestModel{})
 	}
 }

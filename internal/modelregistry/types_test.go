@@ -30,13 +30,6 @@ type QueryableRecord struct {
 	modelregistry.Base
 }
 
-type PaginatableRecord struct {
-	Name string `json:"name,omitempty"`
-
-	modelregistry.Pagination
-	modelregistry.Base
-}
-
 type CursorableRecord struct {
 	Name string `json:"name,omitempty"`
 
@@ -115,20 +108,13 @@ func TestQueryable(t *testing.T) {
 	require.True(t, modelregistry.IsQueryable(new(QueryableRecord)))
 	require.True(t, modelregistry.IsQueryable(QueryableRecord{}))
 
-	require.True(t, modelregistry.IsPaginatable(new(QueryableRecord)))
-	require.True(t, modelregistry.IsCursorable(new(QueryableRecord)))
-
-	require.False(t, modelregistry.IsQueryable(new(PaginatableRecord)))
-	require.True(t, modelregistry.IsPaginatable(new(PaginatableRecord)))
-	require.False(t, modelregistry.IsCursorable(new(PaginatableRecord)))
+	require.False(t, modelregistry.IsCursorable(new(QueryableRecord)), "Query brings no cursor")
 
 	require.False(t, modelregistry.IsQueryable(new(CursorableRecord)))
-	require.False(t, modelregistry.IsPaginatable(new(CursorableRecord)))
 	require.True(t, modelregistry.IsCursorable(new(CursorableRecord)))
 
 	// Embedding the framework query structs is the only opt-in path.
 	require.False(t, modelregistry.IsQueryable(new(markerMethodSpoofRecord)))
-	require.False(t, modelregistry.IsPaginatable(new(markerMethodSpoofRecord)))
 	require.False(t, modelregistry.IsCursorable(new(markerMethodSpoofRecord)))
 }
 

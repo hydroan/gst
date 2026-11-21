@@ -52,10 +52,6 @@ func (a *action[M, REQ, RSP]) listFlow(ctx context.Context, newServiceContext se
 		return nil, 0, false, failWith(ctx, log, "parse query parameter failed", err, invalidArgument(err))
 	}
 
-	if err = checkCursorOrderConflict(cursor, orders); err != nil {
-		return nil, 0, false, failWith(ctx, log, "parse query parameter failed", err, invalidArgument(err))
-	}
-
 	expands, err := parseExpandQuery(query, m)
 	if err != nil {
 		return nil, 0, false, failWith(ctx, log, "parse query parameter failed", err, invalidArgument(err))

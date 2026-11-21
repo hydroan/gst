@@ -56,39 +56,40 @@ const (
 // The query markers of the model registry a model embeds to opt in to the
 // framework's List controls, named after the types themselves.
 var (
-	queryMarkerName      = reflect.TypeFor[modelregistry.Query]().Name()
-	paginationMarkerName = reflect.TypeFor[modelregistry.Pagination]().Name()
-	cursorMarkerName     = reflect.TypeFor[modelregistry.Cursor]().Name()
+	queryMarkerName  = reflect.TypeFor[modelregistry.Query]().Name()
+	cursorMarkerName = reflect.TypeFor[modelregistry.Cursor]().Name()
 )
 
-// queryControls is what a model opted in to of the framework's List
-// controls by the markers it embeds: the orderings and the expansion with
-// Query, the page with Pagination, the cursor with Cursor and the size with
-// either. The List request of a standard action carries the fields of the
-// controls the model reads and no other (see queryFields), the HTTP
-// listener refusing the parameters of the others.
+// queryControls is what the List request of a model carries of the
+// framework's List controls, by the markers the model embeds: the orderings
+// and the expansion with Query, the cursor with Cursor, which makes the list
+// a feed, and the page without it, a feed taking neither a page nor an
+// ordering; the size is every list's. The List request of a standard action
+// carries the fields of the controls the model reads and no other (see
+// queryFields), the HTTP listener refusing the parameters of the others.
 type queryControls struct {
-	queryable, paginatable, cursorable bool
+	sort, page, cursor, expand bool
 }
 
 // allQueryControls is every control: what the request of a custom List
 // carries, its service reading the query itself.
-var allQueryControls = queryControls{queryable: true, paginatable: true, cursorable: true}
+var allQueryControls = queryControls{sort: true, page: true, cursor: true, expand: true}
 
-// queryControlsOf reports the controls the model type obj opted in to by
-// the markers it embeds, directly or through one another, Query embedding
-// Pagination and Cursor: the reading modelregistry.IsQueryable and its kind
-// make of a model at run time.
+// queryControlsOf reports the controls the List request of the model type
+// obj carries, by the markers it embeds, directly or through one another:
+// the reading modelregistry.IsQueryable and IsCursorable make of a model at
+// run time.
 func queryControlsOf(obj *types.TypeName) queryControls {
-	var c queryControls
+	var queryable, cursorable bool
 	if st, ok := obj.Type().Underlying().(*types.Struct); ok {
-		c.collect(st)
+		queryable, cursorable = embeddedMarkers(st)
 	}
-	return c
+	return queryControls{sort: queryable && !cursorable, page: !cursorable, cursor: cursorable, expand: queryable}
 }
 
-// collect turns on the controls of the markers embedded in st, at any depth.
-func (c *queryControls) collect(st *types.Struct) {
+// embeddedMarkers reports whether st embeds Query and whether it embeds
+// Cursor, at any depth.
+func embeddedMarkers(st *types.Struct) (queryable, cursorable bool) {
 	for f := range st.Fields() {
 		if !f.Embedded() {
 			continue
@@ -106,17 +107,17 @@ func (c *queryControls) collect(st *types.Struct) {
 		if named.Obj().Pkg() != nil && named.Obj().Pkg().Path() == modelRegistryPath {
 			switch named.Obj().Name() {
 			case queryMarkerName:
-				c.queryable = true
-			case paginationMarkerName:
-				c.paginatable = true
+				queryable = true
 			case cursorMarkerName:
-				c.cursorable = true
+				cursorable = true
 			}
 		}
 		if inner, ok := named.Underlying().(*types.Struct); ok {
-			c.collect(inner)
+			q, c := embeddedMarkers(inner)
+			queryable, cursorable = queryable || q, cursorable || c
 		}
 	}
+	return queryable, cursorable
 }
 
 // FieldType is the protobuf type of one field.

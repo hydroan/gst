@@ -49,6 +49,8 @@ func (pinService) CreatePin(ctx context.Context, req *CreatePinRequest) (*Create
 func (pinService) ListPin(ctx context.Context, req *ListPinRequest) (*ListPinResponse, error) {
 	models, total, more, err := listPin(ctx, nil, grpc.Query{
 		Filters: grpc.Filters(req.GetFilters()),
+		Page:    req.GetPage(),
+		Size:    req.GetSize(),
 	})
 	if err != nil {
 		return nil, err

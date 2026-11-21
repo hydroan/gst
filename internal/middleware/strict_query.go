@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"math"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -12,7 +13,8 @@ import (
 
 // strictQuery returns a middleware that rejects, before any handler runs, a
 // query string the framework cannot take at its word: a query that fails to
-// parse, one that repeats a key, or one whose paging parameter is no count.
+// parse, one that repeats a key, or one whose paging parameter is no count
+// its parameter takes.
 //
 // The framework's query contract is one value per key — the framework itself
 // never consumes multiple values for a key, and neither the standard library's
@@ -29,13 +31,15 @@ import (
 // before the error, so two parsers can disagree about what the client sent.
 //
 // The paging parameters are held to their type here as well: _page and _size
-// carry a count, zero or more, and a list reads them through helpers that
-// have no error to answer with (see urlquery.Pagination), so one that is no
-// count is refused at the door the way urlquery.ParseCount words it,
-// _page=abc with "invalid query parameter "_page": expect a numeric value,
-// got "abc"" and _size=-5 with "invalid query parameter "_size": expect a
-// non-negative value, got "-5"", rather than taken for the parameter left
-// out, which an empty value is.
+// carry a count, zero or more, the size urlquery.MaxPageSize at most, and a
+// list reads them through helpers that have no error to answer with (see
+// urlquery.Pagination), so one that is no such count is refused at the door
+// the way urlquery.ParseCount words it, _page=abc with "invalid query
+// parameter "_page": expect a numeric value, got "abc"", _size=-5 with
+// "invalid query parameter "_size": expect a non-negative value, got "-5""
+// and _size=500 with "invalid query parameter "_size": expect a value from 1
+// to 100, got "500"", rather than taken for the parameter left out, which an
+// empty value is, or brought down to the cap.
 //
 // The gate performs the request's one query parse and memoizes it for the
 // framework's request metadata to reuse, so it adds no parse over a chain that
@@ -63,12 +67,15 @@ func strictQuery() gin.HandlerFunc {
 			return
 		}
 
-		for _, key := range [...]string{types.QueryPage, types.QuerySize} {
-			raw := query.Get(key)
+		for _, count := range [...]struct {
+			key  string
+			most int
+		}{{types.QueryPage, math.MaxInt}, {types.QuerySize, urlquery.MaxPageSize}} {
+			raw := query.Get(count.key)
 			if raw == "" {
 				continue
 			}
-			if _, err := urlquery.ParseCount(key, raw); err != nil {
+			if _, err := urlquery.ParseCount(count.key, raw, count.most); err != nil {
 				response.Abort(c, types.NewError(http.StatusBadRequest, err.Error()))
 				return
 			}

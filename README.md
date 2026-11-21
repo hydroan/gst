@@ -180,7 +180,7 @@ func (Record) Design() {
 - **裸键只给标量：** 字符串、数字、布尔这类字段收裸键精确匹配；时间、日期、JSON 这类列只收运算符写法（`?expires_at[gte]=…`），而且运算符只对嵌了 `model.Query` 的模型生效。框架时间戳 `created_at`、`updated_at` 例外：嵌了 `model.Query` 的模型上，它们的裸键也收，按精确匹配处理（`?created_at=2026-01-02T15:04:05Z`），值同样只收 RFC 3339。
 - **存成一整列的结构体没有点路径：** `datatypes.JSON` 一类类型或 `gorm:"serializer:json"` 存成一列的结构体、切片字段只有它自己的查询名，不能点进里面的字段；JSON 文档列（datatypes 的 JSON 类型，或写了 `type:json`）只收 `like` 一类运算符和 `isnull`。
 - **不落库的字段只收裸键：** `gorm:"-"` 的字段写了 `query` tag 仍是查询参数，裸键解码进模型交给服务的 `Filter` 钩子使用，不能用运算符、不能排序。
-- **写错直接报错：** 两个字段写同一个查询名、业务字段的查询名用 `_` 开头（框架参数的保留前缀）、`query` tag 里带 `[`、`]` 或 `.`，由两处检查拦下：声明了 `Migrate()` 的模型，服务启动时直接报错退出；`gg check` 检查这些模型，以及没声明 `Migrate()` 但嵌了 `model.Query` 的模型。其余模型（如只嵌 `model.Pagination` 或 `model.Cursor` 的）两处都不检查。
+- **写错直接报错：** 两个字段写同一个查询名、业务字段的查询名用 `_` 开头（框架参数的保留前缀）、`query` tag 里带 `[`、`]` 或 `.`，由两处检查拦下：声明了 `Migrate()` 的模型，服务启动时直接报错退出；`gg check` 检查这些模型，以及没声明 `Migrate()` 但嵌了 `model.Query` 的模型。其余模型（如只嵌 `model.Cursor` 的）两处都不检查。
 
 每个模型实际收哪些查询参数，以 `/docs/index.html` 的 Swagger 为准：收裸键的参数在说明里列出它可用的运算符，只收运算符的列按 `字段[运算符]` 逐个列出。
 
@@ -481,17 +481,17 @@ if err = database.Database[*appmodel.Sample](ctx).
 }
 ```
 
-这六个方法覆盖 `field[op]` 过滤、零值过滤、排序、分页和 cursor 分页，各项是否生效取决于
-model 声明的 `model.Query`、`model.Pagination`、`model.Cursor`。`WithPagination` 的每一页都按
+这六个方法覆盖 `field[op]` 过滤、零值过滤、排序、分页和 cursor 分页：分页每个 model 都有，
+排序与 `field[op]` 过滤要 model 嵌 `model.Query`，cursor 要嵌 `model.Cursor`。`WithPagination` 的每一页都按
 确定的顺序返回：排序列里没有主键（或不可为 NULL 的唯一列）时，框架在 ORDER BY 末尾补主键，方向
 跟随最后一个排序项（不带 `_sort_by` 时按主键升序），翻页不漏不重，索引照常可用。`QueryOrders` 会校验
 `_sort_by` 的排序列，未知列名直接报错；但它们**不**保证 `List` 与 `Count` 用同一份查询
 条件：统计总数时必须传入同样的查询值和 `gst.QueryOptions`（把 `opts` 存成变量复用是
 最省事的写法），否则 total 会和当页数据对不上。
 
-cursor 分页自带 ORDER BY，首页也是：带 `_cursor_next=true` 而不带 `_cursor_value` 的请求按游标列
-升序返回第一页，之后用末行的值接着翻。所以一次请求不能同时用 `_cursor_value` 和 `_sort_by`，
-框架列表接口会直接返回 400；`Database` 链上 `WithCursor` 与 `WithOrder` 同时出现也会报错。
+cursor 分页自带 ORDER BY，首页也是：不带 `_cursor_value` 的请求按游标列升序返回第一页，之后用
+末行的值接着翻。嵌了 `model.Cursor` 的 model，框架的列表接口只按 cursor 翻页，传 `_page` 或
+`_sort_by` 直接返回 400；`Database` 链上 `WithCursor` 与 `WithOrder` 同时出现也会报错。
 
 #### OR 查询
 

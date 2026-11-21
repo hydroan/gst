@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -14,31 +15,34 @@ import (
 
 // TestListRefusesMalformedQueryParameters pins the 400 of a listing whose
 // query parameters the model cannot answer, each refused before any row is
-// read.
+// read: a parameter of a capability the model lacks, a parameter of the way
+// of paging the list does not page by, and a column or an operator no such
+// parameter takes.
 func TestListRefusesMalformedQueryParameters(t *testing.T) {
 	samples := controller.ListHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute))
 	counters := controller.ListHandler[*sampleCounter, *sampleCounter, *sampleCounter](configFor[*sampleCounter](counterRoute))
+	feeds := controller.ListHandler[*feedSample, *feedSample, *feedSample](configFor[*feedSample](feedRoute))
 
 	for _, tt := range []struct {
-		name   string
-		counts bool
-		target string
+		name    string
+		handler gin.HandlerFunc
+		target  string
 	}{
-		{name: "a page size on a model that does not page", counts: true, target: "/controller-counters?_size=10"},
-		{name: "a filter on a field the model lacks", target: "/controller-samples?missing[eq]=value"},
-		{name: "a filter operator that does not exist", target: "/controller-samples?name[bogus]=value"},
-		{name: "a sort column the model lacks", target: "/controller-samples?_sort_by=missing"},
-		{name: "a sort direction that does not exist", target: "/controller-samples?_sort_by=name+sideways"},
-		{name: "a cursor column the model lacks", target: "/controller-samples?_cursor_field=missing&_cursor_value=value"},
-		{name: "a cursor column the model lacks on the first page", target: "/controller-samples?_cursor_field=missing"},
-		{name: "a cursor beside an order of its own", target: "/controller-samples?_cursor_field=id&_cursor_value=value&_sort_by=name"},
+		{name: "an order on a model that does not sort", handler: counters, target: "/controller-counters?_sort_by=name"},
+		{name: "a filter on a field the model lacks", handler: samples, target: "/controller-samples?missing[eq]=value"},
+		{name: "a filter operator that does not exist", handler: samples, target: "/controller-samples?name[bogus]=value"},
+		{name: "a sort column the model lacks", handler: samples, target: "/controller-samples?_sort_by=missing"},
+		{name: "a sort direction that does not exist", handler: samples, target: "/controller-samples?_sort_by=name+sideways"},
+		{name: "a cursor on a list that pages by number", handler: samples, target: "/controller-samples?_cursor_next=true"},
+		{name: "a cursor beside a page number", handler: samples, target: "/controller-samples?_page=2&_cursor_value=value"},
+		{name: "a page number on a feed", handler: feeds, target: "/controller-feed-samples?_page=2"},
+		{name: "an order on a feed", handler: feeds, target: "/controller-feed-samples?_sort_by=name"},
+		{name: "a cursor column the model lacks", handler: feeds, target: "/controller-feed-samples?_cursor_field=missing&_cursor_value=value"},
+		{name: "a cursor column the model lacks on the first page", handler: feeds, target: "/controller-feed-samples?_cursor_field=missing"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			handler, pattern := samples, "/controller-samples"
-			if tt.counts {
-				handler, pattern = counters, "/controller-counters"
-			}
-			rsp := serve(t, http.MethodGet, pattern, handler, tt.target, "")
+			pattern, _, _ := strings.Cut(tt.target, "?")
+			rsp := serve(t, http.MethodGet, pattern, tt.handler, tt.target, "")
 
 			require.Equal(t, http.StatusBadRequest, rsp.Code, rsp.Body.String())
 		})
@@ -66,23 +70,25 @@ func TestListAnswersAHookRefusal(t *testing.T) {
 }
 
 // TestListWalksAFeedToItsEnd pins what has_more spares the client reading a
-// feed: four records read two a page take two requests, the second page
-// telling that none follow it, and no third request for an empty page.
+// feed, the list of a model embedding Cursor: four records read two a page
+// take two requests, the first naming no cursor and the second page telling
+// that none follow it, and no third request for an empty page.
 func TestListWalksAFeedToItsEnd(t *testing.T) {
 	name := uniqueName("list-feed")
 	created := make([]string, 0, 4)
 	for range 4 {
-		created = append(created, createSample(t, name).GetID())
+		created = append(created, createFeed(t, name).GetID())
 	}
-	handler := controller.ListHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute))
+	handler := controller.ListHandler[*feedSample, *feedSample, *feedSample](configFor[*feedSample](feedRoute))
 
-	first := serveList(t, handler, "/"+sampleRoute, "/"+sampleRoute+"?name="+name+"&_size=2&_cursor_next=true")
+	first := serveList(t, handler, "/"+feedRoute, "/"+feedRoute+"?name="+name+"&_size=2")
 	require.Len(t, first.Items, 2)
+	require.Zero(t, first.Total, "a feed counts nothing")
 	require.NotNil(t, first.HasMore, "a list response carries has_more")
 	require.True(t, *first.HasMore, "two records follow the first page")
 
 	last := stringOf(first.Items[1]["id"])
-	second := serveList(t, handler, "/"+sampleRoute, "/"+sampleRoute+"?name="+name+"&_size=2&_cursor_next=true&_cursor_value="+last)
+	second := serveList(t, handler, "/"+feedRoute, "/"+feedRoute+"?name="+name+"&_size=2&_cursor_next=true&_cursor_value="+last)
 	require.Len(t, second.Items, 2)
 	require.NotNil(t, second.HasMore, "a list response carries has_more")
 	require.False(t, *second.HasMore, "the feed ends on the second page")
@@ -100,11 +106,11 @@ func TestListWalksAFeedToItsEnd(t *testing.T) {
 func TestListHandsItsAfterHookThePageItAnswers(t *testing.T) {
 	name := uniqueName("list-observed")
 	for range 3 {
-		createSample(t, name)
+		createFeed(t, name)
 	}
-	handler := controller.ListHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](pageRoute))
+	handler := controller.ListHandler[*feedSample, *feedSample, *feedSample](configFor[*feedSample](pageRoute))
 
-	page := serveList(t, handler, "/"+pageRoute, "/"+pageRoute+"?name="+name+"&_size=2&_cursor_next=true")
+	page := serveList(t, handler, "/"+pageRoute, "/"+pageRoute+"?name="+name+"&_size=2")
 
 	require.Len(t, page.Items, 2)
 	require.NotNil(t, page.HasMore, "a list response carries has_more")
@@ -112,43 +118,30 @@ func TestListHandsItsAfterHookThePageItAnswers(t *testing.T) {
 	require.EqualValues(t, 2, observedPage.Load(), "the hook is handed the page, without the record read past it")
 }
 
-// TestListTellsWhenItsCapCutsAnUnpagedListShort pins has_more on a model that
-// does not page, whose listing stops at 1000 records: false while every
-// record fits, the cap filled exactly included, and true once one does not.
-func TestListTellsWhenItsCapCutsAnUnpagedListShort(t *testing.T) {
-	const limit = 1000
+// TestListPagesAModelThatEmbedsNothing pins that a list pages with nothing
+// embedded in its model: a request naming no size is answered the default
+// page of 20 records with whether records follow it, and _page reads on.
+func TestListPagesAModelThatEmbedsNothing(t *testing.T) {
 	ctx := context.Background()
-
-	var stored int
-	require.NoError(t, database.Database[*sampleCounter](ctx).Count(&stored))
-	require.Less(t, stored, limit, "the counters the other tests leave fit under the cap")
-	fill := make([]*sampleCounter, limit-stored)
-	for i := range fill {
-		fill[i] = &sampleCounter{Name: "list-cap"}
+	created := make([]*sampleCounter, 21)
+	for i := range created {
+		created[i] = &sampleCounter{Name: "list-paged"}
 	}
-	require.NoError(t, database.Database[*sampleCounter](ctx).Create(fill...))
+	require.NoError(t, database.Database[*sampleCounter](ctx).Create(created...))
 	t.Cleanup(func() {
-		require.NoError(t, database.Database[*sampleCounter](ctx).WithPurge().Delete(fill...))
+		require.NoError(t, database.Database[*sampleCounter](ctx).WithPurge().Delete(created...))
 	})
 	handler := controller.ListHandler[*sampleCounter, *sampleCounter, *sampleCounter](configFor[*sampleCounter](counterRoute))
 
-	filled := serveList(t, handler, "/"+counterRoute, "/"+counterRoute)
-	require.Len(t, filled.Items, limit)
-	require.Equal(t, limit, filled.Total)
-	require.NotNil(t, filled.HasMore, "a list response carries has_more")
-	require.False(t, *filled.HasMore, "the cap filled exactly leaves no record unread")
+	first := serveList(t, handler, "/"+counterRoute, "/"+counterRoute)
+	require.Len(t, first.Items, 20, "a size left out is the default page size")
+	require.GreaterOrEqual(t, first.Total, 21)
+	require.NotNil(t, first.HasMore, "a list response carries has_more")
+	require.True(t, *first.HasMore, "a twenty-first record follows the page")
 
-	past := &sampleCounter{Name: "list-cap"}
-	require.NoError(t, database.Database[*sampleCounter](ctx).Create(past))
-	t.Cleanup(func() {
-		require.NoError(t, database.Database[*sampleCounter](ctx).WithPurge().Delete(past))
-	})
-
-	cut := serveList(t, handler, "/"+counterRoute, "/"+counterRoute)
-	require.Len(t, cut.Items, limit)
-	require.Equal(t, limit+1, cut.Total)
-	require.NotNil(t, cut.HasMore, "a list response carries has_more")
-	require.True(t, *cut.HasMore, "one record lies past the cap")
+	second := serveList(t, handler, "/"+counterRoute, "/"+counterRoute+"?_page=2&_size=20")
+	require.NotEmpty(t, second.Items, "the second page reads on")
+	require.NotEqual(t, first.Items[0]["id"], second.Items[0]["id"], "the second page starts past the first")
 }
 
 // listAnswer is the data of a list response; HasMore is nil when the

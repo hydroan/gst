@@ -14,9 +14,8 @@ import (
 // frameworkQueryStructs are the structs declaring the framework's own query
 // parameters, the fields alone whose names may take the "_" namespace.
 var frameworkQueryStructs = map[reflect.Type]bool{
-	reflect.TypeFor[modelregistry.Query]():      true,
-	reflect.TypeFor[modelregistry.Pagination](): true,
-	reflect.TypeFor[modelregistry.Cursor]():     true,
+	reflect.TypeFor[modelregistry.Query]():  true,
+	reflect.TypeFor[modelregistry.Cursor](): true,
 }
 
 // queryNameMarks are the characters a query tag cannot hold: the operator

@@ -141,6 +141,18 @@ type datedSample struct {
 
 func (datedSample) TableName() string { return "controller_dated_samples" }
 
+// feedSample is read by cursor: embedding Cursor makes its list a feed,
+// which Query lets filter by operator.
+type feedSample struct {
+	Name string `json:"name" query:"name"`
+
+	modelregistry.Query
+	modelregistry.Cursor
+	modelregistry.Base
+}
+
+func (feedSample) TableName() string { return "controller_feed_samples" }
+
 // scopedSample is filed under a tenant: the framework stamps the tenant of
 // the caller when a record is created, whatever tenant the record names.
 type scopedSample struct {
@@ -184,10 +196,11 @@ const (
 	versionedRoute     = "controller-versioned-samples"
 	validatedRoute     = "controller-validated-samples"
 	datedRoute         = "controller-dated-samples"
+	feedRoute          = "controller-feed-samples"
 	scopedRoute        = "controller-scoped-samples"
 	publicRoute        = "controller-public-samples"
 	observedRoute      = "controller-observed-samples"
-	pageRoute          = "controller-observed-pages"
+	pageRoute          = "controller-observed-feed-pages"
 	cookieBeforeRoute  = "controller-cookie-before-samples"
 	cookieAfterRoute   = "controller-cookie-after-samples"
 	actionRoute        = "controller-sample-actions"
@@ -209,7 +222,7 @@ func registerFixtureServices() {
 	} {
 		serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](phase, refusalRoute, &refusingService{})
 	}
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.List, pageRoute, &pageObservingService{})
+	serviceregistry.RegisterInstance[*feedSample, *feedSample, *feedSample](apiaction.List, pageRoute, &pageObservingService{})
 	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.List, filterRefusalRoute, &filterRefusingService{})
 	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.List, hangingRoute, &hangingService{})
 	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.Import, importRoute, &importingService{})
@@ -304,17 +317,17 @@ func (*filterRefusingService) Filter(_ *types.ServiceContext, m *sampleRecord, o
 	return m, opts, refusal()
 }
 
-// pageObservingService records how many records a listing hands its after
-// hook: the page the client is answered with.
+// pageObservingService records how many records the listing of a feed hands
+// its after hook: the page the client is answered with.
 type pageObservingService struct {
-	serviceregistry.Base[*sampleRecord, *sampleRecord, *sampleRecord]
+	serviceregistry.Base[*feedSample, *feedSample, *feedSample]
 }
 
 // observedPage is the number of records the last listing on pageRoute
 // handed its after hook.
 var observedPage atomic.Int64
 
-func (*pageObservingService) ListAfter(_ *types.ServiceContext, records *[]*sampleRecord) error {
+func (*pageObservingService) ListAfter(_ *types.ServiceContext, records *[]*feedSample) error {
 	observedPage.Store(int64(len(*records)))
 	return nil
 }
@@ -613,14 +626,22 @@ func createDated(t *testing.T, name string, day time.Time) *datedSample {
 	return record
 }
 
-// datedIDs returns the ids of the dated samples named name in id order, the
+// createFeed stores a feed sample named name and returns it with its id.
+func createFeed(t *testing.T, name string) *feedSample {
+	t.Helper()
+	record := &feedSample{Name: name}
+	require.NoError(t, database.Database[*feedSample](context.Background()).Create(record))
+	return record
+}
+
+// feedIDs returns the ids of the feed samples named name in id order, the
 // order their feed is read in.
-func datedIDs(t *testing.T, name string) []string {
+func feedIDs(t *testing.T, name string) []string {
 	t.Helper()
 
-	var records []*datedSample
-	require.NoError(t, database.Database[*datedSample](context.Background()).
-		WithQuery(&datedSample{Name: name}).
+	var records []*feedSample
+	require.NoError(t, database.Database[*feedSample](context.Background()).
+		WithQuery(&feedSample{Name: name}).
 		WithOrder(types.Asc("id")).
 		List(&records))
 	found := make([]string, len(records))

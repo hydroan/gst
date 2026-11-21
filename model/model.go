@@ -27,14 +27,13 @@ type (
 	// columns are fixed the way Base's are.
 	AutoBase = modelregistry.AutoBase
 
-	// Query enables framework-owned list query parameters when embedded by a
-	// model. It already includes Pagination and Cursor.
+	// Query enables sorting, expansion and the operator filters when
+	// embedded by a model. Paging is no part of it: every list pages by
+	// _page and _size.
 	Query = modelregistry.Query
 
-	// Pagination enables page and size query parameters when embedded by a model.
-	Pagination = modelregistry.Pagination
-
-	// Cursor enables cursor query parameters when embedded by a model.
+	// Cursor makes the list of a model embedding it a feed, read by cursor
+	// in place of pages.
 	Cursor = modelregistry.Cursor
 
 	// Empty marks a model as an action-only type that does not map to a database table.

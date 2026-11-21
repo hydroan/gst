@@ -47,12 +47,17 @@ func TestAddQueryParametersUsesDateTimeFormatForTimeFields(t *testing.T) {
 	require.True(t, isNull.Schema.Value.Type.Is(openapi3.TypeBoolean), "isnull takes a boolean")
 }
 
-type openapiPaginationQueryModel struct {
-	modelregistry.Pagination
+type openapiPlainQueryModel struct {
 	modelregistry.Base
 }
 
 type openapiCursorQueryModel struct {
+	modelregistry.Cursor
+	modelregistry.Base
+}
+
+type openapiFeedQueryModel struct {
+	modelregistry.Query
 	modelregistry.Cursor
 	modelregistry.Base
 }
@@ -92,18 +97,32 @@ func TestAddQueryParametersIncludesEmbeddedFrameworkParameters(t *testing.T) {
 			parameters: []string{
 				"page",
 				"_page", "_size",
-				"_cursor_value", "_cursor_field", "_cursor_next",
 				"_expand", "_depth", "_sort_by",
 				"id", "created_by", "updated_by",
 				"created_at", "updated_at",
 			},
 		},
 		{
-			name: "pagination",
+			// Every list pages by number, with nothing embedded.
+			name: "plain",
 			add: func(op *openapi3.Operation) {
-				addQueryParameters[*openapiPaginationQueryModel, *openapiPaginationQueryModel, *openapiPaginationQueryModel](op, true)
+				addQueryParameters[*openapiPlainQueryModel, *openapiPlainQueryModel, *openapiPlainQueryModel](op, true)
 			},
 			parameters: []string{"_page", "_size", "id", "created_by", "updated_by"},
+		},
+		{
+			// A feed that expands takes neither a page nor an order.
+			name: "query beside cursor",
+			add: func(op *openapi3.Operation) {
+				addQueryParameters[*openapiFeedQueryModel, *openapiFeedQueryModel, *openapiFeedQueryModel](op, true)
+			},
+			parameters: []string{
+				"_size",
+				"_cursor_value", "_cursor_field", "_cursor_next",
+				"_expand", "_depth",
+				"id", "created_by", "updated_by",
+				"created_at", "updated_at",
+			},
 		},
 		{
 			name: "cursor",
@@ -205,7 +224,6 @@ type openapiPlainFilterQueryModel struct {
 	First     openapiQueryPart  `json:"first" gorm:"embedded;embeddedPrefix:first_" query:"first"`
 	*OpenAPIQueryExtra
 
-	modelregistry.Pagination
 	modelregistry.Base
 }
 
@@ -236,7 +254,6 @@ func TestAddQueryParametersOrdersBusinessFieldsBeforeFrameworkParameters(t *test
 		"id", "created_by", "updated_by",
 		"created_at", "updated_at",
 		"_page", "_size", "_sort_by",
-		"_cursor_value", "_cursor_field", "_cursor_next",
 		"_expand", "_depth",
 	}
 	if len(names) != len(want) {
@@ -304,7 +321,7 @@ func TestAddQueryParametersDocumentsFieldOperatorFilters(t *testing.T) {
 	require.NotContains(t, parameters["scope"].Description, "[op]=value", "a field that is no column takes no operator")
 
 	op = &openapi3.Operation{}
-	addQueryParameters[*openapiPaginationQueryModel, *openapiPaginationQueryModel, *openapiPaginationQueryModel](op, true)
+	addQueryParameters[*openapiPlainQueryModel, *openapiPlainQueryModel, *openapiPlainQueryModel](op, true)
 	parameters = queryParametersByName(t, op)
 	if strings.Contains(parameters["id"].Description, "[op]=value") {
 		t.Fatalf("id description = %q, models without modelregistry.Query must not advertise operator filters", parameters["id"].Description)

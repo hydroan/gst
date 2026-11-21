@@ -80,8 +80,7 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		// model takes are read by nothing here, a virtual resource's service
 		// included, and are refused rather than ignored.
 		query := requestctx.GinQuery(c)
-		paging := matchQueryKeys(query, listPageQueryKey)
-		paging = append(paging, matchQueryKeys(query, listSizeQueryKey)...)
+		paging := matchQueryKeys(query, listPagingQueryKeys)
 		paging = append(paging, matchQueryKeys(query, listCursorQueryKeys)...)
 		if len(paging) > 0 {
 			err := urlquery.UnsupportedParameterError(paging)

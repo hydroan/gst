@@ -3,6 +3,7 @@ package controller
 import (
 	"net/url"
 	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -17,56 +18,57 @@ import (
 // association.
 const expandAll = "all"
 
-// listQueryKeys are List controller parameters that belong to model.Query
-// rather than to the resource model's own filter fields.
+// listQueryKeys are the List parameters model.Query opts a model in to,
+// beside the operator filters.
 var listQueryKeys = map[string]struct{}{
 	types.QueryExpand: {},
 	types.QueryDepth:  {},
 	types.QuerySortBy: {},
 }
 
-// listPageQueryKey is enabled by model.Pagination only: offset paging
-// conflicts with cursor semantics, so cursor-only models reject it.
-var listPageQueryKey = map[string]struct{}{
-	types.QueryPage: {},
+// feedRefusedQueryKeys are the List parameters a feed, the list of a model
+// embedding model.Cursor, takes from no model: the page, a feed being read
+// from its cursor on, and the order, which its cursor defines.
+var feedRefusedQueryKeys = map[string]struct{}{
+	types.QueryPage:   {},
+	types.QuerySortBy: {},
 }
 
-// listSizeQueryKey is enabled by model.Pagination or model.Cursor: both
-// paging styles need a client-adjustable page/batch size.
-var listSizeQueryKey = map[string]struct{}{
+// listPagingQueryKeys are the List parameters a list pages by: the size of
+// every list, and the page of one that is no feed. An export, which lists
+// every record the query matches, refuses them beside the cursor's.
+var listPagingQueryKeys = map[string]struct{}{
+	types.QueryPage: {},
 	types.QuerySize: {},
 }
 
-// listCursorQueryKeys are enabled by model.Cursor. A model may opt in to both
-// cursor and sort parameters, but a single request may not use both at once:
-// the cursor column and travel direction define the stable order, which
-// checkCursorOrderConflict enforces.
+// listCursorQueryKeys are the List parameters a feed alone takes.
 var listCursorQueryKeys = map[string]struct{}{
 	types.QueryCursorValue: {},
 	types.QueryCursorField: {},
 	types.QueryCursorNext:  {},
 }
 
-// decodeListQuery rejects the framework query keys the model has not opted in
-// to via model.Query, model.Pagination, or model.Cursor, then decodes the
-// remaining URL query parameters into the model's own query fields. The
-// explicit gate keeps the rejection uniform: it reports every non-opted
-// capability key in one error, including _size, which urlquery.Decode would
-// silently drop for a model that cannot carry it.
+// decodeListQuery rejects the framework query keys the list of the model
+// does not take, then decodes the remaining URL query parameters into the
+// model's own query fields. A list pages one way: by _page, or, the model
+// embedding model.Cursor, by its cursor, and the parameters of the other way
+// are refused, as _sort_by is on a feed; _size is every list's. The keys of
+// model.Query are refused a model not embedding it. The explicit gate
+// reports every such key in one error, _page included, which urlquery.Decode
+// leaves to urlquery.Pagination.
 func decodeListQuery[M types.Model](m M, query map[string][]string) error {
 	rejected := make([]string, 0)
 	if !modelregistry.IsQueryable(m) {
 		rejected = append(rejected, matchQueryKeys(query, listQueryKeys)...)
 	}
-	paginatable := modelregistry.IsPaginatable(m)
-	cursorable := modelregistry.IsCursorable(m)
-	if !paginatable {
-		rejected = append(rejected, matchQueryKeys(query, listPageQueryKey)...)
-	}
-	if !paginatable && !cursorable {
-		rejected = append(rejected, matchQueryKeys(query, listSizeQueryKey)...)
-	}
-	if !cursorable {
+	if modelregistry.IsCursorable(m) {
+		for _, key := range matchQueryKeys(query, feedRefusedQueryKeys) {
+			if !slices.Contains(rejected, key) {
+				rejected = append(rejected, key)
+			}
+		}
+	} else {
 		rejected = append(rejected, matchQueryKeys(query, listCursorQueryKeys)...)
 	}
 	if len(rejected) > 0 {
@@ -84,18 +86,6 @@ func matchQueryKeys(query map[string][]string, keys map[string]struct{}) []strin
 		}
 	}
 	return matched
-}
-
-// checkCursorOrderConflict reports the client error for combining cursor
-// pagination with an explicit sort order. Cursor pagination derives its
-// ORDER BY from the cursor column, so a second order source would demote that
-// column to a secondary sort key and invalidate the boundary condition the
-// cursor relies on, which shows up as pages that skip or repeat rows.
-func checkCursorOrderConflict(cursor types.Cursor, orders []types.Order) error {
-	if cursor.Enabled() && len(orders) > 0 {
-		return errors.New("cursor pagination defines its own ordering: _sort_by cannot be combined with _cursor_value")
-	}
-	return nil
 }
 
 // parseExpandQuery resolves the _expand and _depth parameters of the parsed
@@ -118,13 +108,11 @@ func checkCursorOrderConflict(cursor types.Cursor, orders []types.Order) error {
 func parseExpandQuery(query url.Values, m types.Model) ([]string, error) {
 	depth := 1
 	if raw := query.Get(types.QueryDepth); raw != "" {
-		asked, err := urlquery.ParseCount(types.QueryDepth, raw)
-		switch {
-		case err != nil:
+		asked, err := urlquery.ParseCount(types.QueryDepth, raw, urlquery.MaxExpandDepth)
+		if err != nil {
 			return nil, err
-		case asked > urlquery.MaxExpandDepth:
-			return nil, errors.Newf("invalid query parameter %q: expect a value from 1 to %d, got %q", types.QueryDepth, urlquery.MaxExpandDepth, raw)
-		case asked > 0:
+		}
+		if asked > 0 {
 			depth = asked
 		}
 	}

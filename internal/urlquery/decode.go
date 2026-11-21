@@ -11,7 +11,6 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 )
@@ -35,10 +34,9 @@ import (
 // The keys Filters owns never reach the plan, so the "field[op]" bracket
 // syntax and the bare framework timestamp keys stay with Filters. _format and
 // _limit are the export action's own, which it takes off the query before
-// decoding (see WithoutExportKeys), so any other action is refused them. _size
-// is dropped when the model cannot carry it: a model embedding only Cursor
-// accepts the parameter as its batch size, but the Size field lives in
-// Pagination.
+// decoding (see WithoutExportKeys), so any other action is refused them.
+// _page and _size are left to Pagination, which reads them off the query: no
+// model holds a field for them.
 //
 // Every remaining key must map to a decodable field, so a mistyped filter
 // name is reported instead of silently widening the result set, and every
@@ -59,7 +57,7 @@ func Decode(q url.Values, m types.Model) error {
 		}
 		field, ok := plan[key]
 		if !ok {
-			if key == types.QuerySize && !modelregistry.IsPaginatable(m) {
+			if key == types.QueryPage || key == types.QuerySize {
 				continue
 			}
 			unsupported = append(unsupported, key)

@@ -23,7 +23,6 @@ func TestGeneratedDocsRegisterEveryDeclaredStruct(t *testing.T) {
 		{typeName: "Base", source: "base.go", fields: baseFields},
 		{typeName: "AutoBase", source: "autobase.go", fields: baseFields},
 		{typeName: "Query", source: "query.go", fields: []string{"Expand", "Depth", "SortBy"}},
-		{typeName: "Pagination", source: "query.go", fields: []string{"Page", "Size"}},
 		{typeName: "Cursor", source: "query.go", fields: []string{"CursorValue", "CursorField", "CursorNext"}},
 	}
 

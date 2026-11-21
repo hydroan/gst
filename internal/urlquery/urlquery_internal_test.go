@@ -44,6 +44,7 @@ type filterTestModel struct {
 	Meta datatypes.JSONMap `json:"meta" query:"meta"`
 
 	modelregistry.Query
+	modelregistry.Cursor
 	modelregistry.Base
 }
 
@@ -119,6 +120,7 @@ type hiddenNamedEmbeddingTestModel struct {
 	Hidden namedPart `json:"-" gorm:"embedded;embeddedPrefix:hidden_" query:"hidden"`
 
 	modelregistry.Query
+	modelregistry.Cursor
 	modelregistry.Base
 }
 
@@ -730,11 +732,9 @@ func TestDecode(t *testing.T) {
 		require.Equal(t, 10, m.Age, "the bare key keeps feeding the exact filter while the operator key is left to Filters")
 	})
 
-	t.Run("FillsFrameworkQueryFields", func(t *testing.T) {
+	t.Run("FillsFrameworkQueryFieldsAndLeavesThePageAndSizeToPagination", func(t *testing.T) {
 		var m filterTestModel
 		require.NoError(t, Decode(url.Values{"_page": {"2"}, "_size": {"50"}, "_sort_by": {"created_at desc"}}, &m))
-		require.Equal(t, 2, m.Page)
-		require.Equal(t, 50, m.Size)
 		require.Equal(t, "created_at desc", m.SortBy)
 	})
 
@@ -970,11 +970,6 @@ func TestParsedConditionsReadThroughColumnReferences(t *testing.T) {
 	require.True(t, orders[0].Descending())
 }
 
-type paginatableTestModel struct {
-	modelregistry.Pagination
-	modelregistry.Base
-}
-
 type cursorTestModel struct {
 	modelregistry.Cursor
 	modelregistry.Base
@@ -1051,57 +1046,30 @@ type queryAutoTestModel struct {
 	modelregistry.AutoBase
 }
 
+// TestPagination pins the page and the size a list reads: every model reads
+// both, a page or a size left out, empty or zero being the first page and
+// the default size, while the list of a model embedding Cursor is a feed and
+// reads no page. A size past the cap never reaches Pagination, the listeners
+// refusing it at the door (see ParseCount).
 func TestPagination(t *testing.T) {
-	t.Run("PaginatableModelReadsBothParameters", func(t *testing.T) {
-		page, size := Pagination(url.Values{"_page": {"2"}, "_size": {"50"}}, &paginatableTestModel{})
+	t.Run("EveryModelReadsThePageAndTheSize", func(t *testing.T) {
+		page, size := Pagination(url.Values{"_page": {"2"}, "_size": {"50"}}, &plainTestModel{})
 		require.Equal(t, 2, page)
 		require.Equal(t, 50, size)
 	})
 
-	t.Run("PaginatableModelDefaultsAndClamps", func(t *testing.T) {
-		page, size := Pagination(url.Values{}, &paginatableTestModel{})
-		require.Equal(t, 1, page, "an unset page normalizes to the first page")
-		require.Equal(t, DefaultPageSize, size, "adjustable models default to a small page")
-
-		page, _ = Pagination(url.Values{"_page": {"0"}}, &paginatableTestModel{})
-		require.Equal(t, 1, page, "a zero page normalizes to the first page")
-
-		_, size = Pagination(url.Values{"_size": {"0"}}, &paginatableTestModel{})
-		require.Equal(t, DefaultPageSize, size)
-
-		_, size = Pagination(url.Values{"_size": {"101"}}, &paginatableTestModel{})
-		require.Equal(t, MaxPageSize, size, "oversized page size clamps to the cap")
+	t.Run("APageOrSizeLeftOutIsTheFirstPageAndTheDefaultSize", func(t *testing.T) {
+		for _, q := range []url.Values{{}, {"_page": {"0"}, "_size": {"0"}}, {"_page": {""}, "_size": {""}}} {
+			page, size := Pagination(q, &plainTestModel{})
+			require.Equal(t, 1, page, "%v", q)
+			require.Equal(t, DefaultPageSize, size, "%v", q)
+		}
 	})
 
-	t.Run("EmptyValuesFallBackToDefaults", func(t *testing.T) {
-		page, size := Pagination(url.Values{"_page": {""}, "_size": {""}}, &paginatableTestModel{})
-		require.Equal(t, 1, page, "an empty page is the page left out, the first one")
-		require.Equal(t, DefaultPageSize, size)
-	})
-
-	t.Run("CursorModelIgnoresPageButKeepsSize", func(t *testing.T) {
+	t.Run("AFeedReadsNoPage", func(t *testing.T) {
 		page, size := Pagination(url.Values{"_page": {"2"}, "_size": {"50"}}, &cursorTestModel{})
-		require.Equal(t, 1, page, "offset paging conflicts with cursor semantics and is not offered to cursor models; the page still normalizes to 1")
-		require.Equal(t, 50, size, "cursor pagination needs a client-adjustable batch size")
-	})
-
-	t.Run("PlainModelKeepsBottomLine", func(t *testing.T) {
-		page, size := Pagination(url.Values{"_page": {"2"}, "_size": {"50"}}, &plainTestModel{})
-		require.Equal(t, 1, page, "a model without offset paging still yields a usable first page")
-		require.Equal(t, defaultLimit, size, "models without client size control keep the full-table safety limit")
-	})
-
-	t.Run("ActiveCursorResetsPage", func(t *testing.T) {
-		page, _ := Pagination(url.Values{"_page": {"3"}, "_cursor_value": {"abc"}}, &filterTestModel{})
-		require.Equal(t, 1, page, "offset paging must not stack on top of an active cursor")
-
-		page, _ = Pagination(url.Values{"_page": {"3"}, "_cursor_value": {"abc"}}, &plainTestModel{})
-		require.Equal(t, 1, page, "a model without cursor support never sees a cursor; the page still normalizes to 1")
-	})
-
-	t.Run("FirstPageCursorResetsPage", func(t *testing.T) {
-		page, _ := Pagination(url.Values{"_page": {"3"}, "_cursor_next": {"true"}}, &queryTestModel{})
-		require.Equal(t, 1, page, "a cursor parameter without a value asks for the feed's first page; offset paging must not stack on it")
+		require.Equal(t, 1, page, "a feed is read from the cursor on, with no page to skip to")
+		require.Equal(t, 50, size)
 	})
 }
 
@@ -1257,29 +1225,16 @@ func TestCursor(t *testing.T) {
 		require.Error(t, err, "a mistyped cursor column is refused on the first page, not on the second")
 	})
 
-	t.Run("SortByWithoutValueYieldsZeroCursor", func(t *testing.T) {
-		cursor, err := Cursor(url.Values{"_sort_by": {"name"}}, &cursorTestModel{})
-		require.NoError(t, err)
-		require.False(t, cursor.Enabled(), "a list sorted by the client is not a feed; the cursor orders nothing")
-	})
-
-	t.Run("PlainRequestOnAnOffsetPagedModelIsNotAFeed", func(t *testing.T) {
-		cursor, err := Cursor(url.Values{"_size": {"2"}}, &queryTestModel{})
-		require.NoError(t, err)
-		require.False(t, cursor.Enabled(), "a model paging by offset too reads its first page by offset unless a cursor parameter asks for the feed")
-	})
-
-	t.Run("CursorParameterWithoutValueIsTheFirstPageOfAnOffsetPagedModel", func(t *testing.T) {
+	t.Run("AModelThatSortsAndExpandsIsNoFeed", func(t *testing.T) {
 		cursor, err := Cursor(url.Values{"_cursor_next": {"true"}}, &queryTestModel{})
 		require.NoError(t, err)
-		require.True(t, cursor.Enabled())
-		require.False(t, cursor.Bounded())
+		require.False(t, cursor.Enabled(), "Query brings no cursor: a list is a feed by embedding Cursor alone")
 	})
 
-	t.Run("CursorOnlyModelReadsItsFirstPageFromAPlainRequest", func(t *testing.T) {
+	t.Run("AFeedReadsItsFirstPageFromAPlainRequest", func(t *testing.T) {
 		cursor, err := Cursor(url.Values{"_size": {"2"}}, &cursorTestModel{})
 		require.NoError(t, err)
-		require.True(t, cursor.Enabled(), "a model with no other paging has nothing but the feed")
+		require.True(t, cursor.Enabled(), "the list of a model embedding Cursor is nothing but the feed")
 		require.False(t, cursor.Bounded())
 	})
 

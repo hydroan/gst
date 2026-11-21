@@ -26,12 +26,11 @@ type parameterTestModel struct {
 	modelregistry.Base
 }
 
-// plainParameterTestModel pages by offset without model.Query, so no column
-// takes an operator.
+// plainParameterTestModel embeds no model.Query, so no column takes an
+// operator.
 type plainParameterTestModel struct {
 	Title string `json:"title" query:"title"`
 
-	modelregistry.Pagination
 	modelregistry.Base
 }
 
@@ -71,14 +70,9 @@ func TestParameters(t *testing.T) {
 			{Name: "title", Index: []int{0}, Bare: true, Ops: all},
 			{Name: "expires_at", Index: []int{1}, Ops: times},
 			{Name: "scope", Index: []int{2}, Bare: true},
-			{Name: "_page", Index: []int{5, 0, 0}, Bare: true},
-			{Name: "_size", Index: []int{5, 0, 1}, Bare: true},
-			{Name: "_cursor_value", Index: []int{5, 1, 0}, Bare: true},
-			{Name: "_cursor_field", Index: []int{5, 1, 1}, Bare: true},
-			{Name: "_cursor_next", Index: []int{5, 1, 2}, Bare: true},
-			{Name: "_expand", Index: []int{5, 2}, Bare: true},
-			{Name: "_depth", Index: []int{5, 3}, Bare: true},
-			{Name: "_sort_by", Index: []int{5, 4}, Bare: true},
+			{Name: "_expand", Index: []int{5, 0}, Bare: true},
+			{Name: "_depth", Index: []int{5, 1}, Bare: true},
+			{Name: "_sort_by", Index: []int{5, 2}, Bare: true},
 			{Name: "id", Index: []int{6, 0}, Bare: true, Ops: all},
 			{Name: "created_by", Index: []int{6, 1}, Bare: true, Ops: all},
 			{Name: "updated_by", Index: []int{6, 2}, Bare: true, Ops: all},
@@ -92,11 +86,9 @@ func TestParameters(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, []Parameter{
 			{Name: "title", Index: []int{0}, Bare: true},
-			{Name: "_page", Index: []int{1, 0}, Bare: true},
-			{Name: "_size", Index: []int{1, 1}, Bare: true},
-			{Name: "id", Index: []int{2, 0}, Bare: true},
-			{Name: "created_by", Index: []int{2, 1}, Bare: true},
-			{Name: "updated_by", Index: []int{2, 2}, Bare: true},
+			{Name: "id", Index: []int{1, 0}, Bare: true},
+			{Name: "created_by", Index: []int{1, 1}, Bare: true},
+			{Name: "updated_by", Index: []int{1, 2}, Bare: true},
 		}, params)
 	})
 

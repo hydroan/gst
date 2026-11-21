@@ -31,7 +31,7 @@ type querySnapshot struct {
 	Code       string    `query:"code"`
 	SnapshotAt time.Time `json:"snapshot_at" query:"snapshot_at"`
 
-	modelregistry.Query
+	modelregistry.Cursor
 	modelregistry.Base
 }
 
@@ -77,8 +77,6 @@ func TestBaseQueryModel(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "alice", m.Name)
 		require.Equal(t, 10, m.Age)
-		require.Equal(t, 2, m.Page)
-		require.Equal(t, 50, m.Size)
 	})
 
 	t.Run("KeepsFilterKeysAwayFromTheDecoder", func(t *testing.T) {
@@ -152,16 +150,22 @@ func TestBaseQueryPagination(t *testing.T) {
 		require.Equal(t, 50, size)
 	})
 
-	t.Run("ClampsOversizedPageSize", func(t *testing.T) {
-		_, size := svc.QueryPagination(newQueryContext(t, apiaction.List, "/samples?_size=100000"))
-		require.Equal(t, 100, size)
-	})
-
-	t.Run("ModelWithoutPaginationKeepsTheSafetyLimit", func(t *testing.T) {
+	t.Run("EveryModelPages", func(t *testing.T) {
 		var plain queryPlainService
 		page, size := plain.QueryPagination(newQueryContext(t, apiaction.List, "/samples?_page=2&_size=50"))
+		require.Equal(t, 2, page, "a model pages with nothing embedded")
+		require.Equal(t, 50, size)
+
+		page, size = plain.QueryPagination(newQueryContext(t, apiaction.List, "/samples"))
 		require.Equal(t, 1, page, "the page always normalizes to at least 1")
-		require.Equal(t, 1000, size)
+		require.Equal(t, 20, size, "a size left out is the default page size")
+	})
+
+	t.Run("AFeedReadsNoPage", func(t *testing.T) {
+		var feed querySnapshotService
+		page, size := feed.QueryPagination(newQueryContext(t, apiaction.List, "/samples?_page=2&_size=50"))
+		require.Equal(t, 1, page, "a model embedding model.Cursor is read from its cursor on")
+		require.Equal(t, 50, size)
 	})
 }
 
@@ -188,11 +192,10 @@ func TestBaseQueryOrders(t *testing.T) {
 }
 
 func TestBaseQueryCursor(t *testing.T) {
-	var svc querySampleService
+	var svc querySnapshotService
 
 	t.Run("ReadsRequestValues", func(t *testing.T) {
-		var snapshots querySnapshotService
-		cursor, err := snapshots.QueryCursor(newQueryContext(t, apiaction.List, "/snapshots?_cursor_value=2026-07-01T08:30:15%2B08:00&_cursor_next=true&_cursor_field=snapshot_at"))
+		cursor, err := svc.QueryCursor(newQueryContext(t, apiaction.List, "/snapshots?_cursor_value=2026-07-01T08:30:15%2B08:00&_cursor_next=true&_cursor_field=snapshot_at"))
 		require.NoError(t, err)
 		// A time boundary is accepted in RFC 3339 only, like a time filter
 		// bound, and travels as the UTC wall clock.
@@ -214,7 +217,7 @@ func TestBaseQueryCursor(t *testing.T) {
 	})
 
 	t.Run("MistypedValueIsAClientError", func(t *testing.T) {
-		_, err := svc.QueryCursor(newQueryContext(t, apiaction.List, "/samples?_cursor_value=abc&_cursor_field=age"))
+		_, err := svc.QueryCursor(newQueryContext(t, apiaction.List, "/samples?_cursor_value=abc&_cursor_field=snapshot_at"))
 		require.Error(t, err)
 	})
 
@@ -232,10 +235,18 @@ func TestBaseQueryCursor(t *testing.T) {
 		require.False(t, cursor.Bounded())
 	})
 
-	t.Run("PlainRequestOnAnOffsetPagedModelIsNotAFeed", func(t *testing.T) {
+	t.Run("AFeedReadsItsFirstPageFromAPlainRequest", func(t *testing.T) {
 		cursor, err := svc.QueryCursor(newQueryContext(t, apiaction.List, "/samples?_size=2"))
 		require.NoError(t, err)
-		require.False(t, cursor.Enabled(), "a model embedding model.Query reads its first page by offset unless a cursor parameter asks for the feed")
+		require.True(t, cursor.Enabled(), "the list of a model embedding model.Cursor is nothing but the feed")
+		require.False(t, cursor.Bounded())
+	})
+
+	t.Run("AModelThatSortsAndExpandsIsNoFeed", func(t *testing.T) {
+		var sorted querySampleService
+		cursor, err := sorted.QueryCursor(newQueryContext(t, apiaction.List, "/samples?_cursor_next=true"))
+		require.NoError(t, err)
+		require.False(t, cursor.Enabled(), "model.Query brings no cursor")
 	})
 }
 

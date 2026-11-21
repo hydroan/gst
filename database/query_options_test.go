@@ -24,13 +24,6 @@ type queryableTestUser struct {
 	modelregistry.Base
 }
 
-type paginatableTestUser struct {
-	Name string `json:"name" query:"name"`
-
-	modelregistry.Pagination
-	modelregistry.Base
-}
-
 type cursorableTestUser struct {
 	Name string `json:"name" query:"name"`
 

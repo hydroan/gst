@@ -406,15 +406,11 @@ func TestDatabaseWithDryRunCollector(t *testing.T) {
 		t.Run("Query", func(t *testing.T) {
 			var stmts []types.SQLStatement
 			users := make([]*queryableTestUser, 0)
-			cursorValue := "cursor-001"
+			expand := "Friends"
 			query := &queryableTestUser{
-				Name:        "queryable-user",
-				Page:        2,
-				Size:        10,
-				CursorValue: &cursorValue,
-				CursorField: "id",
-				CursorNext:  true,
-				SortBy:      "created_at desc",
+				Name:   "queryable-user",
+				Expand: &expand,
+				SortBy: "created_at desc",
 			}
 
 			err := database.Database[*queryableTestUser](context.Background()).
@@ -425,33 +421,8 @@ func TestDatabaseWithDryRunCollector(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, stmts, 1)
 			require.Contains(t, stmts[0].Args, query.Name)
-			require.NotContains(t, stmts[0].Args, "2")
-			require.NotContains(t, stmts[0].Args, "10")
-			require.NotContains(t, stmts[0].Args, "1")
-			require.NotContains(t, stmts[0].Args, *query.CursorValue)
-			require.NotContains(t, stmts[0].Args, query.CursorField)
+			require.NotContains(t, stmts[0].Args, *query.Expand)
 			require.NotContains(t, stmts[0].Args, query.SortBy)
-			require.Empty(t, users, "WithDryRun should not execute the query or fill the destination")
-		})
-
-		t.Run("Pagination", func(t *testing.T) {
-			var stmts []types.SQLStatement
-			users := make([]*paginatableTestUser, 0)
-			query := &paginatableTestUser{
-				Name: "paginatable-user",
-				Page: 2, Size: 10,
-			}
-
-			err := database.Database[*paginatableTestUser](context.Background()).
-				WithDryRun(&stmts).
-				WithQuery(query).
-				List(&users)
-
-			require.NoError(t, err)
-			require.Len(t, stmts, 1)
-			require.Contains(t, stmts[0].Args, query.Name)
-			require.NotContains(t, stmts[0].Args, "2")
-			require.NotContains(t, stmts[0].Args, "10")
 			require.Empty(t, users, "WithDryRun should not execute the query or fill the destination")
 		})
 

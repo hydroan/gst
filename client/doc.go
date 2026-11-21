@@ -15,7 +15,7 @@
 //	Stream() with a StreamingResult       ServerStream
 //	Stream() with a StreamingPayload      ClientStream
 //	Stream() with both                    BidiStream
-//	model.Pagination / Query / Cursor     WithPage/WithSortBy/WithExpand/WithCursor
+//	paging, model.Query, model.Cursor     WithPage/WithSortBy/WithExpand/WithCursor
 //	envelope (msg/data/trace_id)          Envelope on success, *Error on rejection
 //
 // Evolution rule: whenever the DSL grows a new HTTP action or protocol shape, this

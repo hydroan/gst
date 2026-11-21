@@ -60,6 +60,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 	versioned := standardFixture[*versionedSample](versionedRoute, "Versioned")
 	validated := standardFixture[*validatedSample](validatedRoute, "Validated")
 	dated := standardFixture[*datedSample](datedRoute, "Dated")
+	feeds := standardFixture[*feedSample](feedRoute, "Feed")
 	scoped := standardFixture[*scopedSample](scopedRoute, "Scoped")
 	scopedAcross := scoped
 	scopedAcross.across = true
@@ -506,17 +507,18 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			// A cursor parameter without a boundary value asks for the first
-			// page of the feed, read in the feed's order from the start; a
-			// feed answers no total, on the first page as on any other, so it
-			// says itself whether records follow the page: one record past
-			// the page is read to tell, and is not answered.
-			name: "List reads the first page of a feed in the feed's order, answers no total and tells that records follow it", fixture: dated, phase: apiaction.List,
+			// The list of a model embedding Cursor is a feed: a request
+			// without a boundary value reads its first page, in the feed's
+			// order from the start; a feed answers no total, on the first
+			// page as on any other, so it says itself whether records follow
+			// the page: one record past the page is read to tell, and is not
+			// answered.
+			name: "List reads the first page of a feed in the feed's order, answers no total and tells that records follow it", fixture: feeds, phase: apiaction.List,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
-				name := uniqueName("contract-dated-feed")
+				name := uniqueName("contract-feed-first")
 				for range 3 {
-					createDated(t, name, time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
+					createFeed(t, name)
 				}
 				return contractInput{query: controller.Query{
 					Filters:    []controller.Filter{{Field: "name", Op: "eq", Values: []string{name}}},
@@ -529,7 +531,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				t.Helper()
 				data := dataMap(t, got)
 				require.EqualValues(t, 0, data["total"], "a feed answers no total")
-				feed := datedIDs(t, in.query.Filters[0].Values[0])
+				feed := feedIDs(t, in.query.Filters[0].Values[0])
 				require.Equal(t, feed[:2], ids(data["items"]), "the page is the first two records of the feed in its order, by id, without the record read past it")
 				require.Equal(t, true, data["has_more"])
 			},
@@ -537,12 +539,12 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 		{
 			// A page the feed ends on says so even when it is full: the
 			// client need not ask for an empty page to learn it.
-			name: "List tells the page a feed ends on that none follow, a full page included", fixture: dated, phase: apiaction.List,
+			name: "List tells the page a feed ends on that none follow, a full page included", fixture: feeds, phase: apiaction.List,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
-				name := uniqueName("contract-dated-end")
+				name := uniqueName("contract-feed-end")
 				for range 2 {
-					createDated(t, name, time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
+					createFeed(t, name)
 				}
 				return contractInput{query: controller.Query{
 					Filters:    []controller.Filter{{Field: "name", Op: "eq", Values: []string{name}}},
@@ -562,24 +564,24 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			// Read backward, a feed tells whether records lie before the
 			// page, and the page is the one next to the boundary: of three
 			// records, the page of one before the last is the middle one.
-			name: "List reads a feed backward and tells whether records lie before the page", fixture: dated, phase: apiaction.List,
+			name: "List reads a feed backward and tells whether records lie before the page", fixture: feeds, phase: apiaction.List,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
-				name := uniqueName("contract-dated-before")
+				name := uniqueName("contract-feed-before")
 				for range 3 {
-					createDated(t, name, time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
+					createFeed(t, name)
 				}
 				return contractInput{query: controller.Query{
 					Filters:     []controller.Filter{{Field: "name", Op: "eq", Values: []string{name}}},
 					Size:        1,
-					CursorValue: datedIDs(t, name)[2],
+					CursorValue: feedIDs(t, name)[2],
 				}}
 			},
 			want: ok,
 			check: func(t *testing.T, in contractInput, got contractAnswer) {
 				t.Helper()
 				data := dataMap(t, got)
-				feed := datedIDs(t, in.query.Filters[0].Values[0])
+				feed := feedIDs(t, in.query.Filters[0].Values[0])
 				require.Equal(t, feed[1:2], ids(data["items"]), "the page is the record next to the boundary")
 				require.Equal(t, true, data["has_more"])
 			},
@@ -633,6 +635,49 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
+			// Every list pages by number with nothing embedded in its model.
+			name: "List pages a model that embeds nothing", fixture: validated, phase: apiaction.List,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				for range 3 {
+					createValidated(t, uniqueName("contract-plain-page"))
+				}
+				return contractInput{query: controller.Query{Page: 1, Size: 2}}
+			},
+			want: ok,
+			check: func(t *testing.T, in contractInput, got contractAnswer) {
+				t.Helper()
+				data := dataMap(t, got)
+				require.Len(t, ids(data["items"]), 2)
+				require.Equal(t, true, data["has_more"])
+			},
+		},
+		{
+			// A size past the cap is refused at the door of either line, in
+			// the same words, rather than brought down to the cap.
+			name: "List refuses a size past the cap", fixture: samples, phase: apiaction.List,
+			input: contractInput{query: controller.Query{Size: 500}},
+			want:  contractWant{status: http.StatusBadRequest, msg: `invalid query parameter "_size": expect a value from 1 to 100, got "500"`},
+		},
+		{
+			// A list pages one way: by number, unless its model embeds
+			// Cursor, and the parameters of the other way are refused.
+			name: "List refuses a cursor on a list that pages by number", fixture: samples, phase: apiaction.List,
+			input: contractInput{query: controller.Query{CursorNext: true}},
+			want:  contractWant{status: http.StatusBadRequest, msg: `unsupported query parameter "_cursor_next"`},
+		},
+		{
+			name: "List refuses a page number on a feed", fixture: feeds, phase: apiaction.List,
+			input: contractInput{query: controller.Query{Page: 2}},
+			want:  contractWant{status: http.StatusBadRequest, msg: `unsupported query parameter "_page"`},
+		},
+		{
+			// The cursor defines the order of a feed.
+			name: "List refuses an order on a feed", fixture: feeds, phase: apiaction.List,
+			input: contractInput{query: controller.Query{SortBy: []string{"name"}}},
+			want:  contractWant{status: http.StatusBadRequest, msg: `unsupported query parameter "_sort_by"`},
+		},
+		{
 			name: "List refuses a date filter it cannot read", fixture: dated, phase: apiaction.List,
 			input: contractInput{query: controller.Query{Filters: []controller.Filter{{Field: "day", Op: "eq", Values: []string{"not-a-date"}}}}},
 			want:  contractWant{status: http.StatusBadRequest},
@@ -656,11 +701,6 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			name: "List matches a numeric column by the number's text", fixture: dated, phase: apiaction.List,
 			input: contractInput{query: controller.Query{Filters: []controller.Filter{{Field: "count", Op: "like", Values: []string{"1"}}}}},
 			want:  ok,
-		},
-		{
-			name: "List refuses a page on a model that does not page", fixture: counters, phase: apiaction.List,
-			input: contractInput{query: controller.Query{Page: 2}},
-			want:  contractWant{status: http.StatusBadRequest},
 		},
 		{
 			name: "List refuses an association the model does not expand", fixture: samples, phase: apiaction.List,

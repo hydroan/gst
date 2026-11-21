@@ -11,7 +11,7 @@ import (
 // message is read the way the HTTP query is, a filter with an operator as
 // field[op]=value, one without as the bare key, the orderings and the
 // paging under their parameters; what the HTTP listener refuses, a filter on
-// a field the model lacks, a page on a model that does not page, a filter
+// a field the model lacks, an order on a model that does not sort, a filter
 // given twice, is refused the same; and a hook's refusal answers with the
 // hook's status.
 func TestListCallListsLikeTheHTTPQuery(t *testing.T) {
@@ -56,7 +56,7 @@ func TestListCallListsLikeTheHTTPQuery(t *testing.T) {
 		{name: "a filter on a field the model lacks", rpc: "List", query: map[string]any{
 			"Filters": []map[string]any{{"Field": "missing", "Op": "eq", "Values": []string{"value"}}},
 		}},
-		{name: "a page on a model that does not page", rpc: "CounterList", query: map[string]any{"Page": 2}},
+		{name: "an order on a model that does not sort", rpc: "CounterList", query: map[string]any{"SortBy": []string{"name"}}},
 		{name: "a filter given twice", rpc: "List", query: map[string]any{
 			"Filters": []map[string]any{{"Field": "name", "Op": "eq", "Values": []string{"a"}}, {"Field": "name", "Op": "eq", "Values": []string{"b"}}},
 		}},

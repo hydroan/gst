@@ -534,12 +534,12 @@ func TestGenRunRegistersTheServicesOfEachPackageInItsOwnFile(t *testing.T) { //n
 
 // TestGenRunListsTheQueryFieldsAModelReads pins that the List request of a
 // model's standard action carries the query fields the model reads and no
-// other: the filters always, the page and size for a model embedding
-// model.Pagination, the size and the cursor for one embedding model.Cursor,
-// and the orderings and expansion, with all of those, for one embedding
-// model.Query; the handler reads the fields present. The Get request carries
-// the expansion whatever the model embeds, the get flow reading it for
-// every model.
+// other: the filters and the size always; the page, unless the model embeds
+// model.Cursor, whose list is a feed and carries the cursor instead; and,
+// for one embedding model.Query, the expansion and the orderings, which a
+// feed takes none of; the handler reads the fields present. The Get request
+// carries the expansion whatever the model embeds, the get flow reading it
+// for every model.
 func TestGenRunListsTheQueryFieldsAModelReads(t *testing.T) {
 	projectDir, ok := newGenProject(t)
 	if !ok {
@@ -547,9 +547,9 @@ func TestGenRunListsTheQueryFieldsAModelReads(t *testing.T) {
 	}
 	writeProtobufProject(t, projectDir, map[string]string{
 		"model/plain.go":    protobufQueryModel("Plain", ""),
-		"model/paged.go":    protobufQueryModel("Paged", "model.Pagination"),
 		"model/cursored.go": protobufQueryModel("Cursored", "model.Cursor"),
 		"model/queried.go":  protobufQueryModel("Queried", "model.Query"),
+		"model/fed.go":      protobufQueryModel("Fed", "model.Query\n\tmodel.Cursor"),
 	})
 
 	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
@@ -558,10 +558,10 @@ func TestGenRunListsTheQueryFieldsAModelReads(t *testing.T) {
 		model string
 		list  []string
 	}{
-		{"Plain", []string{"filters"}},
-		{"Paged", []string{"filters", "page", "size"}},
+		{"Plain", []string{"filters", "page", "size"}},
 		{"Cursored", []string{"filters", "size", "cursor_field", "cursor_value", "cursor_next"}},
-		{"Queried", []string{"filters", "sort_by", "page", "size", "cursor_field", "cursor_value", "cursor_next", "expand", "depth"}},
+		{"Queried", []string{"filters", "sort_by", "page", "size", "expand", "depth"}},
+		{"Fed", []string{"filters", "size", "cursor_field", "cursor_value", "cursor_next", "expand", "depth"}},
 	} {
 		content, err := os.ReadFile(filepath.Join(projectDir, ggconst.DirPB, strings.ToLower(tt.model)+".proto"))
 		require.NoError(t, err)
@@ -595,7 +595,7 @@ func messageFieldNames(proto, name string) []string {
 }
 
 // protobufQueryModel is a model declaring List and Get and embedding embed,
-// a query marker of the framework, or nothing when embed is empty: what
+// the query markers of the framework, or nothing when embed is empty: what
 // TestGenRunListsTheQueryFieldsAModelReads reads the request messages of.
 func protobufQueryModel(name, embed string) string {
 	if embed != "" {
@@ -1019,19 +1019,19 @@ func TestGenRunRefusesARouteParameterNamedLikeAField(t *testing.T) {
 // TestGenRunRefusesARouteParameterNamedLikeAQueryField pins that a route
 // parameter named like a query field of a List request is reported even
 // when the model reads no such control and the request carries no such
-// field: the name is the query's in every List request, which is where the
-// handler would read it from.
+// field, the depth of a model that expands nothing: the name is the query's
+// in every List request, which is where the handler would read it from.
 func TestGenRunRefusesARouteParameterNamedLikeAQueryField(t *testing.T) {
 	projectDir, ok := newGenProject(t)
 	if !ok {
 		return
 	}
-	writeProtobufProject(t, projectDir, map[string]string{"model/entry.go": strings.Replace(protobufParamClashModel, "\tmodel.Pagination\n", "", 1)})
+	writeProtobufProject(t, projectDir, map[string]string{"model/entry.go": strings.Replace(protobufParamClashModel, "/pages/:page/entries", "/levels/:depth/entries", 1)})
 
 	err := genRunWithOptions(genRunOptions{Quiet: true})
 
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "tmpapp/model.Entry: the :page parameter of /api/pages/:page/entries takes the name of the page query field of a List request; rename the parameter")
+	require.Contains(t, err.Error(), "tmpapp/model.Entry: the :depth parameter of /api/levels/:depth/entries takes the name of the depth query field of a List request; rename the parameter")
 }
 
 // TestGenRunRefusesAFieldReachedThroughAnUnexportedEmbeddedStruct pins that
@@ -1806,7 +1806,6 @@ import (
 type Entry struct {
 	Title string 'json:"title" pb:"11"'
 
-	model.Pagination
 	model.Base
 }
 

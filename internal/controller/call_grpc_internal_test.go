@@ -65,8 +65,9 @@ func TestQueryValuesRenderTheHTTPQuery(t *testing.T) {
 // under an operator taking one; a member of an in holding a comma, which the
 // HTTP parser would split; a filter without a value, or with an empty one,
 // which over HTTP would filter by nothing; a filter without a field, or with
-// one named like the framework's own parameters; and a sort or expand member
-// holding a comma, which the HTTP parser would split too.
+// one named like the framework's own parameters; a sort or expand member
+// holding a comma, which the HTTP parser would split too; and a size past
+// the cap, in the words the HTTP listener refuses it at its door.
 func TestQueryValuesRefuseBeforeParsing(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
@@ -77,6 +78,11 @@ func TestQueryValuesRefuseBeforeParsing(t *testing.T) {
 			name:    "a filter given twice",
 			query:   Query{Filters: []Filter{{Field: "name", Op: "eq", Values: []string{"a"}}, {Field: "name", Op: "eq", Values: []string{"b"}}}},
 			message: `duplicate query parameter: name[eq]`,
+		},
+		{
+			name:    "a size past the cap",
+			query:   Query{Size: 500},
+			message: `invalid query parameter "_size": expect a value from 1 to 100, got "500"`,
 		},
 		{
 			name: "two filters each given twice",

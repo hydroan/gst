@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/gorilla/schema"
-	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/types"
 )
 
@@ -20,8 +19,7 @@ var gorillaDecoder = func() *schema.Decoder {
 }()
 
 // decodeGorilla runs the reference pipeline: copy the query without the keys
-// Filters owns, drop _format and, for a model without Pagination, _size, and
-// stream-decode the rest.
+// Filters owns, drop _format, _page and _size, and stream-decode the rest.
 func decodeGorilla(q url.Values, m types.Model) error {
 	values := make(url.Values, len(q))
 	for key, entry := range q {
@@ -31,9 +29,8 @@ func decodeGorilla(q url.Values, m types.Model) error {
 		values[key] = entry
 	}
 	delete(values, types.QueryFormat)
-	if !modelregistry.IsPaginatable(m) {
-		delete(values, types.QuerySize)
-	}
+	delete(values, types.QueryPage)
+	delete(values, types.QuerySize)
 	return gorillaDecoder.Decode(m, values)
 }
 

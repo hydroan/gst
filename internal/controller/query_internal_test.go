@@ -3,6 +3,7 @@ package controller
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -49,10 +50,10 @@ func TestDecodeListQueryGatesQueryKeys(t *testing.T) {
 		var m plainModel
 		require.EqualError(t, decodeListQuery(&m, map[string][]string{
 			"_sort_by":      {"created_at desc"},
-			"_page":         {"2"},
+			"_expand":       {"all"},
 			"_cursor_value": {"abc"},
 		}),
-			`unsupported query parameters "_cursor_value", "_page", "_sort_by"`,
+			`unsupported query parameters "_cursor_value", "_expand", "_sort_by"`,
 			"framework keys rejected by different capability gates are still reported together")
 	})
 
@@ -72,43 +73,68 @@ func TestDecodeListQueryGatesQueryKeys(t *testing.T) {
 	})
 }
 
-func TestDecodeListQueryPageSizeGating(t *testing.T) {
-	type cursorOnlyModel struct {
-		Name string `query:"name"`
-
-		modelregistry.Cursor
-		modelregistry.Base
-	}
-	type paginatableModel struct {
-		Name string `query:"name"`
-
-		modelregistry.Pagination
-		modelregistry.Base
-	}
+// TestDecodeListQueryTakesOneWayOfPagingPerModel pins the paging parameters
+// a list takes by what its model embeds: page numbers, unless the model
+// embeds Cursor, which makes its list a feed read by cursor alone, and a
+// page size either way. The parameters of the other way of paging are
+// refused, a page beside a cursor as either alone, and so is _sort_by on a
+// feed, whose order the cursor defines.
+func TestDecodeListQueryTakesOneWayOfPagingPerModel(t *testing.T) {
 	type plainModel struct {
 		Name string `query:"name"`
 
 		modelregistry.Base
 	}
+	type feedModel struct {
+		Name string `query:"name"`
 
-	t.Run("CursorModelAcceptsSizeButRejectsPage", func(t *testing.T) {
-		var m cursorOnlyModel
-		require.NoError(t, decodeListQuery(&m, map[string][]string{"_size": {"50"}}),
-			"cursor pagination needs a client-adjustable batch size")
-		require.Error(t, decodeListQuery(&m, map[string][]string{"_page": {"2"}}),
-			"offset paging conflicts with cursor semantics")
-	})
+		modelregistry.Cursor
+		modelregistry.Base
+	}
+	type queryModel struct {
+		Name string `query:"name"`
 
-	t.Run("PaginatableModelAcceptsBoth", func(t *testing.T) {
-		var m paginatableModel
-		require.NoError(t, decodeListQuery(&m, map[string][]string{"_page": {"2"}, "_size": {"50"}}))
-	})
+		modelregistry.Query
+		modelregistry.Base
+	}
+	type queryFeedModel struct {
+		Name string `query:"name"`
 
-	t.Run("PlainModelRejectsBoth", func(t *testing.T) {
-		var m plainModel
-		require.Error(t, decodeListQuery(&m, map[string][]string{"_size": {"50"}}))
-		require.Error(t, decodeListQuery(&m, map[string][]string{"_page": {"2"}}))
-	})
+		modelregistry.Query
+		modelregistry.Cursor
+		modelregistry.Base
+	}
+
+	for _, tt := range []struct {
+		name    string
+		model   types.Model
+		query   string
+		refusal string
+	}{
+		{name: "a list pages by number", model: &plainModel{}, query: "_page=2&_size=5"},
+		{name: "a list takes no cursor", model: &plainModel{}, query: "_cursor_next=true", refusal: `unsupported query parameter "_cursor_next"`},
+		{name: "a list refuses a cursor beside a page", model: &plainModel{}, query: "_page=2&_cursor_value=x", refusal: `unsupported query parameter "_cursor_value"`},
+		{name: "a feed takes its cursor and a size", model: &feedModel{}, query: "_cursor_value=x&_cursor_next=true&_size=5"},
+		{name: "a feed takes no page", model: &feedModel{}, query: "_page=2", refusal: `unsupported query parameter "_page"`},
+		{name: "a feed refuses a page beside its cursor", model: &feedModel{}, query: "_page=3&_cursor_value=x", refusal: `unsupported query parameter "_page"`},
+		{name: "a list sorts and pages", model: &queryModel{}, query: "_sort_by=id&_page=2&_size=5"},
+		{name: "a list that sorts takes no cursor", model: &queryModel{}, query: "_sort_by=id&_cursor_next=true", refusal: `unsupported query parameter "_cursor_next"`},
+		{name: "a feed expands", model: &queryFeedModel{}, query: "_expand=all&_depth=2&_cursor_next=true"},
+		{name: "a feed takes no order of the client's", model: &queryFeedModel{}, query: "_sort_by=id&_cursor_value=x", refusal: `unsupported query parameter "_sort_by"`},
+		{name: "a feed lists every parameter it refuses", model: &queryFeedModel{}, query: "_sort_by=id&_page=2", refusal: `unsupported query parameters "_page", "_sort_by"`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			query, err := url.ParseQuery(tt.query)
+			require.NoError(t, err)
+
+			err = decodeListQuery(tt.model, query)
+			if tt.refusal == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.EqualError(t, err, tt.refusal)
+		})
+	}
 }
 
 type filterKeyTestModel struct {
@@ -145,10 +171,9 @@ type listBenchmarkQueryableModel struct {
 	modelregistry.Base
 }
 
-type listBenchmarkPaginatableModel struct {
+type listBenchmarkPlainModel struct {
 	Name string `query:"name"`
 
-	modelregistry.Pagination
 	modelregistry.Base
 }
 
@@ -164,13 +189,11 @@ var (
 		"name": {"alice"},
 	}
 	listBenchmarkFullQuery = map[string][]string{
-		"name":          {"alice"},
-		"_sort_by":      {"created_at desc"},
-		"_page":         {"2"},
-		"_size":         {"10"},
-		"_cursor_value": {"0196a0b3-c9d1-713c-870e-adc76af9f857"},
-		"_cursor_field": {"id"},
-		"_cursor_next":  {"true"},
+		"name":     {"alice"},
+		"_sort_by": {"created_at desc"},
+		"_expand":  {"all"},
+		"_page":    {"2"},
+		"_size":    {"10"},
 	}
 	listBenchmarkPaginationQuery = map[string][]string{
 		"_page": {"2"},
@@ -210,7 +233,7 @@ func BenchmarkDecodeListQuery(b *testing.B) {
 	b.Run("Pagination", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
-			var m listBenchmarkPaginatableModel
+			var m listBenchmarkPlainModel
 			if err := decodeListQuery(&m, listBenchmarkPaginationQuery); err != nil {
 				b.Fatal(err)
 			}
@@ -235,31 +258,6 @@ func BenchmarkDecodeListQuery(b *testing.B) {
 				b.Fatal("expected framework query key to be rejected")
 			}
 		}
-	})
-}
-
-// TestCheckCursorOrderConflictRefusesASortByUnderACursor pins that a cursor
-// and an explicit ordering are refused together, the cursor column being the
-// order a cursor pages by, while either alone, or neither, is accepted.
-func TestCheckCursorOrderConflictRefusesASortByUnderACursor(t *testing.T) {
-	cursor := types.CursorForward(types.Asc("id"), "abc")
-	orders := []types.Order{types.Desc("created_at")}
-
-	t.Run("CursorWithExplicitOrderIsRejected", func(t *testing.T) {
-		require.Error(t, checkCursorOrderConflict(cursor, orders),
-			"a second order source demotes the cursor column to a secondary sort key and breaks the boundary condition")
-	})
-
-	t.Run("CursorAloneIsAccepted", func(t *testing.T) {
-		require.NoError(t, checkCursorOrderConflict(cursor, nil))
-	})
-
-	t.Run("OrderAloneIsAccepted", func(t *testing.T) {
-		require.NoError(t, checkCursorOrderConflict(types.Cursor{}, orders))
-	})
-
-	t.Run("NeitherIsAccepted", func(t *testing.T) {
-		require.NoError(t, checkCursorOrderConflict(types.Cursor{}, nil))
 	})
 }
 
