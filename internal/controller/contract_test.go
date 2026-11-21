@@ -289,7 +289,17 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 		{
 			name: "Create refuses a value the field cannot hold and stores nothing", fixture: shaped, phase: apiaction.Create,
 			input: contractInput{record: map[string]any{"name": uniqueName("contract-narrow"), "rank": 300}},
-			want:  contractWant{status: http.StatusBadRequest, msg: "invalid value for field 'rank'", fields: []types.FieldViolation{{Field: "rank", Description: "number 300 does not fit the field"}}},
+			// The transports describe the value in the words of their own
+			// decoders (see TRANSPORTS.md, section 4): HTTP in those of the
+			// JSON decoding, stated here; gRPC in those of the generated
+			// FromProto, "300 is out of range", which the conversions' own
+			// tests pin (see grpc.Narrow), the sample service converting
+			// through JSON in its place.
+			want: contractWant{
+				status: http.StatusBadRequest, msg: "invalid value for field 'rank'",
+				fields: []types.FieldViolation{{Field: "rank", Description: "number 300 does not fit the field"}},
+				grpc:   &grpcAnswer{code: codes.InvalidArgument, msg: "invalid value for field 'rank'"},
+			},
 			check: func(t *testing.T, in contractInput, _ contractAnswer) {
 				t.Helper()
 				require.Zero(t, countShapedNamed(t, stringOf(in.record["name"])))
@@ -955,7 +965,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				t.Helper()
 				return contractInput{items: []map[string]any{{"name": uniqueName("contract-create-many-valid")}, {}}}
 			},
-			want: contractWant{status: http.StatusBadRequest, msg: "items[1].name is a required field"},
+			want: contractWant{status: http.StatusBadRequest, msg: "items[1].name is a required field", fields: []types.FieldViolation{{Field: "items[1].name", Description: "items[1].name is a required field"}}},
 			check: func(t *testing.T, in contractInput, _ contractAnswer) {
 				t.Helper()
 				require.Zero(t, countValidatedNamed(t, stringOf(in.items[0]["name"])))
@@ -1160,7 +1170,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				t.Helper()
 				return contractInput{items: []map[string]any{{"id": createValidated(t, "contract-patch-many-validated").GetID(), "name": ""}}}
 			},
-			want: contractWant{status: http.StatusBadRequest, msg: "items[0].name is a required field"},
+			want: contractWant{status: http.StatusBadRequest, msg: "items[0].name is a required field", fields: []types.FieldViolation{{Field: "items[0].name", Description: "items[0].name is a required field"}}},
 		},
 		{
 			name: "PatchMany refuses an item carrying a value its field cannot hold and writes nothing", fixture: shaped, phase: apiaction.PatchMany,
@@ -1286,7 +1296,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 		{
 			name: "A custom action refuses a payload failing validation", fixture: actionFixture, phase: apiaction.Create,
 			input: contractInput{payload: map[string]any{}},
-			want:  contractWant{status: http.StatusBadRequest, msg: "note is a required field"},
+			want:  contractWant{status: http.StatusBadRequest, msg: "note is a required field", fields: []types.FieldViolation{{Field: "note", Description: "note is a required field"}}},
 		},
 		{
 			name: "A custom action answers the service's error with its status", fixture: actionFixture, phase: apiaction.Create,
@@ -1427,7 +1437,12 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			}
 			if len(answered) == len(contractTransports) && s.want.grpc == nil && s.want.status != http.StatusOK {
 				require.Equal(t, answered[contractTransports[0].name].msg, answered[contractTransports[1].name].msg, "both transports refuse with the same msg")
-				require.Equal(t, answered[contractTransports[0].name].violations, answered[contractTransports[1].name].violations, "both transports name the same fields")
+				// The fields are compared by their paths. What a
+				// validator refused is described alike on both
+				// transports, which the rows stating fields hold both
+				// to; a value a field cannot hold is described by each
+				// transport's own decoder (see TRANSPORTS.md, section 4).
+				require.Equal(t, violatedFields(answered[contractTransports[0].name].violations), violatedFields(answered[contractTransports[1].name].violations), "both transports name the same fields")
 			}
 		})
 	}
@@ -1492,9 +1507,10 @@ type contractAnswer struct {
 // contractWant is what a scenario must be answered: the HTTP status, the
 // gRPC code it maps to unless code says otherwise, the msg of both, left
 // empty when the scenario only requires the two to be the same, and the
-// fields the refusal names, left nil the same way. A scenario the
+// fields the refusal names, each with its description, left nil when the
+// scenario only requires the two to name the same fields. A scenario the
 // transports answer differently on purpose states in grpc what gRPC answers
-// instead.
+// instead, and its fields are then held to HTTP alone.
 type contractWant struct {
 	status int
 	code   codes.Code
@@ -1816,6 +1832,16 @@ func requireGRPCAnswer(t *testing.T, got contractAnswer, want contractWant) {
 	if fields != nil {
 		require.Equal(t, fields, got.violations)
 	}
+}
+
+// violatedFields returns the paths of the fields violations names, in the
+// order they are named.
+func violatedFields(violations []types.FieldViolation) []string {
+	fields := make([]string, 0, len(violations))
+	for _, violation := range violations {
+		fields = append(fields, violation.Field)
+	}
+	return fields
 }
 
 // grpcCodeOf is the gRPC code an HTTP status maps to (see TRANSPORTS.md,
