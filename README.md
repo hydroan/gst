@@ -992,6 +992,11 @@ rsp, err := cli.Post[model.SampleSealRsp](ctx, "/api/samples/seal", &model.Sampl
 显式开启 `auto_migrate = true`，本地开发、测试环境按需开启即可；生产环境保持默认关闭，
 schema 变更一律走 `gg migrate`。
 
+MySQL 默认明文连接。要加密时在 `[mysql]` 节打开 `tls_enabled`，主库、从库和 `gg migrate` 的连接都按这一组设置走：
+`ca_file` 是校验服务器证书用的 CA 文件，不写就用系统的根证书；`cert_file`、`key_file` 是服务器要求客户端证书时
+出示的那一对，要么都写、要么都不写，只写一个启动失败；`insecure_skip_verify = true` 只加密、不校验服务器是谁，
+不要用在生产环境。
+
 常用配置命令：
 
 ```bash

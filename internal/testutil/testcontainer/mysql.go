@@ -1,8 +1,12 @@
 package testcontainer
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
 
 	"github.com/cockroachdb/errors"
 	// Registers the "mysql" driver the shared setup provisions databases with.
@@ -115,20 +119,80 @@ func setupDedicatedMySQL() (func() error, error) {
 	return terminate, nil
 }
 
+// The files the standalone mysql server reads its certificate from, inside
+// the container, and the names the files a test dials it with go by, in a
+// directory of the test's own.
+const (
+	mysqlTLSAuthorityPath  = "/etc/mysql/tls/ca.pem"
+	mysqlTLSServerCertPath = "/etc/mysql/tls/server-cert.pem"
+	mysqlTLSServerKeyPath  = "/etc/mysql/tls/server-key.pem"
+
+	mysqlTLSAuthorityFile  = "ca.pem"
+	mysqlTLSClientCertFile = "client-cert.pem"
+	mysqlTLSClientKeyFile  = "client-key.pem"
+)
+
 // SetupStandaloneMySQL starts a mysql container of its own with the given
 // database name and credentials, and returns its connection settings without
 // touching the process environment or the framework's default database.
 // Tests use it for topologies the single default database cannot express —
 // a non-replicating stand-in replica for routing assertions, a second
-// instance for cross-instance behavior. The returned function terminates
-// the container.
+// instance for cross-instance behavior, a server reached over TLS.
+//
+// The server runs with a certificate an authority made for it signed for the
+// hosts it is reached at, and takes plaintext connections as before. The
+// settings returned name the authority's certificate (CAFile) and a client
+// certificate it signed (CertFile and KeyFile) and leave TLS off: a test of
+// TLS turns TLSEnabled on in them, and every other test dials as it always
+// did. The returned function terminates the container and removes those
+// files.
 func SetupStandaloneMySQL(database, username, password string) (config.MySQL, func() error, error) {
 	muteContainerLog()
 	ctx := context.Background()
 
+	// The certificate names the host the container's ports are reached at,
+	// which the daemon knows before any container exists.
+	provider, err := testcontainers.NewDockerProvider()
+	if err != nil {
+		return config.MySQL{}, nil, errors.Wrap(err, "failed to reach the docker daemon")
+	}
+	daemonHost, err := provider.DaemonHost(ctx)
+	if err = errors.CombineErrors(err, provider.Close()); err != nil {
+		return config.MySQL{}, nil, errors.Wrap(err, "failed to resolve the docker daemon host")
+	}
+	hosts := []string{"localhost", "127.0.0.1", "::1"}
+	if !slices.Contains(hosts, daemonHost) {
+		hosts = append(hosts, daemonHost)
+	}
+	issued, err := issueCertificates(hosts...)
+	if err != nil {
+		return config.MySQL{}, nil, err
+	}
+
+	tlsDir, err := os.MkdirTemp("", "gst-mysql-tls-")
+	if err != nil {
+		return config.MySQL{}, nil, errors.Wrap(err, "failed to create the directory of the mysql tls files")
+	}
+	removeTLSFiles := func() error { return os.RemoveAll(tlsDir) }
+	for name, content := range map[string][]byte{
+		mysqlTLSAuthorityFile:  issued.authority,
+		mysqlTLSClientCertFile: issued.clientCert,
+		mysqlTLSClientKeyFile:  issued.clientKey,
+	} {
+		if err = os.WriteFile(filepath.Join(tlsDir, name), content, 0o600); err != nil {
+			return config.MySQL{}, nil, errors.CombineErrors(errors.Wrap(err, "failed to write the mysql tls files"), removeTLSFiles())
+		}
+	}
+
 	options := []testcontainers.ContainerCustomizer{
 		mysql.WithDatabase(database),
 		mysql.WithPassword(password),
+		testcontainers.WithFiles(
+			testcontainers.ContainerFile{Reader: bytes.NewReader(issued.authority), ContainerFilePath: mysqlTLSAuthorityPath, FileMode: 0o644},
+			testcontainers.ContainerFile{Reader: bytes.NewReader(issued.serverCert), ContainerFilePath: mysqlTLSServerCertPath, FileMode: 0o644},
+			testcontainers.ContainerFile{Reader: bytes.NewReader(issued.serverKey), ContainerFilePath: mysqlTLSServerKeyPath, FileMode: 0o644},
+		),
+		testcontainers.WithCmdArgs("--ssl-ca="+mysqlTLSAuthorityPath, "--ssl-cert="+mysqlTLSServerCertPath, "--ssl-key="+mysqlTLSServerKeyPath),
 		patientStart(),
 	}
 	// The mysql module refuses to provision root as a plain user; root works
@@ -138,9 +202,9 @@ func SetupStandaloneMySQL(database, username, password string) (config.MySQL, fu
 	}
 	c, err := mysql.Run(ctx, mysqlImage, options...)
 	if err != nil {
-		return config.MySQL{}, nil, errors.Wrap(err, "failed to start standalone mysql container")
+		return config.MySQL{}, nil, errors.CombineErrors(errors.Wrap(err, "failed to start standalone mysql container"), removeTLSFiles())
 	}
-	terminate := func() error { return c.Terminate(ctx) }
+	terminate := func() error { return errors.CombineErrors(c.Terminate(ctx), removeTLSFiles()) }
 
 	host, port, err := endpoint(ctx, c, mysqlPort)
 	if err != nil {
@@ -153,6 +217,9 @@ func SetupStandaloneMySQL(database, username, password string) (config.MySQL, fu
 		Database: database,
 		Username: username,
 		Password: password,
+		CAFile:   filepath.Join(tlsDir, mysqlTLSAuthorityFile),
+		CertFile: filepath.Join(tlsDir, mysqlTLSClientCertFile),
+		KeyFile:  filepath.Join(tlsDir, mysqlTLSClientKeyFile),
 		Enabled:  true,
 	}
 	reportServiceReady("mysql-standalone", fmt.Sprintf("%s:%d/%s", host, port, database))

@@ -2,11 +2,13 @@ package mysql
 
 import (
 	"fmt"
+	"sync/atomic"
 
 	"github.com/cockroachdb/errors"
 	mysqldriver "github.com/go-sql-driver/mysql"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 	"gorm.io/driver/mysql"
@@ -36,8 +38,15 @@ func Init() error {
 // GORM OpenTelemetry tracing plugin, so application-held instances passed to
 // DatabaseOn, SelectOn, UnionAllOn, TransactionOn, and CleanupOn are traced
 // like the default database. The pool runs under the connection limits of the
-// [database] configuration, the same ones the default handle runs under.
+// [database] configuration, the same ones the default handle runs under. A
+// configuration turning TLS on encrypts every connection of the handle, the
+// replicas' included (see registerTLS).
 func New(cfg config.MySQL) (*gorm.DB, error) {
+	tlsName, err := registerTLS(cfg)
+	if err != nil {
+		return nil, err
+	}
+
 	// TranslateError maps dialect-specific write failures to portable gorm
 	// sentinels (gorm.ErrDuplicatedKey, gorm.ErrForeignKeyViolated) that
 	// database.Create/Update surface to callers; the framework's own table
@@ -45,7 +54,7 @@ func New(cfg config.MySQL) (*gorm.DB, error) {
 	// run over the text protocol with client-side parameter interpolation —
 	// no gorm PrepareStmt, no server-side prepared statements; buildDSN
 	// explains why.
-	db, err := gorm.Open(mysql.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
+	db, err := gorm.Open(mysql.Open(buildDSN(cfg, tlsName)), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +67,7 @@ func New(cfg config.MySQL) (*gorm.DB, error) {
 	}
 	dbruntime.ConfigurePool(pool)
 	dbruntime.InstallTracing(db)
-	return attachReplicas(db, cfg)
+	return attachReplicas(db, cfg, tlsName)
 }
 
 // dryRunDSN is the shortest DSN the driver parses; the dry-run handle never
@@ -88,15 +97,16 @@ func DryRun() (*gorm.DB, error) {
 // untouched, so a replica-free deployment pays nothing.
 //
 // Each replica shares the primary's DSN settings — credentials, database,
-// timeouts, the utf8mb4 charset, and the UTC wire location, all of which reads
-// depend on — and differs by address only. The returned handle carries a Write
+// timeouts, the TLS configuration tlsName selects, the utf8mb4 charset, and
+// the UTC wire location, all of which reads depend on — and differs by
+// address only. The returned handle carries a Write
 // pin: with the resolver installed, gorm would otherwise route every plain read
 // to a replica, and that silent default breaks read-your-writes everywhere (a
 // session read right after login, a list right after create). Reads move only
 // where a model declares PreferReplica or a call site opts in with WithReplica;
 // transactions never move at all, because the resolver leaves statements inside
 // one alone. See WithReplica for the full routing precedence.
-func attachReplicas(db *gorm.DB, cfg config.MySQL) (*gorm.DB, error) {
+func attachReplicas(db *gorm.DB, cfg config.MySQL, tlsName string) (*gorm.DB, error) {
 	if len(cfg.Replicas) == 0 {
 		return db, nil
 	}
@@ -109,7 +119,7 @@ func attachReplicas(db *gorm.DB, cfg config.MySQL) (*gorm.DB, error) {
 		replicaCfg := cfg
 		replicaCfg.Host, replicaCfg.Port = host, port
 		replicaCfg.Replicas = nil
-		dialectors = append(dialectors, mysql.Open(buildDSN(replicaCfg)))
+		dialectors = append(dialectors, mysql.Open(buildDSN(replicaCfg, tlsName)))
 	}
 	return dbruntime.AttachResolver(db, dialectors)
 }
@@ -165,7 +175,12 @@ const strictSQLMode = "CONCAT(@@sql_mode,%27,STRICT_TRANS_TABLES%27)"
 // the OS gives up; readTimeout and writeTimeout are appended only when
 // configured, because their default is deliberately off — see the field
 // comments on config.MySQL.
-func buildDSN(cfg config.MySQL) string {
+//
+// tls, appended for a configuration that turns TLS on, selects the TLS
+// configuration registered with the driver under tlsName (see registerTLS);
+// with tlsName empty the DSN carries no such parameter and the connection is
+// plaintext.
+func buildDSN(cfg config.MySQL, tlsName string) string {
 	dsn := fmt.Sprintf(
 		"%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=UTC&clientFoundRows=true&interpolateParams=true",
 		cfg.Username, cfg.Password, cfg.Host, cfg.Port, cfg.Database,
@@ -182,7 +197,47 @@ func buildDSN(cfg config.MySQL) string {
 	if cfg.WriteTimeout > 0 {
 		dsn += "&writeTimeout=" + cfg.WriteTimeout.String()
 	}
+	if tlsName != "" {
+		dsn += "&tls=" + tlsName
+	}
 	return dsn
+}
+
+// tlsNamePrefix opens the names TLS configurations are registered with the
+// driver under, and tlsNames counts them, each registration getting a name
+// of its own (see registerTLS).
+const tlsNamePrefix = "gst-"
+
+var tlsNames atomic.Uint64
+
+// registerTLS registers the TLS configuration cfg asks for with the driver
+// and returns the name the tls parameter of a DSN selects it by; "" for a
+// configuration that leaves TLS off, whose other TLS keys are not read. The
+// configuration is built the way every component builds one (see
+// util.BuildTLSConfig): the CA bundle the server's certificate must chain to,
+// the client certificate when both of its files are given, one without the
+// other being refused, and the verification skipped only where the
+// configuration says so.
+//
+// The driver takes a TLS configuration of the caller's in a DSN by name
+// alone, and parsing a DSN hands the endpoint a copy of the one registered,
+// held to the host that endpoint dials. One registration therefore serves the
+// primary and every replica of a handle, each verified by its own host name,
+// and every call registers under a name of its own, so two handles never
+// share a configuration.
+func registerTLS(cfg config.MySQL) (string, error) {
+	if !cfg.TLSEnabled {
+		return "", nil
+	}
+	tlsConfig, err := util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify)
+	if err != nil {
+		return "", errors.Wrap(err, "mysql tls")
+	}
+	name := fmt.Sprintf("%s%d", tlsNamePrefix, tlsNames.Add(1))
+	if err = mysqldriver.RegisterTLSConfig(name, tlsConfig); err != nil {
+		return "", errors.Wrap(err, "failed to register the mysql tls configuration")
+	}
+	return name, nil
 }
 
 // errCodes are the errors of the constraints a client's data breaks that the

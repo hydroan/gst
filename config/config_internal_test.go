@@ -67,6 +67,30 @@ func TestInitReadsMySQLStrictFromTheEnvironment(t *testing.T) {
 	require.False(t, App.MySQL.Strict)
 }
 
+// TestInitReadsMySQLTLSFromTheEnvironment proves the TLS keys of the mysql
+// section, off and empty by default, read their environment variables.
+func TestInitReadsMySQLTLSFromTheEnvironment(t *testing.T) {
+	withFreshRegistry(t, "")
+	require.NoError(t, Init())
+	require.False(t, App.MySQL.TLSEnabled)
+	require.Empty(t, App.MySQL.CertFile)
+	require.Empty(t, App.MySQL.KeyFile)
+	require.Empty(t, App.MySQL.CAFile)
+	require.False(t, App.MySQL.InsecureSkipVerify)
+
+	t.Setenv(MYSQL_TLS_ENABLED, "true")
+	t.Setenv(MYSQL_CERT_FILE, "client-cert.pem")
+	t.Setenv(MYSQL_KEY_FILE, "client-key.pem")
+	t.Setenv(MYSQL_CA_FILE, "ca.pem")
+	t.Setenv(MYSQL_INSECURE_SKIP_VERIFY, "true")
+	require.NoError(t, Init())
+	require.True(t, App.MySQL.TLSEnabled)
+	require.Equal(t, "client-cert.pem", App.MySQL.CertFile)
+	require.Equal(t, "client-key.pem", App.MySQL.KeyFile)
+	require.Equal(t, "ca.pem", App.MySQL.CAFile)
+	require.True(t, App.MySQL.InsecureSkipVerify)
+}
+
 // TestRegisteredSectionTakesEveryEnvironmentValue proves a registered
 // section's fields read their environment variables over the file and the
 // default tags — an empty string, false and 0 included, a nested field, a list

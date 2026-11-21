@@ -14,8 +14,10 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/errors"
+	mysqldriver "github.com/go-sql-driver/mysql"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/hydroan/gst/internal/util"
 	"github.com/sqldef/sqldef/v3"
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/database/mysql"
@@ -24,7 +26,10 @@ import (
 	"github.com/sqldef/sqldef/v3/schema"
 )
 
-// DatabaseConfig is the connection the migration runs against.
+// DatabaseConfig is the connection the migration runs against. A MySQL
+// target is reached under the TLS keys of the application's mysql section
+// (config.App.MySQL), the way the application reaches it: encrypted when the
+// section turns TLS on, plaintext otherwise.
 type DatabaseConfig struct {
 	// Database is the schema name on MySQL and PostgreSQL, and the file path
 	// on SQLite.
@@ -192,16 +197,22 @@ func openTarget(dbtyp config.DBType, cfg *DatabaseConfig) (database.Database, pa
 		Password: cfg.Password,
 		Host:     cfg.Host,
 		Port:     cfg.Port,
-		SslMode:  cfg.SSLMode,
 	}
 
 	var db database.Database
 	var err error
 	switch dbtyp {
 	case config.DBMySQL:
+		if config.App.MySQL.TLSEnabled {
+			if err = registerMySQLTLS(config.App.MySQL); err != nil {
+				return nil, 0, 0, err
+			}
+			dbcfg.SslMode = mysqlTLSName
+		}
 		db, err = mysql.NewDatabase(dbcfg)
 		return db, parser.ParserModeMysql, schema.GeneratorModeMysql, err
 	case config.DBPostgres:
+		dbcfg.SslMode = cfg.SSLMode
 		db, err = postgres.NewDatabase(dbcfg)
 		return db, parser.ParserModePostgres, schema.GeneratorModePostgres, err
 	case config.DBSqlite:
@@ -214,6 +225,27 @@ func openTarget(dbtyp config.DBType, cfg *DatabaseConfig) (database.Database, pa
 		// so the application owns it through hand-written DDL.
 		return nil, 0, 0, errors.Newf("schema migration does not support %q: its schema is managed by hand-written DDL on the application side", dbtyp)
 	}
+}
+
+// mysqlTLSName is the name the TLS configuration of a migration is
+// registered with the MySQL driver under (see registerMySQLTLS).
+const mysqlTLSName = "gst-migrate"
+
+// registerMySQLTLS registers the TLS configuration cfg asks for with the
+// MySQL driver under mysqlTLSName, the name sqldef then selects it by: sqldef
+// takes the TLS setup of a connection by the name the driver knows it under,
+// and builds none itself past a CA bundle. The configuration is the one the
+// application's own connections run under (see util.BuildTLSConfig), so a
+// migration reaches the server the way the application does.
+func registerMySQLTLS(cfg config.MySQL) error {
+	tlsConfig, err := util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify)
+	if err != nil {
+		return errors.Wrap(err, "mysql tls")
+	}
+	if err = mysqldriver.RegisterTLSConfig(mysqlTLSName, tlsConfig); err != nil {
+		return errors.Wrap(err, "failed to register the mysql tls configuration")
+	}
+	return nil
 }
 
 // runMigration executes the database migration logic.

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/config"
+	gstmysql "github.com/hydroan/gst/database/mysql"
 	"github.com/hydroan/gst/dbmigrate"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
@@ -78,6 +79,8 @@ func TestMigrate(t *testing.T) {
 		})
 		databaseConfig := mysqlDatabaseConfig()
 		databaseConfig.Database = database
+		// The sslmode of a PostgreSQL target is nothing a MySQL target reads.
+		databaseConfig.SSLMode = "disable"
 
 		plan, err := dbmigrate.Migrate([]string{schema}, config.DBMySQL, databaseConfig,
 			&dbmigrate.MigrateOption{
@@ -590,6 +593,52 @@ func TestMigrateTableRenameAdvisoryWithRemainingChangesOnPostgres(t *testing.T) 
 	require.NoError(t, err)
 	require.True(t, plan.Changed())
 	require.Empty(t, plan.Advisory)
+}
+
+// TestMigrateReachesAMySQLTargetUnderTheTLSKeysOfTheApplication pins that a
+// migration connects to a MySQL target the way the application does, under
+// the TLS keys of its mysql section: a server that takes encrypted
+// connections alone refuses it while the section leaves TLS off, and is
+// planned against and migrated once the section turns it on.
+func TestMigrateReachesAMySQLTargetUnderTheTLSKeysOfTheApplication(t *testing.T) {
+	plain, terminate, err := testcontainer.SetupStandaloneMySQL("sample", "root", "sample-pass9")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, terminate()) })
+
+	secure := plain
+	secure.TLSEnabled = true
+	admin, err := gstmysql.New(secure)
+	require.NoError(t, err)
+	require.NoError(t, admin.Exec("SET GLOBAL require_secure_transport = ON").Error)
+	pool, err := admin.DB()
+	require.NoError(t, err)
+	require.NoError(t, pool.Close())
+
+	target := &dbmigrate.DatabaseConfig{
+		Host:     plain.Host,
+		Port:     int(plain.Port),
+		Database: plain.Database,
+		Username: plain.Username,
+		Password: plain.Password,
+	}
+	schema := "CREATE TABLE `records` (`id` varchar(36) NOT NULL, PRIMARY KEY (`id`));"
+
+	section := config.App.MySQL
+	t.Cleanup(func() { config.App.MySQL = section })
+
+	config.App.MySQL = plain
+	_, err = dbmigrate.Migrate([]string{schema}, config.DBMySQL, target, &dbmigrate.MigrateOption{DryRun: true})
+	require.ErrorContains(t, err, "Error 3159")
+
+	config.App.MySQL = secure
+	plan, err := dbmigrate.Migrate([]string{schema}, config.DBMySQL, target, &dbmigrate.MigrateOption{DryRun: true})
+	require.NoError(t, err)
+	require.True(t, plan.Changed())
+	require.NoError(t, dbmigrate.Apply(plan, config.DBMySQL, target))
+
+	plan, err = dbmigrate.Migrate([]string{schema}, config.DBMySQL, target, &dbmigrate.MigrateOption{DryRun: true})
+	require.NoError(t, err)
+	require.False(t, plan.Changed(), "the table the plan created is there")
 }
 
 // newDatabaseConfig reads back the connection the test container was prepared on.
