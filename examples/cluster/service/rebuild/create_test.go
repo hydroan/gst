@@ -94,7 +94,7 @@ func TestCreateRunsOnceAtATime(t *testing.T) {
 
 // TestCreateOverGRPCRunsOnceAtATime proves the same lock behind the
 // CreateRebuild rpc: of two rebuilds requested at once one runs and the other
-// is refused with AlreadyExists, the status a 409 becomes over gRPC; the runs
+// is refused with Aborted, the status a 409 becomes over gRPC; the runs
 // then list over the ListRun rpc, every one marked ended.
 func TestCreateOverGRPCRunsOnceAtATime(t *testing.T) {
 	ctx := gstgrpc.WithBearer(t.Context(), iamtest.GRPCSession(t, testsupport.Root))
@@ -116,14 +116,14 @@ func TestCreateOverGRPCRunsOnceAtATime(t *testing.T) {
 		switch status.Code(err) {
 		case codes.OK:
 			ran++
-		case codes.AlreadyExists:
+		case codes.Aborted:
 			refused++
 		default:
 			require.NoError(t, err)
 		}
 	}
 	require.Equal(t, 1, ran, "exactly one of two concurrent rebuilds runs")
-	require.Equal(t, 1, refused, "the other is refused at once with AlreadyExists")
+	require.Equal(t, 1, refused, "the other is refused at once with Aborted")
 
 	runs, err := pb.NewRunServiceClient(testutil.DialGRPC(t)).ListRun(ctx, &pb.ListRunRequest{
 		Filters: []*pb.ListRunRequest_Filter{{Field: "kind", Values: []string{"lock"}}},

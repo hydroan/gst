@@ -68,7 +68,7 @@ func TestCreateCallCreatesTheRecordForTheCaller(t *testing.T) {
 
 		_, err := invoke(t, conn, "RefusedCreate", map[string]any{"record": map[string]any{"name": name}})
 
-		requireStatus(t, err, codes.AlreadyExists, refusedMsg)
+		requireStatus(t, err, codes.Aborted, refusedMsg)
 		require.Zero(t, countSamplesNamed(t, name))
 	})
 

@@ -32,6 +32,7 @@ import (
 const (
 	invalidArgumentMsg = "The request contains invalid parameters."
 	notFoundMsg        = "The requested resource was not found."
+	alreadyExistsMsg   = "The resource already exists."
 	staleObjectMsg     = "The resource was modified by another operation. Reload and retry."
 )
 
@@ -119,6 +120,20 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 		{
 			name: "Create refuses a request carrying no record", fixture: samples, phase: apiaction.Create,
 			want: noRecord,
+		},
+		{
+			// A key a stored record holds is the one conflict gRPC answers
+			// AlreadyExists: the record the request creates is there.
+			name: "Create refuses a record under an id a stored record carries", fixture: samples, phase: apiaction.Create,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				return contractInput{record: map[string]any{"id": createSample(t, "contract-create-taken").GetID(), "name": uniqueName("contract-create-twice")}}
+			},
+			want: contractWant{status: http.StatusConflict, msg: alreadyExistsMsg, code: codes.AlreadyExists},
+			check: func(t *testing.T, in contractInput, _ contractAnswer) {
+				t.Helper()
+				requireSampleName(t, stringOf(in.record["id"]), "contract-create-taken")
+			},
 		},
 		{
 			// A date sent with the client's own offset names the UTC day of
@@ -330,6 +345,22 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			want:  notFound,
 		},
 		{
+			name: "Get refuses an association the model does not expand", fixture: samples, phase: apiaction.Get,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				return contractInput{id: createSample(t, "contract-get-expand").GetID(), query: controller.Query{Expand: []string{"missing"}}}
+			},
+			want: contractWant{status: http.StatusBadRequest, msg: `invalid query parameter "_expand": unknown association "missing"`},
+		},
+		{
+			name: "Get refuses a depth past the cap", fixture: samples, phase: apiaction.Get,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				return contractInput{id: createSample(t, "contract-get-depth").GetID(), query: controller.Query{Depth: 11}}
+			},
+			want: contractWant{status: http.StatusBadRequest, msg: `invalid query parameter "_depth": expect a value from 1 to 10, got "11"`},
+		},
+		{
 			name: "List answers the records the query matches in the order asked", fixture: samples, phase: apiaction.List,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
@@ -518,6 +549,16 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			name: "List refuses a page on a model that does not page", fixture: counters, phase: apiaction.List,
 			input: contractInput{query: controller.Query{Page: 2}},
 			want:  contractWant{status: http.StatusBadRequest},
+		},
+		{
+			name: "List refuses an association the model does not expand", fixture: samples, phase: apiaction.List,
+			input: contractInput{query: controller.Query{Expand: []string{"missing"}}},
+			want:  contractWant{status: http.StatusBadRequest, msg: `invalid query parameter "_expand": unknown association "missing"`},
+		},
+		{
+			name: "List refuses a depth past the cap", fixture: samples, phase: apiaction.List,
+			input: contractInput{query: controller.Query{Depth: 11}},
+			want:  contractWant{status: http.StatusBadRequest, msg: `invalid query parameter "_depth": expect a value from 1 to 10, got "11"`},
 		},
 		{name: "List answers the hook's refusal", fixture: refusals, phase: apiaction.List, want: refused},
 		{name: "List answers the Filter hook's refusal", fixture: filterRefusals, phase: apiaction.List, want: refused},
@@ -791,7 +832,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				t.Helper()
 				return contractInput{id: createVersioned(t, "contract-patch-stale").GetID(), record: map[string]any{"name": "contract-patched", "version": 5}}
 			},
-			want: contractWant{status: http.StatusConflict, msg: staleObjectMsg, code: codes.Aborted},
+			want: contractWant{status: http.StatusConflict, msg: staleObjectMsg},
 		},
 		{
 			// HTTP finds the version under a key differing only in case the
@@ -1753,7 +1794,7 @@ func grpcCodeOf(httpStatus int) codes.Code {
 	case http.StatusNotFound:
 		return codes.NotFound
 	case http.StatusConflict:
-		return codes.AlreadyExists
+		return codes.Aborted
 	case http.StatusInternalServerError:
 		return codes.Internal
 	case http.StatusNotImplemented:
@@ -1783,9 +1824,9 @@ func routePath(route string, params map[string]string) string {
 // queryString renders q as the query string of the HTTP request: each
 // filter as a parameter field[op]=value of its own, a filter given twice
 // repeating its parameter, the members of an in joined by commas, the
-// orderings under _sort_by, the page and size and the cursor under their
-// parameters, the way the request message of the rpc carries them (see
-// controller.Query).
+// orderings under _sort_by, the page and size, the cursor and the expansion
+// with its depth under their parameters, the way the request message of the
+// rpc carries them (see controller.Query).
 func queryString(q controller.Query) string {
 	values := url.Values{}
 	for _, f := range q.Filters {
@@ -1812,6 +1853,12 @@ func queryString(q controller.Query) string {
 	}
 	if q.CursorNext {
 		values.Set(types.QueryCursorNext, "true")
+	}
+	if len(q.Expand) > 0 {
+		values.Set(types.QueryExpand, strings.Join(q.Expand, ","))
+	}
+	if q.Depth != 0 {
+		values.Set(types.QueryDepth, strconv.FormatUint(uint64(q.Depth), 10))
 	}
 	return values.Encode()
 }

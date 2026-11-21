@@ -73,7 +73,7 @@ func TestListCallListsLikeTheHTTPQuery(t *testing.T) {
 	t.Run("a hook refusal answers with the hook's status", func(t *testing.T) {
 		for _, rpc := range []string{"RefusedList", "FilterRefusedList"} {
 			_, err := invoke(t, conn, rpc, map[string]any{})
-			requireStatus(t, err, codes.AlreadyExists, refusedMsg)
+			requireStatus(t, err, codes.Aborted, refusedMsg)
 		}
 	})
 }

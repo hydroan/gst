@@ -45,14 +45,19 @@ func StatusError(err error) error {
 // codeOf maps the HTTP status a failure answers with to its gRPC code: the
 // standard correspondence for the statuses that have one, the client-closed
 // status of a client that went away (see types.StatusClientClosedRequest)
-// as Canceled among them; the 409 of a stale object — err wraps
-// database.ErrStaleObject, the optimistic-lock miss of a versioned model —
-// as Aborted rather than AlreadyExists, since it is a concurrent change to
-// retry after and not a duplicate; the 409 of a foreign key — err wraps
-// database.ErrForeignKeyViolated, a record the request refers to missing or
-// still referred to — as FailedPrecondition, the code AIP-135 gives a delete
-// the records referring to the resource hold up; and, for the rest,
-// InvalidArgument for a client error and Internal for a server error.
+// as Canceled among them; and, for the rest, InvalidArgument for a client
+// error and Internal for a server error.
+//
+// A 409 is a conflict with what is stored or under way, and its cause
+// chooses the code: Aborted, a conflict to retry after, the optimistic-lock
+// miss of a versioned model among them, unless err wraps
+// database.ErrDuplicatedKey, the record the request creates being there
+// already, AlreadyExists, the one code a caller may take for the creation
+// done; or wraps database.ErrForeignKeyViolated, a record the request refers
+// to missing or still referred to, FailedPrecondition, the code AIP-135
+// gives a delete the records referring to the resource hold up. A service
+// answering 409 for a duplicate it found by reading first carries
+// database.ErrDuplicatedKey as the cause to answer AlreadyExists.
 func codeOf(httpStatus int, err error) codes.Code {
 	switch httpStatus {
 	case http.StatusBadRequest:
@@ -68,13 +73,13 @@ func codeOf(httpStatus int, err error) codes.Code {
 	case types.StatusClientClosedRequest:
 		return codes.Canceled
 	case http.StatusConflict:
-		if errors.Is(err, database.ErrStaleObject) {
-			return codes.Aborted
-		}
-		if errors.Is(err, database.ErrForeignKeyViolated) {
+		switch {
+		case errors.Is(err, database.ErrDuplicatedKey):
+			return codes.AlreadyExists
+		case errors.Is(err, database.ErrForeignKeyViolated):
 			return codes.FailedPrecondition
 		}
-		return codes.AlreadyExists
+		return codes.Aborted
 	case http.StatusPreconditionFailed:
 		return codes.FailedPrecondition
 	case http.StatusTooManyRequests:

@@ -159,7 +159,7 @@ func TestBatchCallsWriteAllOrNothing(t *testing.T) {
 	t.Run("a hook refusal writes nothing", func(t *testing.T) {
 		name := uniqueName("call-batch-refused")
 		_, err := invoke(t, conn, "RefusedCreateMany", map[string]any{"items": []map[string]any{{"name": name}}})
-		requireStatus(t, err, codes.AlreadyExists, refusedMsg)
+		requireStatus(t, err, codes.Aborted, refusedMsg)
 		require.Zero(t, countSamplesNamed(t, name))
 	})
 

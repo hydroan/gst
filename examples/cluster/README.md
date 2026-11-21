@@ -565,7 +565,7 @@ L=$(holder leader:counter); rpc "$L" -d '{}' localhost:8081 cluster.StepDownServ
 sleep 8; holder leader:counter
 ```
 
-A、B 同时抢同一把锁，一个跑了，另一个当场被拒：HTTP 上的 409 在 gRPC 上是 `AlreadyExists: a rebuild is already running`，controller 日志里同样一条 INFO。跑完的那次在 `runs` 里记着是哪个副本、`ended_at` 已填。正持有 `leader:counter` 的副本收到 `CreateStepDown` 答 `asked: true`，几秒后租约到了别的副本手里。
+A、B 同时抢同一把锁，一个跑了，另一个当场被拒：HTTP 上的 409 在 gRPC 上是 `Aborted: a rebuild is already running`，controller 日志里同样一条 INFO。跑完的那次在 `runs` 里记着是哪个副本、`ended_at` 已填。正持有 `leader:counter` 的副本收到 `CreateStepDown` 答 `asked: true`，几秒后租约到了别的副本手里。
 
 #### 7.5 流被滚动更新切断，换个副本接着读
 

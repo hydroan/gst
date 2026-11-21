@@ -24,6 +24,6 @@ func TestDeleteCallDeletesTheRecord(t *testing.T) {
 
 	kept := createSample(t, "call-delete-refused")
 	_, err = invoke(t, conn, "RefusedDelete", map[string]any{"id": kept.GetID()})
-	requireStatus(t, err, codes.AlreadyExists, refusedMsg)
+	requireStatus(t, err, codes.Aborted, refusedMsg)
 	requireSampleName(t, kept.GetID(), "call-delete-refused")
 }
