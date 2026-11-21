@@ -21,6 +21,21 @@ func TestHealthReportsReachableServer(t *testing.T) {
 	}
 }
 
+// TestNewRefusesHalfOfAKeyPair pins that a client, standalone or cluster,
+// configured with one file of its certificate's key pair and not the other
+// is refused as it is built, naming the file that is missing, rather than
+// dialed without the certificate.
+func TestNewRefusesHalfOfAKeyPair(t *testing.T) {
+	cfg := config.Redis{Addr: "127.0.0.1:6379", Addrs: []string{"127.0.0.1:6379"}, TLSEnabled: true, CertFile: "client.crt"}
+	const want = "failed to build TLS config: cert_file is set without key_file: a client certificate takes both"
+
+	_, err := gstredis.New(cfg)
+	require.EqualError(t, err, want)
+
+	_, err = gstredis.NewCluster(cfg)
+	require.EqualError(t, err, want)
+}
+
 // TestInitInstrumentsTracingWithoutCallerAttributes pins how Init instruments
 // the client: every command still exports a span carrying the raw statement,
 // which is what a trace is read for, but none of the code.* caller

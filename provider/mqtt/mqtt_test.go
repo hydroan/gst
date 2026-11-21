@@ -15,6 +15,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestNewRefusesHalfOfAKeyPair pins that a client configured with one file
+// of its certificate's key pair and not the other is refused as it is built,
+// naming the file that is missing, rather than dialed without the
+// certificate.
+func TestNewRefusesHalfOfAKeyPair(t *testing.T) {
+	_, err := mqtt.New(config.Mqtt{Addr: "tcp://127.0.0.1:1883", UseTLS: true, KeyFile: "client.key"})
+	require.EqualError(t, err, "failed to build mqtt options: failed to build TLS config: key_file is set without cert_file: a client certificate takes both")
+}
+
 func TestMqtt(t *testing.T) {
 	t.Skip("MQTT provider integration is temporarily disabled: it needs a live broker.")
 

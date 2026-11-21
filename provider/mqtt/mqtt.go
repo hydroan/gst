@@ -2,7 +2,6 @@ package mqtt
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -14,6 +13,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 )
@@ -95,15 +95,9 @@ func buildOptions(cfg config.Mqtt) (*mqtt.ClientOptions, error) {
 		opts.SetPassword(cfg.Password)
 	}
 	if cfg.UseTLS {
-		tlsConfig := &tls.Config{
-			InsecureSkipVerify: cfg.InsecureSkipVerify, //nolint:gosec
-		}
-		if len(cfg.CertFile) != 0 && len(cfg.KeyFile) != 0 {
-			cert, err := loadCertificate(cfg.CertFile, cfg.KeyFile)
-			if err != nil {
-				return nil, errors.Wrap(err, "failed to load mqtt certificate")
-			}
-			tlsConfig.Certificates = []tls.Certificate{cert}
+		tlsConfig, err := util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, "", cfg.InsecureSkipVerify)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to build TLS config")
 		}
 		opts.SetTLSConfig(tlsConfig)
 	}
@@ -126,15 +120,6 @@ func connect(client mqtt.Client) error {
 		return err
 	}
 	return nil
-}
-
-// loadCertificate loads TLS certificate
-func loadCertificate(certFile, keyFile string) (tls.Certificate, error) {
-	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-	if err != nil {
-		return tls.Certificate{}, errors.Wrap(err, "failed to load certificate")
-	}
-	return cert, nil
 }
 
 // defaultIfEmpty returns default value if str is empty

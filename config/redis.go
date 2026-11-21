@@ -82,7 +82,7 @@ func (*Redis) setDefaults(v *viper.Viper) {
 
 	v.SetDefault("redis.tls_enabled", false)
 	v.SetDefault("redis.cert_file", "")
-	v.SetDefault("redis.key_file", 0)
+	v.SetDefault("redis.key_file", "")
 	v.SetDefault("redis.ca_file", "")
 	v.SetDefault("redis.insecure_skip_verify", false)
 

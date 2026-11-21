@@ -26,6 +26,10 @@ func TestLoadAppliesFrameworkDefaults(t *testing.T) {
 	require.Zero(t, c.MySQL.WriteTimeout)
 	// Connections add the strict mode by default; see config.MySQL.Strict.
 	require.True(t, c.MySQL.Strict)
+	// A redis client presents no certificate by default: neither file of
+	// the key pair is named.
+	require.Empty(t, c.Redis.CertFile)
+	require.Empty(t, c.Redis.KeyFile)
 }
 
 func TestLoadReadsFileContent(t *testing.T) {

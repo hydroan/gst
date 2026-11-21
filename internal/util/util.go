@@ -58,18 +58,27 @@ func PanicError(recovered any) error {
 
 // BuildTLSConfig builds the TLS configuration a client dials with: the
 // certificate and key pair when both files are given, the CA bundle when
-// caFile is, and insecureSkipVerify as given.
+// caFile is, and insecureSkipVerify as given. One file of the pair given
+// without the other is a configuration error, refused naming the file that
+// is missing by the cert_file and key_file every component configures the
+// pair under: dialing on without the certificate would only fail the
+// handshake at the far end, which says nothing of the configuration.
 func BuildTLSConfig(certFile, keyFile, caFile string, insecureSkipVerify bool) (*tls.Config, error) {
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: insecureSkipVerify, //nolint:gosec
 	}
 
-	if len(certFile) > 0 && len(keyFile) > 0 {
+	switch {
+	case certFile != "" && keyFile != "":
 		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to load x509 key pair")
 		}
 		tlsConfig.Certificates = []tls.Certificate{cert}
+	case certFile != "":
+		return nil, errors.New("cert_file is set without key_file: a client certificate takes both")
+	case keyFile != "":
+		return nil, errors.New("key_file is set without cert_file: a client certificate takes both")
 	}
 
 	if len(caFile) > 0 {
