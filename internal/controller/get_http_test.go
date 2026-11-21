@@ -30,11 +30,11 @@ func TestGetAnswersNotFound(t *testing.T) {
 	})
 }
 
-// TestGetRefusesADepthThatIsNoNumber pins that a get, which decodes no model
-// from the query, refuses a _depth that is no number itself, in the words a
+// TestGetRefusesADepthThatIsNoCount pins that a get, which decodes no model
+// from the query, refuses a _depth that is no count itself, in the words a
 // list answers one its model cannot decode; a depth of zero is the depth
 // left out.
-func TestGetRefusesADepthThatIsNoNumber(t *testing.T) {
+func TestGetRefusesADepthThatIsNoCount(t *testing.T) {
 	id := createSample(t, "get-depth").GetID()
 	get := func(query string) *httptest.ResponseRecorder {
 		return serve(t, http.MethodGet, "/controller-samples/:id",
@@ -42,10 +42,10 @@ func TestGetRefusesADepthThatIsNoNumber(t *testing.T) {
 			"/controller-samples/"+id+"?"+query, "")
 	}
 
-	for _, depth := range []string{"abc", "-1", "1.5"} {
+	for depth, reason := range map[string]string{"abc": "expect a numeric value", "1.5": "expect a numeric value", "-1": "expect a non-negative value"} {
 		rsp := get("_depth=" + depth)
 		require.Equal(t, http.StatusBadRequest, rsp.Code, rsp.Body.String())
-		require.Contains(t, rsp.Body.String(), `"msg":"invalid query parameter \"_depth\": expect a numeric value, got \"`+depth+`\""`)
+		require.Contains(t, rsp.Body.String(), `"msg":"invalid query parameter \"_depth\": `+reason+`, got \"`+depth+`\""`)
 	}
 
 	rsp := get("_depth=0")

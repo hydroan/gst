@@ -328,10 +328,10 @@ func TestParseExpandQueryResolvesTheExpandableAssociations(t *testing.T) {
 }
 
 // TestParseExpandQueryRefusesWhatItCannotRead pins that an expansion naming
-// an association the model does not expand, or a depth that is no number or
+// an association the model does not expand, or a depth that is no count or
 // runs past the cap, is refused rather than read as no expansion or as the
 // depth left out: the answer names the parameter and echoes the value alone,
-// a depth that is no number in the words the model decode answers one. The
+// a depth that is no count in the words the model decode answers one. The
 // depth is read whether or not the request expands anything.
 func TestParseExpandQueryRefusesWhatItCannotRead(t *testing.T) {
 	for _, tt := range []struct{ name, target, want string }{
@@ -340,7 +340,7 @@ func TestParseExpandQueryRefusesWhatItCannotRead(t *testing.T) {
 		{"UnknownAssociationBesideAll", "/items?_expand=all,bogus", `invalid query parameter "_expand": unknown association "bogus"`},
 		{"DepthPastTheCap", "/items?_expand=Children&_depth=11", `invalid query parameter "_depth": expect a value from 1 to 10, got "11"`},
 		{"DepthThatIsNoNumber", "/items?_expand=Children&_depth=abc", `invalid query parameter "_depth": expect a numeric value, got "abc"`},
-		{"NegativeDepth", "/items?_expand=Children&_depth=-1", `invalid query parameter "_depth": expect a numeric value, got "-1"`},
+		{"NegativeDepth", "/items?_expand=Children&_depth=-1", `invalid query parameter "_depth": expect a non-negative value, got "-1"`},
 		{"DepthPastTheCapWithNothingToExpand", "/items?_depth=11", `invalid query parameter "_depth": expect a value from 1 to 10, got "11"`},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

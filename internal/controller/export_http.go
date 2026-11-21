@@ -106,7 +106,7 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			if raw := c.Query(types.QueryLimit); raw != "" {
 				var err error
 				if limit, err = strconv.Atoi(raw); err != nil {
-					err = notNumericError(types.QueryLimit, raw)
+					err = urlquery.NotNumericError(types.QueryLimit, raw)
 					response.Error(c, reportFailure(log, span, "parse query parameter failed", err, invalidArgument(err)))
 					return
 				}

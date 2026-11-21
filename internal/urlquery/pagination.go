@@ -40,8 +40,9 @@ const (
 //
 // Pagination has no error to answer with, so what it reads is a count
 // already: an HTTP request whose _page or _size is no integer, or a negative
-// one, is refused at the door (see the strictQuery middleware), and the
-// fields of a gRPC request message are unsigned.
+// one, is refused at the door (see the strictQuery middleware, which reads
+// both by ParseCount), and the fields of a gRPC request message are
+// unsigned.
 func Pagination(q url.Values, m types.Model) (page, size int) {
 	paginatable := modelregistry.IsPaginatable(m)
 	cursorable := modelregistry.IsCursorable(m)

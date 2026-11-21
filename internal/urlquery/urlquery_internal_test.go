@@ -482,6 +482,17 @@ func TestFilters(t *testing.T) {
 		}
 	})
 
+	t.Run("UnsignedFieldRefusesANegativeValueAsOne", func(t *testing.T) {
+		for _, tt := range []struct{ key, value, want string }{
+			{"id[gt]", "-1", `invalid field filter "id[gt]": expect a non-negative value, got "-1"`},
+			{"id[in]", "1,-2", `invalid field filter "id[in]": expect a non-negative value, got "-2"`},
+			{"id[gt]", "abc", `invalid field filter "id[gt]": expect a numeric value, got "abc"`},
+		} {
+			_, err := Filters(url.Values{tt.key: {tt.value}}, &queryAutoTestModel{})
+			require.EqualError(t, err, tt.want)
+		}
+	})
+
 	t.Run("WrappedBoolFieldNormalizesAndGatesOps", func(t *testing.T) {
 		conds, err := Filters(url.Values{"active[eq]": {"true"}}, &gormTypedTestModel{})
 		require.NoError(t, err)
@@ -770,6 +781,11 @@ func TestDecode(t *testing.T) {
 			`invalid query parameter "age": expect a numeric value, got "abc"`)
 		require.EqualError(t, Decode(url.Values{"enabled": {"maybe"}}, &m),
 			`invalid query parameter "enabled": expect a boolean value, got "maybe"`)
+		require.EqualError(t, Decode(url.Values{"_depth": {"abc"}}, &m),
+			`invalid query parameter "_depth": expect a numeric value, got "abc"`)
+		require.EqualError(t, Decode(url.Values{"_depth": {"-1"}}, &m),
+			`invalid query parameter "_depth": expect a non-negative value, got "-1"`,
+			"an unsigned field refuses a negative integer as one")
 	})
 
 	t.Run("ReportsUnsupportedAndMistypedTogether", func(t *testing.T) {
@@ -1028,6 +1044,13 @@ type queryTestModel struct {
 	modelregistry.Base
 }
 
+// queryAutoTestModel takes filters on the unsigned column of an
+// auto-increment id.
+type queryAutoTestModel struct {
+	modelregistry.Query
+	modelregistry.AutoBase
+}
+
 func TestPagination(t *testing.T) {
 	t.Run("PaginatableModelReadsBothParameters", func(t *testing.T) {
 		page, size := Pagination(url.Values{"_page": {"2"}, "_size": {"50"}}, &paginatableTestModel{})
@@ -1181,6 +1204,11 @@ func TestCursor(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, cursor.Enabled())
 		require.Equal(t, "42", cursor.Value())
+	})
+
+	t.Run("NegativeValueOnUnsignedDefaultColumnFailsAsOne", func(t *testing.T) {
+		_, err := Cursor(url.Values{"_cursor_value": {"-1"}}, &cursorAutoTestModel{})
+		require.EqualError(t, err, `invalid cursor value: expect a non-negative value, got "-1"`)
 	})
 
 	t.Run("MistypedValueOnNumericColumnFails", func(t *testing.T) {

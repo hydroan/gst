@@ -94,17 +94,18 @@ func TestStrictQueryRejectsMalformedQueries(t *testing.T) {
 // TestStrictQueryRefusesAPageOrSizeThatIsNoCount pins that _page and _size
 // carry a count, zero or more, wherever a request gives them: one that is no
 // integer, or a negative one, is refused at the gate, before a list flow or
-// a service reads it as the default, in the words a list of the framework's
-// own answers a value its model cannot decode, naming the parameter and
-// echoing the value alone. Zero and an empty value are admitted, each read
-// as the parameter left out, and so is a size past the cap, which the list
-// brings down to it.
+// a service reads it as the default, naming the parameter and echoing the
+// value alone: one that is no integer in the words a list of the
+// framework's own answers a value its model cannot decode, a negative one
+// as one. Zero and an empty value are admitted, each read as the parameter
+// left out, and so is a size past the cap, which the list brings down to
+// it.
 func TestStrictQueryRefusesAPageOrSizeThatIsNoCount(t *testing.T) {
 	for _, tt := range []struct{ name, method, rawQuery, wantMsg string }{
 		{name: "page that is no number", method: http.MethodGet, rawQuery: "_page=abc", wantMsg: `invalid query parameter "_page": expect a numeric value, got "abc"`},
-		{name: "negative page", method: http.MethodGet, rawQuery: "_page=-1", wantMsg: `invalid query parameter "_page": expect a numeric value, got "-1"`},
+		{name: "negative page", method: http.MethodGet, rawQuery: "_page=-1", wantMsg: `invalid query parameter "_page": expect a non-negative value, got "-1"`},
 		{name: "size that is no integer", method: http.MethodGet, rawQuery: "_size=1.5", wantMsg: `invalid query parameter "_size": expect a numeric value, got "1.5"`},
-		{name: "negative size", method: http.MethodGet, rawQuery: "_size=-5", wantMsg: `invalid query parameter "_size": expect a numeric value, got "-5"`},
+		{name: "negative size", method: http.MethodGet, rawQuery: "_size=-5", wantMsg: `invalid query parameter "_size": expect a non-negative value, got "-5"`},
 		{name: "page past what an int holds", method: http.MethodGet, rawQuery: "_page=18446744073709551615", wantMsg: `invalid query parameter "_page": expect a numeric value, got "18446744073709551615"`},
 		{name: "page of a request that lists nothing", method: http.MethodPost, rawQuery: "_page=abc", wantMsg: `invalid query parameter "_page": expect a numeric value, got "abc"`},
 		{name: "zero page and size", method: http.MethodGet, rawQuery: "_page=0&_size=0"},

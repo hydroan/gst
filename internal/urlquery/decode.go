@@ -268,8 +268,10 @@ func fieldAlong(dst reflect.Value, index []int) reflect.Value {
 // fieldSetter returns the parse-and-set function for a field type, reported
 // per kind so a named scalar type decodes like its underlying kind. A type
 // without a setter is not decodable and stays out of the plan. Error wording
-// matches the filter and cursor validators, and a boolean is read by the
-// modelschema.ParseBool they read one by.
+// matches the filter and cursor validators: a boolean and an unsigned
+// integer are read by the modelschema.ParseBool and modelschema.ParseUint
+// they read one by, and a number of another kind is refused in their words
+// (see notNumericMessage).
 func fieldSetter(typ reflect.Type, key string) (func(dst reflect.Value, raw string) string, bool) {
 	if typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
@@ -284,7 +286,7 @@ func fieldSetter(typ reflect.Type, key string) (func(dst reflect.Value, raw stri
 		return func(dst reflect.Value, raw string) string {
 			parsed, err := modelschema.ParseBool(raw)
 			if err != nil {
-				return fmt.Sprintf("invalid query parameter %q: %v", key, err)
+				return invalidParameterMessage(key, err)
 			}
 			dst.SetBool(parsed)
 			return ""
@@ -294,7 +296,7 @@ func fieldSetter(typ reflect.Type, key string) (func(dst reflect.Value, raw stri
 		return func(dst reflect.Value, raw string) string {
 			parsed, err := strconv.ParseInt(raw, 10, bits)
 			if err != nil {
-				return fmt.Sprintf("invalid query parameter %q: expect a numeric value, got %q", key, raw)
+				return notNumericMessage(key, raw)
 			}
 			dst.SetInt(parsed)
 			return ""
@@ -302,9 +304,9 @@ func fieldSetter(typ reflect.Type, key string) (func(dst reflect.Value, raw stri
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		bits := typ.Bits()
 		return func(dst reflect.Value, raw string) string {
-			parsed, err := strconv.ParseUint(raw, 10, bits)
+			parsed, err := modelschema.ParseUint(raw, bits)
 			if err != nil {
-				return fmt.Sprintf("invalid query parameter %q: expect a numeric value, got %q", key, raw)
+				return invalidParameterMessage(key, err)
 			}
 			dst.SetUint(parsed)
 			return ""
@@ -314,7 +316,7 @@ func fieldSetter(typ reflect.Type, key string) (func(dst reflect.Value, raw stri
 		return func(dst reflect.Value, raw string) string {
 			parsed, err := strconv.ParseFloat(raw, bits)
 			if err != nil {
-				return fmt.Sprintf("invalid query parameter %q: expect a numeric value, got %q", key, raw)
+				return notNumericMessage(key, raw)
 			}
 			dst.SetFloat(parsed)
 			return ""

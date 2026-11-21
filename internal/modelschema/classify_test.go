@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
+	"math"
 	"reflect"
 	"testing"
 	"time"
@@ -264,7 +265,8 @@ func TestParseTimeOfDay(t *testing.T) {
 // TestValidateNumericValue pins that a value is checked against the kind of
 // number its column stores by the data type gorm reads for the field: an
 // integer, an unsigned one or a float, the number a Valuer holds included;
-// a column storing no number takes any value.
+// a column storing no number takes any value. An unsigned column refuses a
+// negative integer as one, in the words of ParseUint.
 func TestValidateNumericValue(t *testing.T) {
 	type counted struct {
 		ID    string `gorm:"primaryKey"`
@@ -280,9 +282,9 @@ func TestValidateNumericValue(t *testing.T) {
 	for _, c := range columns {
 		byName[c.DBName] = c
 	}
-	for name, values := range map[string]struct{ taken, refused []string }{
+	for name, values := range map[string]struct{ taken, refused, negative []string }{
 		"count": {taken: []string{"-3", "42"}, refused: []string{"1.5", "x", ""}},
-		"size":  {taken: []string{"0", "42"}, refused: []string{"-1", "x"}},
+		"size":  {taken: []string{"0", "42"}, refused: []string{"x", "-1.5"}, negative: []string{"-1"}},
 		"ratio": {taken: []string{"1.5", "-2", "1e3"}, refused: []string{"x"}},
 		"tally": {taken: []string{"7"}, refused: []string{"7.5"}},
 		"note":  {taken: []string{"x", "1.5"}},
@@ -293,6 +295,41 @@ func TestValidateNumericValue(t *testing.T) {
 		for _, value := range values.refused {
 			require.EqualError(t, modelschema.ValidateNumericValue(byName[name], value), fmt.Sprintf("expect a numeric value, got %q", value), "%s %q", name, value)
 		}
+		for _, value := range values.negative {
+			require.EqualError(t, modelschema.ValidateNumericValue(byName[name], value), fmt.Sprintf("expect a non-negative value, got %q", value), "%s %q", name, value)
+		}
+	}
+}
+
+// TestParseUint pins the one reading of an unsigned integer the framework
+// takes from a client: decimal digits that fit the bit size asked for, a
+// negative integer refused as one and anything else as no number, each
+// refusal naming the value.
+func TestParseUint(t *testing.T) {
+	for _, tt := range []struct {
+		value   string
+		bitSize int
+		want    uint64
+	}{
+		{"0", 64, 0},
+		{"42", 64, 42},
+		{"255", 8, 255},
+		{"18446744073709551615", 64, math.MaxUint64},
+	} {
+		got, err := modelschema.ParseUint(tt.value, tt.bitSize)
+		require.NoError(t, err, tt.value)
+		require.Equal(t, tt.want, got, tt.value)
+	}
+	for _, value := range []string{"-1", "-42"} {
+		_, err := modelschema.ParseUint(value, 64)
+		require.EqualError(t, err, fmt.Sprintf("expect a non-negative value, got %q", value), value)
+	}
+	for _, tt := range []struct {
+		value   string
+		bitSize int
+	}{{"abc", 64}, {"1.5", 64}, {"-1.5", 64}, {"+5", 64}, {"", 64}, {"256", 8}} {
+		_, err := modelschema.ParseUint(tt.value, tt.bitSize)
+		require.EqualError(t, err, fmt.Sprintf("expect a numeric value, got %q", tt.value), tt.value)
 	}
 }
 

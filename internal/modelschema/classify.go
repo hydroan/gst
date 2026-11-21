@@ -153,21 +153,46 @@ func IsNumericColumn(c Column) bool {
 // ValidateNumericValue checks that value spells a number of the kind a
 // column stores by the data type gorm reads for its field: an integer, an
 // unsigned one, or a float. A column storing no number (see IsNumericColumn)
-// takes any value.
+// takes any value. A value spelling no such number is refused, "expect a
+// numeric value, got "x""; an unsigned column reads by ParseUint, so it
+// refuses a negative integer as one.
 func ValidateNumericValue(c Column, value string) error {
 	var err error
 	switch c.gormDataType {
 	case gormschema.Int:
 		_, err = strconv.ParseInt(value, 10, 64)
 	case gormschema.Uint:
-		_, err = strconv.ParseUint(value, 10, 64)
+		_, err = ParseUint(value, 64)
+		return err
 	case gormschema.Float:
 		_, err = strconv.ParseFloat(value, 64)
 	}
 	if err != nil {
-		return errors.Newf("expect a numeric value, got %q", value)
+		return notNumericError(value)
 	}
 	return nil
+}
+
+// ParseUint reads an unsigned integer of at most bitSize bits the one way
+// the framework takes it from a client: decimal digits, the reading of
+// strconv.ParseUint. A negative integer is refused as one, "expect a
+// non-negative value, got "-1"", and anything else it cannot read as no
+// number, "expect a numeric value, got "abc"".
+func ParseUint(value string, bitSize int) (uint64, error) {
+	parsed, err := strconv.ParseUint(value, 10, bitSize)
+	if err != nil {
+		if signed, signedErr := strconv.ParseInt(value, 10, 64); signedErr == nil && signed < 0 {
+			return 0, errors.Newf("expect a non-negative value, got %q", value)
+		}
+		return 0, notNumericError(value)
+	}
+	return parsed, nil
+}
+
+// notNumericError is the refusal ValidateNumericValue and ParseUint share
+// for a value that spells no number of the kind asked for.
+func notNumericError(value string) error {
+	return errors.Newf("expect a numeric value, got %q", value)
 }
 
 // IsBoolColumn reports whether a column stores a boolean by the data type

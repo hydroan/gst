@@ -47,3 +47,29 @@ func DuplicateParameterError(keys []string) error {
 	sort.Strings(sorted)
 	return errors.New("duplicate query parameter: " + strings.Join(sorted, ", "))
 }
+
+// NotNumericError reports a query parameter that takes a number and is given
+// a value spelling none, in the words Decode refuses such a value of a
+// numeric model field with, for the readers of a parameter no model field
+// holds. Given "_limit" and "abc" it reports
+//
+//	invalid query parameter "_limit": expect a numeric value, got "abc"
+func NotNumericError(key, raw string) error {
+	return errors.New(notNumericMessage(key, raw))
+}
+
+// notNumericMessage renders the message shared by NotNumericError and
+// Decode.
+func notNumericMessage(key, raw string) string {
+	return fmt.Sprintf("invalid query parameter %q: expect a numeric value, got %q", key, raw)
+}
+
+// invalidParameterMessage renders the refusal of the value a query parameter
+// is given, the parameter by name and then the reason a reader of the value
+// refused it with, shared by Decode and ParseCount: for "enabled" and
+// modelschema.ParseBool's refusal of "maybe",
+//
+//	invalid query parameter "enabled": expect a boolean value, got "maybe"
+func invalidParameterMessage(key string, reason error) string {
+	return fmt.Sprintf("invalid query parameter %q: %v", key, reason)
+}

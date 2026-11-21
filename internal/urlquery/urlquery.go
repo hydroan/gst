@@ -20,8 +20,11 @@ package urlquery
 import (
 	"maps"
 	"net/url"
+	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 )
 
@@ -58,4 +61,28 @@ func PresentFields(q url.Values) map[string]struct{} {
 		present[key] = struct{}{}
 	}
 	return present
+}
+
+// MaxExpandDepth is the largest _depth a request may ask for. Every level of
+// depth becomes one more recursive preload query, so the cap keeps a single
+// request from fanning out unbounded database work. The controllers refuse a
+// deeper one, and the pb generator quotes the cap in the comment of a
+// request's depth field, so a gRPC caller reads it off the message.
+const MaxExpandDepth = 10
+
+// ParseCount reads the count a query parameter carries, the value of _page,
+// _size or _depth: a whole number of zero or more that an int, the type the
+// readers of a count hold it in, has room for. It reads the way
+// modelschema.ParseUint reads an unsigned integer and refuses in its words
+// under the parameter's name: given "_page" and "-1" it reports
+//
+//	invalid query parameter "_page": expect a non-negative value, got "-1"
+//
+// and given a value that is no number, what NotNumericError reports.
+func ParseCount(key, raw string) (int, error) {
+	count, err := modelschema.ParseUint(raw, strconv.IntSize-1)
+	if err != nil {
+		return 0, errors.New(invalidParameterMessage(key, err))
+	}
+	return int(count), nil //nolint:gosec // G115: read into one bit less than an int has, the count is within its range.
 }
