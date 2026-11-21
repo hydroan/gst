@@ -76,7 +76,6 @@ type Config struct {
 	Server        `json:"server" mapstructure:"server" ini:"server" yaml:"server"`
 	GRPC          `json:"grpc" mapstructure:"grpc" ini:"grpc" yaml:"grpc"`
 	Cache         `json:"cache" mapstructure:"cache" ini:"cache" yaml:"cache"`
-	Middleware    `json:"middleware" mapstructure:"middleware" ini:"middleware" yaml:"middleware"`
 	Auth          `json:"auth" mapstructure:"auth" ini:"auth" yaml:"auth"`
 	Database      `json:"database" mapstructure:"database" ini:"database" yaml:"database"`
 	Sqlite        `json:"sqlite" mapstructure:"sqlite" ini:"sqlite" yaml:"sqlite"`
@@ -122,7 +121,7 @@ type validator interface {
 // are set and their ranges checked.
 func (c *Config) sections() []section {
 	return []section{
-		&c.AppInfo, &c.Server, &c.GRPC, &c.Cache, &c.Middleware, &c.Auth, &c.Logger,
+		&c.AppInfo, &c.Server, &c.GRPC, &c.Cache, &c.Auth, &c.Logger,
 		&c.Database, &c.Sqlite, &c.Postgres, &c.MySQL, &c.Clickhouse, &c.Redis, &c.OTEL,
 		&c.Elasticsearch, &c.Mongo, &c.Kafka, &c.Ldap, &c.Influxdb, &c.Minio, &c.Mqtt,
 		&c.Nats, &c.Etcd, &c.Cassandra, &c.Scylla, &c.RethinkDB, &c.RocketMQ, &c.Debug,

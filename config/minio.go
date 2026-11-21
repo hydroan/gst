@@ -1,23 +1,14 @@
 package config
 
-import (
-	"time"
-
-	"github.com/spf13/viper"
-)
+import "github.com/spf13/viper"
 
 const (
 	MINIO_ENDPOINT      = "MINIO_ENDPOINT"
 	MINIO_ACCESS_KEY    = "MINIO_ACCESS_KEY"
 	MINIO_SECRET_KEY    = "MINIO_SECRET_KEY"
 	MINIO_BUCKET        = "MINIO_BUCKET"
-	MINIO_LOCATION      = "MINIO_LOCATION"
 	MINIO_SECURE        = "MINIO_SECURE"
 	MINIO_REGION        = "MINIO_REGION"
-	MINIO_TIMEOUT       = "MINIO_TIMEOUT"
-	MINIO_PART_SIZE     = "MINIO_PART_SIZE"
-	MINIO_CONCURRENCY   = "MINIO_CONCURRENCY"
-	MINIO_COMPRESS      = "MINIO_COMPRESS"
 	MINIO_TRACE         = "MINIO_TRACE"
 	MINIO_SESSION_TOKEN = "MINIO_SESSION_TOKEN"
 	MINIO_USE_IAM       = "MINIO_USE_IAM"
@@ -42,20 +33,15 @@ type Minio struct {
 	// options name none. Several buckets may be listed, comma separated, as
 	// in "media, archive": each is created at startup when missing, and the
 	// first is the default.
-	Bucket       string        `json:"bucket" mapstructure:"bucket" ini:"bucket" yaml:"bucket"`
-	Location     string        `json:"location" mapstructure:"location" ini:"location" yaml:"location"`
-	Secure       bool          `json:"secure" mapstructure:"secure" ini:"secure" yaml:"secure"`
-	Region       string        `json:"region" mapstructure:"region" ini:"region" yaml:"region"`
-	Timeout      time.Duration `json:"timeout" mapstructure:"timeout" ini:"timeout" yaml:"timeout"`
-	PartSize     int64         `json:"part_size" mapstructure:"part_size" ini:"part_size" yaml:"part_size"`
-	Concurrency  int           `json:"concurrency" mapstructure:"concurrency" ini:"concurrency" yaml:"concurrency"`
-	Compress     bool          `json:"compress" mapstructure:"compress" ini:"compress" yaml:"compress"`
-	Trace        bool          `json:"trace" mapstructure:"trace" ini:"trace" yaml:"trace"`
-	SessionToken string        `json:"session_token" mapstructure:"session_token" ini:"session_token" yaml:"session_token"`
-	UseIAM       bool          `json:"use_iam" mapstructure:"use_iam" ini:"use_iam" yaml:"use_iam"`
-	UseSTS       bool          `json:"use_sts" mapstructure:"use_sts" ini:"use_sts" yaml:"use_sts"`
-	IAMEndpoint  string        `json:"iam_endpoint" mapstructure:"iam_endpoint" ini:"iam_endpoint" yaml:"iam_endpoint"`
-	STSEndpoint  string        `json:"sts_endpoint" mapstructure:"sts_endpoint" ini:"sts_endpoint" yaml:"sts_endpoint"`
+	Bucket       string `json:"bucket" mapstructure:"bucket" ini:"bucket" yaml:"bucket"`
+	Secure       bool   `json:"secure" mapstructure:"secure" ini:"secure" yaml:"secure"`
+	Region       string `json:"region" mapstructure:"region" ini:"region" yaml:"region"`
+	Trace        bool   `json:"trace" mapstructure:"trace" ini:"trace" yaml:"trace"`
+	SessionToken string `json:"session_token" mapstructure:"session_token" ini:"session_token" yaml:"session_token"`
+	UseIAM       bool   `json:"use_iam" mapstructure:"use_iam" ini:"use_iam" yaml:"use_iam"`
+	UseSTS       bool   `json:"use_sts" mapstructure:"use_sts" ini:"use_sts" yaml:"use_sts"`
+	IAMEndpoint  string `json:"iam_endpoint" mapstructure:"iam_endpoint" ini:"iam_endpoint" yaml:"iam_endpoint"`
+	STSEndpoint  string `json:"sts_endpoint" mapstructure:"sts_endpoint" ini:"sts_endpoint" yaml:"sts_endpoint"`
 
 	TLSEnabled         bool   `json:"tls_enabled" mapstructure:"tls_enabled" ini:"tls_enabled" yaml:"tls_enabled"`
 	CertFile           string `json:"cert_file" mapstructure:"cert_file" ini:"cert_file" yaml:"cert_file"`
@@ -71,13 +57,8 @@ func (*Minio) setDefaults(v *viper.Viper) {
 	v.SetDefault("minio.access_key", "")
 	v.SetDefault("minio.secret_key", "")
 	v.SetDefault("minio.bucket", "")
-	v.SetDefault("minio.location", "")
 	v.SetDefault("minio.secure", false)
 	v.SetDefault("minio.region", "")
-	v.SetDefault("minio.timeout", 10*time.Second)
-	v.SetDefault("minio.part_size", 0) // 5MB part size
-	v.SetDefault("minio.concurrency", 0)
-	v.SetDefault("minio.compress", false)
 	v.SetDefault("minio.trace", false)
 	v.SetDefault("minio.session_token", "")
 	v.SetDefault("minio.use_iam", false)

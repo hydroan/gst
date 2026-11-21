@@ -24,7 +24,6 @@ const (
 	ELASTICSEARCH_DEBUG_LOGGER_ENABLED    = "ELASTICSEARCH_DEBUG_LOGGER_ENABLED"
 	ELASTICSEARCH_CONNECTION_POOL_SIZE    = "ELASTICSEARCH_CONNECTION_POOL_SIZE"
 	ELASTICSEARCH_RESPONSE_HEADER_TIMEOUT = "ELASTICSEARCH_RESPONSE_HEADER_TIMEOUT"
-	ELASTICSEARCH_REQUEST_TIMEOUT         = "ELASTICSEARCH_REQUEST_TIMEOUT"
 	ELASTICSEARCH_DIAL_TIMEOUT            = "ELASTICSEARCH_DIAL_TIMEOUT"
 	ELASTICSEARCH_KEEP_ALIVE_INTERVAL     = "ELASTICSEARCH_KEEP_ALIVE_INTERVAL"
 
@@ -55,7 +54,6 @@ type Elasticsearch struct {
 	DebugLoggerEnabled    bool          `json:"debug_logger_enabled" mapstructure:"debug_logger_enabled" ini:"debug_logger_enabled" yaml:"debug_logger_enabled"`
 	ConnectionPoolSize    int           `json:"connection_pool_size" mapstructure:"connection_pool_size" ini:"connection_pool_size" yaml:"connection_pool_size"`
 	ResponseHeaderTimeout time.Duration `json:"response_header_timeout" mapstructure:"response_header_timeout" ini:"response_header_timeout" yaml:"response_header_timeout"`
-	RequestTimeout        time.Duration `json:"request_timeout" mapstructure:"request_timeout" ini:"request_timeout" yaml:"request_timeout"`
 	DialTimeout           time.Duration `json:"dial_timeout" mapstructure:"dial_timeout" ini:"dial_timeout" yaml:"dial_timeout"`
 	KeepAliveInterval     time.Duration `json:"keep_alive_interval" mapstructure:"keep_alive_interval" ini:"keep_alive_interval" yaml:"keep_alive_interval"`
 
@@ -86,7 +84,6 @@ func (*Elasticsearch) setDefaults(v *viper.Viper) {
 	v.SetDefault("elasticsearch.debug_logger_enabled", false)
 	v.SetDefault("elasticsearch.connection_pool_size", 0)    // Default is 0 (unlimited)
 	v.SetDefault("elasticsearch.response_header_timeout", 0) // 0 means no timeout
-	v.SetDefault("elasticsearch.request_timeout", 0)         // 0 means no timeout
 	v.SetDefault("elasticsearch.dial_timeout", 30*time.Second)
 	v.SetDefault("elasticsearch.keep_alive_interval", 15*time.Second)
 

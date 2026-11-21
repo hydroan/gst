@@ -14,7 +14,6 @@ const (
 	LDAP_BIND_DN         = "LDAP_BIND_DN"
 	LDAP_BIND_PASSWORD   = "LDAP_BIND_PASSWORD"
 	LDAP_ATTRIBUTES      = "LDAP_ATTRIBUTES"
-	LDAP_FILTER          = "LDAP_FILTER"
 	LDAP_GROUP_FILTER    = "LDAP_GROUP_FILTER"
 	LDAP_USER_FILTER     = "LDAP_USER_FILTER"
 	LDAP_GROUP_DN        = "LDAP_GROUP_DN"
@@ -23,8 +22,6 @@ const (
 	LDAP_USER_ATTRIBUTE  = "LDAP_USER_ATTRIBUTE"
 	LDAP_SCOPE           = "LDAP_SCOPE"
 	LDAP_REQUEST_TIMEOUT = "LDAP_REQUEST_TIMEOUT"
-	LDAP_CONN_TIMEOUT    = "LDAP_CONN_TIMEOUT"
-	LDAP_REFERRALS       = "LDAP_REFERRALS"
 	LDAP_DEREF           = "LDAP_DEREF"
 	LDAP_PAGE_SIZE       = "LDAP_PAGE_SIZE"
 	LDAP_HEARTBEAT       = "LDAP_HEARTBEAT"
@@ -71,7 +68,6 @@ type Ldap struct {
 	BindDN         string   `json:"bind_dn" mapstructure:"bind_dn" ini:"bind_dn" yaml:"bind_dn"`
 	BindPassword   string   `json:"bind_password" mapstructure:"bind_password" ini:"bind_password" yaml:"bind_password"`
 	Attributes     []string `json:"attributes" mapstructure:"attributes" ini:"attributes" yaml:"attributes"`
-	Filter         string   `json:"filter" mapstructure:"filter" ini:"filter" yaml:"filter"`
 	GroupFilter    string   `json:"group_filter" mapstructure:"group_filter" ini:"group_filter" yaml:"group_filter"`
 	UserFilter     string   `json:"user_filter" mapstructure:"user_filter" ini:"user_filter" yaml:"user_filter"`
 	GroupDN        string   `json:"group_dn" mapstructure:"group_dn" ini:"group_dn" yaml:"group_dn"`
@@ -84,8 +80,6 @@ type Ldap struct {
 	// Default: 2
 	Scope          Scope         `json:"scope" mapstructure:"scope" ini:"scope" yaml:"scope"`
 	RequestTimeout time.Duration `json:"request_timeout" mapstructure:"request_timeout" ini:"request_timeout" yaml:"request_timeout"`
-	ConnTimeout    time.Duration `json:"conn_timeout" mapstructure:"conn_timeout" ini:"conn_timeout" yaml:"conn_timeout"`
-	Referrals      bool          `json:"referrals" mapstructure:"referrals" ini:"referrals" yaml:"referrals"`
 	// Deref is when a search dereferences aliases: 0 never, 1 while
 	// searching, 2 when finding the base object, 3 always. Any other value
 	// fails startup.
@@ -111,7 +105,6 @@ func (*Ldap) setDefaults(v *viper.Viper) {
 	v.SetDefault("ldap.bind_dn", "")
 	v.SetDefault("ldap.bind_password", "")
 	v.SetDefault("ldap.attributes", []string{"*"})
-	v.SetDefault("ldap.filter", "(objectClass=*)")
 	v.SetDefault("ldap.group_filter", "(objectClass=groupOfNames)")
 	v.SetDefault("ldap.user_filter", "(objectClass=person)")
 	v.SetDefault("ldap.group_dn", "")
@@ -120,8 +113,6 @@ func (*Ldap) setDefaults(v *viper.Viper) {
 	v.SetDefault("ldap.user_attribute", "uid")
 	v.SetDefault("ldap.scope", ScopeWholeSubtree)
 	v.SetDefault("ldap.request_timeout", 10*time.Second)
-	v.SetDefault("ldap.conn_timeout", 10*time.Second)
-	v.SetDefault("ldap.referrals", false)
 	v.SetDefault("ldap.deref", NeverDerefAliases)
 	v.SetDefault("ldap.page_size", 1000)
 	v.SetDefault("ldap.heartbeat", 30*time.Second)

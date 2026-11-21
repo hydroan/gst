@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"runtime"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -17,14 +16,9 @@ const (
 	APP_NAME        = "APP_NAME"
 	APP_VERSION     = "APP_VERSION"
 	APP_DESCRIPTION = "APP_DESCRIPTION"
-	APP_AUTHOR      = "APP_AUTHOR"
-	APP_EMAIL       = "APP_EMAIL"
-	APP_HOMEPAGE    = "APP_HOMEPAGE"
-	APP_LICENSE     = "APP_LICENSE"
 	APP_BUILD_TIME  = "APP_BUILD_TIME"
 	APP_GIT_COMMIT  = "APP_GIT_COMMIT"
 	APP_GIT_BRANCH  = "APP_GIT_BRANCH"
-	APP_GO_VERSION  = "APP_GO_VERSION"
 )
 
 // AppInfo represents application metadata and build information
@@ -35,21 +29,14 @@ type AppInfo struct {
 	Name        string `json:"name" mapstructure:"name" ini:"name" yaml:"name"`
 	Version     string `json:"version" mapstructure:"version" ini:"version" yaml:"version"`
 	Description string `json:"description" mapstructure:"description" ini:"description" yaml:"description"`
-	Author      string `json:"author" mapstructure:"author" ini:"author" yaml:"author"`
-	Email       string `json:"email" mapstructure:"email" ini:"email" yaml:"email"`
-	Homepage    string `json:"homepage" mapstructure:"homepage" ini:"homepage" yaml:"homepage"`
-	License     string `json:"license" mapstructure:"license" ini:"license" yaml:"license"`
 
 	// Build and runtime information. BuildTime is the time the configuration
 	// names, or else the time of the commit Go recorded in the binary.
 	BuildTime    time.Time `json:"build_time" mapstructure:"build_time" ini:"build_time" yaml:"build_time"`
 	GitCommit    string    `json:"git_commit" mapstructure:"git_commit" ini:"git_commit" yaml:"git_commit"`
 	GitBranch    string    `json:"git_branch" mapstructure:"git_branch" ini:"git_branch" yaml:"git_branch"`
-	GoVersion    string    `json:"go_version" mapstructure:"go_version" ini:"go_version" yaml:"go_version"`
 	GitTag       string    `json:"git_tag" mapstructure:"git_tag" ini:"git_tag" yaml:"git_tag"`
 	GitTreeState string    `json:"git_tree_state" mapstructure:"git_tree_state" ini:"git_tree_state" yaml:"git_tree_state"`
-	Platform     string    `json:"platform" mapstructure:"platform" ini:"platform" yaml:"platform"`
-	Compiler     string    `json:"compiler" mapstructure:"compiler" ini:"compiler" yaml:"compiler"`
 	BuildTags    []string  `json:"build_tags" mapstructure:"build_tags" ini:"build_tags" yaml:"build_tags"`
 }
 
@@ -58,10 +45,6 @@ func (a *AppInfo) setDefaults(v *viper.Viper) {
 	v.SetDefault("app.name", types.FrameworkName)
 	v.SetDefault("app.version", "")
 	v.SetDefault("app.description", fmt.Sprintf("A Go application built with %s framework", types.FrameworkName))
-	v.SetDefault("app.license", "MIT")
-	v.SetDefault("app.go_version", runtime.Version())
-	v.SetDefault("app.platform", runtime.GOOS+"/"+runtime.GOARCH)
-	v.SetDefault("app.compiler", runtime.Compiler)
 
 	// What the build information Go records in the binary supplies becomes the
 	// default of its key, so a file or an environment variable still overrides
