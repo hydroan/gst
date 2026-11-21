@@ -3,15 +3,7 @@ package ggcheck
 import (
 	"fmt"
 	"go/ast"
-	"go/parser"
-	"go/token"
-	"os"
-	"path/filepath"
-	"reflect"
-	"strconv"
-	"strings"
 
-	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	gormschema "gorm.io/gorm/schema"
 	"gorm.io/gorm/utils"
@@ -24,86 +16,27 @@ var GormTagIndexBan = Check{
 	run:  checkGormTagIndexBan,
 }
 
+// gormTag is the struct tag gorm reads the settings of a field from.
+const gormTag = "gorm"
+
 // checkGormTagIndexBan reports struct fields that configure indexes through
 // gorm struct tags. Indexes are declared exclusively through the model's
 // Indexes() []model.Index method, which validates the fields, generates the
 // names, and feeds bootstrap and gg migrate from one definition; a tag index
 // would bypass all of that. Only the primary key stays in tags, declared by
-// the framework base structs themselves. Model subtrees owned by copyable
-// framework modules are skipped, since copied module code is owned by the
-// framework repository.
+// the framework base structs themselves. The fields read are those of the
+// project's own model files (see structFieldViolations).
 func checkGormTagIndexBan(ignore gghelper.ProjectIgnore) []string {
-	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
-		return nil
-	}
-
-	owned, err := copyableModuleOwners()
-	if err != nil {
-		return []string{fmt.Sprintf("listing copyable framework modules: %v", err)}
-	}
-
-	var violations []string
-	walkErr := ignore.Walk(ggconst.DirModel, func(path string, info os.FileInfo) error {
-		if info.IsDir() {
-			if moduleOwnedPath(owned, ggconst.DirModel, path) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		base := filepath.Base(path)
-		if !strings.HasSuffix(base, ggconst.ExtensionGo) || strings.HasSuffix(base, ggconst.PatternTestFile) || isGeneratedFileName(path) {
-			return nil
-		}
-		violations = append(violations, checkFileGormTagIndexBan(path)...)
-		return nil
-	})
-	if walkErr != nil {
-		violations = append(violations, fmt.Sprintf("walking model directory: %v", walkErr))
-	}
-	return violations
-}
-
-// checkFileGormTagIndexBan reports the index-configuring gorm tags in one
-// file. A file that fails to parse is reported as a violation so broken code
-// cannot slip past the check.
-func checkFileGormTagIndexBan(path string) []string {
-	var violations []string
-
-	fset := token.NewFileSet()
-	node, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
-	if err != nil {
-		return append(violations, fmt.Sprintf("%s has parse error: %v", gghelper.RelativePath(path), err))
-	}
-	relPath := gghelper.RelativePath(path)
-
-	for _, decl := range node.Decls {
-		genDecl, ok := decl.(*ast.GenDecl)
+	return structFieldViolations(ignore, func(structName string, field *ast.Field) string {
+		key, ok := gormIndexTagKey(field)
 		if !ok {
-			continue
+			return ""
 		}
-		for _, spec := range genDecl.Specs {
-			typeSpec, ok := spec.(*ast.TypeSpec)
-			if !ok || typeSpec.Name == nil {
-				continue
-			}
-			structType, ok := typeSpec.Type.(*ast.StructType)
-			if !ok || structType.Fields == nil {
-				continue
-			}
-			for _, field := range structType.Fields.List {
-				key, ok := gormIndexTagKey(field)
-				if !ok {
-					continue
-				}
-				pos := fset.Position(field.Pos())
-				violations = append(violations, fmt.Sprintf(
-					"%s:%d: field '%s.%s' configures an index through the gorm tag (%s); declare it through the model's Indexes() []model.Index method instead",
-					relPath, pos.Line, typeSpec.Name.Name, fieldDisplayName(field), key,
-				))
-			}
-		}
-	}
-	return violations
+		return fmt.Sprintf(
+			"field '%s.%s' configures an index through the gorm tag (%s); declare it through the model's Indexes() []model.Index method instead",
+			structName, fieldDisplayName(field), key,
+		)
+	})
 }
 
 // gormIndexTagKey returns the index setting the field's gorm tag carries,
@@ -117,18 +50,11 @@ func checkFileGormTagIndexBan(path string) []string {
 // banned alongside index and uniqueIndex because it creates a unique index
 // too and would reopen the side door the ban closes.
 func gormIndexTagKey(field *ast.Field) (string, bool) {
-	if field.Tag == nil {
-		return "", false
-	}
-	raw, err := strconv.Unquote(field.Tag.Value)
-	if err != nil {
-		return "", false
-	}
-	gormTag, ok := reflect.StructTag(raw).Lookup("gorm")
+	value, ok := structTagValue(field, gormTag)
 	if !ok {
 		return "", false
 	}
-	settings := gormschema.ParseTagSetting(gormTag, ";")
+	settings := gormschema.ParseTagSetting(value, ";")
 	switch {
 	case settings["INDEX"] != "":
 		return "index", true
@@ -138,16 +64,4 @@ func gormIndexTagKey(field *ast.Field) (string, bool) {
 		return "unique", true
 	}
 	return "", false
-}
-
-// fieldDisplayName names a struct field for the violation message: the
-// declared name, or the embedded type's base name.
-func fieldDisplayName(field *ast.Field) string {
-	if len(field.Names) > 0 {
-		return field.Names[0].Name
-	}
-	if name, ok := typeBaseName(field.Type); ok {
-		return name
-	}
-	return "(embedded)"
 }

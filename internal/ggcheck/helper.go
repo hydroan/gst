@@ -1,9 +1,10 @@
 // The helpers the checks share: the files gg generates and owns, the subtrees
-// gg module copy writes, the models read the way gg gen reads them and what
-// the column inspection finds in them, the explicit DSL Payload and Result
-// calls and the names type expressions end in, and what the checks know about
-// imports and packages, the framework's own and the project's. No check lives
-// here; every check has a file of its own.
+// gg module copy writes, the struct fields the project's own model files
+// declare and what their tags carry, the models read the way gg gen reads
+// them and what the column inspection finds in them, the explicit DSL Payload
+// and Result calls and the names type expressions end in, and what the checks
+// know about imports and packages, the framework's own and the project's. No
+// check lives here; every check has a file of its own.
 
 package ggcheck
 
@@ -12,8 +13,11 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -59,6 +63,116 @@ func moduleOwnedPath(owned map[string]bool, root, path string) bool {
 	}
 	first, _, _ := strings.Cut(rel, string(filepath.Separator))
 	return owned[first]
+}
+
+// structFieldViolations serves the checks of what a struct field may declare
+// in its tag. It reads the struct types the project's own model files
+// declare, every Go file below the model directory but test files, the files
+// gg generates and the subtrees copyable framework modules own, copied module
+// code being owned by the framework repository, and reports what violation
+// finds in each of their fields under the file and the line of the field:
+// for the fault "field 'Record.Name' carries a tag it may not" of a field on
+// line 6 of model/record/record.go,
+//
+//	model/record/record.go:6: field 'Record.Name' carries a tag it may not
+//
+// violation is given the name of the struct and the field, and returns "" for
+// a field it finds no fault in.
+func structFieldViolations(ignore gghelper.ProjectIgnore, violation func(structName string, field *ast.Field) string) []string {
+	if _, err := os.Stat(ggconst.DirModel); os.IsNotExist(err) {
+		return nil
+	}
+
+	owned, err := copyableModuleOwners()
+	if err != nil {
+		return []string{fmt.Sprintf("listing copyable framework modules: %v", err)}
+	}
+
+	var violations []string
+	walkErr := ignore.Walk(ggconst.DirModel, func(path string, info os.FileInfo) error {
+		if info.IsDir() {
+			if moduleOwnedPath(owned, ggconst.DirModel, path) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		base := filepath.Base(path)
+		if !strings.HasSuffix(base, ggconst.ExtensionGo) || strings.HasSuffix(base, ggconst.PatternTestFile) || isGeneratedFileName(path) {
+			return nil
+		}
+		violations = append(violations, fileStructFieldViolations(path, violation)...)
+		return nil
+	})
+	if walkErr != nil {
+		violations = append(violations, fmt.Sprintf("walking model directory: %v", walkErr))
+	}
+	return violations
+}
+
+// fileStructFieldViolations reports what violation finds in the fields of the
+// struct types one file declares (see structFieldViolations). A file that
+// fails to parse is reported itself, so broken code cannot slip past a check.
+func fileStructFieldViolations(path string, violation func(structName string, field *ast.Field) string) []string {
+	var violations []string
+
+	fset := token.NewFileSet()
+	node, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
+	if err != nil {
+		return append(violations, fmt.Sprintf("%s has parse error: %v", gghelper.RelativePath(path), err))
+	}
+	relPath := gghelper.RelativePath(path)
+
+	for _, decl := range node.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok {
+			continue
+		}
+		for _, spec := range genDecl.Specs {
+			typeSpec, ok := spec.(*ast.TypeSpec)
+			if !ok || typeSpec.Name == nil {
+				continue
+			}
+			structType, ok := typeSpec.Type.(*ast.StructType)
+			if !ok || structType.Fields == nil {
+				continue
+			}
+			for _, field := range structType.Fields.List {
+				found := violation(typeSpec.Name.Name, field)
+				if found == "" {
+					continue
+				}
+				violations = append(violations, fmt.Sprintf("%s:%d: %s", relPath, fset.Position(field.Pos()).Line, found))
+			}
+		}
+	}
+	return violations
+}
+
+// structTagValue returns the value the field's struct tag carries under key,
+// read the way reflect.StructTag.Lookup reads a tag, and whether the tag has
+// the key at all: for the field Name string `json:"name" gorm:"size:64"` and
+// the key gorm, size:64 and true.
+func structTagValue(field *ast.Field, key string) (string, bool) {
+	if field.Tag == nil {
+		return "", false
+	}
+	raw, err := strconv.Unquote(field.Tag.Value)
+	if err != nil {
+		return "", false
+	}
+	return reflect.StructTag(raw).Lookup(key)
+}
+
+// fieldDisplayName names a struct field for the violation message: the
+// declared name, or the embedded type's base name.
+func fieldDisplayName(field *ast.Field) string {
+	if len(field.Names) > 0 {
+		return field.Names[0].Name
+	}
+	if name, ok := typeBaseName(field.Type); ok {
+		return name
+	}
+	return "(embedded)"
 }
 
 // dslActionTypeCall returns the kind and type argument for DSL Payload/Result calls.
