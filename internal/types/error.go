@@ -41,9 +41,9 @@ type Error struct {
 	// violations are the fields the request was refused on, set by
 	// NewInvalidFields, one per field the validator refused, and by
 	// NewInvalidValue, the one field holding a value it cannot hold, and read
-	// through FieldViolations; the gRPC answer lists them as its details, while
-	// the HTTP answer carries msg, which NewInvalidFields joins from their
-	// descriptions.
+	// through FieldViolations; both answers list them, the gRPC one as its
+	// details and the HTTP one as the data of its envelope, beside the msg
+	// NewInvalidFields joins from their descriptions.
 	violations []FieldViolation
 	// stack holds the program counters captured at the construction site,
 	// exposed through StackTrace so error-stack consumers such as
@@ -53,10 +53,11 @@ type Error struct {
 
 // FieldViolation is one field a request was refused on: the field by its JSON
 // key path, address.city or items[1].name, and the client-safe description of
-// what it failed, the shape of google.rpc.BadRequest's FieldViolation.
+// what it failed, the shape of google.rpc.BadRequest's FieldViolation. The
+// JSON keys are the ones the HTTP envelope lists a violation by.
 type FieldViolation struct {
-	Field       string
-	Description string
+	Field       string `json:"field"`
+	Description string `json:"description"`
 }
 
 // NewInvalidFields creates the 400 of a request whose fields the validator
@@ -78,9 +79,9 @@ func NewInvalidFields(violations []FieldViolation, cause error) *Error {
 // the field cannot hold, an integer out of its range, a string where a
 // number is due: the message names the field by its JSON key path, "invalid
 // value for field 'items[1].rank'", the one violation carries field and
-// description for the gRPC details (see FieldViolations), and cause, the
-// decoder's error, is reported by Error for logs and available through
-// Unwrap.
+// description for the details of the answer (see FieldViolations), and
+// cause, the decoder's error, is reported by Error for logs and available
+// through Unwrap.
 func NewInvalidValue(field, description string, cause error) *Error {
 	err := newError(http.StatusBadRequest, "invalid value for field '"+field+"'", cause)
 	err.violations = []FieldViolation{{Field: field, Description: description}}
@@ -172,8 +173,9 @@ func (e *Error) Unwrap() error {
 // which only an error NewInvalidFields or NewInvalidValue created carries; nil
 // for any other error, and for nil. It is a package function rather than a
 // method so it stays out of the public alias of Error: only the framework's
-// gRPC answer reads the fields, to list them as its details, and the type they
-// come as is the framework's own.
+// own answers read the fields, the gRPC one to list them as its details and
+// the HTTP one as the data of its envelope, and the type they come as is the
+// framework's own.
 func FieldViolations(err *Error) []FieldViolation {
 	if err == nil {
 		return nil

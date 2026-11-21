@@ -22,6 +22,7 @@ import (
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -42,11 +43,12 @@ const (
 // built-in chain of the HTTP listener and the handler of the action, the call
 // through the server and the call function of the action, and both must answer
 // the status the scenario states — the HTTP status, and the gRPC code it maps
-// to (see TRANSPORTS.md, section 4) — the same msg, and leave the records the
-// same. The scenarios the transports answer differently on purpose state what
-// each answers (see TRANSPORTS.md, section 9): a change to one side alone turns
-// the table red, and a new difference has to be written into the table and the
-// document together.
+// to (see TRANSPORTS.md, section 4) — the same msg, name the same fields when
+// the refusal names any, and leave the records the same. The scenarios the
+// transports answer differently on purpose state what each answers (see
+// TRANSPORTS.md, section 9): a change to one side alone turns the table red,
+// and a new difference has to be written into the table and the document
+// together.
 func TestTransportsAnswerTheContractAlike(t *testing.T) {
 	samples := standardFixture[*sampleRecord](sampleRoute, "")
 	refusals := standardFixture[*sampleRecord](refusalRoute, "Refused")
@@ -71,7 +73,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 	refused := contractWant{status: http.StatusConflict, msg: refusedMsg}
 	notFound := contractWant{status: http.StatusNotFound, msg: notFoundMsg}
 	invalid := contractWant{status: http.StatusBadRequest, msg: invalidArgumentMsg}
-	nameRequired := contractWant{status: http.StatusBadRequest, msg: "name is a required field"}
+	nameRequired := contractWant{status: http.StatusBadRequest, msg: "name is a required field", fields: []types.FieldViolation{{Field: "name", Description: "name is a required field"}}}
 	// Each transport words the refusal by what its request lacks: a body,
 	// a record.
 	noRecord := contractWant{status: http.StatusBadRequest, msg: "request body is required", grpc: &grpcAnswer{code: codes.InvalidArgument, msg: "record is required"}}
@@ -287,7 +289,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 		{
 			name: "Create refuses a value the field cannot hold and stores nothing", fixture: shaped, phase: apiaction.Create,
 			input: contractInput{record: map[string]any{"name": uniqueName("contract-narrow"), "rank": 300}},
-			want:  contractWant{status: http.StatusBadRequest, msg: "invalid value for field 'rank'"},
+			want:  contractWant{status: http.StatusBadRequest, msg: "invalid value for field 'rank'", fields: []types.FieldViolation{{Field: "rank", Description: "number 300 does not fit the field"}}},
 			check: func(t *testing.T, in contractInput, _ contractAnswer) {
 				t.Helper()
 				require.Zero(t, countShapedNamed(t, stringOf(in.record["name"])))
@@ -1425,6 +1427,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			}
 			if len(answered) == len(contractTransports) && s.want.grpc == nil && s.want.status != http.StatusOK {
 				require.Equal(t, answered[contractTransports[0].name].msg, answered[contractTransports[1].name].msg, "both transports refuse with the same msg")
+				require.Equal(t, answered[contractTransports[0].name].violations, answered[contractTransports[1].name].violations, "both transports name the same fields")
 			}
 		})
 	}
@@ -1474,24 +1477,29 @@ type contractInput struct {
 }
 
 // contractAnswer is what a transport answered: the HTTP status and the msg
-// of the envelope, or the gRPC code and message; and the data answered, the
-// envelope's data or the response message.
+// of the envelope, or the gRPC code and message; the data answered, the
+// envelope's data or the response message; and the fields a refusal names,
+// the field_violations of the envelope's data or of the status's
+// google.rpc.BadRequest detail.
 type contractAnswer struct {
-	status int
-	code   codes.Code
-	msg    string
-	data   any
+	status     int
+	code       codes.Code
+	msg        string
+	data       any
+	violations []types.FieldViolation
 }
 
 // contractWant is what a scenario must be answered: the HTTP status, the
-// gRPC code it maps to unless code says otherwise, and the msg of both,
-// left empty when the scenario only requires the two to be the same. A
-// scenario the transports answer differently on purpose states in grpc
-// what gRPC answers instead.
+// gRPC code it maps to unless code says otherwise, the msg of both, left
+// empty when the scenario only requires the two to be the same, and the
+// fields the refusal names, left nil the same way. A scenario the
+// transports answer differently on purpose states in grpc what gRPC answers
+// instead.
 type contractWant struct {
 	status int
 	code   codes.Code
 	msg    string
+	fields []types.FieldViolation
 	grpc   *grpcAnswer
 }
 
@@ -1649,6 +1657,18 @@ func overHTTP(t *testing.T, f contractFixture, phase apiaction.Phase, in contrac
 	if err := json.Unmarshal(rsp.Body.Bytes(), &envelope); err == nil {
 		answer.msg, answer.data = envelope.Msg, envelope.Data
 	}
+	if rsp.Code != http.StatusOK {
+		// The data of a refusal is null or the fields it names; a body
+		// holding neither names none.
+		var refusal struct {
+			Data struct {
+				FieldViolations []types.FieldViolation `json:"field_violations"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(rsp.Body.Bytes(), &refusal); err == nil {
+			answer.violations = refusal.Data.FieldViolations
+		}
+	}
 	return answer
 }
 
@@ -1719,7 +1739,17 @@ func overGRPC(t *testing.T, f contractFixture, phase apiaction.Phase, in contrac
 	out, err := invokeIn(ctx, t, sampleServer(t), f.rpc(phase), message, credential)
 	if err != nil {
 		st := status.Convert(err)
-		return contractAnswer{code: st.Code(), msg: st.Message()}
+		answer := contractAnswer{code: st.Code(), msg: st.Message()}
+		for _, detail := range st.Details() {
+			bad, ok := detail.(*errdetails.BadRequest)
+			if !ok {
+				continue
+			}
+			for _, violation := range bad.GetFieldViolations() {
+				answer.violations = append(answer.violations, types.FieldViolation{Field: violation.GetField(), Description: violation.GetDescription()})
+			}
+		}
+		return answer
 	}
 	return contractAnswer{code: codes.OK, data: out}
 }
@@ -1749,9 +1779,9 @@ func filtersByNothingOverHTTP(t *testing.T, _ contractInput, got contractAnswer)
 }
 
 // requireHTTPAnswer requires got, what HTTP answered, to carry the status
-// want states and its msg: the success msg of the envelope for 200, the
-// msg of the refusal otherwise, unless want leaves it to the comparison
-// of the two transports.
+// want states, its msg — the success msg of the envelope for 200, the msg
+// of the refusal otherwise — and the fields want states the refusal names,
+// unless want leaves either to the comparison of the two transports.
 func requireHTTPAnswer(t *testing.T, got contractAnswer, want contractWant) {
 	t.Helper()
 	require.Equal(t, want.status, got.status, got.msg)
@@ -1761,23 +1791,30 @@ func requireHTTPAnswer(t *testing.T, got contractAnswer, want contractWant) {
 	case want.msg != "":
 		require.Equal(t, want.msg, got.msg)
 	}
+	if want.fields != nil {
+		require.Equal(t, want.fields, got.violations)
+	}
 }
 
 // requireGRPCAnswer requires got, what gRPC answered, to carry the code the
 // status want states maps to, the code want names instead when it does,
-// and the message want states, or what want says gRPC answers on its own.
+// the message want states and the fields it states the refusal names, or
+// what want says gRPC answers on its own.
 func requireGRPCAnswer(t *testing.T, got contractAnswer, want contractWant) {
 	t.Helper()
-	code, msg := grpcCodeOf(want.status), want.msg
+	code, msg, fields := grpcCodeOf(want.status), want.msg, want.fields
 	if want.code != codes.OK {
 		code = want.code
 	}
 	if want.grpc != nil {
-		code, msg = want.grpc.code, want.grpc.msg
+		code, msg, fields = want.grpc.code, want.grpc.msg, nil
 	}
 	require.Equal(t, code, got.code, got.msg)
 	if msg != "" {
 		require.Equal(t, msg, got.msg)
+	}
+	if fields != nil {
+		require.Equal(t, fields, got.violations)
 	}
 }
 

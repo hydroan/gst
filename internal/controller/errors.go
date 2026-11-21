@@ -32,13 +32,18 @@ const (
 )
 
 // invalidArgument returns the refusal of a request the controller could not
-// carry, err: 400 with the client-safe text of err — the message of the
-// service error err wraps, when it does, err's own text otherwise — and err
-// as the cause.
+// carry, err: the service error err wraps when that one answers 400
+// already, whole, so the fields it names (see types.FieldViolations) reach
+// the answer; otherwise 400 with the client-safe text of err — the message
+// of the service error err wraps, when it does, err's own text otherwise —
+// and err as the cause.
 func invalidArgument(err error) *types.Error {
 	msg := err.Error()
 	var serviceErr *types.Error
 	if errors.As(err, &serviceErr) {
+		if serviceErr.Status() == http.StatusBadRequest {
+			return serviceErr
+		}
 		msg = serviceErr.Msg()
 	}
 	return types.NewErrorWithCause(http.StatusBadRequest, msg, err)

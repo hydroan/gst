@@ -37,17 +37,34 @@ func JSON(c *gin.Context, data ...any) {
 
 // Error writes err in the failure envelope: a service error, anywhere in the
 // wrap chain, answers with the status and client-safe message it was
-// constructed with; any other error is the server's own failure and answers
-// 500 with failureMsg. Internal error text — database drivers naming tables
-// and columns, third-party client output — never reaches the envelope;
-// callers log the full error themselves before answering it here.
+// constructed with and, when it names the fields the request was refused on
+// (see types.FieldViolations), with those fields as its data, the list a
+// gRPC status carries as its google.rpc.BadRequest detail:
+//
+//	{"data":{"field_violations":[{"field":"items[1].name","description":"items[1].name is a required field"}]},"msg":"items[1].name is a required field","trace_id":"..."}
+//
+// A failure naming no field answers data null, and any other error is the
+// server's own failure and answers 500 with failureMsg. Internal error text
+// — database drivers naming tables and columns, third-party client output —
+// never reaches the envelope; callers log the full error themselves before
+// answering it here.
 func Error(c *gin.Context, err error) {
 	var serviceErr *types.Error
 	if errors.As(err, &serviceErr) {
-		envelope(c, serviceErr.Status(), serviceErr.Msg(), nil)
+		var data any
+		if violations := types.FieldViolations(serviceErr); len(violations) > 0 {
+			data = failureData{FieldViolations: violations}
+		}
+		envelope(c, serviceErr.Status(), serviceErr.Msg(), data)
 		return
 	}
 	envelope(c, failureStatus, failureMsg, nil)
+}
+
+// failureData is the data of a failure envelope naming the fields the
+// request was refused on.
+type failureData struct {
+	FieldViolations []types.FieldViolation `json:"field_violations"`
 }
 
 // Abort refuses the request with err, written in the failure envelope the

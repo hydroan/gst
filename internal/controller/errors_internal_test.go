@@ -69,10 +69,30 @@ func TestDatabaseErrorMapsEachDatabaseErrorToItsAnswer(t *testing.T) {
 	})
 }
 
+// TestInvalidArgumentAnswersA400AsItIs pins that a refusal that answers 400
+// already, wrapped or not, is the answer whole: the fields it names (see
+// types.FieldViolations) reach the transport, where a new refusal built from
+// its message would leave them behind.
+func TestInvalidArgumentAnswersA400AsItIs(t *testing.T) {
+	violations := []types.FieldViolation{{Field: "name", Description: "name is a required field"}}
+	refused := types.NewInvalidFields(violations, errors.New("validator said so"))
+
+	for name, err := range map[string]error{"refusal": refused, "wrapped refusal": errors.Wrap(refused, "bind the record")} {
+		t.Run(name, func(t *testing.T) {
+			answer := invalidArgument(err)
+
+			require.Same(t, refused, answer)
+			require.Equal(t, http.StatusBadRequest, answer.Status())
+			require.Equal(t, "name is a required field", answer.Msg())
+			require.Equal(t, violations, types.FieldViolations(answer))
+		})
+	}
+}
+
 // TestInvalidArgumentCarriesTheClientSafeText pins the refusal of a request
-// the controller could not carry: 400, with the message of the service error
-// the error wraps when it does, and the error's own text otherwise, the
-// error behind as the cause either way.
+// the controller could not carry, when the error is no 400 of its own: 400,
+// with the message of the service error the error wraps when it does, and
+// the error's own text otherwise, the error behind as the cause either way.
 func TestInvalidArgumentCarriesTheClientSafeText(t *testing.T) {
 	cause := errors.New("database password leaked")
 	serviceErr := types.NewErrorWithCause(http.StatusInternalServerError, "failed to load user", cause)
