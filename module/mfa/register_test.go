@@ -159,6 +159,27 @@ func TestTOTPConfirm(t *testing.T) {
 	challengeID, secret := createTOTPBindingChallenge(t, account.SessionID)
 	cli := mfaSessionClient(t, account.SessionID)
 
+	t.Run("refuses_a_request_its_rules_refuse", func(t *testing.T) {
+		// The request is refused before the service runs, naming the
+		// field, so the challenge is still there for the subtests below.
+		code, err := totp.GenerateCode(secret, time.Now())
+		require.NoError(t, err)
+		for name, tt := range map[string]struct {
+			req   mfa.TOTPConfirmReq
+			field string
+		}{
+			"without a challenge":          {mfa.TOTPConfirmReq{Code: code, DeviceName: "test-device"}, "challenge_id"},
+			"a code of the wrong length":   {mfa.TOTPConfirmReq{ChallengeID: challengeID, Code: "12345", DeviceName: "test-device"}, "code"},
+			"without a device name":        {mfa.TOTPConfirmReq{ChallengeID: challengeID, Code: code}, "device_name"},
+			"a device name past the limit": {mfa.TOTPConfirmReq{ChallengeID: challengeID, Code: code, DeviceName: strings.Repeat("x", 101)}, "device_name"},
+		} {
+			_, err := cli.Do(t.Context(), http.MethodPost, confirmPath, tt.req)
+			rejection := testutil.RequireError(t, err, http.StatusBadRequest)
+			require.Len(t, rejection.FieldViolations, 1, name)
+			require.Equal(t, tt.field, rejection.FieldViolations[0].Field, name)
+		}
+	})
+
 	t.Run("invalid_challenge", func(t *testing.T) {
 		code, err := totp.GenerateCode(secret, time.Now())
 		require.NoError(t, err)
@@ -517,7 +538,21 @@ func TestTOTPUnbindErrorContract(t *testing.T) {
 
 	t.Run("missing_device_id", func(t *testing.T) {
 		_, err := cli.Do(t.Context(), http.MethodPost, unbindPath, mfa.TOTPUnbindReq{TOTPCode: "000000"})
-		testutil.RequireError(t, err, http.StatusBadRequest, "device_id is required")
+		rejection := testutil.RequireError(t, err, http.StatusBadRequest, "device_id is a required field")
+		require.Equal(t, []client.FieldViolation{{Field: "device_id", Description: "device_id is a required field"}}, rejection.FieldViolations)
+	})
+
+	t.Run("malformed_totp_code", func(t *testing.T) {
+		// A code that is not six digits, too short or holding a letter, is a
+		// malformed request, refused naming the field before any credential
+		// is judged.
+		for _, code := range []string{"12345", "12ab56"} {
+			_, err := cli.Do(t.Context(), http.MethodPost, unbindPath, mfa.TOTPUnbindReq{DeviceID: deviceID, TOTPCode: code})
+			rejection := testutil.RequireError(t, err, http.StatusBadRequest)
+			require.Len(t, rejection.FieldViolations, 1, code)
+			require.Equal(t, "totp_code", rejection.FieldViolations[0].Field, code)
+		}
+		assertTOTPDeviceActive(t, deviceID)
 	})
 
 	t.Run("invalid_credential_hides_device_existence", func(t *testing.T) {

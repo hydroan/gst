@@ -8,7 +8,7 @@ import (
 // VerificationConfirmReq is the payload for POST /api/iam/email/verification-confirm.
 // It carries the verification token from the email link or client-side confirmation flow.
 type VerificationConfirmReq struct {
-	Token string `json:"token" validate:"required"`
+	Token string `json:"token" binding:"required"`
 }
 
 // VerificationConfirmRsp is the response for POST /api/iam/email/verification-confirm.

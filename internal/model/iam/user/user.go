@@ -60,8 +60,8 @@ type AdminUserView struct {
 // nothing else: which tenants it belongs to and what it may do there are role
 // bindings, which authz owns and this module deliberately does not write.
 type AdminUserCreateReq struct {
-	Username string `json:"username" validate:"required"`
-	Password string `json:"password" validate:"required"`
+	Username string `json:"username" binding:"required"`
+	Password string `json:"password" binding:"required"`
 	Email    string `json:"email,omitempty"`
 
 	// MustChangePassword defaults to true when omitted, because a password

@@ -8,7 +8,7 @@ import (
 // ChangeResendReq is the payload for POST /api/iam/email/change-resend.
 // It identifies the pending target email address that should receive a new confirmation message.
 type ChangeResendReq struct {
-	NewEmail string `json:"new_email" validate:"required,email"`
+	NewEmail string `json:"new_email" binding:"required,email"`
 }
 
 // ChangeResendRsp is the response for POST /api/iam/email/change-resend.

@@ -8,7 +8,7 @@ import (
 // ChangeConfirmReq is the payload for POST /api/iam/email/change-confirm.
 // It carries the confirmation token from the email change link or confirmation page.
 type ChangeConfirmReq struct {
-	Token string `json:"token" validate:"required"`
+	Token string `json:"token" binding:"required"`
 }
 
 // ChangeConfirmRsp is the response for POST /api/iam/email/change-confirm.

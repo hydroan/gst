@@ -12,9 +12,9 @@ type TOTPConfirm struct {
 
 // TOTPConfirmReq confirms a pending TOTP binding challenge.
 type TOTPConfirmReq struct {
-	ChallengeID string `json:"challenge_id" validate:"required"`
-	Code        string `json:"code" validate:"required,len=6"` // 6-digit TOTP code to confirm
-	DeviceName  string `json:"device_name" validate:"required,max=100"`
+	ChallengeID string `json:"challenge_id" binding:"required"`
+	Code        string `json:"code" binding:"required,len=6"` // 6-digit TOTP code to confirm
+	DeviceName  string `json:"device_name" binding:"required,max=100"`
 }
 
 // TOTPConfirmRsp returns the created device and one-time backup codes.

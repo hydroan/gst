@@ -8,7 +8,7 @@ import (
 // ChangeCancelReq is the payload for POST /api/iam/email/change-cancel.
 // It carries the cancellation token from the notification sent to the old email address.
 type ChangeCancelReq struct {
-	Token string `json:"token" validate:"required"`
+	Token string `json:"token" binding:"required"`
 }
 
 // ChangeCancelRsp is the response for POST /api/iam/email/change-cancel.

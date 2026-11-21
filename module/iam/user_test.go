@@ -393,6 +393,17 @@ func TestAdminUserCreate(t *testing.T) {
 		testutil.RequireError(t, err, http.StatusConflict)
 	})
 
+	t.Run("refuses_a_request_without_a_username_or_a_password", func(t *testing.T) {
+		cli := accountSessionClient(t, rootSessionID)
+
+		_, err := cli.Post[iam.AdminUserCreateRsp](t.Context(), adminUsersPath, iam.AdminUserCreateReq{})
+		rejection := testutil.RequireError(t, err, http.StatusBadRequest)
+		require.Equal(t, []client.FieldViolation{
+			{Field: "username", Description: "username is a required field"},
+			{Field: "password", Description: "password is a required field"},
+		}, rejection.FieldViolations, "the request is refused naming each field its rules refuse")
+	})
+
 	t.Run("rejects_a_password_the_policy_refuses", func(t *testing.T) {
 		cli := accountSessionClient(t, rootSessionID)
 

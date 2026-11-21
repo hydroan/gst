@@ -16,8 +16,8 @@ type TOTPUnbind struct {
 // account that lost both its device and its recovery codes goes through
 // administrative reset instead.
 type TOTPUnbindReq struct {
-	DeviceID   string `json:"device_id" validate:"required"`
-	TOTPCode   string `json:"totp_code,omitempty" validate:"omitempty,len=6,numeric"`
+	DeviceID   string `json:"device_id" binding:"required"`
+	TOTPCode   string `json:"totp_code,omitempty" binding:"omitempty,len=6,numeric"`
 	BackupCode string `json:"backup_code,omitempty"`
 }
 

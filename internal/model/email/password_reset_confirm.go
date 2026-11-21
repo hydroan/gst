@@ -8,8 +8,8 @@ import (
 // PasswordResetConfirmReq is the payload for POST /api/iam/email/password-reset-confirm.
 // It carries the reset token and the new password from the password reset flow.
 type PasswordResetConfirmReq struct {
-	Token       string `json:"token" validate:"required"`
-	NewPassword string `json:"new_password" validate:"required,min=6"`
+	Token       string `json:"token" binding:"required"`
+	NewPassword string `json:"new_password" binding:"required,min=6"`
 }
 
 // PasswordResetConfirmRsp is the response for POST /api/iam/email/password-reset-confirm.
