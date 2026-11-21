@@ -673,7 +673,9 @@ type ListProductResponse struct {
 	// items is the Product records of the page.
 	Items []*Product `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
 	// total is the number of records the filters match, 0 under cursor pagination.
-	Total         int64 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
+	Total int64 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
+	// has_more is whether records lie past the page: before it when the cursor is read backward, after it otherwise.
+	HasMore       bool `protobuf:"varint,3,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -720,6 +722,13 @@ func (x *ListProductResponse) GetTotal() int64 {
 		return x.Total
 	}
 	return 0
+}
+
+func (x *ListProductResponse) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
 }
 
 // GetProductRequest is the request of ProductService.GetProduct.
@@ -1208,10 +1217,11 @@ const file_stress_product_proto_rawDesc = "" +
 	"\x06Filter\x12\x14\n" +
 	"\x05field\x18\x01 \x01(\tR\x05field\x12\x0e\n" +
 	"\x02op\x18\x02 \x01(\tR\x02op\x12\x16\n" +
-	"\x06values\x18\x03 \x03(\tR\x06values\"R\n" +
+	"\x06values\x18\x03 \x03(\tR\x06values\"m\n" +
 	"\x13ListProductResponse\x12%\n" +
 	"\x05items\x18\x01 \x03(\v2\x0f.stress.ProductR\x05items\x12\x14\n" +
-	"\x05total\x18\x02 \x01(\x03R\x05total\"Q\n" +
+	"\x05total\x18\x02 \x01(\x03R\x05total\x12\x19\n" +
+	"\bhas_more\x18\x03 \x01(\bR\ahasMore\"Q\n" +
 	"\x11GetProductRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06expand\x18\x02 \x03(\tR\x06expand\x12\x14\n" +

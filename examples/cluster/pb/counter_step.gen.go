@@ -28,7 +28,7 @@ var (
 // ListCounterStep serves the List action of CounterStep on
 // /api/counter_steps.
 func (counterStepService) ListCounterStep(ctx context.Context, req *ListCounterStepRequest) (*ListCounterStepResponse, error) {
-	models, total, err := listCounterStep(ctx, nil, grpc.Query{
+	models, total, more, err := listCounterStep(ctx, nil, grpc.Query{
 		Filters:     grpc.Filters(req.GetFilters()),
 		SortBy:      req.GetSortBy(),
 		Page:        req.GetPage(),
@@ -50,7 +50,7 @@ func (counterStepService) ListCounterStep(ctx context.Context, req *ListCounterS
 		}
 		items[i] = p
 	}
-	return &ListCounterStepResponse{Items: items, Total: int64(total)}, nil
+	return &ListCounterStepResponse{Items: items, Total: int64(total), HasMore: more}, nil
 }
 
 // WatchCounterStep serves the Stream action of CounterStep on

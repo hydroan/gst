@@ -32,10 +32,16 @@ export interface FieldViolation {
   description: string;
 }
 
-/** ListResult is the data of the default List action. */
+/**
+ * ListResult is the data of the default List action: total counts the
+ * records the query matches, 0 under cursor pagination, and has_more tells
+ * whether records lie past the page, before it when the cursor is read
+ * backward, after it otherwise.
+ */
 export interface ListResult<T> {
   items: T[];
   total: number;
+  has_more: boolean;
 }
 
 /** ItemsPayload is the request body of the default batch create, update and patch actions. */

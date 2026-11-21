@@ -259,7 +259,7 @@ export const level: Level = 2;
 export const permission: Permission = 3;
 
 export const listed: Envelope<ListResult<Record>> = {
-  data: { items: [record], total: 1 },
+  data: { items: [record], total: 1, has_more: false },
   msg: "success",
   trace_id: "trace",
 };

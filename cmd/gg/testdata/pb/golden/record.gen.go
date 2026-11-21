@@ -96,7 +96,7 @@ func (recordService) PatchRecord(ctx context.Context, req *PatchRecordRequest) (
 
 // ListRecord serves the List action of Record on /api/records.
 func (recordService) ListRecord(ctx context.Context, req *ListRecordRequest) (*ListRecordResponse, error) {
-	models, total, err := listRecord(ctx, nil, grpc.Query{
+	models, total, more, err := listRecord(ctx, nil, grpc.Query{
 		Filters:     grpc.Filters(req.GetFilters()),
 		SortBy:      req.GetSortBy(),
 		Page:        req.GetPage(),
@@ -118,7 +118,7 @@ func (recordService) ListRecord(ctx context.Context, req *ListRecordRequest) (*L
 		}
 		items[i] = p
 	}
-	return &ListRecordResponse{Items: items, Total: int64(total)}, nil
+	return &ListRecordResponse{Items: items, Total: int64(total), HasMore: more}, nil
 }
 
 // GetRecord serves the Get action of Record on /api/records/:record.
@@ -230,7 +230,7 @@ func (recordService) PatchManyRecord(ctx context.Context, req *PatchManyRecordRe
 // ListRecordByOwner serves the List action of Record on
 // /api/owners/:owner/records.
 func (recordService) ListRecordByOwner(ctx context.Context, req *ListRecordByOwnerRequest) (*ListRecordByOwnerResponse, error) {
-	models, total, err := listRecordByOwner(ctx, map[string]string{"owner": req.GetOwner()}, grpc.Query{
+	models, total, more, err := listRecordByOwner(ctx, map[string]string{"owner": req.GetOwner()}, grpc.Query{
 		Filters:     grpc.Filters(req.GetFilters()),
 		SortBy:      req.GetSortBy(),
 		Page:        req.GetPage(),
@@ -252,7 +252,7 @@ func (recordService) ListRecordByOwner(ctx context.Context, req *ListRecordByOwn
 		}
 		items[i] = p
 	}
-	return &ListRecordByOwnerResponse{Items: items, Total: int64(total)}, nil
+	return &ListRecordByOwnerResponse{Items: items, Total: int64(total), HasMore: more}, nil
 }
 
 // RecordToProto encodes Record values into their message, nil into nil. A

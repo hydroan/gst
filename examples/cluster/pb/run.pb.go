@@ -271,7 +271,9 @@ type ListRunResponse struct {
 	// items is the Run records of the page.
 	Items []*Run `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
 	// total is the number of records the filters match, 0 under cursor pagination.
-	Total         int64 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
+	Total int64 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
+	// has_more is whether records lie past the page: before it when the cursor is read backward, after it otherwise.
+	HasMore       bool `protobuf:"varint,3,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -318,6 +320,13 @@ func (x *ListRunResponse) GetTotal() int64 {
 		return x.Total
 	}
 	return 0
+}
+
+func (x *ListRunResponse) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
 }
 
 // Filter is one filter of filters: field names the column by its query name, op is the operator, none for the equality every model answers, and values is its value, several for in and notin.
@@ -414,10 +423,11 @@ const file_cluster_run_proto_rawDesc = "" +
 	"\x06Filter\x12\x14\n" +
 	"\x05field\x18\x01 \x01(\tR\x05field\x12\x0e\n" +
 	"\x02op\x18\x02 \x01(\tR\x02op\x12\x16\n" +
-	"\x06values\x18\x03 \x03(\tR\x06values\"K\n" +
+	"\x06values\x18\x03 \x03(\tR\x06values\"f\n" +
 	"\x0fListRunResponse\x12\"\n" +
 	"\x05items\x18\x01 \x03(\v2\f.cluster.RunR\x05items\x12\x14\n" +
-	"\x05total\x18\x02 \x01(\x03R\x05total2J\n" +
+	"\x05total\x18\x02 \x01(\x03R\x05total\x12\x19\n" +
+	"\bhas_more\x18\x03 \x01(\bR\ahasMore2J\n" +
 	"\n" +
 	"RunService\x12<\n" +
 	"\aListRun\x12\x17.cluster.ListRunRequest\x1a\x18.cluster.ListRunResponseB\x0fZ\rcluster/pb;pbb\x06proto3"

@@ -30,12 +30,17 @@ func (e *Envelope) Cookie(name string) *http.Cookie {
 	return nil
 }
 
-// ListResult is the response envelope of the framework's standard List action.
+// ListResult is the data the framework's standard List action answers with.
 // Custom list responses with extra fields decode into their own RSP type
 // instead; nothing forces this shape on them.
+//
+// Total counts the records the query matches, 0 under cursor pagination,
+// which counts nothing. HasMore tells whether records lie past the page:
+// before it when the cursor is read backward, after it otherwise.
 type ListResult[T any] struct {
-	Items []T `json:"items"`
-	Total int `json:"total"`
+	Items   []T  `json:"items"`
+	Total   int  `json:"total"`
+	HasMore bool `json:"has_more"`
 }
 
 // ItemsPayload is the request body of the standard batch create, update and

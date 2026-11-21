@@ -454,7 +454,7 @@ func (g *Schema) typeMessage(scope *types.Scope, file *ProtoFile, action *dsl.Ac
 //	Delete:     ...Request {}                                          ...Response {}
 //	List:       ...Request { repeated Filter filters; repeated string sort_by; uint32 page; uint32 size;
 //	                         string cursor_field; string cursor_value; bool cursor_next;
-//	                         repeated string expand; uint32 depth; }    ...Response { repeated X items; int64 total; }
+//	                         repeated string expand; uint32 depth; }    ...Response { repeated X items; int64 total; bool has_more; }
 //	            with the nested Filter { string field = 1; string op = 2; repeated string values = 3; }
 //	CreateMany, UpdateMany:
 //	            ...Request { repeated X items; }                       ...Response { repeated X items; }
@@ -516,8 +516,14 @@ func standardMessages(m *modelinfo.Model, model *Message, file *ProtoFile, route
 		request = newMessage(fields...)
 		request.NestedType = nested
 		requestFields = append(requestFields, comments...)
-		response = newMessage(repeatedMessageField("items", model.fullName()), scalarField("total", 0, descriptorpb.FieldDescriptorProto_TYPE_INT64))
-		responseFields = append(responseFields, "the "+m.ModelName+" records of the page", "the number of records the filters match, 0 under cursor pagination")
+		response = newMessage(
+			repeatedMessageField("items", model.fullName()),
+			scalarField("total", 0, descriptorpb.FieldDescriptorProto_TYPE_INT64),
+			scalarField("has_more", 0, descriptorpb.FieldDescriptorProto_TYPE_BOOL))
+		responseFields = append(responseFields,
+			"the "+m.ModelName+" records of the page",
+			"the number of records the filters match, 0 under cursor pagination",
+			"whether records lie past the page: before it when the cursor is read backward, after it otherwise")
 	case apiaction.CreateMany, apiaction.UpdateMany:
 		request = newMessage(repeatedMessageField("items", model.fullName()))
 		requestFields = append(requestFields, "the "+m.ModelName+" records to write")

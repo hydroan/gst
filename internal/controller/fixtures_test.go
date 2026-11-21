@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -186,6 +187,7 @@ const (
 	scopedRoute        = "controller-scoped-samples"
 	publicRoute        = "controller-public-samples"
 	observedRoute      = "controller-observed-samples"
+	pageRoute          = "controller-observed-pages"
 	cookieBeforeRoute  = "controller-cookie-before-samples"
 	cookieAfterRoute   = "controller-cookie-after-samples"
 	actionRoute        = "controller-sample-actions"
@@ -207,6 +209,7 @@ func registerFixtureServices() {
 	} {
 		serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](phase, refusalRoute, &refusingService{})
 	}
+	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.List, pageRoute, &pageObservingService{})
 	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.List, filterRefusalRoute, &filterRefusingService{})
 	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.List, hangingRoute, &hangingService{})
 	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.Import, importRoute, &importingService{})
@@ -299,6 +302,21 @@ type filterRefusingService struct {
 
 func (*filterRefusingService) Filter(_ *types.ServiceContext, m *sampleRecord, opts types.QueryOptions) (*sampleRecord, types.QueryOptions, error) {
 	return m, opts, refusal()
+}
+
+// pageObservingService records how many records a listing hands its after
+// hook: the page the client is answered with.
+type pageObservingService struct {
+	serviceregistry.Base[*sampleRecord, *sampleRecord, *sampleRecord]
+}
+
+// observedPage is the number of records the last listing on pageRoute
+// handed its after hook.
+var observedPage atomic.Int64
+
+func (*pageObservingService) ListAfter(_ *types.ServiceContext, records *[]*sampleRecord) error {
+	observedPage.Store(int64(len(*records)))
+	return nil
 }
 
 // importingService parses an uploaded file holding a JSON array of samples,
@@ -593,6 +611,23 @@ func createDated(t *testing.T, name string, day time.Time) *datedSample {
 	require.NoError(t, database.Database[*datedSample](context.Background()).Create(record))
 	require.NotEmpty(t, record.GetID())
 	return record
+}
+
+// datedIDs returns the ids of the dated samples named name in id order, the
+// order their feed is read in.
+func datedIDs(t *testing.T, name string) []string {
+	t.Helper()
+
+	var records []*datedSample
+	require.NoError(t, database.Database[*datedSample](context.Background()).
+		WithQuery(&datedSample{Name: name}).
+		WithOrder(types.Asc("id")).
+		List(&records))
+	found := make([]string, len(records))
+	for i, record := range records {
+		found[i] = record.GetID()
+	}
+	return found
 }
 
 // requireDatedDay requires the dated sample id to hold want as its day.

@@ -86,6 +86,9 @@ message ListCounterStepResponse {
 
   // total is the number of records the filters match, 0 under cursor pagination.
   int64 total = 2;
+
+  // has_more is whether records lie past the page: before it when the cursor is read backward, after it otherwise.
+  bool has_more = 3;
 }
 
 // WatchCounterStepRequest is the request of CounterStepService.WatchCounterStep.

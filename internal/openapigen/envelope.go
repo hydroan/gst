@@ -25,8 +25,9 @@ type apiListResponse[T any] struct {
 }
 
 type listData[T any] struct {
-	Items []T   `json:"items"`
-	Total int64 `json:"total"`
+	Items   []T   `json:"items"`
+	Total   int64 `json:"total"`
+	HasMore bool  `json:"has_more"`
 }
 
 type apiBatchResponse[T any] struct {

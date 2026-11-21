@@ -11,7 +11,9 @@ import (
 //
 // When M, REQ, and RSP are the same type, the handler runs the list flow (see
 // listFlow) and returns the items with a total count, zero under cursor
-// pagination, which counts nothing.
+// pagination, which counts nothing, and with has_more, whether records lie
+// past the page: before it when the cursor is read backward, after it
+// otherwise.
 //
 // The automatic listing branch supports model schema fields plus framework
 // query parameters for pagination, cursor pagination, expansion, depth,
@@ -34,14 +36,15 @@ func ListHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 			return
 		}
 
-		items, total, err := a.listFlow(requestContext(c), ginServiceContext(c))
+		items, total, hasMore, err := a.listFlow(requestContext(c), ginServiceContext(c))
 		if err != nil {
 			response.Error(c, err)
 			return
 		}
 		response.JSON(c, gin.H{
-			"items": items,
-			"total": total,
+			"items":    items,
+			"total":    total,
+			"has_more": hasMore,
 		})
 	}
 }

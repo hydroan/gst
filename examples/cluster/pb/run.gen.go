@@ -26,7 +26,7 @@ var listRun = grpc.ListCall[*model.Run]("/api/runs")
 
 // ListRun serves the List action of Run on /api/runs.
 func (runService) ListRun(ctx context.Context, req *ListRunRequest) (*ListRunResponse, error) {
-	models, total, err := listRun(ctx, nil, grpc.Query{
+	models, total, more, err := listRun(ctx, nil, grpc.Query{
 		Filters:     grpc.Filters(req.GetFilters()),
 		SortBy:      req.GetSortBy(),
 		Page:        req.GetPage(),
@@ -48,7 +48,7 @@ func (runService) ListRun(ctx context.Context, req *ListRunRequest) (*ListRunRes
 		}
 		items[i] = p
 	}
-	return &ListRunResponse{Items: items, Total: int64(total)}, nil
+	return &ListRunResponse{Items: items, Total: int64(total), HasMore: more}, nil
 }
 
 // RunToProto encodes Run values into their message, nil into nil.

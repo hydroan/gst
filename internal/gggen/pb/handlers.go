@@ -307,7 +307,7 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 //
 //	// ListRecord serves the List action of Record on /api/records.
 //	func (recordService) ListRecord(ctx context.Context, req *ListRecordRequest) (*ListRecordResponse, error) {
-//		models, total, err := listRecord(ctx, nil, grpc.Query{
+//		models, total, more, err := listRecord(ctx, nil, grpc.Query{
 //			Filters:     grpc.Filters(req.GetFilters()),
 //			SortBy:      req.GetSortBy(),
 //			Page:        req.GetPage(),
@@ -329,7 +329,7 @@ func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Exp
 //			}
 //			items[i] = p
 //		}
-//		return &ListRecordResponse{Items: items, Total: int64(total)}, nil
+//		return &ListRecordResponse{Items: items, Total: int64(total), HasMore: more}, nil
 //	}
 //
 // and the PatchMany of Item, each item decoded and patched by its id,
@@ -460,8 +460,11 @@ func (w *fileWriter) handler(r *pbschema.RPC) {
 		case apiaction.Delete:
 			body = []ast.Stmt{ifStmt(define([]string{"err"}, run(params, id)), notNil(ident("err")), returns(ident("nil"), ident("err"))), respond()}
 		case apiaction.List:
-			body = append([]ast.Stmt{define([]string{"models", "total", "err"}, run(params, query)), failing()}, itemsOf("models")...)
-			body = append(body, respond(keyValue(responseFields["items"], ident("items")), keyValue(responseFields["total"], call(ident("int64"), ident("total")))))
+			body = append([]ast.Stmt{define([]string{"models", "total", "more", "err"}, run(params, query)), failing()}, itemsOf("models")...)
+			body = append(body, respond(
+				keyValue(responseFields["items"], ident("items")),
+				keyValue(responseFields["total"], call(ident("int64"), ident("total"))),
+				keyValue(responseFields["has_more"], ident("more"))))
 		case apiaction.CreateMany, apiaction.UpdateMany:
 			body = append(modelsOf(), define([]string{"stored", "err"}, run(params, ident("models"))), failing())
 			body = append(body, itemsOf("stored")...)

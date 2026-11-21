@@ -508,8 +508,10 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 		{
 			// A cursor parameter without a boundary value asks for the first
 			// page of the feed, read in the feed's order from the start; a
-			// feed answers no total, on the first page as on any other.
-			name: "List reads the first page of a feed in the feed's order and answers no total", fixture: dated, phase: apiaction.List,
+			// feed answers no total, on the first page as on any other, so it
+			// says itself whether records follow the page: one record past
+			// the page is read to tell, and is not answered.
+			name: "List reads the first page of a feed in the feed's order, answers no total and tells that records follow it", fixture: dated, phase: apiaction.List,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				name := uniqueName("contract-dated-feed")
@@ -527,9 +529,107 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				t.Helper()
 				data := dataMap(t, got)
 				require.EqualValues(t, 0, data["total"], "a feed answers no total")
-				listed := ids(data["items"])
-				require.Len(t, listed, 2)
-				require.Less(t, listed[0], listed[1], "the page comes back in the feed's order, by id")
+				feed := datedIDs(t, in.query.Filters[0].Values[0])
+				require.Equal(t, feed[:2], ids(data["items"]), "the page is the first two records of the feed in its order, by id, without the record read past it")
+				require.Equal(t, true, data["has_more"])
+			},
+		},
+		{
+			// A page the feed ends on says so even when it is full: the
+			// client need not ask for an empty page to learn it.
+			name: "List tells the page a feed ends on that none follow, a full page included", fixture: dated, phase: apiaction.List,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				name := uniqueName("contract-dated-end")
+				for range 2 {
+					createDated(t, name, time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
+				}
+				return contractInput{query: controller.Query{
+					Filters:    []controller.Filter{{Field: "name", Op: "eq", Values: []string{name}}},
+					Size:       2,
+					CursorNext: true,
+				}}
+			},
+			want: ok,
+			check: func(t *testing.T, in contractInput, got contractAnswer) {
+				t.Helper()
+				data := dataMap(t, got)
+				require.Len(t, ids(data["items"]), 2)
+				require.Equal(t, false, data["has_more"])
+			},
+		},
+		{
+			// Read backward, a feed tells whether records lie before the
+			// page, and the page is the one next to the boundary: of three
+			// records, the page of one before the last is the middle one.
+			name: "List reads a feed backward and tells whether records lie before the page", fixture: dated, phase: apiaction.List,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				name := uniqueName("contract-dated-before")
+				for range 3 {
+					createDated(t, name, time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
+				}
+				return contractInput{query: controller.Query{
+					Filters:     []controller.Filter{{Field: "name", Op: "eq", Values: []string{name}}},
+					Size:        1,
+					CursorValue: datedIDs(t, name)[2],
+				}}
+			},
+			want: ok,
+			check: func(t *testing.T, in contractInput, got contractAnswer) {
+				t.Helper()
+				data := dataMap(t, got)
+				feed := datedIDs(t, in.query.Filters[0].Values[0])
+				require.Equal(t, feed[1:2], ids(data["items"]), "the page is the record next to the boundary")
+				require.Equal(t, true, data["has_more"])
+			},
+		},
+		{
+			// A listing by page number counts what it matches, and says
+			// whether a page follows by that count.
+			name: "List by page number tells a page that another follows", fixture: dated, phase: apiaction.List,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				name := uniqueName("contract-dated-paged")
+				for range 3 {
+					createDated(t, name, time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
+				}
+				return contractInput{query: controller.Query{
+					Filters: []controller.Filter{{Field: "name", Op: "eq", Values: []string{name}}},
+					Size:    2,
+					Page:    1,
+				}}
+			},
+			want: ok,
+			check: func(t *testing.T, in contractInput, got contractAnswer) {
+				t.Helper()
+				data := dataMap(t, got)
+				require.Len(t, ids(data["items"]), 2)
+				require.EqualValues(t, 3, data["total"])
+				require.Equal(t, true, data["has_more"])
+			},
+		},
+		{
+			name: "List by page number tells the last page that none follows", fixture: dated, phase: apiaction.List,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				name := uniqueName("contract-dated-last")
+				for range 3 {
+					createDated(t, name, time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
+				}
+				return contractInput{query: controller.Query{
+					Filters: []controller.Filter{{Field: "name", Op: "eq", Values: []string{name}}},
+					Size:    2,
+					Page:    2,
+				}}
+			},
+			want: ok,
+			check: func(t *testing.T, in contractInput, got contractAnswer) {
+				t.Helper()
+				data := dataMap(t, got)
+				require.Len(t, ids(data["items"]), 1)
+				require.EqualValues(t, 3, data["total"])
+				require.Equal(t, false, data["has_more"])
 			},
 		},
 		{

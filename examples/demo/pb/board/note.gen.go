@@ -94,7 +94,7 @@ func (noteService) PatchNote(ctx context.Context, req *PatchNoteRequest) (*Patch
 
 // ListNote serves the List action of Note on /api/board/notes.
 func (noteService) ListNote(ctx context.Context, req *ListNoteRequest) (*ListNoteResponse, error) {
-	models, total, err := listNote(ctx, nil, grpc.Query{
+	models, total, more, err := listNote(ctx, nil, grpc.Query{
 		Filters: grpc.Filters(req.GetFilters()),
 	})
 	if err != nil {
@@ -108,7 +108,7 @@ func (noteService) ListNote(ctx context.Context, req *ListNoteRequest) (*ListNot
 		}
 		items[i] = p
 	}
-	return &ListNoteResponse{Items: items, Total: int64(total)}, nil
+	return &ListNoteResponse{Items: items, Total: int64(total), HasMore: more}, nil
 }
 
 // GetNote serves the Get action of Note on /api/board/notes/:id.

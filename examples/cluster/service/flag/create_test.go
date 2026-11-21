@@ -128,6 +128,12 @@ func TestList(t *testing.T) {
 		require.Len(t, rsp.GetItems(), 2)
 		require.Equal(t, names[2], rsp.GetItems()[0].GetName())
 		require.Equal(t, names[1], rsp.GetItems()[1].GetName())
+		require.True(t, rsp.GetHasMore(), "a third flag follows the page")
+
+		rsp, err = flags.ListFlag(ctx, &pb.ListFlagRequest{Filters: []*pb.ListFlagRequest_Filter{byNote}, SortBy: []string{"name desc"}, Page: 2, Size: 2})
+		require.NoError(t, err)
+		require.Len(t, rsp.GetItems(), 1)
+		require.False(t, rsp.GetHasMore(), "the second page is the last")
 	})
 }
 

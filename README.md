@@ -947,6 +947,8 @@ page, err := cli.Get[client.ListResult[model.Sample]](ctx, "/api/samples",
 	client.WithPage(1, 20),
 	client.WithQuery("status", "active"),
 )
+// page.Items 是这一页的记录，page.Total 是匹配到的总数（游标分页时为 0），
+// page.HasMore 说明这一页之外还有没有记录，翻页翻到它为 false 为止
 
 // 自定义动作：payload 对应 Payload，类型参数对应 Result
 rsp, err := cli.Post[model.SampleSealRsp](ctx, "/api/samples/seal", &model.SampleSealReq{Reason: "audit"})

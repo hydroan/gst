@@ -455,8 +455,9 @@ func TestAddSchemaDocsForTypeCutsCyclicStructTypes(t *testing.T) {
 	}
 }
 
-// customListRsp is a custom list response whose shape mimics the framework
-// list wrapper (items plus total), so wrapper shape sniffing would misfire.
+// customListRsp is a custom list response whose shape, items beside a total,
+// resembles the data of the framework's list response, so wrapper shape
+// sniffing would misfire.
 type customListRsp struct {
 	Items []*embeddedSampleView `json:"items"`
 	Total int64                 `json:"total"`

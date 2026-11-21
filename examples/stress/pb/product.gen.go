@@ -93,7 +93,7 @@ func (productService) PatchProduct(ctx context.Context, req *PatchProductRequest
 
 // ListProduct serves the List action of Product on /api/products.
 func (productService) ListProduct(ctx context.Context, req *ListProductRequest) (*ListProductResponse, error) {
-	models, total, err := listProduct(ctx, nil, grpc.Query{
+	models, total, more, err := listProduct(ctx, nil, grpc.Query{
 		Filters:     grpc.Filters(req.GetFilters()),
 		SortBy:      req.GetSortBy(),
 		Page:        req.GetPage(),
@@ -115,7 +115,7 @@ func (productService) ListProduct(ctx context.Context, req *ListProductRequest) 
 		}
 		items[i] = p
 	}
-	return &ListProductResponse{Items: items, Total: int64(total)}, nil
+	return &ListProductResponse{Items: items, Total: int64(total), HasMore: more}, nil
 }
 
 // GetProduct serves the Get action of Product on /api/products/:id.

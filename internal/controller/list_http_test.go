@@ -1,9 +1,13 @@
 package controller_test
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
 	"testing"
 
+	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/stretchr/testify/require"
 )
@@ -59,4 +63,112 @@ func TestListAnswersAHookRefusal(t *testing.T) {
 			require.NotContains(t, rsp.Body.String(), name)
 		})
 	}
+}
+
+// TestListWalksAFeedToItsEnd pins what has_more spares the client reading a
+// feed: four records read two a page take two requests, the second page
+// telling that none follow it, and no third request for an empty page.
+func TestListWalksAFeedToItsEnd(t *testing.T) {
+	name := uniqueName("list-feed")
+	created := make([]string, 0, 4)
+	for range 4 {
+		created = append(created, createSample(t, name).GetID())
+	}
+	handler := controller.ListHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute))
+
+	first := serveList(t, handler, "/"+sampleRoute, "/"+sampleRoute+"?name="+name+"&_size=2&_cursor_next=true")
+	require.Len(t, first.Items, 2)
+	require.NotNil(t, first.HasMore, "a list response carries has_more")
+	require.True(t, *first.HasMore, "two records follow the first page")
+
+	last := stringOf(first.Items[1]["id"])
+	second := serveList(t, handler, "/"+sampleRoute, "/"+sampleRoute+"?name="+name+"&_size=2&_cursor_next=true&_cursor_value="+last)
+	require.Len(t, second.Items, 2)
+	require.NotNil(t, second.HasMore, "a list response carries has_more")
+	require.False(t, *second.HasMore, "the feed ends on the second page")
+
+	walked := make([]string, 0, 4)
+	for _, item := range append(first.Items, second.Items...) {
+		walked = append(walked, stringOf(item["id"]))
+	}
+	require.ElementsMatch(t, created, walked, "the two pages are the whole feed")
+}
+
+// TestListHandsItsAfterHookThePageItAnswers pins that the record a feed reads
+// past the page, to tell whether records follow it, never reaches the
+// service: ListAfter is handed the page the client is answered with.
+func TestListHandsItsAfterHookThePageItAnswers(t *testing.T) {
+	name := uniqueName("list-observed")
+	for range 3 {
+		createSample(t, name)
+	}
+	handler := controller.ListHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](pageRoute))
+
+	page := serveList(t, handler, "/"+pageRoute, "/"+pageRoute+"?name="+name+"&_size=2&_cursor_next=true")
+
+	require.Len(t, page.Items, 2)
+	require.NotNil(t, page.HasMore, "a list response carries has_more")
+	require.True(t, *page.HasMore, "a third record follows the page")
+	require.EqualValues(t, 2, observedPage.Load(), "the hook is handed the page, without the record read past it")
+}
+
+// TestListTellsWhenItsCapCutsAnUnpagedListShort pins has_more on a model that
+// does not page, whose listing stops at 1000 records: false while every
+// record fits, the cap filled exactly included, and true once one does not.
+func TestListTellsWhenItsCapCutsAnUnpagedListShort(t *testing.T) {
+	const limit = 1000
+	ctx := context.Background()
+
+	var stored int
+	require.NoError(t, database.Database[*sampleCounter](ctx).Count(&stored))
+	require.Less(t, stored, limit, "the counters the other tests leave fit under the cap")
+	fill := make([]*sampleCounter, limit-stored)
+	for i := range fill {
+		fill[i] = &sampleCounter{Name: "list-cap"}
+	}
+	require.NoError(t, database.Database[*sampleCounter](ctx).Create(fill...))
+	t.Cleanup(func() {
+		require.NoError(t, database.Database[*sampleCounter](ctx).WithPurge().Delete(fill...))
+	})
+	handler := controller.ListHandler[*sampleCounter, *sampleCounter, *sampleCounter](configFor[*sampleCounter](counterRoute))
+
+	filled := serveList(t, handler, "/"+counterRoute, "/"+counterRoute)
+	require.Len(t, filled.Items, limit)
+	require.Equal(t, limit, filled.Total)
+	require.NotNil(t, filled.HasMore, "a list response carries has_more")
+	require.False(t, *filled.HasMore, "the cap filled exactly leaves no record unread")
+
+	past := &sampleCounter{Name: "list-cap"}
+	require.NoError(t, database.Database[*sampleCounter](ctx).Create(past))
+	t.Cleanup(func() {
+		require.NoError(t, database.Database[*sampleCounter](ctx).WithPurge().Delete(past))
+	})
+
+	cut := serveList(t, handler, "/"+counterRoute, "/"+counterRoute)
+	require.Len(t, cut.Items, limit)
+	require.Equal(t, limit+1, cut.Total)
+	require.NotNil(t, cut.HasMore, "a list response carries has_more")
+	require.True(t, *cut.HasMore, "one record lies past the cap")
+}
+
+// listAnswer is the data of a list response; HasMore is nil when the
+// response carries no has_more.
+type listAnswer struct {
+	Items   []map[string]any `json:"items"`
+	Total   int              `json:"total"`
+	HasMore *bool            `json:"has_more"`
+}
+
+// serveList sends handler, mounted under pattern, a listing of target, which it
+// must answer 200, and returns the data of the response.
+func serveList(t *testing.T, handler gin.HandlerFunc, pattern, target string) listAnswer {
+	t.Helper()
+
+	rsp := serve(t, http.MethodGet, pattern, handler, target, "")
+	require.Equal(t, http.StatusOK, rsp.Code, rsp.Body.String())
+	var envelope struct {
+		Data listAnswer `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rsp.Body.Bytes(), &envelope))
+	return envelope.Data
 }

@@ -47,7 +47,7 @@ func (pinService) CreatePin(ctx context.Context, req *CreatePinRequest) (*Create
 
 // ListPin serves the List action of Pin on /api/pins.
 func (pinService) ListPin(ctx context.Context, req *ListPinRequest) (*ListPinResponse, error) {
-	models, total, err := listPin(ctx, nil, grpc.Query{
+	models, total, more, err := listPin(ctx, nil, grpc.Query{
 		Filters: grpc.Filters(req.GetFilters()),
 	})
 	if err != nil {
@@ -61,7 +61,7 @@ func (pinService) ListPin(ctx context.Context, req *ListPinRequest) (*ListPinRes
 		}
 		items[i] = p
 	}
-	return &ListPinResponse{Items: items, Total: int64(total)}, nil
+	return &ListPinResponse{Items: items, Total: int64(total), HasMore: more}, nil
 }
 
 // GetPin serves the Get action of Pin on /api/pins/:id.

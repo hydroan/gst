@@ -157,15 +157,18 @@ func TestSetKeepsModelKeyForDefaultCRUD(t *testing.T) {
 }
 
 // TestSetSeparatesListAndGetResponsesForSameType asserts that one response type
-// reused across two phases keeps the list envelope apart from the single-item
-// envelope.
+// reused across two phases keeps the list envelope, whose data is the items
+// with the total and has_more, apart from the single-item envelope.
 func TestSetSeparatesListAndGetResponsesForSameType(t *testing.T) {
 	set[*openapiActionModel, *openapiActionModel, *openapiActionModel]("/api/openapi-envelope", true, apiaction.List)
 	set[*openapiActionModel, *openapiActionModel, *openapiActionModel]("/api/openapi-envelope/:id", true, apiaction.Get)
 
 	list := dataSchema(t, registeredResponseSchema(t, responseRefForPath(t, "/api/openapi-envelope", 200)))
-	if _, ok := list.Properties["items"]; !ok {
-		t.Fatalf("list response data = %v, want items", propertyNames(list))
+	if got, want := propertyNames(list), []string{"has_more", "items", "total"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("list response data = %v, want %v", got, want)
+	}
+	if hasMore := list.Properties["has_more"].Value; hasMore == nil || !hasMore.Type.Is(openapi3.TypeBoolean) {
+		t.Fatalf("has_more of the list response data = %v, want a boolean", hasMore)
 	}
 
 	get := dataSchema(t, registeredResponseSchema(t, responseRefForPath(t, "/api/openapi-envelope/{id}", 200)))

@@ -262,7 +262,9 @@ type ListCounterStepResponse struct {
 	// items is the CounterStep records of the page.
 	Items []*CounterStep `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
 	// total is the number of records the filters match, 0 under cursor pagination.
-	Total         int64 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
+	Total int64 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
+	// has_more is whether records lie past the page: before it when the cursor is read backward, after it otherwise.
+	HasMore       bool `protobuf:"varint,3,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -309,6 +311,13 @@ func (x *ListCounterStepResponse) GetTotal() int64 {
 		return x.Total
 	}
 	return 0
+}
+
+func (x *ListCounterStepResponse) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
 }
 
 // WatchCounterStepRequest is the request of CounterStepService.WatchCounterStep.
@@ -542,10 +551,11 @@ const file_cluster_counter_step_proto_rawDesc = "" +
 	"\x06Filter\x12\x14\n" +
 	"\x05field\x18\x01 \x01(\tR\x05field\x12\x0e\n" +
 	"\x02op\x18\x02 \x01(\tR\x02op\x12\x16\n" +
-	"\x06values\x18\x03 \x03(\tR\x06values\"[\n" +
+	"\x06values\x18\x03 \x03(\tR\x06values\"v\n" +
 	"\x17ListCounterStepResponse\x12*\n" +
 	"\x05items\x18\x01 \x03(\v2\x14.cluster.CounterStepR\x05items\x12\x14\n" +
-	"\x05total\x18\x02 \x01(\x03R\x05total\"Q\n" +
+	"\x05total\x18\x02 \x01(\x03R\x05total\x12\x19\n" +
+	"\bhas_more\x18\x03 \x01(\bR\ahasMore\"Q\n" +
 	"\x17WatchCounterStepRequest\x126\n" +
 	"\apayload\x18\x01 \x01(\v2\x1c.cluster.CounterStepWatchReqR\apayload\"H\n" +
 	"\x18WatchCounterStepResponse\x12,\n" +

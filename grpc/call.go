@@ -126,9 +126,10 @@ func GetCall[M types.Model](route string) func(ctx context.Context, params map[s
 }
 
 // ListCall returns the list call of M on route: given the route parameters
-// and the query, it answers with the items of the page and the total, 0
-// under cursor pagination.
-func ListCall[M types.Model](route string) func(ctx context.Context, params map[string]string, query Query) ([]M, int, error) {
+// and the query, it answers with the items of the page, the total, 0 under
+// cursor pagination, and whether records lie past the page: before it when
+// the cursor is read backward, after it otherwise.
+func ListCall[M types.Model](route string) func(ctx context.Context, params map[string]string, query Query) ([]M, int, bool, error) {
 	return controller.ListCall[M](route)
 }
 

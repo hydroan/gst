@@ -94,7 +94,7 @@ func (flagService) PatchFlag(ctx context.Context, req *PatchFlagRequest) (*Patch
 
 // ListFlag serves the List action of Flag on /api/flags.
 func (flagService) ListFlag(ctx context.Context, req *ListFlagRequest) (*ListFlagResponse, error) {
-	models, total, err := listFlag(ctx, nil, grpc.Query{
+	models, total, more, err := listFlag(ctx, nil, grpc.Query{
 		Filters:     grpc.Filters(req.GetFilters()),
 		SortBy:      req.GetSortBy(),
 		Page:        req.GetPage(),
@@ -116,7 +116,7 @@ func (flagService) ListFlag(ctx context.Context, req *ListFlagRequest) (*ListFla
 		}
 		items[i] = p
 	}
-	return &ListFlagResponse{Items: items, Total: int64(total)}, nil
+	return &ListFlagResponse{Items: items, Total: int64(total), HasMore: more}, nil
 }
 
 // GetFlag serves the Get action of Flag on /api/flags/:id.

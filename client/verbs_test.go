@@ -65,10 +65,10 @@ func TestVerbsDecodeEmptyDataToZeroValue(t *testing.T) {
 	require.NotNil(t, got)
 }
 
-func TestListResultDecodesItemsAndTotal(t *testing.T) {
+func TestListResultDecodesItemsTotalAndHasMore(t *testing.T) {
 	srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"msg":"success","data":{"items":[{"name":"a","count":1},{"name":"b","count":2}],"total":7}}`)
+		fmt.Fprint(w, `{"msg":"success","data":{"items":[{"name":"a","count":1},{"name":"b","count":2}],"total":7,"has_more":true}}`)
 	}))
 	srv.Start()
 
@@ -79,6 +79,7 @@ func TestListResultDecodesItemsAndTotal(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, list.Items, 2)
 	require.Equal(t, 7, list.Total)
+	require.True(t, list.HasMore)
 	require.Equal(t, "a", list.Items[0].Name)
 }
 

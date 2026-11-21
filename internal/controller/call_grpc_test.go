@@ -789,11 +789,11 @@ func itemsFromProto[M types.Model](in map[string]any) ([]M, error) {
 
 // listing, batch and done shape what a list, a batch and a call answering
 // nothing return into what their response messages would carry.
-func listing[M any](items []M, total int, err error) (any, error) {
+func listing[M any](items []M, total int, hasMore bool, err error) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"items": items, "total": total}, nil
+	return map[string]any{"items": items, "total": total, "has_more": hasMore}, nil
 }
 
 func batch[M any](items []M, err error) (any, error) {
