@@ -212,22 +212,48 @@ func TestMiddlewareWrapperSpanAttributesFitTheCapacityInTheWorstCase(t *testing.
 	span := oteltest.EndedNamed(t, recorder, "middleware.Sample")
 	// middleware.name, http.request.method, url.path and http.route are set
 	// as the span starts; the outcome batch adds the rest.
-	const startAttrs = 4
-	require.Len(t, span.Attributes(), startAttrs+middlewareOutcomeAttrCap,
-		"the worst case must fill the outcome batch exactly: a new attribute bumps middlewareOutcomeAttrCap")
-
-	keys := make([]attribute.Key, 0, len(span.Attributes()))
-	for _, attr := range span.Attributes() {
-		keys = append(keys, attr.Key)
-	}
+	require.Len(t, span.Attributes(), middlewareStartAttrCap+middlewareOutcomeAttrCap,
+		"the worst case must fill both batches exactly: a new attribute bumps the capacity of its batch")
 	require.ElementsMatch(t, []attribute.Key{
 		"middleware.name", "http.request.method", "url.path", "http.route",
 		"middleware.duration_ms", "middleware.duration_ns", "http.response.status_code", "middleware.error", "service.name",
-	}, keys, "what the span says of the request goes by the names of the OpenTelemetry HTTP conventions")
+	}, spanAttributeKeys(span.Attributes()), "what the span says of the request goes by the names of the OpenTelemetry HTTP conventions")
+}
+
+// TestMiddlewareWrapperLeavesTheRouteOffARequestNoRouteMatched pins that a
+// middleware span describes the request the way the request root span does:
+// a request no route matched has no route to name, so the span carries no
+// http.route rather than an empty one.
+func TestMiddlewareWrapperLeavesTheRouteOffARequestNoRouteMatched(t *testing.T) {
+	setupTracingTest(t)
+	recorder := oteltest.Record(t)
+
+	router := gin.New()
+	router.Use(tracing())
+	router.Use(middlewareWrapper("sample", func(*gin.Context) {}))
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/unregistered", nil))
+	require.Equal(t, http.StatusNotFound, w.Code)
+
+	span := oteltest.EndedNamed(t, recorder, "middleware.Sample")
+	require.ElementsMatch(t, []attribute.Key{
+		"middleware.name", "http.request.method", "url.path",
+		"middleware.duration_ms", "middleware.duration_ns", "http.response.status_code", "middleware.error", "service.name",
+	}, spanAttributeKeys(span.Attributes()))
 }
 
 func performWrapperRequest(router *gin.Engine) *httptest.ResponseRecorder {
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/ping", nil))
 	return w
+}
+
+// spanAttributeKeys returns the keys of a span's attributes.
+func spanAttributeKeys(attrs []attribute.KeyValue) []attribute.Key {
+	keys := make([]attribute.Key, 0, len(attrs))
+	for _, attr := range attrs {
+		keys = append(keys, attr.Key)
+	}
+	return keys
 }

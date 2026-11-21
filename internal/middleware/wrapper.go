@@ -13,12 +13,20 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// middlewareOutcomeAttrCap is the most attributes a middleware span's outcome
-// batch carries: the duration in milliseconds and in nanoseconds, the status
-// code, the error flag and the service name. The batch is sized to it once
-// per middleware per traced request, so the hot path never regrows it; the
-// worst-case test keeps the count honest when an attribute is added.
-const middlewareOutcomeAttrCap = 5
+// A middleware span's two attribute batches are sized to their worst case
+// once per middleware per traced request, so the hot path never regrows
+// them; the worst-case test keeps each count honest when an attribute is
+// added.
+const (
+	// middlewareStartAttrCap is the most attributes the batch a middleware
+	// span starts with carries: the middleware's name, the request's method
+	// and path, and the route it matched.
+	middlewareStartAttrCap = 4
+	// middlewareOutcomeAttrCap is the most attributes the outcome batch
+	// carries: the duration in milliseconds and in nanoseconds, the status
+	// code, the error flag and the service name.
+	middlewareOutcomeAttrCap = 5
+)
 
 // middlewareWrapper wraps any gin middleware with OTEL tracing capabilities.
 // It creates a span for the middleware execution and records performance metrics.
@@ -73,13 +81,21 @@ func middlewareWrapper(name string, middleware gin.HandlerFunc) gin.HandlerFunc 
 		recording := gstotel.IsSpanRecording(span)
 		var start time.Time
 		if recording {
-			// Set span attributes
-			span.SetAttributes(
+			// The span describes the request it serves the way the request
+			// root span does (see tracing): by the names of the
+			// OpenTelemetry HTTP conventions, the route left off a request
+			// that matched none.
+			attrs := make([]attribute.KeyValue, 0, middlewareStartAttrCap)
+			attrs = append(
+				attrs,
 				attribute.String("middleware.name", name),
 				semconv.HTTPRequestMethodKey.String(c.Request.Method),
 				semconv.URLPath(c.Request.URL.Path),
-				semconv.HTTPRoute(c.FullPath()),
 			)
+			if route := c.FullPath(); route != "" {
+				attrs = append(attrs, semconv.HTTPRoute(route))
+			}
+			span.SetAttributes(attrs...)
 
 			// Record start time
 			start = time.Now()
