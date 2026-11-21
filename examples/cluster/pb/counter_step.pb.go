@@ -157,7 +157,7 @@ type ListCounterStepRequest struct {
 	CursorNext bool `protobuf:"varint,7,opt,name=cursor_next,json=cursorNext,proto3" json:"cursor_next,omitempty"`
 	// expand is the associations to expand, as the _expand query parameter names them.
 	Expand []string `protobuf:"bytes,8,rep,name=expand,proto3" json:"expand,omitempty"`
-	// depth is the depth of the expansion, as the _depth query parameter.
+	// depth is the depth of the expansion, as the _depth query parameter, at most 10.
 	Depth         uint32 `protobuf:"varint,9,opt,name=depth,proto3" json:"depth,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

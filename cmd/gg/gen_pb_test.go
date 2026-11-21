@@ -2871,7 +2871,7 @@ func TestGenRunHoldsTheRPCMessagesToTheirCommittedNumbers(t *testing.T) {
 		// written before the generator added it would, and reserves the
 		// number after its last.
 		fresh(t, inRequest(func(s string) string {
-			return strings.Replace(s, "  // depth is the depth of the expansion, as the _depth query parameter.\n  uint32 depth = 3;\n", "  reserved 3;\n", 1)
+			return strings.Replace(s, "  // depth is the depth of the expansion, as the _depth query parameter, at most 10.\n  uint32 depth = 3;\n", "  reserved 3;\n", 1)
 		}))
 
 		content := regenerated(t)

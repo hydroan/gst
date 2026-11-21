@@ -129,7 +129,7 @@ message ListProductRequest {
   // expand is the associations to expand, as the _expand query parameter names them.
   repeated string expand = 8;
 
-  // depth is the depth of the expansion, as the _depth query parameter.
+  // depth is the depth of the expansion, as the _depth query parameter, at most 10.
   uint32 depth = 9;
 
   // Filter is one filter of filters: field names the column by its query name, op is the operator, none for the equality every model answers, and values is its value, several for in and notin.
@@ -159,7 +159,7 @@ message GetProductRequest {
   // expand is the associations to expand, as the _expand query parameter names them.
   repeated string expand = 2;
 
-  // depth is the depth of the expansion, as the _depth query parameter.
+  // depth is the depth of the expansion, as the _depth query parameter, at most 10.
   uint32 depth = 3;
 }
 

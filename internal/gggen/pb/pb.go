@@ -140,7 +140,7 @@ func (f File) Definition() bool { return strings.HasSuffix(f.Path, ggconst.Exten
 //	  // expand is the associations to expand, as the _expand query parameter names them.
 //	  repeated string expand = 2;
 //
-//	  // depth is the depth of the expansion, as the _depth query parameter.
+//	  // depth is the depth of the expansion, as the _depth query parameter, at most 10.
 //	  uint32 depth = 3;
 //	}
 //

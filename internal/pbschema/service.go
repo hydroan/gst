@@ -377,7 +377,7 @@ func (r *RPC) Streaming() bool {
 //	  // expand is the associations to expand, as the _expand query parameter names them.
 //	  repeated string expand = 1;
 //
-//	  // depth is the depth of the expansion, as the _depth query parameter.
+//	  // depth is the depth of the expansion, as the _depth query parameter, at most 10.
 //	  uint32 depth = 2;
 //	}
 func (g *Schema) customRequest(scope *types.Scope, file *ProtoFile, action *dsl.Action, s jsonshape.Site) (*descriptorpb.DescriptorProto, []string, *Message, bool) {
@@ -474,7 +474,7 @@ func (g *Schema) typeMessage(scope *types.Scope, file *ProtoFile, action *dsl.Ac
 //	  // expand is the associations to expand, as the _expand query parameter names them.
 //	  repeated string expand = 2;
 //
-//	  // depth is the depth of the expansion, as the _depth query parameter.
+//	  // depth is the depth of the expansion, as the _depth query parameter, at most 10.
 //	  uint32 depth = 3;
 //	}
 //
@@ -588,7 +588,7 @@ var listQueryFieldNames = func() []string {
 //	  // expand is the associations to expand, as the _expand query parameter names them.
 //	  repeated string expand = 8;
 //
-//	  // depth is the depth of the expansion, as the _depth query parameter.
+//	  // depth is the depth of the expansion, as the _depth query parameter, at most 10.
 //	  uint32 depth = 9;
 //
 //	  // Filter is one filter of filters: field names the column by its query name, op is the operator, none for the equality every model answers, and values is its value, several for in and notin.
@@ -625,7 +625,7 @@ func queryFields(phase apiaction.Phase, controls queryControls) (fields []*descr
 	}
 	expansionComments := []string{
 		"the associations to expand, as the _expand query parameter names them",
-		"the depth of the expansion, as the _depth query parameter",
+		"the depth of the expansion, as the _depth query parameter, at most " + strconv.Itoa(urlquery.MaxExpandDepth),
 	}
 	switch phase {
 	case apiaction.Get:
