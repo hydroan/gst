@@ -119,3 +119,22 @@ func isolateEnv(t *testing.T, keys ...string) {
 		require.NoError(t, os.Unsetenv(key))
 	}
 }
+
+// isolateEnvInParallel is isolateEnv for a test running in parallel with
+// others, which t.Setenv refuses: the keys are unset for the test and put
+// back as they were once it ends. A test calling it names keys no other test
+// reads, the ones of the one service it starts.
+func isolateEnvInParallel(t *testing.T, keys ...string) {
+	t.Helper()
+	for _, key := range keys {
+		saved, set := os.LookupEnv(key)
+		require.NoError(t, os.Unsetenv(key))
+		t.Cleanup(func() {
+			if set {
+				require.NoError(t, os.Setenv(key, saved)) //nolint:usetesting // t.Setenv refuses a parallel test.
+				return
+			}
+			require.NoError(t, os.Unsetenv(key))
+		})
+	}
+}

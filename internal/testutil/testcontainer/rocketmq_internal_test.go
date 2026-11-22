@@ -13,7 +13,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSetupRocketMQ(t *testing.T) {
+// TestSetupRocketMQ runs beside the other tests starting a container of
+// their own: each spends its time waiting on its service to come up, and
+// none shares anything with the others.
+func TestSetupRocketMQ(t *testing.T) { //nolint:tparallel // The cases share rocketmqBrokerListenAddress.
+	t.Parallel()
+
 	t.Run("on the port the host picks", func(t *testing.T) {
 		setupRocketMQAndSend(t)
 	})
@@ -43,7 +48,7 @@ func TestSetupRocketMQ(t *testing.T) {
 // client could reach.
 func setupRocketMQAndSend(t *testing.T) {
 	t.Helper()
-	isolateEnv(t, config.ROCKETMQ_NAME_SERVER_ADDRS, config.ROCKETMQ_ENABLED)
+	isolateEnvInParallel(t, config.ROCKETMQ_NAME_SERVER_ADDRS, config.ROCKETMQ_ENABLED)
 
 	cleanup, err := SetupRocketMQ()
 	require.NoError(t, err)

@@ -13,8 +13,11 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
+// TestSetupKafka runs beside the other tests starting a container of their
+// own (see TestSetupRocketMQ).
 func TestSetupKafka(t *testing.T) {
-	isolateEnv(t, config.KAFKA_BROKERS, config.KAFKA_ENABLED)
+	t.Parallel()
+	isolateEnvInParallel(t, config.KAFKA_BROKERS, config.KAFKA_ENABLED)
 
 	cleanup, err := SetupKafka()
 	require.NoError(t, err)

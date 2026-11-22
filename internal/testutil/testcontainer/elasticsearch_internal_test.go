@@ -11,8 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestSetupElasticsearch runs beside the other tests starting a container of
+// their own (see TestSetupRocketMQ).
 func TestSetupElasticsearch(t *testing.T) {
-	isolateEnv(t, config.ELASTICSEARCH_ADDRS, config.ELASTICSEARCH_ENABLED)
+	t.Parallel()
+	isolateEnvInParallel(t, config.ELASTICSEARCH_ADDRS, config.ELASTICSEARCH_ENABLED)
 
 	cleanup, err := SetupElasticsearch()
 	require.NoError(t, err)
