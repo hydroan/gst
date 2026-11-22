@@ -27,21 +27,29 @@ const (
 // not refused for it (see IsReadOnly).
 const RuleReadOnly = "readonly"
 
+// BindingRules returns the binding rules of a field's own, as tag, its
+// struct tag, declares them, in order: those before a dive, the rules after
+// which are the elements' of a slice or a map; nil for a tag declaring none.
+// For `binding:"required,max=8"` it returns required and max=8, and for
+// `binding:"omitempty,dive,required"` omitempty alone.
+func BindingRules(tag reflect.StructTag) []string {
+	declared := tag.Get(TagBinding)
+	if declared == "" {
+		return nil
+	}
+	rules := strings.Split(declared, ",")
+	if dive := slices.Index(rules, "dive"); dive >= 0 {
+		rules = rules[:dive]
+	}
+	return rules
+}
+
 // IsReadOnly reports whether tag, the struct tag of a field, declares the
 // field read-only to clients: RuleReadOnly is one of the field's own binding
-// rules, those before a dive, the rules after which are the elements' of a
-// slice or a map. It holds for `binding:"readonly"` and for no tag without
-// the rule, `binding:"required"` or `json:"name"`.
+// rules (see BindingRules). It holds for `binding:"readonly"` and for no tag
+// without the rule, `binding:"required"` or `json:"name"`.
 func IsReadOnly(tag reflect.StructTag) bool {
-	for rule := range strings.SplitSeq(tag.Get(TagBinding), ",") {
-		switch rule {
-		case "dive":
-			return false
-		case RuleReadOnly:
-			return true
-		}
-	}
-	return false
+	return slices.Contains(BindingRules(tag), RuleReadOnly)
 }
 
 // Column is one database column of a model.

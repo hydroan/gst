@@ -192,13 +192,7 @@ func addSchemaDocsForType(typ reflect.Type, schemaRef *openapi3.SchemaRef, visit
 		if !hasField {
 			continue
 		}
-		// The rules before the first dive are the field's own; those after
-		// it are the elements' of a slice or a map.
-		rules := strings.Split(docField.field.Tag.Get(modelschema.TagBinding), ",")
-		if dive := slices.Index(rules, "dive"); dive >= 0 {
-			rules = rules[:dive]
-		}
-		if slices.Contains(rules, "required") && !slices.Contains(schemaRef.Value.Required, propName) {
+		if slices.Contains(modelschema.BindingRules(docField.field.Tag), "required") && !slices.Contains(schemaRef.Value.Required, propName) {
 			schemaRef.Value.Required = append(schemaRef.Value.Required, propName)
 		}
 

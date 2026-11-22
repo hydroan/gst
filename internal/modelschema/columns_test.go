@@ -8,6 +8,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestBindingRules pins the examples of BindingRules: the rules of a field's
+// own are the ones its binding tag declares before a dive, in order, and a
+// tag declaring none has none.
+func TestBindingRules(t *testing.T) {
+	require.Equal(t, []string{"required", "max=8"}, modelschema.BindingRules(`binding:"required,max=8"`))
+	require.Equal(t, []string{"omitempty"}, modelschema.BindingRules(`binding:"omitempty,dive,required"`))
+	require.Empty(t, modelschema.BindingRules(`binding:"dive,required"`))
+	require.Nil(t, modelschema.BindingRules(`json:"name"`))
+	require.Nil(t, modelschema.BindingRules(``))
+}
+
 // TestIsReadOnly pins which struct tags declare a field read-only to
 // clients: the ones whose own binding rules hold readonly, the rules after a
 // dive being the elements' of a slice or a map, and no other tag, whatever
