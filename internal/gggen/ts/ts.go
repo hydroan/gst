@@ -7,7 +7,8 @@
 // erased by a TypeScript compiler -- so the files can be copied into any
 // frontend, whatever HTTP client or UI library it uses.
 //
-// Go types declared under the project module path get a declaration each, in
+// Go types declared under the project module path, or under a tree a run
+// declares beside it (see Config.DeclaredTrees), get a declaration each, in
 // one file per Go package; a type of any other package is spelled out where it
 // is used. A type whose JSON shape cannot be read off its declaration, such as
 // one with encoding methods of its own, is reported as a diagnostic instead of
@@ -34,6 +35,13 @@ type Config struct {
 	// type declared outside it, such as one a model field borrows from another
 	// package of the project, keeps its path relative to ModulePath.
 	RootPath string
+	// DeclaredTrees are the import paths of the package trees outside the
+	// project whose types get declarations too: the trees the framework's
+	// modules declare their types in, for a project that registers modules at
+	// run time. Each mirrors at the output root the way RootPath does, so a
+	// module's types go where a copy of the module into the project puts
+	// them: iam/account.ts for the package iam/account of a tree.
+	DeclaredTrees []string
 	// AppName names the prelude file, so a frontend holding the copied
 	// directory can tell whose API these types describe. The framework name is
 	// used when the project configured no name.
@@ -145,5 +153,5 @@ func (cfg Config) shapeConfig() jsonshape.Config {
 	for _, ref := range cfg.Roots {
 		roots = append(roots, ref.PkgPath)
 	}
-	return jsonshape.Config{Dir: cfg.Dir, ModulePath: cfg.ModulePath, Roots: roots}
+	return jsonshape.Config{Dir: cfg.Dir, ModulePath: cfg.ModulePath, DeclaredTrees: cfg.DeclaredTrees, Roots: roots}
 }

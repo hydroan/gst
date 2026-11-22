@@ -8,7 +8,9 @@ export interface Sample {
   id: string;
   created_by?: string;
   updated_by?: string;
+  /** Format: date-time */
   created_at?: string;
+  /** Format: date-time */
   updated_at?: string;
   /** Name is the display name. */
   name: string;
@@ -44,9 +46,19 @@ export interface Sample {
   meta?: { [key: string]: unknown } | null;
   options: Options | null;
   items?: Item[] | null;
+  /** Format: date-time */
   day: string;
+  /** Format: date */
   due: string;
+  /**
+   * Deadline is when the sample is due.
+   *
+   * Format: date-time
+   */
   deadline?: string;
+  /** Format: date-time */
+  closed?: string | null;
+  /** Format: date-time */
   archived: string | null;
   comment: { String: string; Valid: boolean };
   version?: number;

@@ -2,6 +2,7 @@ package main
 
 import (
 	"cmp"
+	"go/types"
 	"io/fs"
 	"os"
 	"path"
@@ -18,6 +19,7 @@ import (
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/modelinfo"
 	"github.com/spf13/cobra"
+	"golang.org/x/tools/go/packages"
 )
 
 // typeScriptDir is where gg gen ts writes, under the generated directory gg
@@ -38,8 +40,11 @@ directory can be copied into any frontend as it is.
 The directory is kept in step with the models: what an earlier run generated for
 a model that is now gone is removed.
 
-Routes registered at runtime, through gg module add or module.Use, are not
-covered.`,
+The routes registered at run time are covered too, the ones module.Use
+registers from the project's module package and the ones of the framework
+modules that package registers, through gg module add or by hand: the types of
+a framework module go where a copy of the module would put them, iam/account.ts
+for the accounts of the iam module.`,
 	Args: cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := genTypeScriptRun(); err != nil {
@@ -55,7 +60,9 @@ func init() {
 
 // genTypeScriptRun generates the TypeScript declarations. It runs the project
 // checks and reads the models the way gg gen does, so the declarations cover
-// exactly the routes the generated router registers.
+// exactly the routes the generated router registers, and reads the project's
+// module package for the routes registered at run time (see
+// typeScriptModuleRoots).
 func genTypeScriptRun() error {
 	if len(module) == 0 {
 		var err error
@@ -86,14 +93,19 @@ func genTypeScriptRun() error {
 	if err != nil {
 		return err
 	}
+	moduleRoots, err := typeScriptModuleRoots(module)
+	if err != nil {
+		return errors.Wrap(err, "load the module package (run gg gen first if generated files are out of date)")
+	}
 
 	clioutput.Section("Generate TypeScript")
 	files, err := ts.Generate(ts.Config{
-		Dir:        ".",
-		ModulePath: module,
-		RootPath:   path.Join(module, filepath.ToSlash(ggconst.DirModel)),
-		AppName:    appName,
-		Roots:      typeScriptRoots(models),
+		Dir:           ".",
+		ModulePath:    module,
+		RootPath:      path.Join(module, filepath.ToSlash(ggconst.DirModel)),
+		DeclaredTrees: typeScriptDeclaredTrees(moduleRoots),
+		AppName:       appName,
+		Roots:         uniqueTypeScriptRoots(append(typeScriptRoots(models), moduleRoots...)),
 	})
 	var diagnostics *ts.DiagnosticsError
 	switch {
@@ -131,7 +143,6 @@ func applicationName() (string, error) {
 // among them. Import and Export move files and SSE streams events, so their
 // types never travel as JSON, and *model.Empty carries no data.
 func typeScriptRoots(models []*modelinfo.Model) []ts.TypeRef {
-	seen := make(map[ts.TypeRef]bool)
 	var roots []ts.TypeRef
 	for _, m := range models {
 		pkgPath := m.ImportPath()
@@ -143,18 +154,176 @@ func typeScriptRoots(models []*modelinfo.Model) []ts.TypeRef {
 				if typeName == "" || typeName == dsl.PayloadEmpty {
 					continue
 				}
-				ref := ts.TypeRef{PkgPath: pkgPath, Name: strings.TrimPrefix(typeName, "*")}
-				if !seen[ref] {
-					seen[ref] = true
-					roots = append(roots, ref)
-				}
+				roots = append(roots, ts.TypeRef{PkgPath: pkgPath, Name: strings.TrimPrefix(typeName, "*")})
 			}
 		})
 	}
+	return uniqueTypeScriptRoots(roots)
+}
+
+// uniqueTypeScriptRoots returns roots sorted by package and name, each once.
+func uniqueTypeScriptRoots(roots []ts.TypeRef) []ts.TypeRef {
 	slices.SortFunc(roots, func(a, b ts.TypeRef) int {
 		return cmp.Or(strings.Compare(a.PkgPath, b.PkgPath), strings.Compare(a.Name, b.Name))
 	})
-	return roots
+	return slices.Compact(roots)
+}
+
+// Where the framework keeps what its modules are made of, by import path: the
+// module package, whose Use registers a route and whose tree holds a package
+// per module, the tree of the modules' models, and the package declaring the
+// type model.Empty names.
+const (
+	frameworkModuleTree = ggconst.ImportPathGst + "/" + ggconst.DirModule
+	funcModuleUse       = "Use"
+	frameworkModelTree  = ggconst.ImportPathGst + "/internal/" + ggconst.DirModel
+	frameworkEmptyPath  = ggconst.ImportPathGst + "/internal/modelregistry"
+)
+
+// typeScriptDeclaredTrees returns the package trees outside the project whose
+// types get declarations: the tree of the framework's module models, and each
+// framework module package declaring one of roots itself, as
+// github.com/hydroan/gst/module/helloworld does for the roots of the
+// helloworld module. A module package that only forwards the types of its
+// models declares none, and stays a package read from compiled export data.
+func typeScriptDeclaredTrees(roots []ts.TypeRef) []string {
+	trees := []string{frameworkModelTree}
+	for _, root := range roots {
+		if strings.HasPrefix(root.PkgPath, frameworkModuleTree+"/") && !slices.Contains(trees, root.PkgPath) {
+			trees = append(trees, root.PkgPath)
+		}
+	}
+	return trees
+}
+
+// typeScriptModuleRoots returns the types the routes registered at run time
+// exchange as JSON: the request and response types of every module.Use in
+// the project's module package, and in every framework module package whose
+// Register that package refers to, which is how gg module add registers a
+// module. A project without a module package registers none. modulePath is
+// the project's module path.
+//
+// For a module package holding
+//
+//	func init() {
+//		helloworld.Register()
+//	}
+//
+// it returns the types module/helloworld passes to module.Use: Req, Rsp and
+// Helloworld2 of github.com/hydroan/gst/module/helloworld.
+func typeScriptModuleRoots(modulePath string) ([]ts.TypeRef, error) {
+	if !hasGoSources(ggconst.DirModule) {
+		return nil, nil
+	}
+	// The packages holding the calls are type-checked from source, for the
+	// type arguments of the calls; what they import is read from compiled
+	// export data.
+	cfg := &packages.Config{
+		Mode: packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles | packages.NeedImports |
+			packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo,
+		Dir: ".",
+	}
+	loaded, err := packages.Load(cfg, path.Join(modulePath, ggconst.DirModule))
+	if err != nil {
+		return nil, err
+	}
+	var registered []string
+	for _, pkg := range loaded {
+		for _, obj := range pkg.TypesInfo.Uses {
+			if fn, ok := obj.(*types.Func); ok && fn.Name() == ggconst.FuncRegister && fn.Pkg() != nil &&
+				strings.HasPrefix(fn.Pkg().Path(), frameworkModuleTree+"/") {
+				registered = append(registered, fn.Pkg().Path())
+			}
+		}
+	}
+	if len(registered) > 0 {
+		slices.Sort(registered)
+		modules, loadErr := packages.Load(cfg, slices.Compact(registered)...)
+		if loadErr != nil {
+			return nil, loadErr
+		}
+		loaded = append(loaded, modules...)
+	}
+
+	var roots []ts.TypeRef
+	for _, pkg := range loaded {
+		if len(pkg.Errors) > 0 {
+			return nil, errors.Newf("%s does not type-check: %s", pkg.PkgPath, pkg.Errors[0].Error())
+		}
+		for id, instance := range pkg.TypesInfo.Instances {
+			fn, ok := pkg.TypesInfo.Uses[id].(*types.Func)
+			if !ok || fn.Name() != funcModuleUse || fn.Pkg() == nil || fn.Pkg().Path() != frameworkModuleTree {
+				continue
+			}
+			// The type arguments of module.Use: the model, the request and
+			// the response.
+			for i := 1; i < instance.TypeArgs.Len(); i++ {
+				if ref, isRoot := typeScriptRootOf(instance.TypeArgs.At(i)); isRoot {
+					roots = append(roots, ref)
+				}
+			}
+		}
+	}
+	return uniqueTypeScriptRoots(roots), nil
+}
+
+// typeScriptRootOf returns the root a request or response type argument of
+// module.Use names: the type declared at package scope it is, or points to,
+// as {PkgPath: "github.com/hydroan/gst/module/helloworld", Name: "Req"} for
+// *helloworld.Req. An alias a framework module package declares forwards a
+// type of the module's models, and the root is the type it forwards:
+// {PkgPath: "github.com/hydroan/gst/internal/model/authz", Name: "Role"} for
+// *authz.Role. A type that carries no data (see isEmptyModel) is no root, and
+// neither is one written out without a name of its own, which has no
+// declaration to name.
+func typeScriptRootOf(t types.Type) (ts.TypeRef, bool) {
+	if p, ok := types.Unalias(t).(*types.Pointer); ok {
+		t = p.Elem()
+	}
+	for {
+		alias, ok := t.(*types.Alias)
+		if !ok || alias.Obj().Pkg() == nil || !strings.HasPrefix(alias.Obj().Pkg().Path(), frameworkModuleTree+"/") {
+			break
+		}
+		t = alias.Rhs()
+	}
+	var obj *types.TypeName
+	switch tt := t.(type) {
+	case *types.Alias:
+		obj = tt.Obj()
+	case *types.Named:
+		obj = tt.Obj()
+	default:
+		return ts.TypeRef{}, false
+	}
+	if isEmptyModel(t) || obj.Pkg() == nil || obj.Parent() != obj.Pkg().Scope() {
+		return ts.TypeRef{}, false
+	}
+	return ts.TypeRef{PkgPath: obj.Pkg().Path(), Name: obj.Name()}, true
+}
+
+// isEmptyModel reports whether t is model.Empty, or a struct holding nothing
+// beside it: what a module names as the request of a route that reads no
+// body, which carries no data.
+func isEmptyModel(t types.Type) bool {
+	named, ok := types.Unalias(t).(*types.Named)
+	if !ok {
+		return false
+	}
+	// The type carries the name a model embeds it under.
+	if obj := named.Obj(); obj.Pkg() != nil && obj.Pkg().Path() == frameworkEmptyPath && obj.Name() == ggconst.FieldEmpty {
+		return true
+	}
+	fields, ok := named.Underlying().(*types.Struct)
+	if !ok || fields.NumFields() == 0 {
+		return false
+	}
+	for field := range fields.Fields() {
+		if !field.Embedded() || !isEmptyModel(field.Type()) {
+			return false
+		}
+	}
+	return true
 }
 
 // writeTypeScriptFiles writes files under dir, skipping the unchanged ones, and

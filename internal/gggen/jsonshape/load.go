@@ -10,13 +10,14 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-// load type-checks the project packages the root packages reach, in two
-// passes, and returns them keyed by import path together with the file set
-// they were parsed into. The first pass lists the import graph only, to find
-// which project packages are reachable; the second type-checks just those
-// from source, together with their syntax: declarations take their doc
-// comments and enum constants from it. The packages outside the project are
-// read from compiled export data. Loading the whole graph from source instead
+// load type-checks the project packages the root packages reach, and the
+// packages of the declared trees among them (see Config.DeclaredTrees), in
+// two passes, and returns them keyed by import path together with the file
+// set they were parsed into. The first pass lists the import graph only, to
+// find which of those packages are reachable; the second type-checks just
+// those from source, together with their syntax: declarations take their doc
+// comments and enum constants from it. Every other package is read from
+// compiled export data. Loading the whole graph from source instead
 // would parse and check every dependency, the framework and the standard
 // library included.
 func load(cfg Config) (*token.FileSet, map[string]*packages.Package, error) {
@@ -51,9 +52,10 @@ func load(cfg Config) (*token.FileSet, map[string]*packages.Package, error) {
 	if err = packageErrors(graph); err != nil {
 		return nil, nil, err
 	}
+	trees := append([]string{cfg.ModulePath}, cfg.DeclaredTrees...)
 	var project []string
 	packages.Visit(graph, nil, func(pkg *packages.Package) {
-		if inModule(pkg.PkgPath, cfg.ModulePath) {
+		if slices.ContainsFunc(trees, func(tree string) bool { return inTree(pkg.PkgPath, tree) }) {
 			project = append(project, pkg.PkgPath)
 		}
 	})
@@ -94,9 +96,9 @@ func packageErrors(pkgs []*packages.Package) error {
 	return errors.Newf("the packages do not type-check:\n%s", strings.Join(lines, "\n"))
 }
 
-// inModule reports whether pkgPath is modulePath or a package below it:
-// example.com/app and example.com/app/model are in module example.com/app,
+// inTree reports whether pkgPath is tree or a package below it:
+// example.com/app and example.com/app/model are in the tree example.com/app,
 // example.com/application is not.
-func inModule(pkgPath, modulePath string) bool {
-	return pkgPath == modulePath || strings.HasPrefix(pkgPath, modulePath+"/")
+func inTree(pkgPath, tree string) bool {
+	return pkgPath == tree || strings.HasPrefix(pkgPath, tree+"/")
 }

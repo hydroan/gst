@@ -76,7 +76,7 @@ func (g *generator) declareRoot(ref TypeRef) {
 	s := jsonshape.Site{Subject: ref.PkgPath + "." + ref.Name}
 	pkg := g.project.Package(ref.PkgPath)
 	if pkg == nil || pkg.Types == nil {
-		g.project.Report(s, "the package is not part of module %s", g.cfg.ModulePath)
+		g.project.Report(s, "the package is not part of module %s or of a declared tree", g.cfg.ModulePath)
 		return
 	}
 	obj, ok := pkg.Types.Scope().Lookup(ref.Name).(*types.TypeName)

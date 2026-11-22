@@ -62,10 +62,12 @@ type Sample struct {
 	Items    gormdatatypes.JSONSlice[Item]    `json:"items"`
 	Day      gormdatatypes.Date               `json:"day"`
 	Due      datatypes.Date                   `json:"due"`
-	Deadline time.Time                        `json:"deadline,omitzero"`
-	Archived gorm.DeletedAt                   `json:"archived"`
-	Comment  sql.NullString                   `json:"comment"`
-	Version  modelschema.Version              `json:"version,omitempty"`
+	// Deadline is when the sample is due.
+	Deadline time.Time           `json:"deadline,omitzero"`
+	Closed   *time.Time          `json:"closed"`
+	Archived gorm.DeletedAt      `json:"archived"`
+	Comment  sql.NullString      `json:"comment"`
+	Version  modelschema.Version `json:"version,omitempty"`
 
 	Record   *record.Record    `json:"record"`
 	Endpoint notifier.Endpoint `json:"endpoint"`

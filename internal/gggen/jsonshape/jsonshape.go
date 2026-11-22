@@ -33,8 +33,15 @@ type Config struct {
 	// ModulePath is the import path prefix of the project packages: the ones
 	// type-checked from source, whose types get descriptions of their own.
 	ModulePath string
+	// DeclaredTrees are the import paths of the package trees outside the
+	// project whose packages are read like the project's: type-checked from
+	// source, their types described on their own. They are the trees the
+	// framework's modules declare their types in, for a project that
+	// registers modules at run time.
+	DeclaredTrees []string
 	// Roots are the import paths of the packages declaring the types the API
-	// sends and receives. The project packages they reach are loaded.
+	// sends and receives. The project packages they reach are loaded, and the
+	// packages of the declared trees with them.
 	Roots []string
 	// Overlay maps file paths, absolute or relative to Dir, to the contents
 	// the load reads in place of the files on disk, the way a go build

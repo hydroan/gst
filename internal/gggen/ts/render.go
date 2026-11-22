@@ -119,10 +119,47 @@ func (g *generator) writeInterface(b *strings.Builder, name string, fields []jso
 		b.WriteString("  [key: string]: never;\n")
 	}
 	for _, f := range fields {
-		writeDoc(b, "  ", g.project.FieldDoc(f.Var))
+		writeDoc(b, "  ", g.propertyDoc(f))
 		fmt.Fprintf(b, "  %s;\n", g.property(f, ctx, g.project.FieldSite(s, f.Key, f.Var)))
 	}
 	b.WriteString("}\n")
+}
+
+// propertyDoc returns the doc comment of the property of one key: the doc
+// comment of the field, and, for a string written in a format of its own (see
+// jsonshape.FormatOf), a line naming the format, the way the OpenAPI document
+// names it. The field
+//
+//	// Deadline is when the sample is due.
+//	Deadline time.Time `json:"deadline,omitzero"`
+//
+// gets the doc
+//
+//	Deadline is when the sample is due.
+//
+//	Format: date-time
+//
+// and the field Due gst.Date, without a comment, the doc "Format: date". A
+// pointer to such a type gets the line of the type.
+func (g *generator) propertyDoc(f jsonshape.Field) string {
+	doc := g.project.FieldDoc(f.Var)
+	t := types.Unalias(f.Var.Type())
+	if p, ok := t.(*types.Pointer); ok {
+		t = types.Unalias(p.Elem())
+	}
+	n, ok := t.(*types.Named)
+	if !ok {
+		return doc
+	}
+	format := jsonshape.FormatOf(n)
+	switch {
+	case format == "":
+		return doc
+	case doc == "":
+		return "Format: " + format
+	default:
+		return doc + "\n\nFormat: " + format
+	}
 }
 
 // property renders the property of one key. It is optional when the key may

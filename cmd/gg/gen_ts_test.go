@@ -3,10 +3,12 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gggen/ts"
 )
 
 func TestGenTypeScriptRunWritesTheDeclarationsOfTheRoutes(t *testing.T) {
@@ -160,6 +162,137 @@ func TestGenTypeScriptRunClearsTheOutputWhenTheModelsAreGone(t *testing.T) {
 		t.Errorf("the output must follow the models and disappear with them, stat error = %v", err)
 	}
 }
+
+// TestTypeScriptModuleRootsAreTheTypesModuleUseExchanges pins the roots a
+// project's module package yields: the request and response types the
+// framework module it registers passes to module.Use. It carries the example
+// of the typeScriptModuleRoots doc comment, and the one of typeScriptRootOf
+// for a type a module package declares itself.
+func TestTypeScriptModuleRootsAreTheTypesModuleUseExchanges(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	writeProjectFile(t, filepath.Join(projectDir, "module", "module.go"), `package module
+
+import "github.com/hydroan/gst/module/helloworld"
+
+func init() {
+	helloworld.Register()
+}
+`)
+
+	roots, err := typeScriptModuleRoots("tmpapp")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const helloworld = "github.com/hydroan/gst/module/helloworld"
+	want := []ts.TypeRef{{PkgPath: helloworld, Name: "Helloworld2"}, {PkgPath: helloworld, Name: "Req"}, {PkgPath: helloworld, Name: "Rsp"}}
+	if !slices.Equal(roots, want) {
+		t.Fatalf("typeScriptModuleRoots() = %v, want %v", roots, want)
+	}
+}
+
+// TestGenTypeScriptRunCoversTheRoutesRegisteredAtRunTime pins that gg gen ts
+// describes the types of the routes a project registers at run time beside
+// the ones of its models: those of every framework module its module package
+// registers, each where a copy of the module would put it, and those of a
+// module.Use of the project's own, the request and the response without the
+// model it is registered on. An alias a module package forwards a model
+// type under yields the model's declaration (see typeScriptRootOf, whose
+// example on *authz.Role it carries), the constants a module package
+// re-exports break no enum, and a module exchanging nothing with a name,
+// column, gets no file.
+func TestGenTypeScriptRunCoversTheRoutesRegisteredAtRunTime(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	writeTypeScriptProject(t, projectDir, typeScriptSampleModel)
+	writeProjectFile(t, filepath.Join(projectDir, "module", "module.go"), strings.ReplaceAll(typeScriptSampleModules, "'", "`"))
+
+	runGenTypeScript(t)
+
+	for name, wants := range map[string][]string{
+		"model.ts":       {"export interface Sample {"},
+		"module.ts":      {"export interface NoticeReq {", "export interface NoticeRsp {"},
+		"authz.ts":       {"export interface Role {", "export interface RoutesRsp {"},
+		"email.ts":       {"export interface ChangeRequestReq {"},
+		"helloworld.ts":  {"export interface Req {", "export interface Helloworld2 {"},
+		"iam/account.ts": {"export interface LoginReq {", "export type LoginRsp = $iam$session.AuthenticatedSessionRsp;"},
+		"iam/session.ts": {"export interface AuthenticatedSessionRsp {"},
+		"logmgmt.ts":     {"export interface LoginLog {", `export type LoginStatus = "success" | "failure" | "logout";`},
+		"mfa.ts":         {"export interface TOTPConfirmReq {"},
+		"version.ts":     {"export interface VersionRsp {"},
+	} {
+		declarations := readTypeScriptFile(t, projectDir, name)
+		for _, want := range wants {
+			if !strings.Contains(declarations, want) {
+				t.Errorf("%s is missing %q:\n%s", name, want, declarations)
+			}
+		}
+	}
+	if _, err := os.Stat(filepath.Join(projectDir, "generated", "typescript", "column.ts")); !os.IsNotExist(err) {
+		t.Errorf("the column module exchanges no type with a name and gets no file, stat error = %v", err)
+	}
+	// The model a module is registered on travels only where the request or
+	// the response is that model.
+	if declarations := readTypeScriptFile(t, projectDir, "module.ts"); strings.Contains(declarations, "export interface Notice {") {
+		t.Errorf("module.ts declares the model no route exchanges:\n%s", declarations)
+	}
+}
+
+// typeScriptSampleModules is the module package of a project registering
+// every framework module at run time, and a module of its own on types the
+// package declares, with its struct tags quoted by ' instead of backquotes.
+const typeScriptSampleModules = `package module
+
+import (
+	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/module"
+	"github.com/hydroan/gst/module/authz"
+	"github.com/hydroan/gst/module/column"
+	"github.com/hydroan/gst/module/email"
+	"github.com/hydroan/gst/module/helloworld"
+	"github.com/hydroan/gst/module/iam"
+	"github.com/hydroan/gst/module/logmgmt"
+	"github.com/hydroan/gst/module/mfa"
+	versionmod "github.com/hydroan/gst/module/version"
+	"github.com/hydroan/gst/service"
+)
+
+type Notice struct {
+	Body string 'json:"body"'
+
+	model.Base
+}
+
+type NoticeReq struct {
+	Title string 'json:"title"'
+}
+
+type NoticeRsp struct {
+	ID string 'json:"id"'
+}
+
+type noticeService struct {
+	service.Base[*Notice, *NoticeReq, *NoticeRsp]
+}
+
+func init() {
+	authz.Register()
+	column.Register(map[string][]string{"samples": {"name"}})
+	email.Register()
+	helloworld.Register()
+	iam.Register()
+	logmgmt.Register()
+	mfa.Register()
+	versionmod.Register()
+
+	module.Use(module.NewWrapper("/notices", "id", false, &noticeService{}), module.CRUD(service.Create))
+}
+`
 
 // typeScriptSampleModel is the model file of the TypeScript generation tests,
 // with its struct tags quoted by ' instead of backquotes. gst.yaml ignores its

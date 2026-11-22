@@ -35,9 +35,9 @@ var (
 
 // TestGenerateMatchesGoldenFiles holds the files generated from Sample against
 // testdata/golden; run it with -update to rewrite them. The golden files carry
-// the examples of the Generate, render, writeInterface, property, expr, ref,
-// builtin, structural, value, files, enumBody, enumZero and constantLiteral doc
-// comments.
+// the examples of the Generate, render, writeInterface, property, propertyDoc,
+// expr, ref, builtin, structural, value, files, enumBody, enumZero and
+// constantLiteral doc comments.
 func TestGenerateMatchesGoldenFiles(t *testing.T) {
 	files, err := generateFixture(t, sampleRoot)
 	require.NoError(t, err)
@@ -109,6 +109,35 @@ func TestGenerateReportsRootsItCannotFind(t *testing.T) {
 
 	require.Contains(t, diagnostics.Error(), "the package declares no type Missing")
 	require.Contains(t, diagnostics.Error(), "the package is not part of module "+fixtureModule)
+}
+
+// TestGenerateDeclaresTheTypesOfADeclaredTree pins what a declared tree
+// changes. A type from outside the project is spelled out where it is used;
+// once its package lies under a declared tree it gets a declaration of its
+// own, in a file at the output root, which the files using it import, and a
+// root may name it.
+func TestGenerateDeclaresTheTypesOfADeclaredTree(t *testing.T) {
+	cfg := Config{Dir: fixtureDir, ModulePath: fixtureModule + "/model", RootPath: fixtureModule + "/model", Roots: []TypeRef{sampleRoot}}
+	generate := func() map[string]string {
+		files, err := Generate(cfg)
+		require.NoError(t, err)
+		contents := make(map[string]string, len(files))
+		for _, f := range files {
+			contents[f.Path] = f.Content
+		}
+		return contents
+	}
+
+	outside := generate()
+	require.NotContains(t, outside, "notifier.ts")
+	require.Contains(t, outside["sample.ts"], "  endpoint: { url: string; token?: string };\n")
+
+	cfg.DeclaredTrees = []string{fixtureModule + "/pkg"}
+	cfg.Roots = append(cfg.Roots, TypeRef{PkgPath: fixtureModule + "/pkg/notifier", Name: "Endpoint"})
+	declared := generate()
+	require.Contains(t, declared["notifier.ts"], "export interface Endpoint {\n")
+	require.Contains(t, declared["sample.ts"], "import type * as $notifier from \"./notifier.js\";\n")
+	require.Contains(t, declared["sample.ts"], "  endpoint: $notifier.Endpoint;\n")
 }
 
 func TestGenerateNamesThePreludeAfterTheApplication(t *testing.T) {
@@ -237,7 +266,7 @@ var compilerConfigs = map[string]string{
 // consumerSource uses the generated declarations the way a frontend does. Each
 // @ts-expect-error line must fail to compile, or the compiler reports the
 // directive as unused.
-const consumerSource = `import type { Envelope, IDsPayload, ItemsPayload, ListResult } from "./gst.js";
+const consumerSource = `import type { Envelope, ErrorEnvelope, IDsPayload, ItemsPayload, ListResult } from "./gst.js";
 import type { Record, State } from "./record.js";
 import type { Entry, Kind, Level, Permission, Sample, Status } from "./sample.js";
 
@@ -263,6 +292,16 @@ export const listed: Envelope<ListResult<Record>> = {
   msg: "success",
   trace_id: "trace",
 };
+
+export const refused: ErrorEnvelope = {
+  data: null,
+  msg: "title is a required field",
+  trace_id: "trace",
+  error: { field_violations: [{ field: "title", description: "title is a required field" }] },
+};
+
+// @ts-expect-error the body of a success has no error member
+export const mixed: Envelope<Record> = { data: record, msg: "success", trace_id: "trace", error: {} };
 
 export const batch: ItemsPayload<Record> = { items: [record] };
 export const removal: IDsPayload = { ids: ["1"] };

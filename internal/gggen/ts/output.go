@@ -91,18 +91,23 @@ func (g *generator) files() []File {
 // relativePackage returns the output path of a package, extension aside. The
 // packages of the root tree sit at the output root, so the model directory is
 // not repeated in every path; the root package itself keeps that directory's
-// name. A package outside the tree keeps its path relative to the module, which
-// is what tells a reader it comes from elsewhere. With the module
-// example.com/app and the root tree example.com/app/model, it returns sample
-// for example.com/app/model/sample, model for example.com/app/model,
-// pkg/notifier for example.com/app/pkg/notifier, and index for the module
-// root package.
+// name. The packages of a declared tree sit there the same way. Any other
+// package keeps its path relative to the module, which is what tells a reader
+// it comes from elsewhere. With the module example.com/app, the root tree
+// example.com/app/model and the declared tree example.org/lib/internal/model,
+// it returns sample for example.com/app/model/sample, model for
+// example.com/app/model, iam/account for
+// example.org/lib/internal/model/iam/account, pkg/notifier for
+// example.com/app/pkg/notifier, and index for the module root package.
 func (g *generator) relativePackage(pkgPath string) string {
-	if root := g.cfg.RootPath; root != "" {
-		if pkgPath == root {
-			return path.Base(root)
+	for _, tree := range append([]string{g.cfg.RootPath}, g.cfg.DeclaredTrees...) {
+		if tree == "" {
+			continue
 		}
-		if rel, inRoot := strings.CutPrefix(pkgPath, root+"/"); inRoot {
+		if pkgPath == tree {
+			return path.Base(tree)
+		}
+		if rel, inTree := strings.CutPrefix(pkgPath, tree+"/"); inTree {
 			return rel
 		}
 	}
@@ -169,20 +174,30 @@ func preludeFileName(appName string) string {
 }
 
 // prelude declares the JSON the framework wraps around the project's types:
-// the response envelope written by internal/response, and the list data and
-// batch request bodies of the default actions in internal/controller.
+// the envelopes internal/response writes, one for a successful response and
+// one for a failed one, and the list data and batch request bodies of the
+// default actions in internal/controller.
 func prelude() string {
 	return ggconst.CodeGeneratedComment + `
 
 /**
- * Envelope is the JSON body of every API response. A successful request
- * answers 200 with the data of the route; a failed one answers its 4xx or 5xx
- * status with the error message, data null and, when the failure carries
- * details, error. The status tells a failure from a success: a failure
- * carrying no details has no error member.
+ * Envelope is the JSON body of a successful response: 200 with the data of
+ * the route. The status tells a success from a failure, whose body is an
+ * ErrorEnvelope.
  */
 export interface Envelope<T> {
   data: T;
+  msg: string;
+  trace_id: string;
+}
+
+/**
+ * ErrorEnvelope is the JSON body of a failed response: its 4xx or 5xx status
+ * with the error message, data null and, when the failure carries details,
+ * error. A failure carrying no details has no error member.
+ */
+export interface ErrorEnvelope {
+  data: null;
   msg: string;
   trace_id: string;
   error?: ErrorDetails;

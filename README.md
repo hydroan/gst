@@ -1245,8 +1245,9 @@ replace google.golang.org/genproto => google.golang.org/genproto v0.0.0-20261012
 `sample.ts`，`model/sample/item` 生成 `sample/item.ts`，`model` 包自身生成 `model.ts`，路径里不重复
 `model` 这一层；model 之外被模型引用到的类型（例如 `helper/notifier` 里作为字段类型出现的结构）保留
 自己的相对路径 `helper/notifier.ts`，一眼能看出它不来自 model。另有一个以
-`app.name` 命名的文件（未配置时用框架名 `gst.ts`），声明响应信封 `Envelope<T>`、默认列表结果
-`ListResult<T>` 和默认批量请求体 `ItemsPayload<T>`、`IDsPayload`。
+`app.name` 命名的文件（未配置时用框架名 `gst.ts`），声明成功响应的信封 `Envelope<T>`、失败响应的信封
+`ErrorEnvelope`、默认列表结果 `ListResult<T>` 和默认批量请求体 `ItemsPayload<T>`、`IDsPayload`。成功还是
+失败只看 HTTP 状态码：200 的响应体按 `Envelope<T>` 读，4xx、5xx 的按 `ErrorEnvelope` 读。
 
 产物只有类型，文件之间用相对路径互相引用，不依赖任何 npm 包，也不限定请求库和前端框架：把整个
 目录复制到前端项目即可使用。命令和 `gg gen` 一样先执行项目检查、应用 gst.yaml 的忽略规则；模型
@@ -1265,15 +1266,18 @@ replace google.golang.org/genproto => google.golang.org/genproto v0.0.0-20261012
 - 同包声明了常量的 string、整数类型生成字面量联合，常量注释写进类型注释，与 Swagger 一致；常量用
   `<<`、`|` 等位运算定义的视为位标志，类型是 `number`；没有零值常量的枚举在使用处补 `| ""` 或 `| 0`。
 - `time.Time`、`gst.Date`，以及只定义了 `MarshalText`、没有 `MarshalJSON` 的类型（`netip.Addr`、实现了它的枚举）
-  是字符串；`any`、`json.RawMessage`、`datatypes.JSON` 是 `unknown`。
+  是字符串；`any`、`json.RawMessage`、`datatypes.JSON` 是 `unknown`。时刻和日期字段的注释里带一行格式说明，
+  `Format: date-time`（RFC3339 的时刻）或 `Format: date`（`2006-01-02` 的日期），格式名与 Swagger 文档一致。
 
 JSON 形态由代码决定、无法从类型声明读出的写法，命令会列出全部位置后失败，不写任何文件：自定义了
 `MarshalJSON` 的类型（上面列出的类型除外）、项目内的泛型类型、带方法的接口、
 channel 与函数字段、键不是字符串或整数的 map，以及 `encoding/json` 不认的 tag 名和 tag 选项。只定义了
 `UnmarshalJSON` 等解码方法的类型照常按自身结构生成，即服务端返回它时的形态。
 
-`gg module add` 或 `module.Use` 在运行期注册的模块路由不在生成范围内，它们收发的类型需要前端自行声明；
-`gg module copy` 复制进项目的模块和业务 model 一样会生成。
+运行期注册的路由同样在生成范围内：项目 `module` 包里用 `gg module add` 或手写注册的框架模块
+（`iam.Register()` 这类），以及项目自己写的 `module.Use`。框架模块的类型放在把模块 `gg module copy`
+进项目后会在的位置，例如 iam 模块的账号类型在 `iam/account.ts`，所以模块是注册还是复制，前端引用的
+路径相同。`gg module copy` 复制进项目的模块和业务 model 一样会生成。
 
 ### 项目级配置 gst.yaml
 

@@ -59,6 +59,55 @@ func TestLoadReadsTheShapesOfAProject(t *testing.T) {
 	require.Empty(t, project.Diagnostics())
 }
 
+// TestLoadReadsADeclaredTreeLikeTheProject pins what a declared tree adds to a
+// load: the packages under it the roots reach are type-checked from source
+// with the project's, so their types are declared, where a package outside
+// the project is otherwise not one the project holds.
+func TestLoadReadsADeclaredTreeLikeTheProject(t *testing.T) {
+	cfg := jsonshape.Config{Dir: ".", ModulePath: fixtureModule + "/model", Roots: []string{fixtureModule + "/model/sample"}}
+	project, err := jsonshape.Load(cfg)
+	require.NoError(t, err)
+	require.Nil(t, project.Package(fixtureModule+"/pkg/notifier"))
+
+	cfg.DeclaredTrees = []string{fixtureModule + "/pkg"}
+	project, err = jsonshape.Load(cfg)
+	require.NoError(t, err)
+	pkg := project.Package(fixtureModule + "/pkg/notifier")
+	require.NotNil(t, pkg)
+	endpoint, ok := pkg.Types.Scope().Lookup("Endpoint").(*types.TypeName)
+	require.True(t, ok)
+	require.True(t, project.Declares(endpoint))
+	require.Equal(t, "Endpoint is where a sample reports to.", project.TypeDoc(endpoint))
+}
+
+// TestFormatOfNamesTheFormatOfABuiltinString pins the formats of the builtin
+// strings, the names the OpenAPI document gives them: date-time for an
+// instant, date for the framework's calendar day, and none for a builtin of
+// another shape or for a type that is no builtin.
+func TestFormatOfNamesTheFormatOfABuiltinString(t *testing.T) {
+	project, err := jsonshape.Load(jsonshape.Config{
+		Dir:        ".",
+		ModulePath: fixtureModule,
+		Roots:      []string{fixtureModule + "/model/sample"},
+	})
+	require.NoError(t, err)
+	sample, ok := project.Package(fixtureModule + "/model/sample").Types.Scope().Lookup("Sample").Type().Underlying().(*types.Struct)
+	require.True(t, ok)
+
+	formats := make(map[string]string)
+	for field := range sample.Fields() {
+		if named, isNamed := types.Unalias(field.Type()).(*types.Named); isNamed {
+			formats[field.Name()] = jsonshape.FormatOf(named)
+		}
+	}
+	require.Equal(t, "date-time", formats["Deadline"], "time.Time")
+	require.Equal(t, "date-time", formats["Day"], "gorm.io/datatypes.Date")
+	require.Equal(t, "date-time", formats["Archived"], "gorm.DeletedAt")
+	require.Equal(t, "date", formats["Due"], "gst.Date")
+	require.Empty(t, formats["Document"], "datatypes.JSON is no string")
+	require.Empty(t, formats["Comment"], "sql.NullString is no builtin")
+}
+
 // TestTextMethodNamesHowATypeWithoutAJSONMethodWritesText pins which types
 // a generator describes as strings: a type with MarshalText and no JSON
 // method, netip.Addr and the Grade fixture, writes the text of that method,
