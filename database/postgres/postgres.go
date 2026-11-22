@@ -1,14 +1,19 @@
 package postgres
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/logger"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/stdlib"
 	"go.uber.org/zap"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -44,7 +49,11 @@ func New(cfg config.Postgres) (*gorm.DB, error) {
 	// TranslateError maps the write failures to the gorm sentinels; the
 	// framework's own table (see translate) runs over what the driver's
 	// leaves as it is.
-	db, err := gorm.Open(postgres.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
+	dialector, err := open(cfg)
+	if err != nil {
+		return nil, err
+	}
+	db, err := gorm.Open(dialector, &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
 	if err != nil {
 		return nil, err
 	}
@@ -80,9 +89,40 @@ func attachReplicas(db *gorm.DB, cfg config.Postgres) (*gorm.DB, error) {
 		replicaCfg := cfg
 		replicaCfg.Host, replicaCfg.Port = host, port
 		replicaCfg.Replicas = nil
-		dialectors = append(dialectors, postgres.Open(buildDSN(replicaCfg)))
+		dialector, err := open(replicaCfg)
+		if err != nil {
+			return nil, errors.Wrap(err, "postgres replicas")
+		}
+		dialectors = append(dialectors, dialector)
 	}
 	return dbruntime.AttachResolver(db, dialectors)
+}
+
+// open returns the dialector of the database cfg names, over a connection
+// pool of its own: the pool is opened here, not by the dialector, so that
+// every connection of it is set up by readTimesInUTC.
+func open(cfg config.Postgres) (gorm.Dialector, error) {
+	connConfig, err := pgx.ParseConfig(buildDSN(cfg))
+	if err != nil {
+		return nil, errors.Wrap(err, "postgres connection string")
+	}
+	pool := stdlib.OpenDB(*connConfig, stdlib.OptionAfterConnect(func(_ context.Context, conn *pgx.Conn) error {
+		readTimesInUTC(conn.TypeMap())
+		return nil
+	}))
+	return postgres.New(postgres.Config{Conn: pool}), nil
+}
+
+// readTimesInUTC makes the connection whose types are given hand back every
+// time it reads, a timestamptz and a timestamp alike, located in UTC, the
+// framework's one time base, the way the MySQL DSN's loc=UTC does. The
+// driver hands a timestamptz back in the zone of the process, the same
+// instant under another wall clock, so a time read on a host outside UTC and
+// written out as it stands, formatted or encoded, would carry that host's
+// offset.
+func readTimesInUTC(types *pgtype.Map) {
+	types.RegisterType(&pgtype.Type{Name: "timestamptz", OID: pgtype.TimestamptzOID, Codec: &pgtype.TimestamptzCodec{ScanLocation: time.UTC}})
+	types.RegisterType(&pgtype.Type{Name: "timestamp", OID: pgtype.TimestampOID, Codec: &pgtype.TimestampCodec{ScanLocation: time.UTC}})
 }
 
 // buildDSN assembles the pgx connection string.
@@ -99,10 +139,10 @@ func attachReplicas(db *gorm.DB, cfg config.Postgres) (*gorm.DB, error) {
 // timestamptz as an instant but reads the session zone wherever text meets
 // time: a timestamp string without an offset — the form URL time filters and
 // time cursors bind, see types.FilterTimeLayout — is taken as time in that
-// zone, to_char renders time buckets in it, and values come back carrying its
-// offset. Under any other zone, filters and cursors would shift by the
-// offset, buckets would split days at that zone's midnight, and responses
-// would carry that offset instead of UTC's, so the zone is not configurable.
+// zone, and to_char renders time buckets in it. Under any other zone, filters
+// and cursors would shift by the offset and buckets would split days at that
+// zone's midnight, so the zone is not configurable. The zone a time read
+// comes back in is the driver's to pick, and readTimesInUTC picks it.
 //
 // Every configured value is written quoted (see dsnValue): the driver reads
 // the string as keywords and values, and a space ends a value that is not

@@ -145,6 +145,10 @@ func (d *sqliteDatabase) GetGeneratorConfig() database.GeneratorConfig {
 	return d.generatorConfig
 }
 
+func (d *sqliteDatabase) SessionSetupQueries() []string {
+	return nil
+}
+
 func (d *sqliteDatabase) GetTransactionQueries() database.TransactionQueries {
 	return database.TransactionQueries{
 		Begin:    "BEGIN",

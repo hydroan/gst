@@ -23,7 +23,7 @@ GOTESTSUM_PKG := gotest.tools/gotestsum
 
 # The tools make runs, each the binary of the version go.mod pins, installed
 # under GO_BIN_DIR in a directory named after the tool and its version, as
-# golangci-lint-v2.14.0/golangci-lint. A tool on PATH is never run, whatever
+# golangci-lint-v2.15.0/golangci-lint. A tool on PATH is never run, whatever
 # its version, so a run here and a run in CI judge the code by the same tool;
 # an upgrade installs the new version beside the old one.
 GOLANGCI_LINT := $(GO_BIN_DIR)/golangci-lint-$(GOLANGCI_LINT_VERSION)/golangci-lint

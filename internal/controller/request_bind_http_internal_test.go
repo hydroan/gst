@@ -353,14 +353,14 @@ func TestClientSafeBindErrorNamesTheFieldsTheValidatorRefused(t *testing.T) {
 }
 
 // untranslatedProbe carries rules the validator has no English sentence for:
-// hostname and startswith are two of its own without one, gstprobe is a rule
+// hostname and oneofci are two of its own without one, gstprobe is a rule
 // a project registers.
 type untranslatedProbe struct {
 	Host    string `json:"host" binding:"hostname"`
 	Address struct {
 		Zip string `json:"zip" binding:"hostname"`
 	} `json:"address"`
-	Tag string `json:"tag" binding:"startswith=ab"`
+	Tag string `json:"tag" binding:"oneofci=ab"`
 	Own string `json:"own" binding:"gstprobe"`
 }
 
@@ -379,7 +379,7 @@ func TestClientSafeBindErrorSpeaksOfTheRuleWithoutATranslation(t *testing.T) {
 	require.Equal(t, []types.FieldViolation{
 		{Field: "host", Description: "host failed the hostname check"},
 		{Field: "address.zip", Description: "address.zip failed the hostname check"},
-		{Field: "tag", Description: "tag failed the startswith=ab check"},
+		{Field: "tag", Description: "tag failed the oneofci=ab check"},
 		{Field: "own", Description: "own failed the gstprobe check"},
 	}, types.FieldViolations(serviceErr))
 	require.NotContains(t, serviceErr.Msg(), "Key:")

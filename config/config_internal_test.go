@@ -244,7 +244,7 @@ func TestInitFailsOnAnEnvironmentValueItCannotDecode(t *testing.T) {
 				withFreshRegistry(t, "")
 
 				tc.register()
-				require.ErrorContains(t, Init(), `default tag "`+tc.tag+`"`)
+				require.ErrorContains(t, Init(), `invalid default "`+tc.tag+`"`)
 			})
 		}
 	})

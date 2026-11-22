@@ -287,8 +287,8 @@ func TestRunWaitsForTheWorkAtShutdown(t *testing.T) {
 
 	cancel()
 	select {
-	case <-returned:
-		t.Fatal("Run must wait for the work when the context ends without a loss")
+	case err := <-returned:
+		t.Fatalf("Run must wait for the work when the context ends without a loss, returned %v", err)
 	case <-time.After(3 * stepDownGrace):
 	}
 	close(release)
@@ -322,8 +322,8 @@ func TestRunFailsTheProcessWhenLostWorkWillNotStop(t *testing.T) {
 		t.Fatal("work ignoring the loss must fail the process")
 	}
 	select {
-	case <-returned:
-		t.Fatal("Run must keep waiting for the work after failing the process")
+	case err := <-returned:
+		t.Fatalf("Run must keep waiting for the work after failing the process, returned %v", err)
 	case <-time.After(3 * stepDownGrace):
 	}
 	close(release)

@@ -420,8 +420,8 @@ func TestWaitReturnsOnceTheQueueDrains(t *testing.T) {
 	go func() { returned <- Wait() }()
 
 	select {
-	case <-returned:
-		t.Fatal("Wait returned while a table was still pending")
+	case err := <-returned:
+		t.Fatalf("Wait returned while a table was still pending: %v", err)
 	case <-time.After(50 * time.Millisecond):
 	}
 

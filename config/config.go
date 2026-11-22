@@ -50,14 +50,11 @@
 package config
 
 import (
-	"encoding"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"reflect"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -495,9 +492,6 @@ func loadSection(name string, typ reflect.Type) error {
 	if err := defaults.Set(defaultCfg.Interface()); err != nil {
 		return errors.Wrapf(err, "config: section %q of %s: failed to apply the default tags", name, typ)
 	}
-	if err := checkDefaultTags(typ); err != nil {
-		return errors.Wrapf(err, "config: section %q of %s", name, typ)
-	}
 	setDefaultDurationFields(typ, defaultCfg.Elem())
 	walkConfigKeys(name, defaultCfg.Elem(), func(key string, field reflect.Value) {
 		cv.SetDefault(key, field.Interface())
@@ -552,77 +546,12 @@ func keepUnkeyedDefaults(section, defaultValues reflect.Value) {
 	}
 }
 
-// checkDefaultTags reports each "default" struct tag of typ, a registered
-// section's struct type, that package defaults cannot set its field from —
-// it leaves such a field zero without a word — walking into nested structs
-// and pointers to them. A field tagged "-" is passed over, as package defaults
-// passes over it, and a list, a map or a struct fails in defaults.Set already.
-func checkDefaultTags(typ reflect.Type) error {
-	var errs error
-	for sf := range typ.Fields() {
-		tag := sf.Tag.Get("default")
-		if !sf.IsExported() || tag == "-" {
-			continue
-		}
-		fieldTyp := sf.Type
-		for fieldTyp.Kind() == reflect.Pointer {
-			fieldTyp = fieldTyp.Elem()
-		}
-		if fieldTyp.Kind() == reflect.Struct && fieldTyp != reflect.TypeFor[time.Time]() {
-			errs = errors.Join(errs, checkDefaultTags(fieldTyp))
-			continue
-		}
-		if tag == "" {
-			continue
-		}
-		if err := parseDefaultTag(tag, fieldTyp); err != nil {
-			errs = errors.Join(errs, errors.Wrapf(err, "field %s: default tag %q", sf.Name, tag))
-		}
-	}
-	return errs
-}
-
-// parseDefaultTag reports whether package defaults can set a value of typ
-// from tag, trying what it tries in its order: the type's own text or JSON
-// unmarshaling, then its kind. A kind it sets without parsing, such as a
-// string, takes any tag.
-func parseDefaultTag(tag string, typ reflect.Type) error {
-	value := reflect.New(typ).Interface()
-	if u, ok := value.(encoding.TextUnmarshaler); ok && u.UnmarshalText([]byte(tag)) == nil {
-		return nil
-	}
-	if u, ok := value.(json.Unmarshaler); ok && u.UnmarshalJSON([]byte(tag)) == nil {
-		return nil
-	}
-	var err error
-	switch typ.Kind() {
-	case reflect.Bool:
-		_, err = strconv.ParseBool(tag)
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32:
-		_, err = strconv.ParseInt(tag, 0, typ.Bits())
-	case reflect.Int64:
-		// A duration first, then an integer; a time.Duration reports why the
-		// tag is no duration.
-		_, durationErr := time.ParseDuration(tag)
-		if durationErr == nil {
-			break
-		}
-		if _, err = strconv.ParseInt(tag, 0, 64); err != nil && typ == reflect.TypeFor[time.Duration]() {
-			err = durationErr
-		}
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		_, err = strconv.ParseUint(tag, 0, typ.Bits())
-	case reflect.Float32, reflect.Float64:
-		_, err = strconv.ParseFloat(tag, typ.Bits())
-	}
-	return err
-}
-
 // setDefaultDurationFields sets each zero time.Duration field of val, a value
 // of struct type typ, from its "default" struct tag, walking into nested and
 // embedded structs and pointers to them — a time.Time is a value, not one to
 // walk into — and passing over a field tagged "-". A tag that does not parse
-// leaves its field alone; checkDefaultTags reports it.
+// leaves its field alone: defaults.Set has failed on it already, except in an
+// unexported embedded struct, which defaults.Set does not walk.
 func setDefaultDurationFields(typ reflect.Type, val reflect.Value) {
 	if typ.Kind() != reflect.Struct {
 		return
