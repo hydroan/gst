@@ -16,11 +16,16 @@ import (
 // there, so a model's own start at 11. The standard actions become the rpcs
 // CreateNote, GetNote, ListNote and so on, and the publish action
 // PublishNote; over HTTP they are /api/board/notes.
+//
+// Published and PublishedAt are the publish action's to write. binding
+// "readonly" declares them read-only to clients: the standard create,
+// update and patch take no value a client sends for them, over either
+// transport, and answer what is stored.
 type Note struct {
 	Title       string     `json:"title" query:"title" pb:"11"`
 	Body        string     `json:"body" pb:"12"`
-	Published   bool       `json:"published" query:"published" pb:"13"`
-	PublishedAt *time.Time `json:"published_at,omitempty" pb:"14"`
+	Published   bool       `json:"published" query:"published" pb:"13" binding:"readonly"`
+	PublishedAt *time.Time `json:"published_at,omitempty" pb:"14" binding:"readonly"`
 
 	model.Base
 }

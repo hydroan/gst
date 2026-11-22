@@ -34,6 +34,11 @@ const (
 // there, so a model's own start at 11. The standard actions become the rpcs
 // CreateNote, GetNote, ListNote and so on, and the publish action
 // PublishNote; over HTTP they are /api/board/notes.
+//
+// Published and PublishedAt are the publish action's to write. binding
+// "readonly" declares them read-only to clients: the standard create,
+// update and patch take no value a client sends for them, over either
+// transport, and answer what is stored.
 type Note struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The identifier of the record, assigned when it is created.

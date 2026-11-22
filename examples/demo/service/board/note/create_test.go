@@ -17,13 +17,14 @@ import (
 )
 
 // TestCreate covers POST /api/board/notes and the CreateNote rpc, served by
-// Creator in create.go: a note starts unpublished whatever the request
-// says, over either transport, and a gRPC call names its session or is
+// Creator in create.go: the title is stored trimmed, and a note starts
+// unpublished whatever the request says, its publication being read-only to
+// clients, over either transport; a gRPC call names its session or is
 // refused.
 func TestCreate(t *testing.T) {
 	t.Run("over HTTP", func(t *testing.T) {
 		account := testsupport.Login(t)
-		note, err := account.Client.Post[board.Note](t.Context(), "/api/board/notes", &board.Note{Title: "hello", Body: "over http", Published: true})
+		note, err := account.Client.Post[board.Note](t.Context(), "/api/board/notes", &board.Note{Title: " hello ", Body: "over http", Published: true})
 		require.NoError(t, err)
 		require.Equal(t, "hello", note.Title)
 		require.False(t, note.Published)
@@ -33,7 +34,7 @@ func TestCreate(t *testing.T) {
 	t.Run("over gRPC", func(t *testing.T) {
 		notes := pbboard.NewNoteServiceClient(testutil.DialGRPC(t))
 		ctx := gstgrpc.WithBearer(t.Context(), testsupport.Login(t, client.WithUserAgent(iamtest.GRPCUserAgent)).SessionID)
-		rsp, err := notes.CreateNote(ctx, &pbboard.CreateNoteRequest{Note: &pbboard.Note{Title: "hello", Body: "over grpc", Published: true}})
+		rsp, err := notes.CreateNote(ctx, &pbboard.CreateNoteRequest{Note: &pbboard.Note{Title: " hello ", Body: "over grpc", Published: true}})
 		require.NoError(t, err)
 		require.Equal(t, "hello", rsp.GetNote().GetTitle())
 		require.False(t, rsp.GetNote().GetPublished())

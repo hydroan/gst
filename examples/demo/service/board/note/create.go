@@ -1,6 +1,8 @@
 package note
 
 import (
+	"strings"
+
 	"demo/model/board"
 
 	"github.com/hydroan/gst"
@@ -14,10 +16,10 @@ type Creator struct {
 	service.Base[*board.Note, *board.Note, *board.Note]
 }
 
-// CreateBefore has every note start unpublished, whatever the request says;
-// publishing is the publish action's.
+// CreateBefore trims the title the note arrives with. It has nothing to
+// clear of the publication a request may name: the model declares those
+// fields read-only, so the framework dropped them before this hook ran.
 func (n *Creator) CreateBefore(_ *gst.ServiceContext, note *board.Note) error {
-	note.Published = false
-	note.PublishedAt = nil
+	note.Title = strings.TrimSpace(note.Title)
 	return nil
 }

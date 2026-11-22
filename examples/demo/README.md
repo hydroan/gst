@@ -49,6 +49,7 @@ gst 的入门示例：一个用 `gg new` 生成、按框架推荐写法补齐的
 | `Public` | `model/ping.go` |
 | `SSE` | `model/notice.go` |
 | `GRPC`、`pb` tag、gRPC 上的标准动作和自定义动作 | `model/board/note.go` |
+| `binding:"readonly"`：客户端不能写、只由发布动作写的字段 | `model/board/note.go` |
 | `Stream` `StreamingPayload` `StreamingResult`：三种流，gRPC 上是流式 rpc，HTTP 上是 WebSocket 连接 | `model/board/feed.go` |
 | 不写 `GRPC()` 的 `Stream`：只走 WebSocket | `model/tally.go` |
 
