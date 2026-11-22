@@ -2,11 +2,13 @@ package dbruntime
 
 import (
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"gorm.io/gorm"
@@ -98,13 +100,13 @@ func ensureCustomIndexes(handler *gorm.DB, m types.Model) error {
 
 	for _, plan := range plans {
 		if idx, ok := byName[plan.Name]; ok {
-			if !matchesPlan(idx, plan) {
+			if !matchesPlan(handler.Dialector, idx, plan) {
 				return errors.Newf("index %q on table %q exists with a different definition; resolve the conflict manually",
 					plan.Name, plan.Table)
 			}
 			continue
 		}
-		if renamed := sameDefinitionName(existing, plan); len(renamed) != 0 {
+		if renamed := sameDefinitionName(handler.Dialector, existing, plan); len(renamed) != 0 {
 			return errors.Newf("index on table %q columns (%s) already exists as %q; rename it manually, e.g. %s",
 				plan.Table, strings.Join(plan.Columns, ","), renamed, RenameIndexSQL(handler.Dialector, plan.Table, renamed, plan.Name))
 		}
@@ -127,24 +129,31 @@ func indexMatchesPlan(handler *gorm.DB, tableName string, plan modelschema.Index
 	}
 	for _, idx := range existing {
 		if idx.Name() == plan.Name {
-			return matchesPlan(idx, plan), nil
+			return matchesPlan(handler.Dialector, idx, plan), nil
 		}
 	}
 	return false, nil
 }
 
-// matchesPlan reports whether an existing index carries the plan's column
-// sequence and uniqueness. Uniqueness participates only when the driver
-// reports it.
-func matchesPlan(idx gorm.Index, plan modelschema.IndexPlan) bool {
-	columns := idx.Columns()
-	if len(columns) != len(plan.Columns) {
-		return false
+// matchesPlan reports whether an existing index, as the migrator of dialector
+// reads it, carries the plan's column sequence and uniqueness. Uniqueness
+// participates only when the driver reports it.
+//
+// A plan over the live rows alone (see modelschema.IndexPlan.LiveOnly) is
+// told from one over every row where the migrator reads the difference. On
+// MySQL it does: the index has one more key part than the plan's columns, the
+// expression telling a live row, which the migrator reads as a column without
+// a name, so an index over every row under the plan's name is a different
+// definition there. On PostgreSQL and SQLite the index carries a condition
+// instead, which the migrator reads no part of, so there an index over every
+// row matches the plan as well.
+func matchesPlan(dialector gorm.Dialector, idx gorm.Index, plan modelschema.IndexPlan) bool {
+	columns := plan.Columns
+	if plan.LiveOnly && strings.EqualFold(dialector.Name(), string(config.DBMySQL)) {
+		columns = append(slices.Clip(columns), "")
 	}
-	for i, col := range columns {
-		if col != plan.Columns[i] {
-			return false
-		}
+	if !slices.Equal(idx.Columns(), columns) {
+		return false
 	}
 	if unique, ok := idx.Unique(); ok && unique != plan.Unique {
 		return false
@@ -154,12 +163,12 @@ func matchesPlan(idx gorm.Index, plan modelschema.IndexPlan) bool {
 
 // sameDefinitionName returns the name of an existing non-primary index that
 // matches the plan's definition, signaling a rename candidate.
-func sameDefinitionName(existing []gorm.Index, plan modelschema.IndexPlan) string {
+func sameDefinitionName(dialector gorm.Dialector, existing []gorm.Index, plan modelschema.IndexPlan) string {
 	for _, idx := range existing {
 		if isPrimary, ok := idx.PrimaryKey(); ok && isPrimary {
 			continue
 		}
-		if matchesPlan(idx, plan) {
+		if matchesPlan(dialector, idx, plan) {
 			return idx.Name()
 		}
 	}

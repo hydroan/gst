@@ -13,14 +13,15 @@ import (
 // composite, and unique indexes in the ALTER TABLE ADD form (MySQL struct
 // tag indexes embedded in CREATE TABLE), the standalone CREATE INDEX form
 // (indexes declared through a model's Indexes method; the optional USING
-// clause appears in the PostgreSQL export), and the bare DROP INDEX form the
-// PostgreSQL generator emits, which names no table — the owning table is
-// recovered from the exported current schema.
+// clause appears in the PostgreSQL export, and the optional condition on a
+// unique index over the live rows alone, see indexDefinitionOf), and the bare
+// DROP INDEX form the PostgreSQL generator emits, which names no table — the
+// owning table is recovered from the exported current schema.
 var (
 	dropIndexPattern     = regexp.MustCompile(`^ALTER TABLE ([^ ]+) DROP INDEX ([^ ]+)$`)
 	bareDropIndexPattern = regexp.MustCompile(`^DROP INDEX ([^ ]+)$`)
 	alterAddPattern      = regexp.MustCompile(`^ALTER TABLE ([^ ]+) ADD (UNIQUE )?(?:FULLTEXT |SPATIAL )?(?:INDEX|KEY) ([^ ]+) \((.+)\)$`)
-	createIndexPattern   = regexp.MustCompile(`^CREATE (UNIQUE )?INDEX ([^ ]+) ON ([^ ]+)(?: USING [^ ]+)? \((.+)\)$`)
+	createIndexPattern   = regexp.MustCompile(`^CREATE (UNIQUE )?INDEX ([^ ]+) ON ([^ ]+)(?: USING [^ ]+)? \((.+?)\)(?: WHERE (.+))?$`)
 )
 
 // Statement shapes emitted by the sqldef generators for whole tables.
@@ -50,10 +51,47 @@ var (
 	currentIndexPattern = regexp.MustCompile("^\\s*(UNIQUE |FULLTEXT |SPATIAL )?KEY `([^`]+)` \\((.+)\\)")
 )
 
-// currentIndex is one secondary index parsed from the exported current schema.
-type currentIndex struct {
-	Columns string // normalized column list
-	Unique  bool
+// indexDefinition is the definition of one secondary index, read off the
+// exported current schema or off a statement of the plan (see
+// indexDefinitionOf).
+type indexDefinition struct {
+	Columns  string // normalized column list
+	Unique   bool
+	LiveOnly bool // whether a unique index holds the live rows alone, those not soft-deleted
+}
+
+// The spellings a unique index over the live rows alone is recognized by,
+// the ones modelschema.IndexPlan.CreateSQL writes, each as normalizeCondition
+// leaves it: the condition PostgreSQL and SQLite index a part of the table
+// by, and the key part that tells a live row on MySQL. The plan carries them
+// as sqldef prints them back and the exported schema as the database stores
+// them, in parentheses and, on MySQL, in lower case; normalized, the
+// spellings of one are the same text.
+const (
+	liveOnlyCondition = "deleted_at is null"
+	liveOnlyKeyPart   = "case when deleted_at is null then 1 end"
+)
+
+// indexDefinitionOf reads the definition of an index off the column list and
+// the condition of its statement, "" for a statement carrying none, as either
+// the plan or the exported schema spells them. A unique index over the live
+// rows alone carries the live-rows condition on PostgreSQL and SQLite, and on
+// MySQL one more key part after its columns, which is none of them: the
+// column list "`code`,((case when (`deleted_at` is null) then 1 end))" reads
+// as the column code of an index over the live rows. The second result is
+// false for a statement under any other condition, an index the framework
+// did not build, which no rename guidance is derived from.
+func indexDefinitionOf(columns, condition string, unique bool) (indexDefinition, bool) {
+	liveOnly := false
+	if condition != "" {
+		if normalizeCondition(condition) != liveOnlyCondition {
+			return indexDefinition{}, false
+		}
+		liveOnly = true
+	} else if i := strings.LastIndex(columns, ","); i >= 0 && normalizeCondition(columns[i+1:]) == liveOnlyKeyPart {
+		columns, liveOnly = columns[:i], true
+	}
+	return indexDefinition{Columns: normalizeColumns(columns), Unique: unique, LiveOnly: liveOnly}, true
 }
 
 // flattenStatement collapses a statement onto one line, folding every run of
@@ -80,13 +118,13 @@ func isIndexStatement(statement string) bool {
 // from the DDLs exported from the current database: MySQL embeds them as KEY
 // lines inside the SHOW CREATE TABLE body, PostgreSQL exports standalone
 // CREATE INDEX statements.
-func parseCurrentIndexes(currentDDLs string) map[string]map[string]currentIndex {
-	indexes := make(map[string]map[string]currentIndex)
-	ensure := func(table string) map[string]currentIndex {
+func parseCurrentIndexes(currentDDLs string) map[string]map[string]indexDefinition {
+	indexes := make(map[string]map[string]indexDefinition)
+	ensure := func(table string) map[string]indexDefinition {
 		if m, ok := indexes[table]; ok {
 			return m
 		}
-		m := make(map[string]currentIndex)
+		m := make(map[string]indexDefinition)
 		indexes[table] = m
 		return m
 	}
@@ -99,9 +137,8 @@ func parseCurrentIndexes(currentDDLs string) map[string]map[string]currentIndex 
 		}
 		standalone := strings.TrimSuffix(strings.TrimSpace(line), ";")
 		if m := createIndexPattern.FindStringSubmatch(standalone); m != nil {
-			ensure(unquoteIdent(m[3]))[unquoteIdent(m[2])] = currentIndex{
-				Columns: normalizeColumns(m[4]),
-				Unique:  strings.TrimSpace(m[1]) == "UNIQUE",
+			if definition, ok := indexDefinitionOf(m[4], m[5], m[1] != ""); ok {
+				ensure(unquoteIdent(m[3]))[unquoteIdent(m[2])] = definition
 			}
 			continue
 		}
@@ -120,10 +157,7 @@ func parseCurrentIndexes(currentDDLs string) map[string]map[string]currentIndex 
 		if start < 0 || end <= start {
 			continue
 		}
-		ensure(table)[m[2]] = currentIndex{
-			Columns: normalizeColumns(trimmed[start+1 : end]),
-			Unique:  strings.TrimSpace(m[1]) == "UNIQUE",
-		}
+		ensure(table)[m[2]], _ = indexDefinitionOf(trimmed[start+1:end], "", strings.TrimSpace(m[1]) == "UNIQUE")
 	}
 	return indexes
 }
@@ -156,6 +190,15 @@ func parseCurrentTables(currentDDLs string) map[string]string {
 		}
 	}
 	return tables
+}
+
+// normalizeCondition strips identifier quoting, parentheses, letter case and
+// spacing from a condition or an expression, so its spellings compare by
+// content: PostgreSQL exports (deleted_at IS NULL) for the condition the plan
+// spells "deleted_at" IS NULL, and both normalize to deleted_at is null.
+func normalizeCondition(condition string) string {
+	condition = strings.NewReplacer("`", "", `"`, "", "(", " ", ")", " ").Replace(condition)
+	return strings.ToLower(strings.Join(strings.Fields(condition), " "))
 }
 
 // normalizeColumns strips identifier quoting and spacing from a column list

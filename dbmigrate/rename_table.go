@@ -209,9 +209,10 @@ func renameCurrentTable(statement, to string) string {
 }
 
 // appendCurrentIndexes appends CREATE INDEX statements synthesized from the
-// dropped table's parsed index definitions, targeting the created table name.
-// The names sort so the synthesized definition stays deterministic.
-func appendCurrentIndexes(currentDDL, to string, indexes map[string]currentIndex) string {
+// dropped table's parsed index definitions, targeting the created table name,
+// an index over the live rows alone under its condition. The names sort so
+// the synthesized definition stays deterministic.
+func appendCurrentIndexes(currentDDL, to string, indexes map[string]indexDefinition) string {
 	if len(indexes) == 0 {
 		return currentDDL
 	}
@@ -230,6 +231,9 @@ func appendCurrentIndexes(currentDDL, to string, indexes map[string]currentIndex
 			unique = "UNIQUE "
 		}
 		fmt.Fprintf(&b, ";\nCREATE %sINDEX %s ON %s (%s)", unique, name, to, def.Columns)
+		if def.LiveOnly {
+			b.WriteString(" WHERE " + liveOnlyCondition)
+		}
 	}
 	return b.String()
 }

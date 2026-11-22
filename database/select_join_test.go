@@ -638,6 +638,42 @@ func TestSelectJoinHidesWhatAListOnTheJoinedModelHides(t *testing.T) {
 	}, rows)
 }
 
+// TestSelectJoinReadsTheLiveRowOfAKeyDeletedRowsShare pins what the proof of
+// a model join rests on where the unique key holds the live rows alone: an
+// account soft-deleted and one created anew under its code are two rows of
+// one code, and the join, its ON carrying the model's soft delete, reads the
+// live one alone, so each payment still comes back once.
+func TestSelectJoinReadsTheLiveRowOfAKeyDeletedRowsShare(t *testing.T) {
+	ctx := context.Background()
+	defer cleanupJoinData()
+	setupJoinData(t)
+
+	gone := &TestAccount{Code: "bolt", Name: "Bolt"}
+	anew := &TestAccount{Code: "bolt", Name: "Bolt anew"}
+	defer func() {
+		_ = database.Database[*TestAccount](ctx).WithPurge().WithAllowMissing().Delete(gone, anew)
+	}()
+	require.NoError(t, database.Database[*TestAccount](ctx).Create(gone))
+	require.NoError(t, database.Database[*TestAccount](ctx).Delete(gone))
+	require.NoError(t, database.Database[*TestAccount](ctx).Create(anew))
+
+	type paid struct {
+		ID   string
+		Name *string
+	}
+	rows := make([]paid, 0)
+	require.NoError(t, database.Select[*TestPayment, paid](ctx, TestPaymentCols.ID, TestAccountCols.Name.As("name")).
+		Join(types.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestPaymentCols.Account))).
+		OrderBy(TestPaymentCols.ID.Asc()).
+		Scan(&rows))
+	require.Equal(t, []paid{
+		{ID: "p1", Name: new("Acme Ltd")},
+		{ID: "p2", Name: new("Acme Ltd")},
+		{ID: "p3", Name: new("Bolt anew")},
+		{ID: "p4", Name: new("Acme Ltd")},
+	}, rows)
+}
+
 func TestSelectJoinInsideAUnionBranch(t *testing.T) {
 	defer cleanupJoinData()
 	setupJoinData(t)

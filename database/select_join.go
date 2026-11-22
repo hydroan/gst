@@ -397,8 +397,11 @@ var uniqueKeyCache sync.Map
 
 // uniqueKeysOf resolves the column sets a row of the model is unique on: its
 // primary key, then every unique index, whether declared by the Indexes
-// method or a struct tag. The indexes come from collectUniqueIndexes, the
-// collector Upsert reads too, so the two never disagree about what is unique.
+// method or a struct tag. A unique index declared by the Indexes method
+// holds the live rows alone, which are the rows a join reads, its ON
+// carrying the model's soft delete (see joinClauses). The indexes come from
+// collectUniqueIndexes, the collector Upsert reads too, so the two never
+// disagree about what is unique.
 func uniqueKeysOf(ins *gorm.DB, model any) ([][]string, error) {
 	typ := reflect.TypeOf(model)
 	if cached, ok := uniqueKeyCache.Load(typ); ok {

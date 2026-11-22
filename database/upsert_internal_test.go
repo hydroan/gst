@@ -6,6 +6,7 @@ import (
 
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
+	"github.com/hydroan/gst/internal/tenant"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -69,6 +70,22 @@ func (*syncCollectPrimaryOnlyItem) Indexes() []modelschema.Index {
 	return []modelschema.Index{{Fields: []string{"ID"}, Unique: true}}
 }
 
+// syncCollectTenantItem belongs to a tenant: unique on its code within the
+// tenant by its Indexes declaration, and on its ref by a struct tag.
+type syncCollectTenantItem struct {
+	Code string `gorm:"size:191"`
+	Ref  string `gorm:"size:191;uniqueIndex"`
+
+	tenant.Scope
+	modelregistry.Base
+}
+
+func (*syncCollectTenantItem) TableName() string { return "sync_collect_tenant_items" }
+
+func (*syncCollectTenantItem) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"TenantID", "Code"}, Unique: true}}
+}
+
 // newSyncCollectDB opens the DryRun sqlite instance the collect tests parse
 // their fixtures through.
 func newSyncCollectDB(t *testing.T) *gorm.DB {
@@ -103,10 +120,12 @@ func TestCollectUniqueIndexesGathersTheDeclaredUniqueKeys(t *testing.T) {
 
 		require.Equal(t, []string{"code"}, indexColumns(indexes[0]), "the tag-declared key comes first")
 		require.Equal(t, "UNIQUE", indexes[0].Class)
+		require.Empty(t, indexes[0].Where, "a tag-declared key holds every row")
 
 		require.Equal(t, []string{"ref"}, indexColumns(indexes[1]), "the Indexes-declared key follows")
 		require.Equal(t, "UNIQUE", indexes[1].Class)
 		require.Equal(t, "uniq_sync_collect_merged_items_ref", indexes[1].Name, "plan indexes keep the framework-generated name")
+		require.Equal(t, "deleted_at IS NULL", indexes[1].Where, "an Indexes-declared key holds the live rows alone, under the condition gorm keeps the deleted ones out by")
 	})
 
 	t.Run("keeps the declared composite column order", func(t *testing.T) {
@@ -138,6 +157,34 @@ func TestCollectUniqueIndexesGathersTheDeclaredUniqueKeys(t *testing.T) {
 		})
 		require.ErrorContains(t, err, `column "ghost"`)
 	})
+}
+
+// TestRefuseForeignTenantRowsReadsEachKeyOverTheRowsItHolds pins the read a
+// tenant model's Upsert runs before its write: the primary key and a
+// tag-declared unique index are read over every row, a soft-deleted one
+// included, and a unique index over the live rows alone under its condition,
+// which is also what lets the read run on that index.
+func TestRefuseForeignTenantRowsReadsEachKeyOverTheRowsItHolds(t *testing.T) {
+	gormDB := newSyncCollectDB(t)
+	var statements []string
+	require.NoError(t, gormDB.Callback().Query().After("gorm:query").Register("capture", func(tx *gorm.DB) {
+		statements = append(statements, tx.Statement.SQL.String())
+	}))
+	db := &database[*syncCollectTenantItem]{
+		ins: gormDB,
+		m:   &syncCollectTenantItem{},
+		ctx: tenant.In(context.Background(), "tenant-a"),
+	}
+
+	item := &syncCollectTenantItem{Code: "c-1", Ref: "r-1", TenantID: "tenant-a"}
+	item.SetID("id-1")
+	require.NoError(t, db.refuseForeignTenantRows("sync_collect_tenant_items", []*syncCollectTenantItem{item}))
+	require.Equal(t, []string{
+		"SELECT `tenant_id` FROM `sync_collect_tenant_items` WHERE (" +
+			"`sync_collect_tenant_items`.`id` = ? OR " +
+			"`sync_collect_tenant_items`.`ref` = ? OR " +
+			"((`sync_collect_tenant_items`.`tenant_id`,`sync_collect_tenant_items`.`code`) IN ((?,?)) AND deleted_at IS NULL))",
+	}, statements)
 }
 
 func TestUniqueIndexesCached(t *testing.T) {

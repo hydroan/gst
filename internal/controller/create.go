@@ -29,8 +29,8 @@ func (a *action[M, REQ, RSP]) createFlow(ctx context.Context, newServiceContext 
 	}); err != nil {
 		return failService(ctx, log, err)
 	}
-	// 2.Create resource in database. Create is a pure INSERT: a primary or
-	// unique key collision (including one held by a soft-deleted row)
+	// 2.Create resource in database. Create is a pure INSERT: a collision on
+	// the primary key, a soft-deleted row's included, or on a unique key
 	// surfaces as ErrDuplicatedKey and renders 409.
 	if err := database.Database[M](ctx).Create(req); err != nil {
 		return failDatabase(ctx, log, err)

@@ -39,7 +39,12 @@ import (
 //
 // The remaining sharp edges the caller owns on every dialect:
 //   - A merging collision with a soft-deleted row updates that row and clears
-//     its deleted_at, resurrecting it.
+//     its deleted_at, resurrecting it. The primary key collides with such a
+//     row on every dialect. A unique index the model declares through its
+//     Indexes method holds the live rows alone (see model.Index), so no
+//     soft-deleted row collides on it: an object carrying a value such a row
+//     held is inserted as a new row, and the deleted one stays deleted. A
+//     unique index a struct tag declares holds the deleted rows too.
 //   - The conflict update is gorm's own, the UpdateAll expansion of its
 //     slice Save: a column gorm's write permissions keep off a create or an
 //     update keeps the row's value (a read-only column, a create-only one
@@ -229,9 +234,13 @@ func (db *database[M]) Upsert(objs ...M) (err error) {
 // first, across tenants: by primary key, and by every complete unique index
 // value, since MySQL merges on any unique key. One held by another tenant
 // fails the call with ErrDuplicatedKey, the answer a key already taken gets;
-// a soft-deleted row counts, since a merge would resurrect it. A model whose
-// rows belong to no tenant, and a caller acting across every tenant, pay no
-// read.
+// a soft-deleted row counts wherever the key holds it, since a merge would
+// resurrect it: under the primary key and under a unique index over every
+// row. A unique index over the live rows alone (see
+// modelschema.IndexPlan.LiveOnly) is read under its condition, the rows it
+// holds being the ones a batch collides with on it, and the read running on
+// the index only so. A model whose rows belong to no tenant, and a caller
+// acting across every tenant, pay no read.
 //
 // Each key is one IN over the values the batch holds for it (see keyIn), the
 // primary key included. A primary key zero in every column is left out of its
@@ -297,9 +306,14 @@ func (db *database[M]) refuseForeignTenantRows(tableName string, objs []M) error
 				indexKeys = append(indexKeys, values)
 			}
 		}
-		if len(indexKeys) > 0 {
-			conditions = append(conditions, keyIn(tableName, indexColumns(index), indexKeys))
+		if len(indexKeys) == 0 {
+			continue
 		}
+		var condition clause.Expression = keyIn(tableName, indexColumns(index), indexKeys)
+		if index.Where != "" {
+			condition = clause.And(condition, clause.Expr{SQL: index.Where})
+		}
+		conditions = append(conditions, condition)
 	}
 	if len(conditions) == 0 {
 		return nil
@@ -503,6 +517,18 @@ func collectUniqueIndexes(schema *gormschema.Schema, plans []modelschema.IndexPl
 		index := &gormschema.Index{Name: plan.Name, Class: "UNIQUE", Fields: fields}
 		if !uniqueIndexUsable(index) {
 			continue
+		}
+		// A plan over the live rows alone stays a key rows are looked up by:
+		// its condition is the one every read of the model carries, gorm's
+		// soft-delete clause. It is recorded for the one read that carries no
+		// such clause (see refuseForeignTenantRows).
+		if plan.LiveOnly {
+			for _, c := range schema.QueryClauses {
+				if softDelete, ok := c.(gorm.SoftDeleteQueryClause); ok {
+					index.Where = softDelete.Field.DBName + " IS NULL"
+					break
+				}
+			}
 		}
 		indexes = append(indexes, index)
 	}

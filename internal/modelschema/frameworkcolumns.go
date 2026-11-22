@@ -17,13 +17,20 @@ var fixedColumns = map[string]string{
 	"UpdatedBy": "updated_by",
 	"CreatedAt": "created_at",
 	"UpdatedAt": "updated_at",
-	"DeletedAt": "deleted_at",
+	"DeletedAt": softDeleteColumn,
 }
 
 // IDColumn is the column the framework names the primary key of model.Base
 // and model.AutoBase by. ValidateFrameworkColumns holds every model to it, so
 // the framework reads a record by its id through this column.
 const IDColumn = "id"
+
+// softDeleteColumn is the column the framework names the soft-delete time of
+// model.Base and model.AutoBase by: NULL in a live row, the time of the
+// delete in a soft-deleted one. ValidateFrameworkColumns holds every model to
+// it, so a unique index tells the live rows by this column (see
+// IndexPlan.LiveOnly).
+const softDeleteColumn = "deleted_at"
 
 // fixedTenantColumn is the column the framework names the tenant by, the one
 // tenant.Scope declares.

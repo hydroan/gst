@@ -21,8 +21,7 @@ import (
 //
 // The (user_id, secret) unique index is the authoritative guard against binding
 // the same secret twice for one user, and its leftmost prefix serves every
-// per-user lookup, so no separate user_id index exists. The index assumes hard
-// deletion (see Purge): a soft-deleted row would keep occupying the unique key.
+// per-user lookup, so no separate user_id index exists.
 type TOTPDevice struct {
 	UserID           string                      `json:"user_id" gorm:"type:varchar(191);not null"`
 	DeviceName       string                      `json:"device_name" gorm:"type:varchar(100);not null"`
@@ -39,8 +38,7 @@ func (TOTPDevice) TableName() string { return "totp_devices" }
 
 // Purge makes every TOTPDevice deletion a hard delete. An unbound device must
 // not leave its shared secret and recovery-code hashes behind as a soft-deleted
-// row, and the (user_id, secret) unique index relies on removed rows actually
-// releasing their key.
+// row.
 func (TOTPDevice) Purge() bool { return true }
 
 func (TOTPDevice) Design() {

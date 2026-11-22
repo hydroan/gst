@@ -16,8 +16,13 @@ import (
 	gstmysql "github.com/hydroan/gst/database/mysql"
 	"github.com/hydroan/gst/dbmigrate"
 	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 func TestMain(m *testing.M) {
@@ -846,6 +851,148 @@ func TestMigrateTableRenameAdvisoryOnSQLite(t *testing.T) {
 	require.Len(t, plan.Statements, 1, "%v", plan.Statements)
 	require.Contains(t, plan.Statements[0], "idx_records_code")
 	require.Empty(t, plan.Advisory)
+}
+
+// TestMigrateHandlesUniqueIndexesOverTheLiveRows pins, on each dialect, what
+// a migration makes of a unique index over the live rows alone (see
+// modelschema.IndexPlan.LiveOnly), spelled as the index renderer writes it.
+// A database carrying the index over every row under the same name is
+// planned a drop and a create, the plan gg migrate asks for, and once it is
+// applied nothing is left to plan. And the index keeps the rename advice an
+// index over every row has, alone and along with its table: a rename where
+// the dialect renames indexes, and on SQLite, which renames none, the drop
+// of the old name beside the table's rename.
+func TestMigrateHandlesUniqueIndexesOverTheLiveRows(t *testing.T) {
+	type dialect struct {
+		typ         config.DBType
+		dialector   gorm.Dialector
+		table       func(name string) string
+		target      func(t *testing.T, name string) *dbmigrate.DatabaseConfig
+		renameIndex string   // the statement advised for the index renamed alone, "" where the plan stands
+		renameTable []string // the statements advised for the table renamed with its index
+	}
+	dialects := []dialect{
+		{
+			typ:       config.DBMySQL,
+			dialector: mysql.New(mysql.Config{}),
+			table: func(name string) string {
+				return "CREATE TABLE `" + name + "` (\n" +
+					"  `id` char(36) NOT NULL,\n" +
+					"  `code` varchar(64) NOT NULL,\n" +
+					"  `deleted_at` datetime(3) NULL,\n" +
+					"  PRIMARY KEY (`id`)\n" +
+					") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;"
+			},
+			target: func(t *testing.T, name string) *dbmigrate.DatabaseConfig {
+				t.Helper()
+				createMySQLDatabase(t, mysqlDatabaseConfig(), name)
+				t.Cleanup(func() { dropMySQLDatabase(t, mysqlDatabaseConfig(), name) })
+				cfg := mysqlDatabaseConfig()
+				cfg.Database = name
+				return cfg
+			},
+			renameIndex: "ALTER TABLE `items` RENAME INDEX `legacy_items_code` TO `uniq_items_code`;",
+			renameTable: []string{
+				"RENAME TABLE `old_items` TO `new_items`;",
+				"ALTER TABLE `new_items` RENAME INDEX `uniq_old_items_code` TO `uniq_new_items_code`;",
+			},
+		},
+		{
+			typ:       config.DBPostgres,
+			dialector: postgres.New(postgres.Config{}),
+			table: func(name string) string {
+				return `CREATE TABLE "` + name + `" (` + "\n" +
+					`  "id" char(36) NOT NULL,` + "\n" +
+					`  "code" varchar(64) NOT NULL,` + "\n" +
+					`  "deleted_at" timestamptz,` + "\n" +
+					`  PRIMARY KEY ("id")` + "\n" +
+					");"
+			},
+			target: func(t *testing.T, name string) *dbmigrate.DatabaseConfig {
+				t.Helper()
+				admin := postgresDatabaseConfig(os.Getenv(config.POSTGRES_DATABASE))
+				createPostgresDatabase(t, admin, name)
+				t.Cleanup(func() { dropPostgresDatabase(t, admin, name) })
+				return postgresDatabaseConfig(name)
+			},
+			renameIndex: `ALTER INDEX "legacy_items_code" RENAME TO "uniq_items_code";`,
+			renameTable: []string{
+				`ALTER TABLE "old_items" RENAME TO "new_items";`,
+				`ALTER INDEX "uniq_old_items_code" RENAME TO "uniq_new_items_code";`,
+			},
+		},
+		{
+			typ:       config.DBSqlite,
+			dialector: sqlite.New(sqlite.Config{}),
+			table: func(name string) string {
+				return "CREATE TABLE `" + name + "` (\n" +
+					"  `id` text NOT NULL,\n" +
+					"  `code` text NOT NULL,\n" +
+					"  `deleted_at` datetime,\n" +
+					"  PRIMARY KEY (`id`)\n" +
+					");"
+			},
+			target: func(t *testing.T, name string) *dbmigrate.DatabaseConfig {
+				t.Helper()
+				return &dbmigrate.DatabaseConfig{Database: filepath.Join(t.TempDir(), name+".db")}
+			},
+			renameTable: []string{
+				"ALTER TABLE `old_items` RENAME TO `new_items`;",
+				"DROP INDEX `uniq_old_items_code`;",
+			},
+		},
+	}
+	for _, d := range dialects {
+		t.Run(string(d.typ), func(t *testing.T) {
+			stamp := time.Now().UnixNano()
+			schemaOf := func(table, index string, liveOnly bool) []string {
+				plan := modelschema.IndexPlan{Name: index, Table: table, Columns: []string{"code"}, Unique: true, LiveOnly: liveOnly}
+				return []string{d.table(table), plan.CreateSQL(d.dialector)}
+			}
+			plan := func(cfg *dbmigrate.DatabaseConfig, desired []string) dbmigrate.Plan {
+				t.Helper()
+				planned, err := dbmigrate.Migrate(desired, d.typ, cfg, &dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
+				require.NoError(t, err)
+				return planned
+			}
+			create := func(name string, current []string) *dbmigrate.DatabaseConfig {
+				t.Helper()
+				cfg := d.target(t, fmt.Sprintf("gst_dbmigrate_live_%s_%d", name, stamp))
+				_, err := dbmigrate.Migrate(current, d.typ, cfg, &dbmigrate.MigrateOption{})
+				require.NoError(t, err)
+				return cfg
+			}
+
+			// The index over every row, replaced under its own name.
+			cfg := create("swap", schemaOf("items", "uniq_items_code", false))
+			desired := schemaOf("items", "uniq_items_code", true)
+			swap := plan(cfg, desired)
+			require.Len(t, swap.Statements, 2, "%v", swap.Statements)
+			require.Contains(t, swap.Statements[0], "DROP INDEX")
+			require.Contains(t, swap.Statements[1], "CREATE UNIQUE INDEX")
+			require.Empty(t, swap.Advisory, "one name, two definitions: a rebuild, not a rename")
+			require.NoError(t, dbmigrate.Apply(swap, d.typ, cfg))
+			require.False(t, plan(cfg, desired).Changed())
+
+			// The index renamed alone.
+			cfg = create("index", schemaOf("items", "legacy_items_code", true))
+			renamed := plan(cfg, schemaOf("items", "uniq_items_code", true))
+			require.Len(t, renamed.Statements, 2, "%v", renamed.Statements)
+			if d.renameIndex == "" {
+				require.Empty(t, renamed.Advisory)
+			} else {
+				require.Contains(t, renamed.Advisory, d.renameIndex)
+			}
+
+			// The index renamed along with its table.
+			cfg = create("table", schemaOf("old_items", "uniq_old_items_code", true))
+			renamed = plan(cfg, schemaOf("new_items", "uniq_new_items_code", true))
+			for _, statement := range d.renameTable {
+				require.Contains(t, renamed.Advisory, statement)
+			}
+			require.NotContains(t, renamed.Advisory, "remaining change", "the index change is the rename the advisory names")
+		})
+	}
 }
 
 // TestMigrateRefusesASQLiteColumnChangeItCannotPlan pins that a change to a

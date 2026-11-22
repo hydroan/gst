@@ -26,6 +26,58 @@ func TestDetectIndexRenames(t *testing.T) {
 		}}, pairs)
 	})
 
+	t.Run("an index over the live rows alone pairs with one of the same definition", func(t *testing.T) {
+		// MySQL stores the key part telling a live row in parentheses and in
+		// lower case; the plan spells it as the index renderer wrote it.
+		current := "CREATE TABLE `samples` (\n" +
+			"  `id` char(36) NOT NULL,\n" +
+			"  PRIMARY KEY (`id`),\n" +
+			"  UNIQUE KEY `legacy_samples_code` (`code`,((case when (`deleted_at` is null) then 1 end)))\n" +
+			") ENGINE=InnoDB;"
+		pairs := detectIndexRenames([]string{
+			"CREATE UNIQUE INDEX `uniq_samples_code` ON `samples` (`code`,(CASE WHEN `deleted_at` IS NULL THEN 1 END))",
+			"ALTER TABLE `samples` DROP INDEX `legacy_samples_code`",
+		}, current)
+		require.Equal(t, []indexRenamePair{{Table: "samples", From: "legacy_samples_code", To: "uniq_samples_code", Columns: "code", Unique: true}}, pairs)
+
+		// PostgreSQL exports the condition in parentheses, and its generator
+		// prints the plan's in lower case.
+		current = "CREATE TABLE \"public\".\"samples\" (\n" +
+			"    \"id\" character(36) NOT NULL\n" +
+			");\n" +
+			"CREATE UNIQUE INDEX legacy_samples_code ON public.samples USING btree (code) WHERE (deleted_at IS NULL);"
+		pairs = detectIndexRenames([]string{
+			`CREATE UNIQUE INDEX "uniq_samples_code" ON public."samples" ("code") WHERE deleted_at is null`,
+			"DROP INDEX public.legacy_samples_code",
+		}, current)
+		require.Equal(t, []indexRenamePair{{Table: "samples", From: "legacy_samples_code", To: "uniq_samples_code", Columns: "code", Unique: true}}, pairs)
+	})
+
+	t.Run("an index over every row and one over the live rows are rebuilds, not renames", func(t *testing.T) {
+		// The two hold different rows under the same columns, so one replacing
+		// the other is built anew, on MySQL and under a condition alike.
+		current := "CREATE TABLE `samples` (\n" +
+			"  `id` char(36) NOT NULL,\n" +
+			"  PRIMARY KEY (`id`),\n" +
+			"  UNIQUE KEY `legacy_samples_code` (`code`)\n" +
+			") ENGINE=InnoDB;"
+		pairs := detectIndexRenames([]string{
+			"CREATE UNIQUE INDEX `uniq_samples_code` ON `samples` (`code`,(CASE WHEN `deleted_at` IS NULL THEN 1 END))",
+			"ALTER TABLE `samples` DROP INDEX `legacy_samples_code`",
+		}, current)
+		require.Empty(t, pairs)
+
+		current = "CREATE TABLE \"public\".\"samples\" (\n" +
+			"    \"id\" character(36) NOT NULL\n" +
+			");\n" +
+			"CREATE UNIQUE INDEX legacy_samples_code ON public.samples USING btree (code);"
+		pairs = detectIndexRenames([]string{
+			`CREATE UNIQUE INDEX "uniq_samples_code" ON public."samples" ("code") WHERE deleted_at is null`,
+			"DROP INDEX public.legacy_samples_code",
+		}, current)
+		require.Empty(t, pairs)
+	})
+
 	t.Run("changed column sets are rebuilds, not renames", func(t *testing.T) {
 		// Regression: dropping (box_id, kind, created_at) while adding
 		// (box_id, created_at) must not be reported as a rename.

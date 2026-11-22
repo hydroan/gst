@@ -231,16 +231,28 @@ func TestEnsureCustomIndexesCreatesTheDeclaredIndexesOnMySQL(t *testing.T) {
 			uniqueByName[idx.Name()] = unique
 		}
 	}
-	require.Equal(t, []string{"code", "kind"}, columnsByName["uniq_sized_records_code_kind"])
+	// The unique index holds the live rows alone, which MySQL spells as one
+	// more key part, an expression the migrator reads as a column without a
+	// name.
+	require.Equal(t, []string{"code", "kind", ""}, columnsByName["uniq_sized_records_code_kind"])
 	require.True(t, uniqueByName["uniq_sized_records_code_kind"])
 
 	// The same definition living under a foreign name must be reported as a
 	// rename candidate instead of being created a second time.
 	require.NoError(t, db.Migrator().DropIndex(m, "uniq_sized_records_code_kind"))
-	require.NoError(t, db.Exec("CREATE UNIQUE INDEX legacy_sized_records_code_kind ON sized_records(code, kind)").Error)
+	require.NoError(t, db.Exec("CREATE UNIQUE INDEX legacy_sized_records_code_kind ON sized_records(code, kind, (CASE WHEN deleted_at IS NULL THEN 1 END))").Error)
 
 	err = ensureCustomIndexes(db, m)
 	require.ErrorContains(t, err, `already exists as "legacy_sized_records_code_kind"`)
+
+	// An index over every row is another definition on MySQL: under a foreign
+	// name it is no rename candidate, and under the plan's name the start is
+	// refused.
+	require.NoError(t, db.Migrator().DropIndex(m, "legacy_sized_records_code_kind"))
+	require.NoError(t, db.Exec("CREATE UNIQUE INDEX uniq_sized_records_code_kind ON sized_records(code, kind)").Error)
+
+	err = ensureCustomIndexes(db, m)
+	require.ErrorContains(t, err, `index "uniq_sized_records_code_kind" on table "sized_records" exists with a different definition`)
 }
 
 // TestEnsureCustomIndexesCreatesTheDeclaredIndexesOnPostgres covers the same
@@ -276,10 +288,16 @@ func TestEnsureCustomIndexesCreatesTheDeclaredIndexesOnPostgres(t *testing.T) {
 	// dropped through raw SQL because the gorm postgres migrator's DropIndex
 	// renders CURRENT_SCHEMA() into a position DROP INDEX does not accept.
 	require.NoError(t, db.Exec("DROP INDEX uniq_sized_records_code_kind").Error)
-	require.NoError(t, db.Exec("CREATE UNIQUE INDEX legacy_sized_records_code_kind ON sized_records(code, kind)").Error)
+	require.NoError(t, db.Exec("CREATE UNIQUE INDEX legacy_sized_records_code_kind ON sized_records(code, kind) WHERE deleted_at IS NULL").Error)
 
 	err = ensureCustomIndexes(db, m)
 	require.ErrorContains(t, err, `already exists as "legacy_sized_records_code_kind"`)
+
+	// The migrator reads no part of the condition, so an index over every
+	// row under the plan's name passes for the plan's.
+	require.NoError(t, db.Exec("DROP INDEX legacy_sized_records_code_kind").Error)
+	require.NoError(t, db.Exec("CREATE UNIQUE INDEX uniq_sized_records_code_kind ON sized_records(code, kind)").Error)
+	require.NoError(t, ensureCustomIndexes(db, m))
 }
 
 func TestEnsureCustomIndexesRejectsInvalidDeclaration(t *testing.T) {

@@ -14,7 +14,8 @@ import (
 
 // Fingerprint returns a short hash of everything models derive their tables
 // from: their table names, the fields they declare with the tags gorm reads a
-// column definition out of, and the indexes they declare. It is empty for no
+// column definition out of, and the indexes they declare, each beside the
+// plan the framework resolves it into (see IndexPlan). It is empty for no
 // models; the callers pass the registered ones (see
 // modelregistry.RegisteredModels).
 //
@@ -22,7 +23,11 @@ import (
 // reused as it is — and is built to err towards saying no. It hashes
 // declarations rather than rendered DDL, which keeps it independent of any
 // particular rendering, and it hashes them whole, so a change that turns out
-// never to reach the DDL costs a rebuild rather than a wrong answer.
+// never to reach the DDL costs a rebuild rather than a wrong answer. An index
+// is the exception to declarations alone: its name and the rows a unique one
+// holds are the framework's to decide, and an index in place under another
+// definition is refused rather than repaired where the tables are prepared,
+// so what the framework resolves a declaration into is hashed with it.
 //
 // What it must not miss is a change no later migration can repair. A
 // migration adds the columns a model gained and alters the ones whose
@@ -68,8 +73,21 @@ func modelDeclaration(m any) string {
 	var declaration strings.Builder
 	fmt.Fprintf(&declaration, "%s table=%s", typ.String(), table)
 	writeFieldDeclarations(&declaration, typ, map[reflect.Type]bool{})
-	for _, index := range IndexDeclarations(m) {
+	indexes := IndexDeclarations(m)
+	for _, index := range indexes {
 		fmt.Fprintf(&declaration, " index=%v unique=%t", index.Fields, index.Unique)
+	}
+	// The plans are resolved the way table preparation resolves them, under
+	// no dialect: a declaration that does not resolve is refused there, and
+	// stands here as it is declared.
+	if len(indexes) > 0 {
+		if sch, err := gormschema.Parse(reflect.New(typ).Interface(), schemaCache, namer); err == nil {
+			if plans, err := buildIndexPlans(nil, sch, table, indexes); err == nil {
+				for _, plan := range plans {
+					fmt.Fprintf(&declaration, " plan=%+v", plan)
+				}
+			}
+		}
 	}
 	return declaration.String()
 }

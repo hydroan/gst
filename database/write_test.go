@@ -151,6 +151,36 @@ func TestDatabaseCreate(t *testing.T) {
 		require.Equal(t, "first", items[0].Name, "the existing row must stay untouched")
 	})
 
+	// A unique index the model declares holds the live rows alone: a
+	// soft-deleted record keeps its value away from no new record, two live
+	// ones still collide, and the deleted ones share the value.
+	t.Run("a value a soft-deleted record held is free for a new one", func(t *testing.T) {
+		ctx := context.Background()
+		gone := &TestAccount{Code: "freed-code", Name: "gone"}
+		fresh := &TestAccount{Code: "freed-code", Name: "fresh"}
+		again := &TestAccount{Code: "freed-code", Name: "again"}
+		t.Cleanup(func() {
+			_ = database.Database[*TestAccount](ctx).WithPurge().WithAllowMissing().Delete(gone, fresh, again)
+		})
+		require.NoError(t, database.Database[*TestAccount](ctx).Create(gone))
+		require.NoError(t, database.Database[*TestAccount](ctx).Delete(gone))
+
+		require.NoError(t, database.Database[*TestAccount](ctx).Create(fresh))
+		err := database.Database[*TestAccount](ctx).Create(&TestAccount{Code: "freed-code", Name: "a second live one"})
+		require.ErrorIs(t, err, database.ErrDuplicatedKey, "the live records are still unique among themselves")
+
+		require.NoError(t, database.Database[*TestAccount](ctx).Delete(fresh))
+		require.NoError(t, database.Database[*TestAccount](ctx).Create(again))
+
+		live := make([]*TestAccount, 0)
+		require.NoError(t, database.Database[*TestAccount](ctx).WithQuery(&TestAccount{Code: "freed-code"}).List(&live))
+		require.Len(t, live, 1)
+		require.Equal(t, again.ID, live[0].ID)
+		all := make([]*TestAccount, 0)
+		require.NoError(t, database.Database[*TestAccount](ctx).WithDeleted().WithQuery(&TestAccount{Code: "freed-code"}).List(&all))
+		require.Len(t, all, 3, "the two deleted records keep the value beside the live one")
+	})
+
 	t.Run("duplicated key rolls back the whole batch", func(t *testing.T) {
 		seed := &TestUniqueItem{UniqueCode: "batch-code", Name: "existing"}
 		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Create(seed))
@@ -1049,6 +1079,48 @@ func TestDatabaseUpsert(t *testing.T) {
 		require.Len(t, items, 1)
 		require.Equal(t, "second", items[0].Name)
 		require.WithinDuration(t, firstPersisted.CreatedAt, items[0].CreatedAt, time.Second, "a conflict update keeps the original created_at")
+	})
+
+	// A soft-deleted row collides with nothing on a unique key declared
+	// through Indexes, on any dialect: the object is inserted as a row of its
+	// own, and the deleted row stays deleted. The primary key still reaches
+	// the deleted row and brings it back, which a live row holding its value
+	// refuses.
+	t.Run("a value a soft-deleted row held under a unique key declared through Indexes", func(t *testing.T) {
+		ctx := context.Background()
+		gone := &TestAccount{Code: "upsert-freed", Name: "gone"}
+		fresh := &TestAccount{Code: "upsert-freed", Name: "fresh"}
+		t.Cleanup(func() {
+			_ = database.Database[*TestAccount](ctx).WithPurge().WithAllowMissing().Delete(gone, fresh)
+		})
+		require.NoError(t, database.Database[*TestAccount](ctx).Create(gone))
+		require.NoError(t, database.Database[*TestAccount](ctx).Delete(gone))
+
+		require.NoError(t, database.Database[*TestAccount](ctx).Upsert(fresh))
+		require.NotEqual(t, gone.ID, fresh.ID, "the object is a row of its own, not the deleted one brought back")
+		live := make([]*TestAccount, 0)
+		require.NoError(t, database.Database[*TestAccount](ctx).WithQuery(&TestAccount{Code: "upsert-freed"}).List(&live))
+		require.Len(t, live, 1)
+		require.Equal(t, "fresh", live[0].Name)
+		deleted := new(TestAccount)
+		require.NoError(t, database.Database[*TestAccount](ctx).WithDeleted().Get(deleted, gone.ID))
+		require.Equal(t, "gone", deleted.Name, "the deleted row is not written")
+		require.True(t, deleted.DeletedAt.Valid, "and stays deleted")
+
+		back := &TestAccount{Code: "upsert-freed", Name: "back"}
+		back.SetID(gone.ID)
+		require.ErrorIs(t, database.Database[*TestAccount](ctx).Upsert(back), database.ErrDuplicatedKey,
+			"brought back, the row would hold the value beside the live one")
+
+		require.NoError(t, database.Database[*TestAccount](ctx).WithPurge().Delete(fresh))
+		back = &TestAccount{Code: "upsert-freed", Name: "back"}
+		back.SetID(gone.ID)
+		require.NoError(t, database.Database[*TestAccount](ctx).Upsert(back))
+		live = live[:0]
+		require.NoError(t, database.Database[*TestAccount](ctx).WithQuery(&TestAccount{Code: "upsert-freed"}).List(&live))
+		require.Len(t, live, 1)
+		require.Equal(t, gone.ID, live[0].ID, "the primary key reaches the deleted row and brings it back")
+		require.Equal(t, "back", live[0].Name)
 	})
 
 	// A model carrying both a tag-declared and an Indexes-declared unique key:

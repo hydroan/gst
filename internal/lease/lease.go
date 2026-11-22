@@ -415,6 +415,11 @@ func insertClaim(ctx context.Context, db *gorm.DB, now, name, holder string, slo
 // on PostgreSQL and SQLite. The scheduler's insert records its instant as the
 // last one claimed and as unfinished; any other records none.
 //
+// The conflict names no target. The name is the one key an insert can collide
+// on, the id being the database's to assign, and the unique index on it holds
+// the live rows alone, under a condition on PostgreSQL and SQLite, which a
+// target naming the column would have to repeat to be matched.
+//
 // INSERT IGNORE also turns a value too long for its column into a warning
 // and a truncated row, which is why every name is validated before it gets
 // here: for the literal values the statement carries nothing else IGNORE
@@ -426,7 +431,7 @@ func claimInsert(dialect, now string) string {
 	if dialect == "mysql" {
 		return fmt.Sprintf("INSERT IGNORE INTO %s %s", table, columns)
 	}
-	return fmt.Sprintf("INSERT INTO %s %s ON CONFLICT (name) DO NOTHING", table, columns)
+	return fmt.Sprintf("INSERT INTO %s %s ON CONFLICT DO NOTHING", table, columns)
 }
 
 // handleOf reads the term the claim just started; the update that won the

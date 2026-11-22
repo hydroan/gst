@@ -1,8 +1,9 @@
 package dbmigrate
 
 // indexRenamePair is one confirmed index rename: the dropped and the added
-// index carry exactly the same column sequence and uniqueness, so a
-// metadata-only RENAME INDEX can replace the drop-and-rebuild pair.
+// index carry exactly the same definition, the column sequence, the
+// uniqueness and the rows held, so a metadata-only RENAME INDEX can replace
+// the drop-and-rebuild pair.
 type indexRenamePair struct {
 	Table   string
 	From    string
@@ -13,16 +14,16 @@ type indexRenamePair struct {
 
 // addedIndex is one secondary index the migration plan would create.
 type addedIndex struct {
-	Name    string
-	Columns string // raw column list as it appears in the plan
-	Unique  bool
+	Name       string
+	Definition indexDefinition
 }
 
 // detectIndexRenames pairs every added index in the migration plan with a
 // dropped index of the identical definition, recovering the dropped side's
 // columns from the exported current schema. Only exact matches (same table,
-// same column sequence, same uniqueness) with an unambiguous one-to-one
-// pairing are reported, so every reported pair is safe to rename.
+// same column sequence, same uniqueness, and the same rows held, every one or
+// the live ones alone) with an unambiguous one-to-one pairing are reported,
+// so every reported pair is safe to rename.
 //
 // The PostgreSQL generator drops indexes through a bare DROP INDEX that
 // names no table; the owning table is recovered from the exported current
@@ -75,12 +76,15 @@ func detectIndexRenames(ddls []string, currentDDLs string) []indexRenamePair {
 		}
 		if m := alterAddPattern.FindStringSubmatch(statement); m != nil {
 			c := track(unquoteIdent(m[1]))
-			c.added = append(c.added, addedIndex{Name: unquoteIdent(m[3]), Columns: m[4], Unique: m[2] != ""})
+			definition, _ := indexDefinitionOf(m[4], "", m[2] != "")
+			c.added = append(c.added, addedIndex{Name: unquoteIdent(m[3]), Definition: definition})
 			continue
 		}
 		if m := createIndexPattern.FindStringSubmatch(statement); m != nil {
-			c := track(unquoteIdent(m[3]))
-			c.added = append(c.added, addedIndex{Name: unquoteIdent(m[2]), Columns: m[4], Unique: m[1] != ""})
+			if definition, ok := indexDefinitionOf(m[4], m[5], m[1] != ""); ok {
+				c := track(unquoteIdent(m[3]))
+				c.added = append(c.added, addedIndex{Name: unquoteIdent(m[2]), Definition: definition})
+			}
 		}
 	}
 
@@ -91,8 +95,7 @@ func detectIndexRenames(ddls []string, currentDDLs string) []indexRenamePair {
 			continue
 		}
 		for _, added := range c.added {
-			definition := currentIndex{Columns: normalizeColumns(added.Columns), Unique: added.Unique}
-			from, ok := matchDroppedIndex(current[table], c.dropped, definition)
+			from, ok := matchDroppedIndex(current[table], c.dropped, added.Definition)
 			if !ok {
 				continue
 			}
@@ -100,8 +103,8 @@ func detectIndexRenames(ddls []string, currentDDLs string) []indexRenamePair {
 				Table:   table,
 				From:    from,
 				To:      added.Name,
-				Columns: definition.Columns,
-				Unique:  added.Unique,
+				Columns: added.Definition.Columns,
+				Unique:  added.Definition.Unique,
 			})
 		}
 	}
@@ -111,7 +114,7 @@ func detectIndexRenames(ddls []string, currentDDLs string) []indexRenamePair {
 // matchDroppedIndex returns the single dropped index whose current
 // definition equals the added one. Zero matches means a genuine rebuild and
 // multiple matches are ambiguous; both report no pairing.
-func matchDroppedIndex(currentTable map[string]currentIndex, dropped []string, definition currentIndex) (string, bool) {
+func matchDroppedIndex(currentTable map[string]indexDefinition, dropped []string, definition indexDefinition) (string, bool) {
 	matched := ""
 	for _, name := range dropped {
 		def, ok := currentTable[name]

@@ -190,7 +190,7 @@ func TestParseIndexPlans(t *testing.T) {
 	t.Run("ValueAndPointerModelsResolveIdentically", func(t *testing.T) {
 		want := []modelschema.IndexPlan{
 			{Name: "idx_indexed_samples_kind_created_at", Table: "indexed_samples", Columns: []string{"kind", "created_at"}},
-			{Name: "uniq_indexed_samples_code_kind", Table: "indexed_samples", Columns: []string{"code", "kind"}, Unique: true},
+			{Name: "uniq_indexed_samples_code_kind", Table: "indexed_samples", Columns: []string{"code", "kind"}, Unique: true, LiveOnly: true},
 		}
 
 		plans, err := modelschema.ParseIndexPlans(db, &IndexedSample{})
@@ -242,7 +242,7 @@ func TestParseIndexPlansNamesEmbeddedFieldsByPath(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []modelschema.IndexPlan{
 		{Name: "idx_embedded_index_samples_label", Table: "embedded_index_samples", Columns: []string{"label"}},
-		{Name: "uniq_embedded_index_samples_first_label", Table: "embedded_index_samples", Columns: []string{"first_label"}, Unique: true},
+		{Name: "uniq_embedded_index_samples_first_label", Table: "embedded_index_samples", Columns: []string{"first_label"}, Unique: true, LiveOnly: true},
 	}, plans)
 }
 
@@ -268,10 +268,10 @@ func TestParseIndexPlansNamesAQualifiedTableLikeGorm(t *testing.T) {
 	plans, err := modelschema.ParseIndexPlans(newSchemaDB(t), &QualifiedIndexSample{})
 	require.NoError(t, err)
 	require.Equal(t, []modelschema.IndexPlan{
-		{Name: "uniq_audit_qualified_samples_code", Table: "audit.qualified_samples", Columns: []string{"code"}, Unique: true},
+		{Name: "uniq_audit_qualified_samples_code", Table: "audit.qualified_samples", Columns: []string{"code"}, Unique: true, LiveOnly: true},
 	}, plans)
 	require.Equal(t,
-		`CREATE UNIQUE INDEX "uniq_audit_qualified_samples_code" ON "audit"."qualified_samples" ("code")`,
+		`CREATE UNIQUE INDEX "uniq_audit_qualified_samples_code" ON "audit"."qualified_samples" ("code") WHERE "deleted_at" IS NULL`,
 		plans[0].CreateSQL(postgres.New(postgres.Config{})))
 }
 
@@ -412,6 +412,11 @@ func TestCheckCrossModelIndexPlanConflicts(t *testing.T) {
 	})
 }
 
+// TestIndexPlanCreateSQL pins the statements CreateSQL renders, the two
+// examples of its comment among them: the columns in order under the
+// dialect's quoting, and a plan over the live rows alone spelled the way the
+// dialect has for it, a condition everywhere but on MySQL, where it is one
+// more key part after the columns.
 func TestIndexPlanCreateSQL(t *testing.T) {
 	plan := modelschema.IndexPlan{
 		Name:    "idx_samples_kind_created_at",
@@ -431,6 +436,107 @@ func TestIndexPlanCreateSQL(t *testing.T) {
 	require.Equal(t,
 		`CREATE UNIQUE INDEX "uniq_samples_code" ON "samples" ("code")`,
 		unique.CreateSQL(postgres.New(postgres.Config{})))
+
+	unique.LiveOnly = true
+	require.Equal(t,
+		`CREATE UNIQUE INDEX "uniq_samples_code" ON "samples" ("code") WHERE "deleted_at" IS NULL`,
+		unique.CreateSQL(postgres.New(postgres.Config{})))
+	require.Equal(t,
+		"CREATE UNIQUE INDEX `uniq_samples_code` ON `samples` (`code`,(CASE WHEN `deleted_at` IS NULL THEN 1 END))",
+		unique.CreateSQL(mysql.New(mysql.Config{})))
+	require.Equal(t,
+		"CREATE UNIQUE INDEX `uniq_samples_code` ON `samples` (`code`) WHERE `deleted_at` IS NULL",
+		unique.CreateSQL(tests.DummyDialector{}))
+
+	unique.Columns = []string{"kind", "code"}
+	require.Equal(t,
+		"CREATE UNIQUE INDEX `uniq_samples_code` ON `samples` (`kind`,`code`,(CASE WHEN `deleted_at` IS NULL THEN 1 END))",
+		unique.CreateSQL(mysql.New(mysql.Config{})))
+}
+
+// PurgedUniqueSample deletes its rows for good by default, which a call may
+// still override.
+type PurgedUniqueSample struct {
+	Code string `json:"code" gorm:"size:191"`
+
+	modelregistry.Base
+}
+
+func (*PurgedUniqueSample) TableName() string { return "purged_unique_samples" }
+
+func (*PurgedUniqueSample) Purge() bool { return true }
+
+func (*PurgedUniqueSample) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Code"}, Unique: true}}
+}
+
+// BareUniqueSample carries no soft-delete column, so no row of it is ever
+// soft-deleted.
+type BareUniqueSample struct {
+	ID   string `gorm:"primaryKey;size:36"`
+	Code string `gorm:"size:191"`
+}
+
+func (*BareUniqueSample) TableName() string { return "bare_unique_samples" }
+
+func (*BareUniqueSample) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Code"}, Unique: true}}
+}
+
+// ZeroValueDeleteSample tells its live rows by a zero value of its own rather
+// than by NULL.
+type ZeroValueDeleteSample struct {
+	ID        string         `gorm:"primaryKey;size:36"`
+	Code      string         `gorm:"size:191"`
+	DeletedAt gorm.DeletedAt `gorm:"zeroValue:1970-01-01 00:00:00"`
+}
+
+func (*ZeroValueDeleteSample) TableName() string { return "zero_value_delete_samples" }
+
+func (*ZeroValueDeleteSample) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Code"}, Unique: true}}
+}
+
+// RenamedDeleteSample soft-deletes by a column of its own name rather than by
+// the framework's.
+type RenamedDeleteSample struct {
+	ID        string `gorm:"primaryKey;size:36"`
+	Code      string `gorm:"size:191"`
+	RemovedAt gorm.DeletedAt
+}
+
+func (*RenamedDeleteSample) TableName() string { return "renamed_delete_samples" }
+
+func (*RenamedDeleteSample) Indexes() []modelschema.Index {
+	return []modelschema.Index{{Fields: []string{"Code"}, Unique: true}}
+}
+
+// TestParseIndexPlansHoldsUniqueIndexesToTheLiveRows pins which plans hold
+// the live rows alone: the unique ones of a model gorm soft-deletes by the
+// framework's column, a NULL there telling a live row, whatever the model's
+// Purge answers. An index that is not unique holds every row, and so does a
+// unique one of a model carrying no soft-delete column, soft-deleting by a
+// column of another name, or telling its live rows by a zero value of its
+// own.
+func TestParseIndexPlansHoldsUniqueIndexesToTheLiveRows(t *testing.T) {
+	db := newSchemaDB(t)
+	liveOnly := func(model any) map[string]bool {
+		plans, err := modelschema.ParseIndexPlans(db, model)
+		require.NoError(t, err)
+		got := make(map[string]bool, len(plans))
+		for _, plan := range plans {
+			got[plan.Name] = plan.LiveOnly
+		}
+		return got
+	}
+	require.Equal(t, map[string]bool{
+		"idx_indexed_samples_kind_created_at": false,
+		"uniq_indexed_samples_code_kind":      true,
+	}, liveOnly(&IndexedSample{}))
+	require.Equal(t, map[string]bool{"uniq_purged_unique_samples_code": true}, liveOnly(&PurgedUniqueSample{}))
+	require.Equal(t, map[string]bool{"uniq_bare_unique_samples_code": false}, liveOnly(&BareUniqueSample{}))
+	require.Equal(t, map[string]bool{"uniq_renamed_delete_samples_code": false}, liveOnly(&RenamedDeleteSample{}))
+	require.Equal(t, map[string]bool{"uniq_zero_value_delete_samples_code": false}, liveOnly(&ZeroValueDeleteSample{}))
 }
 
 // newSchemaDB opens a dry-run gorm handle that only serves schema parsing.

@@ -25,8 +25,13 @@ import (
 // supported dialect. Extensions follow real demand, descending columns
 // first (identical semantics everywhere), then MySQL prefix lengths
 // (dialect-specific, so they need an explicit cross-dialect failure
-// contract). Partial, functional and fulltext indexes stay out: their
-// semantics diverge per dialect, so hand-written DDL owns them.
+// contract). Partial, functional and fulltext indexes are not declared:
+// their semantics diverge per dialect, so hand-written DDL owns them.
+//
+// Unique is uniqueness among the live rows. On a model whose rows are
+// soft-deleted the framework builds the index over the rows not deleted (see
+// IndexPlan.LiveOnly), so a value a deleted row held is free for a new row,
+// and deleted rows may share it.
 type Index struct {
 	Fields []string // Go field names, First.Label for a field of a struct embedded by name; slice order is the index column order
 	Unique bool     // Unique makes the index a unique index
@@ -67,17 +72,41 @@ func IndexDeclarations(model any) []Index {
 // The bootstrap executor and the migration schema dumper both consume
 // IndexPlan, so the executed DDL and the desired-schema DDL always stay
 // literally identical.
+//
+// LiveOnly is what Unique means on a table whose rows are soft-deleted:
+// unique among the live rows, the ones gorm's soft delete has not marked. A
+// deleted row stays in the table, and under an index over every row it would
+// keep the value it held away from every new row; under this one the value is
+// free again, and any number of deleted rows share it. Every unique plan of a
+// model gorm soft-deletes by the framework's column is one, whatever the
+// model's Purge answers: a call deletes softly or for good as it asks, so no
+// model is known to hold no deleted row.
 type IndexPlan struct {
-	Name    string   // framework-generated index name
-	Table   string   // table the index belongs to
-	Columns []string // database column names in index order
-	Unique  bool     // whether the index is unique
+	Name     string   // framework-generated index name
+	Table    string   // table the index belongs to
+	Columns  []string // database column names in index order
+	Unique   bool     // whether the index is unique
+	LiveOnly bool     // whether a unique index holds the live rows alone, those not soft-deleted
 }
 
 // CreateSQL renders the CREATE INDEX statement for the plan using the
 // dialector's identifier quoting. Every consumer must render statements
 // through this single method so DDL text never diverges between the
 // database and the migration schema.
+//
+// A plan holding the live rows alone (see LiveOnly) is spelled the way the
+// dialect has for it. PostgreSQL and SQLite index a part of a table, here the
+// rows whose soft-delete column is NULL:
+//
+//	CREATE UNIQUE INDEX "uniq_samples_code" ON "samples" ("code") WHERE "deleted_at" IS NULL
+//
+// MySQL indexes whole tables alone, so there the index takes one more key
+// part, an expression that is 1 in a live row and NULL in a deleted one: a
+// unique index holds no two NULLs equal, so a deleted row collides with no
+// row, and the live ones collide on the columns alone. A key part that is an
+// expression needs MySQL 8.0.13:
+//
+//	CREATE UNIQUE INDEX `uniq_samples_code` ON `samples` (`code`,(CASE WHEN `deleted_at` IS NULL THEN 1 END))
 func (p IndexPlan) CreateSQL(dialector gorm.Dialector) string {
 	var b strings.Builder
 	b.WriteString("CREATE ")
@@ -95,7 +124,18 @@ func (p IndexPlan) CreateSQL(dialector gorm.Dialector) string {
 		}
 		dialector.QuoteTo(&b, col)
 	}
-	b.WriteString(")")
+	switch {
+	case !p.LiveOnly:
+		b.WriteString(")")
+	case strings.EqualFold(dialector.Name(), string(config.DBMySQL)):
+		b.WriteString(",(CASE WHEN ")
+		dialector.QuoteTo(&b, softDeleteColumn)
+		b.WriteString(" IS NULL THEN 1 END))")
+	default:
+		b.WriteString(") WHERE ")
+		dialector.QuoteTo(&b, softDeleteColumn)
+		b.WriteString(" IS NULL")
+	}
 	return b.String()
 }
 
@@ -139,12 +179,24 @@ func ValidateIndexes(db *gorm.DB, model any) error {
 // declarations share the same column sequence, no declaration may duplicate
 // a struct tag index, and every column must be one the dialect of db can
 // index (see unindexableColumn). The names are held to the dialect's limit
-// (see indexNameLimit).
+// (see indexNameLimit). A unique plan of a model gorm soft-deletes holds the
+// live rows alone (see IndexPlan.LiveOnly).
 func buildIndexPlans(db *gorm.DB, sch *gormschema.Schema, tableName string, decls []Index) ([]IndexPlan, error) {
 	nameLimit := indexNameLimit(db)
 	byName, err := GoNameIndex(sch.ModelType)
 	if err != nil {
 		return nil, err
+	}
+	// The rows a unique index holds are the ones every query of the model
+	// reads: gorm keeps the soft-deleted ones out by the first soft-delete
+	// clause of the schema, which tells a live row by a NULL in the
+	// framework's column unless the field declares a zero value of its own.
+	liveOnly := false
+	for _, c := range sch.QueryClauses {
+		if softDelete, ok := c.(gorm.SoftDeleteQueryClause); ok {
+			liveOnly = softDelete.Field.DBName == softDeleteColumn && !softDelete.ZeroValue.Valid
+			break
+		}
 	}
 	plans := make([]IndexPlan, 0, len(decls))
 	declared := make(map[string]struct{}, len(decls))
@@ -180,10 +232,11 @@ func buildIndexPlans(db *gorm.DB, sch *gormschema.Schema, tableName string, decl
 		}
 		declared[key] = struct{}{}
 		plans = append(plans, IndexPlan{
-			Name:    indexName(tableName, columns, decl.Unique, nameLimit),
-			Table:   tableName,
-			Columns: columns,
-			Unique:  decl.Unique,
+			Name:     indexName(tableName, columns, decl.Unique, nameLimit),
+			Table:    tableName,
+			Columns:  columns,
+			Unique:   decl.Unique,
+			LiveOnly: decl.Unique && liveOnly,
 		})
 	}
 	if err = checkTagIndexConflicts(sch, plans); err != nil {

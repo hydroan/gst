@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 // The fingerprintSample variants below each differ from fingerprintSample in
@@ -75,6 +76,21 @@ func (*fingerprintSampleUniqueIndex) Indexes() []Index {
 	return []Index{{Fields: []string{"Name"}, Unique: true}}
 }
 
+// fingerprintSampleSoftDeleted soft-deletes its rows and keeps a unique
+// index, which the framework builds over the live rows alone.
+type fingerprintSampleSoftDeleted struct {
+	Name      string `gorm:"size:64"`
+	DeletedAt gorm.DeletedAt
+
+	SampleBase
+}
+
+func (*fingerprintSampleSoftDeleted) TableName() string { return "fingerprint_samples" }
+
+func (*fingerprintSampleSoftDeleted) Indexes() []Index {
+	return []Index{{Fields: []string{"Name"}, Unique: true}}
+}
+
 // fingerprintSampleOtherTable changes nothing but the table it maps to.
 type fingerprintSampleOtherTable struct {
 	Name string `gorm:"size:64"`
@@ -124,6 +140,19 @@ func TestModelDeclarationCoversEveryTableDeclaration(t *testing.T) {
 		} {
 			require.NotEqual(t, baseline, modelDeclaration(model), name)
 		}
+	})
+
+	t.Run("WhatTheFrameworkBuildsFromAnIndexDeclarationIsDeclaredToo", func(t *testing.T) {
+		// The name of an index and the rows a unique one holds are the
+		// framework's to decide, and an index in place under another
+		// definition is refused, not repaired: what a declaration resolves
+		// into has to move the fingerprint as the declaration itself does.
+		require.Contains(t, baseline,
+			" index=[Name] unique=false plan={Name:idx_fingerprint_samples_name Table:fingerprint_samples Columns:[name] Unique:false LiveOnly:false}")
+		require.Contains(t, modelDeclaration(&fingerprintSampleUniqueIndex{}),
+			" index=[Name] unique=true plan={Name:uniq_fingerprint_samples_name Table:fingerprint_samples Columns:[name] Unique:true LiveOnly:false}")
+		require.Contains(t, modelDeclaration(&fingerprintSampleSoftDeleted{}),
+			" index=[Name] unique=true plan={Name:uniq_fingerprint_samples_name Table:fingerprint_samples Columns:[name] Unique:true LiveOnly:true}")
 	})
 
 	t.Run("EveryFieldGormExpandsIntoAColumnIsDeclared", func(t *testing.T) {
