@@ -225,7 +225,7 @@ func TestMigratePlansAMissingSqliteFileWithoutCreatingIt(t *testing.T) {
 			require.True(t, plan.CreatesDatabase)
 			require.NoFileExists(t, tc.file, "a dry run creates nothing")
 
-			require.NoError(t, dbmigrate.Apply(plan, config.DBSqlite, cfg))
+			require.NoError(t, dbmigrate.Apply(plan, config.DBSqlite, cfg, nil))
 			require.FileExists(t, tc.file)
 
 			plan, err = dbmigrate.Migrate([]string{schema}, config.DBSqlite, cfg, &dbmigrate.MigrateOption{DryRun: true})
@@ -272,11 +272,12 @@ func TestMigrateRefusesASqliteFileItCannotCreate(t *testing.T) {
 }
 
 // TestMigrateDropsRemovedIndex pins the planner's drop path for a secondary
-// index that disappears from the desired schema: the index survives without
-// EnableDrop, and is planned and executed as a drop with it. The fixture
-// index comes from a struct tag because that is the shape a base-struct tag
-// removal produces on every table at once, and tag indexes flow through the
-// same desired-DDL rendering as everything else the dumper emits.
+// index that disappears from the desired schema: it is planned as a drop,
+// which loses no data and so is no data loss to accept, and applying the plan
+// drops it. The fixture index comes from a struct tag because that is the
+// shape a base-struct tag removal produces on every table at once, and tag
+// indexes flow through the same desired-DDL rendering as everything else the
+// dumper emits.
 func TestMigrateDropsRemovedIndex(t *testing.T) {
 	dumper, err := dbmigrate.NewSchemaDumper()
 	require.NoError(t, err)
@@ -302,27 +303,21 @@ func TestMigrateDropsRemovedIndex(t *testing.T) {
 	require.True(t, plan.Changed())
 	require.Equal(t, 1, mysqlIndexCount(t, databaseConfig, "widgets", "idx_widgets_tag"))
 
-	// Without EnableDrop the index survives: the plan still reports the
-	// change, but renders the destructive statement as skipped instead of
-	// executing it.
-	plan, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBMySQL, databaseConfig, &dbmigrate.MigrateOption{})
+	// The removal is planned, with no column dropped beside it...
+	plan, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBMySQL, databaseConfig, &dbmigrate.MigrateOption{DryRun: true})
 	require.NoError(t, err)
 	require.True(t, plan.Changed())
+	require.Empty(t, plan.DroppedColumns)
 	require.Equal(t, 1, mysqlIndexCount(t, databaseConfig, "widgets", "idx_widgets_tag"))
 
-	// With EnableDrop the removal is planned...
-	plan, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBMySQL, databaseConfig, &dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
-	require.NoError(t, err)
-	require.True(t, plan.Changed())
-
 	// ...and applying it drops the index for good.
-	plan, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBMySQL, databaseConfig, &dbmigrate.MigrateOption{EnableDrop: true})
+	plan, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBMySQL, databaseConfig, &dbmigrate.MigrateOption{})
 	require.NoError(t, err)
 	require.True(t, plan.Changed())
 	require.Equal(t, 0, mysqlIndexCount(t, databaseConfig, "widgets", "idx_widgets_tag"))
 
 	// The converged schema plans nothing on a re-run.
-	plan, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBMySQL, databaseConfig, &dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
+	plan, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBMySQL, databaseConfig, &dbmigrate.MigrateOption{DryRun: true})
 	require.NoError(t, err)
 	require.False(t, plan.Changed())
 }
@@ -356,27 +351,21 @@ func TestMigrateDropsRemovedIndexOnPostgres(t *testing.T) {
 	require.True(t, plan.Changed())
 	require.Equal(t, 1, postgresIndexCount(t, databaseConfig, "widgets", "idx_widgets_tag"))
 
-	// Without EnableDrop the index survives: the plan still reports the
-	// change, but renders the destructive statement as skipped instead of
-	// executing it.
-	plan, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBPostgres, databaseConfig, &dbmigrate.MigrateOption{})
+	// The removal is planned, with no column dropped beside it...
+	plan, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBPostgres, databaseConfig, &dbmigrate.MigrateOption{DryRun: true})
 	require.NoError(t, err)
 	require.True(t, plan.Changed())
+	require.Empty(t, plan.DroppedColumns)
 	require.Equal(t, 1, postgresIndexCount(t, databaseConfig, "widgets", "idx_widgets_tag"))
 
-	// With EnableDrop the removal is planned...
-	plan, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBPostgres, databaseConfig, &dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
-	require.NoError(t, err)
-	require.True(t, plan.Changed())
-
 	// ...and applying it drops the index for good.
-	plan, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBPostgres, databaseConfig, &dbmigrate.MigrateOption{EnableDrop: true})
+	plan, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBPostgres, databaseConfig, &dbmigrate.MigrateOption{})
 	require.NoError(t, err)
 	require.True(t, plan.Changed())
 	require.Equal(t, 0, postgresIndexCount(t, databaseConfig, "widgets", "idx_widgets_tag"))
 
 	// The converged schema plans nothing on a re-run.
-	plan, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBPostgres, databaseConfig, &dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
+	plan, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBPostgres, databaseConfig, &dbmigrate.MigrateOption{DryRun: true})
 	require.NoError(t, err)
 	require.False(t, plan.Changed())
 }
@@ -400,204 +389,23 @@ func TestApplyRunsThePlanItWasGiven(t *testing.T) {
 		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;"
 
 	plan, err := dbmigrate.Migrate([]string{schema}, config.DBMySQL, databaseConfig,
-		&dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
+		&dbmigrate.MigrateOption{DryRun: true})
 	require.NoError(t, err)
 	require.True(t, plan.Changed())
 	require.Contains(t, strings.Join(plan.Statements, "\n"), "CREATE TABLE", "the plan carries the statements it showed")
 
-	require.NoError(t, dbmigrate.Apply(plan, config.DBMySQL, databaseConfig))
+	require.NoError(t, dbmigrate.Apply(plan, config.DBMySQL, databaseConfig, nil))
 
 	// The schema now matches, so nothing is planned any more.
 	after, err := dbmigrate.Migrate([]string{schema}, config.DBMySQL, databaseConfig,
-		&dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
+		&dbmigrate.MigrateOption{DryRun: true})
 	require.NoError(t, err)
 	require.False(t, after.Changed())
 
 	// The plan already applied is still the same statements: running it again
 	// fails on the table it would create, instead of quietly planning nothing.
 	// That failure is the proof the plan is not recomputed.
-	require.Error(t, dbmigrate.Apply(plan, config.DBMySQL, databaseConfig))
-}
-
-func TestMigrateTableRenameAdvisory(t *testing.T) {
-	database := fmt.Sprintf("gst_dbmigrate_rename_%d", time.Now().UnixNano())
-	createMySQLDatabase(t, mysqlDatabaseConfig(), database)
-	t.Cleanup(func() {
-		dropMySQLDatabase(t, mysqlDatabaseConfig(), database)
-	})
-	databaseConfig := mysqlDatabaseConfig()
-	databaseConfig.Database = database
-
-	before := "CREATE TABLE `samples` (\n" +
-		"  `id` char(36) NOT NULL,\n" +
-		"  `code` varchar(64) NOT NULL,\n" +
-		"  PRIMARY KEY (`id`),\n" +
-		"  INDEX `idx_samples_code` (`code`)\n" +
-		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;"
-	after := strings.ReplaceAll(before, "samples", "records")
-
-	plan, err := dbmigrate.Migrate([]string{before}, config.DBMySQL, databaseConfig, &dbmigrate.MigrateOption{})
-	require.NoError(t, err)
-	require.True(t, plan.Changed())
-	require.Empty(t, plan.Advisory)
-
-	// The plan for the renamed model drops `samples` and creates `records`;
-	// the advisory must offer the metadata-only statements instead.
-	plan, err = dbmigrate.Migrate([]string{after}, config.DBMySQL, databaseConfig,
-		&dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
-	require.NoError(t, err)
-	require.True(t, plan.Changed())
-	require.Contains(t, plan.Advisory, "RENAME TABLE `samples` TO `records`;")
-	require.Contains(t, plan.Advisory, "ALTER TABLE `records` RENAME INDEX `idx_samples_code` TO `idx_records_code`;")
-
-	// Applying the advisory instead of the plan leaves nothing to migrate.
-	execMySQL(t, databaseConfig, "RENAME TABLE `samples` TO `records`")
-	execMySQL(t, databaseConfig, "ALTER TABLE `records` RENAME INDEX `idx_samples_code` TO `idx_records_code`")
-	plan, err = dbmigrate.Migrate([]string{after}, config.DBMySQL, databaseConfig,
-		&dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
-	require.NoError(t, err)
-	require.False(t, plan.Changed())
-	require.Empty(t, plan.Advisory)
-}
-
-func TestMigrateTableRenameAdvisoryWithRemainingChanges(t *testing.T) {
-	database := fmt.Sprintf("gst_dbmigrate_rename_drift_%d", time.Now().UnixNano())
-	createMySQLDatabase(t, mysqlDatabaseConfig(), database)
-	t.Cleanup(func() {
-		dropMySQLDatabase(t, mysqlDatabaseConfig(), database)
-	})
-	databaseConfig := mysqlDatabaseConfig()
-	databaseConfig.Database = database
-
-	before := "CREATE TABLE `samples` (\n" +
-		"  `id` char(36) NOT NULL,\n" +
-		"  `code` varchar(64) NOT NULL,\n" +
-		"  PRIMARY KEY (`id`),\n" +
-		"  INDEX `idx_samples_code` (`code`)\n" +
-		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;"
-
-	plan, err := dbmigrate.Migrate([]string{before}, config.DBMySQL, databaseConfig, &dbmigrate.MigrateOption{})
-	require.NoError(t, err)
-	require.True(t, plan.Changed())
-	require.Empty(t, plan.Advisory)
-
-	// The model renames the table and adds a column in the same step, so the
-	// created table is a column superset of the dropped one. The advisory must
-	// still offer the rename and list the addition as a remaining change.
-	after := strings.ReplaceAll(
-		strings.Replace(before, "  `code` varchar(64) NOT NULL,\n",
-			"  `code` varchar(64) NOT NULL,\n  `remark` varchar(255) NOT NULL DEFAULT '',\n", 1),
-		"samples", "records",
-	)
-	plan, err = dbmigrate.Migrate([]string{after}, config.DBMySQL, databaseConfig,
-		&dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
-	require.NoError(t, err)
-	require.True(t, plan.Changed())
-	require.Contains(t, plan.Advisory, "RENAME TABLE `samples` TO `records`;")
-	require.Contains(t, plan.Advisory, "ALTER TABLE `records` RENAME INDEX `idx_samples_code` TO `idx_records_code`;")
-	require.Contains(t, plan.Advisory, "remaining change: ALTER TABLE `records` ADD COLUMN `remark`")
-
-	// After the rename, only the remaining column addition is left in the
-	// plan, and there is no drop/create pair left to advise about.
-	execMySQL(t, databaseConfig, "RENAME TABLE `samples` TO `records`")
-	execMySQL(t, databaseConfig, "ALTER TABLE `records` RENAME INDEX `idx_samples_code` TO `idx_records_code`")
-	plan, err = dbmigrate.Migrate([]string{after}, config.DBMySQL, databaseConfig,
-		&dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
-	require.NoError(t, err)
-	require.True(t, plan.Changed())
-	require.Empty(t, plan.Advisory)
-}
-
-func TestMigrateTableRenameAdvisoryOnPostgres(t *testing.T) {
-	database := fmt.Sprintf("gst_dbmigrate_rename_pg_%d", time.Now().UnixNano())
-	adminConfig := postgresDatabaseConfig(os.Getenv(config.POSTGRES_DATABASE))
-	createPostgresDatabase(t, adminConfig, database)
-	t.Cleanup(func() {
-		dropPostgresDatabase(t, adminConfig, database)
-	})
-	databaseConfig := postgresDatabaseConfig(database)
-
-	// Quoted the way the schema dumper writes a postgres schema.
-	before := "CREATE TABLE \"samples\" (\n" +
-		"  \"id\" char(36) NOT NULL,\n" +
-		"  \"code\" varchar(64) NOT NULL,\n" +
-		"  PRIMARY KEY (\"id\")\n" +
-		");\n" +
-		"CREATE INDEX \"idx_samples_code\" ON \"samples\" (\"code\");"
-	after := strings.ReplaceAll(before, "samples", "records")
-
-	plan, err := dbmigrate.Migrate([]string{before}, config.DBPostgres, databaseConfig, &dbmigrate.MigrateOption{})
-	require.NoError(t, err)
-	require.True(t, plan.Changed())
-	require.Empty(t, plan.Advisory)
-
-	// The plan for the renamed model drops "samples" and creates "records";
-	// the advisory must offer the metadata-only statements in postgres syntax,
-	// the names quoted once.
-	plan, err = dbmigrate.Migrate([]string{after}, config.DBPostgres, databaseConfig,
-		&dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
-	require.NoError(t, err)
-	require.True(t, plan.Changed())
-	require.Contains(t, plan.Advisory, `ALTER TABLE "samples" RENAME TO "records";`)
-	require.Contains(t, plan.Advisory, `ALTER INDEX "idx_samples_code" RENAME TO "idx_records_code";`)
-
-	// Applying the advisory instead of the plan leaves nothing to migrate.
-	execPostgres(t, databaseConfig, `ALTER TABLE "samples" RENAME TO "records"`)
-	execPostgres(t, databaseConfig, `ALTER INDEX "idx_samples_code" RENAME TO "idx_records_code"`)
-	plan, err = dbmigrate.Migrate([]string{after}, config.DBPostgres, databaseConfig,
-		&dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
-	require.NoError(t, err)
-	require.False(t, plan.Changed())
-	require.Empty(t, plan.Advisory)
-}
-
-func TestMigrateTableRenameAdvisoryWithRemainingChangesOnPostgres(t *testing.T) {
-	database := fmt.Sprintf("gst_dbmigrate_rename_pg_drift_%d", time.Now().UnixNano())
-	adminConfig := postgresDatabaseConfig(os.Getenv(config.POSTGRES_DATABASE))
-	createPostgresDatabase(t, adminConfig, database)
-	t.Cleanup(func() {
-		dropPostgresDatabase(t, adminConfig, database)
-	})
-	databaseConfig := postgresDatabaseConfig(database)
-
-	before := "CREATE TABLE samples (\n" +
-		"  id char(36) NOT NULL,\n" +
-		"  code varchar(64) NOT NULL,\n" +
-		"  PRIMARY KEY (id)\n" +
-		");\n" +
-		"CREATE INDEX idx_samples_code ON samples (code);"
-
-	plan, err := dbmigrate.Migrate([]string{before}, config.DBPostgres, databaseConfig, &dbmigrate.MigrateOption{})
-	require.NoError(t, err)
-	require.True(t, plan.Changed())
-	require.Empty(t, plan.Advisory)
-
-	// The model renames the table and adds a column in the same step, so the
-	// created table is a column superset of the dropped one. The advisory must
-	// still offer the rename and list the addition as a remaining change.
-	after := strings.ReplaceAll(
-		strings.Replace(before, "  code varchar(64) NOT NULL,\n",
-			"  code varchar(64) NOT NULL,\n  remark varchar(255) NOT NULL DEFAULT '',\n", 1),
-		"samples", "records",
-	)
-	plan, err = dbmigrate.Migrate([]string{after}, config.DBPostgres, databaseConfig,
-		&dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
-	require.NoError(t, err)
-	require.True(t, plan.Changed())
-	require.Contains(t, plan.Advisory, `ALTER TABLE "samples" RENAME TO "records";`)
-	require.Contains(t, plan.Advisory, `ALTER INDEX "idx_samples_code" RENAME TO "idx_records_code";`)
-	require.Contains(t, plan.Advisory, "remaining change:")
-	require.Contains(t, plan.Advisory, "ADD COLUMN")
-
-	// After the rename, only the remaining column addition is left in the
-	// plan, and there is no drop/create pair left to advise about.
-	execPostgres(t, databaseConfig, `ALTER TABLE "samples" RENAME TO "records"`)
-	execPostgres(t, databaseConfig, `ALTER INDEX "idx_samples_code" RENAME TO "idx_records_code"`)
-	plan, err = dbmigrate.Migrate([]string{after}, config.DBPostgres, databaseConfig,
-		&dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
-	require.NoError(t, err)
-	require.True(t, plan.Changed())
-	require.Empty(t, plan.Advisory)
+	require.Error(t, dbmigrate.Apply(plan, config.DBMySQL, databaseConfig, nil))
 }
 
 // TestMigrateReachesAMySQLTargetUnderTheTLSKeysOfTheApplication pins that a
@@ -639,7 +447,7 @@ func TestMigrateReachesAMySQLTargetUnderTheTLSKeysOfTheApplication(t *testing.T)
 	plan, err := dbmigrate.Migrate([]string{schema}, config.DBMySQL, target, &dbmigrate.MigrateOption{DryRun: true})
 	require.NoError(t, err)
 	require.True(t, plan.Changed())
-	require.NoError(t, dbmigrate.Apply(plan, config.DBMySQL, target))
+	require.NoError(t, dbmigrate.Apply(plan, config.DBMySQL, target, nil))
 
 	plan, err = dbmigrate.Migrate([]string{schema}, config.DBMySQL, target, &dbmigrate.MigrateOption{DryRun: true})
 	require.NoError(t, err)
@@ -811,65 +619,21 @@ func postgresDSN(cfg *dbmigrate.DatabaseConfig) string {
 	return dsn.String()
 }
 
-// TestMigrateTableRenameAdvisoryOnSQLite pins that a sqlite database file,
-// a migration target in its own right, gets the rename advisory the server
-// dialects get: the plan for a renamed model drops and re-creates the table,
-// and the advisory offers the metadata-only rename instead. SQLite renames
-// no index, so the advisory drops the old one for the next run to create
-// under its new name.
-func TestMigrateTableRenameAdvisoryOnSQLite(t *testing.T) {
-	file := filepath.Join(t.TempDir(), "rename.db")
-	databaseConfig := &dbmigrate.DatabaseConfig{Database: file}
-
-	before := "CREATE TABLE `samples` (\n" +
-		"  `id` text NOT NULL,\n" +
-		"  `code` text NOT NULL,\n" +
-		"  PRIMARY KEY (`id`)\n" +
-		");\n" +
-		"CREATE INDEX `idx_samples_code` ON `samples` (`code`);"
-	after := strings.ReplaceAll(before, "samples", "records")
-
-	plan, err := dbmigrate.Migrate([]string{before}, config.DBSqlite, databaseConfig, &dbmigrate.MigrateOption{})
-	require.NoError(t, err)
-	require.True(t, plan.Changed())
-	require.Empty(t, plan.Advisory)
-
-	plan, err = dbmigrate.Migrate([]string{after}, config.DBSqlite, databaseConfig,
-		&dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
-	require.NoError(t, err)
-	require.True(t, plan.Changed())
-	require.Contains(t, plan.Advisory, "ALTER TABLE `samples` RENAME TO `records`;")
-	require.Contains(t, plan.Advisory, "DROP INDEX `idx_samples_code`;", "sqlite renames no index: the old one is dropped for the next run to create the new one")
-
-	// Applying the advisory instead of the plan leaves only the index to
-	// create under its new name.
-	execSQLite(t, file, "ALTER TABLE `samples` RENAME TO `records`")
-	execSQLite(t, file, "DROP INDEX `idx_samples_code`")
-	plan, err = dbmigrate.Migrate([]string{after}, config.DBSqlite, databaseConfig,
-		&dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
-	require.NoError(t, err)
-	require.Len(t, plan.Statements, 1, "%v", plan.Statements)
-	require.Contains(t, plan.Statements[0], "idx_records_code")
-	require.Empty(t, plan.Advisory)
-}
-
 // TestMigrateHandlesUniqueIndexesOverTheLiveRows pins, on each dialect, what
 // a migration makes of a unique index over the live rows alone (see
 // modelschema.IndexPlan.LiveOnly), spelled as the index renderer writes it.
 // A database carrying the index over every row under the same name is
 // planned a drop and a create, the plan gg migrate asks for, and once it is
-// applied nothing is left to plan. And the index keeps the rename advice an
-// index over every row has, alone and along with its table: a rename where
-// the dialect renames indexes, and on SQLite, which renames none, the drop
-// of the old name beside the table's rename.
+// applied nothing is left to plan. And the index is renamed the way an index
+// over every row is, alone and once its table is renamed: by one rename
+// statement where the dialect renames indexes, and on SQLite, which renames
+// none, by a drop and a create.
 func TestMigrateHandlesUniqueIndexesOverTheLiveRows(t *testing.T) {
 	type dialect struct {
-		typ         config.DBType
-		dialector   gorm.Dialector
-		table       func(name string) string
-		target      func(t *testing.T, name string) *dbmigrate.DatabaseConfig
-		renameIndex string   // the statement advised for the index renamed alone, "" where the plan stands
-		renameTable []string // the statements advised for the table renamed with its index
+		typ       config.DBType
+		dialector gorm.Dialector
+		table     func(name string) string
+		target    func(t *testing.T, name string) *dbmigrate.DatabaseConfig
 	}
 	dialects := []dialect{
 		{
@@ -891,11 +655,6 @@ func TestMigrateHandlesUniqueIndexesOverTheLiveRows(t *testing.T) {
 				cfg.Database = name
 				return cfg
 			},
-			renameIndex: "ALTER TABLE `items` RENAME INDEX `legacy_items_code` TO `uniq_items_code`;",
-			renameTable: []string{
-				"RENAME TABLE `old_items` TO `new_items`;",
-				"ALTER TABLE `new_items` RENAME INDEX `uniq_old_items_code` TO `uniq_new_items_code`;",
-			},
 		},
 		{
 			typ:       config.DBPostgres,
@@ -915,11 +674,6 @@ func TestMigrateHandlesUniqueIndexesOverTheLiveRows(t *testing.T) {
 				t.Cleanup(func() { dropPostgresDatabase(t, admin, name) })
 				return postgresDatabaseConfig(name)
 			},
-			renameIndex: `ALTER INDEX "legacy_items_code" RENAME TO "uniq_items_code";`,
-			renameTable: []string{
-				`ALTER TABLE "old_items" RENAME TO "new_items";`,
-				`ALTER INDEX "uniq_old_items_code" RENAME TO "uniq_new_items_code";`,
-			},
 		},
 		{
 			typ:       config.DBSqlite,
@@ -936,10 +690,6 @@ func TestMigrateHandlesUniqueIndexesOverTheLiveRows(t *testing.T) {
 				t.Helper()
 				return &dbmigrate.DatabaseConfig{Database: filepath.Join(t.TempDir(), name+".db")}
 			},
-			renameTable: []string{
-				"ALTER TABLE `old_items` RENAME TO `new_items`;",
-				"DROP INDEX `uniq_old_items_code`;",
-			},
 		},
 	}
 	for _, d := range dialects {
@@ -951,7 +701,7 @@ func TestMigrateHandlesUniqueIndexesOverTheLiveRows(t *testing.T) {
 			}
 			plan := func(cfg *dbmigrate.DatabaseConfig, desired []string) dbmigrate.Plan {
 				t.Helper()
-				planned, err := dbmigrate.Migrate(desired, d.typ, cfg, &dbmigrate.MigrateOption{DryRun: true, EnableDrop: true})
+				planned, err := dbmigrate.Migrate(desired, d.typ, cfg, &dbmigrate.MigrateOption{DryRun: true})
 				require.NoError(t, err)
 				return planned
 			}
@@ -970,27 +720,51 @@ func TestMigrateHandlesUniqueIndexesOverTheLiveRows(t *testing.T) {
 			require.Len(t, swap.Statements, 2, "%v", swap.Statements)
 			require.Contains(t, swap.Statements[0], "DROP INDEX")
 			require.Contains(t, swap.Statements[1], "CREATE UNIQUE INDEX")
-			require.Empty(t, swap.Advisory, "one name, two definitions: a rebuild, not a rename")
-			require.NoError(t, dbmigrate.Apply(swap, d.typ, cfg))
+			require.Empty(t, swap.Renames, "one name, two definitions: a rebuild, not a rename")
+			require.NoError(t, dbmigrate.Apply(swap, d.typ, cfg, nil))
 			require.False(t, plan(cfg, desired).Changed())
+
+			// requireIndexRenamed holds a plan to the rename of one index and
+			// nothing else: one statement renaming it, or on SQLite its drop
+			// and its create.
+			requireIndexRenamed := func(planned dbmigrate.Plan, from, to string) {
+				t.Helper()
+				require.Empty(t, planned.Renames)
+				require.Empty(t, planned.DroppedColumns)
+				if d.typ == config.DBSqlite {
+					require.Len(t, planned.Statements, 2, "%v", planned.Statements)
+					statements := strings.Join(planned.Statements, "\n")
+					require.Contains(t, statements, "DROP INDEX")
+					require.Contains(t, statements, "CREATE UNIQUE INDEX")
+					return
+				}
+				require.Len(t, planned.Statements, 1, "%v", planned.Statements)
+				require.Contains(t, planned.Statements[0], "RENAME")
+				require.Contains(t, planned.Statements[0], from)
+				require.Contains(t, planned.Statements[0], to)
+			}
 
 			// The index renamed alone.
 			cfg = create("index", schemaOf("items", "legacy_items_code", true))
-			renamed := plan(cfg, schemaOf("items", "uniq_items_code", true))
-			require.Len(t, renamed.Statements, 2, "%v", renamed.Statements)
-			if d.renameIndex == "" {
-				require.Empty(t, renamed.Advisory)
-			} else {
-				require.Contains(t, renamed.Advisory, d.renameIndex)
-			}
+			desired = schemaOf("items", "uniq_items_code", true)
+			renamed := plan(cfg, desired)
+			requireIndexRenamed(renamed, "legacy_items_code", "uniq_items_code")
+			require.NoError(t, dbmigrate.Apply(renamed, d.typ, cfg, nil))
+			require.False(t, plan(cfg, desired).Changed())
 
-			// The index renamed along with its table.
+			// The index renamed along with its table: the table first, as the
+			// rename the plan reports, then the index in the plan made of the
+			// renamed table.
 			cfg = create("table", schemaOf("old_items", "uniq_old_items_code", true))
-			renamed = plan(cfg, schemaOf("new_items", "uniq_new_items_code", true))
-			for _, statement := range d.renameTable {
-				require.Contains(t, renamed.Advisory, statement)
-			}
-			require.NotContains(t, renamed.Advisory, "remaining change", "the index change is the rename the advisory names")
+			desired = schemaOf("new_items", "uniq_new_items_code", true)
+			renamed = plan(cfg, desired)
+			require.Len(t, renamed.Renames, 1)
+			require.Equal(t, "table old_items to new_items", renamed.Renames[0].String())
+			require.NoError(t, dbmigrate.ApplyRenames(renamed.Renames, d.typ, cfg))
+			renamed = plan(cfg, desired)
+			requireIndexRenamed(renamed, "uniq_old_items_code", "uniq_new_items_code")
+			require.NoError(t, dbmigrate.Apply(renamed, d.typ, cfg, nil))
+			require.False(t, plan(cfg, desired).Changed())
 		})
 	}
 }

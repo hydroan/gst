@@ -182,9 +182,10 @@ func TestDumperKeepsCallerOrder(t *testing.T) {
 func TestDumperClosed(t *testing.T) {
 	dumper, err := dbmigrate.NewSchemaDumper()
 	require.NoError(t, err)
-	// The mock connection carries no ExpectClose, so Close reports the call as
-	// unexpected; this test only covers what Dump does once it is closed.
-	_ = dumper.Close()
+	_, err = dumper.Dump(config.DBMySQL, &User{})
+	require.NoError(t, err)
+	require.NoError(t, dumper.Close(), "a dumper that rendered a schema closes without an error")
+	require.NoError(t, dumper.Close(), "a dumper already closed reports no error")
 
 	_, err = dumper.Dump(config.DBMySQL, &User{})
 	require.ErrorContains(t, err, "schema dumper is closed")

@@ -39,6 +39,7 @@ var (
 	migrateModule            string
 	migrateDryRun            bool
 	migrateYes               bool
+	migrateAcceptDataLoss    bool
 	migrateSchemaOnly        bool
 	migrateSchemaSource      string
 	migrateSchemaSourceFiles fileList
@@ -58,6 +59,7 @@ func main() {
 	flag.StringVar(&migrateModule, "module", "", "the project's module path")
 	flag.BoolVar(&migrateDryRun, "dry-run", false, "preview the migration SQL without applying it")
 	flag.BoolVar(&migrateYes, "yes", false, "apply the migration without prompting for confirmation")
+	flag.BoolVar(&migrateAcceptDataLoss, "accept-data-loss", false, "apply a migration that drops columns and the data they hold")
 	flag.BoolVar(&migrateSchemaOnly, "schema-only", false, "dump the schema and stop")
 	flag.StringVar(&migrateSchemaSource, "schema-source", "", "the model source the schema dump covers; empty covers every registered model")
 	flag.Var(&migrateSchemaSourceFiles, "schema-source-file", "a Go file under schema-source; repeat for each")
@@ -406,38 +408,84 @@ func databaseTarget(cfg *dbmigrate.DatabaseConfig) string {
 	}
 }
 
-// performMigration executes the migration process: dry run, confirmation, and actual execution.
+// performMigration plans the migration, offers the renames the plan
+// suspects, shows the plan with what a reviewer has to know beside it, and
+// applies it once confirmed.
 func performMigration(schema string, cfg *dbmigrate.DatabaseConfig) error {
 	dbtyp := config.App.Database.Type
 
-	fmt.Println("\n▶ Migration Plan")
-
-	// Planned once, against the schema the database has now. What is applied
-	// below is this plan, statement for statement: planning again to execute
-	// would plan against whatever the database has by then, which is not what
-	// was shown and approved.
-	plan, err := dbmigrate.Migrate([]string{schema}, dbtyp, cfg, &dbmigrate.MigrateOption{
-		DryRun:     true,
-		EnableDrop: true,
-	})
+	// Planned against the schema the database has at that moment. What is
+	// applied below is the plan shown, statement for statement: planning
+	// again to execute would plan against whatever the database has by then,
+	// which is not what was approved.
+	planned := func() (dbmigrate.Plan, error) {
+		return dbmigrate.Migrate([]string{schema}, dbtyp, cfg, &dbmigrate.MigrateOption{DryRun: true})
+	}
+	plan, err := planned()
 	if err != nil {
 		return err
 	}
 
+	// A rename is asked about before the plan is shown: carried out, it
+	// leaves the plan without the drop and the add that stood for it, so the
+	// migration is planned again from what the database then holds, where a
+	// renamed table may show a renamed column of its own. A rename declined
+	// is not asked about twice, and a run that cannot ask carries none out.
+	declined := make(map[string]bool)
+	for !migrateDryRun && !migrateYes {
+		confirmed := confirmRenames(plan.Renames, declined)
+		if len(confirmed) == 0 {
+			break
+		}
+		if err = dbmigrate.ApplyRenames(confirmed, dbtyp, cfg); err != nil {
+			return err
+		}
+		fmt.Println("  ✔ Renamed.")
+		if plan, err = planned(); err != nil {
+			return err
+		}
+	}
+
+	fmt.Println("\n▶ Migration Plan")
+	undeclared := ""
+	if len(plan.UndeclaredTables) > 0 {
+		undeclared = "  → Left as they are, the tables no model declares: " + strings.Join(plan.UndeclaredTables, ", ") + "\n"
+	}
 	if !plan.Changed() {
 		fmt.Println("  → No changes detected.")
+		fmt.Print(undeclared)
 		return nil
 	}
 
+	// Each statement goes under its position and ends in a semicolon, the
+	// positions as comments, so the block pastes into a database client as
+	// it stands.
+	for i, statement := range plan.Statements {
+		fmt.Printf("  -- [%d/%d]\n  %s;\n", i+1, len(plan.Statements), strings.ReplaceAll(statement, "\n", "\n  "))
+	}
 	if plan.CreatesDatabase {
 		fmt.Println("  → The target database file does not exist yet: the plan starts from an empty database, and applying it creates the file.")
 	}
+	fmt.Print(undeclared)
 
-	// The advisory gets its own section after the plan, so suspected table
-	// and index renames stay visible right before the reviewer decides.
-	if len(plan.Advisory) != 0 {
-		fmt.Println("\n▶ Rename Advisory")
-		fmt.Print(plan.Advisory)
+	// The renames no one was asked about stay visible beside the plan that
+	// drops and adds in their place.
+	if pending := undecided(plan.Renames, declined); len(pending) > 0 {
+		fmt.Println("\n▶ Suspected Renames")
+		for _, rename := range pending {
+			printRename(rename)
+		}
+		fmt.Println("  → The plan above drops and adds instead. Run gg migrate without --dry-run and --yes to be asked about each rename, or run its statement yourself, then migrate again.")
+	}
+
+	if len(plan.DroppedColumns) > 0 {
+		fmt.Println("\n▶ Data Loss")
+		fmt.Printf("  → The plan drops these columns and the data they hold: %s\n", strings.Join(plan.DroppedColumns, ", "))
+		if migrateAcceptDataLoss {
+			fmt.Println("  → --accept-data-loss is given: they are dropped when the plan is applied.")
+		} else {
+			fmt.Println("  → Declare a column in its model to keep it. To drop them, pass --accept-data-loss.")
+		}
 	}
 
 	if migrateDryRun {
@@ -445,28 +493,92 @@ func performMigration(schema string, cfg *dbmigrate.DatabaseConfig) error {
 		fmt.Println("  → Dry run completed. No changes were applied.")
 		return nil
 	}
-
-	// Confirm execution with the user.
-	if !migrateYes && !confirmExecution() {
+	if len(plan.DroppedColumns) > 0 && !migrateAcceptDataLoss {
+		return errors.New("the migration was not applied: it drops columns, and --accept-data-loss is not given")
+	}
+	if !migrateYes && !confirm("\n? Apply the migration to the target database? Type \"yes\" to continue: ") {
 		fmt.Println("  → Migration canceled.")
 		return nil
 	}
 
 	fmt.Println("\n▶ Apply Migration")
 
-	// The statements shown above, as they stand.
-	if err := dbmigrate.Apply(plan, dbtyp, cfg); err != nil {
+	// The statements shown above, as they stand, each announced as it starts.
+	err = dbmigrate.Apply(plan, dbtyp, cfg, &dbmigrate.ApplyOption{
+		AcceptDataLoss: migrateAcceptDataLoss,
+		Progress: func(index int, statement string) {
+			first, _, more := strings.Cut(statement, "\n")
+			if more {
+				first += " ..."
+			}
+			fmt.Printf("  → [%d/%d] %s\n", index+1, len(plan.Statements), first)
+		},
+	})
+	if err != nil {
 		return err
 	}
 	fmt.Println("  ✔ Migration executed successfully.")
 	return nil
 }
 
-// confirmExecution prompts the user for confirmation to proceed.
-func confirmExecution() bool {
-	fmt.Print("\n? Apply the migration to the target database? Type \"yes\" to continue: ")
-	reader := bufio.NewReader(os.Stdin)
-	input, _ := reader.ReadString('\n')
-	input = strings.TrimSpace(input)
-	return strings.ToLower(input) == "yes"
+// confirmRenames asks about each rename the plan suspects that was not
+// declined before, and returns the ones confirmed; a rename declined is
+// recorded in declined.
+func confirmRenames(renames []dbmigrate.Rename, declined map[string]bool) []dbmigrate.Rename {
+	pending := undecided(renames, declined)
+	if len(pending) == 0 {
+		return nil
+	}
+	fmt.Println("\n▶ Suspected Renames")
+	confirmed := make([]dbmigrate.Rename, 0, len(pending))
+	for _, rename := range pending {
+		printRename(rename)
+		if confirm(fmt.Sprintf("? Rename %s now, by the statement above? Type \"yes\" to run it: ", rename)) {
+			confirmed = append(confirmed, rename)
+		} else {
+			declined[rename.String()] = true
+		}
+	}
+	return confirmed
+}
+
+// undecided returns the renames no answer declined.
+func undecided(renames []dbmigrate.Rename, declined map[string]bool) []dbmigrate.Rename {
+	pending := make([]dbmigrate.Rename, 0, len(renames))
+	for _, rename := range renames {
+		if !declined[rename.String()] {
+			pending = append(pending, rename)
+		}
+	}
+	return pending
+}
+
+// printRename prints a rename the plan suspects, what the plan does in its
+// place, and the statement that renames:
+//
+//	→ column samples.title to subject: both hold the same definition. Left as it is, the plan drops title with its data and adds subject empty.
+//	    ALTER TABLE `samples` RENAME COLUMN `title` TO `subject`;
+func printRename(rename dbmigrate.Rename) {
+	if rename.Column == "" {
+		fmt.Printf("  → %s: %s keeps every column of %s. Left as it is, the plan creates %s empty and the rows stay in %s.\n",
+			rename, rename.To, rename.Table, rename.To, rename.Table)
+	} else {
+		fmt.Printf("  → %s: both hold the same definition. Left as it is, the plan drops %s with its data and adds %s empty.\n",
+			rename, rename.Column, rename.To)
+	}
+	for _, statement := range rename.Statements {
+		fmt.Printf("      %s;\n", statement)
+	}
+}
+
+// answers reads what the user types at the prompts. One reader serves every
+// prompt: a reader of its own for each would take, with the answer it was
+// asked for, the answers typed ahead for the prompts after it.
+var answers = bufio.NewReader(os.Stdin)
+
+// confirm prints prompt and reports whether the answer typed is yes.
+func confirm(prompt string) bool {
+	fmt.Print(prompt)
+	input, _ := answers.ReadString('\n')
+	return strings.EqualFold(strings.TrimSpace(input), "yes")
 }

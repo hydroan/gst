@@ -1051,11 +1051,38 @@ gg migrate
 
 命令会生成 `generated/migrate/<dbtype>/schema.sql`，并在执行前要求确认。
 执行前先确认 `config.ini` 指向目标环境，避免把开发中的模型变化迁移到错误数据库。
+执行时逐条显示进度；某条语句失败时会说明是第几条、前面的语句还在不在：MySQL 每条语句单独生效，
+前面的保留；PostgreSQL 和 SQLite 整份计划在一个事务里，全部回滚。
+
+迁移只管模型声明的表。库里没有模型声明的表不删也不改，计划下面会把它们列出来。模型声明的表里，
+模型没有的索引和列都在计划里删；删列会丢数据，要显式带上 `--accept-data-loss` 才执行：
+
+```bash
+gg migrate --accept-data-loss
+```
+
+不带时整份计划都不执行，并列出是哪几列；`--yes` 只跳过确认，不代表同意丢数据。想保留某一列，
+就在模型里把它声明出来。
+
 用 SQLite 时迁移的是 `sqlite.path` 指向的库文件；内存库（`sqlite.is_memory = true`，默认值）每次启动都按模型建表，
 `gg migrate` 提示没有可迁移的内容后直接退出。
 SQLite 的 `ALTER TABLE` 改不了已有列的类型、非空、默认值和 CHECK，sqldef 也不会为这类变化生成语句：`gg migrate`
 发现库里的列定义与模型不一致时直接报错，点名表和列并给出 SQLite 官方的重建步骤（按模型新建一张表、拷贝数据、
 删旧表、改名），不会把这种库当成「无变化」放过。
+
+### 表改名、列改名先确认
+
+只对比模型和库，分不出「改名」和「删一个、加一个」。照删加执行，表改名会新建一张空表、数据留在
+旧表里；列改名会删掉旧列连同数据。所以 `gg migrate` 遇到下面两种情况会当成疑似改名提出来，只在
+一对一对得上时才提：
+
+- 库里有一张没有模型声明的表，模型要新建的表保留了它的全部列，定义也相同；
+- 同一张表少一列、多一列，两列定义相同。
+
+直接运行 `gg migrate` 会逐个询问，答 `yes` 就先执行改名语句、再重新出计划，数据都在：表是
+`RENAME TABLE`（MySQL）或 `ALTER TABLE ... RENAME TO`（PostgreSQL、SQLite），列是
+`ALTER TABLE ... RENAME COLUMN`。带 `--dry-run` 或 `--yes` 时不询问也不改名，只在计划下面列出
+疑似改名和现成的语句；此时计划仍是删加，其中删列会被 `--accept-data-loss` 拦住。
 
 ### 索引改名必须先迁移后发布
 
@@ -1064,17 +1091,9 @@ SQLite 的 `ALTER TABLE` 改不了已有列的类型、非空、默认值和 CHE
 同定义的索引还挂在旧名下，直接报错并给出改名语句，启动期不会 DROP 任何索引；生产环境默认
 关闭 auto_migrate，先发布不会报错，但模型与库会持续漂移，直到执行 `gg migrate` 为止。
 
-`gg migrate` 检测到疑似改名（同表索引有删有加）时会随迁移计划给出索引改名指引（按方言给语句：
-MySQL 是 `RENAME INDEX`，PostgreSQL 是 `ALTER INDEX ... RENAME TO`）：确认列定义一致后手工执行
-该语句（瞬时元数据操作），再重跑 `gg migrate`，对应删建项即消失。
-
-### 表改名不要执行删表重建
-
-改表名（`TableName` 返回值变化）时迁移计划会生成 `DROP TABLE` + `CREATE TABLE`，直接执行会
-清空整表数据。只要新表列覆盖旧表全部列（改名不丢数据），`gg migrate` 就会随迁移计划给出表改名
-指引（MySQL 是 `RENAME TABLE`，PostgreSQL 和 SQLite 是 `ALTER TABLE ... RENAME TO`），并附上表名变化连带
-的索引改名语句（SQLite 不能给索引改名，给出的是 `DROP INDEX`，重跑 `gg migrate` 时按新名重建）；同批的加列、
-索引调整会标注为剩余变更。手工执行改名语句后重跑 `gg migrate`，剩余变更会以原地 ALTER 呈现。
+模型里的索引换了名字、库里同一张表上还有一个定义相同的旧名索引时，迁移计划直接是索引改名
+（MySQL 是 `RENAME INDEX`，PostgreSQL 是 `ALTER INDEX ... RENAME TO`，瞬时的元数据操作）；
+SQLite 不能给索引改名，计划是删掉再建。
 
 ## 内置模块
 

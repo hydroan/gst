@@ -8,11 +8,12 @@ import (
 	"gorm.io/gorm"
 )
 
-// The statements the framework tells an operator to run, rendered for the
-// database a gorm dialector speaks to and quoted by that dialector itself:
-// the startup refusal of an index found under another name (see
-// ensureCustomIndexes) and the advisory of gg migrate both render them, and
-// MySQL spells them differently from the others.
+// The statements the framework offers in place of a drop and a create,
+// rendered for the database a gorm dialector speaks to and quoted by that
+// dialector itself: the startup refusal of an index found under another name
+// (see ensureCustomIndexes) renders the rename of the index, and gg migrate
+// the rename of a table it suspects (see dbmigrate.Rename); MySQL spells
+// them differently from the others.
 
 // QuoteIdentifier returns ident quoted the way dialector quotes it: `records`
 // on MySQL and SQLite, "records" on PostgreSQL, a quote inside the name

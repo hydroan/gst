@@ -23,6 +23,13 @@ var migrateCmd = &cobra.Command{
 	Short: "Run database migrations",
 	Long: `Generate and execute database migration code based on current models.
 
+The migration stays inside the tables the models declare: a table of the
+database no model declares is listed and left as it is. A plan that drops a
+column, and the data it holds, is applied only with --accept-data-loss; --yes
+skips the confirmation and accepts no data loss. Where a table or a column
+looks renamed, the command asks before renaming it, and under --dry-run or
+--yes lists the rename with its statement instead.
+
 On SQLite the migration targets the database file sqlite.path names. An
 in-memory database, which sqlite.is_memory selects by default, has nothing to
 migrate: the application creates its tables from the models every time it
@@ -70,13 +77,15 @@ var migrateSchemaCmd = &cobra.Command{
 }
 
 var (
-	migrateDryRun bool
-	migrateYes    bool
+	migrateDryRun         bool
+	migrateYes            bool
+	migrateAcceptDataLoss bool
 )
 
 func init() {
 	migrateCmd.Flags().BoolVar(&migrateDryRun, "dry-run", false, "Preview migration SQL without applying changes")
 	migrateCmd.Flags().BoolVar(&migrateYes, "yes", false, "Apply migration without prompting for confirmation")
+	migrateCmd.Flags().BoolVar(&migrateAcceptDataLoss, "accept-data-loss", false, "Apply a migration that drops columns and the data they hold")
 	migrateCmd.AddCommand(migrateSchemaCmd)
 }
 
@@ -104,6 +113,7 @@ func buildMigrateProgramForMode(moduleName string, schemaOnly bool, schemaSource
 		"-module", moduleName,
 		"-dry-run=" + strconv.FormatBool(migrateDryRun),
 		"-yes=" + strconv.FormatBool(migrateYes),
+		"-accept-data-loss=" + strconv.FormatBool(migrateAcceptDataLoss),
 		"-schema-only=" + strconv.FormatBool(schemaOnly),
 		"-schema-source", schemaSource,
 	}

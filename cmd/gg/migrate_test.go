@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"database/sql"
 	"go/parser"
 	"go/token"
 	"os"
@@ -13,6 +14,10 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
+
+	// The tests of the migration program write to its sqlite database file
+	// themselves, under the driver the program migrates it with.
+	_ "github.com/mattn/go-sqlite3"
 )
 
 // TestMigrateProgramLinksWhatMainLinks pins what the migration program links:
@@ -76,7 +81,7 @@ import (
 		}
 	}
 	// The mode travels as flags, so the sources stay the same between runs.
-	if !slices.Equal(program.Args, []string{"-module", "sample", "-dry-run=false", "-yes=false", "-schema-only=false", "-schema-source", ""}) {
+	if !slices.Equal(program.Args, []string{"-module", "sample", "-dry-run=false", "-yes=false", "-accept-data-loss=false", "-schema-only=false", "-schema-source", ""}) {
 		t.Fatalf("unexpected migration program arguments: %q", program.Args)
 	}
 }
@@ -192,6 +197,106 @@ func TestMigrateProgramMigratesTheSqliteFileThePathNames(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Fatalf("expected the planned migration's output to contain %q, got:\n%s", want, out)
 		}
+	}
+}
+
+// TestMigrateProgramLeavesTheTablesNoModelDeclares pins that the migration
+// program plans nothing for a table of the database no model declares, and
+// names it below the plan as left alone.
+func TestMigrateProgramLeavesTheTablesNoModelDeclares(t *testing.T) {
+	if !newMigrateSampleProject(t) {
+		return
+	}
+	t.Setenv(config.SQLITE_IS_MEMORY, "false")
+	t.Setenv(config.SQLITE_PATH, "./data.db")
+	runMigrateProgramForTest(t, false, true)
+	execMigrateSampleDatabase(t, "CREATE TABLE `archives` (`id` text NOT NULL, PRIMARY KEY (`id`))")
+
+	out := runMigrateProgramForTest(t, true, false)
+
+	for _, want := range []string{"→ No changes detected.", "→ Left as they are, the tables no model declares: archives"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected the migration output to contain %q, got:\n%s", want, out)
+		}
+	}
+}
+
+// TestMigrateProgramRefusesToDropAColumnUnlessTheDataLossIsAccepted pins what
+// the migration program makes of a column the model does not declare: the
+// plan drops it and says so, a run without --accept-data-loss ends in an
+// error and applies nothing, --yes given or not, and a run with the flag
+// drops the column.
+func TestMigrateProgramRefusesToDropAColumnUnlessTheDataLossIsAccepted(t *testing.T) {
+	if !newMigrateSampleProject(t) {
+		return
+	}
+	t.Setenv(config.SQLITE_IS_MEMORY, "false")
+	t.Setenv(config.SQLITE_PATH, "./data.db")
+	runMigrateProgramForTest(t, false, true)
+	execMigrateSampleDatabase(t, "ALTER TABLE `samples` ADD COLUMN `legacy` text")
+
+	out, err := runMigrateProgram(t, false, true, false, "")
+	if err == nil {
+		t.Fatalf("expected the migration program to refuse a plan dropping a column, got:\n%s", out)
+	}
+	for _, want := range []string{"▶ Data Loss", "samples.legacy", "pass --accept-data-loss"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected the refused migration's output to contain %q, got:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "▶ Apply Migration") {
+		t.Fatalf("expected nothing applied without --accept-data-loss, got:\n%s", out)
+	}
+
+	out, err = runMigrateProgram(t, false, true, true, "")
+	if err != nil {
+		t.Fatalf("expected the migration program to drop the column once the data loss is accepted, got %v\n%s", err, out)
+	}
+	if out = runMigrateProgramForTest(t, true, false); !strings.Contains(out, "→ No changes detected.") {
+		t.Fatalf("expected nothing left to migrate after the column is dropped, got:\n%s", out)
+	}
+}
+
+// TestMigrateProgramAsksBeforeRenamingAColumn pins the rename the migration
+// program suspects where a column of the database stands beside a column of
+// the model with the same definition. A dry run and a run under --yes ask
+// nothing and rename nothing: they list the rename with its statement below
+// a plan that drops and adds. A run that can ask does, renames on a yes,
+// keeping the values, and plans again, which leaves nothing to migrate.
+func TestMigrateProgramAsksBeforeRenamingAColumn(t *testing.T) {
+	if !newMigrateSampleProject(t) {
+		return
+	}
+	t.Setenv(config.SQLITE_IS_MEMORY, "false")
+	t.Setenv(config.SQLITE_PATH, "./data.db")
+	runMigrateProgramForTest(t, false, true)
+	execMigrateSampleDatabase(t, "INSERT INTO `samples` (`id`, `name`, `created_at`, `updated_at`) VALUES ('a', 'first', '2024-01-10 08:00:00', '2024-01-10 08:00:00')")
+	execMigrateSampleDatabase(t, "ALTER TABLE `samples` RENAME COLUMN `name` TO `title`")
+
+	out := runMigrateProgramForTest(t, true, false)
+	for _, want := range []string{
+		"▶ Suspected Renames",
+		"→ column samples.title to name:",
+		"ALTER TABLE `samples` RENAME COLUMN `title` TO `name`;",
+		"▶ Data Loss",
+		"samples.title",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected the dry run's output to contain %q, got:\n%s", want, out)
+		}
+	}
+
+	out, err := runMigrateProgram(t, false, false, false, "yes\n")
+	if err != nil {
+		t.Fatalf("expected the migration program to rename the column on a yes, got %v\n%s", err, out)
+	}
+	for _, want := range []string{"? Rename column samples.title to name now", "✔ Renamed.", "→ No changes detected."} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected the confirmed rename's output to contain %q, got:\n%s", want, out)
+		}
+	}
+	if got := queryMigrateSampleDatabase(t, "SELECT `name` FROM `samples`"); got != "first" {
+		t.Fatalf("expected the renamed column to keep its value, got %q", got)
 	}
 }
 
@@ -354,9 +459,23 @@ func runMigrateSchemaProgramForTest(t *testing.T, source string, files []string)
 func runMigrateProgramForTest(t *testing.T, dryRun, yes bool) string {
 	t.Helper()
 
-	oldDryRun, oldYes := migrateDryRun, migrateYes
-	migrateDryRun, migrateYes = dryRun, yes
-	defer func() { migrateDryRun, migrateYes = oldDryRun, oldYes }()
+	out, err := runMigrateProgram(t, dryRun, yes, false, "")
+	if err != nil {
+		t.Fatalf("expected the migration program to run, got %v\n%s", err, out)
+	}
+	return out
+}
+
+// runMigrateProgram builds the migration program in the mode the --dry-run,
+// --yes and --accept-data-loss flags select, runs it in the working directory
+// and returns what it printed, with the error it ended in. answers, when not
+// empty, is what the program reads at its prompts, in place of the terminal.
+func runMigrateProgram(t *testing.T, dryRun, yes, acceptDataLoss bool, answers string) (string, error) {
+	t.Helper()
+
+	oldDryRun, oldYes, oldAccept := migrateDryRun, migrateYes, migrateAcceptDataLoss
+	migrateDryRun, migrateYes, migrateAcceptDataLoss = dryRun, yes, acceptDataLoss
+	defer func() { migrateDryRun, migrateYes, migrateAcceptDataLoss = oldDryRun, oldYes, oldAccept }()
 
 	var out bytes.Buffer
 	program, err := buildMigrateProgramForMode("tmpapp", false, "", nil)
@@ -364,10 +483,55 @@ func runMigrateProgramForTest(t *testing.T, dryRun, yes bool) string {
 		t.Fatal(err)
 	}
 	program.Stdout = &out
-	if err := program.Run(); err != nil {
-		t.Fatalf("expected the migration program to run, got %v\n%s", err, out.String())
+	if answers != "" {
+		typed := filepath.Join(t.TempDir(), "answers")
+		if err = os.WriteFile(typed, []byte(answers), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		var input *os.File
+		if input, err = os.Open(typed); err != nil {
+			t.Fatal(err)
+		}
+		defer input.Close()
+		terminal := os.Stdin
+		os.Stdin = input
+		defer func() { os.Stdin = terminal }()
+		program.Interactive = true
 	}
-	return out.String()
+	err = program.Run()
+	return out.String(), err
+}
+
+// execMigrateSampleDatabase runs statement against the sqlite database file
+// the migration program tests migrate, ./data.db of the working directory.
+func execMigrateSampleDatabase(t *testing.T, statement string) {
+	t.Helper()
+
+	db, err := sql.Open("sqlite3", "./data.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err = db.Exec(statement); err != nil {
+		t.Fatalf("%s: %v", statement, err)
+	}
+}
+
+// queryMigrateSampleDatabase returns the one text value query reads from the
+// sqlite database file the migration program tests migrate.
+func queryMigrateSampleDatabase(t *testing.T, query string) string {
+	t.Helper()
+
+	db, err := sql.Open("sqlite3", "./data.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var value string
+	if err = db.QueryRow(query).Scan(&value); err != nil {
+		t.Fatalf("%s: %v", query, err)
+	}
+	return value
 }
 
 // missingSqliteFileNotice is what the migration program prints below a plan

@@ -178,6 +178,8 @@ func (s *SchemaDumper) Close() (err error) {
 	defer s.mu.Unlock()
 
 	if s.db != nil {
+		// The mock connection fails a close it was not told to expect.
+		s.mock.ExpectClose()
 		err = s.db.Close()
 		s.db = nil
 		return err
