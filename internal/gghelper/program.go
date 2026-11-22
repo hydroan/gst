@@ -127,9 +127,13 @@ func (p ProjectProgram) Run() error {
 	// program is built to a file and run from there rather than through go
 	// run: go run keeps every program it links in the build cache, and since
 	// the program changes with the project, each run would leave another
-	// copy of tens of megabytes there that nothing reuses.
+	// copy of tens of megabytes there that nothing reuses. The symbol table
+	// and the debug information are left out of it (-s -w): the program runs
+	// once and is removed, nothing ever debugs it, and writing them is most
+	// of what linking it costs. A stack trace reads the runtime's own tables,
+	// which the program keeps.
 	program := filepath.Join(tempDir, "program")
-	args := append([]string{"build", "-trimpath"}, flags...)
+	args := append([]string{"build", "-trimpath", "-ldflags=-s -w"}, flags...)
 	args = append(args, "-o", program)
 	if len(p.Overlay) > 0 {
 		overlayFile, overlayErr := writeOverlayFile(tempDir, p.Overlay)
