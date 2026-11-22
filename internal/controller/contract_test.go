@@ -438,6 +438,22 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
+			name: "List matches a substring whatever its case under ilike", fixture: samples, phase: apiaction.List,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				prefix := uniqueName("contract-ilike")
+				createSample(t, prefix+"-Mixed")
+				return contractInput{query: controller.Query{
+					Filters: []controller.Filter{{Field: "name", Op: "ilike", Values: []string{strings.ToUpper(prefix) + "-MIXED"}}},
+				}}
+			},
+			want: ok,
+			check: func(t *testing.T, in contractInput, got contractAnswer) {
+				t.Helper()
+				require.EqualValues(t, 1, dataMap(t, got)["total"])
+			},
+		},
+		{
 			name: "List refuses a filter on a field the model lacks", fixture: samples, phase: apiaction.List,
 			input: contractInput{query: controller.Query{Filters: []controller.Filter{{Field: "missing", Op: "eq", Values: []string{"value"}}}}},
 			want:  contractWant{status: http.StatusBadRequest},

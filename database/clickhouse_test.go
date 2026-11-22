@@ -82,6 +82,8 @@ func TestClickhouse(t *testing.T) {
 		require.Equal(t, []string{"a4", "a5", "a6"}, listIDs(t, types.FilterGte("amount", 400)))
 		require.Equal(t, []string{"a1", "a2", "a3"}, listIDs(t, types.FilterIn("category", []string{"alpha"})))
 		require.Equal(t, []string{"a1", "a2"}, listIDs(t, types.FilterLike("category", "alph"), types.FilterEq("status", "done")))
+		require.Empty(t, listIDs(t, types.FilterLike("category", "ALPH")), "like compares case")
+		require.Equal(t, []string{"a1", "a2"}, listIDs(t, types.FilterILike("category", "ALPH"), types.FilterEq("status", "done")))
 
 		page := make([]*TestAggregateRecord, 0)
 		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).
@@ -502,6 +504,7 @@ func TestClickhouse(t *testing.T) {
 		// match take a string alone on ClickHouse.
 		require.Equal(t, []string{"a1"}, listIDs(t, types.NewFilter("", "amount", types.FilterOpLike, "1")))
 		require.Equal(t, []string{"a2", "a3", "a4", "a5", "a6"}, listIDs(t, types.NewFilter("", "amount", types.FilterOpNotLike, "1")))
+		require.Equal(t, []string{"a1"}, listIDs(t, types.NewFilter("", "amount", types.FilterOpILike, "1")))
 		require.Equal(t, []string{"a2"}, listIDs(t, types.NewFilter("", "amount", types.FilterOpStartsWith, "2")))
 		require.Equal(t, []string{"a4"}, listIDs(t, types.NewFilter("", "score", types.FilterOpEndsWith, "4.5")))
 		require.Equal(t, []string{"a1", "a2"}, listIDs(t, types.NewFilter("", "amount", types.FilterOpRegex, "^[12]")))

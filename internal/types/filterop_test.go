@@ -20,6 +20,7 @@ func TestParseFilterOp(t *testing.T) {
 			"notin":      types.FilterOpNotIn,
 			"like":       types.FilterOpLike,
 			"notlike":    types.FilterOpNotLike,
+			"ilike":      types.FilterOpILike,
 			"startswith": types.FilterOpStartsWith,
 			"endswith":   types.FilterOpEndsWith,
 			"isnull":     types.FilterOpIsNull,

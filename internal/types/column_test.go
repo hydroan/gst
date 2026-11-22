@@ -104,6 +104,7 @@ func TestColumnBuildsFilters(t *testing.T) {
 		},
 		{"Like", name.Like("sam"), types.NewFilter("samples", "name", types.FilterOpLike, "sam")},
 		{"NotLike", name.NotLike("sam"), types.NewFilter("samples", "name", types.FilterOpNotLike, "sam")},
+		{"ILike", name.ILike("sam"), types.NewFilter("samples", "name", types.FilterOpILike, "sam")},
 		{"StartsWith", name.StartsWith("sa"), types.NewFilter("samples", "name", types.FilterOpStartsWith, "sa")},
 		{"EndsWith", name.EndsWith("le"), types.NewFilter("samples", "name", types.FilterOpEndsWith, "le")},
 		{"IsNull", name.IsNull(), types.NewFilter("samples", "name", types.FilterOpIsNull, true)},

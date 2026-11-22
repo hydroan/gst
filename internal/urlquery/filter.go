@@ -136,7 +136,7 @@ var (
 	}
 	boolFilterOps = []types.FilterOp{types.FilterOpEq, types.FilterOpNe, types.FilterOpIsNull}
 	jsonFilterOps = []types.FilterOp{
-		types.FilterOpLike, types.FilterOpNotLike, types.FilterOpStartsWith, types.FilterOpEndsWith,
+		types.FilterOpLike, types.FilterOpNotLike, types.FilterOpILike, types.FilterOpStartsWith, types.FilterOpEndsWith,
 		types.FilterOpIsNull,
 	}
 	allFilterOps = types.FilterOps()
@@ -219,7 +219,7 @@ func normalizeFilterValue(col modelschema.Column, op types.FilterOp, value strin
 				}
 			}
 			return items, nil
-		case types.FilterOpLike, types.FilterOpNotLike, types.FilterOpStartsWith, types.FilterOpEndsWith:
+		case types.FilterOpLike, types.FilterOpNotLike, types.FilterOpILike, types.FilterOpStartsWith, types.FilterOpEndsWith:
 			// Substring matching relies on the database's string rendering of
 			// the number; the pattern itself is not numeric.
 			return value, nil

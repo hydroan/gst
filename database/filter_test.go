@@ -686,6 +686,7 @@ func TestDatabasePatternFiltersOnNumericColumns(t *testing.T) {
 
 	require.Equal(t, []int{18, 19}, ages(types.NewFilter("", "age", types.FilterOpLike, "1")))
 	require.Equal(t, []int{20}, ages(types.NewFilter("", "age", types.FilterOpNotLike, "1")))
+	require.Equal(t, []int{18, 19}, ages(types.NewFilter("", "age", types.FilterOpILike, "1")))
 	require.Equal(t, []int{20}, ages(types.NewFilter("", "age", types.FilterOpStartsWith, "2")))
 	require.Equal(t, []int{19}, ages(types.NewFilter("", "age", types.FilterOpEndsWith, "9")))
 	require.Equal(t, []int{18, 19}, ages(types.NewFilter("", "age", types.FilterOpRegex, "^1")))
@@ -1588,15 +1589,22 @@ func TestFilterExistsMultipleCorrelations(t *testing.T) {
 	})
 }
 
-// TestLikeFiltersCompareCase pins that the like family compares case on every
-// dialect: a pattern in one case matches no row spelled in the other, so a
-// project testing on sqlite sees the rows MySQL and postgres answer.
-func TestLikeFiltersCompareCase(t *testing.T) {
+// TestLikeFiltersCompareCaseAndILikeIgnoresIt pins the case the pattern
+// operators match by on every dialect. The like family compares case: a
+// pattern in one case matches no row spelled in the other, so a project
+// testing on sqlite sees the rows MySQL and postgres answer. ilike ignores
+// the case of the letters a to z, on either side, and matches its value
+// literally as the like family does. A value holding a letter beyond those
+// 26 still matches the row spelled exactly as it, whatever the dialect's
+// LOWER makes of that letter.
+func TestLikeFiltersCompareCaseAndILikeIgnoresIt(t *testing.T) {
 	defer cleanupTestData()
 	ctx := context.Background()
 	rows := []*TestUser{
 		{Name: "case-lower", Email: "lower@example.com"},
 		{Name: "Case-Upper", Email: "upper@example.com"},
+		{Name: "under_score", Email: "score@example.com"},
+		{Name: "Éclair", Email: "accent@example.com"},
 	}
 	require.NoError(t, database.Database[*TestUser](ctx).Create(rows...))
 
@@ -1613,7 +1621,17 @@ func TestLikeFiltersCompareCase(t *testing.T) {
 		return got
 	}
 	require.Equal(t, []string{"case-lower"}, names(types.NewFilter("", "name", types.FilterOpLike, "case")))
-	require.Equal(t, []string{"Case-Upper"}, names(types.NewFilter("", "name", types.FilterOpNotLike, "case")))
+	require.Equal(t, []string{"Case-Upper", "under_score", "Éclair"}, names(types.NewFilter("", "name", types.FilterOpNotLike, "case")))
 	require.Equal(t, []string{"Case-Upper"}, names(types.NewFilter("", "name", types.FilterOpStartsWith, "Case")))
 	require.Equal(t, []string{"case-lower"}, names(types.NewFilter("", "name", types.FilterOpEndsWith, "lower")))
+
+	// The value may sit anywhere in the column, in any case.
+	require.Equal(t, []string{"Case-Upper", "case-lower"}, names(types.NewFilter("", "name", types.FilterOpILike, "CASE")))
+	require.Equal(t, []string{"Case-Upper"}, names(types.NewFilter("", "name", types.FilterOpILike, "e-u")))
+	require.Equal(t, []string{"case-lower"}, names(types.NewFilter("", "name", types.FilterOpILike, "LOWER")))
+	// A LIKE metacharacter in the value stands for itself: the underscore
+	// matches the underscore of one row and no other character of another.
+	require.Equal(t, []string{"under_score"}, names(types.NewFilter("", "name", types.FilterOpILike, "UNDER_S")))
+	require.Empty(t, names(types.NewFilter("", "name", types.FilterOpILike, "CASE_")))
+	require.Equal(t, []string{"Éclair"}, names(types.NewFilter("", "name", types.FilterOpILike, "Éclair")))
 }

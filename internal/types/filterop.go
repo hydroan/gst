@@ -30,6 +30,7 @@ const (
 	FilterOpNotIn      FilterOp = "notin"      // set exclusion: column NOT IN (comma-separated values)
 	FilterOpLike       FilterOp = "like"       // substring match: column LIKE %value%
 	FilterOpNotLike    FilterOp = "notlike"    // substring exclusion: column NOT LIKE %value%
+	FilterOpILike      FilterOp = "ilike"      // substring match whatever the case of the letters a to z: LOWER(column) LIKE LOWER(%value%)
 	FilterOpStartsWith FilterOp = "startswith" // prefix match: column LIKE value% (can use an index)
 	FilterOpEndsWith   FilterOp = "endswith"   // suffix match: column LIKE %value
 	FilterOpIsNull     FilterOp = "isnull"     // null check: value true means IS NULL, false means IS NOT NULL
@@ -63,6 +64,7 @@ var filterOps = map[string]FilterOp{
 	string(FilterOpNotIn):      FilterOpNotIn,
 	string(FilterOpLike):       FilterOpLike,
 	string(FilterOpNotLike):    FilterOpNotLike,
+	string(FilterOpILike):      FilterOpILike,
 	string(FilterOpStartsWith): FilterOpStartsWith,
 	string(FilterOpEndsWith):   FilterOpEndsWith,
 	string(FilterOpIsNull):     FilterOpIsNull,
@@ -84,7 +86,7 @@ func FilterOps() []FilterOp {
 		FilterOpEq, FilterOpNe,
 		FilterOpGt, FilterOpGte, FilterOpLt, FilterOpLte,
 		FilterOpIn, FilterOpNotIn,
-		FilterOpLike, FilterOpNotLike, FilterOpStartsWith, FilterOpEndsWith,
+		FilterOpLike, FilterOpNotLike, FilterOpILike, FilterOpStartsWith, FilterOpEndsWith,
 		FilterOpIsNull,
 	}
 }

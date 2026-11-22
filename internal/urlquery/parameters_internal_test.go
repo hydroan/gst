@@ -112,7 +112,7 @@ func TestParameters(t *testing.T) {
 		require.Equal(t, []types.FilterOp{types.FilterOpEq, types.FilterOpNe, types.FilterOpIsNull}, byName["enabled"].Ops)
 		require.True(t, byName["enabled"].Bare)
 		require.Equal(t, []types.FilterOp{
-			types.FilterOpLike, types.FilterOpNotLike, types.FilterOpStartsWith, types.FilterOpEndsWith,
+			types.FilterOpLike, types.FilterOpNotLike, types.FilterOpILike, types.FilterOpStartsWith, types.FilterOpEndsWith,
 			types.FilterOpIsNull,
 		}, byName["meta"].Ops)
 		require.False(t, byName["meta"].Bare, "a JSON document decodes into no field")

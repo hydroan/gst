@@ -522,6 +522,9 @@ Filters: []gst.Filter{
 // WHERE tenant_id = ? AND (name LIKE ? OR code LIKE ?)
 ```
 
+`Like` 区分大小写。搜索词要不分大小写就换成 `ILike`（URL 上是 `字段[ilike]=值`）：保证不分大小写的是
+英文字母 a 到 z，其他文字分不分随数据库而定。
+
 条件用 `gg gen` 为模型生成的列引用来写（上例的 `appmodel.SampleCols`），列名和值类型都在
 编译期校验；拿不到具体模型的泛型工具函数用自己的类型参数现造列引用，例如
 `gst.NewColumn[M, string]("id").In(ids...)`，值类型同样在编译期校验。

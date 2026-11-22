@@ -23,6 +23,7 @@ func TestFilterConstructors(t *testing.T) {
 		{"NotIn", types.FilterNotIn("id", []int{1, 2}), types.NewFilter("", "id", types.FilterOpNotIn, []int{1, 2})},
 		{"Like", types.FilterLike("name", "sample"), types.NewFilter("", "name", types.FilterOpLike, "sample")},
 		{"NotLike", types.FilterNotLike("name", "sample"), types.NewFilter("", "name", types.FilterOpNotLike, "sample")},
+		{"ILike", types.FilterILike("name", "sample"), types.NewFilter("", "name", types.FilterOpILike, "sample")},
 		{"StartsWith", types.FilterStartsWith("name", "sam"), types.NewFilter("", "name", types.FilterOpStartsWith, "sam")},
 		{"EndsWith", types.FilterEndsWith("name", "ple"), types.NewFilter("", "name", types.FilterOpEndsWith, "ple")},
 		{"IsNull", types.FilterIsNull("expired_at"), types.NewFilter("", "expired_at", types.FilterOpIsNull, true)},

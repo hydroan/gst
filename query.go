@@ -59,6 +59,7 @@ const (
 	FilterOpNotIn      = types.FilterOpNotIn      // set exclusion: column NOT IN (comma-separated values)
 	FilterOpLike       = types.FilterOpLike       // substring match: column LIKE %value%
 	FilterOpNotLike    = types.FilterOpNotLike    // substring exclusion: column NOT LIKE %value%
+	FilterOpILike      = types.FilterOpILike      // substring match whatever the case of the letters a to z: LOWER(column) LIKE LOWER(%value%)
 	FilterOpStartsWith = types.FilterOpStartsWith // prefix match: column LIKE value% (can use an index)
 	FilterOpEndsWith   = types.FilterOpEndsWith   // suffix match: column LIKE %value
 	FilterOpIsNull     = types.FilterOpIsNull     // null check: value true means IS NULL, false means IS NOT NULL

@@ -191,7 +191,7 @@ docker exec gst-bench-mysql mysql -uroot -pbench bench -e "TRUNCATE TABLE benche
 # 启动被测服务（仅本地）
 DEBUG_PPROF_ENABLED=true LOGGER_HTTP_BODY_ENABLED=false OTEL_ENABLED=false DATABASE_TYPE=mysql MYSQL_HOST=127.0.0.1 MYSQL_PORT=3307 MYSQL_DATABASE=bench MYSQL_USERNAME=root MYSQL_PASSWORD=bench go run .
 
-# Q 覆盖 WithQuery 两个查询参数的全部 URL 能力：13 个操作符（eq/ne/gt/gte/lt/lte/in/notin/like/notlike/startswith/endswith/isnull）、
+# Q 覆盖 WithQuery 两个查询参数的 URL 能力：13 个操作符（eq/ne/gt/gte/lt/lte/in/notin/like/notlike/startswith/endswith/isnull）、
 # 模型等值条件四种形态（field1 string、field2 int、field3 指针、field5 bool 显式零值经 PresentFields 保留）、
 # created_at[gte] 时间范围与 updated_at 裸键时间等值。条件间语义一致，命中集非空。
 export Q='field1=hello&field1%5Bne%5D=abc&field2=5&field2%5Bgt%5D=0&field2%5Bgte%5D=1&field2%5Blt%5D=100&field2%5Blte%5D=99&field3=world&field3%5Blike%5D=wor&field3%5Bnotlike%5D=xyz&field3%5Bstartswith%5D=wo&field3%5Bendswith%5D=ld&field3%5Bisnull%5D=false&field4%5Beq%5D=2&field4%5Bin%5D=1,2,3&field4%5Bnotin%5D=8,9&field5=false&created_at%5Bgte%5D=2020-01-01T00:00:00Z&updated_at=2020-01-01T00:00:00Z'

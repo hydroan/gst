@@ -346,6 +346,12 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 		return db.patternFilter(f, db.patternColumn(info, f.Column(), column)+" LIKE ?"+db.likeEscapeSuffix(), "%", "%")
 	case types.FilterOpNotLike:
 		return db.patternFilter(f, db.patternColumn(info, f.Column(), column)+" NOT LIKE ?"+db.likeEscapeSuffix(), "%", "%")
+	case types.FilterOpILike:
+		// Both sides go through the dialect's own LOWER, so a value always
+		// matches the same value: lowering the pattern here instead would fold
+		// letters a dialect's LOWER leaves alone, the ASCII-only one of SQLite
+		// and ClickHouse, and miss a row spelled exactly as the pattern.
+		return db.patternFilter(f, "LOWER("+db.patternColumn(info, f.Column(), column)+") LIKE LOWER(?)"+db.likeEscapeSuffix(), "%", "%")
 	case types.FilterOpStartsWith:
 		return db.patternFilter(f, db.patternColumn(info, f.Column(), column)+" LIKE ?"+db.likeEscapeSuffix(), "", "%")
 	case types.FilterOpEndsWith:

@@ -19,9 +19,9 @@ package types
 //
 //   - FilterOpIn and FilterOpNotIn require a slice or array value.
 //   - FilterOpIsNull requires a bool value.
-//   - FilterOpLike, FilterOpNotLike, FilterOpStartsWith, FilterOpEndsWith,
-//     FilterOpRegex, FilterOpNotRegex, and FilterOpJSONContains require a
-//     string value.
+//   - FilterOpLike, FilterOpNotLike, FilterOpILike, FilterOpStartsWith,
+//     FilterOpEndsWith, FilterOpRegex, FilterOpNotRegex, and
+//     FilterOpJSONContains require a string value.
 //   - FilterOpOr and FilterOpAnd require a non-empty []Filter value and carry
 //     no column: they group their children instead of naming one themselves.
 //   - FilterOpExists requires a Subquery value and carries no column; see
@@ -170,6 +170,15 @@ func FilterLike(column, value string) Filter {
 //gst:api string-form constructor of the Filter family, the counterpart of Column.NotLike
 func FilterNotLike(column, value string) Filter {
 	return Filter{column: column, op: FilterOpNotLike, value: value}
+}
+
+// FilterILike matches rows where column contains value as a substring,
+// whatever the case of the letters a to z on either side; value is escaped
+// and matches literally.
+//
+//gst:api string-form constructor of the Filter family, the counterpart of Column.ILike
+func FilterILike(column, value string) Filter {
+	return Filter{column: column, op: FilterOpILike, value: value}
 }
 
 // FilterStartsWith matches rows where column starts with value; value is

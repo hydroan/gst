@@ -280,12 +280,21 @@ type expandQueryTestModel struct {
 }
 
 func (*expandQueryTestModel) Expands() []string {
-	return []string{"Children", "Parent", "ChildItems", "Entries"}
+	return []string{"Children", "Parent", "ChildItems", "Entries", "Entries.Notes"}
 }
 
-// expandQueryTestEntry is held by expandQueryTestModel and holds nothing.
+// expandQueryTestEntry is held by expandQueryTestModel and holds notes, which
+// the model expands through it by the path Entries.Notes.
 type expandQueryTestEntry struct {
-	OwnerID string `gorm:"size:191"`
+	OwnerID string                 `gorm:"size:191"`
+	Notes   []*expandQueryTestNote `gorm:"foreignKey:EntryID"`
+
+	modelregistry.Base
+}
+
+// expandQueryTestNote is held by expandQueryTestEntry and holds nothing.
+type expandQueryTestNote struct {
+	EntryID string `gorm:"size:191"`
 
 	modelregistry.Base
 }
@@ -294,9 +303,9 @@ type expandQueryTestEntry struct {
 // _depth name the associations a read preloads: names match the model's
 // expands ignoring case, snake case and the spaces around them, all selects
 // every one wherever it stands among the names, an item left empty names
-// nothing, and the depth repeats an association holding the model itself,
-// one to ten, zero read as the depth left out, while any other association
-// ignores it.
+// nothing, a path of several steps the model declares is named by its steps,
+// and the depth repeats an association holding the model itself, one to ten,
+// zero read as the depth left out, while any other association ignores it.
 func TestParseExpandQueryResolvesTheExpandableAssociations(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
@@ -308,12 +317,13 @@ func TestParseExpandQueryResolvesTheExpandableAssociations(t *testing.T) {
 		// An entry holds no entries: repeating the association would name a
 		// relation the entry's model does not have, which gorm refuses.
 		{"AnAssociationOfAnotherModelIgnoresDepth", "/items?_expand=Entries&_depth=3", []string{"Entries"}},
-		{"AllSelectsEveryModelExpand", "/items?_expand=all", []string{"Children", "Parent", "ChildItems", "Entries"}},
-		{"AllAmongTheNamesSelectsEveryModelExpand", "/items?_expand=parent,all", []string{"Children", "Parent", "ChildItems", "Entries"}},
+		{"AllSelectsEveryModelExpand", "/items?_expand=all", []string{"Children", "Parent", "ChildItems", "Entries", "Entries.Notes"}},
+		{"AllAmongTheNamesSelectsEveryModelExpand", "/items?_expand=parent,all", []string{"Children", "Parent", "ChildItems", "Entries", "Entries.Notes"}},
 		{"ExpandMatchesCaseInsensitively", "/items?_expand=children", []string{"Children"}},
 		{"ExpandMatchesSnakeCaseName", "/items?_expand=child_items", []string{"ChildItems"}},
+		{"APathTheModelDeclaresIsNamedByItsSteps", "/items?_expand=entries.notes", []string{"Entries.Notes"}},
 		{"NamesAreReadWithoutTheSpacesAroundThem", "/items?_expand=parent,%20children", []string{"Children", "Parent"}},
-		{"AllIsReadWithoutTheSpacesAroundIt", "/items?_expand=parent,%20all", []string{"Children", "Parent", "ChildItems", "Entries"}},
+		{"AllIsReadWithoutTheSpacesAroundIt", "/items?_expand=parent,%20all", []string{"Children", "Parent", "ChildItems", "Entries", "Entries.Notes"}},
 		{"AnItemOfSpacesNamesNothing", "/items?_expand=children,%20", []string{"Children"}},
 		{"ANameGivenTwiceIsExpandedOnce", "/items?_expand=children,Children", []string{"Children"}},
 		{"AnEmptyItemNamesNothing", "/items?_expand=children,", []string{"Children"}},
@@ -341,6 +351,7 @@ func TestParseExpandQueryRefusesWhatItCannotRead(t *testing.T) {
 		{"UnknownAssociation", "/items?_expand=Bogus", `invalid query parameter "_expand": unknown association "Bogus"`},
 		{"UnknownAssociationAmongKnownOnes", "/items?_expand=children,bogus", `invalid query parameter "_expand": unknown association "bogus"`},
 		{"UnknownAssociationBesideAll", "/items?_expand=all,bogus", `invalid query parameter "_expand": unknown association "bogus"`},
+		{"APathTheModelDoesNotDeclare", "/items?_expand=entries.owner", `invalid query parameter "_expand": unknown association "entries.owner"`},
 		{"DepthPastTheCap", "/items?_expand=Children&_depth=11", `invalid query parameter "_depth": expect a value from 1 to 10, got "11"`},
 		{"DepthThatIsNoNumber", "/items?_expand=Children&_depth=abc", `invalid query parameter "_depth": expect a numeric value, got "abc"`},
 		{"NegativeDepth", "/items?_expand=Children&_depth=-1", `invalid query parameter "_depth": expect a non-negative value, got "-1"`},

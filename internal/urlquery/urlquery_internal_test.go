@@ -127,9 +127,10 @@ type hiddenNamedEmbeddingTestModel struct {
 
 func TestFilters(t *testing.T) {
 	t.Run("MatchesAJSONColumnByItsTextAndRefusesComparingIt", func(t *testing.T) {
-		conds, err := Filters(url.Values{"meta[like]": {"alice"}, "meta[isnull]": {"true"}}, &filterTestModel{})
+		conds, err := Filters(url.Values{"meta[like]": {"alice"}, "meta[ilike]": {"Alice"}, "meta[isnull]": {"true"}}, &filterTestModel{})
 		require.NoError(t, err)
 		require.Equal(t, []types.Filter{
+			types.NewFilter("", "meta", types.FilterOpILike, "Alice"),
 			types.NewFilter("", "meta", types.FilterOpIsNull, true),
 			types.NewFilter("", "meta", types.FilterOpLike, "alice"),
 		}, conds)
@@ -142,14 +143,16 @@ func TestFilters(t *testing.T) {
 
 	t.Run("ExtractsOperatorConditionsAndIgnoresOtherKeys", func(t *testing.T) {
 		conds, err := Filters(url.Values{
-			"age[gt]":      {"20"},
-			"remark[like]": {"hello"},
-			"name":         {"alice"},
-			"_sort_by":     {"created_at desc"},
+			"age[gt]":       {"20"},
+			"remark[like]":  {"hello"},
+			"remark[ilike]": {"Hello"},
+			"name":          {"alice"},
+			"_sort_by":      {"created_at desc"},
 		}, &filterTestModel{})
 		require.NoError(t, err)
 		require.Equal(t, []types.Filter{
 			types.NewFilter("", "age", types.FilterOpGt, "20"),
+			types.NewFilter("", "remark", types.FilterOpILike, "Hello"),
 			types.NewFilter("", "remark", types.FilterOpLike, "hello"),
 		}, conds)
 	})
@@ -298,7 +301,7 @@ func TestFilters(t *testing.T) {
 	})
 
 	t.Run("TimeFieldRejectsSetAndSubstringOps", func(t *testing.T) {
-		for _, key := range []string{"expired_at[like]", "expired_at[notlike]", "expired_at[in]", "expired_at[notin]", "expired_at[startswith]", "expired_at[endswith]"} {
+		for _, key := range []string{"expired_at[like]", "expired_at[notlike]", "expired_at[ilike]", "expired_at[in]", "expired_at[notin]", "expired_at[startswith]", "expired_at[endswith]"} {
 			_, err := Filters(url.Values{key: {"2026-07-01"}}, &filterTestModel{})
 			require.Error(t, err, "key %q must be rejected on a time field", key)
 		}
@@ -425,6 +428,17 @@ func TestFilters(t *testing.T) {
 		}, &filterTestModel{})
 		require.NoError(t, err)
 		require.Equal(t, []types.Filter{types.NewFilter("", "age", types.FilterOpIn, []string{"1", "2"})}, conds)
+
+		// A substring of the number's text form is no number itself.
+		conds, err = Filters(url.Values{
+			"age[like]":  {"1a"},
+			"age[ilike]": {"1A"},
+		}, &filterTestModel{})
+		require.NoError(t, err)
+		require.Equal(t, []types.Filter{
+			types.NewFilter("", "age", types.FilterOpILike, "1A"),
+			types.NewFilter("", "age", types.FilterOpLike, "1a"),
+		}, conds)
 	})
 
 	t.Run("BoolFieldNormalizesAndGatesOps", func(t *testing.T) {

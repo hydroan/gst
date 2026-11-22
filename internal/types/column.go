@@ -185,6 +185,12 @@ func (c Column[T]) Like(value string) Filter { return c.filter(FilterOpLike, val
 // NotLike matches rows where the column does not contain value as a substring.
 func (c Column[T]) NotLike(value string) Filter { return c.filter(FilterOpNotLike, value) }
 
+// ILike matches rows where the column contains value as a substring, whatever
+// the case of the letters a to z on either side: ILike("alice") matches Alice
+// and ALICE. Whether the case of any other letter is ignored is the dialect's
+// own affair.
+func (c Column[T]) ILike(value string) Filter { return c.filter(FilterOpILike, value) }
+
 // StartsWith matches rows where the column starts with value.
 func (c Column[T]) StartsWith(value string) Filter { return c.filter(FilterOpStartsWith, value) }
 
