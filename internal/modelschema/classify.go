@@ -7,7 +7,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"gorm.io/datatypes"
+	"github.com/hydroan/gst/internal/datatypes"
+	gormdatatypes "gorm.io/datatypes"
 	gormschema "gorm.io/gorm/schema"
 )
 
@@ -57,14 +58,14 @@ func ClassifyColumn(c Column) ColumnClass {
 // dateDataType is the data type gorm reads for a Date, the name the type
 // declares through GormDataTypeInterface: gorm names no data type of its own
 // for a calendar day.
-var dateDataType = gormschema.DataType(Date{}.GormDataType())
+var dateDataType = gormschema.DataType(datatypes.Date{}.GormDataType())
 
 // timeOfDayType is datatypes.Time, the time of day a TIME column stores. It
 // declares the time data type an instant carries, and only its
 // GormDBDataType, which needs a dialect to answer, tells the column it
 // creates apart from an instant's, so the type itself is what tells a time
 // of day apart.
-var timeOfDayType = reflect.TypeFor[datatypes.Time]()
+var timeOfDayType = reflect.TypeFor[gormdatatypes.Time]()
 
 // IsTimeColumn reports whether a column stores a time by the data type gorm
 // reads for its field: an instant — time.Time, or the time sql.NullTime,

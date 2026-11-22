@@ -7,10 +7,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hydroan/gst/internal/datatypes"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/stretchr/testify/require"
-	"gorm.io/datatypes"
+	gormdatatypes "gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/utils/tests"
 )
@@ -28,11 +29,11 @@ type autoBaseQueryItem struct {
 }
 
 type sliceQueryItem struct {
-	Codes   datatypes.JSONSlice[string]  `json:"codes"`
-	Scores  datatypes.JSONSlice[int]     `json:"scores"`
-	Ranks   datatypes.JSONSlice[int8]    `json:"ranks"`
-	Weights datatypes.JSONSlice[float64] `json:"weights"`
-	Digest  []byte                       `json:"digest"`
+	Codes   gormdatatypes.JSONSlice[string]  `json:"codes"`
+	Scores  gormdatatypes.JSONSlice[int]     `json:"scores"`
+	Ranks   gormdatatypes.JSONSlice[int8]    `json:"ranks"`
+	Weights gormdatatypes.JSONSlice[float64] `json:"weights"`
+	Digest  []byte                           `json:"digest"`
 
 	modelregistry.Base
 }
@@ -40,10 +41,10 @@ type sliceQueryItem struct {
 // valuedQueryItem carries the columns that are one struct or map each: an
 // instant, a day, a nullable string and a JSON document.
 type valuedQueryItem struct {
-	At    time.Time         `json:"at"`
-	Day   modelschema.Date  `json:"day"`
-	Grade sql.NullString    `json:"grade"`
-	Meta  datatypes.JSONMap `json:"meta"`
+	At    time.Time             `json:"at"`
+	Day   datatypes.Date        `json:"day"`
+	Grade sql.NullString        `json:"grade"`
+	Meta  gormdatatypes.JSONMap `json:"meta"`
 
 	modelregistry.Base
 }
@@ -155,7 +156,7 @@ func TestStructConditionsMapTheQueriedFieldsToTheirColumns(t *testing.T) {
 
 	t.Run("a day binds as the midnight in UTC of the day it names", func(t *testing.T) {
 		// 07:30 at +08:00 on the 11th is the 11th, though the 10th in UTC.
-		day := modelschema.Date(time.Date(2024, 1, 11, 7, 30, 0, 0, time.FixedZone("", 8*3600)))
+		day := datatypes.Date(time.Date(2024, 1, 11, 7, 30, 0, 0, time.FixedZone("", 8*3600)))
 		require.Equal(t, map[string]any{"day": time.Date(2024, 1, 11, 0, 0, 0, 0, time.UTC)}, conditions(&valuedQueryItem{Day: day}, nil))
 	})
 
@@ -165,7 +166,7 @@ func TestStructConditionsMapTheQueriedFieldsToTheirColumns(t *testing.T) {
 	})
 
 	t.Run("a json document binds for the json check to fail closed on", func(t *testing.T) {
-		require.Equal(t, map[string]any{"meta": datatypes.JSONMap{"k": "v"}}, conditions(&valuedQueryItem{Meta: datatypes.JSONMap{"k": "v"}}, nil))
+		require.Equal(t, map[string]any{"meta": gormdatatypes.JSONMap{"k": "v"}}, conditions(&valuedQueryItem{Meta: gormdatatypes.JSONMap{"k": "v"}}, nil))
 	})
 
 	t.Run("zero values without presence stay ignored", func(t *testing.T) {
@@ -226,10 +227,10 @@ func TestStructConditionsMapTheQueriedFieldsToTheirColumns(t *testing.T) {
 	})
 
 	t.Run("slices bind as their type stores them", func(t *testing.T) {
-		codes := datatypes.NewJSONSlice([]string{"a", "b"})
-		scores := datatypes.NewJSONSlice([]int{1, -2})
-		ranks := datatypes.NewJSONSlice([]int8{3})
-		weights := datatypes.NewJSONSlice([]float64{0.5, 2})
+		codes := gormdatatypes.NewJSONSlice([]string{"a", "b"})
+		scores := gormdatatypes.NewJSONSlice([]int{1, -2})
+		ranks := gormdatatypes.NewJSONSlice([]int8{3})
+		weights := gormdatatypes.NewJSONSlice([]float64{0.5, 2})
 		require.Equal(t, map[string]any{"codes": codes, "scores": scores, "ranks": ranks, "weights": weights},
 			conditions(&sliceQueryItem{Codes: codes, Scores: scores, Ranks: ranks, Weights: weights}, nil))
 	})
@@ -248,14 +249,14 @@ func TestStructConditionsMapTheQueriedFieldsToTheirColumns(t *testing.T) {
 
 	t.Run("empty slices keep their empty value for WithQuery to skip", func(t *testing.T) {
 		require.Equal(t, map[string]any{
-			"codes":   datatypes.NewJSONSlice([]string{}),
-			"scores":  datatypes.NewJSONSlice([]int{}),
-			"weights": datatypes.NewJSONSlice([]float64{}),
+			"codes":   gormdatatypes.NewJSONSlice([]string{}),
+			"scores":  gormdatatypes.NewJSONSlice([]int{}),
+			"weights": gormdatatypes.NewJSONSlice([]float64{}),
 			"digest":  []byte{},
 		}, conditions(&sliceQueryItem{
-			Codes:   datatypes.NewJSONSlice([]string{}),
-			Scores:  datatypes.NewJSONSlice([]int{}),
-			Weights: datatypes.NewJSONSlice([]float64{}),
+			Codes:   gormdatatypes.NewJSONSlice([]string{}),
+			Scores:  gormdatatypes.NewJSONSlice([]int{}),
+			Weights: gormdatatypes.NewJSONSlice([]float64{}),
 			Digest:  []byte{},
 		}, nil))
 	})

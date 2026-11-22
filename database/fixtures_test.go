@@ -13,13 +13,14 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/datatypes"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
-	"gorm.io/datatypes"
+	gormdatatypes "gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	gormschema "gorm.io/gorm/schema"
@@ -207,12 +208,12 @@ func findUsersByID(users []*TestUser) (u11, u22, u33 *TestUser) {
 }
 
 type TestUser struct {
-	Name     string                      `json:"name"`
-	Email    string                      `json:"email"`
-	Age      int                         `json:"age" query:"age"`
-	Addr     datatypes.JSONSlice[string] `json:"addr"`
-	IsActive *bool                       `json:"is_active"`
-	Remark   *string                     `json:"remark,omitempty" gorm:"size:10240" query:"remark"`
+	Name     string                          `json:"name"`
+	Email    string                          `json:"email"`
+	Age      int                             `json:"age" query:"age"`
+	Addr     gormdatatypes.JSONSlice[string] `json:"addr"`
+	IsActive *bool                           `json:"is_active"`
+	Remark   *string                         `json:"remark,omitempty" gorm:"size:10240" query:"remark"`
 
 	modelregistry.Base
 }
@@ -236,14 +237,14 @@ func (t *TestUser) UpdateBefore(ctx context.Context) error {
 // an array, which binds through driver.Valuer; and a nullable string, which
 // an exact match compares by the value it carries.
 type TestScoredRecord struct {
-	Name    string                                `json:"name"`
-	Scores  datatypes.JSONSlice[int]              `json:"scores"`
-	Weights datatypes.JSONSlice[float64]          `json:"weights"`
-	Meta    datatypes.JSONMap                     `json:"meta"`
-	Extra   datatypes.JSONType[map[string]string] `json:"extra"`
-	Digest  []byte                                `json:"digest"`
-	Token   sampleToken                           `json:"token"`
-	Grade   sql.NullString                        `json:"grade"`
+	Name    string                                    `json:"name"`
+	Scores  gormdatatypes.JSONSlice[int]              `json:"scores"`
+	Weights gormdatatypes.JSONSlice[float64]          `json:"weights"`
+	Meta    gormdatatypes.JSONMap                     `json:"meta"`
+	Extra   gormdatatypes.JSONType[map[string]string] `json:"extra"`
+	Digest  []byte                                    `json:"digest"`
+	Token   sampleToken                               `json:"token"`
+	Grade   sql.NullString                            `json:"grade"`
 
 	modelregistry.Base
 }
@@ -279,11 +280,11 @@ func (t *sampleToken) Scan(src any) error {
 // string its type tag declares a JSON column, and datatypes.Time, a time of
 // day.
 type TestTypedRecord struct {
-	Label   string         `json:"label" gorm:"size:191"`
-	Settled sql.NullTime   `json:"settled"`
-	Tally   sql.NullInt64  `json:"tally"`
-	Payload string         `json:"payload" gorm:"type:json"`
-	Clock   datatypes.Time `json:"clock"`
+	Label   string             `json:"label" gorm:"size:191"`
+	Settled sql.NullTime       `json:"settled"`
+	Tally   sql.NullInt64      `json:"tally"`
+	Payload string             `json:"payload" gorm:"type:json"`
+	Clock   gormdatatypes.Time `json:"clock"`
 
 	modelregistry.Base
 }
@@ -598,8 +599,8 @@ func (*TestCursorSnapshot) Indexes() []modelschema.Index {
 // one row a day, its day under a unique index, so the column can carry a
 // cursor.
 type TestDatedCursor struct {
-	Label string           `json:"label" gorm:"size:191"`
-	Day   modelschema.Date `json:"day"`
+	Label string         `json:"label" gorm:"size:191"`
+	Day   datatypes.Date `json:"day"`
 
 	modelregistry.Base
 }
@@ -614,9 +615,9 @@ func (*TestDatedCursor) Indexes() []modelschema.Index {
 // filter compares by. Every record has its day, so a report can group by it
 // into a plain string. Due is an optional day.
 type TestDatedRecord struct {
-	Label string            `json:"label" gorm:"size:191"`
-	Day   modelschema.Date  `json:"day" gorm:"not null"`
-	Due   *modelschema.Date `json:"due"`
+	Label string          `json:"label" gorm:"size:191"`
+	Day   datatypes.Date  `json:"day" gorm:"not null"`
+	Due   *datatypes.Date `json:"due"`
 
 	modelregistry.Base
 }
@@ -742,17 +743,17 @@ var TestAggregateRecordCols = struct {
 }
 
 // TestDatedRecordCols are the column references of the dated fixture, typed
-// the way gg gen types them: a date column gets the time reference.
+// the way gg gen types them: a date column gets the date reference.
 var TestDatedRecordCols = struct {
 	ID    types.Column[string]
 	Label types.Column[string]
-	Day   types.TimeColumn
-	Due   types.TimeColumn
+	Day   types.DateColumn
+	Due   types.DateColumn
 }{
 	ID:    types.NewColumn[*TestDatedRecord, string]("id"),
 	Label: types.NewColumn[*TestDatedRecord, string]("label"),
-	Day:   types.NewTimeColumn[*TestDatedRecord]("day"),
-	Due:   types.NewTimeColumn[*TestDatedRecord]("due"),
+	Day:   types.NewDateColumn[*TestDatedRecord]("day"),
+	Due:   types.NewDateColumn[*TestDatedRecord]("due"),
 }
 
 // TestRecordTagCols mirrors the generated column references of the related
@@ -775,20 +776,20 @@ var TestRecordTagCols = struct {
 var TestScoredRecordCols = struct {
 	ID      types.Column[string]
 	Name    types.Column[string]
-	Scores  types.Column[datatypes.JSONSlice[int]]
-	Weights types.Column[datatypes.JSONSlice[float64]]
-	Meta    types.Column[datatypes.JSONMap]
-	Extra   types.Column[datatypes.JSONType[map[string]string]]
+	Scores  types.Column[gormdatatypes.JSONSlice[int]]
+	Weights types.Column[gormdatatypes.JSONSlice[float64]]
+	Meta    types.Column[gormdatatypes.JSONMap]
+	Extra   types.Column[gormdatatypes.JSONType[map[string]string]]
 	Digest  types.Column[[]byte]
 	Token   types.Column[sampleToken]
 	Grade   types.Column[sql.NullString]
 }{
 	ID:      types.NewColumn[*TestScoredRecord, string]("id"),
 	Name:    types.NewColumn[*TestScoredRecord, string]("name"),
-	Scores:  types.NewColumn[*TestScoredRecord, datatypes.JSONSlice[int]]("scores"),
-	Weights: types.NewColumn[*TestScoredRecord, datatypes.JSONSlice[float64]]("weights"),
-	Meta:    types.NewColumn[*TestScoredRecord, datatypes.JSONMap]("meta"),
-	Extra:   types.NewColumn[*TestScoredRecord, datatypes.JSONType[map[string]string]]("extra"),
+	Scores:  types.NewColumn[*TestScoredRecord, gormdatatypes.JSONSlice[int]]("scores"),
+	Weights: types.NewColumn[*TestScoredRecord, gormdatatypes.JSONSlice[float64]]("weights"),
+	Meta:    types.NewColumn[*TestScoredRecord, gormdatatypes.JSONMap]("meta"),
+	Extra:   types.NewColumn[*TestScoredRecord, gormdatatypes.JSONType[map[string]string]]("extra"),
 	Digest:  types.NewColumn[*TestScoredRecord, []byte]("digest"),
 	Token:   types.NewColumn[*TestScoredRecord, sampleToken]("token"),
 	Grade:   types.NewColumn[*TestScoredRecord, sql.NullString]("grade"),
@@ -804,14 +805,14 @@ var TestTypedRecordCols = struct {
 	Settled types.TimeColumn
 	Tally   types.NumericColumn[sql.NullInt64]
 	Payload types.Column[string]
-	Clock   types.Column[datatypes.Time]
+	Clock   types.Column[gormdatatypes.Time]
 }{
 	ID:      types.NewColumn[*TestTypedRecord, string]("id"),
 	Label:   types.NewColumn[*TestTypedRecord, string]("label"),
 	Settled: types.NewTimeColumn[*TestTypedRecord]("settled"),
 	Tally:   types.NewNumericColumn[*TestTypedRecord, sql.NullInt64]("tally"),
 	Payload: types.NewColumn[*TestTypedRecord, string]("payload"),
-	Clock:   types.NewColumn[*TestTypedRecord, datatypes.Time]("clock"),
+	Clock:   types.NewColumn[*TestTypedRecord, gormdatatypes.Time]("clock"),
 }
 
 // tagSeed is the related-row fixture: two vip tags on alpha records and one

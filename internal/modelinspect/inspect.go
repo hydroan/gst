@@ -24,6 +24,7 @@ type ColumnInfo struct {
 	TypeName    string            `json:"type_name"`    // Original type, recorded in a comment when TypeExpr is empty.
 	Numeric     bool              `json:"numeric"`      // modelschema.ClassifyColumn calls the column numeric, so the reference gains SUM and AVG.
 	Time        bool              `json:"time"`         // modelschema.ClassifyColumn calls the column a time, so the reference gains time bucketing.
+	Date        bool              `json:"date"`         // The column's type is gst.Date, a calendar day, which gets the DateColumn reference.
 	JSONStrings bool              `json:"json_strings"` // Column type stores a JSON array of strings, which gets the JSONStringsColumn reference.
 }
 

@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hydroan/gst/internal/datatypes"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
@@ -150,6 +151,25 @@ func TestColumnBounds(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, types.Bound[time.Time]{Value: from, Inclusive: true, Present: true}, lower)
 		require.Equal(t, types.Bound[time.Time]{Value: to, Inclusive: true, Present: true}, upper)
+	})
+
+	t.Run("ReadsParsedDayBounds", func(t *testing.T) {
+		// A date column's filter parsed from a request carries the day's
+		// midnight in FilterTimeLayout, and one built through the reference
+		// the Date itself; both come back as the day.
+		day := types.NewDateColumn[sampleTable]("day")
+		first := datatypes.Date(time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC))
+		last := datatypes.Date(time.Date(2026, 9, 30, 0, 0, 0, 0, time.UTC))
+		lower, upper, err := day.Bounds([]types.Filter{
+			types.NewFilter("", "day", types.FilterOpGte, "2026-09-01 00:00:00"),
+			day.Lt(last),
+		})
+		require.NoError(t, err)
+		require.Equal(t, types.Bound[datatypes.Date]{Value: first, Inclusive: true, Present: true}, lower)
+		require.Equal(t, types.Bound[datatypes.Date]{Value: last, Present: true}, upper)
+
+		_, _, err = day.Bounds([]types.Filter{types.NewFilter("", "day", types.FilterOpGte, "2026-09-01")})
+		require.Error(t, err, "a value outside the canonical layout does not convert")
 	})
 
 	t.Run("ReadsBuiltExclusiveBounds", func(t *testing.T) {

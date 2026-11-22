@@ -8,11 +8,12 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/hydroan/gst/internal/datatypes"
 	"github.com/hydroan/gst/internal/gggen/jsonshape/fixture/model/record"
 	"github.com/hydroan/gst/internal/gggen/jsonshape/fixture/pkg/notifier"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
-	"gorm.io/datatypes"
+	gormdatatypes "gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -53,18 +54,18 @@ type Sample struct {
 	Permission Permission `json:"permission"`
 	Reference  Reference  `json:"reference"`
 
-	Extra    any                          `json:"extra"`
-	Raw      json.RawMessage              `json:"raw"`
-	Document datatypes.JSON               `json:"document"`
-	Meta     datatypes.JSONMap            `json:"meta"`
-	Options  datatypes.JSONType[*Options] `json:"options"`
-	Items    datatypes.JSONSlice[Item]    `json:"items"`
-	Day      datatypes.Date               `json:"day"`
-	Due      modelschema.Date             `json:"due"`
-	Deadline time.Time                    `json:"deadline,omitzero"`
-	Archived gorm.DeletedAt               `json:"archived"`
-	Comment  sql.NullString               `json:"comment"`
-	Version  modelschema.Version          `json:"version,omitempty"`
+	Extra    any                              `json:"extra"`
+	Raw      json.RawMessage                  `json:"raw"`
+	Document gormdatatypes.JSON               `json:"document"`
+	Meta     gormdatatypes.JSONMap            `json:"meta"`
+	Options  gormdatatypes.JSONType[*Options] `json:"options"`
+	Items    gormdatatypes.JSONSlice[Item]    `json:"items"`
+	Day      gormdatatypes.Date               `json:"day"`
+	Due      datatypes.Date                   `json:"due"`
+	Deadline time.Time                        `json:"deadline,omitzero"`
+	Archived gorm.DeletedAt                   `json:"archived"`
+	Comment  sql.NullString                   `json:"comment"`
+	Version  modelschema.Version              `json:"version,omitempty"`
 
 	Record   *record.Record    `json:"record"`
 	Endpoint notifier.Endpoint `json:"endpoint"`

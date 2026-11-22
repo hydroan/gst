@@ -8,12 +8,13 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/datatypes"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
-	"gorm.io/datatypes"
+	gormdatatypes "gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -192,7 +193,7 @@ func TestDatabaseWithCursor(t *testing.T) {
 		rows := make([]*TestDatedCursor, 0, 3)
 		for d := 1; d <= 3; d++ {
 			day := time.Date(2026, time.January, d, 0, 0, 0, 0, time.UTC)
-			row := &TestDatedCursor{Label: fmt.Sprintf("d%d", d), Day: modelschema.Date(day)}
+			row := &TestDatedCursor{Label: fmt.Sprintf("d%d", d), Day: datatypes.Date(day)}
 			row.ID = fmt.Sprintf("dated-cursor-%d", d)
 			rows = append(rows, row)
 		}
@@ -551,7 +552,7 @@ func TestDatabaseWithSelect(t *testing.T) {
 				Name:     "narrow_user",
 				Email:    "narrow@example.com",
 				Age:      30,
-				Addr:     datatypes.NewJSONSlice([]string{"street-1", "street-2"}),
+				Addr:     gormdatatypes.NewJSONSlice([]string{"street-1", "street-2"}),
 				IsActive: &active,
 				Remark:   &remark,
 			}

@@ -9,9 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hydroan/gst/internal/datatypes"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/stretchr/testify/require"
-	"gorm.io/datatypes"
+	gormdatatypes "gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -46,8 +47,8 @@ func TestClassifyColumn(t *testing.T) {
 
 		At      time.Time
 		Closed  *time.Time
-		Day     modelschema.Date
-		Due     *modelschema.Date
+		Day     datatypes.Date
+		Due     *datatypes.Date
 		Named   namedTime
 		Settled sql.NullTime
 		Removed gorm.DeletedAt
@@ -57,8 +58,8 @@ func TestClassifyColumn(t *testing.T) {
 		Label  namedLabel
 		Digest []byte
 		Text   textValuer
-		Clock  datatypes.Time
-		Doc    datatypes.JSON
+		Clock  gormdatatypes.Time
+		Doc    gormdatatypes.JSON
 	}
 	columns, err := modelschema.Columns(reflect.TypeFor[classified]())
 	require.NoError(t, err)
@@ -95,20 +96,20 @@ type sampleStoredRecord struct {
 	At        time.Time `gorm:"type:datetime(6)"`
 	Settled   sql.NullTime
 	Removed   gorm.DeletedAt
-	Day       modelschema.Date
-	Clock     datatypes.Time
-	Closing   *datatypes.Time
+	Day       datatypes.Date
+	Clock     gormdatatypes.Time
+	Closing   *gormdatatypes.Time
 	Count     int
 	Tally     sql.NullInt64
 	Ratio     sql.NullFloat64
 	Active    bool
 	Flag      sql.NullBool
 	Note      string
-	Doc       datatypes.JSON
-	DocText   string         `gorm:"type:json"`
-	DocBytes  []byte         `gorm:"type:jsonb"`
-	DocTagged datatypes.JSON `gorm:"type:text"`
-	Tags      []string       `gorm:"serializer:json"`
+	Doc       gormdatatypes.JSON
+	DocText   string             `gorm:"type:json"`
+	DocBytes  []byte             `gorm:"type:jsonb"`
+	DocTagged gormdatatypes.JSON `gorm:"type:text"`
+	Tags      []string           `gorm:"serializer:json"`
 }
 
 // columnsWhere lists, in name order, the database names of the
@@ -215,14 +216,14 @@ func TestParseTime(t *testing.T) {
 // type are no date.
 func TestIsDateColumn(t *testing.T) {
 	type dated struct {
-		Day     modelschema.Date  `json:"day"`
-		DayPtr  *modelschema.Date `json:"day_ptr"`
-		Library datatypes.Date    `json:"library"`
-		Due     time.Time         `json:"due" gorm:"type:date"`
-		DuePtr  *time.Time        `json:"due_ptr" gorm:"type:DATE"`
-		At      time.Time         `json:"at"`
-		Stamped time.Time         `json:"stamped" gorm:"type:datetime(3)"`
-		Clock   datatypes.Time    `json:"clock"`
+		Day     datatypes.Date     `json:"day"`
+		DayPtr  *datatypes.Date    `json:"day_ptr"`
+		Library gormdatatypes.Date `json:"library"`
+		Due     time.Time          `json:"due" gorm:"type:date"`
+		DuePtr  *time.Time         `json:"due_ptr" gorm:"type:DATE"`
+		At      time.Time          `json:"at"`
+		Stamped time.Time          `json:"stamped" gorm:"type:datetime(3)"`
+		Clock   gormdatatypes.Time `json:"clock"`
 	}
 	columns, err := modelschema.Columns(reflect.TypeFor[dated]())
 	require.NoError(t, err)
@@ -362,15 +363,15 @@ func (sampleStringsDocument) GormDataType() string { return "json" }
 // pointers dereferenced, and nothing else.
 func TestIsJSONStringsType(t *testing.T) {
 	for _, typ := range []reflect.Type{
-		reflect.TypeFor[datatypes.JSONSlice[string]](),
-		reflect.TypeFor[*datatypes.JSONSlice[string]](),
+		reflect.TypeFor[gormdatatypes.JSONSlice[string]](),
+		reflect.TypeFor[*gormdatatypes.JSONSlice[string]](),
 		reflect.TypeFor[sampleStringsDocument](),
 	} {
 		require.True(t, modelschema.IsJSONStringsType(typ), typ.String())
 	}
 	for _, typ := range []reflect.Type{
-		reflect.TypeFor[datatypes.JSONSlice[int]](), reflect.TypeFor[datatypes.JSONMap](),
-		reflect.TypeFor[datatypes.JSON](), reflect.TypeFor[datatypes.JSONType[[]string]](),
+		reflect.TypeFor[gormdatatypes.JSONSlice[int]](), reflect.TypeFor[gormdatatypes.JSONMap](),
+		reflect.TypeFor[gormdatatypes.JSON](), reflect.TypeFor[gormdatatypes.JSONType[[]string]](),
 		reflect.TypeFor[[]string](), reflect.TypeFor[string](),
 	} {
 		require.False(t, modelschema.IsJSONStringsType(typ), typ.String())

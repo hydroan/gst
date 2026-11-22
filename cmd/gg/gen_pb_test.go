@@ -1901,6 +1901,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
 	"gorm.io/datatypes"
@@ -1909,7 +1910,7 @@ import (
 
 // Shape carries one field of every kind the handlers convert.
 type Shape struct {
-	Date    model.Date                       'json:"date" pb:"11"'
+	Date    gst.Date                         'json:"date" pb:"11"'
 	Clock   datatypes.Time                   'json:"clock" pb:"12"'
 	Doc     datatypes.JSON                   'json:"doc,omitempty" pb:"13"'
 	Attrs   datatypes.JSONMap                'json:"attrs,omitempty" pb:"14"'
@@ -1996,8 +1997,8 @@ type Shape struct {
 	// Due and Days hold days behind a pointer and in a repeated field,
 	// where the zero day travels as 0001-01-01 and comes back as the zero
 	// day.
-	Due  *model.Date  'json:"due,omitempty" pb:"59"'
-	Days []model.Date 'json:"days,omitempty" pb:"60" gorm:"-"'
+	Due  *gst.Date  'json:"due,omitempty" pb:"59"'
+	Days []gst.Date 'json:"days,omitempty" pb:"60" gorm:"-"'
 	// Opened is the date of the datatypes package of gorm, which a field no
 	// column stores may take: it travels as a Timestamp at the start of the
 	// day.
@@ -2089,7 +2090,7 @@ import (
 	"tmpapp/pb"
 	pbrecord "tmpapp/pb/record"
 
-	gstmodel "github.com/hydroan/gst/model"
+	"github.com/hydroan/gst"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genproto/googleapis/type/date"
 	"google.golang.org/grpc/codes"
@@ -2202,7 +2203,7 @@ func TestItemLinksRoundTrip(t *testing.T) {
 func TestShapeRoundTrips(t *testing.T) {
 	day := time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC)
 	when := day.Add(time.Hour)
-	due := gstmodel.Date(day.AddDate(0, 0, 1))
+	due := gst.Date(day.AddDate(0, 0, 1))
 	score := 7
 	ratio := 0.5
 	price := json.Number("1.5")
@@ -2210,7 +2211,7 @@ func TestShapeRoundTrips(t *testing.T) {
 	extra := datatypes.JSON('{"c":2}')
 	meta := datatypes.JSONMap{"m": float64(1)}
 	in := &model.Shape{
-		Date:    gstmodel.Date(day),
+		Date:    gst.Date(day),
 		Clock:   datatypes.Time(90 * time.Minute),
 		Doc:     datatypes.JSON('{"a":[1,2]}'),
 		Attrs:   datatypes.JSONMap{"deep": map[string]any{"x": float64(1)}},
@@ -2254,7 +2255,7 @@ func TestShapeRoundTrips(t *testing.T) {
 		Pair:    [2]json.Number{"3", "4"},
 		Rates:   map[string]json.Number{"r": "0.5"},
 		Due:     &due,
-		Days:    []gstmodel.Date{{}, gstmodel.Date(day)},
+		Days:    []gst.Date{{}, gst.Date(day)},
 		Opened:  datatypes.Date(day),
 	}
 	in.Window = struct {

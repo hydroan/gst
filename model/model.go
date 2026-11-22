@@ -53,14 +53,6 @@ type (
 	// moved on, deletes are checked when a version is carried, and successful
 	// updates bump the version for everyone else.
 	Version = modelschema.Version
-
-	// Date is a calendar day, a year, a month and a day with no time of day
-	// and no zone: a model declares a day as a Date (`Day model.Date`) and an
-	// optional one as a *Date, stored in a date column. A day is written
-	// 2026-01-02 in a request body, a response and a URL filter, and is a
-	// google.type.Date over gRPC; an instant sent for it is refused. Date(t)
-	// is the day the time t reads in its own location.
-	Date = modelschema.Date
 )
 
 // RegisteredModels returns independent model values registered through

@@ -3,7 +3,7 @@ package modeliamprofile
 import (
 	. "github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
-	"gorm.io/datatypes"
+	gormdatatypes "gorm.io/datatypes"
 )
 
 // Profile stores the generic self-service profile data for an IAM user.
@@ -14,10 +14,10 @@ import (
 // that needs its own decomposition can put it in Metadata, which exists for
 // exactly the fields the framework cannot know about.
 type Profile struct {
-	UserID      string            `json:"user_id" query:"user_id" gorm:"size:36;not null"`
-	DisplayName string            `json:"display_name,omitempty" query:"display_name" gorm:"size:191"`
-	Avatar      string            `json:"avatar,omitempty" query:"avatar" gorm:"size:512"`
-	Metadata    datatypes.JSONMap `json:"metadata,omitempty"`
+	UserID      string                `json:"user_id" query:"user_id" gorm:"size:36;not null"`
+	DisplayName string                `json:"display_name,omitempty" query:"display_name" gorm:"size:191"`
+	Avatar      string                `json:"avatar,omitempty" query:"avatar" gorm:"size:512"`
+	Metadata    gormdatatypes.JSONMap `json:"metadata,omitempty"`
 
 	model.Base
 }
@@ -27,9 +27,9 @@ type ProfileGetRsp = Profile
 
 // ProfilePatchReq is the request payload for patching the current user's profile.
 type ProfilePatchReq struct {
-	DisplayName *string           `json:"display_name,omitempty"`
-	Avatar      *string           `json:"avatar,omitempty"`
-	Metadata    datatypes.JSONMap `json:"metadata,omitempty"`
+	DisplayName *string               `json:"display_name,omitempty"`
+	Avatar      *string               `json:"avatar,omitempty"`
+	Metadata    gormdatatypes.JSONMap `json:"metadata,omitempty"`
 }
 
 // ProfilePatchRsp returns the patched current user's profile.

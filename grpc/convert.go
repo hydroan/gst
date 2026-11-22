@@ -10,8 +10,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/datatypes"
 	"github.com/hydroan/gst/internal/grpcserver"
-	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"google.golang.org/genproto/googleapis/type/date"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -130,25 +130,25 @@ func Timestamp(t time.Time) *timestamppb.Timestamp {
 // "2026-02-30 is not a day of the calendar" the detail, the way the HTTP
 // listener refuses a day it cannot read. The generated FromProto reads every
 // day through it.
-func Date(field string, d *date.Date) (modelschema.Date, error) {
+func Date(field string, d *date.Date) (datatypes.Date, error) {
 	if d == nil {
-		return modelschema.Date{}, nil
+		return datatypes.Date{}, nil
 	}
 	year, month, day := int(d.GetYear()), time.Month(d.GetMonth()), int(d.GetDay())
 	// time.Date carries a month or a day out of range over into the next
 	// ones, so a date it gives back changed is one the calendar does not hold.
 	on := time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
 	if year < 1 || year > 9999 || on.Year() != year || on.Month() != month || on.Day() != day {
-		return modelschema.Date{}, invalidValue(field, fmt.Sprintf("%04d-%02d-%02d is not a day of the calendar", d.GetYear(), d.GetMonth(), d.GetDay()))
+		return datatypes.Date{}, invalidValue(field, fmt.Sprintf("%04d-%02d-%02d is not a day of the calendar", d.GetYear(), d.GetMonth(), d.GetDay()))
 	}
-	return modelschema.Date(on), nil
+	return datatypes.Date(on), nil
 }
 
 // DatePB returns the google.type.Date of the day d names, the zero day as
 // 0001-01-01, which Date reads back as the zero day. The generated ToProto
 // writes every day through it, and leaves the field of a zero day unset
 // where the field stands alone, the way Timestamp leaves the zero time.
-func DatePB(d modelschema.Date) *date.Date {
+func DatePB(d datatypes.Date) *date.Date {
 	year, month, day := time.Time(d).Date()
 	return &date.Date{Year: int32(year), Month: int32(month), Day: int32(day)} //nolint:gosec // G115: a month and a day fit, and a year past the range of an int32 is far outside the years 1 to 9999 Date reads back.
 }

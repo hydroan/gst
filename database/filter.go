@@ -10,11 +10,12 @@ import (
 
 	"github.com/cockroachdb/errors"
 
+	"github.com/hydroan/gst/internal/datatypes"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
-	"gorm.io/datatypes"
+	gormdatatypes "gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -385,7 +386,7 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 		if !ok {
 			return db.failClosedFilter(f, "expects a string value")
 		}
-		return datatypes.JSONArrayQuery(db.placedName(f, scope, info)).Contains(s), nil
+		return gormdatatypes.JSONArrayQuery(db.placedName(f, scope, info)).Contains(s), nil
 	case types.FilterOpEqCol:
 		return db.eqColCondition(f, column, scope)
 	default:
@@ -696,7 +697,7 @@ func (db *database[M]) scalarFilter(f types.Filter, info tableInfo, sql string) 
 }
 
 // dayValue is the value a comparison with a date column, or a list matched
-// against one, binds for v. A day, a modelschema.Date, binds the midnight in
+// against one, binds for v. A day, a datatypes.Date, binds the midnight in
 // UTC of the day it names. A time binds the UTC day it falls on (see
 // modelschema.UTCDay), in the form it came in: a string in
 // types.FilterTimeLayout, the way the URL parser binds a day, a time.Time,
@@ -706,7 +707,7 @@ func (db *database[M]) scalarFilter(f types.Filter, info tableInfo, sql string) 
 // as its midnight, PostgreSQL takes the instant as the day it falls on.
 func dayValue(v any) any {
 	switch value := v.(type) {
-	case modelschema.Date:
+	case datatypes.Date:
 		year, month, day := time.Time(value).Date()
 		return time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
 	case string:

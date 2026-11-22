@@ -9,7 +9,7 @@ import (
 	"github.com/hydroan/gst/database"
 	gstmysql "github.com/hydroan/gst/database/mysql"
 	"github.com/stretchr/testify/require"
-	"gorm.io/datatypes"
+	gormdatatypes "gorm.io/datatypes"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
@@ -87,7 +87,7 @@ func modeSet(modes string) []string {
 // as it is.
 func TestJSONValuesFindTheRowTheyWereWrittenFrom(t *testing.T) {
 	defer cleanupTestData()
-	addr := datatypes.NewJSONSlice([]string{"street-1", "street-2"})
+	addr := gormdatatypes.NewJSONSlice([]string{"street-1", "street-2"})
 	user := &TestUser{Name: "json-user", Email: "json-user@example.com", Age: 30, Addr: addr, ID: "json-user"}
 	require.NoError(t, database.Database[*TestUser](context.Background()).Create(user))
 

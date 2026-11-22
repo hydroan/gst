@@ -5,7 +5,7 @@ import (
 
 	. "github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
-	"gorm.io/datatypes"
+	gormdatatypes "gorm.io/datatypes"
 )
 
 // TOTPDevice stores a registered TOTP authenticator for an IAM user.
@@ -23,12 +23,12 @@ import (
 // the same secret twice for one user, and its leftmost prefix serves every
 // per-user lookup, so no separate user_id index exists.
 type TOTPDevice struct {
-	UserID           string                      `json:"user_id" gorm:"type:varchar(191);not null"`
-	DeviceName       string                      `json:"device_name" gorm:"type:varchar(100);not null"`
-	Secret           string                      `json:"-" gorm:"type:varchar(64);not null"` // Base32 encoded secret (52 chars at SecretSize 32), not exposed in JSON
-	BackupCodeHashes datatypes.JSONSlice[string] `json:"-"`
-	IsActive         bool                        `json:"is_active"`
-	LastUsedAt       *time.Time                  `json:"last_used_at"`
+	UserID           string                          `json:"user_id" gorm:"type:varchar(191);not null"`
+	DeviceName       string                          `json:"device_name" gorm:"type:varchar(100);not null"`
+	Secret           string                          `json:"-" gorm:"type:varchar(64);not null"` // Base32 encoded secret (52 chars at SecretSize 32), not exposed in JSON
+	BackupCodeHashes gormdatatypes.JSONSlice[string] `json:"-"`
+	IsActive         bool                            `json:"is_active"`
+	LastUsedAt       *time.Time                      `json:"last_used_at"`
 
 	model.Base
 }

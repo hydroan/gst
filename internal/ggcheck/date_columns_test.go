@@ -12,7 +12,7 @@ import (
 // TestDateColumnsRefusesADateColumnOfAnotherType pins the check: a model
 // declaring its date columns by the date type of gorm.io/datatypes and by a
 // time.Time under a type tag is reported under its file with the fix, before
-// gg gen wrote any registration, and the same columns declared model.Date
+// gg gen wrote any registration, and the same columns declared gst.Date
 // are clean.
 func TestDateColumnsRefusesADateColumnOfAnotherType(t *testing.T) {
 	projectDir := t.TempDir()
@@ -33,14 +33,14 @@ func TestDateColumnsRefusesADateColumnOfAnotherType(t *testing.T) {
 	writeCheckFile(t, filepath.Join(projectDir, "model", "record.go"), libraryDatedModel)
 
 	violations := runCheck(ggcheck.DateColumns)
-	want := `model/record.go: model Record: field Day stores a date as datatypes.Date; field Due stores a date as *time.Time; a date column is declared model.Date, or *model.Date when it is optional`
+	want := `model/record.go: model Record: field Day stores a date as datatypes.Date; field Due stores a date as *time.Time; a date column is declared gst.Date, or *gst.Date when it is optional`
 	if len(violations) != 1 || violations[0] != want {
 		t.Fatalf("violations = %#v, want the date columns reported once under their file", violations)
 	}
 
 	writeCheckFile(t, filepath.Join(projectDir, "model", "record.go"), datedModel)
 	if violations := runCheck(ggcheck.DateColumns); len(violations) != 0 {
-		t.Fatalf("date columns declared model.Date should have nothing to report, got %#v", violations)
+		t.Fatalf("date columns declared gst.Date should have nothing to report, got %#v", violations)
 	}
 }
 
@@ -78,14 +78,15 @@ func (Record) Design() {
 const datedModel = `package model
 
 import (
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
 )
 
 // Record is a record of one day.
 type Record struct {
-	Day model.Date  ` + "`json:\"day\"`" + `
-	Due *model.Date ` + "`json:\"due\"`" + `
+	Day gst.Date  ` + "`json:\"day\"`" + `
+	Due *gst.Date ` + "`json:\"due\"`" + `
 
 	model.Base
 }

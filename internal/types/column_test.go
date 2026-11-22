@@ -6,7 +6,7 @@ import (
 
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
-	"gorm.io/datatypes"
+	gormdatatypes "gorm.io/datatypes"
 )
 
 // nameless stands in for a virtual model: it declares no table, the way a
@@ -150,6 +150,7 @@ func TestColumnBuildsTerms(t *testing.T) {
 	category := types.NewColumn[sampleTable, string]("category")
 	amount := types.NewNumericColumn[sampleTable, int64]("amount")
 	occurred := types.NewTimeColumn[sampleTable]("occurred_at")
+	day := types.NewDateColumn[sampleTable]("day")
 	// Every projection method yields the column with its table, aliased by
 	// its own name; only the function and the bucket differ.
 	term := func(fn types.TermFn, column string) types.Term {
@@ -157,6 +158,9 @@ func TestColumnBuildsTerms(t *testing.T) {
 	}
 	bucket := func(b types.TimeBucket) types.Term {
 		return types.NewTerm(types.FnNone, "samples", "occurred_at", b, "occurred_at")
+	}
+	dayBucket := func(b types.TimeBucket) types.Term {
+		return types.NewTerm(types.FnNone, "samples", "day", b, "day")
 	}
 
 	tests := []struct {
@@ -176,6 +180,8 @@ func TestColumnBuildsTerms(t *testing.T) {
 		{"ByHour", occurred.ByHour(), bucket(types.TimeBucketHour)},
 		{"ByDay", occurred.ByDay(), bucket(types.TimeBucketDay)},
 		{"ByMonth", occurred.ByMonth(), bucket(types.TimeBucketMonth)},
+		{"a day ByDay", day.ByDay(), dayBucket(types.TimeBucketDay)},
+		{"a day ByMonth", day.ByMonth(), dayBucket(types.TimeBucketMonth)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
@@ -243,13 +249,13 @@ func TestJSONStringsColumnSpeaksStrings(t *testing.T) {
 	})
 
 	t.Run("BuildsDocuments", func(t *testing.T) {
-		document := datatypes.JSONSlice[string]{"vip", "new"}
+		document := gormdatatypes.JSONSlice[string]{"vip", "new"}
 		value := []string{"vip", "new"}
 		for _, f := range []types.Filter{tags.Eq(value), tags.Ne(value), tags.Gt(value), tags.Gte(value), tags.Lt(value), tags.Lte(value)} {
 			require.Equal(t, document, f.Value(), f.Op())
 		}
-		require.Equal(t, []datatypes.JSONSlice[string]{document}, tags.In(value).Value())
-		require.Equal(t, []datatypes.JSONSlice[string]{document}, tags.NotIn(value).Value())
+		require.Equal(t, []gormdatatypes.JSONSlice[string]{document}, tags.In(value).Value())
+		require.Equal(t, []gormdatatypes.JSONSlice[string]{document}, tags.NotIn(value).Value())
 		require.Equal(t, document, tags.Set(value).Value())
 	})
 

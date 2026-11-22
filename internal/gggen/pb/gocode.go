@@ -55,6 +55,7 @@ var fixedImportNames = map[string]string{
 	importPathTimestampPB:     "",
 	importPathDatatypes:       "",
 	importPathGorm:            "",
+	ggconst.ImportPathGst:     "",
 	ggconst.ImportPathGRPC:    "",
 	ggconst.ImportPathModel:   gstModelName,
 	ggconst.ImportPathService: "",

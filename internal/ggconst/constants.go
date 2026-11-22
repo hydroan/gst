@@ -198,6 +198,7 @@ const (
 	GstNewColumn            = "NewColumn"
 	GstNewNumericColumn     = "NewNumericColumn"
 	GstNewTimeColumn        = "NewTimeColumn"
+	GstNewDateColumn        = "NewDateColumn"
 	GstNewJSONStringsColumn = "NewJSONStringsColumn"
 	// GstControllerConfig is the type of the configuration a route
 	// registration carries, and GstControllerConfigParamName its field

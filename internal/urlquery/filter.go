@@ -9,10 +9,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/datatypes"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
-	"gorm.io/datatypes"
+	gormdatatypes "gorm.io/datatypes"
 )
 
 // Filters extracts field-level operator filters from URL query keys of the
@@ -249,7 +250,7 @@ func normalizeFilterValue(col modelschema.Column, op types.FilterOp, value strin
 // would let the driver re-render the value in its own location, while the
 // string pins the wall clock the parser resolved.
 //
-// A date column takes a day instead, the way modelschema.ParseDate reads one,
+// A date column takes a day instead, the way datatypes.ParseDate reads one,
 // and binds its midnight in the same layout: 2026-01-02 binds as
 // 2026-01-02 00:00:00.
 //
@@ -262,10 +263,10 @@ func timeBound(col modelschema.Column, value string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return datatypes.Time(since).String(), nil
+		return gormdatatypes.Time(since).String(), nil
 	}
 	if modelschema.IsDateColumn(col) {
-		day, err := modelschema.ParseDate(value)
+		day, err := datatypes.ParseDate(value)
 		if err != nil {
 			return "", err
 		}

@@ -15,7 +15,7 @@ import (
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/stretchr/testify/require"
-	"gorm.io/datatypes"
+	gormdatatypes "gorm.io/datatypes"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 )
@@ -160,7 +160,7 @@ func TestEnsureTableRejectsAUniqueIndexLeavingOutTheTenant(t *testing.T) {
 // whose JSON is the instant of a midnight; table preparation must refuse it
 // before the table exists, whatever the database.
 type libraryDatedRecord struct {
-	Day datatypes.Date
+	Day gormdatatypes.Date
 
 	modelregistry.Base
 }

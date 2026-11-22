@@ -43,6 +43,7 @@ import (
 //	var RecordCols = struct {
 //		Amount    gst.NumericColumn[int64]
 //		CreatedAt gst.TimeColumn
+//		Day       gst.DateColumn
 //		Elapsed   gst.NumericColumn[time.Duration]
 //		ID        gst.Column[uuid.UUID]
 //		Tags      gst.JSONStringsColumn
@@ -50,6 +51,7 @@ import (
 //	}{
 //		Amount:    gst.NewNumericColumn[*Record, int64]("amount"),
 //		CreatedAt: gst.NewTimeColumn[*Record]("created_at"),
+//		Day:       gst.NewDateColumn[*Record]("day"),
 //		Elapsed:   gst.NewNumericColumn[*Record, time.Duration]("elapsed"),
 //		ID:        gst.NewColumn[*Record, uuid.UUID]("id"),
 //		Tags:      gst.NewJSONStringsColumn[*Record]("tags"),
@@ -59,9 +61,10 @@ func renderColumnsFile(module string, pkgName string, source string, models []mo
 	imports := map[string]string{ggconst.ImportPathGst: ggconst.PkgGst}
 	for _, m := range models {
 		for _, col := range m.Columns {
-			// A TimeColumn or JSONStringsColumn reference carries no type
-			// argument, so the column type's imports would be unused in the
-			// generated file.
+			// A TimeColumn, a DateColumn, whose column is a time column to
+			// the inspection as well, or a JSONStringsColumn reference
+			// carries no type argument, so the column type's imports would
+			// be unused in the generated file.
 			if col.JSONStrings || (col.Time && col.TypeExpr != "") {
 				continue
 			}
@@ -244,17 +247,20 @@ func columnVarName(model string) string {
 }
 
 // columnRefType returns the declared type of one generated column reference.
-// Numeric and time columns get the specialized references that carry the
-// aggregate functions only meaningful there, and a JSON array of strings the
-// one carrying the membership test; every other column, including one whose
-// type cannot be written as source, gets the plain reference. In the example
-// of renderColumnsFile, Amount gets gst.NumericColumn[int64], CreatedAt
-// gst.TimeColumn, ID gst.Column[uuid.UUID], Tags gst.JSONStringsColumn and
-// Weights gst.Column[any].
+// Numeric, time and date columns get the specialized references that carry
+// the aggregate functions only meaningful there, a date column's taking a
+// day where a time column's takes an instant, and a JSON array of strings
+// the one carrying the membership test; every other column, including one
+// whose type cannot be written as source, gets the plain reference. In the
+// example of renderColumnsFile, Amount gets gst.NumericColumn[int64],
+// CreatedAt gst.TimeColumn, Day gst.DateColumn, ID gst.Column[uuid.UUID],
+// Tags gst.JSONStringsColumn and Weights gst.Column[any].
 func columnRefType(col modelinspect.ColumnInfo) (ast.Expr, error) {
 	switch {
 	case col.JSONStrings:
 		return gstSelector("JSONStringsColumn"), nil
+	case col.Date:
+		return gstSelector("DateColumn"), nil
 	case col.Time && col.TypeExpr != "":
 		return gstSelector("TimeColumn"), nil
 	case col.Numeric && col.TypeExpr != "":
@@ -280,7 +286,8 @@ func columnRefType(col modelinspect.ColumnInfo) (ast.Expr, error) {
 // of it at package initialization, so the table name is never restated as a
 // literal that could drift from the model. In the example of renderColumnsFile,
 // Amount gets gst.NewNumericColumn[*Record, int64]("amount"), CreatedAt
-// gst.NewTimeColumn[*Record]("created_at"), ID
+// gst.NewTimeColumn[*Record]("created_at"), Day
+// gst.NewDateColumn[*Record]("day"), ID
 // gst.NewColumn[*Record, uuid.UUID]("id"), Tags
 // gst.NewJSONStringsColumn[*Record]("tags") and Weights
 // gst.NewColumn[*Record, any]("weights").
@@ -290,6 +297,9 @@ func columnRefLiteral(model string, col modelinspect.ColumnInfo) (ast.Expr, erro
 	switch {
 	case col.JSONStrings:
 		constructor := &ast.IndexExpr{X: gstSelector(ggconst.GstNewJSONStringsColumn), Index: modelArg}
+		return &ast.CallExpr{Fun: constructor, Args: []ast.Expr{dbName}}, nil
+	case col.Date:
+		constructor := &ast.IndexExpr{X: gstSelector(ggconst.GstNewDateColumn), Index: modelArg}
 		return &ast.CallExpr{Fun: constructor, Args: []ast.Expr{dbName}}, nil
 	case col.Time && col.TypeExpr != "":
 		constructor := &ast.IndexExpr{X: gstSelector(ggconst.GstNewTimeColumn), Index: modelArg}
@@ -313,7 +323,7 @@ func columnRefLiteral(model string, col modelinspect.ColumnInfo) (ast.Expr, erro
 
 // endColumnRefType positions the last token of a reference type built by
 // columnRefType at pos: the closing bracket of gst.Column[any], or the name
-// of gst.TimeColumn.
+// of gst.TimeColumn or gst.DateColumn.
 func endColumnRefType(refType ast.Expr, pos token.Pos) {
 	switch t := refType.(type) {
 	case *ast.IndexExpr:

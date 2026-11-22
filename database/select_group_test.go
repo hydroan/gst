@@ -9,7 +9,7 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
-	"gorm.io/datatypes"
+	gormdatatypes "gorm.io/datatypes"
 )
 
 // Tests for the grouped side of the select builder (select_group.go): group
@@ -335,11 +335,11 @@ func TestAggregatesFollowTheStoredType(t *testing.T) {
 	require.NoError(t, database.Database[*TestTypedRecord](ctx).Create(
 		&TestTypedRecord{
 			Label: "first", Settled: sql.NullTime{Time: settled, Valid: true}, Tally: sql.NullInt64{Int64: 15, Valid: true},
-			Payload: `{}`, Clock: datatypes.NewTime(9, 0, 0, 0),
+			Payload: `{}`, Clock: gormdatatypes.NewTime(9, 0, 0, 0),
 		},
 		&TestTypedRecord{
 			Label: "second", Settled: sql.NullTime{Time: settled.Add(time.Hour), Valid: true}, Tally: sql.NullInt64{Int64: 27, Valid: true},
-			Payload: `{}`, Clock: datatypes.NewTime(17, 30, 0, 0),
+			Payload: `{}`, Clock: gormdatatypes.NewTime(17, 30, 0, 0),
 		},
 	))
 	type total struct{ Total int64 }
@@ -377,7 +377,7 @@ func TestAggregatesFollowTheStoredType(t *testing.T) {
 
 	t.Run("ATimeOfDayNeitherSumsNorBuckets", func(t *testing.T) {
 		got := total{}
-		require.ErrorIs(t, database.Select[*TestTypedRecord, total](ctx, types.NewNumericColumn[*TestTypedRecord, datatypes.Time]("clock").Sum().As("total")).ScanOne(&got),
+		require.ErrorIs(t, database.Select[*TestTypedRecord, total](ctx, types.NewNumericColumn[*TestTypedRecord, gormdatatypes.Time]("clock").Sum().As("total")).ScanOne(&got),
 			database.ErrAggregateType, "MySQL and SQLite would add the readings up as plain numbers")
 		rows := make([]perDay, 0)
 		require.ErrorIs(t, database.Select[*TestTypedRecord, perDay](ctx, types.NewTimeColumn[*TestTypedRecord]("clock").ByDay().As("day"), types.Count().As("records")).Scan(&rows),

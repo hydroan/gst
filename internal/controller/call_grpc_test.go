@@ -19,6 +19,7 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/controller"
+	"github.com/hydroan/gst/internal/datatypes"
 	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/tenant"
@@ -37,7 +38,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
-	"gorm.io/datatypes"
+	gormdatatypes "gorm.io/datatypes"
 )
 
 // The tests of the call functions run them the way a project's generated
@@ -755,7 +756,7 @@ func decodeAtPointer[T any](dec *jsontext.Decoder, v *T) error {
 // modelschema.ParseTimeOfDay, and one naming a duration past the end of a day,
 // 25:00:00, is refused naming the field, the way grpc.TimeOfDay refuses 25
 // hours. A null is a duration the message leaves unset, read as none.
-var timeOfDayAsDuration = jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, t *datatypes.Time) error {
+var timeOfDayAsDuration = jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, t *gormdatatypes.Time) error {
 	value, err := dec.ReadValue()
 	if err != nil || value.Kind() == jsontext.KindNull {
 		return err
@@ -766,9 +767,9 @@ var timeOfDayAsDuration = jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, t
 	}
 	since, err := modelschema.ParseTimeOfDay(string(text))
 	if err != nil {
-		return &jsonv2.SemanticError{JSONPointer: dec.StackPointer(), JSONKind: value.Kind(), GoType: reflect.TypeFor[datatypes.Time](), Err: err}
+		return &jsonv2.SemanticError{JSONPointer: dec.StackPointer(), JSONKind: value.Kind(), GoType: reflect.TypeFor[gormdatatypes.Time](), Err: err}
 	}
-	*t = datatypes.Time(since)
+	*t = gormdatatypes.Time(since)
 	return nil
 })
 
@@ -781,13 +782,13 @@ var timeOfDayAsDuration = jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, t
 // cannot reach), and one naming no day, 2026-02-30, is refused naming the
 // field, the way grpc.Date refuses the 30th of February. A null is a date
 // the message leaves unset, read as none.
-var dayAsDate = jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, day *modelschema.Date) error {
+var dayAsDate = jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, day *datatypes.Date) error {
 	value, err := dec.ReadValue()
 	if err != nil {
 		return err
 	}
 	if err = day.UnmarshalJSON(value); err != nil {
-		return &jsonv2.SemanticError{JSONPointer: dec.StackPointer(), JSONKind: value.Kind(), JSONValue: value.Clone(), GoType: reflect.TypeFor[modelschema.Date](), Err: err}
+		return &jsonv2.SemanticError{JSONPointer: dec.StackPointer(), JSONKind: value.Kind(), JSONValue: value.Clone(), GoType: reflect.TypeFor[datatypes.Date](), Err: err}
 	}
 	return nil
 })

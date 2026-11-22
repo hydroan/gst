@@ -10,7 +10,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	gstgrpc "github.com/hydroan/gst/grpc"
-	"github.com/hydroan/gst/internal/modelschema"
+	"github.com/hydroan/gst/internal/datatypes"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/genproto/googleapis/type/date"
@@ -163,7 +163,7 @@ func TestTimestampLeavesTheZeroTimeUnset(t *testing.T) {
 func TestDateRefusesWhatIsNoDay(t *testing.T) {
 	got, err := gstgrpc.Date("day", &date.Date{Year: 2024, Month: 2, Day: 29})
 	require.NoError(t, err)
-	require.Equal(t, modelschema.Date(time.Date(2024, time.February, 29, 0, 0, 0, 0, time.UTC)), got)
+	require.Equal(t, datatypes.Date(time.Date(2024, time.February, 29, 0, 0, 0, 0, time.UTC)), got)
 	unset, err := gstgrpc.Date("day", nil)
 	require.NoError(t, err)
 	require.True(t, time.Time(unset).IsZero())
@@ -197,14 +197,14 @@ func TestDateRefusesWhatIsNoDay(t *testing.T) {
 // as 0001-01-01 and comes back as the zero day.
 func TestDatePBWritesTheDayItsTimeReads(t *testing.T) {
 	// 07:30 at +08:00 on the 2nd is the 2nd, though the 1st in UTC.
-	on := modelschema.Date(time.Date(2026, time.January, 2, 7, 30, 0, 0, time.FixedZone("", 8*3600)))
+	on := datatypes.Date(time.Date(2026, time.January, 2, 7, 30, 0, 0, time.FixedZone("", 8*3600)))
 	msg := gstgrpc.DatePB(on)
 	require.True(t, proto.Equal(&date.Date{Year: 2026, Month: 1, Day: 2}, msg), msg)
 	back, err := gstgrpc.Date("day", msg)
 	require.NoError(t, err)
-	require.Equal(t, modelschema.Date(time.Date(2026, time.January, 2, 0, 0, 0, 0, time.UTC)), back)
+	require.Equal(t, datatypes.Date(time.Date(2026, time.January, 2, 0, 0, 0, 0, time.UTC)), back)
 
-	zero := gstgrpc.DatePB(modelschema.Date{})
+	zero := gstgrpc.DatePB(datatypes.Date{})
 	require.True(t, proto.Equal(&date.Date{Year: 1, Month: 1, Day: 1}, zero), zero)
 	back, err = gstgrpc.Date("day", zero)
 	require.NoError(t, err)

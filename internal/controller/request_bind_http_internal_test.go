@@ -21,7 +21,7 @@ import (
 	"github.com/hydroan/gst/internal/testutil/swap"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
-	"gorm.io/datatypes"
+	gormdatatypes "gorm.io/datatypes"
 )
 
 // normalizeProbeModel is the model fixture of the request-normalization tests.
@@ -523,17 +523,17 @@ func BenchmarkBindJSONRequest(b *testing.B) {
 // reports for it.
 func TestDecodeJSONRequestReadsEveryTimeOfDayStrictly(t *testing.T) {
 	type promoted struct {
-		Closes datatypes.Time `json:"closes"`
+		Closes gormdatatypes.Time `json:"closes"`
 	}
 	type window struct {
-		Opens datatypes.Time `json:"opens"`
+		Opens gormdatatypes.Time `json:"opens"`
 	}
 	type holder struct {
 		promoted
-		Clock  *datatypes.Time           `json:"clock"`
-		Window window                    `json:"window"`
-		Slots  []datatypes.Time          `json:"slots"`
-		ByName map[string]datatypes.Time `json:"by_name"`
+		Clock  *gormdatatypes.Time           `json:"clock"`
+		Window window                        `json:"window"`
+		Slots  []gormdatatypes.Time          `json:"slots"`
+		ByName map[string]gormdatatypes.Time `json:"by_name"`
 	}
 	gin.SetMode(gin.TestMode)
 	decode := decodeBody[holder]

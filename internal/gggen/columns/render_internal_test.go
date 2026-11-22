@@ -21,6 +21,7 @@ func TestRenderColumnsFileWritesATypedReferencePerColumn(t *testing.T) {
 		Columns: []modelinspect.ColumnInfo{
 			{GoName: "Amount", DBName: "amount", TypeExpr: "int64", TypeName: "int64", Numeric: true},
 			{GoName: "CreatedAt", DBName: "created_at", TypeExpr: "time.Time", TypeImports: map[string]string{"time": "time"}, TypeName: "time.Time", Time: true},
+			{GoName: "Day", DBName: "day", TypeExpr: "gst.Date", TypeImports: map[string]string{"github.com/hydroan/gst": "gst"}, TypeName: "datatypes.Date", Time: true, Date: true},
 			{GoName: "Elapsed", DBName: "elapsed", TypeExpr: "time.Duration", TypeImports: map[string]string{"time": "time"}, TypeName: "time.Duration", Numeric: true},
 			{GoName: "ID", DBName: "id", TypeExpr: "uuid.UUID", TypeImports: map[string]string{"github.com/gofrs/uuid/v5": "uuid"}, TypeName: "uuid.UUID"},
 			{GoName: "Tags", DBName: "tags", TypeName: "datatypes.JSONSlice[string]", JSONStrings: true},
@@ -47,6 +48,7 @@ import (
 var RecordCols = struct {
 	Amount    gst.NumericColumn[int64]
 	CreatedAt gst.TimeColumn
+	Day       gst.DateColumn
 	Elapsed   gst.NumericColumn[time.Duration]
 	ID        gst.Column[uuid.UUID]
 	Tags      gst.JSONStringsColumn
@@ -54,6 +56,7 @@ var RecordCols = struct {
 }{
 	Amount:    gst.NewNumericColumn[*Record, int64]("amount"),
 	CreatedAt: gst.NewTimeColumn[*Record]("created_at"),
+	Day:       gst.NewDateColumn[*Record]("day"),
 	Elapsed:   gst.NewNumericColumn[*Record, time.Duration]("elapsed"),
 	ID:        gst.NewColumn[*Record, uuid.UUID]("id"),
 	Tags:      gst.NewJSONStringsColumn[*Record]("tags"),

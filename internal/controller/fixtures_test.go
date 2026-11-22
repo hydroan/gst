@@ -19,6 +19,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/datatypes"
 	"github.com/hydroan/gst/internal/middleware"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
@@ -27,7 +28,7 @@ import (
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
-	"gorm.io/datatypes"
+	gormdatatypes "gorm.io/datatypes"
 )
 
 // sampleRecord is the table model the handler tests read and write, keyed by
@@ -127,13 +128,13 @@ func (nestedSample) TableName() string { return "controller_nested_samples" }
 // record a test writes names its day: MySQL refuses the zero date a record
 // without one holds.
 type datedSample struct {
-	Name     string            `json:"name" query:"name"`
-	Day      modelschema.Date  `json:"day" query:"day"`
-	Due      *modelschema.Date `json:"due" query:"due"`
-	ClosedAt *time.Time        `json:"closed_at" query:"closed_at"`
-	Meta     datatypes.JSONMap `json:"meta" query:"meta"`
-	Count    int               `json:"count" query:"count"`
-	Clock    datatypes.Time    `json:"clock" query:"clock"`
+	Name     string                `json:"name" query:"name"`
+	Day      datatypes.Date        `json:"day" query:"day"`
+	Due      *datatypes.Date       `json:"due" query:"due"`
+	ClosedAt *time.Time            `json:"closed_at" query:"closed_at"`
+	Meta     gormdatatypes.JSONMap `json:"meta" query:"meta"`
+	Count    int                   `json:"count" query:"count"`
+	Clock    gormdatatypes.Time    `json:"clock" query:"clock"`
 
 	modelregistry.Query
 	modelregistry.Base
@@ -681,7 +682,7 @@ func loadSample(t *testing.T, id string) *sampleRecord {
 // and returns it with its id.
 func createDated(t *testing.T, name, day string) *datedSample {
 	t.Helper()
-	on, err := modelschema.ParseDate(day)
+	on, err := datatypes.ParseDate(day)
 	require.NoError(t, err)
 	record := &datedSample{Name: name, Day: on}
 	require.NoError(t, database.Database[*datedSample](context.Background()).Create(record))

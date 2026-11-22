@@ -362,8 +362,8 @@ func typeKey(t types.Type) string {
 }
 
 // dateTypeKey is what typeKey answers for the framework's calendar day,
-// model.Date, the alias of a type of an internal package.
-const dateTypeKey = ggconst.ImportPathGst + "/internal/modelschema.Date"
+// gst.Date, the alias of a type of an internal package.
+const dateTypeKey = ggconst.ImportPathGst + "/internal/datatypes.Date"
 
 // toProto returns the statements encoding src, a Go value of type t, into
 // dst, a message field of protobuf type ft. A value the field holds as it

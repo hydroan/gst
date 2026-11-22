@@ -1,16 +1,17 @@
-package modelschema
+// Package datatypes holds the value types the framework declares for model
+// fields itself, where a project would otherwise reach for a third-party
+// type: each stores, scans and writes its JSON the way the framework's
+// contract says. The root gst package forwards them to projects.
+package datatypes
 
 import (
 	"bytes"
 	"database/sql/driver"
 	"encoding/json"
-	"fmt"
-	"reflect"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"gorm.io/datatypes"
+	gormdatatypes "gorm.io/datatypes"
 )
 
 // Date is a calendar day, a year, a month and a day: a birthday, a due day,
@@ -77,59 +78,23 @@ func (d *Date) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// Scan reads the day a date column holds, the way datatypes.Date reads it.
+// Scan reads the day a date column holds, the way gormdatatypes.Date reads
+// it.
 func (d *Date) Scan(value any) error {
-	return (*datatypes.Date)(d).Scan(value)
+	return (*gormdatatypes.Date)(d).Scan(value)
 }
 
 // Value writes the day for a date column as its midnight in UTC, whatever
-// location the time is in. datatypes.Date writes the midnight of the time's
-// own location, an instant a connection in UTC, the one the framework opens,
-// reads as the day before for a location east of it.
+// location the time is in. gormdatatypes.Date writes the midnight of the
+// time's own location, an instant a connection in UTC, the one the framework
+// opens, reads as the day before for a location east of it.
 func (d Date) Value() (driver.Value, error) {
 	year, month, day := time.Time(d).Date()
 	return time.Date(year, month, day, 0, 0, 0, 0, time.UTC), nil
 }
 
-// GormDataType declares the date column, the one datatypes.Date declares.
+// GormDataType declares the date column, the one gormdatatypes.Date
+// declares.
 func (Date) GormDataType() string {
-	return datatypes.Date{}.GormDataType()
-}
-
-// ValidateDateColumns refuses a date column a model declares by a type other
-// than Date: the Date of gorm.io/datatypes, and a time.Time, or any other
-// type, a gorm type tag declares a date. Only a Date is a day on the wire:
-// the library's type and a time.Time write the instant of a midnight,
-// 2026-01-02T00:00:00Z, which is that day to a reader in the zone it was
-// written in alone. A model with no date column has nothing to hold to.
-//
-// Every such column is reported in one error, which table preparation fails
-// the start with and the column inspection gg builds into a project hands to
-// gg check; the public inspect.ValidateDateColumns forwards to it. For a
-// model Record declaring Day datatypes.Date and Due *time.Time under
-// gorm:"type:date" the error reads:
-//
-//	model Record: field Day stores a date as datatypes.Date; field Due stores a date as *time.Time; a date column is declared model.Date, or *model.Date when it is optional
-func ValidateDateColumns(typ reflect.Type) error {
-	columns, err := Columns(typ)
-	if err != nil {
-		return err
-	}
-	var refused []string
-	for _, column := range columns {
-		declared := column.Type
-		for declared.Kind() == reflect.Pointer {
-			declared = declared.Elem()
-		}
-		if IsDateColumn(column) && declared != reflect.TypeFor[Date]() {
-			refused = append(refused, fmt.Sprintf("field %s stores a date as %s", column.GoName, column.Type))
-		}
-	}
-	if len(refused) == 0 {
-		return nil
-	}
-	for typ.Kind() == reflect.Pointer {
-		typ = typ.Elem()
-	}
-	return errors.Newf("model %s: %s; a date column is declared model.Date, or *model.Date when it is optional", typ.Name(), strings.Join(refused, "; "))
+	return gormdatatypes.Date{}.GormDataType()
 }

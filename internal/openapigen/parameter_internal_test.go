@@ -12,7 +12,7 @@ import (
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/stretchr/testify/require"
-	"gorm.io/datatypes"
+	gormdatatypes "gorm.io/datatypes"
 )
 
 // openapiTimeFilterModel filters on a time, which no bare key decodes into,
@@ -197,14 +197,14 @@ type OpenAPIQueryExtra struct {
 // from JSON and tagged, a struct embedded by name and one embedded through a
 // pointer.
 type openapiFilterQueryModel struct {
-	Visible   string            `json:"visible" query:"visible"`
-	Active    bool              `json:"active" query:"active"`
-	ExpiresAt time.Time         `json:"expires_at" query:"expires_at"`
-	Meta      datatypes.JSONMap `json:"meta" query:"meta"`
-	Note      string            `json:"note"`
-	Secret    string            `json:"-" query:"secret"`
-	Scope     string            `json:"-" gorm:"-" query:"scope"`
-	First     openapiQueryPart  `json:"first" gorm:"embedded;embeddedPrefix:first_" query:"first"`
+	Visible   string                `json:"visible" query:"visible"`
+	Active    bool                  `json:"active" query:"active"`
+	ExpiresAt time.Time             `json:"expires_at" query:"expires_at"`
+	Meta      gormdatatypes.JSONMap `json:"meta" query:"meta"`
+	Note      string                `json:"note"`
+	Secret    string                `json:"-" query:"secret"`
+	Scope     string                `json:"-" gorm:"-" query:"scope"`
+	First     openapiQueryPart      `json:"first" gorm:"embedded;embeddedPrefix:first_" query:"first"`
 	*OpenAPIQueryExtra
 
 	modelregistry.Query
@@ -214,14 +214,14 @@ type openapiFilterQueryModel struct {
 // openapiPlainFilterQueryModel is openapiFilterQueryModel paging by offset
 // without model.Query, so no column takes an operator.
 type openapiPlainFilterQueryModel struct {
-	Visible   string            `json:"visible" query:"visible"`
-	Active    bool              `json:"active" query:"active"`
-	ExpiresAt time.Time         `json:"expires_at" query:"expires_at"`
-	Meta      datatypes.JSONMap `json:"meta" query:"meta"`
-	Note      string            `json:"note"`
-	Secret    string            `json:"-" query:"secret"`
-	Scope     string            `json:"-" gorm:"-" query:"scope"`
-	First     openapiQueryPart  `json:"first" gorm:"embedded;embeddedPrefix:first_" query:"first"`
+	Visible   string                `json:"visible" query:"visible"`
+	Active    bool                  `json:"active" query:"active"`
+	ExpiresAt time.Time             `json:"expires_at" query:"expires_at"`
+	Meta      gormdatatypes.JSONMap `json:"meta" query:"meta"`
+	Note      string                `json:"note"`
+	Secret    string                `json:"-" query:"secret"`
+	Scope     string                `json:"-" gorm:"-" query:"scope"`
+	First     openapiQueryPart      `json:"first" gorm:"embedded;embeddedPrefix:first_" query:"first"`
 	*OpenAPIQueryExtra
 
 	modelregistry.Base
@@ -331,7 +331,7 @@ func TestAddQueryParametersDocumentsFieldOperatorFilters(t *testing.T) {
 // openapiTagsFilterModel stores its tags as a JSON document, which no bare
 // key decodes into and the like family alone matches by its text.
 type openapiTagsFilterModel struct {
-	Tags datatypes.JSONSlice[string] `json:"tags" query:"tags"`
+	Tags gormdatatypes.JSONSlice[string] `json:"tags" query:"tags"`
 
 	modelregistry.Query
 	modelregistry.Base

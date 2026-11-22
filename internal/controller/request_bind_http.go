@@ -13,9 +13,10 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/internal/datatypes"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
-	"gorm.io/datatypes"
+	gormdatatypes "gorm.io/datatypes"
 )
 
 // This file keeps every bound request body service-safe and every body
@@ -155,13 +156,13 @@ func decodeAtPointer[T any](dec *jsontext.Decoder, v *T) error {
 // is, as datatypes.Time leaves it; a refusal is a SemanticError at the value's
 // JSON Pointer, which the options json.DefaultOptionsV1 names report as a
 // json.UnmarshalTypeError naming the field, items.1.clock.
-var strictTimeOfDay = jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, t *datatypes.Time) error {
+var strictTimeOfDay = jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, t *gormdatatypes.Time) error {
 	value, err := dec.ReadValue()
 	if err != nil || value.Kind() == jsontext.KindNull {
 		return err
 	}
 	refused := func(cause error) error {
-		return &jsonv2.SemanticError{JSONPointer: dec.StackPointer(), JSONKind: value.Kind(), GoType: reflect.TypeFor[datatypes.Time](), Err: cause}
+		return &jsonv2.SemanticError{JSONPointer: dec.StackPointer(), JSONKind: value.Kind(), GoType: reflect.TypeFor[gormdatatypes.Time](), Err: cause}
 	}
 	if value.Kind() != jsontext.KindString {
 		return refused(nil)
@@ -174,11 +175,11 @@ var strictTimeOfDay = jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, t *da
 	if err != nil {
 		return refused(err)
 	}
-	*t = datatypes.Time(since)
+	*t = gormdatatypes.Time(since)
 	return nil
 })
 
-// dayAtPointer reads a day the way modelschema.Date reads one from JSON, a
+// dayAtPointer reads a day the way datatypes.Date reads one from JSON, a
 // string in time.DateOnly and nothing else, a null leaving the day as it is,
 // and reports a value the type refuses as a SemanticError at the value's
 // JSON Pointer. Left to the type's own UnmarshalJSON the refusal comes back
@@ -187,13 +188,13 @@ var strictTimeOfDay = jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, t *da
 // which clientSafeBindError answers the way it answers a time it refuses. A
 // number is read here too, unlike decodeAtPointer leaves one: no day is a
 // number, so the default decoding has nothing of its own to say about it.
-var dayAtPointer = jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, day *modelschema.Date) error {
+var dayAtPointer = jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, day *datatypes.Date) error {
 	value, err := dec.ReadValue()
 	if err != nil {
 		return err
 	}
 	if err = day.UnmarshalJSON(value); err != nil {
-		return &jsonv2.SemanticError{JSONPointer: dec.StackPointer(), JSONKind: value.Kind(), JSONValue: value.Clone(), GoType: reflect.TypeFor[modelschema.Date](), Err: err}
+		return &jsonv2.SemanticError{JSONPointer: dec.StackPointer(), JSONKind: value.Kind(), JSONValue: value.Clone(), GoType: reflect.TypeFor[datatypes.Date](), Err: err}
 	}
 	return nil
 })

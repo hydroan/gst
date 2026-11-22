@@ -9,6 +9,7 @@ import (
 
 	"tmpapp/model"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/grpc"
 	gstmodel "github.com/hydroan/gst/model"
 	"google.golang.org/genproto/googleapis/type/date"
@@ -642,7 +643,7 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 		}
 	}
 	if p.GetDue() != nil {
-		var x gstmodel.Date
+		var x gst.Date
 		x, err = grpc.Date("due", p.GetDue())
 		if err != nil {
 			return nil, err
@@ -650,7 +651,7 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 		m.Due = &x
 	}
 	if p.GetDays() != nil {
-		m.Days = make([]gstmodel.Date, len(p.GetDays()))
+		m.Days = make([]gst.Date, len(p.GetDays()))
 		for i, v := range p.GetDays() {
 			m.Days[i], err = grpc.Date(grpc.Element("days", i), v)
 			if err != nil {

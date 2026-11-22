@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"gorm.io/datatypes"
+	gormdatatypes "gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -19,12 +19,12 @@ func (*pointerDataType) GormDataType() string { return "JSONB" }
 func TestIsJSONTypeReadsTheTypesOwnDeclaration(t *testing.T) {
 	t.Run("JSON", func(t *testing.T) {
 		for _, typ := range []reflect.Type{
-			reflect.TypeFor[datatypes.JSON](),
-			reflect.TypeFor[datatypes.JSONType[map[string]string]](),
-			reflect.TypeFor[datatypes.JSONSlice[string]](),
-			reflect.TypeFor[datatypes.JSONMap](),
+			reflect.TypeFor[gormdatatypes.JSON](),
+			reflect.TypeFor[gormdatatypes.JSONType[map[string]string]](),
+			reflect.TypeFor[gormdatatypes.JSONSlice[string]](),
+			reflect.TypeFor[gormdatatypes.JSONMap](),
 			// A pointer column stores the pointed-to document.
-			reflect.TypeFor[*datatypes.JSONSlice[string]](),
+			reflect.TypeFor[*gormdatatypes.JSONSlice[string]](),
 			// The declaration may hang off the pointer receiver, and the
 			// spelling is case-insensitive.
 			reflect.TypeFor[pointerDataType](),

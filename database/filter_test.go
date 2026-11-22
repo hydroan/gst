@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/modelschema"
+	"github.com/hydroan/gst/internal/datatypes"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/stretchr/testify/require"
-	"gorm.io/datatypes"
+	gormdatatypes "gorm.io/datatypes"
 )
 
 // Tests for the predicate engine in filter.go: the operator filters, their
@@ -468,7 +468,7 @@ func TestDatabaseFilters(t *testing.T) {
 		List(&users))
 
 	// Test the service-only jsoncontains operator on a JSON array column.
-	addrUser := &TestUser{Name: "user6", Email: "user6@example.com", Age: 23, Addr: datatypes.NewJSONSlice([]string{"alpha", "beta"}), ID: "u6"}
+	addrUser := &TestUser{Name: "user6", Email: "user6@example.com", Age: 23, Addr: gormdatatypes.NewJSONSlice([]string{"alpha", "beta"}), ID: "u6"}
 	require.NoError(t, database.Database[*TestUser](context.Background()).Create(addrUser))
 
 	users = make([]*TestUser, 0)
@@ -637,8 +637,8 @@ func TestDatabaseScalarFiltersOnBytesAndValuers(t *testing.T) {
 	ctx := context.Background()
 	t.Cleanup(func() { _ = database.DB().Exec("DELETE FROM test_scored_records").Error })
 	require.NoError(t, database.Database[*TestScoredRecord](ctx).Create(
-		&TestScoredRecord{Name: "first", Digest: []byte{0x00, 0xff, 0x10}, Token: sampleToken{1}, Scores: datatypes.NewJSONSlice([]int{1, 2})},
-		&TestScoredRecord{Name: "second", Digest: []byte{0x01}, Token: sampleToken{2}, Scores: datatypes.NewJSONSlice([]int{3})},
+		&TestScoredRecord{Name: "first", Digest: []byte{0x00, 0xff, 0x10}, Token: sampleToken{1}, Scores: gormdatatypes.NewJSONSlice([]int{1, 2})},
+		&TestScoredRecord{Name: "second", Digest: []byte{0x01}, Token: sampleToken{2}, Scores: gormdatatypes.NewJSONSlice([]int{3})},
 	))
 	names := func(filter types.Filter) []string {
 		rows := make([]*TestScoredRecord, 0)
@@ -659,7 +659,7 @@ func TestDatabaseScalarFiltersOnBytesAndValuers(t *testing.T) {
 	require.Equal(t, []string{"second"}, names(TestScoredRecordCols.Token.Ne(sampleToken{1})))
 	require.Equal(t, []string{"second"}, names(TestScoredRecordCols.Token.Gt(sampleToken{1})))
 	require.Equal(t, []string{"first", "second"}, names(TestScoredRecordCols.Token.In(sampleToken{1}, sampleToken{2})))
-	require.Empty(t, names(TestScoredRecordCols.Scores.Eq(datatypes.NewJSONSlice([]int{1, 2}))), "a JSON array column keeps failing closed on a comparison")
+	require.Empty(t, names(TestScoredRecordCols.Scores.Eq(gormdatatypes.NewJSONSlice([]int{1, 2}))), "a JSON array column keeps failing closed on a comparison")
 }
 
 // TestDatabasePatternFiltersOnNumericColumns pins that the like family and
@@ -805,19 +805,20 @@ func TestDatabaseFiltersOnTimeColumns(t *testing.T) {
 // TestDatabaseFiltersOnDateColumns pins the runtime behavior of comparisons
 // on a date column across dialects, a required day and an optional one alike:
 // the URL parser binds a day as its midnight in types.FilterTimeLayout,
-// service code binds a time.Time through the time reference gg gen writes for
-// the column, and both compare by the UTC day the value falls on, while a
-// Date compares by the day it names; each selects the rows of that day
-// however the dialect stores the date. The same reference buckets the column,
-// so a report groups by it.
+// service code binds a Date through the date reference gg gen writes for the
+// column, which compares by the day it names, and an instant given by the
+// column's name, the way the framework's own code builds a filter, compares
+// by the UTC day it falls on; each selects the rows of that day however the
+// dialect stores the date. The same reference buckets the column, so a report
+// groups by it.
 func TestDatabaseFiltersOnDateColumns(t *testing.T) {
 	defer cleanupDatedData()
 	day := func(d int) time.Time { return time.Date(2026, time.January, d, 0, 0, 0, 0, time.UTC) }
-	due := func(d int) *modelschema.Date { on := modelschema.Date(day(d)); return &on }
+	due := func(d int) *datatypes.Date { on := datatypes.Date(day(d)); return &on }
 	require.NoError(t, database.Database[*TestDatedRecord](context.Background()).Create(
-		&TestDatedRecord{Label: "d1", Day: modelschema.Date(day(1)), Due: due(1)},
-		&TestDatedRecord{Label: "d2", Day: modelschema.Date(day(2)), Due: due(2)},
-		&TestDatedRecord{Label: "d3", Day: modelschema.Date(day(3)), Due: due(3)},
+		&TestDatedRecord{Label: "d1", Day: datatypes.Date(day(1)), Due: due(1)},
+		&TestDatedRecord{Label: "d2", Day: datatypes.Date(day(2)), Due: due(2)},
+		&TestDatedRecord{Label: "d3", Day: datatypes.Date(day(3)), Due: due(3)},
 	))
 
 	labels := func(t *testing.T, f types.Filter) []string {
@@ -839,18 +840,14 @@ func TestDatabaseFiltersOnDateColumns(t *testing.T) {
 		require.Equal(t, []string{"d2", "d3"}, labels(t, types.FilterGte("day", "2026-01-02 00:00:00")))
 	})
 
-	t.Run("TimeValueBound", func(t *testing.T) {
-		require.Equal(t, []string{"d2"}, labels(t, TestDatedRecordCols.Day.Eq(day(2))))
-		require.Equal(t, []string{"d1"}, labels(t, TestDatedRecordCols.Day.Lt(day(2))))
-	})
-
 	t.Run("DayValueBound", func(t *testing.T) {
 		// A Date names the day its time reads in its own location: 07:00 at
 		// +08:00 on the 2nd is the 2nd, though the 1st in UTC.
-		on := modelschema.Date(time.Date(2026, time.January, 2, 7, 0, 0, 0, time.FixedZone("", 8*3600)))
-		for _, column := range []string{"day", "due"} {
-			require.Equal(t, []string{"d2"}, labels(t, types.FilterEq(column, on)), column)
-			require.Equal(t, []string{"d1", "d3"}, labels(t, types.FilterNotIn(column, []modelschema.Date{on})), column)
+		on := datatypes.Date(time.Date(2026, time.January, 2, 7, 0, 0, 0, time.FixedZone("", 8*3600)))
+		for _, column := range []types.DateColumn{TestDatedRecordCols.Day, TestDatedRecordCols.Due} {
+			require.Equal(t, []string{"d2"}, labels(t, column.Eq(on)), column.Name())
+			require.Equal(t, []string{"d1"}, labels(t, column.Lt(on)), column.Name())
+			require.Equal(t, []string{"d1", "d3"}, labels(t, column.NotIn(on)), column.Name())
 		}
 	})
 
@@ -862,11 +859,11 @@ func TestDatabaseFiltersOnDateColumns(t *testing.T) {
 			require.Equal(t, []string{"d2"}, labels(t, types.FilterEq(column, "2026-01-02 16:00:00")), column)
 			require.Equal(t, []string{"d1", "d2"}, labels(t, types.FilterLte(column, time.Date(2026, time.January, 2, 15, 59, 0, 0, time.UTC))), column)
 		}
-		require.Equal(t, []string{"d2", "d3"}, labels(t, TestDatedRecordCols.Due.Gt(time.Date(2026, time.January, 1, 23, 0, 0, 0, time.UTC))))
+		require.Equal(t, []string{"d2", "d3"}, labels(t, types.FilterGt("due", time.Date(2026, time.January, 1, 23, 0, 0, 0, time.UTC))))
 		// The members of an in or a notin list name their days the same way.
 		members := []time.Time{time.Date(2026, time.January, 1, 16, 0, 0, 0, time.UTC), time.Date(2026, time.January, 3, 9, 0, 0, 0, time.UTC)}
-		require.Equal(t, []string{"d1", "d3"}, labels(t, TestDatedRecordCols.Due.In(members...)))
-		require.Equal(t, []string{"d2"}, labels(t, TestDatedRecordCols.Day.NotIn(members...)))
+		require.Equal(t, []string{"d1", "d3"}, labels(t, types.FilterIn("due", members)))
+		require.Equal(t, []string{"d2"}, labels(t, types.FilterNotIn("day", members)))
 	})
 
 	t.Run("BucketsByDay", func(t *testing.T) {
@@ -902,11 +899,11 @@ func TestDatabaseFiltersFollowTheStoredType(t *testing.T) {
 	require.NoError(t, database.Database[*TestTypedRecord](ctx).Create(
 		&TestTypedRecord{
 			Label: "first", Settled: sql.NullTime{Time: settled, Valid: true}, Tally: sql.NullInt64{Int64: 15, Valid: true},
-			Payload: `{"code":"alpha"}`, Clock: datatypes.NewTime(9, 0, 0, 0),
+			Payload: `{"code":"alpha"}`, Clock: gormdatatypes.NewTime(9, 0, 0, 0),
 		},
 		&TestTypedRecord{
 			Label: "second", Settled: sql.NullTime{Time: settled.Add(time.Hour), Valid: true}, Tally: sql.NullInt64{Int64: 27, Valid: true},
-			Payload: `{"code":"beta"}`, Clock: datatypes.NewTime(17, 30, 0, 0),
+			Payload: `{"code":"beta"}`, Clock: gormdatatypes.NewTime(17, 30, 0, 0),
 		},
 	))
 	labels := func(t *testing.T, f types.Filter) []string {

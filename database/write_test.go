@@ -15,7 +15,7 @@ import (
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
-	"gorm.io/datatypes"
+	gormdatatypes "gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -1281,11 +1281,11 @@ func TestDatabaseUpdateByIDWritesAJSONStringsColumnAsADocument(t *testing.T) {
 	defer cleanupTestData()
 	setupTestData(t)
 	addr := types.NewJSONStringsColumn[*TestUser]("addr")
-	require.NoError(t, database.Database[*TestUser](context.Background()).UpdateByID(u1.ID, addr.Set(datatypes.NewJSONSlice([]string{"home", "office"}))))
+	require.NoError(t, database.Database[*TestUser](context.Background()).UpdateByID(u1.ID, addr.Set(gormdatatypes.NewJSONSlice([]string{"home", "office"}))))
 
 	u := new(TestUser)
 	require.NoError(t, database.Database[*TestUser](context.Background()).Get(u, u1.ID))
-	require.Equal(t, datatypes.NewJSONSlice([]string{"home", "office"}), u.Addr)
+	require.Equal(t, gormdatatypes.NewJSONSlice([]string{"home", "office"}), u.Addr)
 
 	users := make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
@@ -1296,7 +1296,7 @@ func TestDatabaseUpdateByIDWritesAJSONStringsColumnAsADocument(t *testing.T) {
 
 	require.NoError(t, database.Database[*TestUser](context.Background()).UpdateByID(u1.ID, addr.Set([]string{"office"})))
 	require.NoError(t, database.Database[*TestUser](context.Background()).Get(u, u1.ID))
-	require.Equal(t, datatypes.NewJSONSlice([]string{"office"}), u.Addr)
+	require.Equal(t, gormdatatypes.NewJSONSlice([]string{"office"}), u.Addr)
 }
 
 // TestDatabaseWritesLeaveAssociationsAlone pins that Create, Update and

@@ -33,6 +33,7 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
@@ -46,12 +47,13 @@ type RecordKind string
 type Record struct {
 	Status   string              `+"`json:\"status\"`"+`
 	Score    int64               `+"`json:\"score\"`"+`
-	Day      model.Date          `+"`json:\"day\"`"+`
+	Day      gst.Date            `+"`json:\"day\"`"+`
 	ClosedAt *time.Time          `+"`json:\"closed_at\"`"+`
 	Settled  sql.NullTime        `+"`json:\"settled\"`"+`
 	Tally    sql.NullInt64       `+"`json:\"tally\"`"+`
 	Clock    datatypes.Time      `+"`json:\"clock\"`"+`
 	Times    []time.Time         `+"`json:\"times\" gorm:\"serializer:json\"`"+`
+	Days     []gst.Date          `+"`json:\"days\" gorm:\"serializer:json\"`"+`
 	Kinds    []RecordKind        `+"`json:\"kinds\" gorm:\"serializer:json\"`"+`
 	ByKind   map[RecordKind]int64 `+"`json:\"by_kind\" gorm:\"serializer:json\"`"+`
 
@@ -152,7 +154,7 @@ func (i *Item) DeleteBefore(ctx context.Context) error {
 	recordColumns, err := os.ReadFile(recordColumnsFile)
 	require.NoError(t, err)
 	require.Contains(t, string(recordColumns), "var RecordCols = struct")
-	require.Contains(t, string(recordColumns), `gst.NewTimeColumn[*Record]("day")`, "a date column gets the time reference")
+	require.Contains(t, string(recordColumns), `gst.NewDateColumn[*Record]("day")`, "a date column gets the date reference")
 	require.Contains(t, string(recordColumns), `gst.NewTimeColumn[*Record]("closed_at")`, "an optional instant gets the time reference")
 	// gorm reads a Valuer through the value it holds, and so does the
 	// reference gg gen writes for it.
@@ -166,6 +168,9 @@ func (i *Item) DeleteBefore(ctx context.Context) error {
 	require.Contains(t, string(recordColumns), "\t\"time\"\n", "the import of a type an element names")
 	require.Contains(t, string(recordColumns), `gst.NewColumn[*Record, []RecordKind]("kinds")`)
 	require.Contains(t, string(recordColumns), `gst.NewColumn[*Record, map[RecordKind]int64]("by_kind")`)
+	// The framework's day is written by the name the root package forwards
+	// it under, inside a composite type as well.
+	require.Contains(t, string(recordColumns), `gst.NewColumn[*Record, []gst.Date]("days")`)
 	itemColumns, err := os.ReadFile(itemColumnsFile)
 	require.NoError(t, err)
 	require.Contains(t, string(itemColumns), "var ItemCols = struct")

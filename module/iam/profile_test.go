@@ -12,7 +12,7 @@ import (
 	modeliamprofile "github.com/hydroan/gst/internal/model/iam/profile"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/stretchr/testify/require"
-	"gorm.io/datatypes"
+	gormdatatypes "gorm.io/datatypes"
 )
 
 const profilePath = "/api/iam/profile"
@@ -46,7 +46,7 @@ func TestProfilePatch(t *testing.T) {
 	t.Run("create_profile", func(t *testing.T) {
 		displayName := "Profile Test"
 		avatar := "https://example.com/avatar.png"
-		metadata := datatypes.JSONMap{
+		metadata := gormdatatypes.JSONMap{
 			"locale": "en-US",
 			"public": true,
 		}
@@ -79,14 +79,14 @@ func TestProfilePatch(t *testing.T) {
 		// The fields the request left out keep what they had, which is what
 		// makes this a patch rather than a replace.
 		require.Equal(t, "Profile Test", rsp.DisplayName)
-		require.Equal(t, datatypes.JSONMap{
+		require.Equal(t, gormdatatypes.JSONMap{
 			"locale": "en-US",
 			"public": true,
 		}, rsp.Metadata)
 	})
 
 	t.Run("replace_metadata", func(t *testing.T) {
-		metadata := datatypes.JSONMap{
+		metadata := gormdatatypes.JSONMap{
 			"timezone": "UTC",
 		}
 
@@ -104,7 +104,7 @@ func TestProfilePatch(t *testing.T) {
 	t.Run("patch_several_fields_at_once", func(t *testing.T) {
 		displayName := "Renamed Profile"
 		avatar := "https://example.com/third.png"
-		metadata := datatypes.JSONMap{
+		metadata := gormdatatypes.JSONMap{
 			"locale": "zh-CN",
 		}
 

@@ -201,12 +201,12 @@ func (Record) Design() {
 | 含义 | 字段类型 | 库里存成 | 请求体与 URL 过滤的写法 | gRPC |
 |---|---|---|---|---|
 | 时刻：某一个瞬间 | `time.Time`、`*time.Time` | 各方言统一存 UTC | RFC 3339，必须带时区偏移，如 `2026-01-02T08:00:00+08:00` | `google.protobuf.Timestamp` |
-| 日期：某一天 | `model.Date`、`*model.Date` | 日期列 | `2026-01-02`，带时刻的写法不收 | `google.type.Date`，年、月、日三个数 |
+| 日期：某一天 | `gst.Date`、`*gst.Date` | 日期列 | `2026-01-02`，带时刻的写法不收 | `google.type.Date`，年、月、日三个数 |
 | 时段：一天里的几点几分 | `datatypes.Time` | 时间列，MySQL 上不保留小数秒 | `15:04:05`，可带小数秒，`17:30:00.5` 是 17:30 过半秒 | `google.protobuf.Duration`，从零点起、不满一天 |
 
 - 写法不对或超出范围的值答 400（gRPC 答 InvalidArgument），并点名字段；不带时区的时间和 Unix 时间戳一律不收。
 - 响应里时刻写成 RFC 3339，日期写成 `2026-01-02`；时段写成 `17:30:00`，有小数秒时写满九位（`17:30:00.500000000`）。
-- 日期列一律声明成 `model.Date`，可空的用 `*model.Date`；用 `datatypes.Date` 或给 `time.Time` 加 `gorm:"type:date"` 来声明日期列，服务启动时报错退出，`gg check` 也会拦下。服务代码里 `model.Date(t)` 取的是 `t` 在它自己时区里的那一天，要按 UTC 取就写 `model.Date(t.UTC())`。
+- 日期列一律声明成 `gst.Date`，可空的用 `*gst.Date`；用 `datatypes.Date` 或给 `time.Time` 加 `gorm:"type:date"` 来声明日期列，服务启动时报错退出，`gg check` 也会拦下。服务代码里 `gst.Date(t)` 取的是 `t` 在它自己时区里的那一天，要按 UTC 取就写 `gst.Date(t.UTC())`；按日期列过滤用生成的列引用，值也给 `gst.Date`。
 - URL 过滤对这三种字段只支持比较（`eq`、`ne`、`gt`、`gte`、`lt`、`lte`）和 `isnull`，前端的完整写法见 [API_CONTRACT.md](API_CONTRACT.md)。
 - 写库时模型里每个 `time.Time`、`*time.Time` 字段都统一转成 UTC、截到毫秒，并写回内存里的模型，所以 `time.Now()` 写进去的值和回读的一样；框架自己写的 `created_at`、`updated_at`、`deleted_at` 同样。可空的时间用指针：非指针的零值时间在 MySQL 上写不进去，答 500。
 - 定时任务的表达式按 UTC 解释，按别的时区算要写 `CRON_TZ=` 前缀；分析查询按时间分桶也按存储的 UTC 切。要按运营时区切日，在查询里自己换算。
@@ -1244,7 +1244,7 @@ replace google.golang.org/genproto => google.golang.org/genproto v0.0.0-20261012
 - 数字一律是 `number`，超过 2^53 的 64 位整数在前端会丢失精度；带 `,string` 选项的字段是 `string`。
 - 同包声明了常量的 string、整数类型生成字面量联合，常量注释写进类型注释，与 Swagger 一致；常量用
   `<<`、`|` 等位运算定义的视为位标志，类型是 `number`；没有零值常量的枚举在使用处补 `| ""` 或 `| 0`。
-- `time.Time`、`model.Date`，以及只定义了 `MarshalText`、没有 `MarshalJSON` 的类型（`netip.Addr`、实现了它的枚举）
+- `time.Time`、`gst.Date`，以及只定义了 `MarshalText`、没有 `MarshalJSON` 的类型（`netip.Addr`、实现了它的枚举）
   是字符串；`any`、`json.RawMessage`、`datatypes.JSON` 是 `unknown`。
 
 JSON 形态由代码决定、无法从类型声明读出的写法，命令会列出全部位置后失败，不写任何文件：自定义了

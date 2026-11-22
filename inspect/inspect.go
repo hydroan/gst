@@ -61,7 +61,7 @@ func ValidateTenantIndexes(typ reflect.Type) error {
 }
 
 // ValidateDateColumns refuses a date column a model declares by a type other
-// than model.Date, the Date of gorm.io/datatypes or a time.Time a gorm type
+// than gst.Date, the Date of gorm.io/datatypes or a time.Time a gorm type
 // tag declares a date. The inspection program asks it of every model it
 // inspects, so gg check refuses what table preparation refuses at startup.
 func ValidateDateColumns(typ reflect.Type) error {

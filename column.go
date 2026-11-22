@@ -57,17 +57,28 @@ func NewNumericColumn[M TableNamer, T any](name string) NumericColumn[T] {
 	return types.NewNumericColumn[M, T](name)
 }
 
-// TimeColumn is the reference generated for a column holding a time value:
-// an instant, time.Time, or a calendar day, a Date, which a filter compares
-// by the UTC day the time it is given falls on. It embeds Column and adds
-// time bucketing, which is only meaningful over a time value and produces
-// garbage rather than an error on some dialects when it is not.
+// TimeColumn is the reference generated for a column holding an instant,
+// time.Time or a type holding one. It embeds Column and adds time bucketing,
+// which is only meaningful over a time value and produces garbage rather than
+// an error on some dialects when it is not.
 type TimeColumn = types.TimeColumn
 
 // NewTimeColumn returns the time reference to the named column of M's table,
 // carrying the bucketing group keys on top of everything Column has.
 func NewTimeColumn[M TableNamer](name string) TimeColumn {
 	return types.NewTimeColumn[M](name)
+}
+
+// DateColumn is the reference generated for a column holding a calendar
+// day, a Date: its filters take the day itself, where a TimeColumn
+// takes an instant. It embeds Column and adds the bucketing a day carries,
+// by day and by month.
+type DateColumn = types.DateColumn
+
+// NewDateColumn returns the date reference to the named column of M's table,
+// carrying the bucketing group keys on top of everything Column has.
+func NewDateColumn[M TableNamer](name string) DateColumn {
+	return types.NewDateColumn[M](name)
 }
 
 // JSONStringsColumn is the reference generated for a column storing a JSON

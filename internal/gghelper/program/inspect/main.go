@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/config"
 	gstmysql "github.com/hydroan/gst/database/mysql"
 	"github.com/hydroan/gst/inspect"
@@ -33,6 +34,7 @@ type columnInfo struct {
 	TypeName    string            `json:"type_name"`
 	Numeric     bool              `json:"numeric"`
 	Time        bool              `json:"time"`
+	Date        bool              `json:"date"`
 	JSONStrings bool              `json:"json_strings"`
 }
 
@@ -137,6 +139,10 @@ func main() {
 		for _, col := range cols {
 			expr, imports := describeType(col.Type, typ.PkgPath())
 			class := inspect.ClassifyColumn(col)
+			declared := col.Type
+			for declared.Kind() == reflect.Pointer {
+				declared = declared.Elem()
+			}
 			entry.Columns = append(entry.Columns, columnInfo{
 				GoName:      col.GoName,
 				DBName:      col.DBName,
@@ -145,6 +151,7 @@ func main() {
 				TypeName:    col.Type.String(),
 				Numeric:     class == inspect.ColumnClassNumeric,
 				Time:        class == inspect.ColumnClassTime,
+				Date:        declared == reflect.TypeFor[gst.Date](),
 				JSONStrings: inspect.IsJSONStringsType(col.Type),
 			})
 		}
@@ -203,10 +210,11 @@ func describeType(typ reflect.Type, modelPkg string) (expr string, imports map[s
 // path, which a business project cannot import, so the reference is
 // rewritten to the alias the model source actually wrote: model.Base and
 // its siblings for internal/modelregistry, model.Version for
-// internal/modelschema, the root gst package for internal/types, which
-// forwards under the same name every type of it a model can name and this
-// function writes back, the generic streams among them being
-// instantiations it declines, the service package for internal/apiaction,
+// internal/modelschema, the root gst package for internal/types and
+// internal/datatypes, which forwards under the same name every type of
+// them a model can name and this function writes back, gst.Date among them,
+// the generic streams being instantiations it declines, the service package
+// for internal/apiaction,
 // service.Phase among them, and, for the types a model stores as JSON, the
 // grpc package for internal/controller and internal/grpcserver, grpc.Filter
 // and grpc.Caller among them, sse for internal/sse and testutil for
@@ -224,7 +232,7 @@ func typeExpr(typ reflect.Type, modelPkg string, imports map[string]string) (str
 		case "github.com/hydroan/gst/internal/modelregistry", "github.com/hydroan/gst/internal/modelschema":
 			imports["github.com/hydroan/gst/model"] = "model"
 			return "model." + name, true
-		case "github.com/hydroan/gst/internal/types":
+		case "github.com/hydroan/gst/internal/types", "github.com/hydroan/gst/internal/datatypes":
 			imports["github.com/hydroan/gst"] = "gst"
 			return "gst." + name, true
 		case "github.com/hydroan/gst/internal/apiaction":

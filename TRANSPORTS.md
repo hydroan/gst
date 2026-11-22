@@ -297,7 +297,7 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 | 请求里的租户 | AIP-203：OUTPUT_ONLY 字段出现在请求里时，服务端清掉它、不得因此报错；IMMUTABLE 字段被要求改动时应答 INVALID_ARGUMENT | gRPC 的 `tenant_id` 只出不进，生成的 FromProto 不读它，请求带了也照常处理、租户不变。HTTP 的请求体能带 `tenant_id`：创建时照样写成调用方的租户；整条更新（含批量）带了别的租户答 400，固定文案「The request contains invalid parameters.」，因为这一列只在创建时写，答成功会让客户端以为记录挪了租户；补丁两线都跳过这个键（它是框架管理的字段）。跨租户身份经 HTTP 创建时可以在请求体里点名租户，经 gRPC 点不了；没有可退回的请求租户又没点名时，两线都答 400 / InvalidArgument |
 | 包名无版本段 | Buf 的 PACKAGE_VERSION_SUFFIX 要 `v1` 这样的后缀 | gst 没有 API 版本，包名就是项目名加目录 |
 | 不生成枚举 | AIP-126 用 enum | 字符串枚举保持 string，取值列在字段注释里，HTTP 与数据库里都是字符串 |
-| 时间类型 | AIP-142 一天里的时刻用 `google.type.TimeOfDay`、日期用 `google.type.Date` | 日期照 AIP：`model.Date` 映射 `google.type.Date`（年、月、日三个数），HTTP 上是 `2026-01-02`；时段不照：`datatypes.Time` 映射 `google.protobuf.Duration`（从零点起的时长） |
+| 时间类型 | AIP-142 一天里的时刻用 `google.type.TimeOfDay`、日期用 `google.type.Date` | 日期照 AIP：`gst.Date` 映射 `google.type.Date`（年、月、日三个数），HTTP 上是 `2026-01-02`；时段不照：`datatypes.Time` 映射 `google.protobuf.Duration`（从零点起的时长） |
 | Delete 的响应 | AIP-135 返回 `google.protobuf.Empty` | 每个 rpc 独享自己的空 `DeleteXxxResponse`，照 Buf 风格指南，日后加字段不换类型 |
 | 不写 HTTP 注解 | AIP 用 `google.api.http`、`google.api.field_behavior` 标路由与必填 | 没有 gateway，路由与 HTTP 方法由注册物描述（`grpc.Method`），必填由模型的 binding tag 决定，.proto 不标注 |
 | proto3 表达不了的形态 | proto3 的标量没有「未设置」，repeated 与 map 的元素不能为 nil，`google.protobuf.Value` 的数字是 double | 这些照 protobuf 的本性走，写在这里不另加机制：切片、map 的 nil 与空过线后分不开（nil 的 JSONSlice 经 gRPC 写库是空数组还是 null 取决于对端怎么发）；`[]*T`、`map[K]*T` 里指向消息的 nil 元素过线变成空消息、解出来是零值（指向标量的指针元素 gg gen 直接拒绝，无从表达「未设置」）；any 与 JSON 对象字段里超过 2^53 的整数经 Value 丢精度，NaN 与无穷按 Value 的 JSON 映射变成字符串 "NaN"、"Infinity"；集合、map 值与可选字段里的零值时间、零值日期编成 0001-01-01 再读回零值 |

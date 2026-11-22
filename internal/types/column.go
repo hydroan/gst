@@ -6,7 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"gorm.io/datatypes"
+	"github.com/hydroan/gst/internal/datatypes"
+	gormdatatypes "gorm.io/datatypes"
 )
 
 // AnyColumnRef is the type-erased view of every generated column reference,
@@ -67,9 +68,10 @@ type ColumnRef[T any] interface {
 // the plain-name constructors are left to code that learns the column only at
 // run time, such as framework internals reading it from a request.
 //
-// Columns whose Go type is numeric, time.Time, or a JSON array of strings are
-// generated as NumericColumn, TimeColumn or JSONStringsColumn instead, which
-// embed this type and add the functions that are only meaningful there.
+// Columns whose Go type is numeric, time.Time, a calendar day or a JSON array
+// of strings are generated as NumericColumn, TimeColumn, DateColumn or
+// JSONStringsColumn instead, which embed this type and add the functions that
+// are only meaningful there.
 type Column[T any] struct {
 	table string
 	name  string
@@ -311,6 +313,15 @@ func (c Column[T]) term(fn TermFn) Term {
 	return Term{fn: fn, table: c.table, column: c.name, alias: c.name}
 }
 
+// bucket makes the column a group key truncated to bucket, for the
+// references over a value a bucket means something for: TimeColumn and
+// DateColumn.
+func (c Column[T]) bucket(bucket TimeBucket) Term {
+	term := c.term(FnNone)
+	term.bucket = bucket
+	return term
+}
+
 // NumericColumn is the reference generated for a column whose Go type is
 // numeric. It embeds Column, so every filter and order stays available, and
 // adds the aggregate functions that only make sense over a number.
@@ -339,11 +350,10 @@ func (c NumericColumn[T]) Sum() Term { return c.term(FnSum) }
 // answers; the result row field must be a pointer.
 func (c NumericColumn[T]) Avg() Term { return c.term(FnAvg) }
 
-// TimeColumn is the reference generated for a column holding a time value:
-// an instant, time.Time, or a calendar day, a Date, which a filter compares
-// by the UTC day the time it is given falls on. It embeds Column and adds
-// time bucketing, which is only meaningful over a time value and produces
-// garbage rather than an error on some dialects when it is not.
+// TimeColumn is the reference generated for a column holding an instant,
+// time.Time or a type holding one. It embeds Column and adds time bucketing,
+// which is only meaningful over a time value and produces garbage rather than
+// an error on some dialects when it is not.
 type TimeColumn struct {
 	Column[time.Time]
 }
@@ -367,17 +377,31 @@ func (c TimeColumn) ByDay() Term { return c.bucket(TimeBucketDay) }
 
 func (c TimeColumn) ByMonth() Term { return c.bucket(TimeBucketMonth) }
 
-func (c TimeColumn) bucket(bucket TimeBucket) Term {
-	term := c.term(FnNone)
-	term.bucket = bucket
-	return term
+// DateColumn is the reference generated for a column holding a calendar
+// day, a datatypes.Date: its filters take the day itself, where a TimeColumn
+// takes an instant. It embeds Column and adds the bucketing a day carries, by
+// day and by month.
+type DateColumn struct {
+	Column[datatypes.Date]
 }
+
+// NewDateColumn returns the date reference to the named column of M's table,
+// carrying the bucketing group keys on top of everything Column has.
+func NewDateColumn[M TableNamer](name string) DateColumn {
+	return DateColumn{Column: NewColumn[M, datatypes.Date](name)}
+}
+
+// ByDay and ByMonth make this column a group key truncated to the bucket,
+// the way TimeColumn's do; a day has no hour to group by.
+func (c DateColumn) ByDay() Term { return c.bucket(TimeBucketDay) }
+
+func (c DateColumn) ByMonth() Term { return c.bucket(TimeBucketMonth) }
 
 // jsonStringsBase is the plain reference a JSONStringsColumn embeds, over
 // datatypes.JSONSlice[string]: the type that binds a JSON array of strings
 // as one document, where a plain []string would bind as a list of
 // parameters.
-type jsonStringsBase = Column[datatypes.JSONSlice[string]]
+type jsonStringsBase = Column[gormdatatypes.JSONSlice[string]]
 
 // JSONStringsColumn is the reference generated for a column storing a JSON
 // array of strings. It takes and answers its values as []string, an array
@@ -396,7 +420,7 @@ type JSONStringsColumn struct {
 // table storing a JSON array of strings, carrying JSONContains on top of
 // everything Column has.
 func NewJSONStringsColumn[M TableNamer](name string) JSONStringsColumn {
-	return JSONStringsColumn{jsonStringsBase: NewColumn[M, datatypes.JSONSlice[string]](name)}
+	return JSONStringsColumn{jsonStringsBase: NewColumn[M, gormdatatypes.JSONSlice[string]](name)}
 }
 
 // sealedColumn makes the reference a ColumnRef[[]string], so that EqCol
@@ -466,8 +490,8 @@ func (c JSONStringsColumn) JSONContains(value string) Filter {
 
 // documents converts arrays of strings to the values binding them as JSON
 // documents.
-func documents(values [][]string) []datatypes.JSONSlice[string] {
-	converted := make([]datatypes.JSONSlice[string], len(values))
+func documents(values [][]string) []gormdatatypes.JSONSlice[string] {
+	converted := make([]gormdatatypes.JSONSlice[string], len(values))
 	for i, value := range values {
 		converted[i] = value
 	}
@@ -475,7 +499,7 @@ func documents(values [][]string) []datatypes.JSONSlice[string] {
 }
 
 // arrays converts the documents filters carry back to arrays of strings.
-func arrays(values []datatypes.JSONSlice[string]) [][]string {
+func arrays(values []gormdatatypes.JSONSlice[string]) [][]string {
 	if values == nil {
 		return nil
 	}
@@ -487,6 +511,6 @@ func arrays(values []datatypes.JSONSlice[string]) [][]string {
 }
 
 // arrayBound converts a bound over documents to one over arrays of strings.
-func arrayBound(bound Bound[datatypes.JSONSlice[string]]) Bound[[]string] {
+func arrayBound(bound Bound[gormdatatypes.JSONSlice[string]]) Bound[[]string] {
 	return Bound[[]string]{Value: bound.Value, Inclusive: bound.Inclusive, Present: bound.Present}
 }

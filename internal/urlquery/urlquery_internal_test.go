@@ -7,11 +7,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hydroan/gst/internal/datatypes"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
-	"gorm.io/datatypes"
+	gormdatatypes "gorm.io/datatypes"
 )
 
 type filterTestModel struct {
@@ -23,10 +24,10 @@ type filterTestModel struct {
 	ExpiredAt time.Time `json:"expired_at" query:"expired_at"`
 	// Day is a calendar day; ClosedAt, Retries and Archived are optional
 	// values behind pointers, checked like the values they point to.
-	Day      modelschema.Date `json:"day" query:"day"`
-	ClosedAt *time.Time       `json:"closed_at" query:"closed_at"`
-	Retries  *int             `json:"retries" query:"retries"`
-	Archived *bool            `json:"archived" query:"archived"`
+	Day      datatypes.Date `json:"day" query:"day"`
+	ClosedAt *time.Time     `json:"closed_at" query:"closed_at"`
+	Retries  *int           `json:"retries" query:"retries"`
+	Archived *bool          `json:"archived" query:"archived"`
 	// BoxIDs and Renamed anchor the column resolution: gorm renders the
 	// former as box_ids (a plain snake case conversion would not) and the
 	// latter through its column tag, while the URL keeps the query name.
@@ -41,7 +42,7 @@ type filterTestModel struct {
 	Virtual string `json:"virtual" gorm:"-" query:"virtual"`
 	Note    string `json:"note"`
 	// Meta is a JSON document, matched by its text and never compared.
-	Meta datatypes.JSONMap `json:"meta" query:"meta"`
+	Meta gormdatatypes.JSONMap `json:"meta" query:"meta"`
 
 	modelregistry.Query
 	modelregistry.Cursor
@@ -53,12 +54,12 @@ type filterTestModel struct {
 // its type tag declares a JSON column, and datatypes.Time, a time of day
 // gorm gives the time data type of an instant.
 type gormTypedTestModel struct {
-	Settled sql.NullTime    `json:"settled" query:"settled"`
-	Tally   sql.NullInt64   `json:"tally" query:"tally"`
-	Ratio   sql.NullFloat64 `json:"ratio" query:"ratio"`
-	Active  sql.NullBool    `json:"active" query:"active"`
-	Payload string          `json:"payload" gorm:"type:json" query:"payload"`
-	Clock   datatypes.Time  `json:"clock" query:"clock"`
+	Settled sql.NullTime       `json:"settled" query:"settled"`
+	Tally   sql.NullInt64      `json:"tally" query:"tally"`
+	Ratio   sql.NullFloat64    `json:"ratio" query:"ratio"`
+	Active  sql.NullBool       `json:"active" query:"active"`
+	Payload string             `json:"payload" gorm:"type:json" query:"payload"`
+	Clock   gormdatatypes.Time `json:"clock" query:"clock"`
 
 	modelregistry.Query
 	modelregistry.Base
@@ -1005,10 +1006,10 @@ func (cursorUniqueTestModel) Indexes() []modelschema.Index {
 // a bool held in sql.NullBool and a time of day. Each is NOT NULL under a
 // unique index of its own, so a cursor may page by it.
 type cursorTypedTestModel struct {
-	Settled sql.NullTime   `json:"settled" gorm:"not null" query:"settled"`
-	Tally   sql.NullInt64  `json:"tally" gorm:"not null" query:"tally"`
-	Active  sql.NullBool   `json:"active" gorm:"not null" query:"active"`
-	Clock   datatypes.Time `json:"clock" query:"clock"`
+	Settled sql.NullTime       `json:"settled" gorm:"not null" query:"settled"`
+	Tally   sql.NullInt64      `json:"tally" gorm:"not null" query:"tally"`
+	Active  sql.NullBool       `json:"active" gorm:"not null" query:"active"`
+	Clock   gormdatatypes.Time `json:"clock" query:"clock"`
 
 	modelregistry.Cursor
 	modelregistry.Base

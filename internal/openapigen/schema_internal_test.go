@@ -11,8 +11,8 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3gen"
 	"github.com/hydroan/gst/apidoc"
-	"github.com/hydroan/gst/internal/modelschema"
-	"gorm.io/datatypes"
+	"github.com/hydroan/gst/internal/datatypes"
+	gormdatatypes "gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -205,7 +205,7 @@ type jsonDocPayload struct {
 }
 
 type jsonDocModel struct {
-	Config datatypes.JSONType[jsonDocPayload] `json:"config"`
+	Config gormdatatypes.JSONType[jsonDocPayload] `json:"config"`
 }
 
 func TestAddSchemaDocsForTypeDecoratesJSONTypeWithoutTitle(t *testing.T) {
@@ -516,20 +516,20 @@ func TestNewSchemaRefWithDocsDecoratesCustomListResponseWrapper(t *testing.T) {
 // own, and one inside a datatypes.JSONType; When writes its own JSON and
 // stays a date-time, and Due, a day, writes a date.
 type encodingFieldModel struct {
-	Addr    netip.Addr                               `json:"addr"`
-	Peer    *netip.Addr                              `json:"peer"`
-	Grade   encodingFieldGrade                       `json:"grade"`
-	When    time.Time                                `json:"when"`
-	Day     datatypes.Date                           `json:"day"`
-	Due     modelschema.Date                         `json:"due"`
-	Clock   datatypes.Time                           `json:"clock"`
-	Removed gorm.DeletedAt                           `json:"removed"`
-	Amount  json.Number                              `json:"amount"`
-	Raw     json.RawMessage                          `json:"raw"`
-	Doc     datatypes.JSON                           `json:"doc"`
-	Meta    datatypes.JSONMap                        `json:"meta"`
-	Custom  encodingFieldCustom                      `json:"custom"`
-	Options datatypes.JSONType[encodingFieldOptions] `json:"options"`
+	Addr    netip.Addr                                   `json:"addr"`
+	Peer    *netip.Addr                                  `json:"peer"`
+	Grade   encodingFieldGrade                           `json:"grade"`
+	When    time.Time                                    `json:"when"`
+	Day     gormdatatypes.Date                           `json:"day"`
+	Due     datatypes.Date                               `json:"due"`
+	Clock   gormdatatypes.Time                           `json:"clock"`
+	Removed gorm.DeletedAt                               `json:"removed"`
+	Amount  json.Number                                  `json:"amount"`
+	Raw     json.RawMessage                              `json:"raw"`
+	Doc     gormdatatypes.JSON                           `json:"doc"`
+	Meta    gormdatatypes.JSONMap                        `json:"meta"`
+	Custom  encodingFieldCustom                          `json:"custom"`
+	Options gormdatatypes.JSONType[encodingFieldOptions] `json:"options"`
 }
 
 type encodingFieldGrade int

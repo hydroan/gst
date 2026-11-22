@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/datatypes"
 )
 
 // Bound is one end of the range a column's comparison filters confine it to:
@@ -129,15 +130,20 @@ func namesColumn(table, column string, ref AnyColumnRef) bool {
 	return column == ref.Name() && (table == "" || table == ref.Table())
 }
 
-// filterTimeType is the Go type of a time column.
-var filterTimeType = reflect.TypeFor[time.Time]()
+// filterTimeType and filterDateType are the Go types of a time column and of
+// a date column.
+var (
+	filterTimeType = reflect.TypeFor[time.Time]()
+	filterDateType = reflect.TypeFor[datatypes.Date]()
+)
 
 // filterValueAs converts one filter value to the column type T. A value built
 // through a column reference already has that type. One parsed from a request
 // carries the canonical form the parser normalized it to: the string spelling
-// of a scalar, a bool for a bool column, and the UTC wall clock in
-// FilterTimeLayout for a time column. A value built from a plain column name
-// may carry any numeric type, which converts when it fits.
+// of a scalar, a bool for a bool column, the UTC wall clock in
+// FilterTimeLayout for a time column, and a day's midnight in the same layout
+// for a date column. A value built from a plain column name may carry any
+// numeric type, which converts when it fits.
 func filterValueAs[T any](value any) (T, error) {
 	if typed, ok := value.(T); ok {
 		return typed, nil
@@ -184,7 +190,7 @@ func convertFilterValue(source reflect.Value, target reflect.Type) (reflect.Valu
 	if !source.IsValid() {
 		return reflect.Value{}, false
 	}
-	if target == filterTimeType {
+	if target == filterTimeType || target == filterDateType {
 		raw, ok := reflect.TypeAssert[string](source)
 		if !ok {
 			return reflect.Value{}, false
@@ -192,6 +198,9 @@ func convertFilterValue(source reflect.Value, target reflect.Type) (reflect.Valu
 		parsed, err := time.ParseInLocation(FilterTimeLayout, raw, time.UTC)
 		if err != nil {
 			return reflect.Value{}, false
+		}
+		if target == filterDateType {
+			return reflect.ValueOf(datatypes.Date(parsed)), true
 		}
 		return reflect.ValueOf(parsed), true
 	}

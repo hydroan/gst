@@ -49,10 +49,10 @@ const (
 // day, and gorm's time of day, a duration since midnight, to Duration.
 var timeTypes = map[string]struct{ typeName, proto string }{
 	"time.Time": {WellKnownTimestamp, timestampProto},
-	ggconst.ImportPathGst + "/internal/modelschema.Date": {GoogleTypeDate, dateProto},
-	"gorm.io/datatypes.Date":                             {WellKnownTimestamp, timestampProto},
-	"gorm.io/datatypes.Time":                             {WellKnownDuration, durationProto},
-	"gorm.io/gorm.DeletedAt":                             {WellKnownTimestamp, timestampProto},
+	ggconst.ImportPathGst + "/internal/datatypes.Date": {GoogleTypeDate, dateProto},
+	"gorm.io/datatypes.Date":                           {WellKnownTimestamp, timestampProto},
+	"gorm.io/datatypes.Time":                           {WellKnownDuration, durationProto},
+	"gorm.io/gorm.DeletedAt":                           {WellKnownTimestamp, timestampProto},
 }
 
 // modelRegistryPath and tenantPath are the packages declaring the
@@ -606,7 +606,7 @@ func malformedTag(tag string) (string, bool) {
 // fieldTypeOf maps the Go type t of a field to its protobuf type: bool to
 // bool, string to string, int and int64 to int64, the smaller integers to
 // int32, unsigned ones to uint64 and uint32, float32 to float and float64 to
-// double; time.Time, datatypes.Date and gorm.DeletedAt to
+// double; time.Time, the Date of gorm.io/datatypes and gorm.DeletedAt to
 // google.protobuf.Timestamp, the framework's Date to google.type.Date and
 // datatypes.Time to google.protobuf.Duration (see timeTypes); a project enum
 // to its underlying string or integer type;

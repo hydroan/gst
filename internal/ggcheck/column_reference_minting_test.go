@@ -31,6 +31,7 @@ var (
 	code   = gst.NewColumn[*Sample, string]("code")
 	amount = gst.NewNumericColumn[*Sample, int64]("amount")
 	at     = gst.NewTimeColumn[*Sample]("created_at")
+	day    = gst.NewDateColumn[*Sample]("day")
 	tags   = gst.NewJSONStringsColumn[*Sample]("tags")
 )
 
@@ -60,11 +61,11 @@ var box = NewColumn[*Row, string]("box_id")
 
 	violations := runCheck(ggcheck.ColumnReferenceMinting)
 
-	if len(violations) != 6 {
-		t.Fatalf("expected six violations, got %#v", violations)
+	if len(violations) != 7 {
+		t.Fatalf("expected seven violations, got %#v", violations)
 	}
 	helperPath := filepath.Join("service", "record", "helper.go")
-	for _, constructor := range []string{"gst.NewColumn;", "gst.NewNumericColumn;", "gst.NewTimeColumn;", "gst.NewJSONStringsColumn;"} {
+	for _, constructor := range []string{"gst.NewColumn;", "gst.NewNumericColumn;", "gst.NewTimeColumn;", "gst.NewDateColumn;", "gst.NewJSONStringsColumn;"} {
 		matched := 0
 		for _, violation := range violations {
 			if strings.Contains(violation, helperPath) && strings.Contains(violation, constructor) {

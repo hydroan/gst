@@ -113,6 +113,7 @@ linters:
             - "github.com/cockroachdb/errors"
             - "github.com/gin-gonic/gin"
             - "github.com/hydroan/gst/internal/apiaction"
+            - "github.com/hydroan/gst/internal/datatypes"
             - "github.com/hydroan/gst/internal/execctx"
             - "github.com/hydroan/gst/internal/requestctx"
             - "github.com/hydroan/gst/internal/sse"
@@ -468,6 +469,8 @@ linters:
           alias: gormlogger
         - pkg: gorm.io/gorm/schema
           alias: gormschema
+        - pkg: gorm.io/datatypes
+          alias: gormdatatypes
         - pkg: github.com/casbin/casbin/v3/model
           alias: casbinmodel
         - pkg: github.com/gin-gonic/gin/codec/json

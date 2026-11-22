@@ -255,7 +255,7 @@ const (
 )
 
 // builtins lists the types with encoding methods whose output is known, keyed
-// by package path and type name: the framework's own day, model.Date, a
+// by package path and type name: the framework's own day, gst.Date, a
 // string as 2026-01-02, among the ones of the libraries a model is built
 // from. The JSON v2 experiment turns json.RawMessage
 // into an alias of jsontext.Value, so both names are listed. The OpenAPI
@@ -273,7 +273,7 @@ var builtins = map[string]Builtin{
 	"gorm.io/datatypes.JSONType":   BuiltinWrapper,
 	"gorm.io/gorm.DeletedAt":       BuiltinNullableString,
 
-	ggconst.ImportPathGst + "/internal/modelschema.Date": BuiltinString,
+	ggconst.ImportPathGst + "/internal/datatypes.Date": BuiltinString,
 }
 
 // BuiltinOf reports the builtin shape of n, if it has one: BuiltinString for
