@@ -25,10 +25,11 @@ var migrateCmd = &cobra.Command{
 
 The migration stays inside the tables the models declare: a table of the
 database no model declares is listed and left as it is. A plan that drops a
-column, and the data it holds, is applied only with --accept-data-loss; --yes
-skips the confirmation and accepts no data loss. Where a table or a column
-looks renamed, the command asks before renaming it, and under --dry-run or
---yes lists the rename with its statement instead.
+column, and the data it holds, says so, and the confirmation before it is
+applied names the loss; --yes, which skips the confirmation, accepts no data
+loss and applies such a plan only with --accept-data-loss. Where a table or a
+column looks renamed, the command asks before renaming it, and under --dry-run
+or --yes lists the rename with its statement instead.
 
 On SQLite the migration targets the database file sqlite.path names. An
 in-memory database, which sqlite.is_memory selects by default, has nothing to
@@ -85,7 +86,7 @@ var (
 func init() {
 	migrateCmd.Flags().BoolVar(&migrateDryRun, "dry-run", false, "Preview migration SQL without applying changes")
 	migrateCmd.Flags().BoolVar(&migrateYes, "yes", false, "Apply migration without prompting for confirmation")
-	migrateCmd.Flags().BoolVar(&migrateAcceptDataLoss, "accept-data-loss", false, "Apply a migration that drops columns and the data they hold")
+	migrateCmd.Flags().BoolVar(&migrateAcceptDataLoss, "accept-data-loss", false, "Accept that the migration drops columns and the data they hold; required for such a migration under --yes")
 	migrateCmd.AddCommand(migrateSchemaCmd)
 }
 

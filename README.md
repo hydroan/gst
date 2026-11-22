@@ -1055,14 +1055,15 @@ gg migrate
 前面的保留；PostgreSQL 和 SQLite 整份计划在一个事务里，全部回滚。
 
 迁移只管模型声明的表。库里没有模型声明的表不删也不改，计划下面会把它们列出来。模型声明的表里，
-模型没有的索引和列都在计划里删；删列会丢数据，要显式带上 `--accept-data-loss` 才执行：
+模型没有的索引和列都在计划里删。删列会丢数据：计划下面会列出是哪几列，执行前的确认会点明要删
+它们，答 `y` 才执行。想保留某一列，就在模型里把它声明出来。
+
+`--yes` 只跳过确认，不代表同意丢数据：计划里有删列时要同时带上 `--accept-data-loss`，否则整份
+计划都不执行：
 
 ```bash
-gg migrate --accept-data-loss
+gg migrate --yes --accept-data-loss
 ```
-
-不带时整份计划都不执行，并列出是哪几列；`--yes` 只跳过确认，不代表同意丢数据。想保留某一列，
-就在模型里把它声明出来。
 
 用 SQLite 时迁移的是 `sqlite.path` 指向的库文件；内存库（`sqlite.is_memory = true`，默认值）每次启动都按模型建表，
 `gg migrate` 提示没有可迁移的内容后直接退出。
@@ -1079,10 +1080,10 @@ SQLite 的 `ALTER TABLE` 改不了已有列的类型、非空、默认值和 CHE
 - 库里有一张没有模型声明的表，模型要新建的表保留了它的全部列，定义也相同；
 - 同一张表少一列、多一列，两列定义相同。
 
-直接运行 `gg migrate` 会逐个询问，答 `yes` 就先执行改名语句、再重新出计划，数据都在：表是
+直接运行 `gg migrate` 会逐个询问，答 `y` 就先执行改名语句、再重新出计划，数据都在：表是
 `RENAME TABLE`（MySQL）或 `ALTER TABLE ... RENAME TO`（PostgreSQL、SQLite），列是
 `ALTER TABLE ... RENAME COLUMN`。带 `--dry-run` 或 `--yes` 时不询问也不改名，只在计划下面列出
-疑似改名和现成的语句；此时计划仍是删加，其中删列会被 `--accept-data-loss` 拦住。
+疑似改名和现成的语句；此时计划仍是删加，带 `--yes` 时其中的删列没有 `--accept-data-loss` 不会执行。
 
 ### 索引改名必须先迁移后发布
 

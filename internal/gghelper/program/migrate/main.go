@@ -59,7 +59,7 @@ func main() {
 	flag.StringVar(&migrateModule, "module", "", "the project's module path")
 	flag.BoolVar(&migrateDryRun, "dry-run", false, "preview the migration SQL without applying it")
 	flag.BoolVar(&migrateYes, "yes", false, "apply the migration without prompting for confirmation")
-	flag.BoolVar(&migrateAcceptDataLoss, "accept-data-loss", false, "apply a migration that drops columns and the data they hold")
+	flag.BoolVar(&migrateAcceptDataLoss, "accept-data-loss", false, "accept that the migration drops columns and the data they hold; required for such a migration under -yes")
 	flag.BoolVar(&migrateSchemaOnly, "schema-only", false, "dump the schema and stop")
 	flag.StringVar(&migrateSchemaSource, "schema-source", "", "the model source the schema dump covers; empty covers every registered model")
 	flag.Var(&migrateSchemaSourceFiles, "schema-source-file", "a Go file under schema-source; repeat for each")
@@ -478,13 +478,20 @@ func performMigration(schema string, cfg *dbmigrate.DatabaseConfig) error {
 		fmt.Println("  → The plan above drops and adds instead. Run gg migrate without --dry-run and --yes to be asked about each rename, or run its statement yourself, then migrate again.")
 	}
 
-	if len(plan.DroppedColumns) > 0 {
+	// Dropping a column loses the data it holds, which someone has to accept:
+	// the one answering the confirmation below, which then names the loss, or,
+	// where no one is asked, --accept-data-loss.
+	dropsData := len(plan.DroppedColumns) > 0
+	if dropsData {
 		fmt.Println("\n▶ Data Loss")
 		fmt.Printf("  → The plan drops these columns and the data they hold: %s\n", strings.Join(plan.DroppedColumns, ", "))
-		if migrateAcceptDataLoss {
+		switch {
+		case migrateAcceptDataLoss:
 			fmt.Println("  → --accept-data-loss is given: they are dropped when the plan is applied.")
-		} else {
-			fmt.Println("  → Declare a column in its model to keep it. To drop them, pass --accept-data-loss.")
+		case migrateDryRun || migrateYes:
+			fmt.Println("  → Declare a column in its model to keep it. To drop them, confirm when gg migrate asks, or pass --accept-data-loss with --yes.")
+		default:
+			fmt.Println("  → Declare a column in its model to keep it.")
 		}
 	}
 
@@ -493,19 +500,29 @@ func performMigration(schema string, cfg *dbmigrate.DatabaseConfig) error {
 		fmt.Println("  → Dry run completed. No changes were applied.")
 		return nil
 	}
-	if len(plan.DroppedColumns) > 0 && !migrateAcceptDataLoss {
-		return errors.New("the migration was not applied: it drops columns, and --accept-data-loss is not given")
-	}
-	if !migrateYes && !confirm("\n? Apply the migration to the target database? Type \"yes\" to continue: ") {
-		fmt.Println("  → Migration canceled.")
-		return nil
+	accepted := migrateAcceptDataLoss
+	if migrateYes {
+		if dropsData && !accepted {
+			return errors.New("the migration was not applied: it drops columns, and --accept-data-loss is not given")
+		}
+	} else {
+		question := "Apply the migration to the target database?"
+		if dropsData && !accepted {
+			question = "Apply the migration and drop the columns above with the data they hold?"
+		}
+		if !confirm("\n? " + question + " (y/N): ") {
+			fmt.Println("  → Migration canceled.")
+			return nil
+		}
+		// The question named the loss, so the yes accepts it.
+		accepted = true
 	}
 
 	fmt.Println("\n▶ Apply Migration")
 
 	// The statements shown above, as they stand, each announced as it starts.
 	err = dbmigrate.Apply(plan, dbtyp, cfg, &dbmigrate.ApplyOption{
-		AcceptDataLoss: migrateAcceptDataLoss,
+		AcceptDataLoss: accepted,
 		Progress: func(index int, statement string) {
 			first, _, more := strings.Cut(statement, "\n")
 			if more {
@@ -533,7 +550,7 @@ func confirmRenames(renames []dbmigrate.Rename, declined map[string]bool) []dbmi
 	confirmed := make([]dbmigrate.Rename, 0, len(pending))
 	for _, rename := range pending {
 		printRename(rename)
-		if confirm(fmt.Sprintf("? Rename %s now, by the statement above? Type \"yes\" to run it: ", rename)) {
+		if confirm(fmt.Sprintf("? Rename %s now, by the statement above? (y/N): ", rename)) {
 			confirmed = append(confirmed, rename)
 		} else {
 			declined[rename.String()] = true
@@ -576,9 +593,15 @@ func printRename(rename dbmigrate.Rename) {
 // asked for, the answers typed ahead for the prompts after it.
 var answers = bufio.NewReader(os.Stdin)
 
-// confirm prints prompt and reports whether the answer typed is yes.
+// confirm prints prompt and reports whether the answer typed is y or yes;
+// any other answer, an empty one included, is a no.
 func confirm(prompt string) bool {
 	fmt.Print(prompt)
 	input, _ := answers.ReadString('\n')
-	return strings.EqualFold(strings.TrimSpace(input), "yes")
+	switch strings.ToLower(strings.TrimSpace(input)) {
+	case "y", "yes":
+		return true
+	default:
+		return false
+	}
 }

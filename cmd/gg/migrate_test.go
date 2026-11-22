@@ -221,23 +221,54 @@ func TestMigrateProgramLeavesTheTablesNoModelDeclares(t *testing.T) {
 	}
 }
 
-// TestMigrateProgramRefusesToDropAColumnUnlessTheDataLossIsAccepted pins what
-// the migration program makes of a column the model does not declare: the
-// plan drops it and says so, a run without --accept-data-loss ends in an
-// error and applies nothing, --yes given or not, and a run with the flag
-// drops the column.
-func TestMigrateProgramRefusesToDropAColumnUnlessTheDataLossIsAccepted(t *testing.T) {
+// TestMigrateProgramDropsAColumnOnlyOnceTheDataLossIsAccepted pins what the
+// migration program makes of a column the model does not declare: the plan
+// drops it and says so, and the column goes only once the loss is accepted. A
+// run that asks names the loss in its confirmation, drops the column on a
+// yes and leaves it on any other answer. A run under --yes asks no one: it
+// ends in an error and applies nothing without --accept-data-loss, and drops
+// the column with it.
+func TestMigrateProgramDropsAColumnOnlyOnceTheDataLossIsAccepted(t *testing.T) {
 	if !newMigrateSampleProject(t) {
 		return
 	}
 	t.Setenv(config.SQLITE_IS_MEMORY, "false")
 	t.Setenv(config.SQLITE_PATH, "./data.db")
 	runMigrateProgramForTest(t, false, true)
-	execMigrateSampleDatabase(t, "ALTER TABLE `samples` ADD COLUMN `legacy` text")
+	const addLegacy = "ALTER TABLE `samples` ADD COLUMN `legacy` text"
+	const legacyColumns = "SELECT COUNT(*) FROM pragma_table_info('samples') WHERE name = 'legacy'"
+	execMigrateSampleDatabase(t, addLegacy)
 
-	out, err := runMigrateProgram(t, false, true, false, "")
+	out, err := runMigrateProgram(t, false, false, false, "n\n")
+	if err != nil {
+		t.Fatalf("expected the migration program to end quietly on a no, got %v\n%s", err, out)
+	}
+	for _, want := range []string{
+		"▶ Data Loss",
+		"samples.legacy",
+		"? Apply the migration and drop the columns above with the data they hold? (y/N): ",
+		"→ Migration canceled.",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected the declined migration's output to contain %q, got:\n%s", want, out)
+		}
+	}
+	if got := queryMigrateSampleDatabase(t, legacyColumns); got != "1" {
+		t.Fatalf("expected the column kept on a no, got %s columns named legacy", got)
+	}
+
+	out, err = runMigrateProgram(t, false, false, false, "yes\n")
+	if err != nil {
+		t.Fatalf("expected the migration program to drop the column on a yes, got %v\n%s", err, out)
+	}
+	if got := queryMigrateSampleDatabase(t, legacyColumns); got != "0" {
+		t.Fatalf("expected the column dropped on a yes, got %s columns named legacy:\n%s", got, out)
+	}
+
+	execMigrateSampleDatabase(t, addLegacy)
+	out, err = runMigrateProgram(t, false, true, false, "")
 	if err == nil {
-		t.Fatalf("expected the migration program to refuse a plan dropping a column, got:\n%s", out)
+		t.Fatalf("expected the migration program to refuse a plan dropping a column under --yes, got:\n%s", out)
 	}
 	for _, want := range []string{"▶ Data Loss", "samples.legacy", "pass --accept-data-loss"} {
 		if !strings.Contains(out, want) {
@@ -245,7 +276,7 @@ func TestMigrateProgramRefusesToDropAColumnUnlessTheDataLossIsAccepted(t *testin
 		}
 	}
 	if strings.Contains(out, "▶ Apply Migration") {
-		t.Fatalf("expected nothing applied without --accept-data-loss, got:\n%s", out)
+		t.Fatalf("expected nothing applied under --yes without --accept-data-loss, got:\n%s", out)
 	}
 
 	out, err = runMigrateProgram(t, false, true, true, "")
@@ -261,7 +292,7 @@ func TestMigrateProgramRefusesToDropAColumnUnlessTheDataLossIsAccepted(t *testin
 // program suspects where a column of the database stands beside a column of
 // the model with the same definition. A dry run and a run under --yes ask
 // nothing and rename nothing: they list the rename with its statement below
-// a plan that drops and adds. A run that can ask does, renames on a yes,
+// a plan that drops and adds. A run that can ask does, renames on a y,
 // keeping the values, and plans again, which leaves nothing to migrate.
 func TestMigrateProgramAsksBeforeRenamingAColumn(t *testing.T) {
 	if !newMigrateSampleProject(t) {
@@ -286,11 +317,11 @@ func TestMigrateProgramAsksBeforeRenamingAColumn(t *testing.T) {
 		}
 	}
 
-	out, err := runMigrateProgram(t, false, false, false, "yes\n")
+	out, err := runMigrateProgram(t, false, false, false, "y\n")
 	if err != nil {
-		t.Fatalf("expected the migration program to rename the column on a yes, got %v\n%s", err, out)
+		t.Fatalf("expected the migration program to rename the column on a y, got %v\n%s", err, out)
 	}
-	for _, want := range []string{"? Rename column samples.title to name now", "✔ Renamed.", "→ No changes detected."} {
+	for _, want := range []string{"? Rename column samples.title to name now, by the statement above? (y/N): ", "✔ Renamed.", "→ No changes detected."} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("expected the confirmed rename's output to contain %q, got:\n%s", want, out)
 		}
