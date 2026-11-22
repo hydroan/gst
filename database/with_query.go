@@ -28,9 +28,9 @@ import (
 //     driver.Valuer, such as sql.NullString, and a field declaring a
 //     serializer, a slice among them, bind the form their column stores; a byte
 //     slice matches byte for byte; time.Time compares as the instant it names
-//     whatever its offset, and a date column, a datatypes.Date or a time.Time
-//     its type tag declares a date, by the UTC day it names. Of the columns
-//     every model carries, only id, created_by and updated_by are conditions.
+//     whatever its offset, and a day, a Date, as the day it names. Of the
+//     columns every model carries, only id, created_by and updated_by are
+//     conditions.
 //   - opts: Optional QueryOptions to control query behavior (empty-query
 //     safety, operator filters)
 //
@@ -297,10 +297,10 @@ func structConditions(stmt *gorm.Statement, query any, columns []modelschema.Col
 	return q
 }
 
-// conditionValue is the value a condition binds for a field value: the UTC
-// day it falls on for a date column, day (see dayValue), an instant in UTC,
-// and anything else — a scalar, a JSON document, a Valuer such as
-// sql.NullString — as it is.
+// conditionValue is the value a condition binds for a field value: the day
+// it names for a date column, day (see dayValue), an instant in UTC, and
+// anything else — a scalar, a JSON document, a Valuer such as sql.NullString
+// — as it is.
 func conditionValue(val reflect.Value, day bool) any {
 	if day {
 		return dayValue(val.Interface())

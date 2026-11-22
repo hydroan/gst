@@ -46,8 +46,8 @@ func TestClassifyColumn(t *testing.T) {
 
 		At      time.Time
 		Closed  *time.Time
-		Day     datatypes.Date
-		Due     *datatypes.Date
+		Day     modelschema.Date
+		Due     *modelschema.Date
 		Named   namedTime
 		Settled sql.NullTime
 		Removed gorm.DeletedAt
@@ -95,7 +95,7 @@ type sampleStoredRecord struct {
 	At        time.Time `gorm:"type:datetime(6)"`
 	Settled   sql.NullTime
 	Removed   gorm.DeletedAt
-	Day       datatypes.Date
+	Day       modelschema.Date
 	Clock     datatypes.Time
 	Closing   *datatypes.Time
 	Count     int
@@ -208,18 +208,21 @@ func TestParseTime(t *testing.T) {
 }
 
 // TestIsDateColumn pins which columns store a calendar day: the column type
-// gorm resolved for them is date, declared by the Go type or by a type tag in
-// either case, a pointer included, and DateColumnSet names the same columns;
-// an instant and a column declared as another time type are no date.
+// gorm resolved for them is date, declared by a Date, a pointer to one
+// included, and by what ValidateDateColumns refuses a model for alike, the
+// date of gorm.io/datatypes and a type tag in either case; DateColumnSet
+// names the same columns; an instant and a column declared as another time
+// type are no date.
 func TestIsDateColumn(t *testing.T) {
 	type dated struct {
-		Day     datatypes.Date  `json:"day"`
-		DayPtr  *datatypes.Date `json:"day_ptr"`
-		Due     time.Time       `json:"due" gorm:"type:date"`
-		DuePtr  *time.Time      `json:"due_ptr" gorm:"type:DATE"`
-		At      time.Time       `json:"at"`
-		Stamped time.Time       `json:"stamped" gorm:"type:datetime(3)"`
-		Clock   datatypes.Time  `json:"clock"`
+		Day     modelschema.Date  `json:"day"`
+		DayPtr  *modelschema.Date `json:"day_ptr"`
+		Library datatypes.Date    `json:"library"`
+		Due     time.Time         `json:"due" gorm:"type:date"`
+		DuePtr  *time.Time        `json:"due_ptr" gorm:"type:DATE"`
+		At      time.Time         `json:"at"`
+		Stamped time.Time         `json:"stamped" gorm:"type:datetime(3)"`
+		Clock   datatypes.Time    `json:"clock"`
 	}
 	columns, err := modelschema.Columns(reflect.TypeFor[dated]())
 	require.NoError(t, err)
@@ -227,8 +230,8 @@ func TestIsDateColumn(t *testing.T) {
 	for _, c := range columns {
 		got[c.DBName] = modelschema.IsDateColumn(c)
 	}
-	require.Equal(t, map[string]bool{"day": true, "day_ptr": true, "due": true, "due_ptr": true, "at": false, "stamped": false, "clock": false}, got)
-	require.Equal(t, map[string]struct{}{"day": {}, "day_ptr": {}, "due": {}, "due_ptr": {}}, modelschema.DateColumnSet(reflect.TypeFor[dated]()))
+	require.Equal(t, map[string]bool{"day": true, "day_ptr": true, "library": true, "due": true, "due_ptr": true, "at": false, "stamped": false, "clock": false}, got)
+	require.Equal(t, map[string]struct{}{"day": {}, "day_ptr": {}, "library": {}, "due": {}, "due_ptr": {}}, modelschema.DateColumnSet(reflect.TypeFor[dated]()))
 }
 
 func TestUTCDay(t *testing.T) {

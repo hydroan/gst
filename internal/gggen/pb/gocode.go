@@ -30,6 +30,7 @@ const (
 	importPathJSON        = "encoding/json"
 	importPathHTTP        = "net/http"
 	importPathTime        = "time"
+	importPathDatePB      = "google.golang.org/genproto/googleapis/type/date"
 	importPathDurationPB  = "google.golang.org/protobuf/types/known/durationpb"
 	importPathStructPB    = "google.golang.org/protobuf/types/known/structpb"
 	importPathTimestampPB = "google.golang.org/protobuf/types/known/timestamppb"
@@ -48,6 +49,7 @@ var fixedImportNames = map[string]string{
 	importPathJSON:            "",
 	importPathHTTP:            "",
 	importPathTime:            "",
+	importPathDatePB:          "",
 	importPathDurationPB:      "",
 	importPathStructPB:        "",
 	importPathTimestampPB:     "",

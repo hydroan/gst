@@ -30,7 +30,7 @@ func TestCreateWritesNothingTheBeforeHookRefuses(t *testing.T) {
 func TestCreateReadsATimeOfDayAsWritten(t *testing.T) {
 	handler := controller.CreateHandler[*datedSample, *datedSample, *datedSample](configFor[*datedSample](datedRoute))
 
-	rsp := serve(t, http.MethodPost, "/controller-dated-samples", handler, "/controller-dated-samples", `{"name":"`+uniqueName("create-clock")+`","day":"2026-01-01T00:00:00Z","clock":"17:30:00.5"}`)
+	rsp := serve(t, http.MethodPost, "/controller-dated-samples", handler, "/controller-dated-samples", `{"name":"`+uniqueName("create-clock")+`","day":"2026-01-01","clock":"17:30:00.5"}`)
 	require.Equal(t, http.StatusOK, rsp.Code, rsp.Body.String())
 	require.Contains(t, rsp.Body.String(), `"clock":"17:30:00.500000000"`)
 
@@ -39,6 +39,33 @@ func TestCreateReadsATimeOfDayAsWritten(t *testing.T) {
 		rsp := serve(t, http.MethodPost, "/controller-dated-samples", handler, "/controller-dated-samples", `{"name":"`+name+`","clock":`+value+`}`)
 		require.Equal(t, http.StatusBadRequest, rsp.Code, form)
 		require.Contains(t, rsp.Body.String(), `"msg":"invalid value for field 'clock'"`, form)
+		require.Zero(t, countDatedNamed(t, name), form)
+	}
+}
+
+// TestCreateReadsADayAsWritten pins how a body's day is read: a string in
+// time.DateOnly, answered as written, and a null for an optional day; an
+// instant, a day the calendar does not hold, or a value of another JSON type
+// is refused with 400 naming the field, and nothing is stored.
+func TestCreateReadsADayAsWritten(t *testing.T) {
+	handler := controller.CreateHandler[*datedSample, *datedSample, *datedSample](configFor[*datedSample](datedRoute))
+
+	rsp := serve(t, http.MethodPost, "/controller-dated-samples", handler, "/controller-dated-samples", `{"name":"`+uniqueName("create-day")+`","day":"2026-01-02","due":null}`)
+	require.Equal(t, http.StatusOK, rsp.Code, rsp.Body.String())
+	require.Contains(t, rsp.Body.String(), `"day":"2026-01-02"`)
+	require.Contains(t, rsp.Body.String(), `"due":null`)
+
+	for form, value := range map[string]string{
+		"instant":       `"2026-01-02T00:00:00+08:00"`,
+		"instant_utc":   `"2026-01-02T00:00:00Z"`,
+		"no_such_day":   `"2026-02-30"`,
+		"short_numbers": `"2026-1-2"`,
+		"number":        `20260102`,
+	} {
+		name := uniqueName("create-day-" + form)
+		rsp := serve(t, http.MethodPost, "/controller-dated-samples", handler, "/controller-dated-samples", `{"name":"`+name+`","day":`+value+`}`)
+		require.Equal(t, http.StatusBadRequest, rsp.Code, form)
+		require.Contains(t, rsp.Body.String(), `"msg":"invalid value for field 'day'"`, form)
 		require.Zero(t, countDatedNamed(t, name), form)
 	}
 }

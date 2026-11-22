@@ -15,6 +15,7 @@ import (
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/stretchr/testify/require"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 )
@@ -153,6 +154,26 @@ func TestEnsureTableRejectsAUniqueIndexLeavingOutTheTenant(t *testing.T) {
 	err := ensureTable(db, &globallyUniqueTenantRecord{})
 	require.ErrorContains(t, err, `unique index (Code) leaves out TenantID`)
 	require.False(t, db.Migrator().HasTable("globally_unique_tenant_records"))
+}
+
+// libraryDatedRecord declares a day by the date type of gorm.io/datatypes,
+// whose JSON is the instant of a midnight; table preparation must refuse it
+// before the table exists, whatever the database.
+type libraryDatedRecord struct {
+	Day datatypes.Date
+
+	modelregistry.Base
+}
+
+func (*libraryDatedRecord) TableName() string { return "library_dated_records" }
+
+func TestEnsureTableRejectsADateColumnOfAnotherType(t *testing.T) {
+	db := newSQLiteDB(t)
+	withAutoMigrate(t, true)
+
+	err := ensureTable(db, &libraryDatedRecord{})
+	require.ErrorContains(t, err, `field Day stores a date as datatypes.Date`)
+	require.False(t, db.Migrator().HasTable("library_dated_records"))
 }
 
 // clashingQueryRecord declares one query name on two columns, which the

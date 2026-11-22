@@ -81,20 +81,22 @@ type jsonWrite struct {
 
 // knownJSONWrites are the types with encoding methods of their own whose
 // JSON the framework knows, the ones the generators know as well (see
-// jsonshape.BuiltinOf): a datatypes.Date writes the RFC 3339 string
-// time.Time writes, a datatypes.Time a clock string, a gorm.DeletedAt that
-// RFC 3339 string or null, a json.Number a number, and a raw JSON document
-// (json.RawMessage, datatypes.JSON) any value. time.Time, datatypes.JSONMap
-// and datatypes.JSONType are left to openapi3gen, which documents the first
-// two as a date-time string and an object, the last unwrapped afterwards
-// (see convertDatatypesJSONTypeSchema).
+// jsonshape.BuiltinOf): a model.Date writes a day, 2026-01-02, a
+// datatypes.Date the RFC 3339 string time.Time writes, a datatypes.Time a
+// clock string, a gorm.DeletedAt that RFC 3339 string or null, a json.Number
+// a number, and a raw JSON document (json.RawMessage, datatypes.JSON) any
+// value. time.Time, datatypes.JSONMap and datatypes.JSONType are left to
+// openapi3gen, which documents the first two as a date-time string and an
+// object, the last unwrapped afterwards (see
+// convertDatatypesJSONTypeSchema).
 var knownJSONWrites = map[reflect.Type]jsonWrite{
-	reflect.TypeFor[datatypes.Date]():  {typ: &openapi3.Types{openapi3.TypeString}, format: "date-time"},
-	reflect.TypeFor[datatypes.Time]():  {typ: &openapi3.Types{openapi3.TypeString}},
-	reflect.TypeFor[gorm.DeletedAt]():  {typ: &openapi3.Types{openapi3.TypeString}, format: "date-time", nullable: true},
-	reflect.TypeFor[json.Number]():     {typ: &openapi3.Types{openapi3.TypeNumber}},
-	reflect.TypeFor[json.RawMessage](): {},
-	reflect.TypeFor[datatypes.JSON]():  {},
+	reflect.TypeFor[modelschema.Date](): {typ: &openapi3.Types{openapi3.TypeString}, format: "date"},
+	reflect.TypeFor[datatypes.Date]():   {typ: &openapi3.Types{openapi3.TypeString}, format: "date-time"},
+	reflect.TypeFor[datatypes.Time]():   {typ: &openapi3.Types{openapi3.TypeString}},
+	reflect.TypeFor[gorm.DeletedAt]():   {typ: &openapi3.Types{openapi3.TypeString}, format: "date-time", nullable: true},
+	reflect.TypeFor[json.Number]():      {typ: &openapi3.Types{openapi3.TypeNumber}},
+	reflect.TypeFor[json.RawMessage]():  {},
+	reflect.TypeFor[datatypes.JSON]():   {},
 }
 
 // documentEncodingMethods is the openapi3gen customizer documenting a type

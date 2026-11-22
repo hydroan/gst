@@ -64,8 +64,7 @@ func writeProjectGoMod(t *testing.T, projectDir string) {
 // the framework for real, which a stub source tree cannot satisfy. The
 // fixture reuses this repository's own go.mod requirements and go.sum so the
 // build resolves the exact dependency versions the framework pins, instead of
-// re-resolving the graph from scratch (which trips over ambiguous-import
-// splits such as google.golang.org/genproto).
+// re-resolving the graph from scratch.
 func writeProjectGoModAgainstRealFramework(t *testing.T, projectDir string) {
 	t.Helper()
 
@@ -550,24 +549,15 @@ func packageDir(t *testing.T) string {
 }
 
 // initWorkspace makes projectDir a go workspace of its own module, the way
-// go work init does, so that the go command runs in workspace mode there.
-// The workspace replaces the monolithic google.golang.org/genproto module
-// with an empty one: a dependency of the framework still requires it at a
-// version holding the packages the split genproto modules took over, and in
-// workspace mode, where the go command resolves imports against the whole
-// module graph rather than the pruned one of the project's go.mod, it would
-// find those packages in two modules. A project of the framework in a
-// workspace carries such a replace of its own.
+// go work init does, so that the go command runs in workspace mode there,
+// resolving imports against the whole module graph rather than the pruned
+// one of the project's go.mod.
 func initWorkspace(t *testing.T, projectDir string) {
 	t.Helper()
 
-	stub := filepath.Join(t.TempDir(), "genproto")
-	writeProjectFile(t, filepath.Join(stub, "go.mod"), "module google.golang.org/genproto\n\ngo 1.27\n")
-	for _, args := range [][]string{{"work", "init", "."}, {"work", "edit", "-replace=google.golang.org/genproto=" + stub}} {
-		cmd := exec.Command("go", args...)
-		cmd.Dir = projectDir
-		if output, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("go %s: %v\n%s", strings.Join(args, " "), err, output)
-		}
+	cmd := exec.Command("go", "work", "init", ".")
+	cmd.Dir = projectDir
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("go work init: %v\n%s", err, output)
 	}
 }

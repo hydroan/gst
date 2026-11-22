@@ -30,6 +30,7 @@ type ColumnInfo struct {
 // ModelColumns is one model as the inspection program reports it: its columns,
 // what model.ValidateIndexes refused in its index declarations on MySQL, what
 // modelschema.ValidateTenantIndexes refused in its unique indexes, what
+// modelschema.ValidateDateColumns refused in its date columns, what
 // modelschema.ValidateFrameworkColumns refused in its columns, what
 // urlquery.ValidateQueryNames refused in its query tags and what
 // modelregistry.ValidateIDAccessors refused in its ID accessors, each "" when
@@ -41,6 +42,7 @@ type ModelColumns struct {
 	Columns                  []ColumnInfo `json:"columns"`
 	IndexViolation           string       `json:"index_violation"`
 	TenantIndexViolation     string       `json:"tenant_index_violation"`
+	DateColumnViolation      string       `json:"date_column_violation"`
 	FrameworkColumnViolation string       `json:"framework_column_violation"`
 	QueryNameViolation       string       `json:"query_name_violation"`
 	IDAccessorViolation      string       `json:"id_accessor_violation"`
@@ -50,7 +52,8 @@ type ModelColumns struct {
 // (see buildProgram) is built into the project's module and reports every
 // model's columns, what model.ValidateIndexes refused in its index declarations
 // on MySQL, what modelschema.ValidateTenantIndexes refused in its unique
-// indexes, what modelschema.ValidateFrameworkColumns refused in its columns,
+// indexes, what modelschema.ValidateDateColumns refused in its date columns,
+// what modelschema.ValidateFrameworkColumns refused in its columns,
 // what urlquery.ValidateQueryNames refused in its query tags and what
 // modelregistry.ValidateIDAccessors refused in its ID accessors. The result
 // comes from the cache when every input of the inspection is unchanged,

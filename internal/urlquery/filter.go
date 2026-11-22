@@ -6,6 +6,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/modelregistry"
@@ -246,9 +247,11 @@ func normalizeFilterValue(col modelschema.Column, op types.FilterOp, value strin
 // FilterTimeLayout, the one wall clock the framework stores on every
 // dialect. The canonical string form is kept on purpose: binding time.Time
 // would let the driver re-render the value in its own location, while the
-// string pins the wall clock the parser resolved. A date column takes the
-// instant as well, which the database compares by the UTC day it falls on,
-// so a service reading the filter sees the time that was sent.
+// string pins the wall clock the parser resolved.
+//
+// A date column takes a day instead, the way modelschema.ParseDate reads one,
+// and binds its midnight in the same layout: 2026-01-02 binds as
+// 2026-01-02 00:00:00.
 //
 // A time of day column takes its value the way modelschema.ParseTimeOfDay
 // reads one instead, and binds it in the spelling datatypes.Time stores, the
@@ -260,6 +263,13 @@ func timeBound(col modelschema.Column, value string) (string, error) {
 			return "", err
 		}
 		return datatypes.Time(since).String(), nil
+	}
+	if modelschema.IsDateColumn(col) {
+		day, err := modelschema.ParseDate(value)
+		if err != nil {
+			return "", err
+		}
+		return time.Time(day).Format(types.FilterTimeLayout), nil
 	}
 	t, err := modelschema.ParseTime(value)
 	if err != nil {

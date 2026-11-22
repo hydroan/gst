@@ -802,7 +802,7 @@ func clearAssociations[M types.Model](objs []M) {
 // dbruntime.UTCMillisecond), written back into the objects so that the
 // value a write hands back equals what a later read returns, whatever zone
 // and precision the value was produced with. A nil pointer stays nil, and a
-// column of another time type, datatypes.Date or sql.NullTime, keeps its own
+// column of another time type, a Date or sql.NullTime, keeps its own
 // value. The columns are the ones modelschema resolves, so a field gorm
 // ignores is left as it is.
 func normalizeTimes[M types.Model](objs []M) error {

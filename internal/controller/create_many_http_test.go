@@ -67,6 +67,21 @@ func TestCreateManyRefusesATimeOfDayAnItemCannotHold(t *testing.T) {
 	require.Zero(t, countDatedNamed(t, prefix+"-a"))
 }
 
+// TestCreateManyRefusesADayAnItemCannotHold pins that an instant an item
+// carries for its day refuses the whole batch with 400 naming the item's
+// field, and the item beside it is not stored.
+func TestCreateManyRefusesADayAnItemCannotHold(t *testing.T) {
+	prefix := uniqueName("create-many-day")
+
+	rsp := serve(t, http.MethodPost, "/controller-dated-samples/batch",
+		controller.CreateManyHandler[*datedSample, *datedSample, *datedSample](configFor[*datedSample](datedRoute)),
+		"/controller-dated-samples/batch", `{"items":[{"name":"`+prefix+`-a","day":"2026-01-02"},{"name":"`+prefix+`-b","day":"2026-01-02T00:00:00+08:00"}]}`)
+
+	require.Equal(t, http.StatusBadRequest, rsp.Code)
+	require.Contains(t, rsp.Body.String(), `"msg":"invalid value for field 'items[1].day'"`)
+	require.Zero(t, countDatedNamed(t, prefix+"-a"))
+}
+
 // TestCreateManyWritesNothingTheBeforeHookRefuses pins that a
 // CreateManyBefore refusal answers with the hook's error and creates
 // nothing.

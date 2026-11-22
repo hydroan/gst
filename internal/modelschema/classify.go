@@ -54,10 +54,10 @@ func ClassifyColumn(c Column) ColumnClass {
 	}
 }
 
-// dateDataType is the data type gorm reads for datatypes.Date, the name the
-// type declares through GormDataTypeInterface: gorm names no data type of
-// its own for a calendar day.
-var dateDataType = gormschema.DataType(datatypes.Date{}.GormDataType())
+// dateDataType is the data type gorm reads for a Date, the name the type
+// declares through GormDataTypeInterface: gorm names no data type of its own
+// for a calendar day.
+var dateDataType = gormschema.DataType(Date{}.GormDataType())
 
 // timeOfDayType is datatypes.Time, the time of day a TIME column stores. It
 // declares the time data type an instant carries, and only its
@@ -68,17 +68,18 @@ var timeOfDayType = reflect.TypeFor[datatypes.Time]()
 
 // IsTimeColumn reports whether a column stores a time by the data type gorm
 // reads for its field: an instant — time.Time, or the time sql.NullTime,
-// gorm.DeletedAt or a named time type holds — or a calendar day,
-// datatypes.Date (see IsDateColumn). A comparison on such a column compares
-// times on every dialect, and a value sent for it is RFC 3339 (see
-// ParseTime). A time of day is not one; see IsTimeOfDayColumn.
+// gorm.DeletedAt or a named time type holds — or a calendar day, a Date (see
+// IsDateColumn). A comparison on such a column compares times on every
+// dialect; a value sent for an instant is RFC 3339 (see ParseTime), and one
+// sent for a day is 2006-01-02 (see ParseDate). A time of day is not one; see
+// IsTimeOfDayColumn.
 func IsTimeColumn(c Column) bool {
 	return (c.gormDataType == gormschema.Time || c.gormDataType == dateDataType) && !IsTimeOfDayColumn(c)
 }
 
-// ParseTime reads a time the one way a filter or a cursor takes it, for an
-// instant and a calendar day alike (see IsTimeColumn): RFC 3339, fractional
-// seconds up to nanoseconds accepted. Its mandatory offset makes the value
+// ParseTime reads an instant the one way a filter or a cursor takes it: RFC
+// 3339, fractional seconds up to nanoseconds accepted; a calendar day is
+// read by ParseDate. Its mandatory offset makes the value
 // the same instant no matter what zone the server runs in, and it is the
 // format time.Time speaks in JSON, so query values and body values spell time
 // identically. Zone-less spellings and unix timestamps are refused on
@@ -93,21 +94,19 @@ func ParseTime(value string) (time.Time, error) {
 }
 
 // IsDateColumn reports whether a column stores a calendar day: the column
-// type gorm resolved for it is date, which datatypes.Date declares for itself
-// and a type tag declares for a time.Time, gorm keeping the tag's spelling, so
-// DATE counts too. A date column is a time column to ClassifyColumn and
-// IsTimeColumn alike; this tells the consumers of its values apart from an
-// instant's: a value sent for or compared with a date column names the UTC
-// day it falls on (see UTCDay), whatever its Go type.
+// type gorm resolved for it is date, which a Date declares for itself, gorm
+// keeping a type tag's spelling, so DATE counts too. A date column is a time
+// column to ClassifyColumn and IsTimeColumn alike; this tells the consumers
+// of its values apart from an instant's: a value sent for a date column is a
+// day (see ParseDate), and a time compared with one is taken as the UTC day
+// it falls on (see UTCDay).
 func IsDateColumn(c Column) bool {
 	return strings.EqualFold(string(c.dataType), string(dateDataType))
 }
 
 // UTCDay returns the calendar day t falls on in UTC, the one time base of
-// the framework, at midnight: the value a date column stores for t and the
-// value a date filter compares by, so that a day a client spells with its
-// own offset, 2026-01-02T00:00:00+08:00, is the same day, 2026-01-01, on
-// every transport and in every database. The zero time stays zero.
+// the framework, at midnight: the day an instant compared with a date column
+// is taken as, the same on every dialect. The zero time stays zero.
 func UTCDay(t time.Time) time.Time {
 	year, month, day := t.UTC().Date()
 	return time.Date(year, month, day, 0, 0, 0, 0, time.UTC)

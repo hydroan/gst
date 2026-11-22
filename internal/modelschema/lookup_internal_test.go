@@ -73,7 +73,7 @@ type sampleDocumentRecord struct {
 	Note      string         `json:"note"`
 	Count     int            `json:"count"`
 	CreatedAt time.Time      `json:"created_at"`
-	Day       datatypes.Date `json:"day"`
+	Day       Date           `json:"day"`
 	Settled   sql.NullTime   `json:"settled"`
 	Tally     sql.NullInt64  `json:"tally"`
 	Doc       string         `json:"doc" gorm:"type:json"`

@@ -58,10 +58,10 @@ func NewNumericColumn[M TableNamer, T any](name string) NumericColumn[T] {
 }
 
 // TimeColumn is the reference generated for a column holding a time value:
-// time.Time, or datatypes.Date, the calendar day a date column stores and
-// binds as a time at midnight. It embeds Column and adds time bucketing,
-// which is only meaningful over a time value and produces garbage rather
-// than an error on some dialects when it is not.
+// an instant, time.Time, or a calendar day, a Date, which a filter compares
+// by the UTC day the time it is given falls on. It embeds Column and adds
+// time bucketing, which is only meaningful over a time value and produces
+// garbage rather than an error on some dialects when it is not.
 type TimeColumn = types.TimeColumn
 
 // NewTimeColumn returns the time reference to the named column of M's table,

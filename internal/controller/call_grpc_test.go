@@ -712,10 +712,12 @@ func fromProto[T any](raw any) (T, error) {
 
 // messageDecoding is the decoding option fromProto reads a message's JSON
 // shape with beside the options json.DefaultOptionsV1 names: a time of day as
-// the duration it names (see timeOfDayAsDuration), and a time or a number the
-// field cannot hold refused naming the field (see decodeAtPointer).
+// the duration it names (see timeOfDayAsDuration), and a day, a time or a
+// number the field cannot hold refused naming the field (see dayAsDate and
+// decodeAtPointer).
 var messageDecoding = jsonv2.WithUnmarshalers(jsonv2.JoinUnmarshalers(
 	timeOfDayAsDuration,
+	dayAsDate,
 	jsonv2.UnmarshalFromFunc(decodeAtPointer[time.Time]),
 	jsonv2.UnmarshalFromFunc(decodeAtPointer[json.Number]),
 ))
@@ -767,6 +769,26 @@ var timeOfDayAsDuration = jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, t
 		return &jsonv2.SemanticError{JSONPointer: dec.StackPointer(), JSONKind: value.Kind(), GoType: reflect.TypeFor[datatypes.Time](), Err: err}
 	}
 	*t = datatypes.Time(since)
+	return nil
+})
+
+// dayAsDate reads a day for fromProto. A message carries one as a
+// google.type.Date, which a generated FromProto reads through grpc.Date,
+// refusing a year, month and day the calendar does not hold by naming the
+// field, while a record of the contract table spells it as HTTP does,
+// 2026-01-02. A spelling is read the way a request body reads it (see
+// dayAtPointer in request_bind_http.go, which this external test package
+// cannot reach), and one naming no day, 2026-02-30, is refused naming the
+// field, the way grpc.Date refuses the 30th of February. A null is a date
+// the message leaves unset, read as none.
+var dayAsDate = jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, day *modelschema.Date) error {
+	value, err := dec.ReadValue()
+	if err != nil {
+		return err
+	}
+	if err = day.UnmarshalJSON(value); err != nil {
+		return &jsonv2.SemanticError{JSONPointer: dec.StackPointer(), JSONKind: value.Kind(), JSONValue: value.Clone(), GoType: reflect.TypeFor[modelschema.Date](), Err: err}
+	}
 	return nil
 })
 

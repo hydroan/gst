@@ -87,8 +87,8 @@ type tableInfo struct {
 	// normalize both sides through timeComparableExpr; see comparisonSQL.
 	timeColumns map[string]struct{}
 	// dateColumns names the time columns that store a calendar day. A value
-	// compared with one, or matched against one in a list, binds the UTC day
-	// it falls on; see dayValue.
+	// compared with one, or matched against one in a list, binds the day it
+	// names; see dayValue.
 	dateColumns map[string]struct{}
 	// jsonColumns names the columns that store a JSON document. The text
 	// pattern filters match against the document's text form and cast the
@@ -696,15 +696,19 @@ func (db *database[M]) scalarFilter(f types.Filter, info tableInfo, sql string) 
 }
 
 // dayValue is the value a comparison with a date column, or a list matched
-// against one, binds for v: the UTC day v falls on (see modelschema.UTCDay),
-// in the form v came in, a string in types.FilterTimeLayout, the way the URL
-// parser binds a time, or a time, a value over one such as datatypes.Date
-// read as the time it holds; any other value binds as it is. The day is bound
-// rather than the instant because the dialects compare a day with an instant
-// differently: MySQL and SQLite take the day as its midnight, PostgreSQL
-// takes the instant as the day it falls on.
+// against one, binds for v. A day, a modelschema.Date, binds the midnight in
+// UTC of the day it names. A time binds the UTC day it falls on (see
+// modelschema.UTCDay), in the form it came in: a string in
+// types.FilterTimeLayout, the way the URL parser binds a day, a time.Time,
+// or a value over one read as the time it holds. Any other value binds as
+// it is. The day is bound rather than the instant because the dialects
+// compare a day with an instant differently: MySQL and SQLite take the day
+// as its midnight, PostgreSQL takes the instant as the day it falls on.
 func dayValue(v any) any {
 	switch value := v.(type) {
+	case modelschema.Date:
+		year, month, day := time.Time(value).Date()
+		return time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
 	case string:
 		t, err := time.ParseInLocation(types.FilterTimeLayout, value, time.UTC)
 		if err != nil {
@@ -725,8 +729,8 @@ func dayValue(v any) any {
 // listFilter binds a set-membership filter whose value must be a slice or an
 // array; anything else, including a comma-separated string, fails closed. An
 // empty slice keeps the SQL list semantics: IN matches nothing, and the result
-// never widens. On a date column every member binds the UTC day it falls on
-// (see dayValue), the way a compared value does.
+// never widens. On a date column every member binds the day it names (see
+// dayValue), the way a compared value does.
 func (db *database[M]) listFilter(f types.Filter, info tableInfo, sql string) (clause.Expression, error) {
 	if f.Value() == nil {
 		return db.failClosedFilter(f, "expects a slice value")

@@ -5,11 +5,12 @@
 // compile a short program inside the project's own module to inspect the
 // project's models, and that program cannot reach the internal packages the
 // rules live in. This package forwards the ones it asks: the column resolution
-// and the framework column check of internal/modelschema, the query name check
-// of internal/urlquery, and the query opt-in and the ID accessor check of
-// internal/modelregistry. The program therefore resolves and refuses exactly
-// what the framework resolves and refuses at runtime, instead of carrying a
-// second copy of the rules that would drift from it.
+// and the checks of the framework columns, the tenant indexes and the date
+// columns of internal/modelschema, the query name check of internal/urlquery,
+// and the query opt-in and the ID accessor check of internal/modelregistry.
+// The program therefore resolves and refuses exactly what the framework
+// resolves and refuses at runtime, instead of carrying a second copy of the
+// rules that would drift from it.
 //
 // Application code never needs this package: filters name their columns
 // through the typed column references gg gen writes next to each model.
@@ -57,6 +58,14 @@ func ValidateFrameworkColumns(typ reflect.Type) error {
 // refuses at startup.
 func ValidateTenantIndexes(typ reflect.Type) error {
 	return modelschema.ValidateTenantIndexes(typ)
+}
+
+// ValidateDateColumns refuses a date column a model declares by a type other
+// than model.Date, the Date of gorm.io/datatypes or a time.Time a gorm type
+// tag declares a date. The inspection program asks it of every model it
+// inspects, so gg check refuses what table preparation refuses at startup.
+func ValidateDateColumns(typ reflect.Type) error {
+	return modelschema.ValidateDateColumns(typ)
 }
 
 // ValidateQueryNames refuses a model whose query tags name its URL query

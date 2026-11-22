@@ -92,12 +92,14 @@ func preparationFailed() error {
 // ensureTable prepares the backing table for a registered model.
 //
 // A model has to declare its table name, keep the columns the framework fixes
-// under their names (see modelschema.ValidateFrameworkColumns), name its URL
-// query parameters unambiguously (see urlquery.ValidateQueryNames) and, when
-// it declares an ID of its own over its base's, declare the ID accessors that
-// go with it (see modelregistry.ValidateIDAccessors); a model failing any of
-// them is refused before anything touches the database, whatever the
-// database.
+// under their names (see modelschema.ValidateFrameworkColumns), keep its
+// unique indexes within its tenant (see modelschema.ValidateTenantIndexes),
+// declare its date columns as days (see modelschema.ValidateDateColumns),
+// name its URL query parameters unambiguously (see
+// urlquery.ValidateQueryNames) and, when it declares an ID of its own over
+// its base's, declare the ID accessors that go with it (see
+// modelregistry.ValidateIDAccessors); a model failing any of them is refused
+// before anything touches the database, whatever the database.
 //
 // With database.auto_migrate enabled it runs gorm AutoMigrate and creates
 // custom indexes, which suits local development and tests. With the option
@@ -120,6 +122,9 @@ func ensureTable(handler *gorm.DB, m types.Model) error {
 		return err
 	}
 	if err = modelschema.ValidateTenantIndexes(reflect.TypeOf(m)); err != nil {
+		return err
+	}
+	if err = modelschema.ValidateDateColumns(reflect.TypeOf(m)); err != nil {
 		return err
 	}
 	if err = urlquery.ValidateQueryNames(reflect.TypeOf(m)); err != nil {

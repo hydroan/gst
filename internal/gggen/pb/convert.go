@@ -195,10 +195,12 @@ func (w *fileWriter) namedMessage(t types.Type) *pbschema.Message {
 	return nil
 }
 
-// wellKnownGoTypes names the Go types of the well-known message types by
-// their package path and type name.
-var wellKnownGoTypes = map[string]struct{ importPath, name string }{
+// importedGoTypes names, by package path and type name, the Go types of the
+// messages a definition imports from outside the project: the well-known
+// types and the google.type.Date of a calendar day.
+var importedGoTypes = map[string]struct{ importPath, name string }{
 	pbschema.WellKnownTimestamp: {importPathTimestampPB, "Timestamp"},
+	pbschema.GoogleTypeDate:     {importPathDatePB, "Date"},
 	pbschema.WellKnownDuration:  {importPathDurationPB, "Duration"},
 	pbschema.WellKnownValue:     {importPathStructPB, "Value"},
 	pbschema.WellKnownStruct:    {importPathStructPB, "Struct"},
@@ -220,9 +222,9 @@ func (w *fileWriter) protoType(ft pbschema.FieldType, elem bool) ast.Expr {
 		switch {
 		case ft.Nested != nil:
 			base = star(ident(ft.Nested.GoName))
-		case wellKnownGoTypes[ft.TypeName].name != "":
-			known := wellKnownGoTypes[ft.TypeName]
-			base = star(sel(w.out.imports.fixedRef(known.importPath), known.name))
+		case importedGoTypes[ft.TypeName].name != "":
+			imported := importedGoTypes[ft.TypeName]
+			base = star(sel(w.out.imports.fixedRef(imported.importPath), imported.name))
 		default:
 			msg := w.g.ByFullName[ft.TypeName]
 			if msg == nil {
@@ -359,13 +361,18 @@ func typeKey(t types.Type) string {
 	return n.Obj().Pkg().Path() + "." + n.Obj().Name()
 }
 
+// dateTypeKey is what typeKey answers for the framework's calendar day,
+// model.Date, the alias of a type of an internal package.
+const dateTypeKey = ggconst.ImportPathGst + "/internal/modelschema.Date"
+
 // toProto returns the statements encoding src, a Go value of type t, into
 // dst, a message field of protobuf type ft. A value the field holds as it
 // is, a []byte or a []int64, is assigned; one of another type, an int for an
 // int64, a string enum for a string, is converted; a string is written
 // through grpc.UTF8 wherever it sits, alone, optional, as an element or as a
 // key, so a []string converts element by element (see utf8Guarded); a time
-// becomes a Timestamp through grpc.Timestamp, a duration a Duration, any
+// becomes a Timestamp through grpc.Timestamp, a day a google.type.Date
+// through grpc.DatePB (see dateOf), a duration a Duration, any
 // value a Value through grpc.Value, a JSON object a Struct through
 // grpc.Struct, and raw JSON travels as its bytes; a type with a text method
 // (see pbschema.FieldType.Text) is written through grpc.TextOf and a
@@ -453,11 +460,13 @@ func typeKey(t types.Type) string {
 //		}
 //	}
 //
-// and, of the Shape model, the date, time of day, JSON document, JSON
+// and, of the Shape model, the day, time of day, JSON document, JSON
 // object, JSON wrapper, struct held by value, JSON number, integer enum and
 // optional integer as
 //
-//	p.Date = grpc.Timestamp(time.Time(m.Date))
+//	if !time.Time(m.Date).IsZero() {
+//		p.Date = grpc.DatePB(m.Date)
+//	}
 //	p.Clock = durationpb.New(time.Duration(m.Clock))
 //	p.Doc = m.Doc
 //	p.Attrs = grpc.Struct(m.Attrs)
@@ -524,6 +533,11 @@ func typeKey(t types.Type) string {
 //			p.Rates[grpc.UTF8(k)] = grpc.NumberText(v)
 //		}
 //	}
+//
+// and the date of the datatypes package of gorm, a Timestamp at the start of
+// the day, as
+//
+//	p.Opened = grpc.Timestamp(time.Time(m.Opened))
 func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft pbschema.FieldType, inner bool) []ast.Stmt {
 	t = types.Unalias(t)
 	if p, ok := t.(*types.Pointer); ok {
@@ -575,6 +589,8 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft pbschema.FieldT
 	switch typeKey(t) {
 	case "time.Time":
 		return []ast.Stmt{assign(dst, w.timestampOf(src, inner))}
+	case dateTypeKey:
+		return w.dateOf(dst, src, inner)
 	case "gorm.io/datatypes.Date":
 		return []ast.Stmt{assign(dst, w.timestampOf(call(sel(w.out.imports.fixedRef(importPathTime), "Time"), src), inner))}
 	case "gorm.io/datatypes.Time":
@@ -662,6 +678,36 @@ func (w *fileWriter) timestampOf(src ast.Expr, inner bool) ast.Expr {
 		return call(sel(w.out.imports.fixedRef(importPathTimestampPB), "New"), src)
 	}
 	return call(w.grpc("Timestamp"), src)
+}
+
+// dateOf returns the statements writing the day src into dst as the
+// google.type.Date grpc.DatePB answers: whatever the day, the zero one as
+// 0001-01-01, where an unset message would stand for something else, inner,
+// an element, a map value or what an optional field points to; and in a
+// field of its own only a day that is not the zero one, which the field
+// leaves unset. Either way the zero day comes back as the zero day.
+//
+// The optional day and the days of the Shape model of the golden fixture
+// encode as
+//
+//	if m.Due != nil {
+//		p.Due = grpc.DatePB(*m.Due)
+//	}
+//	if m.Days != nil {
+//		p.Days = make([]*date.Date, len(m.Days))
+//		for i, v := range m.Days {
+//			p.Days[i] = grpc.DatePB(v)
+//		}
+//	}
+//
+// and its day, a field of its own, the way toProto shows it.
+func (w *fileWriter) dateOf(dst, src ast.Expr, inner bool) []ast.Stmt {
+	write := assign(dst, call(w.grpc("DatePB"), src))
+	if inner {
+		return []ast.Stmt{write}
+	}
+	zero := call(sel(call(w.timeType(), src), "IsZero"))
+	return []ast.Stmt{ifStmt(nil, &ast.UnaryExpr{Op: token.NOT, X: zero}, write)}
 }
 
 // encoded returns src, a scalar Go value of type t, as a message field or
@@ -828,16 +874,14 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 //		}
 //	}
 //
-// and, of the Shape model, the date, time of day, JSON document, JSON
+// and, of the Shape model, the day, time of day, JSON document, JSON
 // object, JSON wrapper, struct held by value, JSON number, integer enum
 // and optional integer as
 //
-//	var day time.Time
-//	day, err = grpc.Time("date", p.GetDate())
+//	m.Date, err = grpc.Date("date", p.GetDate())
 //	if err != nil {
 //		return nil, err
 //	}
-//	m.Date = datatypes.Date(day)
 //	var since time.Duration
 //	since, err = grpc.TimeOfDay("clock", p.GetClock())
 //	if err != nil {
@@ -928,6 +972,16 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 //		}
 //		m.When = &x
 //	}
+//
+// and the date of the datatypes package of gorm, a Timestamp at the start of
+// the day, as
+//
+//	var day time.Time
+//	day, err = grpc.Time("opened", p.GetOpened())
+//	if err != nil {
+//		return nil, err
+//	}
+//	m.Opened = datatypes.Date(day)
 func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft pbschema.FieldType, path ast.Expr) []ast.Stmt {
 	// declared is t as the model spells it, an alias kept, which is how the
 	// file spells it too; t itself decides the conversion.
@@ -1006,6 +1060,8 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft pbschema.Fiel
 	switch typeKey(t) {
 	case "time.Time":
 		return w.refusing(dst, call(w.grpc("Time"), path, src))
+	case dateTypeKey:
+		return w.refusing(dst, call(w.grpc("Date"), path, src))
 	case "gorm.io/datatypes.Date":
 		day := w.temp("day")
 		read := append([]ast.Stmt{w.varDeclExpr(day, w.timeType())}, w.refusing(ident(day), call(w.grpc("Time"), path, src))...)

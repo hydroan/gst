@@ -10,10 +10,13 @@ import (
 
 	"github.com/cockroachdb/errors"
 	gstgrpc "github.com/hydroan/gst/grpc"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/genproto/googleapis/type/date"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -149,6 +152,63 @@ func TestTimestampLeavesTheZeroTimeUnset(t *testing.T) {
 	zero, err := gstgrpc.Time("at", nil)
 	require.NoError(t, err)
 	require.True(t, zero.IsZero())
+}
+
+// TestDateRefusesWhatIsNoDay pins Date, what a generated FromProto reads a
+// day through: a full date comes back as its day, at midnight in UTC, and no
+// date as the zero day; a date leaving its year, its month or its day at
+// zero, one the calendar does not hold and one outside the years 1 to 9999
+// are refused with InvalidArgument naming the field, the way the HTTP
+// listener refuses a day it cannot read.
+func TestDateRefusesWhatIsNoDay(t *testing.T) {
+	got, err := gstgrpc.Date("day", &date.Date{Year: 2024, Month: 2, Day: 29})
+	require.NoError(t, err)
+	require.Equal(t, modelschema.Date(time.Date(2024, time.February, 29, 0, 0, 0, 0, time.UTC)), got)
+	unset, err := gstgrpc.Date("day", nil)
+	require.NoError(t, err)
+	require.True(t, time.Time(unset).IsZero())
+
+	for _, tt := range []struct {
+		name string
+		d    *date.Date
+		want string
+	}{
+		{name: "a day the month does not hold", d: &date.Date{Year: 2026, Month: 2, Day: 30}, want: "2026-02-30 is not a day of the calendar"},
+		{name: "the 29th of February of a common year", d: &date.Date{Year: 2026, Month: 2, Day: 29}, want: "2026-02-29 is not a day of the calendar"},
+		{name: "a month past the twelfth", d: &date.Date{Year: 2026, Month: 13, Day: 1}, want: "2026-13-01 is not a day of the calendar"},
+		{name: "a month of a year", d: &date.Date{Year: 2026, Month: 2}, want: "2026-02-00 is not a day of the calendar"},
+		{name: "a day of any year", d: &date.Date{Month: 2, Day: 3}, want: "0000-02-03 is not a day of the calendar"},
+		{name: "an empty date", d: &date.Date{}, want: "0000-00-00 is not a day of the calendar"},
+		{name: "a year past 9999", d: &date.Date{Year: 10000, Month: 1, Day: 1}, want: "10000-01-01 is not a day of the calendar"},
+		{name: "a day below the first", d: &date.Date{Year: 2026, Month: 3, Day: -1}, want: "2026-03--1 is not a day of the calendar"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := gstgrpc.Date("day", tt.d)
+			require.Equal(t, codes.InvalidArgument, status.Code(err))
+			require.Equal(t, "invalid value for field 'day'", status.Convert(err).Message())
+			requireFieldViolation(t, err, "day", tt.want)
+		})
+	}
+}
+
+// TestDatePBWritesTheDayItsTimeReads pins the two ways of a day through
+// DatePB and Date: a day goes out as the year, month and day its time reads
+// in its own location and comes back as that day, and the zero day goes out
+// as 0001-01-01 and comes back as the zero day.
+func TestDatePBWritesTheDayItsTimeReads(t *testing.T) {
+	// 07:30 at +08:00 on the 2nd is the 2nd, though the 1st in UTC.
+	on := modelschema.Date(time.Date(2026, time.January, 2, 7, 30, 0, 0, time.FixedZone("", 8*3600)))
+	msg := gstgrpc.DatePB(on)
+	require.True(t, proto.Equal(&date.Date{Year: 2026, Month: 1, Day: 2}, msg), msg)
+	back, err := gstgrpc.Date("day", msg)
+	require.NoError(t, err)
+	require.Equal(t, modelschema.Date(time.Date(2026, time.January, 2, 0, 0, 0, 0, time.UTC)), back)
+
+	zero := gstgrpc.DatePB(modelschema.Date{})
+	require.True(t, proto.Equal(&date.Date{Year: 1, Month: 1, Day: 1}, zero), zero)
+	back, err = gstgrpc.Date("day", zero)
+	require.NoError(t, err)
+	require.True(t, time.Time(back).IsZero())
 }
 
 // TestTimeOfDayRefusesADurationOutsideADay pins TimeOfDay, what a generated

@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"unicode"
+
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 // This file holds the encoding/json rules a shape follows: which keys a
@@ -253,7 +255,9 @@ const (
 )
 
 // builtins lists the types with encoding methods whose output is known, keyed
-// by package path and type name. The JSON v2 experiment turns json.RawMessage
+// by package path and type name: the framework's own day, model.Date, a
+// string as 2026-01-02, among the ones of the libraries a model is built
+// from. The JSON v2 experiment turns json.RawMessage
 // into an alias of jsontext.Value, so both names are listed. The OpenAPI
 // document of a running server describes the same types from the same
 // knowledge, by reflection (see internal/openapigen's knownJSONWrites).
@@ -268,6 +272,8 @@ var builtins = map[string]Builtin{
 	"gorm.io/datatypes.JSONMap":    BuiltinObject,
 	"gorm.io/datatypes.JSONType":   BuiltinWrapper,
 	"gorm.io/gorm.DeletedAt":       BuiltinNullableString,
+
+	ggconst.ImportPathGst + "/internal/modelschema.Date": BuiltinString,
 }
 
 // BuiltinOf reports the builtin shape of n, if it has one: BuiltinString for

@@ -23,10 +23,10 @@ type filterTestModel struct {
 	ExpiredAt time.Time `json:"expired_at" query:"expired_at"`
 	// Day is a calendar day; ClosedAt, Retries and Archived are optional
 	// values behind pointers, checked like the values they point to.
-	Day      datatypes.Date `json:"day" query:"day"`
-	ClosedAt *time.Time     `json:"closed_at" query:"closed_at"`
-	Retries  *int           `json:"retries" query:"retries"`
-	Archived *bool          `json:"archived" query:"archived"`
+	Day      modelschema.Date `json:"day" query:"day"`
+	ClosedAt *time.Time       `json:"closed_at" query:"closed_at"`
+	Retries  *int             `json:"retries" query:"retries"`
+	Archived *bool            `json:"archived" query:"archived"`
 	// BoxIDs and Renamed anchor the column resolution: gorm renders the
 	// former as box_ids (a plain snake case conversion would not) and the
 	// latter through its column tag, while the URL keeps the query name.
@@ -303,23 +303,25 @@ func TestFilters(t *testing.T) {
 		}
 	})
 
-	t.Run("DateFieldKeepsTheInstant", func(t *testing.T) {
-		// A date column compares by the UTC day a value falls on, which the
-		// database binds; the parser keeps the instant in the canonical
-		// layout, so a service reading the filter sees what was sent:
-		// midnight in Shanghai on the 2nd is 16:00 on the 1st in UTC.
-		conds, err := Filters(url.Values{"day[eq]": {"2026-01-02T00:00:00+08:00"}}, &filterTestModel{})
+	t.Run("DateFieldTakesADay", func(t *testing.T) {
+		// A date column takes a day, written 2006-01-02, bound as its
+		// midnight in the canonical layout; an instant names a day only in
+		// the zone it is read in, and is refused.
+		conds, err := Filters(url.Values{"day[eq]": {"2026-01-02"}}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{types.NewFilter("", "day", types.FilterOpEq, "2026-01-01 16:00:00")}, conds)
+		require.Equal(t, []types.Filter{types.NewFilter("", "day", types.FilterOpEq, "2026-01-02 00:00:00")}, conds)
 
-		conds, err = Filters(url.Values{"day[gte]": {"2026-01-02T15:30:00Z"}}, &filterTestModel{})
+		conds, err = Filters(url.Values{"day[gte]": {"2026-12-31"}}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, "2026-01-02 15:30:00", conds[0].Value(), "the time of day is kept")
+		require.Equal(t, "2026-12-31 00:00:00", conds[0].Value())
 
-		_, err = Filters(url.Values{"day[eq]": {"not-a-date"}}, &filterTestModel{})
-		require.Error(t, err, "a value that is not RFC 3339 is a client error, not an empty page")
+		for _, value := range []string{"2026-01-02T00:00:00+08:00", "2026-01-02T00:00:00Z", "2026-02-30", "not-a-date"} {
+			_, err = Filters(url.Values{"day[eq]": {value}}, &filterTestModel{})
+			require.ErrorContains(t, err, `invalid field filter "day[eq]": unsupported date format "`+value+`", expect 2006-01-02`,
+				"a value that is no day is a client error, not an empty page")
+		}
 		for _, key := range []string{"day[like]", "day[in]"} {
-			_, err = Filters(url.Values{key: {"2026-01-02T00:00:00Z"}}, &filterTestModel{})
+			_, err = Filters(url.Values{key: {"2026-01-02"}}, &filterTestModel{})
 			require.Error(t, err, "key %q must be rejected on a date field", key)
 		}
 	})
@@ -1264,9 +1266,9 @@ func TestCursor(t *testing.T) {
 
 // TestNormalizeCursorValueFollowsTheColumnType pins the boundary check on
 // the value the column holds, a pointer dereferenced, a date column's
-// boundary kept as the instant sent, which the database compares by its UTC
-// day; the zero Column, a model without the fallback column, passes the
-// value through.
+// boundary a day, bound as its midnight, and an instant refused there; the
+// zero Column, a model without the fallback column, passes the value
+// through.
 func TestNormalizeCursorValueFollowsTheColumnType(t *testing.T) {
 	columns, err := modelschema.Columns(reflect.TypeFor[filterTestModel]())
 	require.NoError(t, err)
@@ -1281,9 +1283,11 @@ func TestNormalizeCursorValueFollowsTheColumnType(t *testing.T) {
 		return modelschema.Column{}
 	}
 
-	value, err := normalizeCursorValue(column("day"), "2026-01-02T00:00:00+08:00")
+	value, err := normalizeCursorValue(column("day"), "2026-01-02")
 	require.NoError(t, err)
-	require.Equal(t, "2026-01-01 16:00:00", value, "a date boundary keeps the instant")
+	require.Equal(t, "2026-01-02 00:00:00", value, "a date boundary is the day's midnight")
+	_, err = normalizeCursorValue(column("day"), "2026-01-02T00:00:00+08:00")
+	require.ErrorContains(t, err, `unsupported date format "2026-01-02T00:00:00+08:00", expect 2006-01-02`)
 
 	value, err = normalizeCursorValue(column("closed_at"), "2026-01-02T08:00:00+08:00")
 	require.NoError(t, err)

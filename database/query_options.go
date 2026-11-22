@@ -118,8 +118,8 @@ func (db *database[M]) ownOrder(option string, order types.Order) error {
 // boundary comparison and the ORDER BY flip; List reverses the rows afterwards
 // to hand them back in the feed's own order. A boundary on a time column goes
 // through timeComparableExpr on both sides, so the comparison agrees across
-// storage spellings, and one on a date column binds the UTC day it falls on
-// (see dayValue).
+// storage spellings, and one on a date column binds the day it names (see
+// dayValue).
 func (db *database[M]) applyCursorPagination() {
 	if !db.cursor.Enabled() {
 		return

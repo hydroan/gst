@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/stretchr/testify/require"
@@ -802,20 +803,21 @@ func TestDatabaseFiltersOnTimeColumns(t *testing.T) {
 }
 
 // TestDatabaseFiltersOnDateColumns pins the runtime behavior of comparisons
-// on a date column across dialects, declared a date by its type or by its
-// type tag alike: the URL parser binds an instant in types.FilterTimeLayout,
+// on a date column across dialects, a required day and an optional one alike:
+// the URL parser binds a day as its midnight in types.FilterTimeLayout,
 // service code binds a time.Time through the time reference gg gen writes for
-// the column, and both compare by the UTC day the value falls on, selecting
-// the rows of that day however the dialect stores the date. The same
-// reference buckets the column, so a report groups by it.
+// the column, and both compare by the UTC day the value falls on, while a
+// Date compares by the day it names; each selects the rows of that day
+// however the dialect stores the date. The same reference buckets the column,
+// so a report groups by it.
 func TestDatabaseFiltersOnDateColumns(t *testing.T) {
 	defer cleanupDatedData()
 	day := func(d int) time.Time { return time.Date(2026, time.January, d, 0, 0, 0, 0, time.UTC) }
-	due := func(d int) *time.Time { t := day(d); return &t }
+	due := func(d int) *modelschema.Date { on := modelschema.Date(day(d)); return &on }
 	require.NoError(t, database.Database[*TestDatedRecord](context.Background()).Create(
-		&TestDatedRecord{Label: "d1", Day: datatypes.Date(day(1)), Due: due(1)},
-		&TestDatedRecord{Label: "d2", Day: datatypes.Date(day(2)), Due: due(2)},
-		&TestDatedRecord{Label: "d3", Day: datatypes.Date(day(3)), Due: due(3)},
+		&TestDatedRecord{Label: "d1", Day: modelschema.Date(day(1)), Due: due(1)},
+		&TestDatedRecord{Label: "d2", Day: modelschema.Date(day(2)), Due: due(2)},
+		&TestDatedRecord{Label: "d3", Day: modelschema.Date(day(3)), Due: due(3)},
 	))
 
 	labels := func(t *testing.T, f types.Filter) []string {
@@ -840,6 +842,16 @@ func TestDatabaseFiltersOnDateColumns(t *testing.T) {
 	t.Run("TimeValueBound", func(t *testing.T) {
 		require.Equal(t, []string{"d2"}, labels(t, TestDatedRecordCols.Day.Eq(day(2))))
 		require.Equal(t, []string{"d1"}, labels(t, TestDatedRecordCols.Day.Lt(day(2))))
+	})
+
+	t.Run("DayValueBound", func(t *testing.T) {
+		// A Date names the day its time reads in its own location: 07:00 at
+		// +08:00 on the 2nd is the 2nd, though the 1st in UTC.
+		on := modelschema.Date(time.Date(2026, time.January, 2, 7, 0, 0, 0, time.FixedZone("", 8*3600)))
+		for _, column := range []string{"day", "due"} {
+			require.Equal(t, []string{"d2"}, labels(t, types.FilterEq(column, on)), column)
+			require.Equal(t, []string{"d1", "d3"}, labels(t, types.FilterNotIn(column, []modelschema.Date{on})), column)
+		}
 	})
 
 	t.Run("InstantsCompareByTheirUTCDay", func(t *testing.T) {

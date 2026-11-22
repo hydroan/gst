@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"gorm.io/datatypes"
@@ -355,23 +356,23 @@ func TestDatabaseWithQuery(t *testing.T) {
 		require.Equal(t, rows[0].ID, listed[0].ID)
 	})
 
-	t.Run("DaysMatchTheUTCDay", func(t *testing.T) {
+	t.Run("DaysMatchTheDayTheyName", func(t *testing.T) {
 		ctx := context.Background()
 		cleanupAggregateData()
 		t.Cleanup(cleanupAggregateData)
-		first, second := seedTime(1, 10, 0), seedTime(1, 11, 0)
+		first, second := modelschema.Date(seedTime(1, 10, 0)), modelschema.Date(seedTime(1, 11, 0))
 		rows := []*TestDatedRecord{
-			{Label: "dated-first", Day: datatypes.Date(first), Due: &first},
-			{Label: "dated-second", Day: datatypes.Date(second), Due: &second},
+			{Label: "dated-first", Day: first, Due: &first},
+			{Label: "dated-second", Day: second, Due: &second},
 		}
 		require.NoError(t, database.Database[*TestDatedRecord](ctx).Create(rows...))
 
-		// A day on the query model is matched by the UTC day it names,
-		// whatever time of day and offset the value carries, declared a date
-		// by its type or by its type tag alike: 23:30 at +08:00 on the tenth
-		// is the tenth in UTC.
-		sent := time.Date(2024, 1, 10, 23, 30, 0, 0, time.FixedZone("", 8*3600))
-		for _, query := range []*TestDatedRecord{{Day: datatypes.Date(sent)}, {Due: &sent}} {
+		// A day on the query model is matched by the day it names, whatever
+		// time of day and offset its time carries, a required day and an
+		// optional one alike: 07:30 at +08:00 on the tenth is the tenth,
+		// though the ninth in UTC.
+		sent := modelschema.Date(time.Date(2024, 1, 10, 7, 30, 0, 0, time.FixedZone("", 8*3600)))
+		for _, query := range []*TestDatedRecord{{Day: sent}, {Due: &sent}} {
 			listed := make([]*TestDatedRecord, 0)
 			require.NoError(t, database.Database[*TestDatedRecord](ctx).WithQuery(query).List(&listed))
 			require.Len(t, listed, 1, "a day on the query model is a condition, not a field the query ignores")

@@ -43,6 +43,7 @@ type modelColumns struct {
 	Columns                  []columnInfo `json:"columns"`
 	IndexViolation           string       `json:"index_violation"`
 	TenantIndexViolation     string       `json:"tenant_index_violation"`
+	DateColumnViolation      string       `json:"date_column_violation"`
 	FrameworkColumnViolation string       `json:"framework_column_violation"`
 	QueryNameViolation       string       `json:"query_name_violation"`
 	IDAccessorViolation      string       `json:"id_accessor_violation"`
@@ -120,6 +121,9 @@ func main() {
 		}
 		if validateErr := inspect.ValidateTenantIndexes(typ); validateErr != nil {
 			entry.TenantIndexViolation = validateErr.Error()
+		}
+		if validateErr := inspect.ValidateDateColumns(typ); validateErr != nil {
+			entry.DateColumnViolation = validateErr.Error()
 		}
 		if validateErr := inspect.ValidateFrameworkColumns(typ); validateErr != nil {
 			entry.FrameworkColumnViolation = validateErr.Error()

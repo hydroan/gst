@@ -11,6 +11,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3gen"
 	"github.com/hydroan/gst/apidoc"
+	"github.com/hydroan/gst/internal/modelschema"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
@@ -513,13 +514,14 @@ func TestNewSchemaRefWithDocsDecoratesCustomListResponseWrapper(t *testing.T) {
 // MarshalText, a pointer to one, an integer type with the method, the types
 // whose JSON the framework knows, a project type with a MarshalJSON of its
 // own, and one inside a datatypes.JSONType; When writes its own JSON and
-// stays a date-time.
+// stays a date-time, and Due, a day, writes a date.
 type encodingFieldModel struct {
 	Addr    netip.Addr                               `json:"addr"`
 	Peer    *netip.Addr                              `json:"peer"`
 	Grade   encodingFieldGrade                       `json:"grade"`
 	When    time.Time                                `json:"when"`
 	Day     datatypes.Date                           `json:"day"`
+	Due     modelschema.Date                         `json:"due"`
 	Clock   datatypes.Time                           `json:"clock"`
 	Removed gorm.DeletedAt                           `json:"removed"`
 	Amount  json.Number                              `json:"amount"`
@@ -570,6 +572,9 @@ func TestNewSchemaRefWithDocsDocumentsWhatEncodingMethodsWrite(t *testing.T) {
 		if p := prop(name); !p.Type.Is("string") || p.Format != "date-time" {
 			t.Fatalf("%s schema = %#v, want the RFC 3339 string time.Time writes", name, p)
 		}
+	}
+	if p := prop("due"); !p.Type.Is("string") || p.Format != "date" {
+		t.Fatalf("due schema = %#v, want the day a Date writes, 2026-01-02", p)
 	}
 	if !prop("removed").Nullable {
 		t.Fatal("removed, a gorm.DeletedAt, writes null when unset and must be nullable")

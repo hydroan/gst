@@ -35,6 +35,51 @@ func TestProjectCheckHelpNumbersEveryCheckInRunOrder(t *testing.T) {
 	}
 }
 
+// TestProjectChecksRunEveryCheckInOrder pins the checks gg check runs and
+// the order it runs them in, by the names their results print: a check left
+// out of the list is declared and never run.
+func TestProjectChecksRunEveryCheckInOrder(t *testing.T) {
+	want := []string{
+		"Architecture dependencies",
+		"Model singular naming",
+		"Model file name hyphens",
+		"JSON tag naming",
+		"Action type naming",
+		"Action type form",
+		"Action type uniqueness",
+		"Model file boundaries",
+		"Service file boundaries",
+		"Model package naming",
+		"Directory restrictions",
+		"DSL design rules",
+		"Database chain termination",
+		"Transaction closure context",
+		"Detached context",
+		"Error discipline",
+		"Service test coverage",
+		"Service test organization",
+		"TestMain imports",
+		"Log field boundedness",
+		"Model table name declaration",
+		"Gorm tag index ban",
+		"Validate tag ban",
+		"Index declarations",
+		"Framework columns",
+		"Tenant unique indexes",
+		"Date columns",
+		"Query names",
+		"ID accessors",
+		"Version field declaration",
+		"Module assembly",
+		"Column reference minting",
+		"gRPC service context",
+		"Protobuf definitions",
+	}
+	if got := checkNames(projectChecks); !slices.Equal(got, want) {
+		t.Fatalf("projectChecks = %q, want %q", got, want)
+	}
+}
+
 // TestModuleCopyChecksLeaveTheModuleAssemblyToTheProject pins the checks the
 // gg gen run of gg module copy makes: the generation checks but Module
 // assembly, which the copy itself cannot satisfy and prints for the project
@@ -54,11 +99,11 @@ func TestModuleCopyChecksLeaveTheModuleAssemblyToTheProject(t *testing.T) {
 // pins the checks gg gen leaves out of the project checks it runs before
 // generating: Protobuf definitions, which the run derives itself, TestMain
 // imports, which it syncs itself, and Index declarations, Framework columns,
-// Tenant unique indexes, Query names and ID accessors, which ask the compiled
-// models of a project that need not compile yet; every other check runs, in
-// the order of gg check.
+// Tenant unique indexes, Date columns, Query names and ID accessors, which
+// ask the compiled models of a project that need not compile yet; every other
+// check runs, in the order of gg check.
 func TestGenerationChecksLeaveOutWhatTheRunDoesItselfAndWhatAsksTheCompiledModels(t *testing.T) {
-	left := []string{ggcheck.ProtobufDefinitions.Name, ggcheck.TestMainImports.Name, ggcheck.IndexDeclarations.Name, ggcheck.FrameworkColumns.Name, ggcheck.TenantUniqueIndexes.Name, ggcheck.QueryNames.Name, ggcheck.IDAccessors.Name}
+	left := []string{ggcheck.ProtobufDefinitions.Name, ggcheck.TestMainImports.Name, ggcheck.IndexDeclarations.Name, ggcheck.FrameworkColumns.Name, ggcheck.TenantUniqueIndexes.Name, ggcheck.DateColumns.Name, ggcheck.QueryNames.Name, ggcheck.IDAccessors.Name}
 	want := slices.DeleteFunc(checkNames(projectChecks), func(name string) bool { return slices.Contains(left, name) })
 	if got := checkNames(generationChecks()); !slices.Equal(got, want) {
 		t.Fatalf("generationChecks() = %v, want %v", got, want)

@@ -12,9 +12,11 @@ import (
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/modelinfo"
+	"google.golang.org/genproto/googleapis/type/date"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/pluginpb"
 )
@@ -42,7 +44,7 @@ const (
 // declares a service, pb/sample_grpc.pb.go with the service; for
 // pb/record/item.proto, pb/record/item.pb.go in the package its go_package
 // names. The definitions are compiled in memory, with protocompile standing
-// in for protoc and carrying the well-known types they import, so nothing
+// in for protoc and the files they import resolved by resolverOf, so nothing
 // has to be on disk first and nothing is written when a definition or a
 // plugin refuses; the plugins get the descriptors the way protoc hands them
 // over, comments included. The files come back sorted by path.
@@ -65,12 +67,7 @@ func Compile(modulePath string, protos []File) ([]File, error) {
 		names = append(names, name)
 	}
 	slices.Sort(names)
-	compiler := protocompile.Compiler{
-		Resolver: protocompile.WithStandardImports(&protocompile.SourceResolver{
-			Accessor: protocompile.SourceAccessorFromMap(sources),
-		}),
-		SourceInfoMode: protocompile.SourceInfoStandard,
-	}
+	compiler := protocompile.Compiler{Resolver: resolverOf(sources), SourceInfoMode: protocompile.SourceInfoStandard}
 	linked, err := compiler.Compile(context.Background(), names...)
 	if err != nil {
 		return nil, errors.Wrap(err, "compile the protobuf definitions")
@@ -119,6 +116,24 @@ func Compile(modulePath string, protos []File) ([]File, error) {
 	}
 	slices.SortFunc(files, func(a, b File) int { return strings.Compare(a.Path, b.Path) })
 	return files, nil
+}
+
+// resolverOf returns the resolver the printed definitions sources holds, by
+// the paths they are registered under, are compiled against, in readBack and
+// in Compile alike: the definitions themselves, which import one another,
+// the well-known types, which protocompile carries, and the google.type.Date
+// of a calendar day, which it does not, taken from the Go package declaring
+// it.
+func resolverOf(sources map[string]string) protocompile.Resolver {
+	return protocompile.WithStandardImports(protocompile.CompositeResolver{
+		&protocompile.SourceResolver{Accessor: protocompile.SourceAccessorFromMap(sources)},
+		protocompile.ResolverFunc(func(name string) (protocompile.SearchResult, error) {
+			if name != date.File_google_type_date_proto.Path() {
+				return protocompile.SearchResult{}, protoregistry.NotFound
+			}
+			return protocompile.SearchResult{Desc: date.File_google_type_date_proto}, nil
+		}),
+	})
 }
 
 // runPlugin runs the plugin pkg, of the module named by module, at version

@@ -41,7 +41,7 @@ type sliceQueryItem struct {
 // instant, a day, a nullable string and a JSON document.
 type valuedQueryItem struct {
 	At    time.Time         `json:"at"`
-	Day   datatypes.Date    `json:"day"`
+	Day   modelschema.Date  `json:"day"`
 	Grade sql.NullString    `json:"grade"`
 	Meta  datatypes.JSONMap `json:"meta"`
 
@@ -153,9 +153,10 @@ func TestStructConditionsMapTheQueriedFieldsToTheirColumns(t *testing.T) {
 		require.Equal(t, map[string]any{"at": at.UTC()}, conditions(&valuedQueryItem{At: at}, nil))
 	})
 
-	t.Run("a day binds as the UTC day it names", func(t *testing.T) {
-		day := datatypes.Date(time.Date(2024, 1, 10, 23, 30, 0, 0, time.FixedZone("", 8*3600)))
-		require.Equal(t, map[string]any{"day": time.Date(2024, 1, 10, 0, 0, 0, 0, time.UTC)}, conditions(&valuedQueryItem{Day: day}, nil))
+	t.Run("a day binds as the midnight in UTC of the day it names", func(t *testing.T) {
+		// 07:30 at +08:00 on the 11th is the 11th, though the 10th in UTC.
+		day := modelschema.Date(time.Date(2024, 1, 11, 7, 30, 0, 0, time.FixedZone("", 8*3600)))
+		require.Equal(t, map[string]any{"day": time.Date(2024, 1, 11, 0, 0, 0, 0, time.UTC)}, conditions(&valuedQueryItem{Day: day}, nil))
 	})
 
 	t.Run("a nullable string binds as it is", func(t *testing.T) {

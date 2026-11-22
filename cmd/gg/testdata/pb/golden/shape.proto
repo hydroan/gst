@@ -10,6 +10,8 @@ import "google/protobuf/struct.proto";
 
 import "google/protobuf/timestamp.proto";
 
+import "google/type/date.proto";
+
 option go_package = "tmpapp/pb;pb";
 
 // Shape carries one field of every kind the handlers convert.
@@ -29,7 +31,7 @@ message Shape {
   // When the record was last updated.
   google.protobuf.Timestamp updated_at = 5;
 
-  google.protobuf.Timestamp date = 11;
+  google.type.Date date = 11;
 
   google.protobuf.Duration clock = 12;
 
@@ -162,6 +164,18 @@ message Shape {
   repeated string pair = 57;
 
   map<string, string> rates = 58;
+
+  // Due and Days hold days behind a pointer and in a repeated field,
+  // where the zero day travels as 0001-01-01 and comes back as the zero
+  // day.
+  google.type.Date due = 59;
+
+  repeated google.type.Date days = 60;
+
+  // Opened is the date of the datatypes package of gorm, which a field no
+  // column stores may take: it travels as a Timestamp at the start of the
+  // day.
+  google.protobuf.Timestamp opened = 61;
 }
 
 // ShapeSpans is the message of the spans field of Shape.

@@ -60,6 +60,7 @@ type Sample struct {
 	Options  datatypes.JSONType[*Options] `json:"options"`
 	Items    datatypes.JSONSlice[Item]    `json:"items"`
 	Day      datatypes.Date               `json:"day"`
+	Due      modelschema.Date             `json:"due"`
 	Deadline time.Time                    `json:"deadline,omitzero"`
 	Archived gorm.DeletedAt               `json:"archived"`
 	Comment  sql.NullString               `json:"comment"`

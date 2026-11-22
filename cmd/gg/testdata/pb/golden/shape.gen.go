@@ -11,6 +11,7 @@ import (
 
 	"github.com/hydroan/gst/grpc"
 	gstmodel "github.com/hydroan/gst/model"
+	"google.golang.org/genproto/googleapis/type/date"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"gorm.io/datatypes"
@@ -76,7 +77,9 @@ func ShapeToProto(m *model.Shape) (*Shape, error) {
 	p.UpdatedBy = grpc.UTF8(m.UpdatedBy)
 	p.CreatedAt = grpc.Timestamp(m.CreatedAt)
 	p.UpdatedAt = grpc.Timestamp(m.UpdatedAt)
-	p.Date = grpc.Timestamp(time.Time(m.Date))
+	if !time.Time(m.Date).IsZero() {
+		p.Date = grpc.DatePB(m.Date)
+	}
 	p.Clock = durationpb.New(time.Duration(m.Clock))
 	p.Doc = m.Doc
 	p.Attrs = grpc.Struct(m.Attrs)
@@ -281,6 +284,16 @@ func ShapeToProto(m *model.Shape) (*Shape, error) {
 			p.Rates[grpc.UTF8(k)] = grpc.NumberText(v)
 		}
 	}
+	if m.Due != nil {
+		p.Due = grpc.DatePB(*m.Due)
+	}
+	if m.Days != nil {
+		p.Days = make([]*date.Date, len(m.Days))
+		for i, v := range m.Days {
+			p.Days[i] = grpc.DatePB(v)
+		}
+	}
+	p.Opened = grpc.Timestamp(time.Time(m.Opened))
 	return p, nil
 }
 
@@ -306,12 +319,10 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 	if err != nil {
 		return nil, err
 	}
-	var day time.Time
-	day, err = grpc.Time("date", p.GetDate())
+	m.Date, err = grpc.Date("date", p.GetDate())
 	if err != nil {
 		return nil, err
 	}
-	m.Date = datatypes.Date(day)
 	var since time.Duration
 	since, err = grpc.TimeOfDay("clock", p.GetClock())
 	if err != nil {
@@ -630,6 +641,29 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 			}
 		}
 	}
+	if p.GetDue() != nil {
+		var x gstmodel.Date
+		x, err = grpc.Date("due", p.GetDue())
+		if err != nil {
+			return nil, err
+		}
+		m.Due = &x
+	}
+	if p.GetDays() != nil {
+		m.Days = make([]gstmodel.Date, len(p.GetDays()))
+		for i, v := range p.GetDays() {
+			m.Days[i], err = grpc.Date(grpc.Element("days", i), v)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var day time.Time
+	day, err = grpc.Time("opened", p.GetOpened())
+	if err != nil {
+		return nil, err
+	}
+	m.Opened = datatypes.Date(day)
 	return m, nil
 }
 

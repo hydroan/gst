@@ -45,6 +45,7 @@ export interface Sample {
   options: Options | null;
   items?: Item[] | null;
   day: string;
+  due: string;
   deadline?: string;
   archived: string | null;
   comment: { String: string; Valid: boolean };

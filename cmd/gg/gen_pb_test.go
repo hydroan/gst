@@ -16,6 +16,8 @@ import (
 	"github.com/hydroan/gst/internal/gggen/pb"
 	"github.com/hydroan/gst/internal/pbschema"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/genproto/googleapis/type/date"
+	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden files under testdata")
@@ -41,7 +43,7 @@ var update = flag.Bool("update", false, "rewrite the golden files under testdata
 // buildMessage, declareService, rpcMessages, customRequest, customResponse,
 // queryFields and fileDescriptor; the whole report.gen.go of handlerFile,
 // the excerpts of serviceType, actionCalls, handler, streamHandler, toProto,
-// fromProto, elementFromProto and conversionFuncs; and the two pb.gen.go of
+// dateOf, fromProto, elementFromProto and conversionFuncs; and the two pb.gen.go of
 // registrationFiles. TestPBDocExamplesComeFromTheGoldenFiles holds the two
 // together: every code block of those doc comments must be a passage of a
 // file here, or of the model sources this test writes.
@@ -1288,7 +1290,9 @@ func requireProtosCompile(t *testing.T, files map[string]string) {
 
 	// bufbuild/protocompile compiles .proto source the way protoc does,
 	// parsing and linking it against the well-known types, without protoc
-	// installed: what it accepts, protoc accepts.
+	// installed: what it accepts, protoc accepts. The google.type.Date of a
+	// calendar day is no well-known type, so it is linked from the Go
+	// package declaring it.
 	sources := make(map[string]string, len(files))
 	names := make([]string, 0, len(files))
 	for path, content := range files {
@@ -1296,8 +1300,14 @@ func requireProtosCompile(t *testing.T, files map[string]string) {
 		names = append(names, "tmpapp/"+path)
 	}
 	compiler := protocompile.Compiler{
-		Resolver: protocompile.WithStandardImports(&protocompile.SourceResolver{
-			Accessor: protocompile.SourceAccessorFromMap(sources),
+		Resolver: protocompile.WithStandardImports(protocompile.CompositeResolver{
+			&protocompile.SourceResolver{Accessor: protocompile.SourceAccessorFromMap(sources)},
+			protocompile.ResolverFunc(func(name string) (protocompile.SearchResult, error) {
+				if name != date.File_google_type_date_proto.Path() {
+					return protocompile.SearchResult{}, protoregistry.NotFound
+				}
+				return protocompile.SearchResult{Desc: date.File_google_type_date_proto}, nil
+			}),
 		}),
 	}
 	_, err := compiler.Compile(context.Background(), names...)
@@ -1874,7 +1884,7 @@ func (Clash) Design() {
 `
 
 // protobufShapeModel carries one field of every kind the handlers convert
-// beyond the ones of the Record model: gorm's date, time of day, JSON
+// beyond the ones of the Record model: a calendar day, gorm's time of day, JSON
 // document, JSON map and JSON wrapper, a soft-delete time, a JSON number, an
 // integer enum, an optional integer, a pointer to a struct, a slice of
 // pointers, an array, maps of scalars, of structs and of unnamed structs, a
@@ -1883,7 +1893,8 @@ func (Clash) Design() {
 // internal type, gorm's JSON slices of structs and of strings, pointers to
 // a slice of strings, to a slice of structs, to a map and to bytes, a
 // second JSON wrapper, a map keyed by a narrow integer, an optional JSON
-// number, a slice of times and a map of pointers to structs.
+// number, a slice of times, a map of pointers to structs, an optional day, a
+// slice of days and gorm's date.
 const protobufShapeModel = `package model
 
 import (
@@ -1898,7 +1909,7 @@ import (
 
 // Shape carries one field of every kind the handlers convert.
 type Shape struct {
-	Date    datatypes.Date                   'json:"date" pb:"11"'
+	Date    model.Date                       'json:"date" pb:"11"'
 	Clock   datatypes.Time                   'json:"clock" pb:"12"'
 	Doc     datatypes.JSON                   'json:"doc,omitempty" pb:"13"'
 	Attrs   datatypes.JSONMap                'json:"attrs,omitempty" pb:"14"'
@@ -1982,6 +1993,15 @@ type Shape struct {
 	Amounts []json.Number          'json:"amounts,omitempty" pb:"56" gorm:"-"'
 	Pair    [2]json.Number         'json:"pair" pb:"57" gorm:"-"'
 	Rates   map[string]json.Number 'json:"rates,omitempty" pb:"58" gorm:"-"'
+	// Due and Days hold days behind a pointer and in a repeated field,
+	// where the zero day travels as 0001-01-01 and comes back as the zero
+	// day.
+	Due  *model.Date  'json:"due,omitempty" pb:"59"'
+	Days []model.Date 'json:"days,omitempty" pb:"60" gorm:"-"'
+	// Opened is the date of the datatypes package of gorm, which a field no
+	// column stores may take: it travels as a Timestamp at the start of the
+	// day.
+	Opened datatypes.Date 'json:"opened" pb:"61" gorm:"-"'
 	// Name shadows the Name of the embedded ShapeMeta, which keeps its own
 	// key and is selected by its path.
 	Name string 'json:"name" pb:"41"'
@@ -2069,7 +2089,9 @@ import (
 	"tmpapp/pb"
 	pbrecord "tmpapp/pb/record"
 
+	gstmodel "github.com/hydroan/gst/model"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/genproto/googleapis/type/date"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -2180,6 +2202,7 @@ func TestItemLinksRoundTrip(t *testing.T) {
 func TestShapeRoundTrips(t *testing.T) {
 	day := time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC)
 	when := day.Add(time.Hour)
+	due := gstmodel.Date(day.AddDate(0, 0, 1))
 	score := 7
 	ratio := 0.5
 	price := json.Number("1.5")
@@ -2187,7 +2210,7 @@ func TestShapeRoundTrips(t *testing.T) {
 	extra := datatypes.JSON('{"c":2}')
 	meta := datatypes.JSONMap{"m": float64(1)}
 	in := &model.Shape{
-		Date:    datatypes.Date(day),
+		Date:    gstmodel.Date(day),
 		Clock:   datatypes.Time(90 * time.Minute),
 		Doc:     datatypes.JSON('{"a":[1,2]}'),
 		Attrs:   datatypes.JSONMap{"deep": map[string]any{"x": float64(1)}},
@@ -2230,6 +2253,9 @@ func TestShapeRoundTrips(t *testing.T) {
 		Amounts: []json.Number{"1", "2.5"},
 		Pair:    [2]json.Number{"3", "4"},
 		Rates:   map[string]json.Number{"r": "0.5"},
+		Due:     &due,
+		Days:    []gstmodel.Date{{}, gstmodel.Date(day)},
+		Opened:  datatypes.Date(day),
 	}
 	in.Window = struct {
 		Width int32 'json:"width" pb:"1"'
@@ -2246,7 +2272,11 @@ func TestShapeRoundTrips(t *testing.T) {
 
 	msg, err := pb.ShapeToProto(in)
 	require.NoError(t, err)
-	require.Equal(t, day, msg.GetDate().AsTime())
+	require.True(t, proto.Equal(&date.Date{Year: 2026, Month: 9, Day: 26}, msg.GetDate()), "a day travels as its year, month and day")
+	require.True(t, proto.Equal(&date.Date{Year: 2026, Month: 9, Day: 27}, msg.GetDue()))
+	require.True(t, proto.Equal(&date.Date{Year: 1, Month: 1, Day: 1}, msg.GetDays()[0]), "the zero day of an element travels as 0001-01-01, not as nothing")
+	require.True(t, proto.Equal(&date.Date{Year: 2026, Month: 9, Day: 26}, msg.GetDays()[1]))
+	require.Equal(t, day, msg.GetOpened().AsTime())
 	require.Equal(t, 90*time.Minute, msg.GetClock().AsDuration())
 	require.Equal(t, "red", msg.GetOptions().GetColor())
 	require.Equal(t, when, msg.GetAudit().GetRemoved().AsTime())
@@ -2328,6 +2358,10 @@ func TestShapeRoundTrips(t *testing.T) {
 	require.Nil(t, empty.Extra)
 	require.Nil(t, empty.Meta)
 	require.True(t, time.Time(empty.Date).IsZero())
+	require.Nil(t, empty.Due)
+	bare, err := pb.ShapeToProto(&model.Shape{})
+	require.NoError(t, err)
+	require.Nil(t, bare.GetDate(), "the zero day of a field of its own stays unset")
 
 	t.Run("a value a field cannot hold is refused", func(t *testing.T) {
 		for _, tt := range []struct {
@@ -2348,6 +2382,9 @@ func TestShapeRoundTrips(t *testing.T) {
 			{name: "a timestamp in a slice past the year 9999", msg: &pb.Shape{Stamps: []*timestamppb.Timestamp{{Seconds: 253402300800}}}, want: "invalid value for field \x27stamps[0]\x27"},
 			{name: "a timestamp inside a nested message past the year 9999", msg: &pb.Shape{Audit: &pb.ShapeAudit{Removed: &timestamppb.Timestamp{Seconds: 253402300800}}}, want: "invalid value for field \x27audit.removed\x27"},
 			{name: "a map key out of range", msg: &pb.Shape{ByRank: map[int32]*pb.ShapePoint{300: {}}}, want: "invalid value for field \x27by_rank\x27"},
+			{name: "a day the calendar does not hold", msg: &pb.Shape{Date: &date.Date{Year: 2026, Month: 2, Day: 30}}, want: "invalid value for field \x27date\x27"},
+			{name: "a date naming no day", msg: &pb.Shape{Due: &date.Date{Year: 2026, Month: 2}}, want: "invalid value for field \x27due\x27"},
+			{name: "a day in a slice the calendar does not hold", msg: &pb.Shape{Days: []*date.Date{{Year: 2026, Month: 1, Day: 2}, {Year: 2026, Month: 13, Day: 1}}}, want: "invalid value for field \x27days[1]\x27"},
 			{name: "an integer out of range inside an unnamed struct", msg: &pb.Shape{Note: &pb.ShapeNote{Level: 300}}, want: "invalid value for field \x27note.level\x27"},
 			{name: "an integer out of range inside an unnamed struct of a slice", msg: &pb.Shape{Spans: []*pb.ShapeSpans{{}, {Weight: 300}}}, want: "invalid value for field \x27spans[1].weight\x27"},
 		} {

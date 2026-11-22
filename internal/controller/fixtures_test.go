@@ -117,19 +117,19 @@ type nestedSample struct {
 
 func (nestedSample) TableName() string { return "controller_nested_samples" }
 
-// datedSample carries a calendar date, stored in a date column, beside an
-// optional instant: a date the client sends with its own offset is read as
-// the UTC day on both transports, in a record and in a filter alike, and a
+// datedSample carries a calendar day, stored in a date column, beside an
+// optional instant: a day is sent, stored and answered as its text,
+// 2026-01-02, on both transports, in a record and in a filter alike, and a
 // filter on either column is checked against the value the column holds. Due
-// is a time declared a date column by its type tag, a day the same way. It
-// also carries a JSON document, which a filter matches by its text and never
-// compares, a number, which a filter matches by its text as well, and a time
-// of day, which a body sends in time.TimeOnly. Every record a test writes
-// names its day: MySQL refuses the zero date a record without one holds.
+// is an optional day. It also carries a JSON document, which a filter matches
+// by its text and never compares, a number, which a filter matches by its
+// text as well, and a time of day, which a body sends in time.TimeOnly. Every
+// record a test writes names its day: MySQL refuses the zero date a record
+// without one holds.
 type datedSample struct {
 	Name     string            `json:"name" query:"name"`
-	Day      datatypes.Date    `json:"day" query:"day"`
-	Due      *time.Time        `json:"due" query:"due" gorm:"type:date"`
+	Day      modelschema.Date  `json:"day" query:"day"`
+	Due      *modelschema.Date `json:"due" query:"due"`
 	ClosedAt *time.Time        `json:"closed_at" query:"closed_at"`
 	Meta     datatypes.JSONMap `json:"meta" query:"meta"`
 	Count    int               `json:"count" query:"count"`
@@ -677,11 +677,13 @@ func loadSample(t *testing.T, id string) *sampleRecord {
 	return stored
 }
 
-// createDated stores a dated sample named name on the UTC day and returns it
-// with its id.
-func createDated(t *testing.T, name string, day time.Time) *datedSample {
+// createDated stores a dated sample named name on day, written 2026-01-02,
+// and returns it with its id.
+func createDated(t *testing.T, name, day string) *datedSample {
 	t.Helper()
-	record := &datedSample{Name: name, Day: datatypes.Date(day)}
+	on, err := modelschema.ParseDate(day)
+	require.NoError(t, err)
+	record := &datedSample{Name: name, Day: on}
 	require.NoError(t, database.Database[*datedSample](context.Background()).Create(record))
 	require.NotEmpty(t, record.GetID())
 	return record
@@ -742,23 +744,25 @@ func loadStaged(t *testing.T, id string) *stagedSample {
 	return stored
 }
 
-// requireDatedDay requires the dated sample id to hold want as its day.
-func requireDatedDay(t *testing.T, id string, want time.Time) {
+// requireDatedDay requires the dated sample id to hold want, written
+// 2026-01-02, as its day.
+func requireDatedDay(t *testing.T, id, want string) {
 	t.Helper()
 
 	record := new(datedSample)
 	require.NoError(t, database.Database[*datedSample](context.Background()).Get(record, id))
-	require.True(t, time.Time(record.Day).Equal(want), "stored day %s, want %s", time.Time(record.Day), want)
+	require.Equal(t, want, record.Day.String())
 }
 
-// requireDatedDue requires the dated sample id to hold want as its due day.
-func requireDatedDue(t *testing.T, id string, want time.Time) {
+// requireDatedDue requires the dated sample id to hold want, written
+// 2026-01-02, as its due day.
+func requireDatedDue(t *testing.T, id, want string) {
 	t.Helper()
 
 	record := new(datedSample)
 	require.NoError(t, database.Database[*datedSample](context.Background()).Get(record, id))
 	require.NotNil(t, record.Due)
-	require.True(t, record.Due.Equal(want), "stored due %s, want %s", *record.Due, want)
+	require.Equal(t, want, record.Due.String())
 }
 
 // countDatedNamed counts the stored dated samples named name.

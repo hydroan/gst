@@ -141,30 +141,37 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			// A date sent with the client's own offset names the UTC day of
-			// that instant, stored and answered as the day at midnight UTC.
-			name: "Create stores a date as the UTC day", fixture: dated, phase: apiaction.Create,
-			input: contractInput{record: map[string]any{"name": uniqueName("contract-dated"), "day": "2026-01-02T00:00:00+08:00"}},
+			// A day is sent, stored and answered as its text.
+			name: "Create stores a day as written", fixture: dated, phase: apiaction.Create,
+			input: contractInput{record: map[string]any{"name": uniqueName("contract-dated"), "day": "2026-01-02"}},
 			want:  ok,
 			check: func(t *testing.T, in contractInput, got contractAnswer) {
 				t.Helper()
 				data := dataMap(t, got)
-				require.Equal(t, "2026-01-01T00:00:00Z", data["day"])
-				requireDatedDay(t, stringOf(data["id"]), time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
+				require.Equal(t, "2026-01-02", data["day"])
+				requireDatedDay(t, stringOf(data["id"]), "2026-01-02")
 			},
 		},
 		{
-			// A time a model declares a date column by its type tag is a day
-			// the same way.
-			name: "Create stores a date declared on a time as the UTC day", fixture: dated, phase: apiaction.Create,
-			input: contractInput{record: map[string]any{"name": uniqueName("contract-due"), "day": "2026-01-01T00:00:00Z", "due": "2026-01-02T00:00:00+08:00"}},
+			name: "Create stores an optional day as written", fixture: dated, phase: apiaction.Create,
+			input: contractInput{record: map[string]any{"name": uniqueName("contract-due"), "day": "2026-01-01", "due": "2026-01-02"}},
 			want:  ok,
 			check: func(t *testing.T, _ contractInput, got contractAnswer) {
 				t.Helper()
 				data := dataMap(t, got)
-				require.Equal(t, "2026-01-01T00:00:00Z", data["due"])
-				requireDatedDue(t, stringOf(data["id"]), time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
+				require.Equal(t, "2026-01-02", data["due"])
+				requireDatedDue(t, stringOf(data["id"]), "2026-01-02")
 			},
+		},
+		{
+			// A day the calendar does not hold is refused naming the field on
+			// both lines: the text a body carries, and the year, month and
+			// day a message carries (see grpc.Date). An instant is a spelling
+			// HTTP alone carries, HTTP's to refuse (see
+			// TestCreateReadsADayAsWritten).
+			name: "Create refuses a day the calendar does not hold", fixture: dated, phase: apiaction.Create,
+			input: contractInput{record: map[string]any{"name": uniqueName("contract-no-day"), "day": "2026-02-30"}},
+			want:  contractWant{status: http.StatusBadRequest, msg: "invalid value for field 'day'"},
 		},
 		{
 			// A time of day travels as a duration since midnight over gRPC, so
@@ -173,7 +180,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			// 17:30, is HTTP's to refuse (see
 			// TestCreateReadsATimeOfDayAsWritten).
 			name: "Create stores a time of day with the fraction of a second it names", fixture: dated, phase: apiaction.Create,
-			input: contractInput{record: map[string]any{"name": uniqueName("contract-clock"), "day": "2026-01-01T00:00:00Z", "clock": "17:30:00.5"}},
+			input: contractInput{record: map[string]any{"name": uniqueName("contract-clock"), "day": "2026-01-01", "clock": "17:30:00.5"}},
 			want:  ok,
 			check: func(t *testing.T, _ contractInput, got contractAnswer) {
 				t.Helper()
@@ -493,17 +500,15 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "List matches a date filter by the UTC day", fixture: dated, phase: apiaction.List,
+			name: "List matches a date filter by the day", fixture: dated, phase: apiaction.List,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
 				name := uniqueName("contract-dated-list")
-				createDated(t, name, time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
-				createDated(t, name, time.Date(2026, time.January, 2, 0, 0, 0, 0, time.UTC))
-				// Midnight in Shanghai on the 2nd is the 1st in UTC, the day
-				// the first sample stores (see API_CONTRACT.md).
+				createDated(t, name, "2026-01-01")
+				createDated(t, name, "2026-01-02")
 				return contractInput{query: controller.Query{Filters: []controller.Filter{
 					{Field: "name", Op: "eq", Values: []string{name}},
-					{Field: "day", Op: "eq", Values: []string{"2026-01-02T00:00:00+08:00"}},
+					{Field: "day", Op: "eq", Values: []string{"2026-01-02"}},
 				}}}
 			},
 			want: ok,
@@ -513,7 +518,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				require.EqualValues(t, 1, data["total"])
 				listed := ids(data["items"])
 				require.Len(t, listed, 1)
-				requireDatedDay(t, listed[0], time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
+				requireDatedDay(t, listed[0], "2026-01-02")
 			},
 		},
 		{
@@ -524,7 +529,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				t.Helper()
 				name := uniqueName("contract-dated-page")
 				for range 3 {
-					createDated(t, name, time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
+					createDated(t, name, "2026-01-01")
 				}
 				return contractInput{query: controller.Query{
 					Filters: []controller.Filter{{Field: "name", Op: "eq", Values: []string{name}}},
@@ -627,7 +632,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				t.Helper()
 				name := uniqueName("contract-dated-paged")
 				for range 3 {
-					createDated(t, name, time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
+					createDated(t, name, "2026-01-01")
 				}
 				return contractInput{query: controller.Query{
 					Filters: []controller.Filter{{Field: "name", Op: "eq", Values: []string{name}}},
@@ -650,7 +655,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				t.Helper()
 				name := uniqueName("contract-dated-last")
 				for range 3 {
-					createDated(t, name, time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
+					createDated(t, name, "2026-01-01")
 				}
 				return contractInput{query: controller.Query{
 					Filters: []controller.Filter{{Field: "name", Op: "eq", Values: []string{name}}},
@@ -729,6 +734,13 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 		{
 			name: "List refuses a date filter it cannot read", fixture: dated, phase: apiaction.List,
 			input: contractInput{query: controller.Query{Filters: []controller.Filter{{Field: "day", Op: "eq", Values: []string{"not-a-date"}}}}},
+			want:  contractWant{status: http.StatusBadRequest},
+		},
+		{
+			// An instant names a day only in the zone it is read in, so a
+			// date filter takes a day alone.
+			name: "List refuses an instant sent as a date filter", fixture: dated, phase: apiaction.List,
+			input: contractInput{query: controller.Query{Filters: []controller.Filter{{Field: "day", Op: "eq", Values: []string{"2026-01-02T00:00:00+08:00"}}}}},
 			want:  contractWant{status: http.StatusBadRequest},
 		},
 		{
@@ -1254,14 +1266,14 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
-			name: "CreateMany stores the dates of the items as UTC days", fixture: dated, phase: apiaction.CreateMany,
-			input: contractInput{items: []map[string]any{{"name": uniqueName("contract-dated-many"), "day": "2026-01-02T00:00:00+08:00"}}},
+			name: "CreateMany stores the days of the items as written", fixture: dated, phase: apiaction.CreateMany,
+			input: contractInput{items: []map[string]any{{"name": uniqueName("contract-dated-many"), "day": "2026-01-02"}}},
 			want:  ok,
 			check: func(t *testing.T, in contractInput, got contractAnswer) {
 				t.Helper()
 				created := ids(dataMap(t, got)["items"])
 				require.Len(t, created, 1)
-				requireDatedDay(t, created[0], time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
+				requireDatedDay(t, created[0], "2026-01-02")
 			},
 		},
 		{

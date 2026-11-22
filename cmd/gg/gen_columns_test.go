@@ -46,7 +46,7 @@ type RecordKind string
 type Record struct {
 	Status   string              `+"`json:\"status\"`"+`
 	Score    int64               `+"`json:\"score\"`"+`
-	Day      datatypes.Date      `+"`json:\"day\"`"+`
+	Day      model.Date          `+"`json:\"day\"`"+`
 	ClosedAt *time.Time          `+"`json:\"closed_at\"`"+`
 	Settled  sql.NullTime        `+"`json:\"settled\"`"+`
 	Tally    sql.NullInt64       `+"`json:\"tally\"`"+`

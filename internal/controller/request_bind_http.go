@@ -77,7 +77,7 @@ func bindJSONRequest(c *gin.Context, target any) error {
 // One knob does not carry over: gin's EnableDecoderUseNumber and
 // EnableDecoderDisallowUnknownFields configure the streaming decoder only, so
 // they never apply here. A time of day is the one value decoded otherwise
-// than json.Unmarshal decodes it, and a time or a number it refuses is
+// than json.Unmarshal decodes it, and a time, a day or a number it refuses is
 // refused naming the field (see requestDecoding).
 func decodeJSONRequest(c *gin.Context, target any) error {
 	raw, err := readJSONRequestBody(c)
@@ -106,10 +106,11 @@ func decodeJSON(raw []byte, target any) error {
 // encoding/json/v2 under those options, so a body decodes the way
 // json.Unmarshal decodes it, every value reached the way it reaches it, with
 // two differences: a time of day is read strictly (see strictTimeOfDay), and
-// a time.Time or a json.Number json.Unmarshal refuses is refused naming the
-// field (see decodeAtPointer).
+// a time.Time, a json.Number or a day json.Unmarshal refuses is refused
+// naming the field (see decodeAtPointer and dayAtPointer).
 var requestDecoding = jsonv2.WithUnmarshalers(jsonv2.JoinUnmarshalers(
 	strictTimeOfDay,
+	dayAtPointer,
 	jsonv2.UnmarshalFromFunc(decodeAtPointer[time.Time]),
 	jsonv2.UnmarshalFromFunc(decodeAtPointer[json.Number]),
 ))
@@ -174,6 +175,26 @@ var strictTimeOfDay = jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, t *da
 		return refused(err)
 	}
 	*t = datatypes.Time(since)
+	return nil
+})
+
+// dayAtPointer reads a day the way modelschema.Date reads one from JSON, a
+// string in time.DateOnly and nothing else, a null leaving the day as it is,
+// and reports a value the type refuses as a SemanticError at the value's
+// JSON Pointer. Left to the type's own UnmarshalJSON the refusal comes back
+// bare, naming no field; at its pointer the options json.DefaultOptionsV1
+// names report it as a json.UnmarshalTypeError naming the field, items.1.day,
+// which clientSafeBindError answers the way it answers a time it refuses. A
+// number is read here too, unlike decodeAtPointer leaves one: no day is a
+// number, so the default decoding has nothing of its own to say about it.
+var dayAtPointer = jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, day *modelschema.Date) error {
+	value, err := dec.ReadValue()
+	if err != nil {
+		return err
+	}
+	if err = day.UnmarshalJSON(value); err != nil {
+		return &jsonv2.SemanticError{JSONPointer: dec.StackPointer(), JSONKind: value.Kind(), JSONValue: value.Clone(), GoType: reflect.TypeFor[modelschema.Date](), Err: err}
+	}
 	return nil
 })
 

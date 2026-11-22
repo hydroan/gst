@@ -30,9 +30,7 @@ func readBack(appName string, files []File, want map[string]protoreflect.FileDes
 		sources[name] = f.Content
 		names = append(names, name)
 	}
-	compiler := protocompile.Compiler{
-		Resolver: protocompile.WithStandardImports(&protocompile.SourceResolver{Accessor: protocompile.SourceAccessorFromMap(sources)}),
-	}
+	compiler := protocompile.Compiler{Resolver: resolverOf(sources)}
 	got, err := compiler.Compile(context.Background(), names...)
 	if err != nil {
 		return errors.Wrap(err, "read the printed definitions back")

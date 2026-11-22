@@ -11,7 +11,9 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/grpcserver"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
+	"google.golang.org/genproto/googleapis/type/date"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -24,8 +26,8 @@ import (
 // and nil to nil, so a value comes back from a message as it went in. It
 // also holds what a generated FromProto reads a value through when the
 // message's type is wider than the model's, or than what the HTTP listener
-// lets through: Narrow and Number, Time and TimeOfDay, Document and Finite
-// refuse what the model's field cannot hold, the way the HTTP listener
+// lets through: Narrow and Number, Time, Date and TimeOfDay, Document and
+// Finite refuse what the model's field cannot hold, the way the HTTP listener
 // refuses it, so that a record a gRPC call wrote reads back over HTTP, while
 // Map and Value carry a dynamic value either way; and what a generated
 // ToProto writes a value through the way the JSON encoder writes it: UTF8,
@@ -118,6 +120,37 @@ func Timestamp(t time.Time) *timestamppb.Timestamp {
 		return nil
 	}
 	return timestamppb.New(t)
+}
+
+// Date returns the day d names, and the zero day for nil, which a message
+// leaves unset. A google.type.Date may leave its year, its month or its day
+// at zero, naming a month of a year or a day of any year, and may name a day
+// the calendar does not hold; a model's day is a full date of the years 1 to
+// 9999, so any of those is refused with invalidValue naming field,
+// "2026-02-30 is not a day of the calendar" the detail, the way the HTTP
+// listener refuses a day it cannot read. The generated FromProto reads every
+// day through it.
+func Date(field string, d *date.Date) (modelschema.Date, error) {
+	if d == nil {
+		return modelschema.Date{}, nil
+	}
+	year, month, day := int(d.GetYear()), time.Month(d.GetMonth()), int(d.GetDay())
+	// time.Date carries a month or a day out of range over into the next
+	// ones, so a date it gives back changed is one the calendar does not hold.
+	on := time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
+	if year < 1 || year > 9999 || on.Year() != year || on.Month() != month || on.Day() != day {
+		return modelschema.Date{}, invalidValue(field, fmt.Sprintf("%04d-%02d-%02d is not a day of the calendar", d.GetYear(), d.GetMonth(), d.GetDay()))
+	}
+	return modelschema.Date(on), nil
+}
+
+// DatePB returns the google.type.Date of the day d names, the zero day as
+// 0001-01-01, which Date reads back as the zero day. The generated ToProto
+// writes every day through it, and leaves the field of a zero day unset
+// where the field stands alone, the way Timestamp leaves the zero time.
+func DatePB(d modelschema.Date) *date.Date {
+	year, month, day := time.Time(d).Date()
+	return &date.Date{Year: int32(year), Month: int32(month), Day: int32(day)} //nolint:gosec // G115: a month and a day fit, and a year past the range of an int32 is far outside the years 1 to 9999 Date reads back.
 }
 
 // TimeOfDay returns the duration since midnight d holds, the time of day a
