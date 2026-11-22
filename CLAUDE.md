@@ -261,8 +261,8 @@ stress 是压测项目，只回答一个问题：框架在真实项目形态（�
 - 修改 model 的 DSL、接口路径、REQ/RSP、service 开关后，需要重新执行 `gg gen`，并检查生成的 router 和 service 注册是否符合预期。
 - 修改声明了 `Migrate()` 的数据库模型字段后，需要执行 `gg migrate --dry-run` 检查 `generated/migrate/<dbtype>/schema.sql` 和迁移计划，再用 `gg migrate` 按确认处理 schema 变化。
 - 改索引名必须"先 `gg migrate` 后发布"：开启 auto_migrate 的环境先发布，启动期会发现同定义的索引还挂在旧名下，直接报错退出并给出改名语句（启动期不 DROP 任何索引）；关闭 auto_migrate 的环境先发布不报错，但模型与库会一直漂移到执行 `gg migrate` 为止；`gg migrate` 的计划对这种索引直接是改名语句（MySQL `RENAME INDEX`，PostgreSQL `ALTER INDEX ... RENAME TO`），SQLite 不能给索引改名，计划是删掉再建。
-- 改表名、改列名：只对比模型和库分不出改名，照计划执行会新建一张空表（数据留在旧表）或删掉旧列连同数据；`gg migrate` 在一对一对得上、定义相同时把它当成疑似改名提出来，交互运行时逐个询问，答 `yes` 就先执行改名语句再重新出计划，带 `--dry-run` 或 `--yes` 时只列出语句、不改名。SQLite 库里已有列的类型、非空、默认值或 CHECK 与模型不一致时，`gg migrate` 直接报错并给出重建步骤，不会当成无变化。
-- `gg migrate` 只管模型声明的表：库里别的表不删不改、只列出来；计划里有删列时要带 `--accept-data-loss` 才执行，`--yes` 不代表同意丢数据。
+- 改表名、改列名：只对比模型和库分不出改名，照计划执行会新建一张空表（数据留在旧表）或删掉旧列连同数据；`gg migrate` 在一对一对得上、定义相同时把它当成疑似改名提出来，交互运行时逐个询问，答 `y` 就先执行改名语句再重新出计划，带 `--dry-run` 或 `--yes` 时只列出语句、不改名。SQLite 库里已有列的类型、非空、默认值或 CHECK 与模型不一致时，`gg migrate` 直接报错并给出重建步骤，不会当成无变化。
+- `gg migrate` 只管模型声明的表：库里别的表不删不改、只列出来；计划里有删列时，执行前的确认会点明要删的列，答 `y` 才执行；带 `--yes` 跳过确认时要同时带 `--accept-data-loss`，`--yes` 不代表同意丢数据。
 - 不要手写覆盖生成文件；如果生成结果不符合预期，优先修正 model DSL 或框架生成逻辑。
 - 后端服务启动后，通过 `/docs/index.html` 检查生成的 Swagger 文档和接口路径。
 - 后端项目自身如果已有测试，修改业务逻辑后需要运行对应测试；涉及框架仓库改动时仍按 gst 仓库要求执行 `make check`。
