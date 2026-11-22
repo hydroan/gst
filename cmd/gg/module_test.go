@@ -409,8 +409,13 @@ func TestRunModuleCopyTidiesTheProjectAfterWritingItsFiles(t *testing.T) {
 			t.Errorf("%s lacks %s after the copy", file, otpModule)
 		}
 	}
-	if out, err := exec.Command("go", "build", "./...").CombinedOutput(); err != nil {
-		t.Fatalf("go build after the copy: %v\n%s", err, out)
+	// The project compiles as the copy left it. The check runs in the
+	// read-only module mode a go command defaults to, so a requirement the
+	// tidy left out of go.mod or go.sum fails it, where requireProjectCompiles
+	// would write the requirement in; like that helper it type-checks rather
+	// than builds, which proves as much and links nothing.
+	if out, err := exec.Command("go", "vet", "-trimpath", "./...").CombinedOutput(); err != nil {
+		t.Fatalf("go vet after the copy: %v\n%s", err, out)
 	}
 
 	goModTidy = func() error { return errors.New("tidy failed") }

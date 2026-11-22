@@ -525,10 +525,7 @@ func TestGenRunRegistersTheServicesOfEachPackageInItsOwnFile(t *testing.T) { //n
 		require.NotContains(t, root, "grpc.Register", "the root has no service of its own to register")
 		require.Contains(t, read(t, projectDir, "pb/record/pb.gen.go"), "grpc.Register[ItemServiceServer](RegisterItemServiceServer, itemService{},")
 		require.Contains(t, read(t, projectDir, ggconst.FileMain), `_ "tmpapp/pb"`)
-		build := exec.Command("go", "build", "./...")
-		build.Dir = projectDir
-		output, err := build.CombinedOutput()
-		require.NoError(t, err, "the project must build: %s", output)
+		requireProjectCompiles(t)
 	})
 }
 
@@ -2815,24 +2812,27 @@ func (Draft) Design() {
 // holds now, a new field takes the next free number, one the committed
 // message reserves excluded, and a field the committed message held stays
 // reserved.
-func TestGenRunHoldsTheRPCMessagesToTheirCommittedNumbers(t *testing.T) {
-	projectDir, ok := newGenProject(t)
-	if !ok {
-		return
-	}
+func TestGenRunHoldsTheRPCMessagesToTheirCommittedNumbers(t *testing.T) { //nolint:tparallel // Each subtest goes parallel in newGenProject, a call deeper than tparallel looks.
+	parallelInParent(t)
 	proto := filepath.Join(ggconst.DirPB, "note.proto")
-	// fresh commits the definition as first generated, then rewrites it as
-	// edit leaves it, for the run that starts from it.
-	fresh := func(t *testing.T, edit func(string) string) {
+	// fresh gives the subtest a project of its own, commits the definition
+	// as first generated, then rewrites it as edit leaves it, for the run
+	// that starts from it. It reports false in the parent process, where the
+	// subtest returns at once (see newGenProject).
+	fresh := func(t *testing.T, edit func(string) string) bool {
 		t.Helper()
+		projectDir, ok := newGenProject(t)
+		if !ok {
+			return false
+		}
 		writeProtobufProject(t, projectDir, map[string]string{"model/note.go": protobufNoteModel})
-		require.NoError(t, os.RemoveAll(ggconst.DirPB))
 		require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
 		content, err := os.ReadFile(proto)
 		require.NoError(t, err)
 		edited := edit(string(content))
 		require.NotEqual(t, string(content), edited, "the edit has to change the committed file")
 		require.NoError(t, os.WriteFile(proto, []byte(edited), 0o600))
+		return true
 	}
 	regenerated := func(t *testing.T) string {
 		t.Helper()
@@ -2854,10 +2854,12 @@ func TestGenRunHoldsTheRPCMessagesToTheirCommittedNumbers(t *testing.T) {
 	t.Run("a field keeps its number by name", func(t *testing.T) {
 		// The committed definition numbers two fields the other way round,
 		// as a generator ordering the fields differently would have.
-		fresh(t, inRequest(func(s string) string {
+		if !fresh(t, inRequest(func(s string) string {
 			s = strings.Replace(s, "  string id = 1;", "  string id = 2;", 1)
 			return strings.Replace(s, "  repeated string expand = 2;", "  repeated string expand = 1;", 1)
-		}))
+		})) {
+			return
+		}
 
 		content := regenerated(t)
 
@@ -2869,9 +2871,11 @@ func TestGenRunHoldsTheRPCMessagesToTheirCommittedNumbers(t *testing.T) {
 		// The committed definition lacks a field the generator adds, as one
 		// written before the generator added it would, and reserves the
 		// number after its last.
-		fresh(t, inRequest(func(s string) string {
+		if !fresh(t, inRequest(func(s string) string {
 			return strings.Replace(s, "  // depth is the depth of the expansion, as the _depth query parameter, at most 10.\n  uint32 depth = 3;\n", "  reserved 3;\n", 1)
-		}))
+		})) {
+			return
+		}
 
 		content := regenerated(t)
 
@@ -2879,9 +2883,11 @@ func TestGenRunHoldsTheRPCMessagesToTheirCommittedNumbers(t *testing.T) {
 		require.Contains(t, content, "  reserved 3;")
 	})
 	t.Run("a field the committed message held stays reserved", func(t *testing.T) {
-		fresh(t, inRequest(func(s string) string {
+		if !fresh(t, inRequest(func(s string) string {
 			return strings.Replace(s, "  uint32 depth = 3;\n", "  uint32 depth = 3;\n\n  string legacy = 4;\n", 1)
-		}))
+		})) {
+			return
+		}
 
 		content := regenerated(t)
 
