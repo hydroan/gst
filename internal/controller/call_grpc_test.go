@@ -513,6 +513,8 @@ func sampleHandlers() map[string]rpcHandler {
 	standardRPCs[*datedSample](handlers, datedRoute, "Dated")
 	standardRPCs[*feedSample](handlers, feedRoute, "Feed")
 	standardRPCs[*scopedSample](handlers, scopedRoute, "Scoped")
+	standardRPCs[*stagedSample](handlers, stagedRoute, "Staged")
+	standardRPCs[*stagedSample](handlers, stagingRoute, "Staging")
 	standardRPCs[*nestedSample](handlers, nestedRoute, "Nested")
 
 	parentList := controller.ListCall[*sampleRecord](parentRoute)

@@ -164,6 +164,29 @@ type scopedSample struct {
 
 func (scopedSample) TableName() string { return "controller_scoped_samples" }
 
+// stagedSample carries what a client may not write beside what it may: the
+// stage and the time it was reached are declared read-only, columns the
+// server writes alone; so is the tally, one field stored in columns of its
+// own, and the summary, which no column stores.
+type stagedSample struct {
+	Name     string     `json:"name"`
+	Stage    string     `json:"stage" binding:"readonly"`
+	StagedAt *time.Time `json:"staged_at,omitempty" binding:"readonly"`
+	Tally    stageTally `json:"tally" gorm:"embedded;embeddedPrefix:tally_" binding:"readonly"`
+	Summary  string     `json:"summary,omitempty" gorm:"-" binding:"readonly"`
+
+	modelregistry.Base
+}
+
+func (stagedSample) TableName() string { return "controller_staged_samples" }
+
+// stageTally is what the server counts of a staged sample, each count stored
+// in a column of its own.
+type stageTally struct {
+	Seen   int `json:"seen"`
+	Passed int `json:"passed"`
+}
+
 // sampleAddress is the struct value of a shaped sample; the floor is an
 // integer narrower than a JSON number, for a nested value a field cannot
 // hold.
@@ -198,6 +221,8 @@ const (
 	datedRoute         = "controller-dated-samples"
 	feedRoute          = "controller-feed-samples"
 	scopedRoute        = "controller-scoped-samples"
+	stagedRoute        = "controller-staged-samples"
+	stagingRoute       = "controller-staging-samples"
 	publicRoute        = "controller-public-samples"
 	observedRoute      = "controller-observed-samples"
 	pageRoute          = "controller-observed-feed-pages"
@@ -222,6 +247,9 @@ func registerFixtureServices() {
 	} {
 		serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](phase, refusalRoute, &refusingService{})
 	}
+	for _, phase := range []apiaction.Phase{apiaction.Create, apiaction.Update, apiaction.Patch} {
+		serviceregistry.RegisterInstance[*stagedSample, *stagedSample, *stagedSample](phase, stagingRoute, &stagingService{})
+	}
 	serviceregistry.RegisterInstance[*feedSample, *feedSample, *feedSample](apiaction.List, pageRoute, &pageObservingService{})
 	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.List, filterRefusalRoute, &filterRefusingService{})
 	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.List, hangingRoute, &hangingService{})
@@ -239,6 +267,39 @@ func registerFixtureServices() {
 	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](apiaction.Stream, chatRoute, &chatService{})
 	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](apiaction.Stream, silentRoute, &actionService{})
 	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](apiaction.Stream, forkRoute, forkingChat)
+}
+
+// stagingService sets the stage of a staged sample, a field its model
+// declares read-only, in the hook before each write of one record: what a
+// create and a patch store of it, and an update leaves unwritten. The hooks
+// before a create and an update refuse a stage that reached them, which
+// only a client could have sent: the flow clears it first.
+type stagingService struct {
+	serviceregistry.Base[*stagedSample, *stagedSample, *stagedSample]
+}
+
+// hookedStage is the stage the staging service sets.
+const hookedStage = "hooked"
+
+func (*stagingService) CreateBefore(_ *types.ServiceContext, m *stagedSample) error {
+	if m.Stage != "" {
+		return refusal()
+	}
+	m.Stage = hookedStage
+	return nil
+}
+
+func (*stagingService) UpdateBefore(_ *types.ServiceContext, m *stagedSample) error {
+	if m.Stage != "" {
+		return refusal()
+	}
+	m.Stage = hookedStage
+	return nil
+}
+
+func (*stagingService) PatchBefore(_ *types.ServiceContext, m *stagedSample) error {
+	m.Stage = hookedStage
+	return nil
 }
 
 // cookieBeforeService and cookieAfterService set a cookie, which only an
@@ -649,6 +710,36 @@ func feedIDs(t *testing.T, name string) []string {
 		found[i] = record.GetID()
 	}
 	return found
+}
+
+// storedStage is the stage createStaged stores a staged sample at.
+const storedStage = "reviewed"
+
+// storedTally is the tally createStaged stores a staged sample with, and
+// storedTallyData the same as an answer carries it.
+var (
+	storedTally     = stageTally{Seen: 3, Passed: 2}
+	storedTallyData = map[string]any{"seen": float64(3), "passed": float64(2)}
+)
+
+// createStaged stores a staged sample named name at storedStage, reached at
+// an instant of its own, with storedTally, the way the server writes the
+// fields a client may not, and returns it with its id.
+func createStaged(t *testing.T, name string) *stagedSample {
+	t.Helper()
+	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	record := &stagedSample{Name: name, Stage: storedStage, StagedAt: &at, Tally: storedTally}
+	require.NoError(t, database.Database[*stagedSample](context.Background()).Create(record))
+	require.NotEmpty(t, record.GetID())
+	return record
+}
+
+// loadStaged returns the stored staged sample id names.
+func loadStaged(t *testing.T, id string) *stagedSample {
+	t.Helper()
+	stored := new(stagedSample)
+	require.NoError(t, database.Database[*stagedSample](context.Background()).Get(stored, id))
+	return stored
 }
 
 // requireDatedDay requires the dated sample id to hold want as its day.

@@ -57,9 +57,9 @@ func (a *action[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceContext s
 	applyPatch(log, a.typ, oldVal, newVal, fields)
 	cur := oldVal.Addr().Interface().(M) //nolint:errcheck
 	// The updater is the write's to name, the caller or, for an anonymous
-	// request, none, as on an update (see clearAudit): the one stored before
-	// did not make this change. The creator stays as stored, the record being
-	// answered whole.
+	// request, none, as on an update (see clearServerFields): the one stored
+	// before did not make this change. The creator stays as stored, the
+	// record being answered whole.
 	cur.SetUpdatedBy("")
 
 	// 1.Perform business logic processing before partial update resource.

@@ -31,6 +31,7 @@ func TestMain(m *testing.M) {
 			modelregistry.Register[*datedSample]()
 			modelregistry.Register[*feedSample]()
 			modelregistry.Register[*scopedSample]()
+			modelregistry.Register[*stagedSample]()
 			registerFixtureServices()
 		},
 	})

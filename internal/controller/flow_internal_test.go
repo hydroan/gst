@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"net/http"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -43,6 +44,35 @@ type sealedFlowSample struct {
 }
 
 func (sealedFlowSample) TableName() string { return "controller_sealed_flow_samples" }
+
+// stagedFlowSample declares its stage read-only beside the name a client
+// writes, and its tally, one field gorm stores in two columns. It is read
+// for its fields alone and has no table.
+type stagedFlowSample struct {
+	Name  string    `json:"name"`
+	Stage string    `json:"stage" binding:"readonly"`
+	Tally flowTally `json:"tally" gorm:"embedded" binding:"readonly"`
+
+	modelregistry.Base
+}
+
+func (stagedFlowSample) TableName() string { return "controller_staged_flow_samples" }
+
+// flowTally is the tally of a staged flow sample.
+type flowTally struct {
+	Seen   int `json:"seen"`
+	Passed int `json:"passed"`
+}
+
+// lockedFlowSample declares every column of its own read-only. It is read
+// for its fields alone and has no table.
+type lockedFlowSample struct {
+	Stage string `json:"stage" binding:"readonly"`
+
+	modelregistry.Base
+}
+
+func (lockedFlowSample) TableName() string { return "controller_locked_flow_samples" }
 
 // replicaFlowSample is flowSample with its reads preferring a replica (see
 // modelregistry.PrefersReplica). Its tables are where useReplica puts them,
@@ -161,6 +191,50 @@ func TestUpdateFlowsAnswerTheColumnsAnUpdateLeavesAsStored(t *testing.T) {
 		require.Equal(t, "patched", rsp.Items[0].Name)
 		require.Equal(t, "original", rsp.Items[0].Code)
 	})
+}
+
+// TestWriteFieldsOfReadsWhatTheWriteFlowsGoBy pins the example of
+// writeFieldsOf: a model declaring read-only fields names them among the
+// fields to clear and their columns among the ones an update leaves alone,
+// beside the creation audit, every column of a field stored in several, and
+// has its update write the columns of its own left, the framework's base
+// columns being the write's to name. A model declaring none narrows nothing,
+// and one declaring every column of its own read-only leaves an empty list,
+// not a missing one.
+func TestWriteFieldsOfReadsWhatTheWriteFlowsGoBy(t *testing.T) {
+	fieldNames := func(typ reflect.Type, indexes [][]int) []string {
+		names := make([]string, 0, len(indexes))
+		for _, index := range indexes {
+			names = append(names, typ.FieldByIndex(index).Name)
+		}
+		return names
+	}
+	columnNames := func(columns []types.AnyColumnRef) []string {
+		names := make([]string, 0, len(columns))
+		for _, column := range columns {
+			names = append(names, column.Name())
+		}
+		return names
+	}
+
+	staged := reflect.TypeFor[stagedFlowSample]()
+	readOnly, unwritten, writable := writeFieldsOf[*stagedFlowSample](staged)
+	require.Equal(t, []string{"Stage", "Tally"}, fieldNames(staged, readOnly))
+	require.ElementsMatch(t, []string{"CreatedAt", "CreatedBy", "Stage", "Seen", "Passed"}, fieldNames(staged, unwritten))
+	require.Equal(t, []string{"name"}, columnNames(writable))
+	for _, column := range writable {
+		require.Equal(t, "controller_staged_flow_samples", column.Table())
+	}
+
+	plain := reflect.TypeFor[flowSample]()
+	readOnly, unwritten, writable = writeFieldsOf[*flowSample](plain)
+	require.Empty(t, readOnly)
+	require.ElementsMatch(t, []string{"CreatedAt", "CreatedBy"}, fieldNames(plain, unwritten))
+	require.Nil(t, writable, "an update of a model declaring no read-only column writes the full row")
+
+	_, _, writable = writeFieldsOf[*lockedFlowSample](reflect.TypeFor[lockedFlowSample]())
+	require.NotNil(t, writable)
+	require.Empty(t, writable)
 }
 
 // TestGetFlowAnswersNotFoundAsAServiceError pins how a flow reports a

@@ -27,9 +27,6 @@ var (
 	idFormat = "" // eg: "uuid"
 )
 
-// bindingTag is the struct tag gin validates a request by.
-const bindingTag = "binding"
-
 // jsonName returns the name a struct field's json tag gives it, or "" for a
 // field the tag leaves unnamed or out (json:"-").
 func jsonName(field reflect.StructField) string {
@@ -197,7 +194,7 @@ func addSchemaDocsForType(typ reflect.Type, schemaRef *openapi3.SchemaRef, visit
 		}
 		// The rules before the first dive are the field's own; those after
 		// it are the elements' of a slice or a map.
-		rules := strings.Split(docField.field.Tag.Get(bindingTag), ",")
+		rules := strings.Split(docField.field.Tag.Get(modelschema.TagBinding), ",")
 		if dive := slices.Index(rules, "dive"); dive >= 0 {
 			rules = rules[:dive]
 		}

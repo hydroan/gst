@@ -15,10 +15,10 @@ import (
 
 // createManyFlow runs the batch create flow on the items of req: it refuses
 // a batch carrying no item with 400 (see missingItemsMsg), clears the
-// creator and updater every item carries (see clearAudit), runs the batch
-// create hooks around the write, which names the caller the request carries
-// as both, and records the operation. The items are req's own, filled by the
-// write.
+// creator, the updater and the read-only fields every item carries (see
+// clearServerFields), runs the batch create hooks around the write, which
+// names the caller the request carries as creator and updater, and records
+// the operation. The items are req's own, filled by the write.
 func (a *action[M, REQ, RSP]) createManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *batch[M]) error {
 	log := logger.Controller.WithContext(ctx, apiaction.CreateMany)
 	svc := a.service()
@@ -26,7 +26,7 @@ func (a *action[M, REQ, RSP]) createManyFlow(ctx context.Context, newServiceCont
 	if len(req.Items) == 0 {
 		return failWith(ctx, log, "batch create without items", nil, badRequest(missingItemsMsg))
 	}
-	clearAudit(req.Items...)
+	a.clearServerFields(req.Items...)
 
 	// 1.Perform business logic processing before batch create resource.
 	if err := a.traceServiceHook(ctx, apiaction.CreateManyBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {

@@ -4,7 +4,8 @@
 // the names of (see ValidateFrameworkColumns and DefaultCursorColumn), the
 // secondary indexes it declares (see Index), its optimistic-locking column
 // (see Version), the columns identifying one of its rows (see
-// IdentifyingColumns) and its associations (see AssociationFields); and the
+// IdentifyingColumns), its associations (see AssociationFields) and the
+// fields it declares read-only to clients (see IsReadOnly); and the
 // fingerprint of everything a set of models declares about their tables (see
 // Fingerprint).
 //

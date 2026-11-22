@@ -348,12 +348,16 @@ func TestSetCustomBatchDocumentsTheServiceTypes(t *testing.T) {
 }
 
 // openapiWriteModel declares a column of each gorm write permission beside
-// the framework base, whose fields the framework writes itself.
+// the framework base, whose fields the framework writes itself, and, declared
+// read-only, a column and a field no column stores, which the server writes
+// alone.
 type openapiWriteModel struct {
-	Name  string `json:"name"`
-	Code  string `json:"code" gorm:"<-:create"`
-	Stamp string `json:"stamp" gorm:"<-:update"`
-	Mark  string `json:"mark" gorm:"->"`
+	Name    string `json:"name"`
+	Code    string `json:"code" gorm:"<-:create"`
+	Stamp   string `json:"stamp" gorm:"<-:update"`
+	Mark    string `json:"mark" gorm:"->"`
+	Stage   string `json:"stage" binding:"readonly"`
+	Summary string `json:"summary" gorm:"-" binding:"readonly"`
 
 	modelregistry.Base
 }
@@ -482,12 +486,13 @@ type openapiWriteRequest struct {
 // the fields it takes from the client, and its example to the same fields.
 // The framework's own flow takes none of the framework base's, which it writes
 // itself, but the primary key a create may name, the insert generating one
-// otherwise, and no column gorm leaves out of the write: an insert none
-// written on update only or never, an update none written on insert only or
-// never. An item of a batch update names its record by its id, which it must
-// carry, not optional as on a create. A custom payload is the service's to
-// read, every field of it, a batch's included, which is the payload itself
-// rather than a list of items.
+// otherwise, no column gorm leaves out of the write, an insert none written
+// on update only or never, an update none written on insert only or never,
+// and no field the model declares read-only, a column or not. An item of a
+// batch update names its record by its id, which it must carry, not optional
+// as on a create. A custom payload is the service's to read, every field of
+// it, a batch's included, which is the payload itself rather than a list of
+// items.
 func TestSetDocumentsTheFieldsAWriteTakes(t *testing.T) {
 	type model = openapiWriteModel
 	tests := []struct {

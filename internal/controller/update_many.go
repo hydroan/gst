@@ -18,12 +18,14 @@ import (
 // updateManyFlow runs the batch update flow on the items of req: it refuses
 // a batch carrying no item (see missingItemsMsg), a batch naming one record
 // twice (see repeatedID) and an item naming no record (see itemWithoutID)
-// with 400, clears the creator and updater every item carries (see
-// clearAudit), runs the batch update hooks around the write, which names the
-// caller the request carries as the updater, and records the operation. The
-// items are req's own, as the write and the hooks left them, with the
-// columns an update leaves alone, the creation audit among them, as stored
-// (see backfillUnwrittenColumns).
+// with 400, clears the creator, the updater and the read-only fields every
+// item carries (see clearServerFields), runs the batch update hooks around
+// the write, which names the caller the request carries as the updater and,
+// like an update of one record, leaves the read-only columns as stored (see
+// updateFlow), and records the operation. The items are req's own, as the
+// write and the hooks left them, with the columns an update leaves alone,
+// the creation audit and the read-only ones among them, as stored (see
+// backfillUnwrittenColumns).
 func (a *action[M, REQ, RSP]) updateManyFlow(ctx context.Context, newServiceContext serviceContextFunc, req *batch[M]) error {
 	log := logger.Controller.WithContext(ctx, apiaction.UpdateMany)
 	svc := a.service()
@@ -44,7 +46,7 @@ func (a *action[M, REQ, RSP]) updateManyFlow(ctx context.Context, newServiceCont
 			return failWith(ctx, log, "batch update item without its id", err, itemWithoutID(i))
 		}
 	}
-	clearAudit(req.Items...)
+	a.clearServerFields(req.Items...)
 	// 1.Perform business logic processing before batch update resource.
 	if err := a.traceServiceHook(ctx, apiaction.UpdateManyBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
 		return svc.UpdateManyBefore(sc, req.Items...)
@@ -53,21 +55,22 @@ func (a *action[M, REQ, RSP]) updateManyFlow(ctx context.Context, newServiceCont
 	}
 	// 2.Batch update resource in database. Pure UPDATE with one transaction
 	// around the batch: an item without a live row renders 404 and rolls the
-	// batch back, so the batch endpoint can never insert rows.
-	if err := database.Database[M](ctx).Update(req.Items...); err != nil {
+	// batch back, so the batch endpoint can never insert rows. WithSelect
+	// given no column narrows nothing: the write is the full row.
+	if err := database.Database[M](ctx).WithSelect(a.writable...).Update(req.Items...); err != nil {
 		return failDatabase(ctx, log, err)
 	}
-	// The columns the update left alone hold whatever the client sent; they
-	// are read back as stored, in one statement from the primary, before the
-	// hook after the write sees them (see backfillUnwrittenColumns). On a
-	// reload failure the items stay as they are: the update itself already
-	// committed.
+	// The columns the update left alone hold whatever the client sent or a
+	// hook set; they are read back as stored, in one statement from the
+	// primary, before the hook after the write sees them (see
+	// backfillUnwrittenColumns). On a reload failure the items stay as they
+	// are: the update itself already committed.
 	if stored, reloadErr := a.recordsByID(database.Database[M](ctx).WithReplica(false), req.itemIDs()); reloadErr != nil {
 		log.Warnz("reload the columns the update leaves alone failed", zap.Error(reloadErr))
 	} else {
 		for _, m := range req.Items {
 			if record, ok := stored[m.GetID()]; ok {
-				backfillUnwrittenColumns(a.typ, reflect.ValueOf(m).Elem(), reflect.ValueOf(record).Elem())
+				backfillUnwrittenColumns(a.unwritten, reflect.ValueOf(m).Elem(), reflect.ValueOf(record).Elem())
 			}
 		}
 	}

@@ -36,14 +36,18 @@ type patchField struct {
 }
 
 // patchFieldTable is the table of the fields of a model a patch may apply,
-// in declaration order, with its lookups by JSON key and by Go path, and
-// the JSON keys of the fields the framework manages, which a mask names to
-// no effect (see maskFieldSet).
+// in declaration order, with its lookups by JSON key and by Go path, the
+// JSON keys of the fields the framework manages, which a mask names to no
+// effect (see maskFieldSet), and the index paths of the fields among them
+// the model declares read-only (see modelschema.IsReadOnly), which the
+// create and update flows clear of what a client sent (see
+// clearServerFields).
 type patchFieldTable struct {
-	fields  []*patchField
-	byKey   map[string]*patchField
-	byName  map[string]*patchField
-	managed map[string]struct{}
+	fields   []*patchField
+	byKey    map[string]*patchField
+	byName   map[string]*patchField
+	managed  map[string]struct{}
+	readOnly [][]int
 }
 
 // lookup returns the field a JSON key names, the way encoding/json binds the
@@ -122,8 +126,9 @@ var patchFieldTables sync.Map // reflect.Type -> *patchFieldTable
 // encoding/json, not their Go names, which Go's own visibility goes by.
 // Left out are the fields of the framework's base types, a field named ID at
 // any depth, as the primary key names the record patched and moves it
-// nowhere, and a column an update leaves alone, one gorm writes on insert
-// only or never. Their keys are kept as the ones the framework manages.
+// nowhere, a column an update leaves alone, one gorm writes on insert only
+// or never, and a field the model declares read-only, which the server
+// writes alone. Their keys are kept as the ones the framework manages.
 func patchFieldsOf(typ reflect.Type) *patchFieldTable {
 	if cached, ok := patchFieldTables.Load(typ); ok {
 		return cached.(*patchFieldTable) //nolint:errcheck
@@ -135,6 +140,7 @@ func patchFieldsOf(typ reflect.Type) *patchFieldTable {
 	candidates := make(map[string][]candidate)
 	var keys []string
 	managed := make(map[string]struct{})
+	var readOnly [][]int
 	// The columns an update leaves alone, by index path: a patch applying one
 	// would answer a value the write never takes (see
 	// backfillUnwrittenColumns), so their keys are managed ones too.
@@ -208,6 +214,11 @@ func patchFieldsOf(typ reflect.Type) *patchFieldTable {
 				if !field.IsExported() || name == "-" {
 					continue
 				}
+				if modelschema.IsReadOnly(field.Tag) {
+					managed[jsonKey(field)] = struct{}{}
+					readOnly = append(readOnly, index)
+					continue
+				}
 				if _, alone := unwritten[fmt.Sprint(index)]; alone || field.Name == idFieldName {
 					managed[jsonKey(field)] = struct{}{}
 					continue
@@ -237,7 +248,7 @@ func patchFieldsOf(typ reflect.Type) *patchFieldTable {
 		}
 		current, count = next, nextCount
 	}
-	table := &patchFieldTable{byKey: make(map[string]*patchField, len(keys)), byName: make(map[string]*patchField, len(keys)), managed: managed}
+	table := &patchFieldTable{byKey: make(map[string]*patchField, len(keys)), byName: make(map[string]*patchField, len(keys)), managed: managed, readOnly: readOnly}
 	for _, key := range keys {
 		shallowest := slices.MinFunc(candidates[key], func(a, b candidate) int {
 			return len(a.field.index) - len(b.field.index)
@@ -286,7 +297,7 @@ func jsonKey(field reflect.StructField) string {
 // the way when held through a nil pointer; each copy is logged before it is
 // made. The fields no patch applies never reach here (see patchFieldsOf),
 // so the primary key names the record patched and the framework's base
-// fields stay as stored.
+// fields and the read-only ones stay as stored.
 func applyPatch(log types.Logger, typ reflect.Type, oldVal reflect.Value, newVal reflect.Value, fieldSets ...patchFieldSet) {
 	var fields patchFieldSet
 	if len(fieldSets) > 0 {

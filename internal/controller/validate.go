@@ -10,6 +10,7 @@ import (
 	ut "github.com/go-playground/universal-translator"
 	"github.com/go-playground/validator/v10"
 	entranslations "github.com/go-playground/validator/v10/translations/en"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 )
 
@@ -74,10 +75,12 @@ var (
 // package initialization so that it is set before any request, on either
 // transport, and before any validation a project runs through gin itself:
 // the validator names fields by their JSON key, the name the client sent
-// them under, and renders each failure as the English sentence of its own
-// translations, "name is a required field". A validator other than
-// go-playground's is left as it is, its errors answered without naming a
-// field (see clientSafeBindError).
+// them under, renders each failure as the English sentence of its own
+// translations, "name is a required field", and knows the rule declaring a
+// field read-only (see modelschema.RuleReadOnly), which checks nothing: the
+// write flows read the declaration, and the validator would refuse a rule it
+// was never told of. A validator other than go-playground's is left as it
+// is, its errors answered without naming a field (see clientSafeBindError).
 func init() {
 	if binding.Validator == nil {
 		return
@@ -87,6 +90,10 @@ func init() {
 		return
 	}
 	engine.RegisterTagNameFunc(fieldJSONName)
+	// The rule runs on a nil value as well, which the validator would refuse
+	// under a rule it does not run; the registration fails for an empty rule
+	// name or a nil function alone.
+	_ = engine.RegisterValidation(modelschema.RuleReadOnly, func(validator.FieldLevel) bool { return true }, true)
 	english := en.New()
 	translator, _ := ut.New(english, english).GetTranslator(english.Locale())
 	if err := entranslations.RegisterDefaultTranslations(engine, translator); err != nil {

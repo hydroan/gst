@@ -242,38 +242,48 @@ func TestPatchFieldSetsLeaveThePrimaryKeyOut(t *testing.T) {
 	require.Equal(t, "after", oldRecord.Name)
 }
 
-// patchFieldsSealedRecord carries a column gorm writes on insert only and a
-// read-only one, neither of which an update writes.
+// patchFieldsSealedRecord carries a column gorm writes on insert only, one
+// gorm never writes, and a column and a field no column stores the model
+// declares read-only, none of which a patch applies.
 type patchFieldsSealedRecord struct {
-	ID   string `json:"id" gorm:"primaryKey"`
-	Name string `json:"name"`
-	Code string `json:"code" gorm:"<-:create"`
-	Mark string `json:"mark" gorm:"->"`
+	ID      string `json:"id" gorm:"primaryKey"`
+	Name    string `json:"name"`
+	Code    string `json:"code" gorm:"<-:create"`
+	Mark    string `json:"mark" gorm:"->"`
+	Stage   string `json:"stage" binding:"readonly"`
+	Summary string `json:"summary" gorm:"-" binding:"readonly"`
 }
 
-// TestPatchFieldSetsLeaveTheColumnsAnUpdateLeavesAloneOut pins that no patch
-// applies a column an update does not write: a body key or a mask path
-// naming it names no field, a mask naming it alone is refused, and the
-// patched record keeps the stored value, the way it keeps the framework's
-// audit columns.
-func TestPatchFieldSetsLeaveTheColumnsAnUpdateLeavesAloneOut(t *testing.T) {
+// TestPatchFieldSetsLeaveOutTheFieldsNoClientWrites pins that no patch
+// applies a column an update does not write, nor a field the model declares
+// read-only: a body key or a mask path naming it names no field, a mask
+// naming it alone is refused, and the patched record keeps the stored value,
+// the way it keeps the framework's audit columns. The read-only fields are
+// kept by their index paths, for the create and update flows to clear.
+func TestPatchFieldSetsLeaveOutTheFieldsNoClientWrites(t *testing.T) {
 	typ := reflect.TypeFor[patchFieldsSealedRecord]()
 
-	fields, err := patchFieldSetFromJSONBody(typ, []byte(`{"code":"forged","mark":"forged","name":"renamed"}`))
+	fields, err := patchFieldSetFromJSONBody(typ, []byte(`{"code":"forged","mark":"forged","stage":"forged","summary":"forged","name":"renamed"}`))
 	require.NoError(t, err)
 	require.Equal(t, patchFieldSet{"Name": {}}, fields)
 
-	fields, err = maskFieldSet(typ, []string{"code", "mark", "name"})
+	fields, err = maskFieldSet(typ, []string{"code", "mark", "stage", "summary", "name"})
 	require.NoError(t, err)
 	require.Equal(t, patchFieldSet{"Name": {}}, fields)
 
-	_, err = maskFieldSet(typ, []string{"code"})
-	require.EqualError(t, err, "update_mask must name at least one field a patch applies")
+	for _, managed := range []string{"code", "stage", "summary"} {
+		_, err = maskFieldSet(typ, []string{managed})
+		require.EqualError(t, err, "update_mask must name at least one field a patch applies", managed)
+	}
 
-	oldRecord := &patchFieldsSealedRecord{ID: "kept", Name: "before", Code: "original", Mark: "stored"}
-	newRecord := &patchFieldsSealedRecord{Name: "after", Code: "forged", Mark: "forged"}
+	oldRecord := &patchFieldsSealedRecord{ID: "kept", Name: "before", Code: "original", Mark: "stored", Stage: "reached", Summary: "computed"}
+	newRecord := &patchFieldsSealedRecord{Name: "after", Code: "forged", Mark: "forged", Stage: "forged", Summary: "forged"}
 	applyPatch(nopControllerLogger{}, typ, reflect.ValueOf(oldRecord).Elem(), reflect.ValueOf(newRecord).Elem())
-	require.Equal(t, patchFieldsSealedRecord{ID: "kept", Name: "after", Code: "original", Mark: "stored"}, *oldRecord)
+	require.Equal(t, patchFieldsSealedRecord{ID: "kept", Name: "after", Code: "original", Mark: "stored", Stage: "reached", Summary: "computed"}, *oldRecord)
+
+	stage, _ := typ.FieldByName("Stage")
+	summary, _ := typ.FieldByName("Summary")
+	require.Equal(t, [][]int{stage.Index, summary.Index}, patchFieldsOf(typ).readOnly)
 }
 
 // patchFieldsVersionedRecord is a model under optimistic locking, whose

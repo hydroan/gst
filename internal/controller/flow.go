@@ -2,10 +2,14 @@ package controller
 
 import (
 	"context"
+	"reflect"
+	"slices"
 
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/execctx"
 	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
+	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/types"
 )
@@ -27,16 +31,91 @@ import (
 // nothing at all for a transport without one — so the transport supplies it.
 type serviceContextFunc func(ctx context.Context, phase apiaction.Phase) *types.ServiceContext
 
-// clearAudit clears the creator and updater of records, what a client sent
-// in them: who created or updated a record is the server's to write. The
-// write names the caller the context carries as both (see database.Create),
-// and with no caller, an anonymous request's, the records keep what a hook
-// set, never what the client sent. The write flows call it first, before
-// any hook runs, so a hook may still set them on purpose.
-func clearAudit[M types.Model](records ...M) {
+// writeFieldsOf reads off typ, the struct type of M, what the framework's
+// own write flows go by: readOnly, the index paths of the fields M declares
+// read-only (see patchFieldsOf); unwritten, the index paths of the columns
+// an update leaves alone, those gorm writes on insert only or never (see
+// modelschema.Column.Updatable) and the read-only ones, every column of a
+// read-only field stored in several, a struct gorm embeds; and writable, the
+// columns an update writes of a model declaring a read-only column, every
+// column of the model's own but the unwritten ones. The columns of the
+// framework's base are none of the model's own: the write names them itself,
+// whatever columns it is narrowed to (see database.WithSelect). writable is
+// nil for a model declaring no read-only column, whose update writes the
+// full row, and empty for one declaring every column of its own read-only.
+//
+// For a model embedding model.Base beside Name, Stage `binding:"readonly"`
+// and Tally, a struct of Seen and Passed tagged `gorm:"embedded"
+// binding:"readonly"`, readOnly is the paths of Stage and Tally, unwritten
+// the paths of the columns created_at, created_by, stage, seen and passed,
+// and writable the column name.
+func writeFieldsOf[M types.Model](typ reflect.Type) (readOnly, unwritten [][]int, writable []types.AnyColumnRef) {
+	readOnly = patchFieldsOf(typ).readOnly
+	columns, err := modelschema.Columns(typ)
+	if err != nil {
+		return readOnly, nil, nil
+	}
+	ofFrameworkBase := func(index []int) bool {
+		holder := typ
+		for _, i := range index[:len(index)-1] {
+			step := holder.Field(i)
+			holder = step.Type
+			for holder.Kind() == reflect.Pointer {
+				holder = holder.Elem()
+			}
+			if step.Anonymous && modelregistry.IsFrameworkBase(holder) {
+				return true
+			}
+		}
+		return false
+	}
+	narrowed := false
+	own := make([]types.AnyColumnRef, 0, len(columns))
+	for _, col := range columns {
+		// The path of a read-only field is the one its column is read by,
+		// or, stored in several columns, the one each of them begins with.
+		declared := slices.ContainsFunc(readOnly, func(index []int) bool {
+			return len(index) <= len(col.Index) && slices.Equal(index, col.Index[:len(index)])
+		})
+		narrowed = narrowed || declared
+		switch {
+		case declared || !col.Updatable:
+			unwritten = append(unwritten, col.Index)
+		case !ofFrameworkBase(col.Index):
+			own = append(own, types.NewColumn[M, any](col.DBName))
+		}
+	}
+	if narrowed {
+		writable = own
+	}
+	return readOnly, unwritten, writable
+}
+
+// clearServerFields clears what a client sent in the fields of records the
+// server writes alone: the creator and updater, and the fields the model
+// declares read-only (see modelschema.IsReadOnly). Who created or updated a
+// record is the write's to name, the caller the context carries as both (see
+// database.Create), and with no caller, an anonymous request's, what a hook
+// set, never what the client sent. The create and update flows call it
+// first, before any hook runs, so a hook reads none of what the client sent
+// there, and may set the fields on purpose: a create stores what it set in
+// a read-only field, where an update writes no read-only column at all (see
+// updateFlow).
+func (a *action[M, REQ, RSP]) clearServerFields(records ...M) {
 	for _, record := range records {
 		record.SetCreatedBy("")
 		record.SetUpdatedBy("")
+		if len(a.readOnly) == 0 {
+			continue
+		}
+		value := reflect.ValueOf(record).Elem()
+		for _, index := range a.readOnly {
+			// A field promoted through a nil embedded pointer holds nothing
+			// to clear.
+			if field, err := value.FieldByIndexErr(index); err == nil {
+				field.SetZero()
+			}
+		}
 	}
 }
 

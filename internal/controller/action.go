@@ -45,6 +45,19 @@ type action[M types.Model, REQ types.Request, RSP types.Response] struct {
 
 	idColumn types.Column[string] // the id column of M, the reference the batch flows read records by
 
+	// What the framework's own write flows read off M (see writeFieldsOf);
+	// empty for an action a service of its own serves. readOnly are the index
+	// paths of the fields a client may not write, which the create and update
+	// flows clear before any hook runs (see clearServerFields). unwritten are
+	// the index paths of the columns an update leaves alone, which it answers
+	// as stored (see backfillUnwrittenColumns). writable are the columns an
+	// update writes of a model declaring read-only columns, every column of
+	// the model's own but those; nil for a model declaring none, whose update
+	// writes the full row.
+	readOnly  [][]int
+	unwritten [][]int
+	writable  []types.AnyColumnRef
+
 	// itemParam is the route parameter carrying the id of a standard item
 	// action, a Get, Update, Patch or Delete of the model itself: the last
 	// parameter segment of its route (see apiaction.LastRouteParam), the one
@@ -64,7 +77,9 @@ type action[M types.Model, REQ types.Request, RSP types.Response] struct {
 // (for example the before/after phases of a CRUD operation), so their span
 // names are precomputed as well. It panics, naming route, when REQ is an
 // interface with methods or a pointer to one, a request type no request
-// body decodes into.
+// body decodes into, and when the action is the framework's own update of a
+// model declaring every column of its own read-only, an update with nothing
+// to write.
 func newAction[M types.Model, REQ types.Request, RSP types.Response](route string, phase apiaction.Phase, hookPhases ...apiaction.Phase) *action[M, REQ, RSP] {
 	typ := reflect.TypeOf(*new(M)).Elem()
 	name := typ.Name()
@@ -92,6 +107,18 @@ func newAction[M types.Model, REQ types.Request, RSP types.Response](route strin
 	if itemPhases[phase] && typesEqual {
 		itemParam = apiaction.LastRouteParam(route)
 	}
+	var readOnly, unwritten [][]int
+	var writable []types.AnyColumnRef
+	if typesEqual {
+		readOnly, unwritten, writable = writeFieldsOf[M](typ)
+		// An update of a model declaring read-only columns writes the columns
+		// left writable alone (see updateFlow), so one declaring every column
+		// of its own read-only has nothing to write: the declaration is
+		// refused as the route registers.
+		if (phase == apiaction.Update || phase == apiaction.UpdateMany) && writable != nil && len(writable) == 0 {
+			panic(fmt.Sprintf("controller: route %q: %s declares every column of its own read-only, which leaves its update nothing to write; leave a column writable, or do not declare the update", route, name))
+		}
+	}
 
 	return &action[M, REQ, RSP]{
 		typ:            typ,
@@ -104,6 +131,9 @@ func newAction[M types.Model, REQ types.Request, RSP types.Response](route strin
 		controllerSpan: newPhaseSpan("controller", name, phase),
 		serviceSpans:   serviceSpans,
 		idColumn:       types.NewColumn[M, string](modelschema.IDColumn),
+		readOnly:       readOnly,
+		unwritten:      unwritten,
+		writable:       writable,
 		itemParam:      itemParam,
 	}
 }

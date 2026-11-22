@@ -16,18 +16,20 @@ import (
 // the model embeds (see modelregistry.IsFrameworkBase), which the framework
 // writes, the columns gorm leaves out of the write, an insert writing none
 // it writes on update only or never, an update none it writes on insert only
-// or never (see modelschema.Column), and the primary key of an update, whose
-// route names the record. A create takes the primary key, optional: the
-// insert keeps a key the client names and generates one otherwise. A patch
-// requires none of the fields its binding rules require, checking the ones it
-// names alone. A batch body holds the records in its items array; an item of
-// a batch update keeps the primary key, which names the record the item
-// writes, as a required field, as the flow refuses an item without one.
+// or never (see modelschema.Column), the fields the model declares read-only
+// (see modelschema.IsReadOnly), which the server writes alone, a column or
+// not, and the primary key of an update, whose route names the record. A
+// create takes the primary key, optional: the insert keeps a key the client
+// names and generates one otherwise. A patch requires none of the fields its
+// binding rules require, checking the ones it names alone. A batch body
+// holds the records in its items array; an item of a batch update keeps the
+// primary key, which names the record the item writes, as a required field,
+// as the flow refuses an item without one.
 //
 // For a model embedding model.Base beside Name, Code `gorm:"<-:create"`,
-// Stamp `gorm:"<-:update"` and Mark `gorm:"->"`, a create documents code, id
-// and name, an update or a patch name and stamp, and an item of a batch
-// update or patch id, name and stamp, id required.
+// Stamp `gorm:"<-:update"`, Mark `gorm:"->"` and Stage `binding:"readonly"`,
+// a create documents code, id and name, an update or a patch name and stamp,
+// and an item of a batch update or patch id, name and stamp, id required.
 func hideUnwrittenFields(schemaRef *openapi3.SchemaRef, model reflect.Type, phase apiaction.Phase) {
 	if schemaRef == nil || schemaRef.Value == nil {
 		return
@@ -62,6 +64,17 @@ func hideUnwrittenFields(schemaRef *openapi3.SchemaRef, model reflect.Type, phas
 		case col.PrimaryKey && batch:
 			schema.Required = append(schema.Required, key)
 		case col.PrimaryKey || base || !written:
+			delete(schema.Properties, key)
+			schema.Required = slices.DeleteFunc(schema.Required, func(name string) bool { return name == key })
+		}
+	}
+	for model.Kind() == reflect.Pointer {
+		model = model.Elem()
+	}
+	fields := make(map[string]schemaDocField)
+	collectSchemaDocFields(model, fields, make(map[reflect.Type]bool))
+	for key, field := range fields {
+		if modelschema.IsReadOnly(field.field.Tag) {
 			delete(schema.Properties, key)
 			schema.Required = slices.DeleteFunc(schema.Required, func(name string) bool { return name == key })
 		}

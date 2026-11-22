@@ -64,6 +64,8 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 	scoped := standardFixture[*scopedSample](scopedRoute, "Scoped")
 	scopedAcross := scoped
 	scopedAcross.across = true
+	staged := standardFixture[*stagedSample](stagedRoute, "Staged")
+	staging := standardFixture[*stagedSample](stagingRoute, "Staging")
 	public := standardFixture[*sampleRecord](publicRoute, publicPrefix)
 	public.anonymous = true
 	shaped := standardFixture[*shapedSample](shapedRoute, "Shaped")
@@ -271,6 +273,37 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				stored := loadSample(t, stringOf(dataMap(t, got)["id"]))
 				require.Empty(t, stored.GetCreatedBy())
 				require.Empty(t, stored.GetUpdatedBy())
+			},
+		},
+		{
+			// A field the model declares read-only is the server's to write:
+			// what a client sends in it is dropped before any hook runs, a
+			// column or not.
+			name: "Create stores nothing a client sends in a read-only field", fixture: staged, phase: apiaction.Create,
+			input: contractInput{record: map[string]any{"name": uniqueName("contract-staged-create"), "stage": "client", "staged_at": "2001-02-03T04:05:06Z", "tally": map[string]any{"seen": 9, "passed": 9}, "summary": "client"}},
+			want:  ok,
+			check: func(t *testing.T, in contractInput, got contractAnswer) {
+				t.Helper()
+				data := dataMap(t, got)
+				require.Equal(t, in.record["name"], data["name"])
+				require.Empty(t, data["stage"])
+				require.NotContains(t, data, "staged_at")
+				require.NotContains(t, data, "summary")
+				stored := loadStaged(t, stringOf(data["id"]))
+				require.Empty(t, stored.Stage)
+				require.Nil(t, stored.StagedAt)
+				require.Zero(t, stored.Tally)
+			},
+		},
+		{
+			name: "Create stores what the hook before it writes in a read-only field", fixture: staging, phase: apiaction.Create,
+			input: contractInput{record: map[string]any{"name": uniqueName("contract-staging-create"), "stage": "client"}},
+			want:  ok,
+			check: func(t *testing.T, _ contractInput, got contractAnswer) {
+				t.Helper()
+				data := dataMap(t, got)
+				require.Equal(t, hookedStage, data["stage"])
+				require.Equal(t, hookedStage, loadStaged(t, stringOf(data["id"])).Stage)
 			},
 		},
 		{
@@ -787,6 +820,67 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
+			// An update replaces what a client may write and no more: a
+			// read-only column keeps what is stored, the request naming it or
+			// not, and the answer carries it as stored.
+			name: "Update leaves a read-only field the request names as stored", fixture: staged, phase: apiaction.Update,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				return contractInput{id: createStaged(t, "contract-staged-update").GetID(), record: map[string]any{"name": "contract-staged-updated", "stage": "client", "staged_at": "2001-02-03T04:05:06Z", "tally": map[string]any{"seen": 9, "passed": 9}, "summary": "client"}}
+			},
+			want: ok,
+			check: func(t *testing.T, in contractInput, got contractAnswer) {
+				t.Helper()
+				stored := loadStaged(t, in.id)
+				require.Equal(t, "contract-staged-updated", stored.Name)
+				require.Equal(t, storedStage, stored.Stage)
+				require.NotNil(t, stored.StagedAt)
+				require.Equal(t, 2026, stored.StagedAt.Year())
+				data := dataMap(t, got)
+				require.Equal(t, storedTally, stored.Tally, "a read-only field stored in several columns keeps them all")
+				require.Equal(t, storedStage, data["stage"], "the answer carries the read-only column as stored")
+				requireSameInstant(t, *stored.StagedAt, data["staged_at"], "the answer carries the read-only column as stored")
+				require.Equal(t, storedTallyData, data["tally"], "the answer carries the read-only columns as stored")
+				require.NotContains(t, data, "summary", "what a client sent in a read-only field no column stores is dropped")
+			},
+		},
+		{
+			name: "Update leaves a read-only field the request omits as stored", fixture: staged, phase: apiaction.Update,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				return contractInput{id: createStaged(t, "contract-staged-kept").GetID(), record: map[string]any{"name": "contract-staged-kept-renamed"}}
+			},
+			want: ok,
+			check: func(t *testing.T, in contractInput, got contractAnswer) {
+				t.Helper()
+				stored := loadStaged(t, in.id)
+				require.Equal(t, "contract-staged-kept-renamed", stored.Name)
+				require.Equal(t, storedStage, stored.Stage, "an update zeroes no read-only column the request omits")
+				require.NotNil(t, stored.StagedAt)
+				require.Equal(t, storedTally, stored.Tally, "nor the columns of a read-only field stored in several")
+				require.Equal(t, storedStage, dataMap(t, got)["stage"])
+				require.Equal(t, storedTallyData, dataMap(t, got)["tally"])
+			},
+		},
+		{
+			// The write of an update names no read-only column, so what the
+			// hook before it set in one is not written either; the answer
+			// carries what is stored.
+			name: "Update writes no read-only field the hook before it sets", fixture: staging, phase: apiaction.Update,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				return contractInput{id: createStaged(t, "contract-staging-update").GetID(), record: map[string]any{"name": "contract-staging-updated", "stage": "client"}}
+			},
+			want: ok,
+			check: func(t *testing.T, in contractInput, got contractAnswer) {
+				t.Helper()
+				stored := loadStaged(t, in.id)
+				require.Equal(t, "contract-staging-updated", stored.Name)
+				require.Equal(t, storedStage, stored.Stage)
+				require.Equal(t, storedStage, dataMap(t, got)["stage"])
+			},
+		},
+		{
 			name: "Update writes the record the request names, whatever id the record carries", fixture: samples, phase: apiaction.Update,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
@@ -953,6 +1047,49 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
+			name: "Patch leaves a read-only field as stored and applies the field beside it", fixture: staged, phase: apiaction.Patch,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				return contractInput{id: createStaged(t, "contract-staged-patch").GetID(), record: map[string]any{"stage": "client", "tally": map[string]any{"seen": 9, "passed": 9}, "name": "contract-staged-patched"}}
+			},
+			want: ok,
+			check: func(t *testing.T, in contractInput, got contractAnswer) {
+				t.Helper()
+				stored := loadStaged(t, in.id)
+				require.Equal(t, "contract-staged-patched", stored.Name)
+				require.Equal(t, storedStage, stored.Stage)
+				require.Equal(t, storedTally, stored.Tally)
+				require.Equal(t, storedStage, dataMap(t, got)["stage"])
+			},
+		},
+		{
+			name: "Patch naming only a read-only field", fixture: staged, phase: apiaction.Patch,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				return contractInput{id: createStaged(t, "contract-staged-patch-alone").GetID(), record: map[string]any{"stage": "client"}}
+			},
+			want: contractWant{status: http.StatusOK, grpc: noField},
+			check: func(t *testing.T, in contractInput, _ contractAnswer) {
+				t.Helper()
+				stored := loadStaged(t, in.id)
+				require.Equal(t, "contract-staged-patch-alone", stored.Name)
+				require.Equal(t, storedStage, stored.Stage)
+			},
+		},
+		{
+			name: "Patch stores what the hook before it writes in a read-only field", fixture: staging, phase: apiaction.Patch,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				return contractInput{id: createStaged(t, "contract-staging-patch").GetID(), record: map[string]any{"name": "contract-staging-patched"}}
+			},
+			want: ok,
+			check: func(t *testing.T, in contractInput, got contractAnswer) {
+				t.Helper()
+				require.Equal(t, hookedStage, loadStaged(t, in.id).Stage)
+				require.Equal(t, hookedStage, dataMap(t, got)["stage"])
+			},
+		},
+		{
 			name: "Patch refuses a field failing validation", fixture: validated, phase: apiaction.Patch,
 			prepare: func(t *testing.T) contractInput {
 				t.Helper()
@@ -1105,6 +1242,18 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			},
 		},
 		{
+			name: "CreateMany stores nothing a client sends in a read-only field", fixture: staged, phase: apiaction.CreateMany,
+			input: contractInput{items: []map[string]any{{"name": uniqueName("contract-staged-many"), "stage": "client"}}},
+			want:  ok,
+			check: func(t *testing.T, _ contractInput, got contractAnswer) {
+				t.Helper()
+				answered := itemMaps(t, dataMap(t, got)["items"])
+				require.Len(t, answered, 1)
+				require.Empty(t, answered[0]["stage"])
+				require.Empty(t, loadStaged(t, stringOf(answered[0]["id"])).Stage)
+			},
+		},
+		{
 			name: "CreateMany stores the dates of the items as UTC days", fixture: dated, phase: apiaction.CreateMany,
 			input: contractInput{items: []map[string]any{{"name": uniqueName("contract-dated-many"), "day": "2026-01-02T00:00:00+08:00"}}},
 			want:  ok,
@@ -1181,6 +1330,28 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				require.Equal(t, "contract-anonymous-update-many2", stored.Name)
 				require.Equal(t, "u-0", stored.GetCreatedBy())
 				require.Empty(t, stored.GetUpdatedBy())
+			},
+		},
+		{
+			name: "UpdateMany leaves the read-only fields of the items as stored", fixture: staged, phase: apiaction.UpdateMany,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				a, b := createStaged(t, "contract-staged-many-a"), createStaged(t, "contract-staged-many-b")
+				return contractInput{items: []map[string]any{{"id": a.GetID(), "name": "contract-staged-many-a2", "stage": "client"}, {"id": b.GetID(), "name": "contract-staged-many-b2"}}}
+			},
+			want: ok,
+			check: func(t *testing.T, in contractInput, got contractAnswer) {
+				t.Helper()
+				answered := itemMaps(t, dataMap(t, got)["items"])
+				require.Len(t, answered, 2)
+				for i, item := range answered {
+					stored := loadStaged(t, stringOf(in.items[i]["id"]))
+					require.Equal(t, in.items[i]["name"], stored.Name)
+					require.Equal(t, storedStage, stored.Stage)
+					require.Equal(t, storedTally, stored.Tally)
+					require.Equal(t, storedStage, item["stage"], "the answer carries the read-only column as stored")
+					require.Equal(t, storedTallyData, item["tally"], "the answer carries the read-only columns as stored")
+				}
 			},
 		},
 		{
@@ -1268,6 +1439,20 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				require.Equal(t, "contract-anonymous-patch-many2", stored.Name)
 				require.Equal(t, "u-0", stored.GetCreatedBy())
 				require.Empty(t, stored.GetUpdatedBy())
+			},
+		},
+		{
+			name: "PatchMany leaves the read-only fields the items name as stored", fixture: staged, phase: apiaction.PatchMany,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				return contractInput{items: []map[string]any{{"id": createStaged(t, "contract-staged-patch-many").GetID(), "stage": "client", "name": "contract-staged-patch-many-2"}}}
+			},
+			want: ok,
+			check: func(t *testing.T, in contractInput, _ contractAnswer) {
+				t.Helper()
+				stored := loadStaged(t, stringOf(in.items[0]["id"]))
+				require.Equal(t, "contract-staged-patch-many-2", stored.Name)
+				require.Equal(t, storedStage, stored.Stage)
 			},
 		},
 		{

@@ -13,11 +13,36 @@ import (
 
 // The struct tags the framework reads a model's fields by: TagJSON names the
 // field in requests and responses, TagQuery names the URL parameter clients
-// filter by.
+// filter by, and TagBinding holds the rules a request is validated by.
 const (
-	TagJSON  = "json"
-	TagQuery = "query"
+	TagJSON    = "json"
+	TagQuery   = "query"
+	TagBinding = "binding"
 )
+
+// RuleReadOnly is the binding rule declaring a field read-only to clients,
+// as in `binding:"readonly"`: the framework's own create, update and patch
+// of the model take no value a client sends for the field, which the server
+// writes alone. The rule checks nothing, so a request carrying the field is
+// not refused for it (see IsReadOnly).
+const RuleReadOnly = "readonly"
+
+// IsReadOnly reports whether tag, the struct tag of a field, declares the
+// field read-only to clients: RuleReadOnly is one of the field's own binding
+// rules, those before a dive, the rules after which are the elements' of a
+// slice or a map. It holds for `binding:"readonly"` and for no tag without
+// the rule, `binding:"required"` or `json:"name"`.
+func IsReadOnly(tag reflect.StructTag) bool {
+	for rule := range strings.SplitSeq(tag.Get(TagBinding), ",") {
+		switch rule {
+		case "dive":
+			return false
+		case RuleReadOnly:
+			return true
+		}
+	}
+	return false
+}
 
 // Column is one database column of a model.
 //

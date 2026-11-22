@@ -13,14 +13,15 @@ import (
 	"go.uber.org/zap"
 )
 
-// createFlow runs the create flow on req: it clears the creator and updater
-// req carries (see clearAudit), runs the create hooks around the write,
-// which names the caller the request carries as both, and records the
-// operation. The created model is req itself, filled by the write.
+// createFlow runs the create flow on req: it clears the creator, the updater
+// and the read-only fields req carries (see clearServerFields), runs the
+// create hooks around the write, which names the caller the request carries
+// as creator and updater, and records the operation. The created model is
+// req itself, filled by the write.
 func (a *action[M, REQ, RSP]) createFlow(ctx context.Context, newServiceContext serviceContextFunc, req M) error {
 	log := logger.Controller.WithContext(ctx, apiaction.Create)
 	svc := a.service()
-	clearAudit(req)
+	a.clearServerFields(req)
 
 	// 1.Perform business logic processing before create resource.
 	if err := a.traceServiceHook(ctx, apiaction.CreateBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {

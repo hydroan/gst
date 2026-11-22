@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/internal/controller"
+	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,6 +33,40 @@ func TestHandlersRefuseARequestTypeNoBodyDecodesInto(t *testing.T) {
 		controller.CreateHandler[*sampleRecord, any, *sampleRecord](cfg)
 		controller.CreateHandler[*sampleRecord, *any, *sampleRecord](cfg)
 		controller.CreateHandler[*sampleRecord, *sampleRecord, sampleBinder](cfg)
+	})
+}
+
+// lockedSample declares every column of its own read-only, which leaves an
+// update of it nothing to write.
+type lockedSample struct {
+	Stage string `json:"stage" binding:"readonly"`
+
+	modelregistry.Base
+}
+
+func (lockedSample) TableName() string { return "controller_locked_samples" }
+
+// TestHandlersRefuseAnUpdateWithNothingToWrite pins that mounting the
+// framework's own update of a model declaring every column of its own
+// read-only panics at once, as the route registers, and names the route, on
+// either transport and for a batch alike: the update writes the columns left
+// writable alone, and such a model leaves none. Its create and its patch
+// stay mounted, a hook writing there what a client may not.
+func TestHandlersRefuseAnUpdateWithNothingToWrite(t *testing.T) {
+	cfg := configFor[*lockedSample]("locked")
+	const refused = `controller: route "locked": lockedSample declares every column of its own read-only, which leaves its update nothing to write; leave a column writable, or do not declare the update`
+
+	require.PanicsWithValue(t, refused, func() {
+		controller.UpdateHandler[*lockedSample, *lockedSample, *lockedSample](cfg)
+	})
+	require.PanicsWithValue(t, refused, func() {
+		controller.UpdateManyHandler[*lockedSample, *lockedSample, *lockedSample](cfg)
+	})
+	require.PanicsWithValue(t, refused, func() { controller.UpdateCall[*lockedSample]("locked") })
+	require.PanicsWithValue(t, refused, func() { controller.UpdateManyCall[*lockedSample]("locked") })
+	require.NotPanics(t, func() {
+		controller.CreateHandler[*lockedSample, *lockedSample, *lockedSample](cfg)
+		controller.PatchHandler[*lockedSample, *lockedSample, *lockedSample](cfg)
 	})
 }
 
