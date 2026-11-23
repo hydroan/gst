@@ -133,6 +133,37 @@
 // checkValidateTag reports a struct field carrying a validate tag in the
 // model sources of the framework's modules, under internal/model.
 //
+// # Message constants
+//
+// A sentence a client is answered with is written once, as a constant its
+// package declares, and its translations are registered under that
+// constant. A sentence written where it is answered has no constant to
+// follow it: it is written again wherever it is answered once more and
+// where its translations are registered, and rewording one of them leaves
+// the others behind. checkMsgConst reports a string constant handed to a
+// constructor of the error a request is answered with, or to the
+// translation, directly or through a function or a variable forwarding to
+// them, that no constant of the framework holds; and a constant handed to
+// one, or a translation is registered under, whose name does not end in Msg,
+// the suffix telling the sentences of a package from its other strings.
+//
+// # Translations
+//
+// A process answers its clients in the language its configuration names,
+// and a sentence it answers with is translated from the translations the
+// package it belongs to registers with internal/i18n. A sentence added
+// without one is answered in English to a client reading another language,
+// and nothing fails until that client meets it. A package declares its
+// sentences and registers their translations in one file, translations.go,
+// each translation under the constant declaring its sentence, so the two
+// are read side by side. checkTranslations reports a sentence (see Message
+// constants) its package registers no translation for in one of the
+// languages the framework speaks; a registration written in another file,
+// or one that is not a map literal under a constant language, the form the
+// check reads; a translation registered under anything but a constant its
+// file declares; and a translation under a constant nothing but the
+// registrations uses, the sentence no client is answered with.
+//
 // # Layout
 //
 // Each check lives in the file named after it, testplacement.go for the
@@ -179,6 +210,8 @@ var checks = []check{
 	{name: "testlisting", run: checkTestListing},
 	{name: "constliteral", run: checkConstLiteral},
 	{name: "validatetag", run: checkValidateTag},
+	{name: "msgconst", run: checkMsgConst},
+	{name: "translations", run: checkTranslations},
 }
 
 func main() {
