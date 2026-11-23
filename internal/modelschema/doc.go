@@ -9,6 +9,12 @@
 // fingerprint of everything a set of models declares about their tables (see
 // Fingerprint).
 //
+// Beside the kind of value a column stores stands the reading of a value a
+// client sends for it: an instant, a boolean and a number are each read the
+// one way the framework takes them (see ParseTime, ParseBool, ParseUint and
+// ValidateNumericValue), and an instant compared with a calendar day is taken
+// as its day in UTC (see UTCDay).
+//
 // It is the single place where a Go struct field is mapped to a database
 // column: the mapping is delegated to gorm's own schema parser, so column
 // names always match what gorm actually emits, including the column tag,
