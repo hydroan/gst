@@ -592,7 +592,11 @@ func (s *errDiscFuncScope) markKilledAssigns(body *ast.BlockStmt) {
 			if !ok {
 				continue
 			}
-			checkedObj := errDiscNilCheckedObj(ifStmt)
+			checked := goast.NilChecked(ifStmt)
+			if checked == nil {
+				continue
+			}
+			checkedObj := declObj(checked)
 			if checkedObj == nil {
 				continue
 			}
@@ -612,49 +616,12 @@ func (s *errDiscFuncScope) markKilledAssigns(body *ast.BlockStmt) {
 			})
 			// A check whose body always leaves also consumes the value for
 			// everything after the check.
-			if errDiscStmtsAlwaysLeave(ifStmt.Body.List) {
+			if goast.AlwaysLeaves(ifStmt.Body.List) {
 				s.killAssign(checkedObj, assign, ifStmt.End())
 			}
 		}
 		return true
 	})
-}
-
-// errDiscNilCheckedObj returns the declaration object of v when cond is a
-// plain `v != nil` comparison, nil otherwise.
-func errDiscNilCheckedObj(ifStmt *ast.IfStmt) varObj {
-	cond, ok := ifStmt.Cond.(*ast.BinaryExpr)
-	if !ok || cond.Op != token.NEQ {
-		return nil
-	}
-	ident, ok := cond.X.(*ast.Ident)
-	if !ok {
-		return nil
-	}
-	if right, ok := cond.Y.(*ast.Ident); !ok || right.Name != "nil" {
-		return nil
-	}
-	return declObj(ident)
-}
-
-// errDiscStmtsAlwaysLeave reports whether a statement list ends by leaving
-// the surrounding flow: a return, a branch statement, or a panic call.
-func errDiscStmtsAlwaysLeave(stmts []ast.Stmt) bool {
-	if len(stmts) == 0 {
-		return false
-	}
-	switch last := stmts[len(stmts)-1].(type) {
-	case *ast.ReturnStmt, *ast.BranchStmt:
-		return true
-	case *ast.ExprStmt:
-		call, ok := last.X.(*ast.CallExpr)
-		if !ok {
-			return false
-		}
-		ident, ok := call.Fun.(*ast.Ident)
-		return ok && ident.Name == "panic"
-	}
-	return false
 }
 
 // killAssign records the kill point on the recorded entries of one
