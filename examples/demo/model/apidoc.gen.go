@@ -11,6 +11,20 @@ func init() {
 			"TicketID": "empty for a login or a logout",
 		},
 	})
+	apidoc.Register("demo/model", "Meeting", apidoc.StructDoc{
+		Comment: "Meeting is a meeting on the team's calendar, and the model showing the\nfield types of the datatypes package: a calendar day, a time of day, and\nthe three ways a column stores JSON, each written in a request and a\nresponse the one way its comment below tells. Every action is the\nframework's own. Embedding model.Query lets a list take the framework's\nfilters, a day and a time of day by comparison:\nGET /api/meetings?day[gte]=2026-01-01&day[lte]=2026-01-31 is a month of\nmeetings. The List hook in service/meeting serves two parameters of the\nmodel's own, tag and upcoming, with the column references generated for\nthese fields. /api/meetings and /api/meetings/:id.",
+		Fields: map[string]string{
+			"Day":      "Day is the day of the meeting, a date with no time of day and no zone,\nwritten 2026-01-02; a request must name it.",
+			"Links":    "Links is a JSON object whose keys the client chooses:\n{\"agenda\":\"https://example.com/agenda\"}.",
+			"Options":  "Options is a value of a Go type stored as one JSON document, sent and\nanswered as the object MeetingOptions is.",
+			"StartsAt": "StartsAt is the time of day the meeting starts at, written 17:30:00.\nIt is optional, so it is a pointer: a meeting with none lasts the day.",
+			"Tag":      "Tag and Upcoming are parameters of a list and no columns: tag=weekly\nkeeps the meetings carrying the tag, upcoming=true the ones of the\nweek ahead.",
+			"Tags":     "Tags is a JSON array of strings, sent and answered as the array it is:\n[\"weekly\",\"planning\"].",
+		},
+	})
+	apidoc.Register("demo/model", "MeetingOptions", apidoc.StructDoc{
+		Comment: "MeetingOptions is how a meeting is held.",
+	})
 	apidoc.Register("demo/model", "Notice", apidoc.StructDoc{
 		Comment: "Notice is a notice pushed to whoever is listening, as a stream of\nserver-sent events: a long-lived GET response a\nbrowser reads through an EventSource, or a Go program through the SSE\nmethod of client.Client. SSE always delegates to service code, which opens\nthe stream and decides what to send; how many events a stream carries here\nis configuration, see configx.Notice. GET /api/notices.",
 	})

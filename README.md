@@ -1400,6 +1400,7 @@ prune 删什么、不删什么、按什么顺序删、什么时候问你，完�
 - [应用入口](./examples/demo/main.go)
 - [模块注册](./examples/demo/module/module.go)
 - [资源模型：Ticket（工单）](./examples/demo/model/ticket.go)
+- [日期、时段与 JSON 列的字段类型：Meeting（会议）](./examples/demo/model/meeting.go)
 - [只建表不出接口的模型：Audit](./examples/demo/model/audit.go)
 - [嵌套资源与批量动作：Comment（工单下的回复）](./examples/demo/model/ticket/comment.go)
 - [自定义路由、Import 与 Export：Document](./examples/demo/model/archive/document.go)

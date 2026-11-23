@@ -41,6 +41,7 @@ gst 的入门示例：一个用 `gg new` 生成、按框架推荐写法补齐的
 | 分析查询 `database.Select`：分组计数 | `service/ticket/summary.go` |
 | 连接查询 `Join`：按工单的状态统计回复 | `model/ticket/comment.go` 的 summary 路由，`service/ticket/comment/summary.go` |
 | `Upsert`：同一个键再提交就是改值 | `model/preference.go`，`service/preference/set.go` |
+| 字段类型 `datatypes.Date` `datatypes.TimeOfDay` `datatypes.JSONSlice` `datatypes.JSONMap` `datatypes.JSON`：日期、时段和存成 JSON 的列；不落库的查询参数交给 `Filter` 钩子，用生成的列引用按日期范围、按「数组里包含某个值」过滤 | `model/meeting.go`（会议），`service/meeting/list.go` |
 | 只建表、不出接口（只写 `Migrate()`） | `model/audit.go` |
 | 嵌套资源、`CreateMany` `DeleteMany` `UpdateMany` `PatchMany` | `model/ticket/comment.go`（工单下的回复） |
 | 自定义路由、`Import` `Export` | `model/archive/document.go` |

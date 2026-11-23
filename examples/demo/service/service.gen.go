@@ -7,6 +7,7 @@ import (
 	"demo/service/archive/document/attachment"
 	"demo/service/board/feed"
 	"demo/service/board/note"
+	"demo/service/meeting"
 	"demo/service/notice"
 	"demo/service/ping"
 	"demo/service/preference"
@@ -29,6 +30,7 @@ func init() {
 	service.Register[*feed.Watch](service.Stream, "/api/board/feeds/watch")
 	service.Register[*note.Creator](service.Create, "/api/board/notes")
 	service.Register[*note.Publish](service.Create, "/api/board/notes/:id/publish")
+	service.Register[*meeting.Lister](service.List, "/api/meetings")
 	service.Register[*notice.Streamer](service.SSE, "/api/notices")
 	service.Register[*ping.Lister](service.List, "/api/pings")
 	service.Register[*preference.Deleter](service.Delete, "/api/preferences/:id")
