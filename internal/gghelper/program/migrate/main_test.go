@@ -14,7 +14,8 @@ import (
 // TestLinesAreShapedTheWayGGShapesItsOwn pins that the lines of this
 // program are the ones gg prints through internal/clioutput, which a
 // program built inside a project cannot import: the same symbols and
-// layout, and on a terminal taking colors the same colors.
+// layout, on the same stream, and on a terminal taking colors the same
+// colors.
 func TestLinesAreShapedTheWayGGShapesItsOwn(t *testing.T) {
 	noColor := color.NoColor
 	t.Cleanup(func() { color.NoColor, migrateColor = noColor, false })
@@ -23,16 +24,20 @@ func TestLinesAreShapedTheWayGGShapesItsOwn(t *testing.T) {
 		color.NoColor, migrateColor = !colored, colored
 		for _, line := range []struct {
 			name      string
+			stream    **os.File
 			program   func()
 			clioutput func()
 		}{
-			{name: "section", program: func() { section("Plan") }, clioutput: func() { clioutput.Section("Plan") }},
-			{name: "item", program: func() { item("Database: %s", "sqlite") }, clioutput: func() { clioutput.Item("Database: %s", "sqlite") }},
-			{name: "success", program: func() { success("Renamed") }, clioutput: func() { clioutput.Success("Renamed") }},
-			{name: "done", program: func() { done("Applied %s", "3 statements") }, clioutput: func() { clioutput.Done("Applied %s", "3 statements") }},
-			{name: "note", program: func() { note("To migrate a database file, set %s", "sqlite.path") }, clioutput: func() { clioutput.Note("To migrate a database file, set %s", "sqlite.path") }},
+			{name: "section", stream: &os.Stdout, program: func() { section("Plan") }, clioutput: func() { clioutput.Section("Plan") }},
+			{name: "item", stream: &os.Stdout, program: func() { item("Database: %s", "sqlite") }, clioutput: func() { clioutput.Item("Database: %s", "sqlite") }},
+			{name: "success", stream: &os.Stdout, program: func() { success("Renamed") }, clioutput: func() { clioutput.Success("Renamed") }},
+			{name: "done", stream: &os.Stdout, program: func() { done("Applied %s", "3 statements") }, clioutput: func() { clioutput.Done("Applied %s", "3 statements") }},
+			{name: "note", stream: &os.Stdout, program: func() { note("To migrate a database file, set %s", "sqlite.path") }, clioutput: func() { clioutput.Note("To migrate a database file, set %s", "sqlite.path") }},
+			{name: "progress", stream: &os.Stderr, program: func() { progress("Printing the %s schema", "sqlite") }, clioutput: func() { clioutput.Progress("Printing the %s schema", "sqlite") }},
 		} {
-			require.Equal(t, captureStdout(t, line.clioutput), captureStdout(t, line.program), "%s, colored %t", line.name, colored)
+			want := capture(t, line.stream, line.clioutput)
+			require.NotEmpty(t, want, "%s, colored %t", line.name, colored)
+			require.Equal(t, want, capture(t, line.stream, line.program), "%s, colored %t", line.name, colored)
 		}
 	}
 }
@@ -69,14 +74,15 @@ func TestElapsedIsWrittenTheWayGGWritesIt(t *testing.T) {
 	}
 }
 
-// captureStdout returns what fn writes to standard output.
-func captureStdout(t *testing.T, fn func()) string {
+// capture returns what fn writes to stream, standard output or standard
+// error.
+func capture(t *testing.T, stream **os.File, fn func()) string {
 	t.Helper()
 	reader, writer, err := os.Pipe()
 	require.NoError(t, err)
-	stdout := os.Stdout
-	os.Stdout = writer
-	defer func() { os.Stdout = stdout }()
+	saved := *stream
+	*stream = writer
+	defer func() { *stream = saved }()
 	fn()
 	require.NoError(t, writer.Close())
 	output, err := io.ReadAll(reader)

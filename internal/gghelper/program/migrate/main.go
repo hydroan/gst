@@ -174,6 +174,9 @@ type modelTypeKey struct {
 	Name    string
 }
 
+// runSchemaDump prints the schema of models, or of those among them the
+// schema source declares, on standard output, and on standard error what it
+// is the schema of: standard output redirected to a file holds the SQL alone.
 func runSchemaDump(models []any) error {
 	var err error
 	models, err = filterModelsBySource(models, migrateSchemaSource, []string(migrateSchemaSourceFiles))
@@ -188,7 +191,12 @@ func runSchemaDump(models []any) error {
 	if err != nil {
 		return err
 	}
-	printSchemaDump(schema, len(models), migrateSchemaSource)
+	of := counted(len(models), "model")
+	if source := strings.TrimSpace(migrateSchemaSource); source != "" {
+		of += " in " + source
+	}
+	progress("Printing the %s schema of %s", config.App.Database.Type, of)
+	fmt.Println(strings.TrimRight(schema, "\n"))
 	return nil
 }
 
@@ -296,17 +304,6 @@ func modelPackagePath(filename string) (string, error) {
 		return migrateModule, nil
 	}
 	return migrateModule + "/" + filepath.ToSlash(dir), nil
-}
-
-func printSchemaDump(schema string, modelCount int, source string) {
-	section("Model Schema")
-	item("Database: %s", config.App.Database.Type)
-	if strings.TrimSpace(source) != "" {
-		item("Source: %s", source)
-	}
-	item("Models: %d", modelCount)
-	fmt.Println()
-	fmt.Println(strings.TrimRight(schema, "\n"))
 }
 
 // dumpSchema creates a schema dump for the provided models using the configured database type.
@@ -666,8 +663,9 @@ func confirm(lead, question string) bool {
 // The lines of this program are shaped the way gg shapes its own, which the
 // package doing that, internal to the framework, is out of reach of a
 // program written as project code: a section title, the entries under it,
-// the line the run ends on with a note under it, in the same symbols and
-// the same colors, on the terminal gg found to take them.
+// the line the run ends on with a note under it, and on standard error what
+// the program is doing, in the same symbols and the same colors, on the
+// terminal gg found to take them.
 const (
 	symbolSection = "▶"
 	symbolSuccess = "✔"
@@ -705,6 +703,12 @@ func done(format string, args ...any) {
 // note prints what to do next, under the line the run ends on.
 func note(format string, args ...any) {
 	fmt.Printf("  %s\n", paint(os.Stdout, colorGrey, fmt.Sprintf(format, args...)))
+}
+
+// progress says what the program is doing, on standard error: it is no part
+// of what the program reports.
+func progress(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, "  %s %s\n", paint(os.Stderr, colorGrey, symbolItem), fmt.Sprintf(format, args...))
 }
 
 // paint returns text in the color when gg said the terminal takes colors,

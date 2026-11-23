@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 
@@ -657,7 +658,9 @@ func useInMemorySqlite(t *testing.T) {
 // TestMigrateCommandsRunTheProgramsTheyBuild pins the two commands end to
 // end: gg migrate, in dry-run mode, and gg migrate schema each build their
 // program and run it, in the sample project on an in-memory sqlite
-// database, where there is nothing to migrate and a schema to print.
+// database, where there is nothing to migrate and a schema to print. The
+// schema is all standard output carries, so that redirected it is a file of
+// SQL; what it is the schema of goes to standard error.
 func TestMigrateCommandsRunTheProgramsTheyBuild(t *testing.T) {
 	if !newMigrateSampleProject(t) {
 		return
@@ -670,7 +673,24 @@ func TestMigrateCommandsRunTheProgramsTheyBuild(t *testing.T) {
 	if err := migrateCmd.RunE(migrateCmd, nil); err != nil {
 		t.Fatalf("gg migrate --dry-run: %v", err)
 	}
-	if err := migrateSchemaCmd.RunE(migrateSchemaCmd, nil); err != nil {
-		t.Fatalf("gg migrate schema: %v", err)
+
+	var said string
+	schema := captureStdout(t, func() {
+		said = captureStderr(t, func() {
+			if err := migrateSchemaCmd.RunE(migrateSchemaCmd, nil); err != nil {
+				t.Fatalf("gg migrate schema: %v", err)
+			}
+		})
+	})
+	if !strings.HasPrefix(schema, "-- Model: ") || !strings.Contains(schema, "CREATE TABLE ") {
+		t.Fatalf("gg migrate schema printed on standard output:\n%s\nwant the SQL from its first line on", schema)
+	}
+	for _, symbol := range []clioutput.Symbol{clioutput.SymbolSection, clioutput.SymbolItem, clioutput.SymbolSuccess} {
+		if strings.Contains(schema, string(symbol)) {
+			t.Fatalf("gg migrate schema printed %s on standard output, which carries the SQL alone:\n%s", symbol, schema)
+		}
+	}
+	if !strings.Contains(said, "  → Printing the sqlite schema of ") {
+		t.Fatalf("gg migrate schema said on standard error:\n%s\nwant what the schema is of", said)
 	}
 }

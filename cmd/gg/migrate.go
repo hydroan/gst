@@ -35,6 +35,7 @@ On SQLite the migration targets the database file sqlite.path names. An
 in-memory database, which sqlite.is_memory selects by default, has nothing to
 migrate: the application creates its tables from the models every time it
 starts.`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// 1. Get module name
 		moduleName, err := gghelper.ModulePath(".")
@@ -53,8 +54,15 @@ starts.`,
 var migrateSchemaCmd = &cobra.Command{
 	Use:   "schema [path]",
 	Short: "Print schema SQL for registered models",
-	Long:  "Print target schema SQL for all registered models, or only registered models declared in a file or directory",
-	Args:  cobra.MaximumNArgs(1),
+	Long: `Print the target schema SQL of every registered model, or of the registered
+models a file or a directory declares.
+
+Standard output carries the SQL and nothing else, so it can be redirected to
+a file or piped into another program.`,
+	Example: `  gg migrate schema
+  gg migrate schema model/sample
+  gg migrate schema > schema.sql`,
+	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		moduleName, err := gghelper.ModulePath(".")
 		if err != nil {
