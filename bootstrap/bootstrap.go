@@ -312,7 +312,7 @@ func Run() (err error) {
 	// is torn down, cancel the process context so the components stop
 	// taking on new work, then hold there for the configured window.
 	// Teardown starts when it elapses.
-	controller.Probe.Drain()
+	router.Drain()
 	grpcserver.Drain()
 	cancelProcess()
 	awaitDrain()

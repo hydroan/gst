@@ -1,4 +1,4 @@
-package controller
+package router
 
 import (
 	"net/http"
@@ -7,20 +7,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// probe answers the two questions an orchestrator asks about a process:
-// whether it is alive at all, and whether it should be sent traffic.
-type probe struct {
-	// draining records that shutdown began. It is written once, by bootstrap
-	// when the process is told to stop, and read by every readiness request
-	// after that.
-	draining atomic.Bool
-}
+// The probes answer the two questions an orchestrator asks about a process:
+// whether it is alive at all (see healthz), and whether it should be sent
+// traffic (see readyz), which it should not once its shutdown began (see
+// Drain).
 
-// Probe answers the liveness and readiness probes of the process (see
-// Healthz and Readyz) and is drained once its shutdown begins (see Drain).
-var Probe = new(probe)
+// draining records that shutdown began. It is written once, by Drain, and
+// read by every readiness request after that.
+var draining atomic.Bool
 
-// Healthz reports that the process is alive.
+// healthz reports that the process is alive.
 //
 // It answers OK for as long as the process runs at all, shutdown included: an
 // orchestrator restarts a container whose liveness probe fails, and a process
@@ -28,11 +24,11 @@ var Probe = new(probe)
 // it check any dependency — restarting a process cannot fix a database, and
 // tying liveness to one turns a recoverable outage into every replica
 // restarting at once.
-func (*probe) Healthz(c *gin.Context) {
+func healthz(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
-// Readyz reports whether this process should receive traffic.
+// readyz reports whether this process should receive traffic.
 //
 // It answers on one question only: is this instance shutting down. What it
 // deliberately does not do is probe shared dependencies. Readiness decides
@@ -43,19 +39,19 @@ func (*probe) Healthz(c *gin.Context) {
 // health belongs in metrics, where an alert can weigh it, not in a signal
 // that reroutes traffic. Probes also run every few seconds on every replica,
 // and must stay cheap enough to be answered that often.
-func (p *probe) Readyz(c *gin.Context) {
-	if p.draining.Load() {
+func readyz(c *gin.Context) {
+	if draining.Load() {
 		c.String(http.StatusServiceUnavailable, "not ready")
 		return
 	}
 	c.Status(http.StatusOK)
 }
 
-// Drain marks the process as shutting down, which fails Readyz from the next
+// Drain marks the process as shutting down, which fails readyz from the next
 // request on. Bootstrap calls it when the process is told to stop — by a
 // termination signal, or by a listener that failed — and then holds the
 // process here for server.shutdown_delay: the mark is only worth anything if
 // something has time to observe it before the listener closes.
-func (p *probe) Drain() {
-	p.draining.Store(true)
+func Drain() {
+	draining.Store(true)
 }

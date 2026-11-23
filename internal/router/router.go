@@ -177,8 +177,8 @@ func Init() error {
 	//   /docs                  Swagger UI rendering that same document, and
 	//                          nothing beyond it.
 	root.GET("/metrics", gin.WrapH(promhttp.Handler()))
-	root.GET("/-/healthz", controller.Probe.Healthz)
-	root.GET("/-/readyz", controller.Probe.Readyz)
+	root.GET("/-/healthz", healthz)
+	root.GET("/-/readyz", readyz)
 	root.GET("/openapi.json", gin.WrapH(openapigen.DocumentHandler()))
 	// The document has one rendering, and it is this one because its assets are
 	// compiled into the binary. It therefore renders in a cluster with no

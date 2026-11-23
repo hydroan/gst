@@ -251,7 +251,7 @@ func serverOptions(cfg config.GRPC) ([]grpc.ServerOption, error) {
 
 // Drain turns the health service to NOT_SERVING, for the process and every
 // service it names, so a balancer checking it stops sending traffic here,
-// the way controller.Probe.Drain fails the HTTP readiness probe; the
+// the way router.Drain fails the HTTP readiness probe; the
 // services keep answering what still arrives. Bootstrap calls both when the
 // process is told to stop, ahead of the shutdown delay.
 func Drain() {
