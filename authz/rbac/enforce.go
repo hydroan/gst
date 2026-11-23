@@ -57,7 +57,7 @@ func Enforce(ctx context.Context, subject Subject, obj, act string) (context.Con
 		// Anonymous subjects are refused before the tenant is resolved, so
 		// the decision is recorded without one.
 		logDeny(ctx, subject, "", sub, obj, act, DenyReasonUnauthenticated, time.Since(start))
-		return ctx, "", types.NewError(http.StatusForbidden, "permission denied")
+		return ctx, "", types.NewError(http.StatusForbidden, deniedMsg)
 	}
 	tenantID := strings.TrimSpace(subject.TenantID)
 	if tenantID == "" {
@@ -67,11 +67,11 @@ func Enforce(ctx context.Context, subject Subject, obj, act string) (context.Con
 	decision, err := RBAC().Authorize(ctx, tenantID, sub, obj, act)
 	if err != nil {
 		logFailure(ctx, subject, tenantID, sub, obj, act, err, time.Since(start))
-		return ctx, tenantID, types.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
+		return ctx, tenantID, types.NewErrorWithCause(http.StatusInternalServerError, unavailableMsg, err)
 	}
 	if !decision.Allowed {
 		logDeny(ctx, subject, tenantID, sub, obj, act, decision.Reason, time.Since(start))
-		return ctx, tenantID, types.NewError(http.StatusForbidden, "permission denied")
+		return ctx, tenantID, types.NewError(http.StatusForbidden, deniedMsg)
 	}
 	// The scope is taken from the decision itself rather than looked up
 	// again, which is what keeps the reach of the data equal to the reach

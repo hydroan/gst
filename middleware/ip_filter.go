@@ -152,7 +152,7 @@ func IPFilter(config *IPFilterConfig) gin.HandlerFunc {
 		ip := net.ParseIP(clientIP)
 		if ip == nil {
 			zap.S().Warnw("failed to parse client IP", "ip", clientIP)
-			response.Abort(c, types.NewError(http.StatusForbidden, "invalid client IP"))
+			response.Abort(c, types.NewError(http.StatusForbidden, invalidClientIPMsg))
 			return
 		}
 
@@ -161,13 +161,13 @@ func IPFilter(config *IPFilterConfig) gin.HandlerFunc {
 			return ip.Equal(blockedIP)
 		}) {
 			zap.S().Warnw("request blocked by blacklist", "ip", clientIP)
-			response.Abort(c, types.NewError(http.StatusForbidden, "access denied"))
+			response.Abort(c, types.NewError(http.StatusForbidden, accessDeniedMsg))
 			return
 		}
 		for _, blockedNet := range blacklistNets {
 			if blockedNet.Contains(ip) {
 				zap.S().Warnw("request blocked by blacklist", "ip", clientIP, "cidr", blockedNet.String())
-				response.Abort(c, types.NewError(http.StatusForbidden, "access denied"))
+				response.Abort(c, types.NewError(http.StatusForbidden, accessDeniedMsg))
 				return
 			}
 		}
@@ -188,7 +188,7 @@ func IPFilter(config *IPFilterConfig) gin.HandlerFunc {
 
 			if !allowed {
 				zap.S().Warnw("request blocked by whitelist", "ip", clientIP)
-				response.Abort(c, types.NewError(http.StatusForbidden, "access denied"))
+				response.Abort(c, types.NewError(http.StatusForbidden, accessDeniedMsg))
 				return
 			}
 		}

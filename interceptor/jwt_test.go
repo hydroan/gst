@@ -9,6 +9,7 @@ import (
 	"github.com/hydroan/gst/authn/jwt"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/interceptor"
+	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -92,4 +93,21 @@ func TestJwtAuthRefusesWhatItCannotVerify(t *testing.T) {
 			require.Equal(t, http.MethodGet, fields[requestctx.KeyMethod])
 		})
 	}
+}
+
+// TestJwtAuthRefusesInTheLanguageOfTheProcess pins the language of the
+// refusal: the one message a refused token is answered with is answered in
+// the language the process answers in, the one the HTTP middleware answers
+// it in.
+func TestJwtAuthRefusesInTheLanguageOfTheProcess(t *testing.T) {
+	withSigningKey(t, "test-signing-key")
+	require.NoError(t, i18n.SetLanguage(i18n.Chinese))
+	t.Cleanup(func() { require.NoError(t, i18n.SetLanguage(i18n.English)) })
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer not-a-token"))
+	ctx = requestctx.WithMetadata(ctx, requestctx.New(requestctx.Fields{Path: "/gst.test.Echo/Get", Method: http.MethodGet}))
+
+	_, err := interceptor.JwtAuth()(ctx)
+
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+	require.Equal(t, "令牌无效", status.Convert(err).Message())
 }

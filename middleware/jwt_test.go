@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/authn/jwt"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/middleware"
 	"github.com/stretchr/testify/require"
@@ -75,6 +76,25 @@ func TestJwtAuthRefusesWhatItCannotVerify(t *testing.T) {
 			require.Equal(t, http.MethodGet, fields[requestctx.KeyMethod])
 		})
 	}
+}
+
+// TestJwtAuthRefusesInTheLanguageOfTheProcess pins the language of the
+// refusal: the one message a refused token is answered with is answered in
+// the language the process answers in, the one the gRPC interceptor answers
+// it in.
+func TestJwtAuthRefusesInTheLanguageOfTheProcess(t *testing.T) {
+	withSigningKey(t, "test-signing-key")
+	require.NoError(t, i18n.SetLanguage(i18n.Chinese))
+	t.Cleanup(func() { require.NoError(t, i18n.SetLanguage(i18n.English)) })
+
+	w := serveJwtAuth(t, http.Header{"Authorization": {"Bearer not-a-token"}})
+
+	require.Equal(t, http.StatusUnauthorized, w.Code)
+	var envelope struct {
+		Msg string `json:"msg"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope), w.Body.String())
+	require.Equal(t, "令牌无效", envelope.Msg)
 }
 
 // withSigningKey configures the key the jwt package signs and verifies

@@ -6,6 +6,7 @@ import (
 
 	"github.com/hydroan/gst/authn/jwt"
 	gstgrpc "github.com/hydroan/gst/grpc"
+	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/requestctx"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -43,7 +44,7 @@ func JwtAuth() gstgrpc.Interceptor {
 		}
 		if err != nil {
 			meta := requestctx.FromContext(ctx)
-			return nil, status.Error(codes.Unauthenticated, jwt.LogRefusal(err, meta.Path(), meta.Method()))
+			return nil, status.Error(codes.Unauthenticated, i18n.Translate(jwt.LogRefusal(err, meta.Path(), meta.Method())))
 		}
 		var sessionID string
 		if md, _ := metadata.FromIncomingContext(ctx); len(md.Get(keySessionID)) > 0 {

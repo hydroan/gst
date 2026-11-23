@@ -75,7 +75,7 @@ func Timeout(timeout time.Duration) gin.HandlerFunc {
 			logfield.Method(c.Request.Method),
 			zap.Duration("timeout", timeout),
 		)
-		response.Abort(c, types.NewError(http.StatusGatewayTimeout, "request timeout"))
+		response.Abort(c, types.NewError(http.StatusGatewayTimeout, timeoutMsg))
 	}
 }
 

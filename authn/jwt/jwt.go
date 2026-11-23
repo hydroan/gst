@@ -284,7 +284,7 @@ func LogRefusal(reason error, path, method string) string {
 		logfield.Path(path),
 		logfield.Method(method),
 	)
-	return "invalid token"
+	return refusalMsg
 }
 
 // Token is the OAuth 2.0 token response of RFC 6749 section 5.1, plus the
