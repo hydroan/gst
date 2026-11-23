@@ -89,3 +89,40 @@ func TestDateIsTheDayItsTimeReads(t *testing.T) {
 	require.NoError(t, scanned.Scan(time.Date(2026, time.January, 2, 0, 0, 0, 0, time.UTC)))
 	require.Equal(t, "2026-01-02", scanned.String())
 }
+
+// TestDateComparesAndCountsByTheDay pins the arithmetic of a Date, the
+// examples of its comments among them: days added and taken, the count of
+// days between two, and the comparisons, each by the day a Date names
+// whatever time and location it was made of, which the == of two days tells
+// apart; and the zero day.
+func TestDateComparesAndCountsByTheDay(t *testing.T) {
+	shanghai := time.FixedZone("UTC+8", 8*60*60)
+	day := datatypes.Date(time.Date(2026, time.January, 2, 0, 0, 0, 0, time.UTC))
+	evening := datatypes.Date(time.Date(2026, time.January, 2, 23, 0, 0, 0, shanghai))
+	next := day.AddDays(1)
+
+	require.Equal(t, "2026-01-03", next.String())
+	require.Equal(t, "2026-01-01", day.AddDays(-1).String())
+	require.Equal(t, "2026-02-01", day.AddDays(30).String())
+	require.Equal(t, "2026-01-03", evening.AddDays(1).String())
+	require.Equal(t, time.Date(2026, time.January, 3, 0, 0, 0, 0, time.UTC), time.Time(evening.AddDays(1)), "a day counted from another is its midnight in UTC")
+
+	require.Equal(t, 1, next.DaysSince(day))
+	require.Equal(t, 0, evening.DaysSince(day))
+	require.Equal(t, -1, day.DaysSince(next))
+	require.Equal(t, 146097, datatypes.Date(time.Date(2426, time.January, 2, 0, 0, 0, 0, time.UTC)).DaysSince(day), "four centuries, further apart than a time.Duration holds")
+
+	require.True(t, day.Equal(evening))
+	require.NotEqual(t, day, evening, "the == of two days tells their times and locations apart")
+	require.Equal(t, 0, day.Compare(evening))
+	require.Equal(t, -1, day.Compare(next))
+	require.Equal(t, 1, next.Compare(day))
+	require.True(t, day.Before(next))
+	require.False(t, day.Before(evening))
+	require.True(t, next.After(day))
+	require.False(t, evening.After(day))
+
+	require.True(t, datatypes.Date{}.IsZero())
+	require.True(t, datatypes.Date(time.Date(1, time.January, 1, 5, 0, 0, 0, shanghai)).IsZero())
+	require.False(t, day.IsZero())
+}

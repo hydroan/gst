@@ -60,12 +60,14 @@ func ValidateTenantIndexes(typ reflect.Type) error {
 	return modelschema.ValidateTenantIndexes(typ)
 }
 
-// ValidateDateColumns refuses a date column a model declares by a type other
-// than gst.Date, the Date of gorm.io/datatypes or a time.Time a gorm type
-// tag declares a date. The inspection program asks it of every model it
-// inspects, so gg check refuses what table preparation refuses at startup.
-func ValidateDateColumns(typ reflect.Type) error {
-	return modelschema.ValidateDateColumns(typ)
+// ValidateColumnTypes refuses a column a model declares by a type the
+// framework has its own for: a type of gorm.io/datatypes the datatypes
+// package replaces, and a date column declared by any type other than
+// datatypes.Date, a time.Time a gorm type tag declares a date among them.
+// The inspection program asks it of every model it inspects, so gg check
+// refuses what table preparation refuses at startup.
+func ValidateColumnTypes(typ reflect.Type) error {
+	return modelschema.ValidateColumnTypes(typ)
 }
 
 // ValidateQueryNames refuses a model whose query tags name its URL query

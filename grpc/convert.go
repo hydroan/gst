@@ -14,7 +14,7 @@ import (
 	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/types"
 	"google.golang.org/genproto/googleapis/type/date"
-	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/genproto/googleapis/type/timeofday"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -153,32 +153,40 @@ func DatePB(d datatypes.Date) *date.Date {
 	return &date.Date{Year: int32(year), Month: int32(month), Day: int32(day)} //nolint:gosec // G115: a month and a day fit, and a year past the range of an int32 is far outside the years 1 to 9999 Date reads back.
 }
 
-// TimeOfDay returns the duration since midnight d holds, the time of day a
-// message carries as one, and none, midnight, for nil, which a message
-// leaves unset. A duration below none or of a whole day or more names no
-// time of day and is refused with invalidValue naming field, "25h0m0s is
-// not a time of day" the detail, and one no duration can be made of with
-// durationpb's own account of it, "duration (nanos:1000000000) has
-// out-of-range nanos", the way the HTTP listener refuses a time of day it
-// cannot read, one time.TimeOnly does not spell. The generated FromProto
-// reads every time of day through it, the datatypes.Time of a model made of
-// the duration it answers.
-func TimeOfDay(field string, d *durationpb.Duration) (time.Duration, error) {
-	if d == nil {
+// TimeOfDay returns the time of day t names, and midnight for nil, which a
+// message leaves unset. A google.type.TimeOfDay may name an hour, a minute,
+// a second or a fraction no clock shows, the 24 it allows for the end of a
+// day and the 60 it allows for a leap second among them; a model's time of
+// day is one time.TimeOnly spells, so any of those is refused with
+// invalidValue naming field, "25:00:00.000000000 is not a time of day" the
+// detail, the way the HTTP listener refuses a time of day it cannot read.
+// The generated FromProto reads every time of day through it.
+func TimeOfDay(field string, t *timeofday.TimeOfDay) (datatypes.TimeOfDay, error) {
+	if t == nil {
 		return 0, nil
 	}
-	if err := d.CheckValid(); err != nil {
-		return 0, invalidValue(field, checkValidDetail(err))
+	hours, minutes, seconds, nanos := t.GetHours(), t.GetMinutes(), t.GetSeconds(), t.GetNanos()
+	if hours < 0 || hours > 23 || minutes < 0 || minutes > 59 || seconds < 0 || seconds > 59 || nanos < 0 || nanos > 999_999_999 {
+		return 0, invalidValue(field, fmt.Sprintf("%02d:%02d:%02d.%09d is not a time of day", hours, minutes, seconds, nanos))
 	}
-	since := d.AsDuration()
-	if since < 0 || since >= 24*time.Hour {
-		return 0, invalidValue(field, since.String()+" is not a time of day")
+	return datatypes.NewTimeOfDay(int(hours), int(minutes), int(seconds), int(nanos)), nil
+}
+
+// TimeOfDayPB returns the google.type.TimeOfDay of the time of day t names,
+// midnight as the message of four zeros, which TimeOfDay reads back as
+// midnight. The generated ToProto writes every time of day through it.
+func TimeOfDayPB(t datatypes.TimeOfDay) *timeofday.TimeOfDay {
+	since := time.Duration(t)
+	return &timeofday.TimeOfDay{
+		Hours:   int32(since / time.Hour), //nolint:gosec // G115: the hours of a time of day fit.
+		Minutes: int32(since % time.Hour / time.Minute),
+		Seconds: int32(since % time.Minute / time.Second),
+		Nanos:   int32(since % time.Second),
 	}
-	return since, nil
 }
 
 // Document returns b, the bytes of a JSON document a model field holds as
-// a json.RawMessage or a datatypes.JSON, nil for none, and refuses bytes
+// a json.RawMessage, alone or in a datatypes.JSON, nil for none, and refuses bytes
 // that are no JSON document with invalidValue naming field, "not a JSON
 // document" the detail: the HTTP listener reads the document out of the
 // body it decoded, which encoding/json refused if the document was not

@@ -15,13 +15,12 @@ import (
 	"github.com/hydroan/gst/internal/datatypes"
 	"github.com/hydroan/gst/internal/modelschema"
 	"go.uber.org/zap"
-	gormdatatypes "gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
 var (
 	timeType          = reflect.TypeFor[time.Time]()
-	jsonMapType       = reflect.TypeFor[gormdatatypes.JSONMap]()
+	jsonMapType       = reflect.TypeFor[datatypes.JSONMap]()
 	textMarshalerType = reflect.TypeFor[encoding.TextMarshaler]()
 	jsonMarshalerType = reflect.TypeFor[json.Marshaler]()
 
@@ -82,22 +81,19 @@ type jsonWrite struct {
 
 // knownJSONWrites are the types with encoding methods of their own whose
 // JSON the framework knows, the ones the generators know as well (see
-// jsonshape.BuiltinOf): a gst.Date writes a day, 2026-01-02, a
-// gormdatatypes.Date the RFC 3339 string time.Time writes, a datatypes.Time a
-// clock string, a gorm.DeletedAt that RFC 3339 string or null, a json.Number
-// a number, and a raw JSON document (json.RawMessage, datatypes.JSON) any
-// value. time.Time, datatypes.JSONMap and datatypes.JSONType are left to
-// openapi3gen, which documents the first two as a date-time string and an
-// object, the last unwrapped afterwards (see
-// convertDatatypesJSONTypeSchema).
+// jsonshape.BuiltinOf): a datatypes.Date writes a day, 2026-01-02, a
+// datatypes.TimeOfDay a clock string, a gorm.DeletedAt the RFC 3339 string
+// time.Time writes or null, a json.Number a number, and a raw JSON document,
+// a json.RawMessage, any value. time.Time, datatypes.JSONMap and
+// datatypes.JSON are left to openapi3gen, which documents the first two as a
+// date-time string and an object, the last as the value it holds afterwards
+// (see jsonHeldSchema).
 var knownJSONWrites = map[reflect.Type]jsonWrite{
-	reflect.TypeFor[datatypes.Date]():     {typ: &openapi3.Types{openapi3.TypeString}, format: "date"},
-	reflect.TypeFor[gormdatatypes.Date](): {typ: &openapi3.Types{openapi3.TypeString}, format: "date-time"},
-	reflect.TypeFor[gormdatatypes.Time](): {typ: &openapi3.Types{openapi3.TypeString}},
-	reflect.TypeFor[gorm.DeletedAt]():     {typ: &openapi3.Types{openapi3.TypeString}, format: "date-time", nullable: true},
-	reflect.TypeFor[json.Number]():        {typ: &openapi3.Types{openapi3.TypeNumber}},
-	reflect.TypeFor[json.RawMessage]():    {},
-	reflect.TypeFor[gormdatatypes.JSON](): {},
+	reflect.TypeFor[datatypes.Date]():      {typ: &openapi3.Types{openapi3.TypeString}, format: "date"},
+	reflect.TypeFor[datatypes.TimeOfDay](): {typ: &openapi3.Types{openapi3.TypeString}},
+	reflect.TypeFor[gorm.DeletedAt]():      {typ: &openapi3.Types{openapi3.TypeString}, format: "date-time", nullable: true},
+	reflect.TypeFor[json.Number]():         {typ: &openapi3.Types{openapi3.TypeNumber}},
+	reflect.TypeFor[json.RawMessage]():     {},
 }
 
 // documentEncodingMethods is the openapi3gen customizer documenting a type
@@ -122,7 +118,7 @@ func documentEncodingMethods(_ string, t reflect.Type, _ reflect.StructTag, sche
 // MarshalText, and a string for a type with a MarshalText alone, the method
 // on t or on its pointer type, as encoding/json finds it. It reports false
 // for a type openapi3gen describes by its structure, time.Time,
-// datatypes.JSONMap and datatypes.JSONType among them.
+// datatypes.JSONMap and datatypes.JSON among them.
 func jsonWriteOf(t reflect.Type) (jsonWrite, bool) {
 	if write, ok := knownJSONWrites[t]; ok {
 		return write, true
@@ -130,7 +126,7 @@ func jsonWriteOf(t reflect.Type) (jsonWrite, bool) {
 	if t == timeType || t == jsonMapType {
 		return jsonWrite{}, false
 	}
-	if _, isJSONType := datatypesJSONDataType(t); isJSONType {
+	if _, held := jsonHeldType(t); held {
 		return jsonWrite{}, false
 	}
 	implements := func(iface reflect.Type) bool {
@@ -201,15 +197,15 @@ func addSchemaDocsForType(typ reflect.Type, schemaRef *openapi3.SchemaRef, visit
 
 		description := openAPIDocComment(docField.field.Name, docField.docs[docField.field.Name])
 
-		// Unwrap gorm datatypes.JSONType[T] so both the schema and the type
-		// walk below continue with the wrapped data type.
+		// Unwrap datatypes.JSON[T] so both the schema and the type walk
+		// below continue with the type it holds.
 		fieldType := docField.field.Type
-		if dataType, isJSONType := datatypesJSONDataType(fieldType); isJSONType {
-			if unwrapped := convertDatatypesJSONTypeSchema(propRef, docField.field); unwrapped != nil {
+		if heldType, held := jsonHeldType(fieldType); held {
+			if unwrapped := jsonHeldSchema(propRef, docField.field); unwrapped != nil {
 				propRef = unwrapped
 				schemaRef.Value.Properties[propName] = propRef
 			}
-			fieldType = dataType
+			fieldType = heldType
 		}
 
 		enumDoc, enumOnItems, hasEnum := fieldEnumDoc(fieldType)
@@ -348,42 +344,46 @@ func enumDescription(base string, doc apidoc.EnumDoc) string {
 	return base + "\n\n" + list
 }
 
-// datatypesJSONDataType returns the wrapped data type of a gorm
-// datatypes.JSONType[T] field type, unwrapping pointers first.
-func datatypesJSONDataType(typ reflect.Type) (reflect.Type, bool) {
+// jsonHeldType returns the type a datatypes.JSON[T] field type holds, T,
+// unwrapping pointers first: what its Data method answers.
+func jsonHeldType(typ reflect.Type) (reflect.Type, bool) {
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
-	if typ.PkgPath() != "gorm.io/datatypes" || (typ.Name() != "JSONType" && !strings.HasPrefix(typ.Name(), "JSONType[")) {
+	if typ.PkgPath() != jsonMapType.PkgPath() || !strings.HasPrefix(typ.Name(), "JSON[") {
 		return nil, false
 	}
-	for f := range typ.Fields() {
-		if f.Name == "Data" || f.Name == "data" || f.IsExported() {
-			return f.Type, true
-		}
+	data, ok := typ.MethodByName("Data")
+	if !ok {
+		return nil, false
 	}
-	return nil, false
+	return data.Type.Out(0), true
 }
 
-// convertDatatypesJSONTypeSchema unwraps gorm datatypes.JSONType[T] so the
-// generated schema uses the underlying T definition instead of the wrapper.
-func convertDatatypesJSONTypeSchema(propRef *openapi3.SchemaRef, field reflect.StructField) *openapi3.SchemaRef {
+// jsonHeldSchema unwraps datatypes.JSON[T] so the generated schema is the
+// one of the T it holds instead of the wrapper's: what its encoding methods
+// write when they decide it (see jsonWriteOf), any value for a
+// json.RawMessage, and the schema of its structure otherwise.
+func jsonHeldSchema(propRef *openapi3.SchemaRef, field reflect.StructField) *openapi3.SchemaRef {
 	if propRef == nil {
 		return nil
 	}
-	dataType, isJSONType := datatypesJSONDataType(field.Type)
-	if !isJSONType {
+	heldType, held := jsonHeldType(field.Type)
+	if !held {
 		return propRef
 	}
+	if write, ok := jsonWriteOf(heldType); ok {
+		return openapi3.NewSchemaRef("", &openapi3.Schema{Type: write.typ, Format: write.format, Nullable: write.nullable})
+	}
 
-	value := reflect.Zero(dataType).Interface()
+	value := reflect.Zero(heldType).Interface()
 
 	gen := openapi3gen.NewGenerator(openapi3gen.SchemaCustomizer(documentEncodingMethods))
 	schemaRef, err := gen.NewSchemaRefForValue(value, nil)
 	if err != nil || schemaRef == nil || schemaRef.Value == nil || (schemaRef.Value.Type == nil && len(schemaRef.Value.Properties) == 0) {
-		schemaRef = schemaFromType(dataType)
+		schemaRef = schemaFromType(heldType)
 		if schemaRef == nil {
-			zap.S().Warnf("failed to build schema for datatypes.JSONType[%s]: %v", dataType.String(), err)
+			zap.S().Warnf("failed to build schema for datatypes.JSON[%s]: %v", heldType.String(), err)
 			return propRef
 		}
 	}

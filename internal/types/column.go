@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/internal/datatypes"
-	gormdatatypes "gorm.io/datatypes"
 )
 
 // AnyColumnRef is the type-erased view of every generated column reference,
@@ -407,7 +406,7 @@ func (c DateColumn) ByMonth() Term { return c.bucket(TimeBucketMonth) }
 // datatypes.JSONSlice[string]: the type that binds a JSON array of strings
 // as one document, where a plain []string would bind as a list of
 // parameters.
-type jsonStringsBase = Column[gormdatatypes.JSONSlice[string]]
+type jsonStringsBase = Column[datatypes.JSONSlice[string]]
 
 // JSONStringsColumn is the reference generated for a column storing a JSON
 // array of strings. It takes and answers its values as []string, an array
@@ -426,7 +425,7 @@ type JSONStringsColumn struct {
 // table storing a JSON array of strings, carrying JSONContains on top of
 // everything Column has.
 func NewJSONStringsColumn[M TableNamer](name string) JSONStringsColumn {
-	return JSONStringsColumn{jsonStringsBase: NewColumn[M, gormdatatypes.JSONSlice[string]](name)}
+	return JSONStringsColumn{jsonStringsBase: NewColumn[M, datatypes.JSONSlice[string]](name)}
 }
 
 // sealedColumn makes the reference a ColumnRef[[]string], so that EqCol
@@ -496,8 +495,8 @@ func (c JSONStringsColumn) JSONContains(value string) Filter {
 
 // documents converts arrays of strings to the values binding them as JSON
 // documents.
-func documents(values [][]string) []gormdatatypes.JSONSlice[string] {
-	converted := make([]gormdatatypes.JSONSlice[string], len(values))
+func documents(values [][]string) []datatypes.JSONSlice[string] {
+	converted := make([]datatypes.JSONSlice[string], len(values))
 	for i, value := range values {
 		converted[i] = value
 	}
@@ -505,7 +504,7 @@ func documents(values [][]string) []gormdatatypes.JSONSlice[string] {
 }
 
 // arrays converts the documents filters carry back to arrays of strings.
-func arrays(values []gormdatatypes.JSONSlice[string]) [][]string {
+func arrays(values []datatypes.JSONSlice[string]) [][]string {
 	if values == nil {
 		return nil
 	}
@@ -517,6 +516,6 @@ func arrays(values []gormdatatypes.JSONSlice[string]) [][]string {
 }
 
 // arrayBound converts a bound over documents to one over arrays of strings.
-func arrayBound(bound Bound[gormdatatypes.JSONSlice[string]]) Bound[[]string] {
+func arrayBound(bound Bound[datatypes.JSONSlice[string]]) Bound[[]string] {
 	return Bound[[]string]{Value: bound.Value, Inclusive: bound.Inclusive, Present: bound.Present}
 }

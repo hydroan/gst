@@ -14,9 +14,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/datatypes"
-	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
-	gormdatatypes "gorm.io/datatypes"
 )
 
 // This file keeps every bound request body service-safe and every body
@@ -106,12 +104,12 @@ func decodeJSON(raw []byte, target any) error {
 // beside the options json.DefaultOptionsV1 names. json.Unmarshal is
 // encoding/json/v2 under those options, so a body decodes the way
 // json.Unmarshal decodes it, every value reached the way it reaches it, with
-// two differences: a time of day is read strictly (see strictTimeOfDay), and
-// a time.Time, a json.Number or a day json.Unmarshal refuses is refused
-// naming the field (see decodeAtPointer and dayAtPointer).
+// one difference: a time.Time, a json.Number, a day or a time of day
+// json.Unmarshal refuses is refused naming the field (see decodeAtPointer
+// and ownTextAtPointer).
 var requestDecoding = jsonv2.WithUnmarshalers(jsonv2.JoinUnmarshalers(
-	strictTimeOfDay,
-	dayAtPointer,
+	jsonv2.UnmarshalFromFunc(ownTextAtPointer[datatypes.Date]),
+	jsonv2.UnmarshalFromFunc(ownTextAtPointer[datatypes.TimeOfDay]),
 	jsonv2.UnmarshalFromFunc(decodeAtPointer[time.Time]),
 	jsonv2.UnmarshalFromFunc(decodeAtPointer[json.Number]),
 ))
@@ -146,58 +144,31 @@ func decodeAtPointer[T any](dec *jsontext.Decoder, v *T) error {
 	return nil
 }
 
-// strictTimeOfDay reads a time of day the way a filter reads one (see
-// modelschema.ParseTimeOfDay): a string in time.TimeOnly, taken as written, and
-// a value in another form or of another JSON type refused. datatypes.Time
-// decodes a string leniently itself: its UnmarshalJSON scans it with fmt.Sscanf
-// and keeps no error (gorm.io/datatypes v1.2.7, time.go), so "abc" decodes as
-// midnight and the fraction of "17:30:00.5" as five nanoseconds, and the
-// library offers no strict decoding to select. A null leaves the value as it
-// is, as datatypes.Time leaves it; a refusal is a SemanticError at the value's
-// JSON Pointer, which the options json.DefaultOptionsV1 names report as a
-// json.UnmarshalTypeError naming the field, items.1.clock.
-var strictTimeOfDay = jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, t *gormdatatypes.Time) error {
-	value, err := dec.ReadValue()
-	if err != nil || value.Kind() == jsontext.KindNull {
-		return err
-	}
-	refused := func(cause error) error {
-		return &jsonv2.SemanticError{JSONPointer: dec.StackPointer(), JSONKind: value.Kind(), GoType: reflect.TypeFor[gormdatatypes.Time](), Err: cause}
-	}
-	if value.Kind() != jsontext.KindString {
-		return refused(nil)
-	}
-	text, err := jsontext.AppendUnquote(nil, value)
-	if err != nil {
-		return refused(err)
-	}
-	since, err := modelschema.ParseTimeOfDay(string(text))
-	if err != nil {
-		return refused(err)
-	}
-	*t = gormdatatypes.Time(since)
-	return nil
-})
-
-// dayAtPointer reads a day the way datatypes.Date reads one from JSON, a
-// string in time.DateOnly and nothing else, a null leaving the day as it is,
-// and reports a value the type refuses as a SemanticError at the value's
-// JSON Pointer. Left to the type's own UnmarshalJSON the refusal comes back
-// bare, naming no field; at its pointer the options json.DefaultOptionsV1
-// names report it as a json.UnmarshalTypeError naming the field, items.1.day,
-// which clientSafeBindError answers the way it answers a time it refuses. A
-// number is read here too, unlike decodeAtPointer leaves one: no day is a
-// number, so the default decoding has nothing of its own to say about it.
-var dayAtPointer = jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, day *datatypes.Date) error {
+// ownTextAtPointer reads a value of a type that reads its own text from
+// JSON, a datatypes.Date or a datatypes.TimeOfDay, through the type's
+// UnmarshalJSON: a string in time.DateOnly or time.TimeOnly and nothing
+// else, a null leaving the value as it is. It reports a value the type
+// refuses as a SemanticError at the value's JSON Pointer. Left to the type's
+// own UnmarshalJSON the refusal comes back bare, naming no field; at its
+// pointer the options json.DefaultOptionsV1 names report it as a
+// json.UnmarshalTypeError naming the field, items.1.day, which
+// clientSafeBindError answers the way it answers a time it refuses. A
+// number is read here too, unlike decodeAtPointer leaves one: no day and no
+// time of day is a number, so the default decoding has nothing of its own
+// to say about it.
+func ownTextAtPointer[T any, P interface {
+	*T
+	json.Unmarshaler
+}](dec *jsontext.Decoder, v P) error {
 	value, err := dec.ReadValue()
 	if err != nil {
 		return err
 	}
-	if err = day.UnmarshalJSON(value); err != nil {
-		return &jsonv2.SemanticError{JSONPointer: dec.StackPointer(), JSONKind: value.Kind(), JSONValue: value.Clone(), GoType: reflect.TypeFor[datatypes.Date](), Err: err}
+	if err = v.UnmarshalJSON(value); err != nil {
+		return &jsonv2.SemanticError{JSONPointer: dec.StackPointer(), JSONKind: value.Kind(), JSONValue: value.Clone(), GoType: reflect.TypeFor[T](), Err: err}
 	}
 	return nil
-})
+}
 
 // requiredBodyError translates the io.EOF sentinel of an absent request body
 // into a client-safe rejection, for the model-path handlers that require a

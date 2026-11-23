@@ -16,7 +16,6 @@ import (
 
 	// The well-known types the definitions import, registered so the
 	// descriptors resolve against them.
-	_ "google.golang.org/protobuf/types/known/durationpb"
 	_ "google.golang.org/protobuf/types/known/fieldmaskpb"
 	_ "google.golang.org/protobuf/types/known/structpb"
 	_ "google.golang.org/protobuf/types/known/timestamppb"

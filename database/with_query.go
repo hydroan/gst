@@ -44,7 +44,7 @@ import (
 //	  (types.Column.In, URL form "field[in]=a,b"), where the list is explicit.
 //
 //	JSON columns (fields whose type declares a JSON gorm data type, such as
-//	the gorm.io/datatypes types JSON, JSONSlice, JSONMap and JSONType): a
+//	the JSON, JSONSlice and JSONMap of the datatypes package): a
 //	JSON document is not a scalar, so an exact match fails closed to an
 //	empty result on every dialect instead of comparing, a JSON array of
 //	numbers as much as one of strings or a map. Substring matching on a JSON

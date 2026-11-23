@@ -48,10 +48,11 @@ var projectChecks = []ggcheck.Check{
 	ggcheck.ModelTableNameDeclaration,
 	ggcheck.GormTagIndexBan,
 	ggcheck.ValidateTagBan,
+	ggcheck.GormDatatypesBan,
 	ggcheck.IndexDeclarations,
 	ggcheck.FrameworkColumns,
 	ggcheck.TenantUniqueIndexes,
-	ggcheck.DateColumns,
+	ggcheck.ColumnTypes,
 	ggcheck.QueryNames,
 	ggcheck.IDAccessors,
 	ggcheck.VersionFieldDeclaration,
@@ -66,13 +67,13 @@ var projectChecks = []ggcheck.Check{
 // the run does itself, the definitions derived right before (see fillPBTags)
 // once instead of twice and the imports synced once main.go is written (see
 // syncTestMainImports). Index declarations, Framework columns, Tenant unique
-// indexes, Date columns, Query names and ID accessors ask the compiled
+// indexes, Column types, Query names and ID accessors ask the compiled
 // models, while a project need not compile until the run has written its
 // files: model code may read column references not generated yet, and the
 // column file of a deleted model still names it. The six stay with gg check,
 // and what they report is refused again before a table is created.
 func generationChecks() []ggcheck.Check {
-	return projectChecksWithout(ggcheck.ProtobufDefinitions.Name, ggcheck.TestMainImports.Name, ggcheck.IndexDeclarations.Name, ggcheck.FrameworkColumns.Name, ggcheck.TenantUniqueIndexes.Name, ggcheck.DateColumns.Name, ggcheck.QueryNames.Name, ggcheck.IDAccessors.Name)
+	return projectChecksWithout(ggcheck.ProtobufDefinitions.Name, ggcheck.TestMainImports.Name, ggcheck.IndexDeclarations.Name, ggcheck.FrameworkColumns.Name, ggcheck.TenantUniqueIndexes.Name, ggcheck.ColumnTypes.Name, ggcheck.QueryNames.Name, ggcheck.IDAccessors.Name)
 }
 
 // moduleCopyChecks are the project checks the gg gen run of gg module copy

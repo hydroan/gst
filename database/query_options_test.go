@@ -14,7 +14,6 @@ import (
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
-	gormdatatypes "gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -552,7 +551,7 @@ func TestDatabaseWithSelect(t *testing.T) {
 				Name:     "narrow_user",
 				Email:    "narrow@example.com",
 				Age:      30,
-				Addr:     gormdatatypes.NewJSONSlice([]string{"street-1", "street-2"}),
+				Addr:     datatypes.NewJSONSlice([]string{"street-1", "street-2"}),
 				IsActive: &active,
 				Remark:   &remark,
 			}

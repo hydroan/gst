@@ -13,7 +13,6 @@ import (
 	"github.com/hydroan/gst/internal/gggen/jsonshape/fixture/pkg/notifier"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
-	gormdatatypes "gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -54,14 +53,14 @@ type Sample struct {
 	Permission Permission `json:"permission"`
 	Reference  Reference  `json:"reference"`
 
-	Extra    any                              `json:"extra"`
-	Raw      json.RawMessage                  `json:"raw"`
-	Document gormdatatypes.JSON               `json:"document"`
-	Meta     gormdatatypes.JSONMap            `json:"meta"`
-	Options  gormdatatypes.JSONType[*Options] `json:"options"`
-	Items    gormdatatypes.JSONSlice[Item]    `json:"items"`
-	Day      gormdatatypes.Date               `json:"day"`
-	Due      datatypes.Date                   `json:"due"`
+	Extra    any                             `json:"extra"`
+	Raw      json.RawMessage                 `json:"raw"`
+	Document datatypes.JSON[json.RawMessage] `json:"document"`
+	Meta     datatypes.JSONMap               `json:"meta"`
+	Options  datatypes.JSON[*Options]        `json:"options"`
+	Items    datatypes.JSONSlice[Item]       `json:"items"`
+	Opens    datatypes.TimeOfDay             `json:"opens"`
+	Due      datatypes.Date                  `json:"due"`
 	// Deadline is when the sample is due.
 	Deadline time.Time           `json:"deadline,omitzero"`
 	Closed   *time.Time          `json:"closed"`

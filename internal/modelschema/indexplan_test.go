@@ -1,13 +1,14 @@
 package modelschema_test
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
+	"github.com/hydroan/gst/internal/datatypes"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/stretchr/testify/require"
-	gormdatatypes "gorm.io/datatypes"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -578,7 +579,7 @@ func (*SizedIndexSample) Indexes() []modelschema.Index {
 // JSONIndexSample indexes a JSON column, which MySQL does not index at all,
 // so no size would help.
 type JSONIndexSample struct {
-	Attrs gormdatatypes.JSON `json:"attrs"`
+	Attrs datatypes.JSON[json.RawMessage] `json:"attrs"`
 
 	modelregistry.Base
 }

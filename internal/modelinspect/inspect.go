@@ -24,14 +24,14 @@ type ColumnInfo struct {
 	TypeName    string            `json:"type_name"`    // Original type, recorded in a comment when TypeExpr is empty.
 	Numeric     bool              `json:"numeric"`      // modelschema.ClassifyColumn calls the column numeric, so the reference gains SUM and AVG.
 	Time        bool              `json:"time"`         // modelschema.ClassifyColumn calls the column a time, so the reference gains time bucketing.
-	Date        bool              `json:"date"`         // The column's type is gst.Date, a calendar day, which gets the DateColumn reference.
+	Date        bool              `json:"date"`         // The column's type is datatypes.Date, a calendar day, which gets the DateColumn reference.
 	JSONStrings bool              `json:"json_strings"` // Column type stores a JSON array of strings, which gets the JSONStringsColumn reference.
 }
 
 // ModelColumns is one model as the inspection program reports it: its columns,
 // what model.ValidateIndexes refused in its index declarations on MySQL, what
 // modelschema.ValidateTenantIndexes refused in its unique indexes, what
-// modelschema.ValidateDateColumns refused in its date columns, what
+// modelschema.ValidateColumnTypes refused in the types of its columns, what
 // modelschema.ValidateFrameworkColumns refused in its columns, what
 // urlquery.ValidateQueryNames refused in its query tags and what
 // modelregistry.ValidateIDAccessors refused in its ID accessors, each "" when
@@ -43,7 +43,7 @@ type ModelColumns struct {
 	Columns                  []ColumnInfo `json:"columns"`
 	IndexViolation           string       `json:"index_violation"`
 	TenantIndexViolation     string       `json:"tenant_index_violation"`
-	DateColumnViolation      string       `json:"date_column_violation"`
+	ColumnTypeViolation      string       `json:"column_type_violation"`
 	FrameworkColumnViolation string       `json:"framework_column_violation"`
 	QueryNameViolation       string       `json:"query_name_violation"`
 	IDAccessorViolation      string       `json:"id_accessor_violation"`
@@ -53,7 +53,7 @@ type ModelColumns struct {
 // (see buildProgram) is built into the project's module and reports every
 // model's columns, what model.ValidateIndexes refused in its index declarations
 // on MySQL, what modelschema.ValidateTenantIndexes refused in its unique
-// indexes, what modelschema.ValidateDateColumns refused in its date columns,
+// indexes, what modelschema.ValidateColumnTypes refused in the types of its columns,
 // what modelschema.ValidateFrameworkColumns refused in its columns,
 // what urlquery.ValidateQueryNames refused in its query tags and what
 // modelregistry.ValidateIDAccessors refused in its ID accessors. The result

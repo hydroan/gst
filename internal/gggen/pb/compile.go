@@ -13,6 +13,7 @@ import (
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/modelinfo"
 	"google.golang.org/genproto/googleapis/type/date"
+	"google.golang.org/genproto/googleapis/type/timeofday"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -122,16 +123,18 @@ func Compile(modulePath string, protos []File) ([]File, error) {
 // the paths they are registered under, are compiled against, in readBack and
 // in Compile alike: the definitions themselves, which import one another,
 // the well-known types, which protocompile carries, and the google.type.Date
-// of a calendar day, which it does not, taken from the Go package declaring
-// it.
+// of a calendar day and the google.type.TimeOfDay of a time of day, which it
+// does not, each taken from the Go package declaring it.
 func resolverOf(sources map[string]string) protocompile.Resolver {
 	return protocompile.WithStandardImports(protocompile.CompositeResolver{
 		&protocompile.SourceResolver{Accessor: protocompile.SourceAccessorFromMap(sources)},
 		protocompile.ResolverFunc(func(name string) (protocompile.SearchResult, error) {
-			if name != date.File_google_type_date_proto.Path() {
-				return protocompile.SearchResult{}, protoregistry.NotFound
+			for _, file := range []protoreflect.FileDescriptor{date.File_google_type_date_proto, timeofday.File_google_type_timeofday_proto} {
+				if name == file.Path() {
+					return protocompile.SearchResult{Desc: file}, nil
+				}
 			}
-			return protocompile.SearchResult{Desc: date.File_google_type_date_proto}, nil
+			return protocompile.SearchResult{}, protoregistry.NotFound
 		}),
 	})
 }

@@ -82,8 +82,8 @@ func TestLoadReadsADeclaredTreeLikeTheProject(t *testing.T) {
 
 // TestFormatOfNamesTheFormatOfABuiltinString pins the formats of the builtin
 // strings, the names the OpenAPI document gives them: date-time for an
-// instant, date for the framework's calendar day, and none for a builtin of
-// another shape or for a type that is no builtin.
+// instant, date for the framework's calendar day, and none for its time of
+// day, for a builtin of another shape or for a type that is no builtin.
 func TestFormatOfNamesTheFormatOfABuiltinString(t *testing.T) {
 	project, err := jsonshape.Load(jsonshape.Config{
 		Dir:        ".",
@@ -101,9 +101,9 @@ func TestFormatOfNamesTheFormatOfABuiltinString(t *testing.T) {
 		}
 	}
 	require.Equal(t, "date-time", formats["Deadline"], "time.Time")
-	require.Equal(t, "date-time", formats["Day"], "gorm.io/datatypes.Date")
 	require.Equal(t, "date-time", formats["Archived"], "gorm.DeletedAt")
-	require.Equal(t, "date", formats["Due"], "gst.Date")
+	require.Equal(t, "date", formats["Due"], "datatypes.Date")
+	require.Empty(t, formats["Opens"], "datatypes.TimeOfDay is a string with no format of its own")
 	require.Empty(t, formats["Document"], "datatypes.JSON is no string")
 	require.Empty(t, formats["Comment"], "sql.NullString is no builtin")
 }

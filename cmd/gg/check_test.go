@@ -63,10 +63,11 @@ func TestProjectChecksRunEveryCheckInOrder(t *testing.T) {
 		"Model table name declaration",
 		"Gorm tag index ban",
 		"Validate tag ban",
+		"Gorm datatypes ban",
 		"Index declarations",
 		"Framework columns",
 		"Tenant unique indexes",
-		"Date columns",
+		"Column types",
 		"Query names",
 		"ID accessors",
 		"Version field declaration",
@@ -99,11 +100,11 @@ func TestModuleCopyChecksLeaveTheModuleAssemblyToTheProject(t *testing.T) {
 // pins the checks gg gen leaves out of the project checks it runs before
 // generating: Protobuf definitions, which the run derives itself, TestMain
 // imports, which it syncs itself, and Index declarations, Framework columns,
-// Tenant unique indexes, Date columns, Query names and ID accessors, which
+// Tenant unique indexes, Column types, Query names and ID accessors, which
 // ask the compiled models of a project that need not compile yet; every other
 // check runs, in the order of gg check.
 func TestGenerationChecksLeaveOutWhatTheRunDoesItselfAndWhatAsksTheCompiledModels(t *testing.T) {
-	left := []string{ggcheck.ProtobufDefinitions.Name, ggcheck.TestMainImports.Name, ggcheck.IndexDeclarations.Name, ggcheck.FrameworkColumns.Name, ggcheck.TenantUniqueIndexes.Name, ggcheck.DateColumns.Name, ggcheck.QueryNames.Name, ggcheck.IDAccessors.Name}
+	left := []string{ggcheck.ProtobufDefinitions.Name, ggcheck.TestMainImports.Name, ggcheck.IndexDeclarations.Name, ggcheck.FrameworkColumns.Name, ggcheck.TenantUniqueIndexes.Name, ggcheck.ColumnTypes.Name, ggcheck.QueryNames.Name, ggcheck.IDAccessors.Name}
 	want := slices.DeleteFunc(checkNames(projectChecks), func(name string) bool { return slices.Contains(left, name) })
 	if got := checkNames(generationChecks()); !slices.Equal(got, want) {
 		t.Fatalf("generationChecks() = %v, want %v", got, want)

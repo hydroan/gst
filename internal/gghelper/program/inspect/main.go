@@ -19,9 +19,9 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/config"
 	gstmysql "github.com/hydroan/gst/database/mysql"
+	"github.com/hydroan/gst/datatypes"
 	"github.com/hydroan/gst/inspect"
 	"github.com/hydroan/gst/model"
 )
@@ -45,7 +45,7 @@ type modelColumns struct {
 	Columns                  []columnInfo `json:"columns"`
 	IndexViolation           string       `json:"index_violation"`
 	TenantIndexViolation     string       `json:"tenant_index_violation"`
-	DateColumnViolation      string       `json:"date_column_violation"`
+	ColumnTypeViolation      string       `json:"column_type_violation"`
 	FrameworkColumnViolation string       `json:"framework_column_violation"`
 	QueryNameViolation       string       `json:"query_name_violation"`
 	IDAccessorViolation      string       `json:"id_accessor_violation"`
@@ -124,8 +124,8 @@ func main() {
 		if validateErr := inspect.ValidateTenantIndexes(typ); validateErr != nil {
 			entry.TenantIndexViolation = validateErr.Error()
 		}
-		if validateErr := inspect.ValidateDateColumns(typ); validateErr != nil {
-			entry.DateColumnViolation = validateErr.Error()
+		if validateErr := inspect.ValidateColumnTypes(typ); validateErr != nil {
+			entry.ColumnTypeViolation = validateErr.Error()
 		}
 		if validateErr := inspect.ValidateFrameworkColumns(typ); validateErr != nil {
 			entry.FrameworkColumnViolation = validateErr.Error()
@@ -151,7 +151,7 @@ func main() {
 				TypeName:    col.Type.String(),
 				Numeric:     class == inspect.ColumnClassNumeric,
 				Time:        class == inspect.ColumnClassTime,
-				Date:        declared == reflect.TypeFor[gst.Date](),
+				Date:        declared == reflect.TypeFor[datatypes.Date](),
 				JSONStrings: inspect.IsJSONStringsType(col.Type),
 			})
 		}
@@ -210,11 +210,12 @@ func describeType(typ reflect.Type, modelPkg string) (expr string, imports map[s
 // path, which a business project cannot import, so the reference is
 // rewritten to the alias the model source actually wrote: model.Base and
 // its siblings for internal/modelregistry, model.Version for
-// internal/modelschema, the root gst package for internal/types and
-// internal/datatypes, which forwards under the same name every type of
-// them a model can name and this function writes back, gst.Date among them,
-// the generic streams being instantiations it declines, the service package
-// for internal/apiaction,
+// internal/modelschema, the root gst package for internal/types, which
+// forwards under the same name every type of it a model can name and this
+// function writes back, the generic streams being instantiations it
+// declines, the datatypes package for internal/datatypes, datatypes.Date
+// and datatypes.JSONMap among them, its generic types instantiations
+// declined alike, the service package for internal/apiaction,
 // service.Phase among them, and, for the types a model stores as JSON, the
 // grpc package for internal/controller and internal/grpcserver, grpc.Filter
 // and grpc.Caller among them, sse for internal/sse and testutil for
@@ -232,9 +233,12 @@ func typeExpr(typ reflect.Type, modelPkg string, imports map[string]string) (str
 		case "github.com/hydroan/gst/internal/modelregistry", "github.com/hydroan/gst/internal/modelschema":
 			imports["github.com/hydroan/gst/model"] = "model"
 			return "model." + name, true
-		case "github.com/hydroan/gst/internal/types", "github.com/hydroan/gst/internal/datatypes":
+		case "github.com/hydroan/gst/internal/types":
 			imports["github.com/hydroan/gst"] = "gst"
 			return "gst." + name, true
+		case "github.com/hydroan/gst/internal/datatypes":
+			imports["github.com/hydroan/gst/datatypes"] = "datatypes"
+			return "datatypes." + name, true
 		case "github.com/hydroan/gst/internal/apiaction":
 			imports["github.com/hydroan/gst/service"] = "service"
 			return "service." + name, true

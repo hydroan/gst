@@ -257,8 +257,11 @@ const (
 // builtins lists the types with encoding methods whose output is known, keyed
 // by package path and type name, each with its shape and, for a string
 // written in a format of its own, the name of that format: the framework's
-// own day, gst.Date, a string as 2026-01-02, among the ones of the libraries
-// a model is built from. The JSON v2 experiment turns json.RawMessage into an
+// own types, a datatypes.Date a string as 2026-01-02, a datatypes.TimeOfDay
+// one as 17:30:00, a datatypes.JSONMap an object and a datatypes.JSON the
+// value it holds, among the ones of the libraries a model is built from; a
+// datatypes.JSONSlice is the slice it is declared over, and needs no entry.
+// The JSON v2 experiment turns json.RawMessage into an
 // alias of jsontext.Value, so both names are listed. The OpenAPI document of
 // a running server describes the same types from the same knowledge, by
 // reflection, under the same format names (see internal/openapigen's
@@ -271,14 +274,12 @@ var builtins = map[string]struct {
 	"encoding/json.Number":         {shape: BuiltinNumber},
 	"encoding/json.RawMessage":     {shape: BuiltinAny},
 	"encoding/json/jsontext.Value": {shape: BuiltinAny},
-	"gorm.io/datatypes.Date":       {shape: BuiltinString, format: formatDateTime},
-	"gorm.io/datatypes.Time":       {shape: BuiltinString},
-	"gorm.io/datatypes.JSON":       {shape: BuiltinAny},
-	"gorm.io/datatypes.JSONMap":    {shape: BuiltinObject},
-	"gorm.io/datatypes.JSONType":   {shape: BuiltinWrapper},
 	"gorm.io/gorm.DeletedAt":       {shape: BuiltinNullableString, format: formatDateTime},
 
-	ggconst.ImportPathGst + "/internal/datatypes.Date": {shape: BuiltinString, format: formatDate},
+	ggconst.ImportPathGst + "/internal/datatypes.Date":      {shape: BuiltinString, format: formatDate},
+	ggconst.ImportPathGst + "/internal/datatypes.TimeOfDay": {shape: BuiltinString},
+	ggconst.ImportPathGst + "/internal/datatypes.JSONMap":   {shape: BuiltinObject},
+	ggconst.ImportPathGst + "/internal/datatypes.JSON":      {shape: BuiltinWrapper},
 }
 
 // The formats a builtin string is written in, under the names OpenAPI gives
@@ -289,8 +290,8 @@ const (
 )
 
 // BuiltinOf reports the builtin shape of n, if it has one: BuiltinString for
-// time.Time, and BuiltinWrapper for datatypes.JSONType[*Options] as for any
-// other instantiation of datatypes.JSONType.
+// time.Time, and BuiltinWrapper for datatypes.JSON[*Options] as for any
+// other instantiation of datatypes.JSON.
 func BuiltinOf(n *types.Named) (Builtin, bool) {
 	obj := n.Origin().Obj()
 	if obj.Pkg() == nil {
@@ -302,8 +303,9 @@ func BuiltinOf(n *types.Named) (Builtin, bool) {
 
 // FormatOf returns the name of the format the string a builtin type encodes to
 // is written in: date-time for time.Time and gorm.DeletedAt, date for
-// gst.Date. It returns nothing for a builtin whose string has no format of
-// its own, such as datatypes.Time, and for a type that is no builtin.
+// datatypes.Date. It returns nothing for a builtin whose string has no
+// format of its own, such as datatypes.TimeOfDay, and for a type that is no
+// builtin.
 func FormatOf(n *types.Named) string {
 	obj := n.Origin().Obj()
 	if obj.Pkg() == nil {

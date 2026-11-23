@@ -17,6 +17,7 @@ import (
 	"github.com/hydroan/gst/internal/pbschema"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genproto/googleapis/type/date"
+	"google.golang.org/genproto/googleapis/type/timeofday"
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
@@ -1291,8 +1292,8 @@ func requireProtosCompile(t *testing.T, files map[string]string) {
 	// bufbuild/protocompile compiles .proto source the way protoc does,
 	// parsing and linking it against the well-known types, without protoc
 	// installed: what it accepts, protoc accepts. The google.type.Date of a
-	// calendar day is no well-known type, so it is linked from the Go
-	// package declaring it.
+	// calendar day and the google.type.TimeOfDay of a time of day are no
+	// well-known types, so each is linked from the Go package declaring it.
 	sources := make(map[string]string, len(files))
 	names := make([]string, 0, len(files))
 	for path, content := range files {
@@ -1303,10 +1304,13 @@ func requireProtosCompile(t *testing.T, files map[string]string) {
 		Resolver: protocompile.WithStandardImports(protocompile.CompositeResolver{
 			&protocompile.SourceResolver{Accessor: protocompile.SourceAccessorFromMap(sources)},
 			protocompile.ResolverFunc(func(name string) (protocompile.SearchResult, error) {
-				if name != date.File_google_type_date_proto.Path() {
-					return protocompile.SearchResult{}, protoregistry.NotFound
+				switch name {
+				case date.File_google_type_date_proto.Path():
+					return protocompile.SearchResult{Desc: date.File_google_type_date_proto}, nil
+				case timeofday.File_google_type_timeofday_proto.Path():
+					return protocompile.SearchResult{Desc: timeofday.File_google_type_timeofday_proto}, nil
 				}
-				return protocompile.SearchResult{Desc: date.File_google_type_date_proto}, nil
+				return protocompile.SearchResult{}, protoregistry.NotFound
 			}),
 		}),
 	}
@@ -1884,37 +1888,36 @@ func (Clash) Design() {
 `
 
 // protobufShapeModel carries one field of every kind the handlers convert
-// beyond the ones of the Record model: a calendar day, gorm's time of day, JSON
-// document, JSON map and JSON wrapper, a soft-delete time, a JSON number, an
+// beyond the ones of the Record model: a calendar day, a time of day, a JSON
+// document, a JSON map and a JSON wrapper, a soft-delete time, a JSON number, an
 // integer enum, an optional integer, a pointer to a struct, a slice of
 // pointers, an array, maps of scalars, of structs and of unnamed structs, a
 // slice of and a pointer to an unnamed struct, an optional time, any value,
 // bytes, a named slice, the framework's version type, an alias of an
-// internal type, gorm's JSON slices of structs and of strings, pointers to
+// internal type, JSON slices of structs and of strings, pointers to
 // a slice of strings, to a slice of structs, to a map and to bytes, a
 // second JSON wrapper, a map keyed by a narrow integer, an optional JSON
-// number, a slice of times, a map of pointers to structs, an optional day, a
-// slice of days and gorm's date.
+// number, a slice of times, a map of pointers to structs, an optional day and
+// a slice of days.
 const protobufShapeModel = `package model
 
 import (
 	"encoding/json"
 	"time"
 
-	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/datatypes"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
-	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
 // Shape carries one field of every kind the handlers convert.
 type Shape struct {
-	Date    gst.Date                         'json:"date" pb:"11"'
-	Clock   datatypes.Time                   'json:"clock" pb:"12"'
-	Doc     datatypes.JSON                   'json:"doc,omitempty" pb:"13"'
-	Attrs   datatypes.JSONMap                'json:"attrs,omitempty" pb:"14"'
-	Options datatypes.JSONType[ShapeOptions] 'json:"options" pb:"15"'
+	Date    datatypes.Date                  'json:"date" pb:"11"'
+	Clock   datatypes.TimeOfDay             'json:"clock" pb:"12"'
+	Doc     datatypes.JSON[json.RawMessage] 'json:"doc,omitempty" pb:"13"'
+	Attrs   datatypes.JSONMap               'json:"attrs,omitempty" pb:"14"'
+	Options datatypes.JSON[ShapeOptions]    'json:"options" pb:"15"'
 	Audit   ShapeAudit                       'json:"audit" pb:"16" gorm:"-"'
 	Amount  json.Number                      'json:"amount" pb:"17"'
 	Level   ShapeLevel                       'json:"level" pb:"18"'
@@ -1955,7 +1958,7 @@ type Shape struct {
 	// RawDoc, Extra and Meta are pointers to JSON types, declared as
 	// themselves when decoded.
 	RawDoc *json.RawMessage   'json:"raw_doc,omitempty" pb:"38" gorm:"-"'
-	Extra  *datatypes.JSON    'json:"extra,omitempty" pb:"39" gorm:"-"'
+	Extra  *datatypes.JSON[json.RawMessage] 'json:"extra,omitempty" pb:"39" gorm:"-"'
 	Meta   *datatypes.JSONMap 'json:"meta,omitempty" pb:"40" gorm:"-"'
 	// Rank and Port are narrower than the int32 and uint32 their fields
 	// carry, read back through grpc.Narrow, which refuses what they cannot
@@ -1964,7 +1967,7 @@ type Shape struct {
 	Port uint16 'json:"port" pb:"46"'
 	// Extras is a second JSON wrapper, decoded into a value of its own
 	// beside the one of Options.
-	Extras datatypes.JSONType[ShapeOptions] 'json:"extras" pb:"47"'
+	Extras datatypes.JSON[ShapeOptions] 'json:"extras" pb:"47"'
 	// Cells is a map of unnamed structs, each decoded whole before it is
 	// put in.
 	Cells map[string]struct {
@@ -1997,12 +2000,8 @@ type Shape struct {
 	// Due and Days hold days behind a pointer and in a repeated field,
 	// where the zero day travels as 0001-01-01 and comes back as the zero
 	// day.
-	Due  *gst.Date  'json:"due,omitempty" pb:"59"'
-	Days []gst.Date 'json:"days,omitempty" pb:"60" gorm:"-"'
-	// Opened is the date of the datatypes package of gorm, which a field no
-	// column stores may take: it travels as a Timestamp at the start of the
-	// day.
-	Opened datatypes.Date 'json:"opened" pb:"61" gorm:"-"'
+	Due  *datatypes.Date  'json:"due,omitempty" pb:"59"'
+	Days []datatypes.Date 'json:"days,omitempty" pb:"60" gorm:"-"'
 	// Name shadows the Name of the embedded ShapeMeta, which keeps its own
 	// key and is selected by its path.
 	Name string 'json:"name" pb:"41"'
@@ -2090,14 +2089,14 @@ import (
 	"tmpapp/pb"
 	pbrecord "tmpapp/pb/record"
 
-	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/datatypes"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genproto/googleapis/type/date"
+	"google.golang.org/genproto/googleapis/type/timeofday"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -2203,19 +2202,19 @@ func TestItemLinksRoundTrip(t *testing.T) {
 func TestShapeRoundTrips(t *testing.T) {
 	day := time.Date(2026, 9, 26, 0, 0, 0, 0, time.UTC)
 	when := day.Add(time.Hour)
-	due := gst.Date(day.AddDate(0, 0, 1))
+	due := datatypes.Date(day.AddDate(0, 0, 1))
 	score := 7
 	ratio := 0.5
 	price := json.Number("1.5")
 	rawDoc := json.RawMessage('{"b":1}')
-	extra := datatypes.JSON('{"c":2}')
+	extra := datatypes.NewJSON(json.RawMessage('{"c":2}'))
 	meta := datatypes.JSONMap{"m": float64(1)}
 	in := &model.Shape{
-		Date:    gst.Date(day),
-		Clock:   datatypes.Time(90 * time.Minute),
-		Doc:     datatypes.JSON('{"a":[1,2]}'),
+		Date:    datatypes.Date(day),
+		Clock:   datatypes.NewTimeOfDay(1, 30, 0, 0),
+		Doc:     datatypes.NewJSON(json.RawMessage('{"a":[1,2]}')),
 		Attrs:   datatypes.JSONMap{"deep": map[string]any{"x": float64(1)}},
-		Options: datatypes.NewJSONType(model.ShapeOptions{Color: "red"}),
+		Options: datatypes.NewJSON(model.ShapeOptions{Color: "red"}),
 		Audit:   model.ShapeAudit{Removed: gorm.DeletedAt{Time: when, Valid: true}},
 		Amount:  json.Number("12.50"),
 		Level:   model.ShapeLevelHigh,
@@ -2255,8 +2254,7 @@ func TestShapeRoundTrips(t *testing.T) {
 		Pair:    [2]json.Number{"3", "4"},
 		Rates:   map[string]json.Number{"r": "0.5"},
 		Due:     &due,
-		Days:    []gst.Date{{}, gst.Date(day)},
-		Opened:  datatypes.Date(day),
+		Days:    []datatypes.Date{{}, datatypes.Date(day)},
 	}
 	in.Window = struct {
 		Width int32 'json:"width" pb:"1"'
@@ -2277,8 +2275,7 @@ func TestShapeRoundTrips(t *testing.T) {
 	require.True(t, proto.Equal(&date.Date{Year: 2026, Month: 9, Day: 27}, msg.GetDue()))
 	require.True(t, proto.Equal(&date.Date{Year: 1, Month: 1, Day: 1}, msg.GetDays()[0]), "the zero day of an element travels as 0001-01-01, not as nothing")
 	require.True(t, proto.Equal(&date.Date{Year: 2026, Month: 9, Day: 26}, msg.GetDays()[1]))
-	require.Equal(t, day, msg.GetOpened().AsTime())
-	require.Equal(t, 90*time.Minute, msg.GetClock().AsDuration())
+	require.True(t, proto.Equal(&timeofday.TimeOfDay{Hours: 1, Minutes: 30}, msg.GetClock()), "a time of day travels as its hours, minutes, seconds and nanoseconds")
 	require.Equal(t, "red", msg.GetOptions().GetColor())
 	require.Equal(t, when, msg.GetAudit().GetRemoved().AsTime())
 	require.Equal(t, "12.50", msg.GetAmount())
@@ -2306,7 +2303,7 @@ func TestShapeRoundTrips(t *testing.T) {
 	require.Equal(t, int32(4), msg.GetWindow().GetWidth(), "window is the message of the unnamed struct")
 	require.Equal(t, int32(-3), msg.GetRank())
 	require.Equal(t, uint32(65000), msg.GetPort())
-	require.Equal(t, []byte(in.Doc), msg.GetDoc(), "a JSON document travels as its bytes")
+	require.Equal(t, []byte(in.Doc.Data()), msg.GetDoc(), "a JSON document travels as its bytes")
 	require.Equal(t, int32(9), msg.GetByRank()[-1].GetX())
 	require.Equal(t, "1.5", msg.GetPrice())
 	require.True(t, msg.GetStamps()[0].AsTime().IsZero(), "the zero time of an element travels as 0001-01-01, not as nothing")
@@ -2580,14 +2577,14 @@ func (Feed) Design() {
 const protobufDataPackageModel = `package data
 
 import (
+	"github.com/hydroan/gst/datatypes"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
-	"gorm.io/datatypes"
 )
 
 // Sample keeps its options as a JSON document.
 type Sample struct {
-	Options datatypes.JSONType[SampleOptions] 'json:"options" pb:"11"'
+	Options datatypes.JSON[SampleOptions] 'json:"options" pb:"11"'
 
 	model.Base
 }

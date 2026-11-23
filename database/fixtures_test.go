@@ -20,7 +20,6 @@ import (
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
-	gormdatatypes "gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	gormschema "gorm.io/gorm/schema"
@@ -208,12 +207,12 @@ func findUsersByID(users []*TestUser) (u11, u22, u33 *TestUser) {
 }
 
 type TestUser struct {
-	Name     string                          `json:"name"`
-	Email    string                          `json:"email"`
-	Age      int                             `json:"age" query:"age"`
-	Addr     gormdatatypes.JSONSlice[string] `json:"addr"`
-	IsActive *bool                           `json:"is_active"`
-	Remark   *string                         `json:"remark,omitempty" gorm:"size:10240" query:"remark"`
+	Name     string                      `json:"name"`
+	Email    string                      `json:"email"`
+	Age      int                         `json:"age" query:"age"`
+	Addr     datatypes.JSONSlice[string] `json:"addr"`
+	IsActive *bool                       `json:"is_active"`
+	Remark   *string                     `json:"remark,omitempty" gorm:"size:10240" query:"remark"`
 
 	modelregistry.Base
 }
@@ -237,14 +236,14 @@ func (t *TestUser) UpdateBefore(ctx context.Context) error {
 // an array, which binds through driver.Valuer; and a nullable string, which
 // an exact match compares by the value it carries.
 type TestScoredRecord struct {
-	Name    string                                    `json:"name"`
-	Scores  gormdatatypes.JSONSlice[int]              `json:"scores"`
-	Weights gormdatatypes.JSONSlice[float64]          `json:"weights"`
-	Meta    gormdatatypes.JSONMap                     `json:"meta"`
-	Extra   gormdatatypes.JSONType[map[string]string] `json:"extra"`
-	Digest  []byte                                    `json:"digest"`
-	Token   sampleToken                               `json:"token"`
-	Grade   sql.NullString                            `json:"grade"`
+	Name    string                            `json:"name"`
+	Scores  datatypes.JSONSlice[int]          `json:"scores"`
+	Weights datatypes.JSONSlice[float64]      `json:"weights"`
+	Meta    datatypes.JSONMap                 `json:"meta"`
+	Extra   datatypes.JSON[map[string]string] `json:"extra"`
+	Digest  []byte                            `json:"digest"`
+	Token   sampleToken                       `json:"token"`
+	Grade   sql.NullString                    `json:"grade"`
 
 	modelregistry.Base
 }
@@ -277,14 +276,14 @@ func (t *sampleToken) Scan(src any) error {
 
 // TestTypedRecord holds columns whose Go shape does not tell what gorm
 // stores: a time held in sql.NullTime, an integer held in sql.NullInt64, a
-// string its type tag declares a JSON column, and datatypes.Time, a time of
+// string its type tag declares a JSON column, and datatypes.TimeOfDay, a time of
 // day.
 type TestTypedRecord struct {
-	Label   string             `json:"label" gorm:"size:191"`
-	Settled sql.NullTime       `json:"settled"`
-	Tally   sql.NullInt64      `json:"tally"`
-	Payload string             `json:"payload" gorm:"type:json"`
-	Clock   gormdatatypes.Time `json:"clock"`
+	Label   string              `json:"label" gorm:"size:191"`
+	Settled sql.NullTime        `json:"settled"`
+	Tally   sql.NullInt64       `json:"tally"`
+	Payload string              `json:"payload" gorm:"type:json"`
+	Clock   datatypes.TimeOfDay `json:"clock"`
 
 	modelregistry.Base
 }
@@ -776,20 +775,20 @@ var TestRecordTagCols = struct {
 var TestScoredRecordCols = struct {
 	ID      types.Column[string]
 	Name    types.Column[string]
-	Scores  types.Column[gormdatatypes.JSONSlice[int]]
-	Weights types.Column[gormdatatypes.JSONSlice[float64]]
-	Meta    types.Column[gormdatatypes.JSONMap]
-	Extra   types.Column[gormdatatypes.JSONType[map[string]string]]
+	Scores  types.Column[datatypes.JSONSlice[int]]
+	Weights types.Column[datatypes.JSONSlice[float64]]
+	Meta    types.Column[datatypes.JSONMap]
+	Extra   types.Column[datatypes.JSON[map[string]string]]
 	Digest  types.Column[[]byte]
 	Token   types.Column[sampleToken]
 	Grade   types.Column[sql.NullString]
 }{
 	ID:      types.NewColumn[*TestScoredRecord, string]("id"),
 	Name:    types.NewColumn[*TestScoredRecord, string]("name"),
-	Scores:  types.NewColumn[*TestScoredRecord, gormdatatypes.JSONSlice[int]]("scores"),
-	Weights: types.NewColumn[*TestScoredRecord, gormdatatypes.JSONSlice[float64]]("weights"),
-	Meta:    types.NewColumn[*TestScoredRecord, gormdatatypes.JSONMap]("meta"),
-	Extra:   types.NewColumn[*TestScoredRecord, gormdatatypes.JSONType[map[string]string]]("extra"),
+	Scores:  types.NewColumn[*TestScoredRecord, datatypes.JSONSlice[int]]("scores"),
+	Weights: types.NewColumn[*TestScoredRecord, datatypes.JSONSlice[float64]]("weights"),
+	Meta:    types.NewColumn[*TestScoredRecord, datatypes.JSONMap]("meta"),
+	Extra:   types.NewColumn[*TestScoredRecord, datatypes.JSON[map[string]string]]("extra"),
 	Digest:  types.NewColumn[*TestScoredRecord, []byte]("digest"),
 	Token:   types.NewColumn[*TestScoredRecord, sampleToken]("token"),
 	Grade:   types.NewColumn[*TestScoredRecord, sql.NullString]("grade"),
@@ -805,14 +804,14 @@ var TestTypedRecordCols = struct {
 	Settled types.TimeColumn
 	Tally   types.NumericColumn[sql.NullInt64]
 	Payload types.Column[string]
-	Clock   types.Column[gormdatatypes.Time]
+	Clock   types.Column[datatypes.TimeOfDay]
 }{
 	ID:      types.NewColumn[*TestTypedRecord, string]("id"),
 	Label:   types.NewColumn[*TestTypedRecord, string]("label"),
 	Settled: types.NewTimeColumn[*TestTypedRecord]("settled"),
 	Tally:   types.NewNumericColumn[*TestTypedRecord, sql.NullInt64]("tally"),
 	Payload: types.NewColumn[*TestTypedRecord, string]("payload"),
-	Clock:   types.NewColumn[*TestTypedRecord, gormdatatypes.Time]("clock"),
+	Clock:   types.NewColumn[*TestTypedRecord, datatypes.TimeOfDay]("clock"),
 }
 
 // tagSeed is the related-row fixture: two vip tags on alpha records and one

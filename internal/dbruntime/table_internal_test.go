@@ -157,8 +157,9 @@ func TestEnsureTableRejectsAUniqueIndexLeavingOutTheTenant(t *testing.T) {
 }
 
 // libraryDatedRecord declares a day by the date type of gorm.io/datatypes,
-// whose JSON is the instant of a midnight; table preparation must refuse it
-// before the table exists, whatever the database.
+// which the framework has its own for, whose JSON is the day; table
+// preparation must refuse it before the table exists, whatever the
+// database.
 type libraryDatedRecord struct {
 	Day gormdatatypes.Date
 
@@ -167,12 +168,12 @@ type libraryDatedRecord struct {
 
 func (*libraryDatedRecord) TableName() string { return "library_dated_records" }
 
-func TestEnsureTableRejectsADateColumnOfAnotherType(t *testing.T) {
+func TestEnsureTableRejectsAColumnOfATypeTheFrameworkHasItsOwnFor(t *testing.T) {
 	db := newSQLiteDB(t)
 	withAutoMigrate(t, true)
 
 	err := ensureTable(db, &libraryDatedRecord{})
-	require.ErrorContains(t, err, `field Day stores a date as datatypes.Date`)
+	require.ErrorContains(t, err, `field Day is declared gorm.io/datatypes.Date, declare it datatypes.Date`)
 	require.False(t, db.Migrator().HasTable("library_dated_records"))
 }
 

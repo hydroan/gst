@@ -4,13 +4,13 @@ syntax = "proto3";
 
 package tmpapp;
 
-import "google/protobuf/duration.proto";
-
 import "google/protobuf/struct.proto";
 
 import "google/protobuf/timestamp.proto";
 
 import "google/type/date.proto";
+
+import "google/type/timeofday.proto";
 
 option go_package = "tmpapp/pb;pb";
 
@@ -33,7 +33,7 @@ message Shape {
 
   google.type.Date date = 11;
 
-  google.protobuf.Duration clock = 12;
+  google.type.TimeOfDay clock = 12;
 
   bytes doc = 13;
 
@@ -171,11 +171,6 @@ message Shape {
   google.type.Date due = 59;
 
   repeated google.type.Date days = 60;
-
-  // Opened is the date of the datatypes package of gorm, which a field no
-  // column stores may take: it travels as a Timestamp at the start of the
-  // day.
-  google.protobuf.Timestamp opened = 61;
 }
 
 // ShapeSpans is the message of the spans field of Shape.

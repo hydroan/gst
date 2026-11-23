@@ -10,11 +10,11 @@ import (
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/datatypes"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/tenant"
 	"go.uber.org/zap"
-	gormdatatypes "gorm.io/datatypes"
 )
 
 // The sentinel menus of the tree and the column menus and roles are found by.
@@ -52,7 +52,7 @@ type Menu struct {
 	Default string `json:"default,omitempty" query:"default"` // Default child route when the menu has children.
 
 	// Backend routes used by this menu.
-	Routes gormdatatypes.JSONSlice[Route] `json:"routes,omitempty" query:"routes"`
+	Routes datatypes.JSONSlice[Route] `json:"routes,omitempty" query:"routes"`
 
 	// Display metadata.
 	Label string `json:"label,omitempty" query:"label"`
@@ -261,8 +261,8 @@ func (m *Menu) validate() error {
 	return nil
 }
 
-func removeMenuID(ids gormdatatypes.JSONSlice[string], menuID string) gormdatatypes.JSONSlice[string] {
-	filtered := make(gormdatatypes.JSONSlice[string], 0, len(ids))
+func removeMenuID(ids datatypes.JSONSlice[string], menuID string) datatypes.JSONSlice[string] {
+	filtered := make(datatypes.JSONSlice[string], 0, len(ids))
 	for _, id := range ids {
 		if id != menuID {
 			filtered = append(filtered, id)

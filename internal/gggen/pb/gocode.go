@@ -31,10 +31,9 @@ const (
 	importPathHTTP        = "net/http"
 	importPathTime        = "time"
 	importPathDatePB      = "google.golang.org/genproto/googleapis/type/date"
-	importPathDurationPB  = "google.golang.org/protobuf/types/known/durationpb"
+	importPathTimeOfDayPB = "google.golang.org/genproto/googleapis/type/timeofday"
 	importPathStructPB    = "google.golang.org/protobuf/types/known/structpb"
 	importPathTimestampPB = "google.golang.org/protobuf/types/known/timestamppb"
-	importPathDatatypes   = "gorm.io/datatypes"
 	importPathGorm        = "gorm.io/gorm"
 
 	// gstModelName is the name the generated files import the framework's
@@ -45,20 +44,20 @@ const (
 // fixedImportNames maps the import paths of the packages imported under a
 // fixed name to that name, "" for the package's own.
 var fixedImportNames = map[string]string{
-	importPathContext:         "",
-	importPathJSON:            "",
-	importPathHTTP:            "",
-	importPathTime:            "",
-	importPathDatePB:          "",
-	importPathDurationPB:      "",
-	importPathStructPB:        "",
-	importPathTimestampPB:     "",
-	importPathDatatypes:       "",
-	importPathGorm:            "",
-	ggconst.ImportPathGst:     "",
-	ggconst.ImportPathGRPC:    "",
-	ggconst.ImportPathModel:   gstModelName,
-	ggconst.ImportPathService: "",
+	importPathContext:           "",
+	importPathJSON:              "",
+	importPathHTTP:              "",
+	importPathTime:              "",
+	importPathDatePB:            "",
+	importPathTimeOfDayPB:       "",
+	importPathStructPB:          "",
+	importPathTimestampPB:       "",
+	importPathGorm:              "",
+	ggconst.ImportPathGst:       "",
+	ggconst.ImportPathDatatypes: "",
+	ggconst.ImportPathGRPC:      "",
+	ggconst.ImportPathModel:     gstModelName,
+	ggconst.ImportPathService:   "",
 }
 
 // generatedLocalNames are the identifiers the generated functions declare

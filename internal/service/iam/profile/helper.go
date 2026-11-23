@@ -5,8 +5,8 @@ import (
 
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/datatypes"
 	modeliamprofile "github.com/hydroan/gst/internal/model/iam/profile"
-	gormdatatypes "gorm.io/datatypes"
 )
 
 // Column references for the patch writes below; module sources carry no
@@ -14,7 +14,7 @@ import (
 var (
 	colProfileDisplayName = gst.NewColumn[*modeliamprofile.Profile, string]("display_name")
 	colProfileAvatar      = gst.NewColumn[*modeliamprofile.Profile, string]("avatar")
-	colProfileMetadata    = gst.NewColumn[*modeliamprofile.Profile, gormdatatypes.JSONMap]("metadata")
+	colProfileMetadata    = gst.NewColumn[*modeliamprofile.Profile, datatypes.JSONMap]("metadata")
 )
 
 func loadProfileByUserID(ctx *gst.ServiceContext, userID string) (*modeliamprofile.Profile, bool, error) {

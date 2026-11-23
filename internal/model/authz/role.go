@@ -8,10 +8,10 @@ import (
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/datatypes"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/tenant"
-	gormdatatypes "gorm.io/datatypes"
 )
 
 // colMenuID references the menu primary key the bound-menu lookups below filter
@@ -29,7 +29,7 @@ type Role struct {
 
 	// MenuIDs grants backend route permissions through each selected menu's
 	// Routes, and is the only source of frontend menu visibility.
-	MenuIDs gormdatatypes.JSONSlice[string] `json:"menu_ids,omitempty"`
+	MenuIDs datatypes.JSONSlice[string] `json:"menu_ids,omitempty"`
 
 	Menus []*Menu `json:"menus,omitempty" gorm:"-"`
 

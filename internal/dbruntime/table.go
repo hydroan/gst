@@ -94,7 +94,8 @@ func preparationFailed() error {
 // A model has to declare its table name, keep the columns the framework fixes
 // under their names (see modelschema.ValidateFrameworkColumns), keep its
 // unique indexes within its tenant (see modelschema.ValidateTenantIndexes),
-// declare its date columns as days (see modelschema.ValidateDateColumns),
+// declare its columns by the framework's types where it has one for them
+// (see modelschema.ValidateColumnTypes),
 // name its URL query parameters unambiguously (see
 // urlquery.ValidateQueryNames) and, when it declares an ID of its own over
 // its base's, declare the ID accessors that go with it (see
@@ -124,7 +125,7 @@ func ensureTable(handler *gorm.DB, m types.Model) error {
 	if err = modelschema.ValidateTenantIndexes(reflect.TypeOf(m)); err != nil {
 		return err
 	}
-	if err = modelschema.ValidateDateColumns(reflect.TypeOf(m)); err != nil {
+	if err = modelschema.ValidateColumnTypes(reflect.TypeOf(m)); err != nil {
 		return err
 	}
 	if err = urlquery.ValidateQueryNames(reflect.TypeOf(m)); err != nil {

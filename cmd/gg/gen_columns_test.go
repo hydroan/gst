@@ -33,11 +33,10 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/datatypes"
 	"github.com/hydroan/gst/dsl"
 	"github.com/hydroan/gst/model"
-	"gorm.io/datatypes"
 )
 
 // RecordKind is a type of the model's own package, which a column of a
@@ -47,13 +46,13 @@ type RecordKind string
 type Record struct {
 	Status   string              `+"`json:\"status\"`"+`
 	Score    int64               `+"`json:\"score\"`"+`
-	Day      gst.Date            `+"`json:\"day\"`"+`
+	Day      datatypes.Date      `+"`json:\"day\"`"+`
 	ClosedAt *time.Time          `+"`json:\"closed_at\"`"+`
 	Settled  sql.NullTime        `+"`json:\"settled\"`"+`
 	Tally    sql.NullInt64       `+"`json:\"tally\"`"+`
-	Clock    datatypes.Time      `+"`json:\"clock\"`"+`
+	Clock    datatypes.TimeOfDay `+"`json:\"clock\"`"+`
 	Times    []time.Time         `+"`json:\"times\" gorm:\"serializer:json\"`"+`
-	Days     []gst.Date          `+"`json:\"days\" gorm:\"serializer:json\"`"+`
+	Days     []datatypes.Date    `+"`json:\"days\" gorm:\"serializer:json\"`"+`
 	Kinds    []RecordKind        `+"`json:\"kinds\" gorm:\"serializer:json\"`"+`
 	ByKind   map[RecordKind]int64 `+"`json:\"by_kind\" gorm:\"serializer:json\"`"+`
 
@@ -161,16 +160,16 @@ func (i *Item) DeleteBefore(ctx context.Context) error {
 	require.Contains(t, string(recordColumns), `gst.NewTimeColumn[*Record]("settled")`, "the time sql.NullTime holds gets the time reference")
 	require.Contains(t, string(recordColumns), `gst.NewTimeColumn[*Record]("deleted_at")`, "so does the soft-delete timestamp")
 	require.Contains(t, string(recordColumns), `gst.NewNumericColumn[*Record, sql.NullInt64]("tally")`, "the number sql.NullInt64 holds gets the numeric reference")
-	require.Contains(t, string(recordColumns), `gst.NewColumn[*Record, datatypes.Time]("clock")`, "a time of day neither sums nor buckets")
+	require.Contains(t, string(recordColumns), `gst.NewColumn[*Record, datatypes.TimeOfDay]("clock")`, "a time of day neither sums nor buckets")
 	// A composite type is written from its elements: a type of another
 	// package qualified and imported, one of the model's own package bare.
 	require.Contains(t, string(recordColumns), `gst.NewColumn[*Record, []time.Time]("times")`)
 	require.Contains(t, string(recordColumns), "\t\"time\"\n", "the import of a type an element names")
 	require.Contains(t, string(recordColumns), `gst.NewColumn[*Record, []RecordKind]("kinds")`)
 	require.Contains(t, string(recordColumns), `gst.NewColumn[*Record, map[RecordKind]int64]("by_kind")`)
-	// The framework's day is written by the name the root package forwards
-	// it under, inside a composite type as well.
-	require.Contains(t, string(recordColumns), `gst.NewColumn[*Record, []gst.Date]("days")`)
+	// The framework's day is written by the name the datatypes package
+	// forwards it under, inside a composite type as well.
+	require.Contains(t, string(recordColumns), `gst.NewColumn[*Record, []datatypes.Date]("days")`)
 	itemColumns, err := os.ReadFile(itemColumnsFile)
 	require.NoError(t, err)
 	require.Contains(t, string(itemColumns), "var ItemCols = struct")

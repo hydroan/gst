@@ -12,7 +12,6 @@ import (
 	"github.com/getkin/kin-openapi/openapi3gen"
 	"github.com/hydroan/gst/apidoc"
 	"github.com/hydroan/gst/internal/datatypes"
-	gormdatatypes "gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -205,7 +204,7 @@ type jsonDocPayload struct {
 }
 
 type jsonDocModel struct {
-	Config gormdatatypes.JSONType[jsonDocPayload] `json:"config"`
+	Config datatypes.JSON[jsonDocPayload] `json:"config"`
 }
 
 func TestAddSchemaDocsForTypeDecoratesJSONTypeWithoutTitle(t *testing.T) {
@@ -516,20 +515,19 @@ func TestNewSchemaRefWithDocsDecoratesCustomListResponseWrapper(t *testing.T) {
 // own, and one inside a datatypes.JSONType; When writes its own JSON and
 // stays a date-time, and Due, a day, writes a date.
 type encodingFieldModel struct {
-	Addr    netip.Addr                                   `json:"addr"`
-	Peer    *netip.Addr                                  `json:"peer"`
-	Grade   encodingFieldGrade                           `json:"grade"`
-	When    time.Time                                    `json:"when"`
-	Day     gormdatatypes.Date                           `json:"day"`
-	Due     datatypes.Date                               `json:"due"`
-	Clock   gormdatatypes.Time                           `json:"clock"`
-	Removed gorm.DeletedAt                               `json:"removed"`
-	Amount  json.Number                                  `json:"amount"`
-	Raw     json.RawMessage                              `json:"raw"`
-	Doc     gormdatatypes.JSON                           `json:"doc"`
-	Meta    gormdatatypes.JSONMap                        `json:"meta"`
-	Custom  encodingFieldCustom                          `json:"custom"`
-	Options gormdatatypes.JSONType[encodingFieldOptions] `json:"options"`
+	Addr    netip.Addr                           `json:"addr"`
+	Peer    *netip.Addr                          `json:"peer"`
+	Grade   encodingFieldGrade                   `json:"grade"`
+	When    time.Time                            `json:"when"`
+	Due     datatypes.Date                       `json:"due"`
+	Clock   datatypes.TimeOfDay                  `json:"clock"`
+	Removed gorm.DeletedAt                       `json:"removed"`
+	Amount  json.Number                          `json:"amount"`
+	Raw     json.RawMessage                      `json:"raw"`
+	Doc     datatypes.JSON[json.RawMessage]      `json:"doc"`
+	Meta    datatypes.JSONMap                    `json:"meta"`
+	Custom  encodingFieldCustom                  `json:"custom"`
+	Options datatypes.JSON[encodingFieldOptions] `json:"options"`
 }
 
 type encodingFieldGrade int
@@ -568,7 +566,7 @@ func TestNewSchemaRefWithDocsDocumentsWhatEncodingMethodsWrite(t *testing.T) {
 	if !prop("peer").Nullable {
 		t.Fatal("peer, a pointer, must stay nullable")
 	}
-	for _, name := range []string{"when", "day", "removed"} {
+	for _, name := range []string{"when", "removed"} {
 		if p := prop(name); !p.Type.Is("string") || p.Format != "date-time" {
 			t.Fatalf("%s schema = %#v, want the RFC 3339 string time.Time writes", name, p)
 		}

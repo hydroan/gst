@@ -9,13 +9,11 @@ import (
 
 	"tmpapp/model"
 
-	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/datatypes"
 	"github.com/hydroan/gst/grpc"
 	gstmodel "github.com/hydroan/gst/model"
 	"google.golang.org/genproto/googleapis/type/date"
-	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -81,11 +79,12 @@ func ShapeToProto(m *model.Shape) (*Shape, error) {
 	if !time.Time(m.Date).IsZero() {
 		p.Date = grpc.DatePB(m.Date)
 	}
-	p.Clock = durationpb.New(time.Duration(m.Clock))
-	p.Doc = m.Doc
+	p.Clock = grpc.TimeOfDayPB(m.Clock)
+	data := m.Doc.Data()
+	p.Doc = data
 	p.Attrs = grpc.Struct(m.Attrs)
-	data := m.Options.Data()
-	p.Options, err = ShapeOptionsToProto(&data)
+	data2 := m.Options.Data()
+	p.Options, err = ShapeOptionsToProto(&data2)
 	if err != nil {
 		return nil, err
 	}
@@ -206,7 +205,8 @@ func ShapeToProto(m *model.Shape) (*Shape, error) {
 		p.RawDoc = *m.RawDoc
 	}
 	if m.Extra != nil {
-		p.Extra = *m.Extra
+		data3 := (*m.Extra).Data()
+		p.Extra = data3
 	}
 	if m.Meta != nil {
 		p.Meta = grpc.Struct(*m.Meta)
@@ -221,8 +221,8 @@ func ShapeToProto(m *model.Shape) (*Shape, error) {
 	p.Window.Width = m.Window.Width
 	p.Rank = int32(m.Rank)
 	p.Port = uint32(m.Port)
-	data2 := m.Extras.Data()
-	p.Extras, err = ShapeOptionsToProto(&data2)
+	data4 := m.Extras.Data()
+	p.Extras, err = ShapeOptionsToProto(&data4)
 	if err != nil {
 		return nil, err
 	}
@@ -294,7 +294,6 @@ func ShapeToProto(m *model.Shape) (*Shape, error) {
 			p.Days[i] = grpc.DatePB(v)
 		}
 	}
-	p.Opened = grpc.Timestamp(time.Time(m.Opened))
 	return p, nil
 }
 
@@ -324,27 +323,27 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 	if err != nil {
 		return nil, err
 	}
-	var since time.Duration
-	since, err = grpc.TimeOfDay("clock", p.GetClock())
+	m.Clock, err = grpc.TimeOfDay("clock", p.GetClock())
 	if err != nil {
 		return nil, err
 	}
-	m.Clock = datatypes.Time(since)
-	m.Doc, err = grpc.Document("doc", p.GetDoc())
+	var data json.RawMessage
+	data, err = grpc.Document("doc", p.GetDoc())
 	if err != nil {
 		return nil, err
 	}
+	m.Doc = datatypes.NewJSON(data)
 	m.Attrs = grpc.Map(p.GetAttrs())
-	var data model.ShapeOptions
+	var data2 model.ShapeOptions
 	if v := p.GetOptions(); v != nil {
 		var x *model.ShapeOptions
 		x, err = ShapeOptionsFromProto(v)
 		if err != nil {
 			return nil, grpc.PathError("options", err)
 		}
-		data = *x
+		data2 = *x
 	}
-	m.Options = datatypes.NewJSONType(data)
+	m.Options = datatypes.NewJSON(data2)
 	if v := p.GetAudit(); v != nil {
 		var x *model.ShapeAudit
 		x, err = ShapeAuditFromProto(v)
@@ -491,11 +490,13 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 		m.RawDoc = &x
 	}
 	if p.Extra != nil {
-		var x datatypes.JSON
-		x, err = grpc.Document("extra", p.Extra)
+		var x datatypes.JSON[json.RawMessage]
+		var data3 json.RawMessage
+		data3, err = grpc.Document("extra", p.Extra)
 		if err != nil {
 			return nil, err
 		}
+		x = datatypes.NewJSON(data3)
 		m.Extra = &x
 	}
 	if p.GetMeta() != nil {
@@ -524,16 +525,16 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 	if err != nil {
 		return nil, err
 	}
-	var data2 model.ShapeOptions
+	var data4 model.ShapeOptions
 	if v := p.GetExtras(); v != nil {
 		var x *model.ShapeOptions
 		x, err = ShapeOptionsFromProto(v)
 		if err != nil {
 			return nil, grpc.PathError("extras", err)
 		}
-		data2 = *x
+		data4 = *x
 	}
-	m.Extras = datatypes.NewJSONType(data2)
+	m.Extras = datatypes.NewJSON(data4)
 	if p.GetCells() != nil {
 		m.Cells = make(map[string]struct {
 			Count int32 `json:"count" pb:"1"`
@@ -643,7 +644,7 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 		}
 	}
 	if p.GetDue() != nil {
-		var x gst.Date
+		var x datatypes.Date
 		x, err = grpc.Date("due", p.GetDue())
 		if err != nil {
 			return nil, err
@@ -651,7 +652,7 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 		m.Due = &x
 	}
 	if p.GetDays() != nil {
-		m.Days = make([]gst.Date, len(p.GetDays()))
+		m.Days = make([]datatypes.Date, len(p.GetDays()))
 		for i, v := range p.GetDays() {
 			m.Days[i], err = grpc.Date(grpc.Element("days", i), v)
 			if err != nil {
@@ -659,12 +660,6 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 			}
 		}
 	}
-	var day time.Time
-	day, err = grpc.Time("opened", p.GetOpened())
-	if err != nil {
-		return nil, err
-	}
-	m.Opened = datatypes.Date(day)
 	return m, nil
 }
 

@@ -8,7 +8,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/datatypes"
-	gormdatatypes "gorm.io/datatypes"
 	gormschema "gorm.io/gorm/schema"
 )
 
@@ -60,12 +59,12 @@ func ClassifyColumn(c Column) ColumnClass {
 // for a calendar day.
 var dateDataType = gormschema.DataType(datatypes.Date{}.GormDataType())
 
-// timeOfDayType is datatypes.Time, the time of day a TIME column stores. It
-// declares the time data type an instant carries, and only its
+// timeOfDayType is datatypes.TimeOfDay, the time of day a TIME column
+// stores. It declares the time data type an instant carries, and only its
 // GormDBDataType, which needs a dialect to answer, tells the column it
 // creates apart from an instant's, so the type itself is what tells a time
 // of day apart.
-var timeOfDayType = reflect.TypeFor[gormdatatypes.Time]()
+var timeOfDayType = reflect.TypeFor[datatypes.TimeOfDay]()
 
 // IsTimeColumn reports whether a column stores a time by the data type gorm
 // reads for its field: an instant — time.Time, or the time sql.NullTime,
@@ -113,29 +112,16 @@ func UTCDay(t time.Time) time.Time {
 	return time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
 }
 
-// IsTimeOfDayColumn reports whether a column stores a time of day,
-// datatypes.Time, pointers dereferenced. A value sent for it names a time on
-// no particular day, in time.TimeOnly.
+// IsTimeOfDayColumn reports whether a column stores a time of day, a
+// datatypes.TimeOfDay, pointers dereferenced. A value sent for it names a
+// time on no particular day, in time.TimeOnly (see
+// datatypes.ParseTimeOfDay).
 func IsTimeOfDayColumn(c Column) bool {
 	typ := c.Type
 	for typ != nil && typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
 	return typ == timeOfDayType
-}
-
-// ParseTimeOfDay reads a time of day the one way the framework takes it, in
-// a filter and in a request body alike: time.TimeOnly, a fractional second
-// allowed and read as written, answered as the duration since midnight it
-// names, so "17:30:00.5" is 17h30m0.5s. Anything else is refused, "abc",
-// "17:30" and "25:00:00" among it, where datatypes.Time's own decoding reads
-// a string leniently and keeps no error.
-func ParseTimeOfDay(value string) (time.Duration, error) {
-	t, err := time.Parse(time.TimeOnly, value)
-	if err != nil {
-		return 0, errors.Newf("unsupported time of day format %q, expect %s", value, time.TimeOnly)
-	}
-	return time.Duration(t.Hour())*time.Hour + time.Duration(t.Minute())*time.Minute + time.Duration(t.Second())*time.Second + time.Duration(t.Nanosecond()), nil
 }
 
 // IsNumericColumn reports whether a column stores a number by the data type
@@ -213,25 +199,26 @@ func ParseBool(value string) (bool, error) {
 }
 
 // IsJSONColumn reports whether a column stores a JSON document: its Go type
-// declares a JSON data type, the way the gorm.io/datatypes types do, or its
-// type tag declares a JSON column. Either data type gorm resolved counts,
-// because a type naming its database type itself, as the datatypes family
-// does, keeps that column type whatever the tag declares.
+// declares a JSON data type, the way the JSON types of the datatypes package
+// do, or its type tag declares a JSON column. Either data type gorm resolved
+// counts, because a type naming its database type itself, as those types do,
+// keeps that column type whatever the tag declares.
 func IsJSONColumn(c Column) bool {
 	return isJSONDataType(c.gormDataType) || isJSONDataType(c.dataType)
 }
 
 // isJSONDataType reports whether a gorm data type names a JSON document. The
-// name is matched by its "json" prefix rather than by equality: the
-// datatypes family does not spell one name (JSONMap declares "jsonmap", the
-// others "json"), and a dialect-flavored type or tag may declare "jsonb".
+// name is matched by its "json" prefix rather than by equality: the JSON
+// types of the datatypes package do not spell one name (JSONMap declares
+// "jsonmap", the others "json"), and a dialect-flavored type or tag may
+// declare "jsonb".
 func isJSONDataType(name gormschema.DataType) bool {
 	return strings.HasPrefix(strings.ToLower(string(name)), "json")
 }
 
 // isJSONType reports whether a column type stores as a JSON document. The
 // answer comes from the type itself through gorm's GormDataTypeInterface,
-// which is how the gorm.io/datatypes types (JSON, JSONType, JSONSlice,
+// which is how the JSON types of the datatypes package (JSON, JSONSlice,
 // JSONMap) and custom JSON wrappers declare their column type. Pointers are
 // dereferenced, and the method is looked up on both receivers.
 //

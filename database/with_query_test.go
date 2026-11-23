@@ -12,7 +12,6 @@ import (
 	"github.com/hydroan/gst/internal/datatypes"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
-	gormdatatypes "gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -277,10 +276,10 @@ func TestDatabaseWithQuery(t *testing.T) {
 		t.Cleanup(func() { _ = database.DB().Exec("DELETE FROM test_scored_records").Error })
 		row := &TestScoredRecord{
 			Name:    "scored",
-			Scores:  gormdatatypes.NewJSONSlice([]int{1, 2}),
-			Weights: gormdatatypes.NewJSONSlice([]float64{0.5}),
-			Meta:    gormdatatypes.JSONMap{"k": "v"},
-			Extra:   gormdatatypes.NewJSONType(map[string]string{"k": "v"}),
+			Scores:  datatypes.NewJSONSlice([]int{1, 2}),
+			Weights: datatypes.NewJSONSlice([]float64{0.5}),
+			Meta:    datatypes.JSONMap{"k": "v"},
+			Extra:   datatypes.NewJSON(map[string]string{"k": "v"}),
 		}
 		require.NoError(t, database.Database[*TestScoredRecord](ctx).Create(row))
 
@@ -293,10 +292,10 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// on a string array does, instead of being dropped and leaving the
 		// name alone to match.
 		for _, query := range []*TestScoredRecord{
-			{Name: "scored", Scores: gormdatatypes.NewJSONSlice([]int{1, 2})},
-			{Name: "scored", Weights: gormdatatypes.NewJSONSlice([]float64{0.5})},
-			{Name: "scored", Meta: gormdatatypes.JSONMap{"k": "v"}},
-			{Name: "scored", Extra: gormdatatypes.NewJSONType(map[string]string{"k": "v"})},
+			{Name: "scored", Scores: datatypes.NewJSONSlice([]int{1, 2})},
+			{Name: "scored", Weights: datatypes.NewJSONSlice([]float64{0.5})},
+			{Name: "scored", Meta: datatypes.JSONMap{"k": "v"}},
+			{Name: "scored", Extra: datatypes.NewJSON(map[string]string{"k": "v"})},
 		} {
 			rows = make([]*TestScoredRecord, 0)
 			require.NoError(t, database.Database[*TestScoredRecord](ctx).WithQuery(query).List(&rows))

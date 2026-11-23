@@ -3,6 +3,7 @@ package modelschema_test
 import (
 	"database/sql"
 	"database/sql/driver"
+	"encoding/json"
 	"fmt"
 	"math"
 	"reflect"
@@ -58,8 +59,8 @@ func TestClassifyColumn(t *testing.T) {
 		Label  namedLabel
 		Digest []byte
 		Text   textValuer
-		Clock  gormdatatypes.Time
-		Doc    gormdatatypes.JSON
+		Clock  datatypes.TimeOfDay
+		Doc    datatypes.JSON[json.RawMessage]
 	}
 	columns, err := modelschema.Columns(reflect.TypeFor[classified]())
 	require.NoError(t, err)
@@ -97,19 +98,19 @@ type sampleStoredRecord struct {
 	Settled   sql.NullTime
 	Removed   gorm.DeletedAt
 	Day       datatypes.Date
-	Clock     gormdatatypes.Time
-	Closing   *gormdatatypes.Time
+	Clock     datatypes.TimeOfDay
+	Closing   *datatypes.TimeOfDay
 	Count     int
 	Tally     sql.NullInt64
 	Ratio     sql.NullFloat64
 	Active    bool
 	Flag      sql.NullBool
 	Note      string
-	Doc       gormdatatypes.JSON
-	DocText   string             `gorm:"type:json"`
-	DocBytes  []byte             `gorm:"type:jsonb"`
-	DocTagged gormdatatypes.JSON `gorm:"type:text"`
-	Tags      []string           `gorm:"serializer:json"`
+	Doc       datatypes.JSON[json.RawMessage]
+	DocText   string                          `gorm:"type:json"`
+	DocBytes  []byte                          `gorm:"type:jsonb"`
+	DocTagged datatypes.JSON[json.RawMessage] `gorm:"type:text"`
+	Tags      []string                        `gorm:"serializer:json"`
 }
 
 // columnsWhere lists, in name order, the database names of the
@@ -210,20 +211,20 @@ func TestParseTime(t *testing.T) {
 
 // TestIsDateColumn pins which columns store a calendar day: the column type
 // gorm resolved for them is date, declared by a Date, a pointer to one
-// included, and by what ValidateDateColumns refuses a model for alike, the
+// included, and by what ValidateColumnTypes refuses a model for alike, the
 // date of gorm.io/datatypes and a type tag in either case; DateColumnSet
 // names the same columns; an instant and a column declared as another time
 // type are no date.
 func TestIsDateColumn(t *testing.T) {
 	type dated struct {
-		Day     datatypes.Date     `json:"day"`
-		DayPtr  *datatypes.Date    `json:"day_ptr"`
-		Library gormdatatypes.Date `json:"library"`
-		Due     time.Time          `json:"due" gorm:"type:date"`
-		DuePtr  *time.Time         `json:"due_ptr" gorm:"type:DATE"`
-		At      time.Time          `json:"at"`
-		Stamped time.Time          `json:"stamped" gorm:"type:datetime(3)"`
-		Clock   gormdatatypes.Time `json:"clock"`
+		Day     datatypes.Date      `json:"day"`
+		DayPtr  *datatypes.Date     `json:"day_ptr"`
+		Library gormdatatypes.Date  `json:"library"`
+		Due     time.Time           `json:"due" gorm:"type:date"`
+		DuePtr  *time.Time          `json:"due_ptr" gorm:"type:DATE"`
+		At      time.Time           `json:"at"`
+		Stamped time.Time           `json:"stamped" gorm:"type:datetime(3)"`
+		Clock   datatypes.TimeOfDay `json:"clock"`
 	}
 	columns, err := modelschema.Columns(reflect.TypeFor[dated]())
 	require.NoError(t, err)
@@ -243,27 +244,6 @@ func TestUTCDay(t *testing.T) {
 	require.Equal(t, time.Date(2026, time.January, 2, 0, 0, 0, 0, time.UTC),
 		modelschema.UTCDay(time.Date(2026, time.January, 2, 23, 59, 59, 999, time.UTC)))
 	require.True(t, modelschema.UTCDay(time.Time{}).IsZero(), "the zero time stays zero")
-}
-
-// TestParseTimeOfDay pins the one reading of a time of day the framework
-// takes, in a filter and in a request body alike: time.TimeOnly, a
-// fractional second read as written, answered as the duration since
-// midnight, and anything else refused.
-func TestParseTimeOfDay(t *testing.T) {
-	for value, want := range map[string]time.Duration{
-		"17:30:00":           17*time.Hour + 30*time.Minute,
-		"17:30:00.5":         17*time.Hour + 30*time.Minute + 500*time.Millisecond,
-		"23:59:59.999":       24*time.Hour - time.Millisecond,
-		"00:00:00.000000001": time.Nanosecond,
-	} {
-		got, err := modelschema.ParseTimeOfDay(value)
-		require.NoError(t, err, value)
-		require.Equal(t, want, got, value)
-	}
-	for _, value := range []string{"abc", "17:30", "1730", "25:00:00", "17:60:00", ""} {
-		_, err := modelschema.ParseTimeOfDay(value)
-		require.EqualError(t, err, fmt.Sprintf("unsupported time of day format %q, expect 15:04:05", value), value)
-	}
 }
 
 // TestValidateNumericValue pins that a value is checked against the kind of
@@ -363,15 +343,15 @@ func (sampleStringsDocument) GormDataType() string { return "json" }
 // pointers dereferenced, and nothing else.
 func TestIsJSONStringsType(t *testing.T) {
 	for _, typ := range []reflect.Type{
-		reflect.TypeFor[gormdatatypes.JSONSlice[string]](),
-		reflect.TypeFor[*gormdatatypes.JSONSlice[string]](),
+		reflect.TypeFor[datatypes.JSONSlice[string]](),
+		reflect.TypeFor[*datatypes.JSONSlice[string]](),
 		reflect.TypeFor[sampleStringsDocument](),
 	} {
 		require.True(t, modelschema.IsJSONStringsType(typ), typ.String())
 	}
 	for _, typ := range []reflect.Type{
-		reflect.TypeFor[gormdatatypes.JSONSlice[int]](), reflect.TypeFor[gormdatatypes.JSONMap](),
-		reflect.TypeFor[gormdatatypes.JSON](), reflect.TypeFor[gormdatatypes.JSONType[[]string]](),
+		reflect.TypeFor[datatypes.JSONSlice[int]](), reflect.TypeFor[datatypes.JSONMap](),
+		reflect.TypeFor[datatypes.JSON[json.RawMessage]](), reflect.TypeFor[datatypes.JSON[[]string]](),
 		reflect.TypeFor[[]string](), reflect.TypeFor[string](),
 	} {
 		require.False(t, modelschema.IsJSONStringsType(typ), typ.String())

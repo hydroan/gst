@@ -4,9 +4,9 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/hydroan/gst/internal/datatypes"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
-	gormdatatypes "gorm.io/datatypes"
 )
 
 // nameless stands in for a virtual model: it declares no table, the way a
@@ -250,13 +250,13 @@ func TestJSONStringsColumnSpeaksStrings(t *testing.T) {
 	})
 
 	t.Run("BuildsDocuments", func(t *testing.T) {
-		document := gormdatatypes.JSONSlice[string]{"vip", "new"}
+		document := datatypes.JSONSlice[string]{"vip", "new"}
 		value := []string{"vip", "new"}
 		for _, f := range []types.Filter{tags.Eq(value), tags.Ne(value), tags.Gt(value), tags.Gte(value), tags.Lt(value), tags.Lte(value)} {
 			require.Equal(t, document, f.Value(), f.Op())
 		}
-		require.Equal(t, []gormdatatypes.JSONSlice[string]{document}, tags.In(value).Value())
-		require.Equal(t, []gormdatatypes.JSONSlice[string]{document}, tags.NotIn(value).Value())
+		require.Equal(t, []datatypes.JSONSlice[string]{document}, tags.In(value).Value())
+		require.Equal(t, []datatypes.JSONSlice[string]{document}, tags.NotIn(value).Value())
 		require.Equal(t, document, tags.Set(value).Value())
 	})
 

@@ -14,10 +14,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/genproto/googleapis/type/date"
+	"google.golang.org/genproto/googleapis/type/timeofday"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -211,34 +211,47 @@ func TestDatePBWritesTheDayItsTimeReads(t *testing.T) {
 	require.True(t, time.Time(back).IsZero())
 }
 
-// TestTimeOfDayRefusesADurationOutsideADay pins TimeOfDay, what a generated
-// FromProto reads a time of day through: a duration within a day comes back
-// as it is, to the nanosecond, and no duration as none, midnight; a duration
-// below none or of a whole day or more, which names no time of day, and one
-// no duration can be made of are refused with InvalidArgument naming the
-// field, the way the HTTP listener refuses a time of day it cannot read.
-func TestTimeOfDayRefusesADurationOutsideADay(t *testing.T) {
-	for _, since := range []time.Duration{17*time.Hour + 30*time.Minute + 500*time.Millisecond, 24*time.Hour - time.Nanosecond} {
-		got, err := gstgrpc.TimeOfDay("clock", durationpb.New(since))
-		require.NoError(t, err)
-		require.Equal(t, since, got)
-	}
+// TestTimeOfDayReadsAndWritesATimeOfTheClock pins TimeOfDay and
+// TimeOfDayPB, what a generated FromProto and ToProto carry a time of day
+// through: a time of day goes out as its hours, minutes, seconds and
+// nanoseconds and comes back as it is, midnight as the message of four
+// zeros, and no message as midnight; an hour, a minute, a second or a
+// fraction no clock shows, the 24 and the 60 the message allows among them,
+// is refused with InvalidArgument naming the field, the way the HTTP
+// listener refuses a time of day it cannot read.
+func TestTimeOfDayReadsAndWritesATimeOfTheClock(t *testing.T) {
+	half := datatypes.NewTimeOfDay(17, 30, 0, 500_000_000)
+	msg := gstgrpc.TimeOfDayPB(half)
+	require.True(t, proto.Equal(&timeofday.TimeOfDay{Hours: 17, Minutes: 30, Nanos: 500_000_000}, msg), msg)
+	back, err := gstgrpc.TimeOfDay("clock", msg)
+	require.NoError(t, err)
+	require.Equal(t, half, back)
+
+	last := datatypes.NewTimeOfDay(23, 59, 59, 999_999_999)
+	back, err = gstgrpc.TimeOfDay("clock", gstgrpc.TimeOfDayPB(last))
+	require.NoError(t, err)
+	require.Equal(t, last, back)
+
+	zero := gstgrpc.TimeOfDayPB(0)
+	require.True(t, proto.Equal(&timeofday.TimeOfDay{}, zero), zero)
 	midnight, err := gstgrpc.TimeOfDay("clock", nil)
 	require.NoError(t, err)
 	require.Zero(t, midnight)
 
 	for _, tt := range []struct {
 		name string
-		d    *durationpb.Duration
+		t    *timeofday.TimeOfDay
 		want string
 	}{
-		{name: "a whole day", d: durationpb.New(24 * time.Hour), want: "24h0m0s is not a time of day"},
-		{name: "past a day", d: durationpb.New(25 * time.Hour), want: "25h0m0s is not a time of day"},
-		{name: "below none", d: durationpb.New(-time.Second), want: "-1s is not a time of day"},
-		{name: "nanos out of range", d: &durationpb.Duration{Nanos: 1_000_000_000}, want: "duration (nanos:1000000000) has out-of-range nanos"},
+		{name: "the end of a day", t: &timeofday.TimeOfDay{Hours: 24}, want: "24:00:00.000000000 is not a time of day"},
+		{name: "past a day", t: &timeofday.TimeOfDay{Hours: 25}, want: "25:00:00.000000000 is not a time of day"},
+		{name: "a minute no hour has", t: &timeofday.TimeOfDay{Hours: 17, Minutes: 60}, want: "17:60:00.000000000 is not a time of day"},
+		{name: "a leap second", t: &timeofday.TimeOfDay{Hours: 23, Minutes: 59, Seconds: 60}, want: "23:59:60.000000000 is not a time of day"},
+		{name: "below none", t: &timeofday.TimeOfDay{Seconds: -1}, want: "00:00:-1.000000000 is not a time of day"},
+		{name: "nanos out of range", t: &timeofday.TimeOfDay{Nanos: 1_000_000_000}, want: "00:00:00.1000000000 is not a time of day"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := gstgrpc.TimeOfDay("clock", tt.d)
+			_, err := gstgrpc.TimeOfDay("clock", tt.t)
 			require.Equal(t, codes.InvalidArgument, status.Code(err))
 			require.Equal(t, "invalid value for field 'clock'", status.Convert(err).Message())
 			requireFieldViolation(t, err, "clock", tt.want)

@@ -2,13 +2,13 @@ package modelschema
 
 import (
 	"database/sql"
+	"encoding/json"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/hydroan/gst/internal/datatypes"
 	"github.com/stretchr/testify/require"
-	gormdatatypes "gorm.io/datatypes"
 )
 
 // TestGoNameIndexResolvesOnceAndCaches pins both properties of the cached
@@ -69,16 +69,16 @@ func TestIndexesTellEmbeddedFieldsApart(t *testing.T) {
 // reading of the field tells, and Clock is a time of day gorm gives the time
 // data type of an instant.
 type sampleDocumentRecord struct {
-	ID        string             `json:"id" gorm:"primaryKey"`
-	Payload   gormdatatypes.JSON `json:"payload"`
-	Note      string             `json:"note"`
-	Count     int                `json:"count"`
-	CreatedAt time.Time          `json:"created_at"`
-	Day       datatypes.Date     `json:"day"`
-	Settled   sql.NullTime       `json:"settled"`
-	Tally     sql.NullInt64      `json:"tally"`
-	Doc       string             `json:"doc" gorm:"type:json"`
-	Clock     gormdatatypes.Time `json:"clock"`
+	ID        string                          `json:"id" gorm:"primaryKey"`
+	Payload   datatypes.JSON[json.RawMessage] `json:"payload"`
+	Note      string                          `json:"note"`
+	Count     int                             `json:"count"`
+	CreatedAt time.Time                       `json:"created_at"`
+	Day       datatypes.Date                  `json:"day"`
+	Settled   sql.NullTime                    `json:"settled"`
+	Tally     sql.NullInt64                   `json:"tally"`
+	Doc       string                          `json:"doc" gorm:"type:json"`
+	Clock     datatypes.TimeOfDay             `json:"clock"`
 }
 
 func (sampleDocumentRecord) TableName() string { return "sample_document_records" }

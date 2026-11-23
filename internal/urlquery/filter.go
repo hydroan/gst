@@ -13,7 +13,6 @@ import (
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
-	gormdatatypes "gorm.io/datatypes"
 )
 
 // Filters extracts field-level operator filters from URL query keys of the
@@ -254,16 +253,17 @@ func normalizeFilterValue(col modelschema.Column, op types.FilterOp, value strin
 // and binds its midnight in the same layout: 2026-01-02 binds as
 // 2026-01-02 00:00:00.
 //
-// A time of day column takes its value the way modelschema.ParseTimeOfDay
-// reads one instead, and binds it in the spelling datatypes.Time stores, the
-// text SQLite compares: 17:30:00.5 binds as 17:30:00.500000000.
+// A time of day column takes its value the way datatypes.ParseTimeOfDay
+// reads one instead, and binds it in the spelling a datatypes.TimeOfDay is
+// stored in, the text SQLite compares: 17:30:00.5 binds as
+// 17:30:00.500000000.
 func timeBound(col modelschema.Column, value string) (string, error) {
 	if modelschema.IsTimeOfDayColumn(col) {
-		since, err := modelschema.ParseTimeOfDay(value)
+		since, err := datatypes.ParseTimeOfDay(value)
 		if err != nil {
 			return "", err
 		}
-		return gormdatatypes.Time(since).String(), nil
+		return since.String(), nil
 	}
 	if modelschema.IsDateColumn(col) {
 		day, err := datatypes.ParseDate(value)

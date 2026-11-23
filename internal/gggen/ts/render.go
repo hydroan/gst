@@ -139,7 +139,7 @@ func (g *generator) writeInterface(b *strings.Builder, name string, fields []jso
 //
 //	Format: date-time
 //
-// and the field Due gst.Date, without a comment, the doc "Format: date". A
+// and the field Due datatypes.Date, without a comment, the doc "Format: date". A
 // pointer to such a type gets the line of the type.
 func (g *generator) propertyDoc(f jsonshape.Field) string {
 	doc := g.project.FieldDoc(f.Var)
@@ -285,7 +285,7 @@ func (g *generator) ref(obj *types.TypeName, ctx *fileContext) string {
 // builtin renders a type of the builtin table: string for time.Time,
 // { [key: string]: unknown } for datatypes.JSONMap, unknown for
 // json.RawMessage, and what the type argument renders as for
-// datatypes.JSONType, as Options for datatypes.JSONType[*Options].
+// datatypes.JSON, as Options for datatypes.JSON[*Options].
 func (g *generator) builtin(kind jsonshape.Builtin, n *types.Named, ctx *fileContext, s jsonshape.Site) string {
 	switch kind {
 	case jsonshape.BuiltinString, jsonshape.BuiltinNullableString:

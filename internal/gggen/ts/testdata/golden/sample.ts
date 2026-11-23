@@ -42,12 +42,11 @@ export interface Sample {
   reference: Reference;
   extra?: unknown;
   raw?: unknown;
-  document?: unknown;
+  document: unknown;
   meta?: { [key: string]: unknown } | null;
   options: Options | null;
   items?: Item[] | null;
-  /** Format: date-time */
-  day: string;
+  opens: string;
   /** Format: date */
   due: string;
   /**

@@ -12,7 +12,6 @@ import (
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
-	gormdatatypes "gorm.io/datatypes"
 )
 
 type filterTestModel struct {
@@ -42,7 +41,7 @@ type filterTestModel struct {
 	Virtual string `json:"virtual" gorm:"-" query:"virtual"`
 	Note    string `json:"note"`
 	// Meta is a JSON document, matched by its text and never compared.
-	Meta gormdatatypes.JSONMap `json:"meta" query:"meta"`
+	Meta datatypes.JSONMap `json:"meta" query:"meta"`
 
 	modelregistry.Query
 	modelregistry.Cursor
@@ -51,15 +50,15 @@ type filterTestModel struct {
 
 // gormTypedTestModel holds columns whose Go shape does not tell what gorm
 // stores: Valuer wrappers gorm reads through the value they hold, a string
-// its type tag declares a JSON column, and datatypes.Time, a time of day
+// its type tag declares a JSON column, and datatypes.TimeOfDay, a time of day
 // gorm gives the time data type of an instant.
 type gormTypedTestModel struct {
-	Settled sql.NullTime       `json:"settled" query:"settled"`
-	Tally   sql.NullInt64      `json:"tally" query:"tally"`
-	Ratio   sql.NullFloat64    `json:"ratio" query:"ratio"`
-	Active  sql.NullBool       `json:"active" query:"active"`
-	Payload string             `json:"payload" gorm:"type:json" query:"payload"`
-	Clock   gormdatatypes.Time `json:"clock" query:"clock"`
+	Settled sql.NullTime        `json:"settled" query:"settled"`
+	Tally   sql.NullInt64       `json:"tally" query:"tally"`
+	Ratio   sql.NullFloat64     `json:"ratio" query:"ratio"`
+	Active  sql.NullBool        `json:"active" query:"active"`
+	Payload string              `json:"payload" gorm:"type:json" query:"payload"`
+	Clock   datatypes.TimeOfDay `json:"clock" query:"clock"`
 
 	modelregistry.Query
 	modelregistry.Base
@@ -538,7 +537,7 @@ func TestFilters(t *testing.T) {
 		require.Equal(t, []types.Filter{
 			types.NewFilter("", "clock", types.FilterOpGte, "09:00:00"),
 			types.NewFilter("", "clock", types.FilterOpLt, "17:30:00.500000000"),
-		}, conds, "the bound is the spelling datatypes.Time stores")
+		}, conds, "the bound is the spelling datatypes.TimeOfDay stores")
 
 		for key, value := range map[string]string{
 			"clock[gt]":   "2026-01-01T09:00:00Z",
@@ -1020,10 +1019,10 @@ func (cursorUniqueTestModel) Indexes() []modelschema.Index {
 // a bool held in sql.NullBool and a time of day. Each is NOT NULL under a
 // unique index of its own, so a cursor may page by it.
 type cursorTypedTestModel struct {
-	Settled sql.NullTime       `json:"settled" gorm:"not null" query:"settled"`
-	Tally   sql.NullInt64      `json:"tally" gorm:"not null" query:"tally"`
-	Active  sql.NullBool       `json:"active" gorm:"not null" query:"active"`
-	Clock   gormdatatypes.Time `json:"clock" query:"clock"`
+	Settled sql.NullTime        `json:"settled" gorm:"not null" query:"settled"`
+	Tally   sql.NullInt64       `json:"tally" gorm:"not null" query:"tally"`
+	Active  sql.NullBool        `json:"active" gorm:"not null" query:"active"`
+	Clock   datatypes.TimeOfDay `json:"clock" query:"clock"`
 
 	modelregistry.Cursor
 	modelregistry.Base
@@ -1140,7 +1139,7 @@ func TestCursor(t *testing.T) {
 		got, err = cursor("clock", "17:30:00.5")
 		require.NoError(t, err)
 		require.Equal(t, types.CursorForward(types.Asc("clock"), "17:30:00.500000000"), got,
-			"a time of day travels in the spelling datatypes.Time stores")
+			"a time of day travels in the spelling datatypes.TimeOfDay stores")
 
 		for field, value := range map[string]string{"settled": "1767225600", "tally": "abc", "clock": "123000"} {
 			_, err := cursor(field, value)

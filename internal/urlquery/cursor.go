@@ -134,7 +134,8 @@ func Cursor(q url.Values, m types.Model) (types.Cursor, error) {
 // filter bound (see timeBound): the client spells the boundary in RFC 3339,
 // and the database compares the one wall clock the framework stores on every
 // dialect, a date column by the UTC day the boundary falls on; a time of day
-// boundary is spelled in time.TimeOnly and binds as datatypes.Time stores it.
+// boundary is spelled in time.TimeOnly and binds as a datatypes.TimeOfDay
+// is stored.
 //
 // Only types the database coerces lossily are gated: numeric, bool, time and
 // time of day columns, read from the data types gorm resolved for the column,

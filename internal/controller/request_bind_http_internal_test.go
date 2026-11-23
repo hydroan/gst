@@ -16,13 +16,13 @@ import (
 	ginjson "github.com/gin-gonic/gin/codec/json"
 	"github.com/go-playground/validator/v10"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/datatypes"
 	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/testutil/swap"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
-	gormdatatypes "gorm.io/datatypes"
 )
 
 // normalizeProbeModel is the model fixture of the request-normalization tests.
@@ -595,17 +595,17 @@ func BenchmarkBindJSONRequest(b *testing.B) {
 // reports for it.
 func TestDecodeJSONRequestReadsEveryTimeOfDayStrictly(t *testing.T) {
 	type promoted struct {
-		Closes gormdatatypes.Time `json:"closes"`
+		Closes datatypes.TimeOfDay `json:"closes"`
 	}
 	type window struct {
-		Opens gormdatatypes.Time `json:"opens"`
+		Opens datatypes.TimeOfDay `json:"opens"`
 	}
 	type holder struct {
 		promoted
-		Clock  *gormdatatypes.Time           `json:"clock"`
-		Window window                        `json:"window"`
-		Slots  []gormdatatypes.Time          `json:"slots"`
-		ByName map[string]gormdatatypes.Time `json:"by_name"`
+		Clock  *datatypes.TimeOfDay           `json:"clock"`
+		Window window                         `json:"window"`
+		Slots  []datatypes.TimeOfDay          `json:"slots"`
+		ByName map[string]datatypes.TimeOfDay `json:"by_name"`
 	}
 	gin.SetMode(gin.TestMode)
 	decode := decodeBody[holder]

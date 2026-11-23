@@ -21,7 +21,6 @@ import (
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/datatypes"
 	"github.com/hydroan/gst/internal/grpcserver"
-	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/hydroan/gst/internal/types"
@@ -38,7 +37,6 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
-	gormdatatypes "gorm.io/datatypes"
 )
 
 // The tests of the call functions run them the way a project's generated
@@ -713,11 +711,11 @@ func fromProto[T any](raw any) (T, error) {
 
 // messageDecoding is the decoding option fromProto reads a message's JSON
 // shape with beside the options json.DefaultOptionsV1 names: a time of day as
-// the duration it names (see timeOfDayAsDuration), and a day, a time or a
+// the duration it names (see timeOfDayAsMessage), and a day, a time or a
 // number the field cannot hold refused naming the field (see dayAsDate and
 // decodeAtPointer).
 var messageDecoding = jsonv2.WithUnmarshalers(jsonv2.JoinUnmarshalers(
-	timeOfDayAsDuration,
+	timeOfDayAsMessage,
 	dayAsDate,
 	jsonv2.UnmarshalFromFunc(decodeAtPointer[time.Time]),
 	jsonv2.UnmarshalFromFunc(decodeAtPointer[json.Number]),
@@ -747,29 +745,23 @@ func decodeAtPointer[T any](dec *jsontext.Decoder, v *T) error {
 	return nil
 }
 
-// timeOfDayAsDuration reads a time of day for fromProto. A message carries one
-// as a duration since midnight, which a generated FromProto reads through
-// grpc.TimeOfDay, refusing a duration outside a day, while a record of the
-// contract table spells it as HTTP does. The spellings time.TimeOnly takes name
-// exactly the durations within a day, 17:30:00.5 the 63000.5 seconds a gRPC
-// client sends for it, so a spelling is read through
-// modelschema.ParseTimeOfDay, and one naming a duration past the end of a day,
-// 25:00:00, is refused naming the field, the way grpc.TimeOfDay refuses 25
-// hours. A null is a duration the message leaves unset, read as none.
-var timeOfDayAsDuration = jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, t *gormdatatypes.Time) error {
+// timeOfDayAsMessage reads a time of day for fromProto. A message carries
+// one as a google.type.TimeOfDay, which a generated FromProto reads through
+// grpc.TimeOfDay, refusing an hour, a minute or a second no clock shows by
+// naming the field, while a record of the contract table spells it as HTTP
+// does, 17:30:00.5. A spelling is read the way a request body reads it (see
+// ownTextAtPointer in request_bind_http.go, which this external test package
+// cannot reach), and one naming no time of day, 25:00:00, is refused naming
+// the field, the way grpc.TimeOfDay refuses the hour 25. A null is a time
+// of day the message leaves unset, read as none.
+var timeOfDayAsMessage = jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, t *datatypes.TimeOfDay) error {
 	value, err := dec.ReadValue()
-	if err != nil || value.Kind() == jsontext.KindNull {
-		return err
-	}
-	text, err := jsontext.AppendUnquote(nil, value)
 	if err != nil {
 		return err
 	}
-	since, err := modelschema.ParseTimeOfDay(string(text))
-	if err != nil {
-		return &jsonv2.SemanticError{JSONPointer: dec.StackPointer(), JSONKind: value.Kind(), GoType: reflect.TypeFor[gormdatatypes.Time](), Err: err}
+	if err = t.UnmarshalJSON(value); err != nil {
+		return &jsonv2.SemanticError{JSONPointer: dec.StackPointer(), JSONKind: value.Kind(), JSONValue: value.Clone(), GoType: reflect.TypeFor[datatypes.TimeOfDay](), Err: err}
 	}
-	*t = gormdatatypes.Time(since)
 	return nil
 })
 
@@ -778,8 +770,8 @@ var timeOfDayAsDuration = jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, t
 // refusing a year, month and day the calendar does not hold by naming the
 // field, while a record of the contract table spells it as HTTP does,
 // 2026-01-02. A spelling is read the way a request body reads it (see
-// dayAtPointer in request_bind_http.go, which this external test package
-// cannot reach), and one naming no day, 2026-02-30, is refused naming the
+// ownTextAtPointer in request_bind_http.go, which this external test
+// package cannot reach), and one naming no day, 2026-02-30, is refused naming the
 // field, the way grpc.Date refuses the 30th of February. A null is a date
 // the message leaves unset, read as none.
 var dayAsDate = jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, day *datatypes.Date) error {

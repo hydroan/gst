@@ -23,36 +23,36 @@ import (
 // The well-known types the mapping refers to, and the files declaring them.
 const (
 	WellKnownTimestamp = ".google.protobuf.Timestamp"
-	WellKnownDuration  = ".google.protobuf.Duration"
 	WellKnownValue     = ".google.protobuf.Value"
 	WellKnownStruct    = ".google.protobuf.Struct"
 	wellKnownFieldMask = ".google.protobuf.FieldMask"
 
 	timestampProto = "google/protobuf/timestamp.proto"
-	durationProto  = "google/protobuf/duration.proto"
 	structProto    = "google/protobuf/struct.proto"
 	fieldMaskProto = "google/protobuf/field_mask.proto"
 )
 
 // GoogleTypeDate is the message a calendar day travels as, a year, a month
-// and a day with no time of day and no zone, and dateProto the file
-// declaring it: one of the common types of the Google APIs, declared beside
-// the well-known ones of protobuf itself.
+// and a day with no time of day and no zone, GoogleTypeTimeOfDay the one a
+// time of day travels as, its hours, minutes, seconds and nanoseconds with
+// no day and no zone, and dateProto and timeOfDayProto the files declaring
+// them: common types of the Google APIs, declared beside the well-known
+// ones of protobuf itself.
 const (
-	GoogleTypeDate = ".google.type.Date"
-	dateProto      = "google/type/date.proto"
+	GoogleTypeDate      = ".google.type.Date"
+	GoogleTypeTimeOfDay = ".google.type.TimeOfDay"
+	dateProto           = "google/type/date.proto"
+	timeOfDayProto      = "google/type/timeofday.proto"
 )
 
 // timeTypes maps the Go types with a time type of their own, keyed by
 // package path and name: an instant to Timestamp, the framework's calendar
-// day to a google.type.Date, gorm's date to a Timestamp at the start of the
-// day, and gorm's time of day, a duration since midnight, to Duration.
+// day to a google.type.Date and its time of day to a google.type.TimeOfDay.
 var timeTypes = map[string]struct{ typeName, proto string }{
 	"time.Time": {WellKnownTimestamp, timestampProto},
-	ggconst.ImportPathGst + "/internal/datatypes.Date": {GoogleTypeDate, dateProto},
-	"gorm.io/datatypes.Date":                           {WellKnownTimestamp, timestampProto},
-	"gorm.io/datatypes.Time":                           {WellKnownDuration, durationProto},
-	"gorm.io/gorm.DeletedAt":                           {WellKnownTimestamp, timestampProto},
+	ggconst.ImportPathGst + "/internal/datatypes.Date":      {GoogleTypeDate, dateProto},
+	ggconst.ImportPathGst + "/internal/datatypes.TimeOfDay": {GoogleTypeTimeOfDay, timeOfDayProto},
+	"gorm.io/gorm.DeletedAt":                                {WellKnownTimestamp, timestampProto},
 }
 
 // modelRegistryPath and tenantPath are the packages declaring the
@@ -606,14 +606,15 @@ func malformedTag(tag string) (string, bool) {
 // fieldTypeOf maps the Go type t of a field to its protobuf type: bool to
 // bool, string to string, int and int64 to int64, the smaller integers to
 // int32, unsigned ones to uint64 and uint32, float32 to float and float64 to
-// double; time.Time, the Date of gorm.io/datatypes and gorm.DeletedAt to
-// google.protobuf.Timestamp, the framework's Date to google.type.Date and
-// datatypes.Time to google.protobuf.Duration (see timeTypes); a project enum
-// to its underlying string or integer type;
+// double; time.Time and gorm.DeletedAt to google.protobuf.Timestamp, a
+// datatypes.Date to google.type.Date and a datatypes.TimeOfDay to
+// google.type.TimeOfDay (see timeTypes); a project enum to its underlying
+// string or integer type;
 // a type with a text method and no JSON one (see
 // jsonshape.Project.TextMethod), a netip.Addr or an enum with the method,
 // to string, the text it writes (see FieldType.Text); a JSON document
-// (json.RawMessage, datatypes.JSON) to bytes, a dynamic value (any) to
+// (json.RawMessage, alone or held by a datatypes.JSON) to bytes, a dynamic
+// value (any) to
 // google.protobuf.Value and a JSON object (map[string]any,
 // datatypes.JSONMap) to google.protobuf.Struct; []byte to bytes, a slice or
 // array to repeated, a map to map; a pointer to the type it points to,

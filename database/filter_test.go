@@ -14,7 +14,6 @@ import (
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/stretchr/testify/require"
-	gormdatatypes "gorm.io/datatypes"
 )
 
 // Tests for the predicate engine in filter.go: the operator filters, their
@@ -468,7 +467,7 @@ func TestDatabaseFilters(t *testing.T) {
 		List(&users))
 
 	// Test the service-only jsoncontains operator on a JSON array column.
-	addrUser := &TestUser{Name: "user6", Email: "user6@example.com", Age: 23, Addr: gormdatatypes.NewJSONSlice([]string{"alpha", "beta"}), ID: "u6"}
+	addrUser := &TestUser{Name: "user6", Email: "user6@example.com", Age: 23, Addr: datatypes.NewJSONSlice([]string{"alpha", "beta"}), ID: "u6"}
 	require.NoError(t, database.Database[*TestUser](context.Background()).Create(addrUser))
 
 	users = make([]*TestUser, 0)
@@ -637,8 +636,8 @@ func TestDatabaseScalarFiltersOnBytesAndValuers(t *testing.T) {
 	ctx := context.Background()
 	t.Cleanup(func() { _ = database.DB().Exec("DELETE FROM test_scored_records").Error })
 	require.NoError(t, database.Database[*TestScoredRecord](ctx).Create(
-		&TestScoredRecord{Name: "first", Digest: []byte{0x00, 0xff, 0x10}, Token: sampleToken{1}, Scores: gormdatatypes.NewJSONSlice([]int{1, 2})},
-		&TestScoredRecord{Name: "second", Digest: []byte{0x01}, Token: sampleToken{2}, Scores: gormdatatypes.NewJSONSlice([]int{3})},
+		&TestScoredRecord{Name: "first", Digest: []byte{0x00, 0xff, 0x10}, Token: sampleToken{1}, Scores: datatypes.NewJSONSlice([]int{1, 2})},
+		&TestScoredRecord{Name: "second", Digest: []byte{0x01}, Token: sampleToken{2}, Scores: datatypes.NewJSONSlice([]int{3})},
 	))
 	names := func(filter types.Filter) []string {
 		rows := make([]*TestScoredRecord, 0)
@@ -659,7 +658,7 @@ func TestDatabaseScalarFiltersOnBytesAndValuers(t *testing.T) {
 	require.Equal(t, []string{"second"}, names(TestScoredRecordCols.Token.Ne(sampleToken{1})))
 	require.Equal(t, []string{"second"}, names(TestScoredRecordCols.Token.Gt(sampleToken{1})))
 	require.Equal(t, []string{"first", "second"}, names(TestScoredRecordCols.Token.In(sampleToken{1}, sampleToken{2})))
-	require.Empty(t, names(TestScoredRecordCols.Scores.Eq(gormdatatypes.NewJSONSlice([]int{1, 2}))), "a JSON array column keeps failing closed on a comparison")
+	require.Empty(t, names(TestScoredRecordCols.Scores.Eq(datatypes.NewJSONSlice([]int{1, 2}))), "a JSON array column keeps failing closed on a comparison")
 }
 
 // TestDatabasePatternFiltersOnNumericColumns pins that the like family and
@@ -891,7 +890,7 @@ func TestDatabaseFiltersOnDateColumns(t *testing.T) {
 // by the type gorm stores, not by its Go shape, alike on every dialect: the
 // time sql.NullTime holds compares as a time, the integer sql.NullInt64
 // holds and a string its type tag declares a JSON column match a pattern by
-// their text form, and a time of day compares in the spelling datatypes.Time
+// their text form, and a time of day compares in the spelling datatypes.TimeOfDay
 // stores, the bound the URL parser hands over.
 func TestDatabaseFiltersFollowTheStoredType(t *testing.T) {
 	ctx := context.Background()
@@ -900,11 +899,11 @@ func TestDatabaseFiltersFollowTheStoredType(t *testing.T) {
 	require.NoError(t, database.Database[*TestTypedRecord](ctx).Create(
 		&TestTypedRecord{
 			Label: "first", Settled: sql.NullTime{Time: settled, Valid: true}, Tally: sql.NullInt64{Int64: 15, Valid: true},
-			Payload: `{"code":"alpha"}`, Clock: gormdatatypes.NewTime(9, 0, 0, 0),
+			Payload: `{"code":"alpha"}`, Clock: datatypes.NewTimeOfDay(9, 0, 0, 0),
 		},
 		&TestTypedRecord{
 			Label: "second", Settled: sql.NullTime{Time: settled.Add(time.Hour), Valid: true}, Tally: sql.NullInt64{Int64: 27, Valid: true},
-			Payload: `{"code":"beta"}`, Clock: gormdatatypes.NewTime(17, 30, 0, 0),
+			Payload: `{"code":"beta"}`, Clock: datatypes.NewTimeOfDay(17, 30, 0, 0),
 		},
 	))
 	labels := func(t *testing.T, f types.Filter) []string {
