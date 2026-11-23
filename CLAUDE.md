@@ -74,7 +74,7 @@ gst 是强约定框架（Apple 风格），不是自由框架（Windows 风格�
 
 - 产生：模型里每个 `time.Time`、`*time.Time` 字段由写路径统一转成 UTC 并截断到毫秒再落库，同时写回内存模型，所以项目直接用 `time.Now()`，写入时返回的值与后续回读值完全一致；框架管理的时间戳（Create/Upsert 强制写入、Update 刷新 updated_at、软删 deleted_at，后两者经各方言 `gorm.Config` 的 NowFunc）出自 `dbruntime.NowUTC`，同一口径。
 - 存储：各方言连接统一 UTC 口径（MySQL DSN `loc=UTC` 等），同一瞬间在所有方言落同一 UTC 墙钟；理由见 mysql 包 buildDSN 的注释。
-- 入口：URL 与请求体里的时刻只接受 RFC3339（自带时区，任意偏移都无损），无时区字符串和 Unix 时间戳直接报错，不猜测；日期（`gst.Date`）不是时刻，只写成 `2006-01-02`，带时刻的写法直接报错。
+- 入口：URL 与请求体里的时刻只接受 RFC3339（自带时区，任意偏移都无损），无时区字符串和 Unix 时间戳直接报错，不猜测；日期（`datatypes.Date`）不是时刻，只写成 `2006-01-02`，带时刻的写法直接报错。
 - 日志：业务打点 ts 统一 UTC RFC3339Nano。
 - "日历"语义（不是瞬间）同样以 UTC 为准：cron 表达式按 UTC 解释、`@every` 按 Unix 纪元对齐，所有副本算出同一组调度时刻，表达式自带 `CRON_TZ=` 前缀时按该时区；聚合时间分桶按存储的 UTC 墙钟切，按运营时区切日需在查询侧显式换算。
 
@@ -92,10 +92,10 @@ gst 是强约定框架（Apple 风格），不是自由框架（Windows 风格�
 
 - 只给项目用、或主要给项目用的能力，是顶层公开包，实现就写在包里，如 `bootstrap`、`database`、`controller`、`cronjob`、`leader`。
 - 只有框架自己用的包一律放 `internal`：项目开发者看不到，就不必理解这些细节。
-- 项目和框架都大量使用的能力，实现下沉到 internal 包，再由一个顶层包做 alias 转发，只转发项目用得到的那部分，框架私用的符号不暴露；转发是唯一形状，符号只是空函数、常量或类型也一样，公开包自己不声明任何东西：根包 `gst` 转发 `internal/types` 与 `internal/datatypes`，`model` 转发 `internal/modelregistry` 与 `internal/modelschema`，`service` 转发 `internal/serviceregistry` 与 `internal/apiaction`，`sse` 转发 `internal/sse`，`router` 转发 `internal/router` 与 `internal/apiaction` 的 `APIPath`，`middleware` 转发 `internal/middleware`，`dsl` 转发 `internal/dsl`，`tenant` 转发 `internal/tenant`，`i18n` 转发 `internal/i18n`。`grpc` 是混合形态：生成代码和项目用到的调用函数、拦截器与调用者类型转发 `internal/controller`、`internal/grpcserver`，只有生成代码用的转换帮手（Narrow、UTF8、Value 等）按第一条实现就写在包里。
+- 项目和框架都大量使用的能力，实现下沉到 internal 包（尽量与公开包同名），再由顶层包做 alias 转发，只转发项目用得到的那部分，框架私用的符号不暴露。下沉只为把框架要用、却不该让项目看到的导出符号挡在公开面之外；它不是新包的默认形态：包里没有这样的符号、也指不出哪处代码已经需要它，就按第一条把实现写在公开包里，不为转发拆成两个包。转发是唯一形状，符号只是空函数、常量或类型也一样，公开包自己不声明任何东西：根包 `gst` 转发 `internal/types`，`datatypes` 转发 `internal/datatypes`，`model` 转发 `internal/modelregistry` 与 `internal/modelschema`，`service` 转发 `internal/serviceregistry` 与 `internal/apiaction`，`sse` 转发 `internal/sse`，`router` 转发 `internal/router` 与 `internal/apiaction` 的 `APIPath`，`middleware` 转发 `internal/middleware`，`dsl` 转发 `internal/dsl`，`tenant` 转发 `internal/tenant`，`i18n` 转发 `internal/i18n`。`grpc` 是混合形态：生成代码和项目用到的调用函数、拦截器与调用者类型转发 `internal/controller`、`internal/grpcserver`，只有生成代码用的转换帮手（Narrow、UTF8、Value 等）按第一条实现就写在包里。
 - middleware 与 interceptor 是例外：中间件和拦截器大多是给项目用的，所以这两个包按谁挂载分家，而不是像 router、dsl 那样全部在 internal 实现、公开包只转发。框架内建链上的中间件与拦截器是框架逻辑，只有它们算核心，放 internal/middleware 与 internal/grpcserver，由 internal/router、internal/grpcserver 装配；项目经 Register、RegisterAuth 自己挂的（如 Timeout、JwtAuth）是项目能力，同模块一样是业务侧，实现直接写在公开包里，不进 internal，也不得改动内建链与监听器的逻辑；随 gg module copy 复制的中间件同样在公开包，只引用公开包。公开包对 Register、RegisterAuth 这类挂载入口只做转发。框架自己构建、交给项目挂载的中间件（如 CircuitBreaker）实现在 internal/middleware，公开包只转发它的构造函数。
 
-引用方向随之固定：internal 包（含测试）需要这些能力时直接引用对应的 internal 包，禁止反向 import 公开包，避免 internal → 公开 → internal 的依赖绕行和潜在 import 环；框架自身代码（含公开包）使用 internal 能力时同样直接引用 internal 实现包，公开转发包只服务业务项目。如果所需符号只存在于公开包，把实现下沉到 internal、公开包改为转发，而不是让 internal 反向引用。
+引用方向随之固定：internal 包（含测试）需要这些能力时直接引用对应的 internal 包，禁止反向 import 公开包，避免 internal → 公开 → internal 的依赖绕行和潜在 import 环；框架自身代码（含公开包）使用 internal 能力时同样直接引用 internal 实现包，公开转发包只服务业务项目。如果所需符号只存在于公开的转发包，把实现下沉到它转发的 internal 包、公开包照旧只转发，而不是让 internal 反向引用；实现就写在公开包里的（第一条），internal 包直接引用它，不为此另建同名 internal 包。
 
 例外，以下内容必须保持公开包 import：
 
