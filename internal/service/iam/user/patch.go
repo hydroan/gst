@@ -40,18 +40,18 @@ func (u *AdminUserPatchService) Patch(ctx *gst.ServiceContext, req *modeliamuser
 
 	targetUserID := ctx.Param("id")
 	if targetUserID == "" {
-		return nil, gst.NewError(http.StatusBadRequest, "user id is required")
+		return nil, gst.NewError(http.StatusBadRequest, userIDRequiredMsg)
 	}
 	if req.Username == nil && req.Status == nil {
 		// Refused rather than accepted as a no-op: a request naming no field
 		// looks the same as one whose field names are misspelled.
-		return nil, gst.NewError(http.StatusBadRequest, "no updatable field provided")
+		return nil, gst.NewError(http.StatusBadRequest, noUpdatableFieldProvidedMsg)
 	}
 	if req.Status != nil {
 		switch *req.Status {
 		case modeliamuser.UserStatusActive, modeliamuser.UserStatusInactive, modeliamuser.UserStatusLocked:
 		default:
-			return nil, gst.NewError(http.StatusBadRequest, "invalid status: must be active, inactive, or locked")
+			return nil, gst.NewError(http.StatusBadRequest, invalidStatusMsg)
 		}
 	}
 
@@ -66,7 +66,7 @@ func (u *AdminUserPatchService) Patch(ctx *gst.ServiceContext, req *modeliamuser
 	if req.Username != nil {
 		username := strings.TrimSpace(*req.Username)
 		if username == "" {
-			return nil, gst.NewError(http.StatusBadRequest, "username cannot be empty")
+			return nil, gst.NewError(http.StatusBadRequest, usernameCannotBeEmptyMsg)
 		}
 		target.Username = username
 	}
@@ -82,9 +82,9 @@ func (u *AdminUserPatchService) Patch(ctx *gst.ServiceContext, req *modeliamuser
 		WithSelect(colUsername, colUserStatus).
 		Update(target); err != nil {
 		if errors.Is(err, database.ErrDuplicatedKey) {
-			return nil, gst.NewErrorWithCause(http.StatusConflict, "username already exists", err)
+			return nil, gst.NewErrorWithCause(http.StatusConflict, usernameAlreadyExistsMsg, err)
 		}
-		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to update user", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToUpdateUserMsg, err)
 	}
 
 	// Run even when the status did not change: a request restating a status the

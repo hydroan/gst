@@ -38,7 +38,7 @@ func loadSession(ctx context.Context, sessionID string) (modeliamsession.Session
 		return modeliamsession.Session{}, false, nil
 	default:
 		logStoreWarning("failed to load iam session", sessionID, err)
-		return modeliamsession.Session{}, false, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load session", err)
+		return modeliamsession.Session{}, false, gst.NewErrorWithCause(http.StatusInternalServerError, failedToLoadSessionMsg, err)
 	}
 }
 
@@ -79,7 +79,7 @@ func loadSession(ctx context.Context, sessionID string) (modeliamsession.Session
 func Authenticate(ctx context.Context, sessionID, userAgent, method, path string) (modeliamsession.Session, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
-		return modeliamsession.Session{}, gst.NewError(http.StatusUnauthorized, "no session")
+		return modeliamsession.Session{}, gst.NewError(http.StatusUnauthorized, noSessionMsg)
 	}
 
 	current, found, err := loadSession(ctx, sessionID)
@@ -104,7 +104,7 @@ func Authenticate(ctx context.Context, sessionID, userAgent, method, path string
 		var serviceErr *gst.Error
 		if !errors.As(err, &serviceErr) {
 			zap.S().Warnw("iam session rejected", "reason", err.Error(), "path", path, "method", method)
-			serviceErr = gst.NewError(http.StatusForbidden, "session invalid")
+			serviceErr = gst.NewError(http.StatusForbidden, sessionInvalidMsg)
 			err = serviceErr
 		}
 		// A refused user — gone, disabled or locked — ends the session; a
@@ -115,7 +115,7 @@ func Authenticate(ctx context.Context, sessionID, userAgent, method, path string
 		return modeliamsession.Session{}, err
 	}
 	if current.MustChangePassword && !MustChangePasswordExempt(method, path) {
-		return modeliamsession.Session{}, gst.NewError(http.StatusForbidden, "password change required before using this resource")
+		return modeliamsession.Session{}, gst.NewError(http.StatusForbidden, passwordChangeRequiredMsg)
 	}
 
 	if err = Store.TouchSession(ctx, sessionID, current, time.Now()); err != nil {
@@ -149,5 +149,5 @@ func deviceMismatch(current modeliamsession.Session, userAgent string) string {
 // refusal with the one fixed message.
 func rejected(reason, method, path string) error {
 	zap.S().Warnw("iam session rejected", "reason", reason, "path", path, "method", method)
-	return gst.NewError(http.StatusUnauthorized, "session invalid")
+	return gst.NewError(http.StatusUnauthorized, sessionInvalidMsg)
 }

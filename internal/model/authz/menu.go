@@ -154,10 +154,10 @@ func errIfMenuWriteForbidden(ctx context.Context) error {
 	}
 	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, subject, rbac.SystemRoleRoot)
 	if err != nil {
-		return gst.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, authorizationUnavailableMsg, err)
 	}
 	if !systemRoot {
-		return gst.NewError(http.StatusForbidden, "only system administrators may modify menus")
+		return gst.NewError(http.StatusForbidden, onlySystemAdminsModifyMenusMsg)
 	}
 	return nil
 }

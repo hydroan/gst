@@ -23,12 +23,12 @@ func ensureAdminSessionActor(ctx *gst.ServiceContext) error {
 	}
 	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, user.GetID(), rbac.SystemRoleRoot)
 	if err != nil {
-		return gst.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, authorizationUnavailableMsg, err)
 	}
 	if systemRoot {
 		return nil
 	}
-	return gst.NewError(http.StatusForbidden, "forbidden")
+	return gst.NewError(http.StatusForbidden, forbiddenMsg)
 }
 
 func ensureAdminSessionTarget(ctx *gst.ServiceContext, target *modeliamuser.User) error {
@@ -47,7 +47,7 @@ func loadAdminSessionActor(ctx *gst.ServiceContext) (*modeliamuser.User, error) 
 
 	actor := new(modeliamuser.User)
 	if err = database.Database[*modeliamuser.User](ctx).Get(actor, session.UserID); err != nil {
-		return nil, gst.NewError(http.StatusUnauthorized, "session invalid")
+		return nil, gst.NewError(http.StatusUnauthorized, sessionInvalidMsg)
 	}
 	if err = ensureSessionUserActive(actor); err != nil {
 		return nil, err
@@ -72,7 +72,7 @@ func parseAdminSessionOnlineSince(ctx *gst.ServiceContext) (time.Time, bool, err
 
 	onlineWithin, err := time.ParseDuration(raw)
 	if err != nil || onlineWithin <= 0 {
-		return time.Time{}, false, gst.NewError(http.StatusBadRequest, "online_within must be a positive duration")
+		return time.Time{}, false, gst.NewError(http.StatusBadRequest, onlineWithinMustBePositiveDurationMsg)
 	}
 	return time.Now().Add(-onlineWithin), true, nil
 }

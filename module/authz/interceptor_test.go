@@ -15,6 +15,7 @@ import (
 	gstgrpc "github.com/hydroan/gst/grpc"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/grpcserver"
+	"github.com/hydroan/gst/internal/i18n"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/tenant"
@@ -58,6 +59,14 @@ func TestAuthzInterceptor(t *testing.T) {
 		err := authzProbeCall(t, conn, "Look", subject.sessionID)
 		require.Equal(t, codes.PermissionDenied, status.Code(err))
 		require.Equal(t, "permission denied", status.Convert(err).Message())
+	})
+
+	t.Run("holding no role, in the language of the process", func(t *testing.T) {
+		require.NoError(t, i18n.SetLanguage(i18n.Chinese))
+		t.Cleanup(func() { require.NoError(t, i18n.SetLanguage(i18n.English)) })
+		err := authzProbeCall(t, conn, "Look", subject.sessionID)
+		require.Equal(t, codes.PermissionDenied, status.Code(err))
+		require.Equal(t, "没有权限", status.Convert(err).Message())
 	})
 
 	t.Run("holding a role with the permission", func(t *testing.T) {

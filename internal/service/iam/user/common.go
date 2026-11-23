@@ -1,9 +1,9 @@
 package serviceiamuser
 
 import (
-	"net/http"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/authz/rbac"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
@@ -36,7 +36,7 @@ func isSystemRoot(ctx *gst.ServiceContext, actor *modeliamuser.User) (bool, erro
 	}
 	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, actor.GetID(), rbac.SystemRoleRoot)
 	if err != nil {
-		return false, gst.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
+		return false, errors.Wrap(err, "authorization unavailable")
 	}
 	return systemRoot, nil
 }

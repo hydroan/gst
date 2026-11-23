@@ -18,9 +18,9 @@ import (
 func ensureSessionUserActive(targetUser *modeliamuser.User) error {
 	switch targetUser.Status {
 	case modeliamuser.UserStatusInactive:
-		return gst.NewError(http.StatusForbidden, "account disabled")
+		return gst.NewError(http.StatusForbidden, accountDisabledMsg)
 	case modeliamuser.UserStatusLocked:
-		return gst.NewError(http.StatusForbidden, "account locked")
+		return gst.NewError(http.StatusForbidden, accountLockedMsg)
 	default:
 		return nil
 	}
@@ -58,7 +58,7 @@ func sessionViewActiveAt(view modeliamsession.SessionView) time.Time {
 func NewSessionID() (string, error) {
 	buf := make([]byte, sessionIDBytes)
 	if _, err := rand.Read(buf); err != nil {
-		return "", gst.NewErrorWithCause(http.StatusInternalServerError, "failed to generate session id", err)
+		return "", errors.Wrap(err, "failed to generate session id")
 	}
 	return hex.EncodeToString(buf), nil
 }

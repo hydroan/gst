@@ -114,11 +114,11 @@ func validAccountSnapshot(account *AccountSnapshot, expectedUserID string) error
 }
 
 func newAccountGatewayNotConfiguredServiceError(err error) *gst.Error {
-	return gst.NewErrorWithCause(http.StatusInternalServerError, "Email account gateway is not configured", err)
+	return gst.NewErrorWithCause(http.StatusInternalServerError, emailAccountGatewayNotConfiguredMsg, err)
 }
 
 func newAccountGatewayInvalidAccountServiceError(err error) *gst.Error {
-	return gst.NewErrorWithCause(http.StatusInternalServerError, "Email account gateway returned invalid account", err)
+	return gst.NewErrorWithCause(http.StatusInternalServerError, emailAccountGatewayReturnedInvalidAccountMsg, err)
 }
 
 // missingAccountGateway is the safe default used until the host application

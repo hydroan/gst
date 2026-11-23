@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"io"
-	"net/http"
 	"strings"
 	"time"
 
@@ -99,7 +98,7 @@ var (
 func dispatchEmail(ctx context.Context, delivery emailDelivery) error {
 	delivery.To = normalizeEmailScope(delivery.To)
 	if delivery.To == "" {
-		return gst.NewError(http.StatusBadRequest, "email recipient is required")
+		return errors.New("email recipient is required")
 	}
 	return activeEmailSender.Send(ctx, delivery)
 }

@@ -345,7 +345,7 @@ func TestVerificationRequestCreateReturnsProviderConfigurationError(t *testing.T
 
 	_, err := svc.Create(ctx, &modelemail.VerificationRequestReq{Email: "user@example.com"})
 
-	requireServiceError(t, err, 500, "Email account gateway is not configured")
+	requireServiceError(t, err, 500, "email account gateway is not configured")
 	require.ErrorIs(t, err, ErrAccountGatewayNotConfigured)
 
 	// The entry states the failure in its message and carries the cause in a

@@ -3,6 +3,7 @@ package ggmodule
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -231,6 +232,78 @@ type SideService struct {
 		if !found {
 			t.Fatalf("moduleServiceHelperClosure() = %v, want blank-imported package file %s", got, suffix)
 		}
+	}
+}
+
+// TestModuleServiceHelperClosureCarriesTheSentencesOfACopiedFile pins that
+// the file declaring the sentences a copied file answers with joins the copy
+// by the constant that file names, and brings the init registering their
+// translations along with what it references: the copied package then
+// answers in the language of the process the way the module's does. The
+// sentences of a package the copy carries nothing of stay behind, and so
+// does a file declaring an init beside a function nothing references.
+func TestModuleServiceHelperClosureCarriesTheSentencesOfACopiedFile(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name string, content string) {
+		t.Helper()
+		path := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	write("go.mod", "module example.com/source\n\ngo 1.26\n")
+	write("action.go", `package source
+
+func Action() string {
+	return takenMsg
+}
+`)
+	write("translations.go", `package source
+
+const takenMsg = "the sample is taken"
+
+func init() {
+	translations[takenMsg] = "样本已被占用"
+}
+`)
+	write("registry.go", `package source
+
+var translations = map[string]string{}
+`)
+	write("unused.go", `package source
+
+func init() {}
+
+func Unused() string {
+	return "unused"
+}
+`)
+	write("other/translations.go", `package other
+
+const lostMsg = "the sample is lost"
+
+func init() {
+	_ = lostMsg
+}
+`)
+
+	seeds, config := testServiceClosureConfig(t, dir, filepath.Join(dir, "action.go"))
+	got, err := moduleServiceHelperClosure(seeds, config)
+	if err != nil {
+		t.Fatalf("moduleServiceHelperClosure() error = %v", err)
+	}
+
+	root, err := canonicalModuleCopyPath(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{filepath.Join(root, "registry.go"), filepath.Join(root, "translations.go")}
+	if !slices.Equal(got, want) {
+		t.Fatalf("moduleServiceHelperClosure() = %v, want %v", got, want)
 	}
 }
 

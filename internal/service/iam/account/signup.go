@@ -22,25 +22,25 @@ func (s *SignupService) Create(ctx *gst.ServiceContext, req *modeliamaccount.Sig
 
 	// Validate input
 	if req.Username == "" {
-		return nil, gst.NewError(http.StatusBadRequest, "username is required")
+		return nil, gst.NewError(http.StatusBadRequest, usernameRequiredMsg)
 	}
 	if req.Password == "" {
-		return nil, gst.NewError(http.StatusBadRequest, "password is required")
+		return nil, gst.NewError(http.StatusBadRequest, passwordRequiredMsg)
 	}
 	if req.Password != req.RePassword {
-		return nil, gst.NewError(http.StatusBadRequest, "passwords do not match")
+		return nil, gst.NewError(http.StatusBadRequest, passwordsDoNotMatchMsg)
 	}
 	if len(req.Password) < 6 {
-		return nil, gst.NewError(http.StatusBadRequest, "password must be at least 6 characters long")
+		return nil, gst.NewError(http.StatusBadRequest, passwordTooShortMsg)
 	}
 
 	// Check if username already exists
 	existingUsers := make([]*modeliamuser.User, 0)
 	if err = database.Database[*modeliamuser.User](ctx).WithLimit(1).WithQuery(&modeliamuser.User{Username: req.Username}).List(&existingUsers); err != nil {
-		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to check existing user", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToCheckExistingUserMsg, err)
 	}
 	if len(existingUsers) > 0 {
-		return nil, gst.NewError(http.StatusConflict, "username already exists")
+		return nil, gst.NewError(http.StatusConflict, usernameAlreadyExistsMsg)
 	}
 
 	// Create new user
@@ -72,9 +72,9 @@ func (s *SignupService) Create(ctx *gst.ServiceContext, req *modeliamaccount.Sig
 		return database.Database[*modeliamaccount.EmailIdentity](ctx).Create(emailIdentity)
 	}); err != nil {
 		if errors.Is(err, database.ErrDuplicatedKey) {
-			return nil, gst.NewErrorWithCause(http.StatusConflict, "username already exists", err)
+			return nil, gst.NewErrorWithCause(http.StatusConflict, usernameAlreadyExistsMsg, err)
 		}
-		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to create user", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToCreateUserMsg, err)
 	}
 
 	log.Infoz("user created successfully", zap.String("username", req.Username), zap.String("user_id", newUser.ID))

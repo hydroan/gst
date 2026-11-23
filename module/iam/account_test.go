@@ -16,6 +16,7 @@ import (
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/i18n"
 	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
 	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
 	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
@@ -115,6 +116,24 @@ func TestAccountLogin(t *testing.T) {
 		// Proving the password forgets the attempts that missed it, so a user
 		// who eventually gets it right does not stay one attempt from a lockout.
 		require.Zero(t, serviceiamsession.Store.LoginFailures(t.Context(), user.Username))
+	})
+
+	// The sentence a failed attempt is refused with is the module's own, and
+	// the module registers its translation: a process answering in Chinese
+	// refuses the attempt in Chinese.
+	t.Run("refuses_in_the_language_of_the_process", func(t *testing.T) {
+		user := accountSignupUser(t, "acct_login_language", "12345678")
+		t.Cleanup(func() {
+			serviceiamsession.Store.ClearLoginFailures(context.Background(), user.Username)
+		})
+		require.NoError(t, i18n.SetLanguage(i18n.Chinese))
+		t.Cleanup(func() { require.NoError(t, i18n.SetLanguage(i18n.English)) })
+
+		_, err := accountNewClient(t).Post[iam.LoginRsp](t.Context(), loginPath, iam.LoginReq{
+			Username: user.Username,
+			Password: "wrong-password",
+		})
+		testutil.RequireError(t, err, http.StatusUnauthorized, "用户名或密码错误")
 	})
 
 	// The lockout is what makes a password worth guessing at expensive. Without
@@ -256,7 +275,7 @@ func TestAccountLogout(t *testing.T) {
 		cli := accountSessionClient(t, brokenIndexUser.SessionID)
 
 		_, err := cli.Post[iam.LogoutRsp](t.Context(), logoutPath, nil)
-		testutil.RequireError(t, err, http.StatusInternalServerError, "failed to logout")
+		testutil.RequireError(t, err, http.StatusInternalServerError, "failed to log out")
 	})
 }
 
@@ -277,7 +296,7 @@ func TestAccountLoginSecondFactorVerifier(t *testing.T) {
 		if allow {
 			return nil
 		}
-		return types.NewError(http.StatusUnauthorized, authn.MsgSecondFactorRequired)
+		return types.NewError(http.StatusUnauthorized, authn.SecondFactorRequiredMsg)
 	})
 
 	t.Run("verifier_rejection_blocks_login", func(t *testing.T) {
@@ -288,7 +307,7 @@ func TestAccountLoginSecondFactorVerifier(t *testing.T) {
 			Password: user.Password,
 			TOTPCode: "654321",
 		})
-		testutil.RequireError(t, err, http.StatusUnauthorized, authn.MsgSecondFactorRequired)
+		testutil.RequireError(t, err, http.StatusUnauthorized, authn.SecondFactorRequiredMsg)
 
 		mu.Lock()
 		defer mu.Unlock()

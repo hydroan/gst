@@ -27,14 +27,14 @@ func (c *CurrentGetService) Get(ctx *gst.ServiceContext, req *model.Empty) (rsp 
 
 	currentUser := new(modeliamuser.User)
 	if err = database.Database[*modeliamuser.User](ctx).Get(currentUser, currentSession.UserID); err != nil {
-		return nil, gst.NewError(http.StatusUnauthorized, "session invalid")
+		return nil, gst.NewError(http.StatusUnauthorized, sessionInvalidMsg)
 	}
 	if err = ensureSessionUserActive(currentUser); err != nil {
 		return nil, err
 	}
 	email, err := loadSessionEmail(ctx, currentUser.ID)
 	if err != nil {
-		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load email identity", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToLoadEmailIdentityMsg, err)
 	}
 
 	// Resolved per request rather than read off the session snapshot, so a
@@ -42,7 +42,7 @@ func (c *CurrentGetService) Get(ctx *gst.ServiceContext, req *model.Empty) (rsp 
 	// instead of as it stood at login.
 	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, currentUser.ID, rbac.SystemRoleRoot)
 	if err != nil {
-		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, authorizationUnavailableMsg, err)
 	}
 
 	return BuildAuthenticatedSessionRsp(currentSession, currentUser, email, time.Now(), systemRoot), nil

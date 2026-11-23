@@ -23,21 +23,20 @@ import (
 // submit exactly one proof: a TOTP code, consumed against replay on success,
 // or a recovery code, removed transactionally. Each proof first spends one
 // attempt from the user's login budget, and a verified proof resets it. Per
-// the authn contract the verifier owns the client-facing error shape, and
-// clients branch on status plus message: the stable 401
-// authn.MsgSecondFactorRequired tells a login UI to prompt for the code, 401
-// with other messages reports an invalid proof, 400 reports both proofs
+// the authn contract the verifier owns the client-facing error shape: 401
+// with authn.SecondFactorRequiredMsg answers a login that submitted no proof,
+// 401 with another message reports an invalid proof, 400 reports both proofs
 // arriving at once, and 429 reports a spent budget, which refuses even a
 // correct proof until its window ends.
 func LoginSecondFactorVerifier(ctx *gst.ServiceContext, userID string, factor authn.LoginSecondFactor) error {
 	userID = strings.TrimSpace(userID)
 	if ctx == nil || userID == "" {
-		return gst.NewError(http.StatusUnauthorized, "authentication required")
+		return gst.NewError(http.StatusUnauthorized, authenticationRequiredMsg)
 	}
 
 	devices, err := listActiveLoginTOTPDevices(ctx, userID)
 	if err != nil {
-		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to verify second factor", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, failedToVerifySecondFactorMsg, err)
 	}
 	if len(devices) == 0 {
 		return nil
@@ -47,11 +46,9 @@ func LoginSecondFactorVerifier(ctx *gst.ServiceContext, userID string, factor au
 	backupCode := strings.TrimSpace(factor.BackupCode)
 	switch {
 	case totpCode == "" && backupCode == "":
-		// authn.MsgSecondFactorRequired is a stable client contract: login UIs match
-		// it to prompt for the code.
-		return gst.NewError(http.StatusUnauthorized, authn.MsgSecondFactorRequired)
+		return gst.NewError(http.StatusUnauthorized, authn.SecondFactorRequiredMsg)
 	case totpCode != "" && backupCode != "":
-		return gst.NewError(http.StatusBadRequest, "provide exactly one second factor")
+		return gst.NewError(http.StatusBadRequest, provideExactlyOneSecondFactorMsg)
 	}
 
 	// Only a submitted proof spends the budget; the rejections above guess
@@ -59,9 +56,9 @@ func LoginSecondFactorVerifier(ctx *gst.ServiceContext, userID string, factor au
 	// that cannot be reached refuses the login without touching a recovery code.
 	if err = reserveTOTPVerificationAttempt(ctx, totpVerificationLogin, userID); err != nil {
 		if errors.Is(err, errTOTPVerificationLocked) {
-			return gst.NewError(http.StatusTooManyRequests, "too many failed verification attempts")
+			return gst.NewError(http.StatusTooManyRequests, tooManyFailedVerificationAttemptsMsg)
 		}
-		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to verify second factor", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, failedToVerifySecondFactorMsg, err)
 	}
 	if totpCode != "" {
 		return verifyLoginTOTPCode(ctx, devices, totpCode)
@@ -86,15 +83,15 @@ func listActiveLoginTOTPDevices(ctx *gst.ServiceContext, userID string) ([]*mode
 func verifyLoginTOTPCode(ctx *gst.ServiceContext, devices []*modelmfa.TOTPDevice, code string) error {
 	device := findLoginTOTPDeviceByCode(devices, code)
 	if device == nil {
-		return gst.NewError(http.StatusUnauthorized, "invalid TOTP code")
+		return gst.NewError(http.StatusUnauthorized, invalidTOTPCodeMsg)
 	}
 
 	// A replayed code fails login exactly like a wrong one.
 	if err := markTOTPCodeUsed(ctx, device.UserID, code); err != nil {
 		if errors.Is(err, errTOTPCodeReplayed) {
-			return gst.NewError(http.StatusUnauthorized, "invalid TOTP code")
+			return gst.NewError(http.StatusUnauthorized, invalidTOTPCodeMsg)
 		}
-		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to verify second factor", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, failedToVerifySecondFactorMsg, err)
 	}
 
 	now := time.Now().UTC()
@@ -104,7 +101,7 @@ func verifyLoginTOTPCode(ctx *gst.ServiceContext, devices []*modelmfa.TOTPDevice
 	if err := database.Database[*modelmfa.TOTPDevice](ctx).
 		WithSelect(colTOTPDeviceLastUsedAt).
 		Update(device); err != nil {
-		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to verify second factor", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, failedToVerifySecondFactorMsg, err)
 	}
 	clearTOTPVerificationFailures(ctx, device.UserID, totpVerificationLogin)
 	return nil
@@ -115,9 +112,9 @@ func verifyLoginTOTPCode(ctx *gst.ServiceContext, devices []*modelmfa.TOTPDevice
 func verifyLoginBackupCode(ctx *gst.ServiceContext, userID, code string) error {
 	if err := consumeTOTPBackupCode(ctx, userID, code); err != nil {
 		if errors.Is(err, errTOTPBackupCodeInvalid) {
-			return gst.NewError(http.StatusUnauthorized, "invalid backup code")
+			return gst.NewError(http.StatusUnauthorized, invalidBackupCodeMsg)
 		}
-		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to verify second factor", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, failedToVerifySecondFactorMsg, err)
 	}
 	clearTOTPVerificationFailures(ctx, userID, totpVerificationLogin)
 	return nil

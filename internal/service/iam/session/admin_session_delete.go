@@ -26,26 +26,26 @@ func (a *AdminSessionDeleteService) Delete(ctx *gst.ServiceContext, req *modelia
 
 	targetSessionID := ctx.Param("id")
 	if targetSessionID == "" {
-		return nil, gst.NewError(http.StatusBadRequest, "session id is required")
+		return nil, gst.NewError(http.StatusBadRequest, sessionIDRequiredMsg)
 	}
 
 	targetSession, err := Store.LoadSession(ctx, targetSessionID)
 	if err != nil {
 		if errors.Is(err, gst.ErrEntryNotFound) {
-			return nil, gst.NewError(http.StatusNotFound, "session not found")
+			return nil, gst.NewError(http.StatusNotFound, sessionNotFoundMsg)
 		}
-		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load target session", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToLoadTargetSessionMsg, err)
 	}
 	if err = ValidateSession(targetSessionID, targetSession); err != nil {
 		_, _ = Store.DeleteSession(ctx, targetSessionID)
-		return nil, gst.NewError(http.StatusNotFound, "session not found")
+		return nil, gst.NewError(http.StatusNotFound, sessionNotFoundMsg)
 	}
 
 	if _, err = Store.DeleteSession(ctx, targetSessionID); err != nil {
 		if errors.Is(err, gst.ErrEntryNotFound) {
-			return nil, gst.NewError(http.StatusNotFound, "session not found")
+			return nil, gst.NewError(http.StatusNotFound, sessionNotFoundMsg)
 		}
-		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to delete session", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToDeleteSessionMsg, err)
 	}
 	if targetSessionID == currentSessionID {
 		ClearCookie(ctx)

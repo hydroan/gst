@@ -31,10 +31,10 @@ func (l *LoginService) Create(ctx *gst.ServiceContext, req *modeliamaccount.Logi
 	log := l.WithContext(ctx, ctx.Phase())
 	// Validate input
 	if req.Username == "" {
-		return nil, gst.NewError(http.StatusBadRequest, "username is required")
+		return nil, gst.NewError(http.StatusBadRequest, usernameRequiredMsg)
 	}
 	if req.Password == "" {
-		return nil, gst.NewError(http.StatusBadRequest, "password is required")
+		return nil, gst.NewError(http.StatusBadRequest, passwordRequiredMsg)
 	}
 
 	ua := useragent.New(ctx.UserAgent())
@@ -71,24 +71,24 @@ func (l *LoginService) Create(ctx *gst.ServiceContext, req *modeliamaccount.Logi
 	// Find user by username
 	users := make([]*modeliamuser.User, 0)
 	if err = database.Database[*modeliamuser.User](ctx).WithLimit(1).WithQuery(&modeliamuser.User{Username: req.Username}).List(&users); err != nil {
-		return nil, gst.NewErrorWithCause(http.StatusUnauthorized, "invalid username or password", err)
+		return nil, gst.NewErrorWithCause(http.StatusUnauthorized, invalidUsernameOrPasswordMsg, err)
 	}
 	if len(users) == 0 {
-		return nil, gst.NewError(http.StatusUnauthorized, "invalid username or password")
+		return nil, gst.NewError(http.StatusUnauthorized, invalidUsernameOrPasswordMsg)
 	}
 	targetUser = users[0]
 
 	// Check if user is enabled
 	if targetUser.Status == modeliamuser.UserStatusInactive {
-		return nil, gst.NewError(http.StatusForbidden, "account disabled")
+		return nil, gst.NewError(http.StatusForbidden, accountDisabledMsg)
 	}
 	if targetUser.Status == modeliamuser.UserStatusLocked {
-		return nil, gst.NewError(http.StatusForbidden, "account locked")
+		return nil, gst.NewError(http.StatusForbidden, accountLockedMsg)
 	}
 
 	credential, err := LoadPasswordCredential(ctx, targetUser.ID)
 	if err != nil {
-		return nil, gst.NewErrorWithCause(http.StatusUnauthorized, "invalid username or password", err)
+		return nil, gst.NewErrorWithCause(http.StatusUnauthorized, invalidUsernameOrPasswordMsg, err)
 	}
 	// Checked after the account is known to exist, so the counter is only ever
 	// keyed by a real username.
@@ -99,14 +99,14 @@ func (l *LoginService) Create(ctx *gst.ServiceContext, req *modeliamaccount.Logi
 	// Verify password
 	if err = VerifyPasswordCredential(ctx, credential, req.Password); err != nil {
 		recordLoginFailure(ctx, targetUser.Username)
-		return nil, gst.NewErrorWithCause(http.StatusUnauthorized, "invalid username or password", err)
+		return nil, gst.NewErrorWithCause(http.StatusUnauthorized, invalidUsernameOrPasswordMsg, err)
 	}
 	// Resolved for every login, not only the ones that name a tenant: the
 	// principal in the response reports it, and it is what exempts a system
 	// root from the tenant membership check below.
 	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, targetUser.ID, rbac.SystemRoleRoot)
 	if err != nil {
-		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, authorizationUnavailableMsg, err)
 	}
 
 	tenantID := strings.TrimSpace(req.TenantID)
@@ -132,7 +132,7 @@ func (l *LoginService) Create(ctx *gst.ServiceContext, req *modeliamaccount.Logi
 	// Create session
 	sessionID, err := serviceiamsession.NewSessionID()
 	if err != nil {
-		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to create session id", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToCreateSessionIDMsg, err)
 	}
 	expire := serviceiamsession.GetSessionExpiration()
 	expiresAt := now.Add(expire)
@@ -161,7 +161,7 @@ func (l *LoginService) Create(ctx *gst.ServiceContext, req *modeliamaccount.Logi
 		// A snapshot no index names can never be listed or revoked, so the
 		// session is dropped rather than left behind unreachable.
 		_, _ = serviceiamsession.Store.DeleteSession(ctx, sessionID)
-		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to track user session", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToTrackUserSessionMsg, err)
 	}
 
 	// The account's failed attempts are forgotten once it proves the
@@ -199,7 +199,7 @@ func verifyLoginSecondFactor(ctx *gst.ServiceContext, userID string, factor auth
 	if errors.As(err, &svcErr) {
 		return svcErr
 	}
-	return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to verify second factor", err)
+	return gst.NewErrorWithCause(http.StatusInternalServerError, failedToVerifySecondFactorMsg, err)
 }
 
 // ensureLoginTenantMembership refuses a login that names a tenant the user holds
@@ -208,10 +208,10 @@ func verifyLoginSecondFactor(ctx *gst.ServiceContext, userID string, factor auth
 func ensureLoginTenantMembership(ctx *gst.ServiceContext, userID string, tenantID string) error {
 	roles, err := rbac.RBAC().RolesForSubject(ctx, tenantID, userID)
 	if err != nil {
-		return gst.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, authorizationUnavailableMsg, err)
 	}
 	if len(roles) == 0 {
-		return gst.NewError(http.StatusForbidden, "user is not a member of tenant")
+		return gst.NewError(http.StatusForbidden, userNotMemberOfTenantMsg)
 	}
 	return nil
 }

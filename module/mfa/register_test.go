@@ -247,9 +247,8 @@ func TestTOTPLogin(t *testing.T) {
 			Username: account.Username,
 			Password: account.Password,
 		})
-		// The message is the client contract: login UIs match it to prompt
-		// for the second factor.
-		testutil.RequireError(t, err, http.StatusUnauthorized, authn.MsgSecondFactorRequired)
+		// A login that submitted no proof is answered with the challenge.
+		testutil.RequireError(t, err, http.StatusUnauthorized, authn.SecondFactorRequiredMsg)
 	})
 
 	t.Run("wrong_password_stays_generic", func(t *testing.T) {

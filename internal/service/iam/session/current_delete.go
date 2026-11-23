@@ -21,7 +21,7 @@ func (c *CurrentDeleteService) Delete(ctx *gst.ServiceContext, req *modeliamsess
 	}
 
 	if _, err = Store.DeleteSession(ctx, sessionID); err != nil {
-		return nil, gst.NewErrorWithCause(http.StatusUnauthorized, "session not exists", err)
+		return nil, gst.NewErrorWithCause(http.StatusUnauthorized, sessionInvalidMsg, err)
 	}
 
 	ClearCookie(ctx)

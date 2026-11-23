@@ -33,7 +33,7 @@ func ensureLoginNotLockedOut(ctx *gst.ServiceContext, username string) error {
 	if serviceiamsession.Store.LoginFailures(ctx, username) < loginFailureLimit() {
 		return nil
 	}
-	return gst.NewError(http.StatusUnauthorized, "invalid username or password")
+	return gst.NewError(http.StatusUnauthorized, invalidUsernameOrPasswordMsg)
 }
 
 // recordLoginFailure counts one failed credential attempt against an account.

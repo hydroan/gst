@@ -48,12 +48,12 @@ var (
 // currentTOTPBindSessionID returns the session that owns the current binding flow.
 func currentTOTPBindSessionID(ctx *gst.ServiceContext) (string, error) {
 	if ctx == nil {
-		return "", gst.NewError(http.StatusUnauthorized, "authentication required")
+		return "", gst.NewError(http.StatusUnauthorized, authenticationRequiredMsg)
 	}
 	if strings.TrimSpace(ctx.SessionID()) != "" {
 		return strings.TrimSpace(ctx.SessionID()), nil
 	}
-	return "", gst.NewError(http.StatusUnauthorized, "authentication required")
+	return "", gst.NewError(http.StatusUnauthorized, authenticationRequiredMsg)
 }
 
 // issueTOTPBindChallenge creates a cache-backed challenge for a pending TOTP binding flow.

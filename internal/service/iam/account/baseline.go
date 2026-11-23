@@ -25,7 +25,7 @@ const rootPasswordEnv = "IAM_ROOT_PASSWORD"
 // mustChangePassword the first login asks for a replacement.
 func CreateAccount(ctx context.Context, newUser *modeliamuser.User, password string, mustChangePassword bool) error {
 	if newUser == nil {
-		return gst.NewError(http.StatusBadRequest, "user is required")
+		return gst.NewError(http.StatusBadRequest, userRequiredMsg)
 	}
 	return database.Transaction(ctx, func(ctx context.Context) error {
 		if err := database.Database[*modeliamuser.User](ctx).Create(newUser); err != nil {

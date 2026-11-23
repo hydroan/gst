@@ -37,7 +37,7 @@
 
 `Design()` 只覆盖模型、路由和 service。`Register()` 里其余的装配语句——安装框架钩子、挂中间件——copy 不会自动复现，必须按下面的规则声明，否则 add 路径正常而 copy 路径静默缺失。
 
-- 模块的 `internal/service/<name>` 禁止用 `init()` 安装框架钩子。包只在被 import 时才链接，而 copy 路径的 import 来自生成的路由注册，项目屏蔽路由就会连带抹掉它，装配随之静默失效。
+- 模块的 `internal/service/<name>` 禁止用 `init()` 安装框架钩子。包只在被 import 时才链接，而 copy 路径的 import 来自生成的路由注册，项目屏蔽路由就会连带抹掉它，装配随之静默失效。唯一可以写的 `init()` 是只登记译文的那一个（见「提示的译文」）：包没被链接时，它的提示也发不出来，译文不在不影响什么。
 - 需要安装的钩子实现必须导出，由 `Register()` 显式调用；copy 路径由项目自有装配代码调用同一个函数。实现在模块自己的 `internal/service/<name>` 里时，`requiredAssembly` 写它的框架路径，项目经复制后的包（`<项目>/service/<name>/…`）调用，`gg check` 按复制后的路径核对。
 - 该实现文件如果不服务任何路由，必须写进 `module.json` 的 `includeSourceFiles`，否则 copy 不会带上它。
 - copy 路径必须执行的装配调用写进 `module.json` 的 `requiredAssembly`，copy 结束时逐条提示还没做的，`gg check` 会强制项目做出该调用；`postNotes` 只保留机器检查不了的接入步骤。
@@ -59,6 +59,45 @@
 - action service 文件只放该 action 自身的 service struct、action 方法、hook 方法和强绑定该 action 的私有逻辑。
 - 多个 action 共享的逻辑必须放到非 action service 文件中。
 - provider/adapter 接口可以放在 service helper 文件中，但具体宿主 adapter 不要放在 `internal/service/<name>`。
+
+
+
+## 提示的译文
+
+模块给客户端的固定提示（`gst.NewError`、`gst.NewErrorWithCause` 的文案）用英文写，每一句都是本包 `translations.go`
+里的一个常量，名字以 `Msg` 结尾，调用处只写常量；译文由同一个文件的 `init` 登记，调用公开包 `i18n` 的
+`i18n.Register`，每种语言一张表（`i18n.Chinese` 是简体，`i18n.TraditionalChinese` 是繁体、按台湾的用词写），键是句子的
+常量，值是译文。项目把 `app.language` 配成中文时，这些提示按对应的译文作答。
+
+```go
+// The sentences the package answers a client with.
+const (
+	sampleSealedMsg   = "sample is sealed"
+	sampleNotFoundMsg = "sample not found"
+)
+
+// init registers the translations of the sentences above.
+func init() {
+	i18n.Register(i18n.Chinese, map[string]string{
+		sampleSealedMsg:   "样本已封存",
+		sampleNotFoundMsg: "样本不存在",
+	})
+	i18n.Register(i18n.TraditionalChinese, map[string]string{
+		sampleSealedMsg:   "樣本已封存",
+		sampleNotFoundMsg: "樣本不存在",
+	})
+}
+```
+
+- 新增一句提示：在本包的 `translations.go` 里声明常量、在每张表里登记译文，调用处写常量；改写一句只改常量的值和它的译文。
+- 句子多的包按功能分组：每组一个 `const` 块，块上写一句说明这组句子属于哪件事；译文表按同样的分组和顺序排，组与组之间
+  空一行。同一件事只留一句话，不为不同的调用位置各写一句。
+- 在框架仓库里，`make check`（框架自检，只检查框架自己的代码）会报出：直接写在调用处的句子、名字不以 `Msg` 结尾的
+  句子常量、没有译文的句子、写在别的文件里的登记、键不是本文件常量的译文，以及除了登记之外没有任何地方在用的句子常量。
+  模块复制进项目之后不在它的检查范围：项目在复制来的代码里加句子，照同样的写法声明常量并登记译文；没登记译文的句子
+  按原文回答。
+- 运行时拼出来的文案（`fmt.Sprintf`、`err.Error()`）登记不了译文，原样作答。
+- `gg module copy` 复制用到这些常量的文件时，会把 `translations.go` 一起带走，不用写进 `module.json`。
 
 
 

@@ -8,6 +8,7 @@ import (
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/internal/types"
@@ -117,6 +118,12 @@ func TestAuthorizationGrantsAndRefusesByRole(t *testing.T) {
 	requireReaches(t, subject, grantedRoute, types.GrantSourceRole)
 	// Holding a role that does not carry this permission.
 	requireRefused(t, subject, deniedRoute, types.DenyReasonNoPolicy)
+
+	// The refusal is answered in the language the process answers in.
+	require.NoError(t, i18n.SetLanguage(i18n.Chinese))
+	t.Cleanup(func() { require.NoError(t, i18n.SetLanguage(i18n.English)) })
+	_, err := subject.client.Get[client.ListResult[*authz.RoleBinding]](t.Context(), deniedRoute)
+	testutil.RequireError(t, err, http.StatusForbidden, "没有权限")
 }
 
 // TestAuthorizationReportsEveryGrantSource covers the three grants that do not

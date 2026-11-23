@@ -41,17 +41,17 @@ func (t *TOTPUnbindService) Create(ctx *gst.ServiceContext, req *modelmfa.TOTPUn
 	log := t.WithContext(ctx, ctx.Phase())
 
 	if len(ctx.UserID()) == 0 {
-		return nil, gst.NewError(http.StatusUnauthorized, "authentication required")
+		return nil, gst.NewError(http.StatusUnauthorized, authenticationRequiredMsg)
 	}
 	if strings.TrimSpace(req.DeviceID) == "" {
-		return nil, gst.NewError(http.StatusBadRequest, "device_id is required")
+		return nil, gst.NewError(http.StatusBadRequest, deviceIDRequiredMsg)
 	}
 	switch countTOTPUnbindVerificationMethods(req) {
 	case 0:
-		return nil, gst.NewError(http.StatusBadRequest, "fresh authentication required")
+		return nil, gst.NewError(http.StatusBadRequest, freshAuthenticationRequiredMsg)
 	case 1:
 	default:
-		return nil, gst.NewError(http.StatusBadRequest, "provide exactly one verification method")
+		return nil, gst.NewError(http.StatusBadRequest, provideExactlyOneVerificationMethodMsg)
 	}
 
 	userID := ctx.UserID()
@@ -63,9 +63,9 @@ func (t *TOTPUnbindService) Create(ctx *gst.ServiceContext, req *modelmfa.TOTPUn
 			log.Warnz("too many failed verification attempts for unbind",
 				zap.String("user_id", userID),
 				zap.String("device_id", req.DeviceID))
-			return nil, gst.NewError(http.StatusTooManyRequests, "too many failed verification attempts")
+			return nil, gst.NewError(http.StatusTooManyRequests, tooManyFailedVerificationAttemptsMsg)
 		}
-		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to verify fresh authentication", reserveErr)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToVerifyFreshAuthenticationMsg, reserveErr)
 	}
 
 	proofAccepted := false
@@ -75,7 +75,7 @@ func (t *TOTPUnbindService) Create(ctx *gst.ServiceContext, req *modelmfa.TOTPUn
 			UserID:   userID,
 			IsActive: true,
 		}).List(&devices); listErr != nil {
-			return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to list active TOTP devices", listErr)
+			return gst.NewErrorWithCause(http.StatusInternalServerError, failedToListActiveTOTPDevicesMsg, listErr)
 		}
 
 		// Fresh authentication is judged before the target device so a failed
@@ -92,9 +92,9 @@ func (t *TOTPUnbindService) Create(ctx *gst.ServiceContext, req *modelmfa.TOTPUn
 					zap.String("user_id", userID),
 					zap.String("device_id", req.DeviceID),
 					zap.Error(verifyErr))
-				return gst.NewError(http.StatusUnauthorized, "invalid verification")
+				return gst.NewError(http.StatusUnauthorized, invalidVerificationMsg)
 			}
-			return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to verify fresh authentication", verifyErr)
+			return gst.NewErrorWithCause(http.StatusInternalServerError, failedToVerifyFreshAuthenticationMsg, verifyErr)
 		}
 		proofAccepted = true
 
@@ -103,16 +103,16 @@ func (t *TOTPUnbindService) Create(ctx *gst.ServiceContext, req *modelmfa.TOTPUn
 			log.Warnz("device not found or not active",
 				zap.String("user_id", userID),
 				zap.String("device_id", req.DeviceID))
-			return gst.NewError(http.StatusNotFound, "device not found or already unbound")
+			return gst.NewError(http.StatusNotFound, deviceNotFoundOrAlreadyUnboundMsg)
 		}
 
 		if deleteErr := database.Database[*modelmfa.TOTPDevice](ctx).WithPurge(true).Delete(device); deleteErr != nil {
 			// The device went away between the listing and the delete: it is
 			// unbound already, the same answer as not finding it above.
 			if errors.Is(deleteErr, database.ErrRecordNotFound) {
-				return gst.NewError(http.StatusNotFound, "device not found or already unbound")
+				return gst.NewError(http.StatusNotFound, deviceNotFoundOrAlreadyUnboundMsg)
 			}
-			return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to unbind device", deleteErr)
+			return gst.NewErrorWithCause(http.StatusInternalServerError, failedToUnbindDeviceMsg, deleteErr)
 		}
 
 		rsp = &modelmfa.TOTPUnbindRsp{
@@ -135,7 +135,7 @@ func (t *TOTPUnbindService) Create(ctx *gst.ServiceContext, req *modelmfa.TOTPUn
 	}
 
 	if rsp == nil {
-		return nil, gst.NewError(http.StatusInternalServerError, "failed to build TOTP unbind response")
+		return nil, gst.NewError(http.StatusInternalServerError, failedToBuildTOTPUnbindResponseMsg)
 	}
 	log.Infoz("totp device unbound successfully",
 		zap.String("user_id", ctx.UserID()),

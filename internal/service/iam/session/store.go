@@ -138,17 +138,17 @@ func deleteUnreadableSnapshot(ctx context.Context, sessionID string) error {
 // SaveSession writes a session snapshot with the given lifetime.
 func (store) SaveSession(ctx context.Context, sessionData modeliamsession.Session, ttl time.Duration) error {
 	if sessionData.ID == "" {
-		return gst.NewError(http.StatusInternalServerError, "session id is required")
+		return gst.NewError(http.StatusInternalServerError, sessionIDRequiredMsg)
 	}
 	if ttl < 0 {
-		return gst.NewError(http.StatusInternalServerError, "session ttl is negative")
+		return gst.NewError(http.StatusInternalServerError, sessionTTLNegativeMsg)
 	}
 	payload, err := json.Marshal(sessionData)
 	if err != nil {
-		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to store session", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, failedToStoreSessionMsg, err)
 	}
 	if err = gstredis.Set(ctx, sessionDataKey(sessionData.ID), payload, ttl); err != nil {
-		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to store session", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, failedToStoreSessionMsg, err)
 	}
 	return nil
 }
@@ -208,7 +208,7 @@ func (store) IndexSession(ctx context.Context, sessionData modeliamsession.Sessi
 	// failing to sweep is no reason to fail the login.
 	_ = pruneIndex(ctx, sessionIndexSeenKey(), seenIndexCutoff(time.Now()))
 	if time.Until(sessionData.ExpiresAt) <= 0 {
-		return gst.NewError(http.StatusInternalServerError, "session expired")
+		return errors.New("session expired")
 	}
 
 	score := float64(sessionData.ExpiresAt.UnixMilli())
@@ -242,7 +242,7 @@ func (store) IndexSession(ctx context.Context, sessionData modeliamsession.Sessi
 }
 
 func indexSessionError(err error) error {
-	return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to index session", err)
+	return errors.Wrap(err, "failed to index session")
 }
 
 // DropSessionIndexes removes a session id from every index pointing at it.
@@ -284,7 +284,7 @@ func (store) DropUserSessionIndexMember(ctx context.Context, userID, sessionID s
 }
 
 func dropIndexError(err error) error {
-	return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to remove session index", err)
+	return gst.NewErrorWithCause(http.StatusInternalServerError, failedToRemoveSessionIndexMsg, err)
 }
 
 // ListUserSessionIDs returns the indexed session ids of a user, spent members
@@ -299,7 +299,7 @@ func (store) ListUserSessionIDs(ctx context.Context, userID string) ([]string, e
 	}
 	sessionIDs, err := gstredis.ZRange(ctx, userKey, 0, -1)
 	if err != nil {
-		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to list user sessions", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToListUserSessionsMsg, err)
 	}
 	return sessionIDs, nil
 }
@@ -311,7 +311,7 @@ func (store) ListAllSessionIDs(ctx context.Context) ([]string, error) {
 	}
 	sessionIDs, err := gstredis.ZRange(ctx, sessionIndexAllKey(), 0, -1)
 	if err != nil {
-		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to list sessions", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToListSessionsMsg, err)
 	}
 	return sessionIDs, nil
 }
@@ -334,7 +334,7 @@ func (store) ListSeenSessionIDs(ctx context.Context, since time.Time) ([]string,
 		"+inf",
 	)
 	if err != nil {
-		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to list online sessions", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToListOnlineSessionsMsg, err)
 	}
 	return sessionIDs, nil
 }
@@ -347,7 +347,7 @@ func (store) ListSeenSessionIDs(ctx context.Context, since time.Time) ([]string,
 // staleness is bounded by seenIndexCutoff instead.
 func pruneIndex(ctx context.Context, key string, cutoff time.Time) error {
 	if err := gstredis.ZRemRangeByScore(ctx, key, "-inf", strconv.FormatInt(cutoff.UnixMilli(), 10)); err != nil {
-		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to prune expired sessions", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, failedToPruneExpiredSessionsMsg, err)
 	}
 	return nil
 }
@@ -438,7 +438,7 @@ func (store) TouchSession(ctx context.Context, sessionID string, sessionData mod
 }
 
 func touchSessionError(err error) error {
-	return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to touch session", err)
+	return gst.NewErrorWithCause(http.StatusInternalServerError, failedToTouchSessionMsg, err)
 }
 
 // ---------- bulk revocation ----------
@@ -459,7 +459,7 @@ func (store) DeleteUserSessions(ctx context.Context, userID string) error {
 		return err
 	}
 	if err := gstredis.Del(ctx, sessionIndexUserKey(userID)); err != nil {
-		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to delete user session index", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, failedToDeleteUserSessionIndexMsg, err)
 	}
 	return nil
 }
@@ -491,7 +491,7 @@ func deleteUserSessions(ctx context.Context, userID, keepSessionID string) error
 				_ = Store.DropSessionIndexes(ctx, userID, sessionID)
 				continue
 			}
-			return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to delete session", err)
+			return gst.NewErrorWithCause(http.StatusInternalServerError, failedToDeleteSessionMsg, err)
 		}
 	}
 	return nil

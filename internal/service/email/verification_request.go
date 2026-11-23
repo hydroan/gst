@@ -27,14 +27,14 @@ func (s *VerificationRequestService) Create(ctx *gst.ServiceContext, req *modele
 
 	email := normalizeEmailScope(req.Email)
 	if !isEmailAddress(email) {
-		return nil, gst.NewError(http.StatusBadRequest, "email must be a valid email address")
+		return nil, gst.NewError(http.StatusBadRequest, emailMustBeValidEmailAddressMsg)
 	}
 
 	if _, err = reserveEmailThrottle(ctx, iamEmailFlowKindVerification, emailThrottleRequest, email, 0); err != nil {
 		if errors.Is(err, errEmailFlowThrottled) {
 			return rsp, nil
 		}
-		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to reserve verification request throttle", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToReserveVerificationRequestThrottleMsg, err)
 	}
 
 	user, err := currentAccountGateway().FindByEmail(ctx, email)
@@ -46,7 +46,7 @@ func (s *VerificationRequestService) Create(ctx *gst.ServiceContext, req *modele
 			log.Errorz("email account gateway is not configured", zap.Error(err))
 			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load verification account", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToLoadVerificationAccountMsg, err)
 	}
 	if !eligibleVerificationAccount(user, email) {
 		return rsp, nil
@@ -57,11 +57,11 @@ func (s *VerificationRequestService) Create(ctx *gst.ServiceContext, req *modele
 		Email:  email,
 	})
 	if err != nil {
-		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to issue verification flow", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToIssueVerificationFlowMsg, err)
 	}
 
 	if err = dispatchEmail(ctx, verificationDelivery(token, flow)); err != nil {
-		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to dispatch verification email", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToDispatchVerificationEmailMsg, err)
 	}
 
 	return rsp, nil

@@ -28,14 +28,14 @@ func (s *PasswordResetRequestService) Create(ctx *gst.ServiceContext, req *model
 
 	email := normalizeEmailScope(req.Email)
 	if !isEmailAddress(email) {
-		return nil, gst.NewError(http.StatusBadRequest, "email must be a valid email address")
+		return nil, gst.NewError(http.StatusBadRequest, emailMustBeValidEmailAddressMsg)
 	}
 
 	if _, err = reserveEmailThrottle(ctx, iamEmailFlowKindPasswordReset, emailThrottleRequest, email, 0); err != nil {
 		if errors.Is(err, errEmailFlowThrottled) {
 			return rsp, nil
 		}
-		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to reserve password reset throttle", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToReservePasswordResetThrottleMsg, err)
 	}
 
 	user, err := currentAccountGateway().FindByEmail(ctx, email)
@@ -47,7 +47,7 @@ func (s *PasswordResetRequestService) Create(ctx *gst.ServiceContext, req *model
 			log.Errorz("email account gateway is not configured", zap.Error(err))
 			return nil, newAccountGatewayNotConfiguredServiceError(err)
 		}
-		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load password reset account", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToLoadPasswordResetAccountMsg, err)
 	}
 	if !eligiblePasswordResetAccount(user, email) {
 		return rsp, nil
@@ -58,11 +58,11 @@ func (s *PasswordResetRequestService) Create(ctx *gst.ServiceContext, req *model
 		Email:  email,
 	})
 	if err != nil {
-		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to issue password reset flow", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToIssuePasswordResetFlowMsg, err)
 	}
 
 	if err = dispatchEmail(ctx, passwordResetDelivery(token, flow)); err != nil {
-		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to dispatch password reset email", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToDispatchPasswordResetEmailMsg, err)
 	}
 
 	return rsp, nil

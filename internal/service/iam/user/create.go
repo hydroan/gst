@@ -38,7 +38,7 @@ func (u *AdminUserCreateService) Create(ctx *gst.ServiceContext, req *modeliamus
 
 	username := strings.TrimSpace(req.Username)
 	if username == "" {
-		return nil, gst.NewError(http.StatusBadRequest, "username is required")
+		return nil, gst.NewError(http.StatusBadRequest, usernameRequiredMsg)
 	}
 
 	actor, err := serviceiamaccount.LoadActor(ctx)
@@ -94,9 +94,9 @@ func (u *AdminUserCreateService) Create(ctx *gst.ServiceContext, req *modeliamus
 			return nil, gst.NewErrorWithCause(svcErr.Status(), svcErr.Msg(), err)
 		}
 		if errors.Is(err, database.ErrDuplicatedKey) {
-			return nil, gst.NewErrorWithCause(http.StatusConflict, "username or email already exists", err)
+			return nil, gst.NewErrorWithCause(http.StatusConflict, usernameOrEmailAlreadyExistsMsg, err)
 		}
-		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to create user", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToCreateUserMsg, err)
 	}
 
 	view, err := buildAdminUserView(ctx, newUser)

@@ -2,7 +2,6 @@ package serviceemail
 
 import (
 	"context"
-	"net/http"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -41,7 +40,7 @@ func markEmailChangeCanceled(ctx context.Context, flow iamEmailFlowState) error 
 		AvailableAt: now.Add(ttl),
 	}
 	if err := emailThrottleCache().Set(ctx, key, record, ttl); err != nil {
-		return gst.NewErrorWithCause(http.StatusInternalServerError, "store email change cancellation marker", err)
+		return errors.Wrap(err, "store email change cancellation marker")
 	}
 
 	return nil
@@ -73,7 +72,7 @@ func emailChangeCanceled(ctx context.Context, userID, oldEmail, newEmail string)
 func clearEmailChangeCancellation(ctx context.Context, userID, oldEmail, newEmail string) error {
 	key := emailChangeCancellationKey(userID, oldEmail, newEmail)
 	if err := emailThrottleCache().Delete(ctx, key); err != nil && !errors.Is(err, gst.ErrEntryNotFound) {
-		return gst.NewErrorWithCause(http.StatusInternalServerError, "delete email change cancellation marker", err)
+		return errors.Wrap(err, "delete email change cancellation marker")
 	}
 	return nil
 }

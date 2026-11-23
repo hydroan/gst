@@ -20,7 +20,7 @@ func CookieSessionID(ctx *gst.ServiceContext) (string, error) {
 	}
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
-		return "", gst.NewError(http.StatusUnauthorized, "session id is required")
+		return "", gst.NewError(http.StatusUnauthorized, sessionIDRequiredMsg)
 	}
 	return sessionID, nil
 }

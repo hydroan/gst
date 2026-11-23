@@ -30,6 +30,10 @@ const (
 	interceptorImportPath         = "github.com/hydroan/gst/interceptor"
 )
 
+// translationsImportPath is the public package a module source registers
+// the translations of its sentences through, from an init function.
+const translationsImportPath = "github.com/hydroan/gst/i18n"
+
 // moduleTreeImportPrefixes are the framework import prefixes whose next path
 // segment names the owning module.
 var moduleTreeImportPrefixes = []string{
@@ -94,6 +98,12 @@ func parseModulePackages(t *testing.T, pattern string) map[string]*ast.File {
 // which a project removes by ignoring the module's routes in gst.yaml. A hook
 // installed from init therefore survives or disappears according to unrelated
 // route configuration, silently and without any build error.
+//
+// The one init a service package declares is the one that registers the
+// translations of the sentences the package answers with and does nothing
+// else (see registersTranslationsAlone): the translations of a package that
+// is not linked translate sentences nothing answers with, so nothing is lost
+// with them.
 func TestCopyableModuleServicesInstallNoHookFromInit(t *testing.T) {
 	for name := range copyableModuleManifests(t) {
 		t.Run(name, func(t *testing.T) {
@@ -102,12 +112,141 @@ func TestCopyableModuleServicesInstallNoHookFromInit(t *testing.T) {
 				return
 			}
 			for path, file := range parseModulePackages(t, frameworkImportPrefix+"internal/service/"+name+"/...") {
+				imports := importPathsByLocalName(file)
 				for _, decl := range file.Decls {
 					fn, ok := decl.(*ast.FuncDecl)
-					require.Falsef(t, ok && fn.Recv == nil && fn.Name != nil && fn.Name.Name == "init",
-						"%s declares init(): export the hook implementation and install it from Register instead", path)
+					if !ok || fn.Recv != nil || fn.Name == nil || fn.Name.Name != "init" {
+						continue
+					}
+					require.Truef(t, registersTranslationsAlone(fn, imports),
+						"%s declares an init() doing more than registering translations: export the hook implementation and install it from Register instead", path)
 				}
 			}
+		})
+	}
+}
+
+// registersTranslationsAlone reports whether every statement of fn is a call
+// of the Register of the translations package, by the import paths of its
+// file, and fn has one at least.
+func registersTranslationsAlone(fn *ast.FuncDecl, imports map[string]string) bool {
+	if fn.Body == nil || len(fn.Body.List) == 0 {
+		return false
+	}
+	for _, stmt := range fn.Body.List {
+		expr, ok := stmt.(*ast.ExprStmt)
+		if !ok {
+			return false
+		}
+		call, ok := expr.X.(*ast.CallExpr)
+		if !ok {
+			return false
+		}
+		selector, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok || selector.Sel.Name != "Register" {
+			return false
+		}
+		qualifier, ok := selector.X.(*ast.Ident)
+		if !ok || imports[qualifier.Name] != translationsImportPath {
+			return false
+		}
+	}
+	return true
+}
+
+// TestRegistersTranslationsAloneTellsTheOneInitFromAHook pins what the
+// assembly rule above admits, an init whose every statement registers
+// translations through the public i18n package, under whatever name its file
+// imports the package by, and what it goes on refusing: an init doing
+// anything else, beside the registration or in its place, a Register of
+// another package, and an init doing nothing.
+func TestRegistersTranslationsAloneTellsTheOneInitFromAHook(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		src  string
+		want bool
+	}{
+		{
+			name: "registering translations",
+			src: `package sample
+
+import "github.com/hydroan/gst/i18n"
+
+func init() {
+	i18n.Register(i18n.Chinese, map[string]string{"the sample is sealed": "样本已封存"})
+}
+`,
+			want: true,
+		},
+		{
+			name: "registering under another import name",
+			src: `package sample
+
+import words "github.com/hydroan/gst/i18n"
+
+func init() {
+	words.Register(words.Chinese, nil)
+	words.Register(words.Chinese, nil)
+}
+`,
+			want: true,
+		},
+		{
+			name: "installing a hook beside the registration",
+			src: `package sample
+
+import "github.com/hydroan/gst/i18n"
+
+func init() {
+	i18n.Register(i18n.Chinese, nil)
+	hook = verify
+}
+`,
+		},
+		{
+			name: "installing a hook alone",
+			src: `package sample
+
+func init() { hook = verify }
+`,
+		},
+		{
+			name: "calling the Register of another package",
+			src: `package sample
+
+import "example.com/sample/i18n"
+
+func init() { i18n.Register("zh", nil) }
+`,
+		},
+		{
+			name: "calling another function of the translations package",
+			src: `package sample
+
+import "github.com/hydroan/gst/i18n"
+
+func init() { i18n.Install(verify) }
+`,
+		},
+		{
+			name: "doing nothing",
+			src: `package sample
+
+func init() {}
+`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			file, err := parser.ParseFile(token.NewFileSet(), "sample.go", tc.src, parser.SkipObjectResolution)
+			require.NoError(t, err)
+			var inits []*ast.FuncDecl
+			for _, decl := range file.Decls {
+				if fn, ok := decl.(*ast.FuncDecl); ok && fn.Name.Name == "init" {
+					inits = append(inits, fn)
+				}
+			}
+			require.Len(t, inits, 1)
+			require.Equal(t, tc.want, registersTranslationsAlone(inits[0], importPathsByLocalName(file)))
 		})
 	}
 }

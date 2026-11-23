@@ -18,18 +18,18 @@ import (
 func LoadActor(ctx *gst.ServiceContext) (*modeliamuser.User, error) {
 	_, session, err := serviceiamsession.CurrentSession(ctx)
 	if err != nil {
-		return nil, gst.NewErrorWithCause(http.StatusUnauthorized, "invalid session", err)
+		return nil, gst.NewErrorWithCause(http.StatusUnauthorized, sessionInvalidMsg, err)
 	}
 	if session.UserID == "" {
-		return nil, gst.NewError(http.StatusUnauthorized, "current user not found")
+		return nil, gst.NewError(http.StatusUnauthorized, currentUserNotFoundMsg)
 	}
 
 	actor := new(modeliamuser.User)
 	if err = database.Database[*modeliamuser.User](ctx).Get(actor, session.UserID); err != nil {
 		if errors.Is(err, database.ErrRecordNotFound) {
-			return nil, gst.NewError(http.StatusUnauthorized, "current user not found")
+			return nil, gst.NewError(http.StatusUnauthorized, currentUserNotFoundMsg)
 		}
-		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load current user", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToLoadCurrentUserMsg, err)
 	}
 	return actor, nil
 }
@@ -49,9 +49,9 @@ func LoadActorAndTarget(ctx *gst.ServiceContext, targetUserID string) (*modeliam
 	target := new(modeliamuser.User)
 	if err = database.Database[*modeliamuser.User](ctx).Get(target, targetUserID); err != nil {
 		if errors.Is(err, database.ErrRecordNotFound) {
-			return nil, nil, gst.NewError(http.StatusNotFound, "user not found")
+			return nil, nil, gst.NewError(http.StatusNotFound, userNotFoundMsg)
 		}
-		return nil, nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load target user", err)
+		return nil, nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToLoadTargetUserMsg, err)
 	}
 
 	return actor, target, nil

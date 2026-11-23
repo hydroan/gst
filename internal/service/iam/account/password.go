@@ -28,30 +28,30 @@ var (
 
 func validateChangePasswordInput(req *modeliamaccount.ChangePasswordReq) error {
 	if req == nil {
-		return gst.NewError(http.StatusBadRequest, "change password request is required")
+		return gst.NewError(http.StatusBadRequest, changePasswordRequestRequiredMsg)
 	}
 	if req.OldPassword == "" {
-		return gst.NewError(http.StatusBadRequest, "old password is required")
+		return gst.NewError(http.StatusBadRequest, oldPasswordRequiredMsg)
 	}
 	return validateNewAccountPassword(req.NewPassword)
 }
 
 func validateResetPasswordInput(req *modeliamaccount.ResetPasswordReq) error {
 	if req == nil {
-		return gst.NewError(http.StatusBadRequest, "reset password request is required")
+		return gst.NewError(http.StatusBadRequest, resetPasswordRequestRequiredMsg)
 	}
 	if req.UserID == "" {
-		return gst.NewError(http.StatusBadRequest, "user_id is required")
+		return gst.NewError(http.StatusBadRequest, userIDRequiredMsg)
 	}
 	return validateNewAccountPassword(req.NewPassword)
 }
 
 func validateNewAccountPassword(password string) error {
 	if password == "" {
-		return gst.NewError(http.StatusBadRequest, "new password is required")
+		return gst.NewError(http.StatusBadRequest, newPasswordRequiredMsg)
 	}
 	if len(password) < minAccountPasswordLength {
-		return gst.NewError(http.StatusBadRequest, "password must be at least 6 characters long")
+		return gst.NewError(http.StatusBadRequest, passwordTooShortMsg)
 	}
 	return nil
 }
@@ -59,7 +59,7 @@ func validateNewAccountPassword(password string) error {
 // NewPasswordCredential creates a password credential for the given IAM user.
 func NewPasswordCredential(ctx context.Context, userID, password string, mustChangePassword bool) (*modeliamaccount.PasswordCredential, error) {
 	if userID == "" {
-		return nil, gst.NewError(http.StatusBadRequest, "user_id is required")
+		return nil, gst.NewError(http.StatusBadRequest, userIDRequiredMsg)
 	}
 
 	credential := &modeliamaccount.PasswordCredential{UserID: userID}
@@ -72,7 +72,7 @@ func NewPasswordCredential(ctx context.Context, userID, password string, mustCha
 // LoadPasswordCredential loads the password credential owned by the given IAM user.
 func LoadPasswordCredential(ctx context.Context, userID string) (*modeliamaccount.PasswordCredential, error) {
 	if userID == "" {
-		return nil, gst.NewError(http.StatusBadRequest, "user_id is required")
+		return nil, gst.NewError(http.StatusBadRequest, userIDRequiredMsg)
 	}
 
 	credentials := make([]*modeliamaccount.PasswordCredential, 0, 1)
@@ -80,7 +80,7 @@ func LoadPasswordCredential(ctx context.Context, userID string) (*modeliamaccoun
 		WithLimit(1).
 		WithQuery(&modeliamaccount.PasswordCredential{UserID: userID}).
 		List(&credentials); err != nil {
-		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load password credential", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToLoadPasswordCredentialMsg, err)
 	}
 	if len(credentials) == 0 {
 		return nil, database.ErrRecordNotFound
@@ -119,7 +119,7 @@ func VerifyPasswordCredential(ctx context.Context, credential *modeliamaccount.P
 // ApplyPasswordCredentialUpdate replaces the credential hash and password-change state.
 func ApplyPasswordCredentialUpdate(ctx context.Context, credential *modeliamaccount.PasswordCredential, newPassword string, mustChangePassword bool) error {
 	if credential == nil {
-		return gst.NewError(http.StatusInternalServerError, "password credential is required")
+		return gst.NewError(http.StatusInternalServerError, passwordCredentialRequiredMsg)
 	}
 
 	passwordHash, err := hashAccountPassword(ctx, newPassword)
@@ -147,7 +147,7 @@ func hashAccountPassword(ctx context.Context, password string) (string, error) {
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		serviceErr := gst.NewErrorWithCause(http.StatusInternalServerError, "failed to hash password", err)
+		serviceErr := gst.NewErrorWithCause(http.StatusInternalServerError, failedToHashPasswordMsg, err)
 		gstotel.RecordError(span, serviceErr)
 		return "", serviceErr
 	}

@@ -22,23 +22,23 @@ import (
 func EnsureTenantAdmin(ctx *gst.ServiceContext, actor *modeliamuser.User, target *modeliamuser.User) error {
 	systemRootActor, err := isSystemRoot(ctx, actor)
 	if err != nil {
-		return gst.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, authorizationUnavailableMsg, err)
 	}
 	if systemRootActor {
 		return nil
 	}
 	if actor == nil || actor.GetID() == "" {
-		return gst.NewError(http.StatusForbidden, "permission denied")
+		return gst.NewError(http.StatusForbidden, permissionDeniedMsg)
 	}
 
 	// Root may appear in tenant RBAC bindings for setup or bootstrap purposes,
 	// but tenant-local administrators must not manage root as a target user.
 	systemRootTarget, err := isSystemRoot(ctx, target)
 	if err != nil {
-		return gst.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, authorizationUnavailableMsg, err)
 	}
 	if systemRootTarget {
-		return gst.NewError(http.StatusForbidden, "permission denied")
+		return gst.NewError(http.StatusForbidden, permissionDeniedMsg)
 	}
 
 	tenant := currentTenant(ctx)
@@ -47,10 +47,10 @@ func EnsureTenantAdmin(ctx *gst.ServiceContext, actor *modeliamuser.User, target
 	// particular target outside the current tenant.
 	decision, err := rbac.RBAC().Authorize(ctx, tenant, actor.GetID(), operationObject(ctx), operationAction(ctx))
 	if err != nil {
-		return gst.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, authorizationUnavailableMsg, err)
 	}
 	if !decision.Allowed {
-		return gst.NewError(http.StatusForbidden, "permission denied")
+		return gst.NewError(http.StatusForbidden, permissionDeniedMsg)
 	}
 
 	if target == nil {
@@ -58,10 +58,10 @@ func EnsureTenantAdmin(ctx *gst.ServiceContext, actor *modeliamuser.User, target
 	}
 	belongs, err := targetBelongsToTenant(ctx, tenant, target.GetID())
 	if err != nil {
-		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to verify target tenant", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, failedToVerifyTargetTenantMsg, err)
 	}
 	if !belongs {
-		return gst.NewError(http.StatusForbidden, "target user is outside tenant")
+		return gst.NewError(http.StatusForbidden, targetUserOutsideTenantMsg)
 	}
 	return nil
 }

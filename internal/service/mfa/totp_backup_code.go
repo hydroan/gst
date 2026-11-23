@@ -91,7 +91,7 @@ func hashTOTPBackupCode(secret, normalizedCode string) string {
 // recovery codes be guessed outside that budget.
 func consumeTOTPBackupCode(ctx *gst.ServiceContext, userID, code string) error {
 	if ctx == nil || strings.TrimSpace(userID) == "" {
-		return gst.NewError(http.StatusUnauthorized, "authentication required")
+		return gst.NewError(http.StatusUnauthorized, authenticationRequiredMsg)
 	}
 
 	return database.Transaction(ctx, func(ctx context.Context) error {

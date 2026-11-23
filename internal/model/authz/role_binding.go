@@ -55,10 +55,10 @@ func (RoleBinding) Design() {
 
 func (r *RoleBinding) CreateBefore(ctx context.Context) error {
 	if len(r.SubjectID) == 0 {
-		return gst.NewError(http.StatusBadRequest, "subject_id is required")
+		return gst.NewError(http.StatusBadRequest, subjectIDRequiredMsg)
 	}
 	if len(r.RoleID) == 0 {
-		return gst.NewError(http.StatusBadRequest, "role_id is required")
+		return gst.NewError(http.StatusBadRequest, bindingRoleIDRequiredMsg)
 	}
 
 	// The tenant comes from the context, not from the binding. The framework
@@ -82,7 +82,7 @@ func (r *RoleBinding) CreateBefore(ctx context.Context) error {
 			return err
 		}
 		if role.tenant() != scoped {
-			return gst.NewError(http.StatusBadRequest, "role tenant does not match binding tenant")
+			return gst.NewError(http.StatusBadRequest, roleTenantDoesNotMatchBindingTenantMsg)
 		}
 	}
 
@@ -103,7 +103,7 @@ func bindingID(scope, subjectID, roleID string) string {
 
 func (r *RoleBinding) CreateAfter(ctx context.Context) error {
 	if err := rbac.RBAC().AssignRole(ctx, r.tenant(), r.SubjectID, r.RoleID); err != nil {
-		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to assign the role", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, failedToAssignRoleMsg, err)
 	}
 
 	return nil
@@ -115,7 +115,7 @@ func (r *RoleBinding) DeleteBefore(ctx context.Context) error {
 		return err
 	}
 	if err := rbac.RBAC().UnassignRole(ctx, r.tenant(), r.SubjectID, r.RoleID); err != nil {
-		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to unassign the role", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, failedToUnassignRoleMsg, err)
 	}
 	return nil
 }

@@ -79,14 +79,14 @@ func (r *Role) validate() error {
 	r.ID = strings.TrimSpace(r.ID)
 	r.Name = strings.TrimSpace(r.Name)
 	if len(r.Name) == 0 {
-		return gst.NewError(http.StatusBadRequest, "role name is required")
+		return gst.NewError(http.StatusBadRequest, roleNameRequiredMsg)
 	}
 
 	// The system role is addressed by its constant ID and never lives in the
 	// roles table; reject both the ID and the name to avoid a user-created
 	// role masquerading as it.
 	if r.ID == rbac.SystemRoleRoot || r.Name == rbac.SystemRoleRoot {
-		return gst.NewError(http.StatusBadRequest, "system_root is reserved for the system role")
+		return gst.NewError(http.StatusBadRequest, systemRootReservedMsg)
 	}
 
 	// Both checks below are on the ID alone, because the ID is what authorization
@@ -100,7 +100,7 @@ func (r *Role) validate() error {
 	// created under this ID hands tenant-wide superuser access to everyone bound
 	// to it, whatever permissions it appears to select.
 	if r.ID == rbac.RoleAdmin {
-		return gst.NewError(http.StatusBadRequest, "admin is reserved for the built-in tenant administrator role")
+		return gst.NewError(http.StatusBadRequest, adminReservedMsg)
 	}
 
 	// Policies written for the authenticated role are matched without a role
@@ -109,7 +109,7 @@ func (r *Role) validate() error {
 	// policy syncRolePermissions generates for it would allow every subject that can
 	// log in, including subjects that were never bound to the role.
 	if r.ID == rbac.RoleAuthenticated {
-		return gst.NewError(http.StatusBadRequest, "authenticated is reserved for the implicit role of every authenticated subject")
+		return gst.NewError(http.StatusBadRequest, authenticatedReservedMsg)
 	}
 
 	return nil
@@ -203,7 +203,7 @@ func (r *Role) UpdateAfter(ctx context.Context) error {
 // for DeleteAfter, which runs on the other side of the row lock.
 func (r *Role) DeleteBefore(ctx context.Context) error {
 	if r.ID == "" {
-		return gst.NewError(http.StatusBadRequest, "role id is required")
+		return gst.NewError(http.StatusBadRequest, roleIDRequiredMsg)
 	}
 
 	current := new(Role)
@@ -249,7 +249,7 @@ func (r *Role) DeleteAfter(ctx context.Context) error {
 	}
 
 	if err := rbac.RBAC().RemoveRole(ctx, r.tenant(), r.ID); err != nil {
-		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to remove the role's policies", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, failedToRemoveRolePoliciesMsg, err)
 	}
 	return nil
 }
@@ -284,7 +284,7 @@ func syncRolePermissions(ctx context.Context, r *Role) error {
 	}
 
 	if err := rbac.RBAC().SetRolePermissions(ctx, r.tenant(), r.ID, permissions); err != nil {
-		return gst.NewErrorWithCause(http.StatusInternalServerError, "failed to sync the role's permissions", err)
+		return gst.NewErrorWithCause(http.StatusInternalServerError, failedToSyncRolePermissionsMsg, err)
 	}
 	return nil
 }

@@ -96,7 +96,7 @@ func loadAdminUserEmailMap(ctx context.Context, userIDs []string) (map[string]*m
 		if errors.Is(err, database.ErrRecordNotFound) {
 			return items, nil
 		}
-		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load email identities", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToLoadEmailIdentitiesMsg, err)
 	}
 	for _, identity := range identities {
 		if identity != nil && identity.UserID != "" {
@@ -124,7 +124,7 @@ func loadAdminUserCredentialMap(ctx context.Context, userIDs []string) (map[stri
 		if errors.Is(err, database.ErrRecordNotFound) {
 			return items, nil
 		}
-		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load password credentials", err)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToLoadPasswordCredentialsMsg, err)
 	}
 	for _, credential := range credentials {
 		if credential != nil && credential.UserID != "" {

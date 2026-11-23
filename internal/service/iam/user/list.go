@@ -3,6 +3,7 @@ package serviceiamuser
 import (
 	"net/http"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/database"
@@ -78,7 +79,7 @@ func (a *AdminUserListService) List(ctx *gst.ServiceContext, _ *model.Empty) (rs
 func (a *AdminUserListService) listUsers(ctx *gst.ServiceContext, actor *modeliamuser.User) ([]*modeliamuser.User, int, error) {
 	opts, err := userVisibilityQueryOptions(ctx, actor)
 	if err != nil {
-		return nil, 0, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to list users", err)
+		return nil, 0, gst.NewErrorWithCause(http.StatusInternalServerError, failedToListUsersMsg, err)
 	}
 
 	userQuery, err := a.QueryModel(ctx)
@@ -101,7 +102,7 @@ func (a *AdminUserListService) listUsers(ctx *gst.ServiceContext, actor *modelia
 
 	var total int
 	if err = database.Database[*modeliamuser.User](ctx).WithQuery(userQuery, opts).Count(&total); err != nil {
-		return nil, 0, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to count users", err)
+		return nil, 0, gst.NewErrorWithCause(http.StatusInternalServerError, failedToCountUsersMsg, err)
 	}
 
 	if len(orders) == 0 {
@@ -114,7 +115,7 @@ func (a *AdminUserListService) listUsers(ctx *gst.ServiceContext, actor *modelia
 		WithOrder(orders...).
 		WithPagination(page, size).
 		List(&users); err != nil {
-		return nil, 0, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to list users", err)
+		return nil, 0, gst.NewErrorWithCause(http.StatusInternalServerError, failedToListUsersMsg, err)
 	}
 	return users, total, nil
 }
@@ -130,7 +131,7 @@ func (a *AdminUserListService) listUsers(ctx *gst.ServiceContext, actor *modelia
 func userVisibilityQueryOptions(ctx *gst.ServiceContext, actor *modeliamuser.User) (gst.QueryOptions, error) {
 	systemRoot, err := isSystemRoot(ctx, actor)
 	if err != nil {
-		return gst.QueryOptions{}, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to resolve actor system role", err)
+		return gst.QueryOptions{}, errors.Wrap(err, "failed to resolve actor system role")
 	}
 	if systemRoot {
 		return gst.QueryOptions{AllowEmpty: true}, nil
@@ -140,7 +141,7 @@ func userVisibilityQueryOptions(ctx *gst.ServiceContext, actor *modeliamuser.Use
 	// default tenant when the request carries none.
 	subjectIDs, err := rbac.RBAC().SubjectsInTenant(ctx, currentTenant(ctx))
 	if err != nil {
-		return gst.QueryOptions{}, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to list tenant subjects", err)
+		return gst.QueryOptions{}, errors.Wrap(err, "failed to list tenant subjects")
 	}
 	if len(subjectIDs) == 0 {
 		return emptyUserVisibilityQueryOptions(), nil
@@ -170,7 +171,7 @@ func excludeSystemRootSubjects(ctx *gst.ServiceContext, subjectIDs []string) ([]
 	for _, subjectID := range subjectIDs {
 		systemRoot, err := rbac.RBAC().HasSystemRole(ctx, subjectID, rbac.SystemRoleRoot)
 		if err != nil {
-			return nil, gst.NewErrorWithCause(http.StatusInternalServerError, "authorization unavailable", err)
+			return nil, errors.Wrap(err, "authorization unavailable")
 		}
 		if systemRoot {
 			continue

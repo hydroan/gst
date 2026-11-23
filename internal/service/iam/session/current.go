@@ -74,7 +74,7 @@ func CurrentSession(ctx *gst.ServiceContext) (string, modeliamsession.Session, e
 	if sessionID, sessionData, ok := currentSessionFromContext(ctx); ok {
 		if err := ValidateSession(sessionID, sessionData); err != nil {
 			_, _ = Store.DeleteSession(ctx, sessionID)
-			return "", modeliamsession.Session{}, gst.NewErrorWithCause(http.StatusUnauthorized, "session invalid", err)
+			return "", modeliamsession.Session{}, gst.NewErrorWithCause(http.StatusUnauthorized, sessionInvalidMsg, err)
 		}
 		return sessionID, sessionData, nil
 	}
@@ -88,11 +88,11 @@ func CurrentSession(ctx *gst.ServiceContext) (string, modeliamsession.Session, e
 		return "", modeliamsession.Session{}, err
 	}
 	if !found {
-		return "", modeliamsession.Session{}, gst.NewError(http.StatusUnauthorized, "session not exists")
+		return "", modeliamsession.Session{}, gst.NewError(http.StatusUnauthorized, sessionInvalidMsg)
 	}
 	if err = ValidateSession(sessionID, sessionData); err != nil {
 		_, _ = Store.DeleteSession(ctx, sessionID)
-		return "", modeliamsession.Session{}, gst.NewErrorWithCause(http.StatusUnauthorized, "session invalid", err)
+		return "", modeliamsession.Session{}, gst.NewErrorWithCause(http.StatusUnauthorized, sessionInvalidMsg, err)
 	}
 
 	return sessionID, sessionData, nil

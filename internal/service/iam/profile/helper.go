@@ -23,7 +23,7 @@ func loadProfileByUserID(ctx *gst.ServiceContext, userID string) (*modeliamprofi
 		WithLimit(1).
 		WithQuery(&modeliamprofile.Profile{UserID: userID}).
 		List(&profiles); err != nil {
-		return nil, false, gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load profile", err)
+		return nil, false, gst.NewErrorWithCause(http.StatusInternalServerError, failedToLoadProfileMsg, err)
 	}
 	if len(profiles) == 0 {
 		return nil, false, nil

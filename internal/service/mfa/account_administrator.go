@@ -66,7 +66,7 @@ func ensureCanAdministerMFA(ctx *gst.ServiceContext, targetUserID string) *gst.E
 	if errors.As(err, &svcErr) {
 		return svcErr
 	}
-	return gst.NewErrorWithCause(http.StatusInternalServerError, "administrative authorization failed", err)
+	return gst.NewErrorWithCause(http.StatusInternalServerError, administrativeAuthorizationFailedMsg, err)
 }
 
 // missingAccountAdministrator is the deny-by-default used until the host
@@ -77,5 +77,5 @@ type missingAccountAdministrator struct{}
 
 func (missingAccountAdministrator) EnsureCanAdminister(*gst.ServiceContext, string) error {
 	return gst.NewErrorWithCause(http.StatusInternalServerError,
-		"MFA account administrator is not configured", ErrAccountAdministratorNotConfigured)
+		mfaAccountAdministratorNotConfiguredMsg, ErrAccountAdministratorNotConfigured)
 }
