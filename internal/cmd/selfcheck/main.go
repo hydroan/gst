@@ -147,6 +147,23 @@
 // one, or a translation is registered under, whose name does not end in Msg,
 // the suffix telling the sentences of a package from its other strings.
 //
+// # Message reach
+//
+// A transport answers a request with the outermost service error of the
+// error it is handed, its status and its sentence. A service error built
+// where every caller drops what the function returns, or wraps it in a
+// service error of its own, is never that one: nobody reads its status or
+// its sentence, and the sentence stands among the ones a client is answered
+// with, translated like them, without being one. checkMsgReach follows the
+// error a function returns through the calls of the framework, the function
+// literal a transaction runs included, and reports a service error returned
+// where it reaches no function that answers a client: one nothing of the
+// framework calls, one handed around as a value, or one a project may call.
+// What the check does not see through counts as reaching a client, a caller
+// taking the service error out with errors.As to answer with its status and
+// its sentence among it: the check misses an error that is never answered
+// rather than report one that is.
+//
 // # Translations
 //
 // A process answers its clients in the language its configuration names,
@@ -211,6 +228,7 @@ var checks = []check{
 	{name: "constliteral", run: checkConstLiteral},
 	{name: "validatetag", run: checkValidateTag},
 	{name: "msgconst", run: checkMsgConst},
+	{name: "msgreach", run: checkMsgReach},
 	{name: "translations", run: checkTranslations},
 }
 

@@ -84,20 +84,28 @@ const (
 	sentenceFile = "translations.go"
 )
 
-// sentenceSinkSeeds seeds the functions taking a sentence a client is
-// answered with, each by its package, its name and the index of the
-// parameter taking the sentence. A function handing a parameter of its own
-// to one of them, and a variable holding one, takes a sentence the same way
-// (see sentenceSinks).
-var sentenceSinkSeeds = []struct {
+// sinkSeed names a function taking a sentence a client is answered with, by
+// its package, its name and the index of the parameter taking the sentence.
+type sinkSeed struct {
 	pkg   string
 	name  string
 	param int
-}{
+}
+
+// errorConstructors seeds the constructors of the error a request is
+// answered with, the service error: a status and a sentence for the client,
+// which the transports answer with when it is the outermost of its kind in
+// the error they are handed.
+var errorConstructors = []sinkSeed{
 	{sentenceErrorsPkg, "NewError", 1},
 	{sentenceErrorsPkg, "NewErrorWithCause", 1},
-	{sentenceTranslatorPkg, "Translate", 0},
 }
+
+// sentenceSinkSeeds seeds the functions taking a sentence a client is
+// answered with: the constructors of the service error and the translation
+// itself. A function handing a parameter of its own to one of them, and a
+// variable holding one, takes a sentence the same way (see sentenceSinks).
+var sentenceSinkSeeds = append(slices.Clone(errorConstructors), sinkSeed{sentenceTranslatorPkg, "Translate", 0})
 
 // plainPackages returns the packages of pkgs as a program builds them,
 // leaving out the variants go test builds, the only ones holding test files.
@@ -129,7 +137,7 @@ type sentenceUse struct {
 // variable forwarding to them. A message put together as the request is
 // served, which no constant holds, is none, and neither is the empty string.
 func sentenceUses(module string, plain []*packages.Package) []sentenceUse {
-	sinks := sentenceSinks(module, plain)
+	sinks := sentenceSinks(module, plain, sentenceSinkSeeds)
 	var uses []sentenceUse
 	for _, p := range plain {
 		for _, file := range p.Syntax {
@@ -155,16 +163,15 @@ func sentenceUses(module string, plain []*packages.Package) []sentenceUse {
 
 // sentenceSinks returns the functions and variables of pkgs taking a
 // sentence a client is answered with, each with the indexes of the
-// parameters taking one: the functions of sentenceSinkSeeds; a function
-// handing a parameter of its own, as it stands, to one of them, the helper
-// a package answers its refusals through; and a package variable holding
-// one, the form a public package forwards a constructor in. They are found
-// in rounds, a round adding what forwards to the ones before it, until a
-// round adds none.
-func sentenceSinks(module string, pkgs []*packages.Package) map[types.Object][]int {
+// parameters taking one: the functions of seeds; a function handing a
+// parameter of its own, as it stands, to one of them, the helper a package
+// answers its refusals through; and a package variable holding one, the form
+// a public package forwards a constructor in. They are found in rounds, a
+// round adding what forwards to the ones before it, until a round adds none.
+func sentenceSinks(module string, pkgs []*packages.Package, seeds []sinkSeed) map[types.Object][]int {
 	sinks := make(map[types.Object][]int)
 	for _, p := range pkgs {
-		for _, seed := range sentenceSinkSeeds {
+		for _, seed := range seeds {
 			if p.PkgPath != module+"/"+seed.pkg {
 				continue
 			}
