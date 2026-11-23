@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	coderwebsocket "github.com/coder/websocket"
+	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/sse"
 	"github.com/hydroan/gst/internal/streamctx"
 	"github.com/hydroan/gst/internal/types"
@@ -324,24 +325,28 @@ func (c *Conn) beat(interval time.Duration) {
 // errorStatusBase plus its status, with its message, for a service error, 4404
 // and "sample not found" for types.NewError(404, "sample not found"); and
 // errorStatusBase plus 500 with types.FailureMsg for any other error, whose
-// text stays out of the answer as it stays out of the HTTP one.
+// text stays out of the answer as it stays out of the HTTP one. The reason
+// is the sentence in the language the process answers in, the one the HTTP
+// envelope carries it in (see closeReason).
 func closeStatus(err error) (coderwebsocket.StatusCode, string) {
 	var serviceErr *types.Error
 	switch {
 	case err == nil:
 		return coderwebsocket.StatusNormalClosure, ""
 	case errors.Is(err, streamctx.ErrServerShutdown):
-		return coderwebsocket.StatusGoingAway, streamctx.ShutdownMsg
+		return coderwebsocket.StatusGoingAway, closeReason(streamctx.ShutdownMsg)
 	case errors.As(err, &serviceErr):
 		return errorStatusBase + coderwebsocket.StatusCode(serviceErr.Status()), closeReason(serviceErr.Msg())
 	default:
-		return errorStatusBase + http.StatusInternalServerError, types.FailureMsg
+		return errorStatusBase + http.StatusInternalServerError, closeReason(types.FailureMsg)
 	}
 }
 
-// closeReason cuts msg to what a close frame carries, maxCloseReasonBytes,
-// at the end of a character.
+// closeReason returns the reason a close frame carries for msg: msg in the
+// language the process answers in (see i18n.Translate), cut to what the
+// frame holds, maxCloseReasonBytes, at the end of a character.
 func closeReason(msg string) string {
+	msg = i18n.Translate(msg)
 	if len(msg) <= maxCloseReasonBytes {
 		return msg
 	}

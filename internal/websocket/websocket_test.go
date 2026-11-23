@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	coderwebsocket "github.com/coder/websocket"
+	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/streamctx"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/websocket"
@@ -307,6 +308,46 @@ func TestCloseAnswersWithTheStatusOfTheEnding(t *testing.T) {
 		{name: "a service error with a long message", ending: types.NewError(http.StatusBadRequest, strings.Repeat("é", 100)), status: 4400, reason: strings.Repeat("é", 61)},
 		{name: "another error", ending: errors.New("sample failure"), status: 4500, reason: types.FailureMsg},
 		{name: "the server shutting down", ending: errors.Wrap(streamctx.ErrServerShutdown, "sample stream"), status: coderwebsocket.StatusGoingAway, reason: "the server is shutting down"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			url := serve(t, func(w http.ResponseWriter, r *http.Request) {
+				conn, err := websocket.Accept(w, r, nil, time.Second)
+				if err != nil {
+					return
+				}
+				conn.Close(tt.ending)
+			})
+
+			var closed coderwebsocket.CloseError
+			require.ErrorAs(t, closedWith(t, dialLibrary(t, url)), &closed)
+			require.Equal(t, tt.status, closed.Code)
+			require.Equal(t, tt.reason, closed.Reason)
+		})
+	}
+}
+
+// TestCloseAnswersInTheLanguageOfTheProcess pins the language of the reason
+// an accepted connection closes with: the sentence in the language the
+// process answers in, the one the HTTP envelope carries it in, for the server
+// shutting down, for the server's own failure and for a service error, whose
+// translation is cut to what a close frame holds without splitting a
+// character the way the sentence itself is.
+func TestCloseAnswersInTheLanguageOfTheProcess(t *testing.T) {
+	i18n.Register(i18n.Chinese, map[string]string{"the sample is far too long": strings.Repeat("样", 100)})
+	require.NoError(t, i18n.SetLanguage(i18n.Chinese))
+	t.Cleanup(func() { require.NoError(t, i18n.SetLanguage(i18n.English)) })
+
+	tests := []struct {
+		name   string
+		ending error
+		status coderwebsocket.StatusCode
+		reason string
+	}{
+		{name: "a service error with a long translation", ending: types.NewError(http.StatusBadRequest, "the sample is far too long"), status: 4400, reason: strings.Repeat("样", 41)},
+		{name: "a service error without a translation", ending: types.NewError(http.StatusNotFound, "sample not found"), status: 4404, reason: "sample not found"},
+		{name: "another error", ending: errors.New("sample failure"), status: 4500, reason: "服务器无法处理该请求。"},
+		{name: "the server shutting down", ending: errors.Wrap(streamctx.ErrServerShutdown, "sample stream"), status: coderwebsocket.StatusGoingAway, reason: "服务器正在关闭"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

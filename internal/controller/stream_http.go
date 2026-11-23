@@ -34,10 +34,6 @@ import (
 // request body is bound (see bindJSONRequest), each one of a request stream
 // as it is read.
 
-// requestTimeoutMsg closes, as a 408, a server stream whose client did not
-// send its request in time (see awaitRequest).
-const requestTimeoutMsg = "the request of the stream did not arrive in time"
-
 // errServicePanicked closes, as the server's own failure, the connection of a
 // stream whose service panicked (see StreamHandler).
 var errServicePanicked = errors.New("controller: the service of the stream panicked")

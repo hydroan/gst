@@ -52,7 +52,7 @@ func strictQuery() gin.HandlerFunc {
 
 		query, err := requestctx.GinQueryStrict(c)
 		if err != nil {
-			response.Abort(c, types.NewError(http.StatusBadRequest, "malformed query string"))
+			response.Abort(c, types.NewError(http.StatusBadRequest, malformedQueryMsg))
 			return
 		}
 

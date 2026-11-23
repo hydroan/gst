@@ -89,7 +89,7 @@ func Init() error {
 	// and none of the envelope's fields, so a client parsing the documented
 	// shape cannot tell it from a malformed response.
 	root.NoRoute(func(c *gin.Context) {
-		response.Abort(c, types.NewError(http.StatusNotFound, "not found"))
+		response.Abort(c, types.NewError(http.StatusNotFound, notFoundMsg))
 	})
 
 	// A path this server does serve, asked for with a method it does not, is
@@ -108,7 +108,7 @@ func Init() error {
 	// that matched nothing, never on a request that reached a handler.
 	root.HandleMethodNotAllowed = true
 	root.NoMethod(func(c *gin.Context) {
-		response.Abort(c, types.NewError(http.StatusMethodNotAllowed, "method not allowed"))
+		response.Abort(c, types.NewError(http.StatusMethodNotAllowed, methodNotAllowedMsg))
 	})
 
 	// A request is matched against its path exactly as sent. gin can loosen

@@ -8,6 +8,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/grpcserver"
+	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/types"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -153,10 +154,6 @@ func (c *call) finishStream() error {
 	return c.finish()
 }
 
-// firstMessageMsg refuses a stream the client ended before its first
-// message (see FirstMessage).
-const firstMessageMsg = "the stream ended before its first message, which carries the route parameters"
-
 // FirstMessage returns the first message of a request stream read through
 // recv, the Recv of the transport's stream: what the generated handler of a
 // client or bidirectional stream on a route with parameters reads ahead of
@@ -168,7 +165,7 @@ const firstMessageMsg = "the stream ended before its first message, which carrie
 func FirstMessage[T any](recv func() (T, error)) (T, error) {
 	first, err := recv()
 	if errors.Is(err, io.EOF) {
-		return first, status.Error(codes.InvalidArgument, firstMessageMsg)
+		return first, status.Error(codes.InvalidArgument, i18n.Translate(firstMessageMsg))
 	}
 	return first, err
 }
@@ -224,5 +221,5 @@ func (a *action[M, REQ, RSP]) requests(c *call, recv func() (REQ, error)) *reque
 // the kind the action declares (see unserved) with Unimplemented and
 // unimplementedMsg: the transport's own refusal of a call nothing serves.
 func (a *action[M, REQ, RSP]) unimplemented(c *call, route string) error {
-	return reportFailure(c.log, c.span, "service operation failed", a.unserved(route), status.Error(codes.Unimplemented, unimplementedMsg))
+	return reportFailure(c.log, c.span, "service operation failed", a.unserved(route), status.Error(codes.Unimplemented, i18n.Translate(unimplementedMsg)))
 }

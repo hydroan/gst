@@ -47,10 +47,6 @@ func (a *action[M, REQ, RSP]) beginRequest(c *gin.Context) (context.Context, tra
 	return spanCtx, span, true
 }
 
-// missingRouteParamMsg answers, with 400, a request whose configured route
-// parameter is absent.
-const missingRouteParamMsg = "not found router param"
-
 // routeFromConfig returns the route carried by the controller config, or an
 // empty string when no config declares one.
 func routeFromConfig[M types.Model](cfg ...*types.ControllerConfig[M]) string {

@@ -231,20 +231,6 @@ func (f Filter) value(key string) (string, error) {
 	return f.Values[0], nil
 }
 
-// The messages a call refuses a request with, where the HTTP handler's
-// wording speaks of a body or a route the call has none of.
-const (
-	// invalidMessageMsg answers a model or payload a validator other than
-	// go-playground's refused, which names no field (see fieldViolations);
-	// what failed stays in the log.
-	invalidMessageMsg = "invalid request message"
-	// missingIDMsg answers an item action whose message names no record.
-	missingIDMsg = "id is required"
-	// missingRecordMsg answers a Create, an Update or a Patch whose message
-	// carries no record.
-	missingRecordMsg = "record is required"
-)
-
 // call is one run of an action for an rpc: the call's context with the
 // parameters attached and the controller span started, the span, the log of
 // the action, and the service contexts built for the hooks and the service,

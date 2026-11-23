@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	ginjson "github.com/gin-gonic/gin/codec/json"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/testutil/swap"
 	"github.com/hydroan/gst/internal/types"
@@ -125,6 +126,61 @@ func TestErrorAnswersServiceErrorsAndHidesTheRest(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestErrorAnswersInTheLanguageOfTheProcess pins the language of a failure
+// envelope: its msg is the sentence in the language the process answers in,
+// the translation registered for it, the server's own failure and the
+// failure of an encoding among them, and the sentence as it is written where
+// no translation of it is registered. The fields a request was refused on
+// are described as the error carries them, and the error itself keeps the
+// sentence as it is written.
+func TestErrorAnswersInTheLanguageOfTheProcess(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	i18n.Register(i18n.Chinese, map[string]string{"the sample is sealed": "样本已封存"})
+	require.NoError(t, i18n.SetLanguage(i18n.Chinese))
+	t.Cleanup(func() { require.NoError(t, i18n.SetLanguage(i18n.English)) })
+	sealed := types.NewError(http.StatusConflict, "the sample is sealed")
+
+	tests := []struct {
+		name       string
+		err        error
+		wantStatus int
+		wantBody   string
+	}{
+		{"a sentence a translation is registered for", sealed, http.StatusConflict, `{"data":null,"msg":"样本已封存","trace_id":""}`},
+		{"a sentence none is registered for", types.NewError(http.StatusConflict, "the sample is open"), http.StatusConflict, `{"data":null,"msg":"the sample is open","trace_id":""}`},
+		{"a sentence written in the language", types.NewError(http.StatusConflict, "样本未封存"), http.StatusConflict, `{"data":null,"msg":"样本未封存","trace_id":""}`},
+		{"the server's own failure", errors.New("dial tcp 10.0.0.1:3306: connection refused"), http.StatusInternalServerError, `{"data":null,"msg":"服务器无法处理该请求。","trace_id":""}`},
+		{
+			"refused fields",
+			types.NewInvalidFields([]types.FieldViolation{{Field: "name", Description: "name为必填字段"}}, nil),
+			http.StatusBadRequest,
+			`{"data":null,"msg":"name为必填字段","trace_id":"","error":{"field_violations":[{"field":"name","description":"name为必填字段"}]}}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+
+			response.Error(c, tt.err)
+
+			require.Equal(t, tt.wantStatus, w.Code)
+			require.JSONEq(t, tt.wantBody, w.Body.String())
+		})
+	}
+	require.Equal(t, "the sample is sealed", sealed.Msg(), "the error keeps the sentence as it is written")
+
+	t.Run("an encoding failure", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+
+		response.JSON(c, map[string]any{"ratio": math.NaN()})
+
+		require.Equal(t, http.StatusInternalServerError, w.Code)
+		require.JSONEq(t, `{"data":null,"msg":"服务器无法处理该请求。","trace_id":""}`, w.Body.String())
+	})
 }
 
 // TestAbortAnswersTheErrorAndStopsTheChain pins the refusal of code outside

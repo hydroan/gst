@@ -16,6 +16,7 @@ import (
 	ginjson "github.com/gin-gonic/gin/codec/json"
 	"github.com/go-playground/validator/v10"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/modelregistry"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/testutil/swap"
@@ -384,6 +385,77 @@ func TestClientSafeBindErrorSpeaksOfTheRuleWithoutATranslation(t *testing.T) {
 	}, types.FieldViolations(serviceErr))
 	require.NotContains(t, serviceErr.Msg(), "Key:")
 	require.NotContains(t, serviceErr.Msg(), "untranslatedProbe")
+}
+
+// partlyTranslatedProbe carries rules the validator words in every language
+// the framework speaks, gte and min, the latter with a count of one, which a
+// language words by its own plural forms, one it words in English alone,
+// fqdn, one it words in no language, hostname, and one it words in English
+// and in the simplified script and not in the traditional one, startswith.
+type partlyTranslatedProbe struct {
+	Rank int      `json:"rank" binding:"gte=1"`
+	Tags []string `json:"tags" binding:"min=1"`
+	Site string   `json:"site" binding:"fqdn"`
+	Host string   `json:"host" binding:"hostname"`
+	Code string   `json:"code" binding:"startswith=ab"`
+}
+
+// TestClientSafeBindErrorSpeaksTheLanguageOfTheProcess pins the sentences of
+// the fields the validator refused in a process answering in Chinese: the
+// validator's own Chinese sentence for a rule it has one for, worded by the
+// plural forms of Chinese, with the path of the field in place of its bare
+// name, the item of a batch in front; and,
+// for a rule it has none for in that language, whether it words the rule in
+// English or in no language, the path and the rule in the framework's own
+// sentence, translated. In English each rule the validator words keeps the
+// validator's sentence, and a process answering in the traditional script is
+// answered the same two ways in that script, by the validator's sentences of
+// it where it has one.
+func TestClientSafeBindErrorSpeaksTheLanguageOfTheProcess(t *testing.T) {
+	refused := validateRequest(&partlyTranslatedProbe{Site: "no host", Host: "no host"})
+	require.Error(t, refused)
+
+	var serviceErr *types.Error
+	require.ErrorAs(t, clientSafeBindError(refused), &serviceErr)
+	require.Equal(t, []types.FieldViolation{
+		{Field: "rank", Description: "rank must be 1 or greater"},
+		{Field: "tags", Description: "tags must contain at least 1 item"},
+		{Field: "site", Description: "site must be a valid FQDN"},
+		{Field: "host", Description: "host failed the hostname check"},
+		{Field: "code", Description: "code must start with 'ab'"},
+	}, types.FieldViolations(serviceErr))
+
+	require.NoError(t, i18n.SetLanguage(i18n.Chinese))
+	t.Cleanup(func() { require.NoError(t, i18n.SetLanguage(i18n.English)) })
+
+	require.ErrorAs(t, clientSafeBindError(refused), &serviceErr)
+	require.Equal(t, "rank必须大于或等于1; tags必须至少包含1项; site未通过fqdn校验; host未通过hostname校验; code必须以文本'ab'开头", serviceErr.Msg())
+	require.Equal(t, []types.FieldViolation{
+		{Field: "rank", Description: "rank必须大于或等于1"},
+		{Field: "tags", Description: "tags必须至少包含1项"},
+		{Field: "site", Description: "site未通过fqdn校验"},
+		{Field: "host", Description: "host未通过hostname校验"},
+		{Field: "code", Description: "code必须以文本'ab'开头"},
+	}, types.FieldViolations(serviceErr))
+
+	require.ErrorAs(t, clientSafeItemBindError(1, validateRequest(&validatedProbe{})), &serviceErr)
+	require.Equal(t, "items[1].name为必填字段; items[1].address.city为必填字段", serviceErr.Msg())
+	require.Equal(t, []types.FieldViolation{
+		{Field: "items[1].name", Description: "items[1].name为必填字段"},
+		{Field: "items[1].address.city", Description: "items[1].address.city为必填字段"},
+	}, types.FieldViolations(serviceErr))
+
+	require.NoError(t, i18n.SetLanguage(i18n.TraditionalChinese))
+
+	require.ErrorAs(t, clientSafeBindError(refused), &serviceErr)
+	require.Equal(t, "rank必須大於或等於1; tags必須至少包含1項; site未通過fqdn驗證; host未通過hostname驗證; code未通過startswith=ab驗證", serviceErr.Msg())
+	require.Equal(t, []types.FieldViolation{
+		{Field: "rank", Description: "rank必須大於或等於1"},
+		{Field: "tags", Description: "tags必須至少包含1項"},
+		{Field: "site", Description: "site未通過fqdn驗證"},
+		{Field: "host", Description: "host未通過hostname驗證"},
+		{Field: "code", Description: "code未通過startswith=ab驗證"},
+	}, types.FieldViolations(serviceErr))
 }
 
 // probeAudit, probeTaggedAudit and probeNamedAudit are the structs

@@ -149,6 +149,9 @@ query 名不要以 `_` 开头。反过来，所有裸名参数都属于业务字
   前端据此把错误标到对应的输入项：`"error":{"field_violations":[{"field":"items[1].name","description":"items[1].name is a required field"}]}`。
   `field` 的路径写法与 `msg` 里点名字段的写法相同，`description` 可直接展示。其余失败没有 `error` 成员，
   所以判断成败只看 HTTP 状态码，不看 `error` 在不在。
+- `msg` 与 `error.field_violations` 里的 `description` 用哪种语言由后端的配置决定：英文、简体中文或繁体中文，一个后端只用一种。
+  本文的例句按英文写；后端配成中文时同一句是中文，例如 `name is a required field` 是 `name为必填字段`（繁体是 `name為必填欄位`）。
+  后端自己写的提示用它写的那种语言；点名具体查询参数或具体字段值的提示（如 `invalid value for field 'rank'`）始终是英文。前端直接展示即可。
 - `trace_id` 用于排障，反馈接口问题时请带上。
 - 每个接口会答的失败状态（`400`、`404`、`409`）与失败信封的形状写在 Swagger 里，其余失败走 `default` 响应。
 - 删除不存在的记录（含已删除的）返回 `404`；批量删除时任一 `id` 不存在，整批返回 `404`，一条都不删。

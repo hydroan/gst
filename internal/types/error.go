@@ -12,12 +12,6 @@ import (
 
 const defaultErrorStatus = http.StatusInternalServerError
 
-// FailureMsg is the message a failure carrying no Error is answered with on
-// every transport, the server's own failure: 500 with it in the HTTP
-// envelope (see response.Error), Internal with it over gRPC (see
-// grpcserver.StatusError). What went wrong stays in the log.
-const FailureMsg = "The server could not process the request."
-
 // StatusClientClosedRequest is the HTTP status a request is answered with
 // once its client went away before the answer: nginx's 499, which the gRPC
 // mapping answers Canceled (see grpcserver.StatusError), as google.rpc's
@@ -33,7 +27,9 @@ var (
 // Error is the error a request is answered with: a status and a client-safe
 // message, with an internal cause for the logs. Service methods, model hooks,
 // middleware and interceptors build it; the root gst package re-exports it
-// and its constructors to application code.
+// and its constructors to application code. The message is kept as it is
+// written: a transport answers it in the language the process answers in
+// (see i18n.Translate).
 type Error struct {
 	status int
 	msg    string
@@ -193,9 +189,10 @@ func (e *Error) Status() int {
 	return e.status
 }
 
-// Msg returns the client-safe message the error answers with; a nil
-// receiver answers FailureMsg, the message of every other failure of the
-// server's own, so the envelope and the gRPC status word the two alike.
+// Msg returns the client-safe message the error answers with, as it is
+// written; a nil receiver answers FailureMsg, the message of every other
+// failure of the server's own, so the envelope and the gRPC status word the
+// two alike.
 func (e *Error) Msg() string {
 	if e == nil {
 		return FailureMsg

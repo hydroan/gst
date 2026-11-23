@@ -10,6 +10,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/types"
 )
 
@@ -46,9 +47,11 @@ func JSON(c *gin.Context, data ...any) {
 //
 // The data of a failure is null, a failure carrying no details has no error
 // member, and any other error is the server's own failure and answers 500
-// with failureMsg. Internal error text — database drivers naming tables and
-// columns, third-party client output — never reaches the envelope; callers
-// log the full error themselves before answering it here.
+// with failureMsg. The message is answered in the language the process
+// answers in (see i18n.Translate), the one a gRPC status carries it in.
+// Internal error text — database drivers naming tables and columns,
+// third-party client output — never reaches the envelope; callers log the
+// full error themselves before answering it here.
 func Error(c *gin.Context, err error) {
 	var serviceErr *types.Error
 	if errors.As(err, &serviceErr) {
@@ -56,10 +59,10 @@ func Error(c *gin.Context, err error) {
 		if violations := types.FieldViolations(serviceErr); len(violations) > 0 {
 			details = &errorDetails{FieldViolations: violations}
 		}
-		envelope(c, serviceErr.Status(), serviceErr.Msg(), nil, details)
+		envelope(c, serviceErr.Status(), i18n.Translate(serviceErr.Msg()), nil, details)
 		return
 	}
-	envelope(c, failureStatus, failureMsg, nil, nil)
+	envelope(c, failureStatus, i18n.Translate(failureMsg), nil, nil)
 }
 
 // Abort refuses the request with err, written in the failure envelope the
@@ -97,10 +100,11 @@ var envelopeBuffers = sync.Pool{
 // encoding/json/v2 under the options json.DefaultOptionsV1 names. It is
 // encoded before anything is written: a data no JSON holds, a NaN or a
 // channel a service put there, is the server's own failure, answered 500
-// with failureMsg and recorded on the context for the access log, the
-// handler chain stopped, where an encoding failing under gin's render would
-// leave the status already written, a 200 with an empty body that reads as a
-// success with nothing in it.
+// with failureMsg, translated the way Error translates it, and recorded on
+// the context for the access log, the handler chain stopped, where an
+// encoding failing under gin's render would leave the status already
+// written, a 200 with an empty body that reads as a success with nothing in
+// it.
 func envelope(c *gin.Context, status int, msg string, data any, details *errorDetails) {
 	traceID := c.GetString(execctx.KeyTraceID)
 	// Nearly every answer carries no details, and an envelope type holding
@@ -116,7 +120,7 @@ func envelope(c *gin.Context, status int, msg string, data any, details *errorDe
 		c.Abort()
 		status = failureStatus
 		body.Reset()
-		_ = jsonv2.MarshalWrite(body, apiEnvelope{Msg: failureMsg, TraceID: traceID}, json.DefaultOptionsV1()) // strings and a null: nothing in it fails to encode
+		_ = jsonv2.MarshalWrite(body, apiEnvelope{Msg: i18n.Translate(failureMsg), TraceID: traceID}, json.DefaultOptionsV1()) // strings and a null: nothing in it fails to encode
 	}
 	c.Render(status, jsonRender{body: body.Bytes()})
 

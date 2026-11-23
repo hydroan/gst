@@ -36,6 +36,7 @@ import (
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/grpcserver"
+	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/middleware"
 	"github.com/hydroan/gst/internal/router"
@@ -76,6 +77,10 @@ func Bootstrap() error {
 
 	startup.Register(
 		config.Init,
+		// The language the process answers its clients in, set before
+		// anything can answer: a configuration naming one the framework does
+		// not speak ends the boot here.
+		func() error { return errors.Wrap(i18n.SetLanguage(config.App.Language), "app.language") },
 		logger.Init,
 		prommetrics.Init,
 

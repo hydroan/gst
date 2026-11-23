@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/internal/i18n"
 	"github.com/stretchr/testify/require"
 )
 
@@ -89,6 +90,18 @@ func TestStrictQueryRejectsMalformedQueries(t *testing.T) {
 			require.Contains(t, body, "malformed query string")
 		})
 	}
+}
+
+// TestStrictQueryRefusesInTheLanguageOfTheProcess pins the language of the
+// gate's own sentence: a query that fails to parse is refused in the language
+// the process answers in.
+func TestStrictQueryRefusesInTheLanguageOfTheProcess(t *testing.T) {
+	require.NoError(t, i18n.SetLanguage(i18n.Chinese))
+	t.Cleanup(func() { require.NoError(t, i18n.SetLanguage(i18n.English)) })
+
+	status, body := strictQueryResult(t, http.MethodGet, "a=%zz")
+	require.Equal(t, http.StatusBadRequest, status)
+	require.Contains(t, body, `"msg":"查询字符串格式有误"`)
 }
 
 // TestStrictQueryRefusesAPageOrSizeThatIsNoCount pins that _page and _size

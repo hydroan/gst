@@ -30,7 +30,7 @@ func TestImportRefusesARequestWithoutItsFile(t *testing.T) {
 		rsp := upload(t, handler, bytes.Repeat([]byte(" "), 5*1024*1024+1))
 
 		require.Equal(t, http.StatusBadRequest, rsp.Code)
-		require.Contains(t, rsp.Body.String(), "too large file")
+		require.Contains(t, rsp.Body.String(), "file too large")
 	})
 }
 

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/i18n"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -288,6 +289,27 @@ func TestInitDefaultsTheGRPCListener(t *testing.T) {
 	}, config.App.GRPC)
 }
 
+// TestInitDefaultsTheLanguageToEnglish pins the language a process answers
+// its clients in when its configuration names none, English, and that the
+// environment names another like any other key, kept the way it is spelt for
+// the boot to read.
+func TestInitDefaultsTheLanguageToEnglish(t *testing.T) {
+	clearConfigEnvForTest(t)
+	t.Chdir(t.TempDir())
+	config.SetConfigFile("")
+
+	if err := config.Init(); err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, i18n.English, config.App.Language)
+
+	t.Setenv(config.APP_LANGUAGE, "zh-CN")
+	if err := config.Init(); err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, "zh-CN", config.App.Language)
+}
+
 // Sample is a registered section read from the file and its default tags.
 type Sample struct {
 	AppID     string `json:"app_id" mapstructure:"app_id" default:"myappid"`
@@ -321,6 +343,7 @@ func clearConfigEnvForTest(t *testing.T) {
 	t.Helper()
 
 	keys := []string{
+		config.APP_LANGUAGE,
 		"SERVER_MODE",
 		"SERVER_PORT",
 		"REDIS_ENABLED",

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/spf13/viper"
 	"golang.org/x/mod/module"
@@ -16,6 +17,7 @@ const (
 	APP_NAME        = "APP_NAME"
 	APP_VERSION     = "APP_VERSION"
 	APP_DESCRIPTION = "APP_DESCRIPTION"
+	APP_LANGUAGE    = "APP_LANGUAGE"
 	APP_BUILD_TIME  = "APP_BUILD_TIME"
 	APP_GIT_COMMIT  = "APP_GIT_COMMIT"
 	APP_GIT_BRANCH  = "APP_GIT_BRANCH"
@@ -29,6 +31,19 @@ type AppInfo struct {
 	Name        string `json:"name" mapstructure:"name" ini:"name" yaml:"name"`
 	Version     string `json:"version" mapstructure:"version" ini:"version" yaml:"version"`
 	Description string `json:"description" mapstructure:"description" ini:"description" yaml:"description"`
+
+	// Language is the language the process answers its clients in, a BCP 47
+	// language tag with a region or a script or without: zh, zh-CN and
+	// zh-Hans name Chinese, zh-TW, zh-HK and zh-Hant name Chinese in the
+	// traditional script, en-US names English. The sentences a client is
+	// answered with that a translation into it is registered for, the
+	// framework's own refusals and the descriptions of the fields a request
+	// is refused on among them, are answered in it; any other sentence is
+	// answered as it is written. It is English by default, the language the
+	// sentences are written in, and a tag naming a language the framework
+	// does not speak, English and Chinese in either script being the ones it
+	// does, fails the boot.
+	Language string `json:"language" mapstructure:"language" ini:"language" yaml:"language"`
 
 	// Build and runtime information. BuildTime is the time the configuration
 	// names, or else the time of the commit Go recorded in the binary.
@@ -45,6 +60,7 @@ func (a *AppInfo) setDefaults(v *viper.Viper) {
 	v.SetDefault("app.name", types.FrameworkName)
 	v.SetDefault("app.version", "")
 	v.SetDefault("app.description", fmt.Sprintf("A Go application built with %s framework", types.FrameworkName))
+	v.SetDefault("app.language", i18n.English)
 
 	// What the build information Go records in the binary supplies becomes the
 	// default of its key, so a file or an environment variable still overrides

@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/router"
 	"github.com/hydroan/gst/internal/testutil/testlog"
@@ -249,6 +251,30 @@ func TestRunOrDieReportsTheCauseWithItsStack(t *testing.T) {
 	require.Contains(t, report, "TestRunOrDieReportsTheCauseWithItsStack.func1 error: start the listener: listen failed")
 	require.Contains(t, report, "attached stack trace", "the report carries the stack of the cause")
 	require.Contains(t, report, "TestRunOrDieReportsTheCauseWithItsStack.func1\n", "the stack names where the cause was created")
+}
+
+// unspokenLanguageHelper names the environment variable that turns
+// TestBootstrapEndsOnALanguageTheFrameworkDoesNotSpeak into the child process
+// it starts.
+const unspokenLanguageHelper = "GST_TEST_UNSPOKEN_LANGUAGE_CHILD"
+
+// TestBootstrapEndsOnALanguageTheFrameworkDoesNotSpeak runs Bootstrap in a
+// child process of the test binary whose configuration names a language the
+// framework does not speak: the boot ends on an error naming the key, the
+// value and the languages spoken, before anything that would answer a client
+// in another language is set up.
+func TestBootstrapEndsOnALanguageTheFrameworkDoesNotSpeak(t *testing.T) {
+	if os.Getenv(unspokenLanguageHelper) == "1" {
+		fmt.Println("bootstrap:", Bootstrap())
+		return
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=^TestBootstrapEndsOnALanguageTheFrameworkDoesNotSpeak$")
+	cmd.Env = append(os.Environ(), unspokenLanguageHelper+"=1", config.APP_LANGUAGE+"=ja", "TMPDIR="+t.TempDir())
+	out, err := cmd.CombinedOutput()
+
+	require.NoError(t, err, "%s", out)
+	require.Contains(t, string(out), `bootstrap: app.language: "ja" is no language the framework speaks: it speaks `+strings.Join(i18n.Languages(), ", "))
 }
 
 // TestLogFatalFailure pins the entry logFatalFailure records before the

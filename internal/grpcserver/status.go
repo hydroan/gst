@@ -5,6 +5,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/types"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
@@ -19,17 +20,18 @@ import (
 // detail listing each field and its description; any other error answers
 // Internal with types.FailureMsg, the message the HTTP envelope answers the
 // server's own failure with, its text kept out of the answer for the caller to
-// log before mapping; nil stays nil. The public grpc.StatusError forwards to
-// it.
+// log before mapping; nil stays nil. The message is answered in the language
+// the process answers in (see i18n.Translate), the one the HTTP envelope
+// carries it in. The public grpc.StatusError forwards to it.
 func StatusError(err error) error {
 	if err == nil {
 		return nil
 	}
 	var serviceErr *types.Error
 	if !errors.As(err, &serviceErr) {
-		return status.Error(codes.Internal, types.FailureMsg)
+		return status.Error(codes.Internal, i18n.Translate(types.FailureMsg))
 	}
-	st := status.New(codeOf(serviceErr.Status(), err), serviceErr.Msg())
+	st := status.New(codeOf(serviceErr.Status(), err), i18n.Translate(serviceErr.Msg()))
 	if violations := types.FieldViolations(serviceErr); len(violations) > 0 {
 		bad := &errdetails.BadRequest{FieldViolations: make([]*errdetails.BadRequest_FieldViolation, 0, len(violations))}
 		for _, v := range violations {

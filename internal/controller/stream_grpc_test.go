@@ -8,6 +8,7 @@ import (
 
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/grpcserver"
+	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -209,6 +210,15 @@ func TestServerStreamCallStreamsTheResponses(t *testing.T) {
 		require.Equal(t, "the Stream action is served by no Stream method of its kind", st.Message())
 	})
 
+	t.Run("a service streaming nothing answers Unimplemented in the language of the process", func(t *testing.T) {
+		require.NoError(t, i18n.SetLanguage(i18n.Chinese))
+		t.Cleanup(func() { require.NoError(t, i18n.SetLanguage(i18n.English)) })
+		stream := openStream(t, conn, "Silence", sampleCredential, serverStream)
+		sendPayload(t, stream, map[string]any{"note": "1"})
+		_, err := recvResponse(stream)
+		requireStatus(t, err, codes.Unimplemented, "没有对应类型的 Stream 方法为该流式接口提供服务")
+	})
+
 	t.Run("a client canceling the stream ends it as canceled", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
@@ -336,8 +346,8 @@ func TestBidiStreamCallKeepsARefusalReadOnAnotherGoroutine(t *testing.T) {
 // TestFirstMessageRefusesAStreamEndedBeforeIt pins FirstMessage, what a
 // generated handler reads the first message of a request stream through:
 // the message when there is one, InvalidArgument naming the missing route
-// parameters when the client ended the stream before sending any, and the
-// stream's error as it is otherwise.
+// parameters when the client ended the stream before sending any, in the
+// language the process answers in, and the stream's error as it is otherwise.
 func TestFirstMessageRefusesAStreamEndedBeforeIt(t *testing.T) {
 	first, err := controller.FirstMessage(func() (string, error) { return "params", nil })
 	require.NoError(t, err)
@@ -350,6 +360,12 @@ func TestFirstMessageRefusesAStreamEndedBeforeIt(t *testing.T) {
 
 	_, err = controller.FirstMessage(func() (string, error) { return "", status.Error(codes.Canceled, "context canceled") })
 	require.Equal(t, codes.Canceled, status.Code(err))
+
+	require.NoError(t, i18n.SetLanguage(i18n.Chinese))
+	t.Cleanup(func() { require.NoError(t, i18n.SetLanguage(i18n.English)) })
+	_, err = controller.FirstMessage(func() (string, error) { return "", io.EOF })
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.Equal(t, "流在发出第一条消息之前就结束了，路由参数由这条消息携带", status.Convert(err).Message())
 }
 
 // TestSameParamsHoldsLaterMessagesToTheFirst pins SameParams, what the

@@ -16,14 +16,6 @@ import (
 // maxImportSize is the largest upload an import accepts, 5 MiB.
 const maxImportSize = 5 * 1024 * 1024
 
-// tooLargeFileMsg answers, with 400, an upload over maxImportSize.
-const tooLargeFileMsg = "too large file"
-
-// missingUploadFileMsg answers an import request whose multipart form carries
-// no "file" field, keeping the multipart reader's own error text out of the
-// response for the same reason bind failures render stable messages.
-const missingUploadFileMsg = "upload file is required"
-
 // ImportHandler returns a Gin handler that imports resources from an
 // uploaded file.
 //

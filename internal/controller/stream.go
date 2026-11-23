@@ -12,10 +12,6 @@ import (
 // requests of a request stream, read with the refusal one of them met kept
 // for the answer, and the failure of an action no Stream method serves.
 
-// unimplementedMsg answers a Stream action nothing serves, each transport
-// with its own status (see unserved).
-const unimplementedMsg = "the Stream action is served by no Stream method of its kind"
-
 // requests reads the requests of a request stream through the function the
 // handler hands the call: recv normalizes and validates each the way
 // ServiceCall treats a payload, and one the validator refuses, or one the

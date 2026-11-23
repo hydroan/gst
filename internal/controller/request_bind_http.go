@@ -209,7 +209,7 @@ var dayAtPointer = jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, day *dat
 // were already wrapped at the decoding entry points.
 func requiredBodyError(err error) error {
 	if errors.Is(err, io.EOF) {
-		return types.NewErrorWithCause(http.StatusBadRequest, "request body is required", err)
+		return types.NewErrorWithCause(http.StatusBadRequest, missingBodyMsg, err)
 	}
 	return err
 }
@@ -239,11 +239,11 @@ func clientSafeBindError(err error) error {
 		if typeErr.Field != "" {
 			return types.NewInvalidValue(indexedJSONPath(typeErr.Field), typeErr.Value+" does not fit the field", err)
 		}
-		return types.NewErrorWithCause(http.StatusBadRequest, "request body has an unexpected JSON type", err)
+		return types.NewErrorWithCause(http.StatusBadRequest, unexpectedJSONTypeMsg, err)
 	case errors.As(err, &syntaxErr):
-		return types.NewErrorWithCause(http.StatusBadRequest, "request body is not valid JSON", err)
+		return types.NewErrorWithCause(http.StatusBadRequest, invalidJSONMsg, err)
 	default:
-		return types.NewErrorWithCause(http.StatusBadRequest, "invalid request body", err)
+		return types.NewErrorWithCause(http.StatusBadRequest, invalidBodyMsg, err)
 	}
 }
 

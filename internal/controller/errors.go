@@ -21,16 +21,6 @@ import (
 // server's own, which each transport answers with its fixed message (see
 // response.Error and grpcserver.StatusError).
 
-// The messages of the controller's fixed refusals, each answered with the
-// status named beside it.
-const (
-	invalidArgumentMsg = "The request contains invalid parameters."                               // 400
-	notFoundMsg        = "The requested resource was not found."                                  // 404
-	alreadyExistsMsg   = "The resource already exists."                                           // 409
-	staleObjectMsg     = "The resource was modified by another operation. Reload and retry."      // 409
-	foreignKeyMsg      = "The request refers to a record that does not exist or is still in use." // 409
-)
-
 // invalidArgument returns the refusal of a request the controller could not
 // carry, err: the service error err wraps when that one answers 400
 // already, whole, so the fields it names (see types.FieldViolations) reach

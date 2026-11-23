@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/streamctx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -45,7 +46,7 @@ func streamShutdown(stopping context.Context) grpc.StreamServerInterceptor {
 		case err == nil && !info.IsServerStream:
 			return nil
 		case err == nil || status.Code(err) == codes.Canceled:
-			return status.Error(codes.Unavailable, streamctx.ShutdownMsg)
+			return status.Error(codes.Unavailable, i18n.Translate(streamctx.ShutdownMsg))
 		}
 		return err
 	}

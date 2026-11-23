@@ -7,6 +7,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/grpcserver"
+	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
@@ -111,4 +112,34 @@ func TestStatusErrorAnswersServiceErrorsAndHidesTheRest(t *testing.T) {
 	require.Equal(t, types.FailureMsg, broken.Message())
 
 	require.NoError(t, grpcserver.StatusError(nil))
+}
+
+// TestStatusErrorAnswersInTheLanguageOfTheProcess pins the language of a
+// status: its message is the sentence in the language the process answers
+// in, the one the HTTP envelope carries it in, the translation registered for
+// it, the server's own failure among them, and the sentence as it is written
+// where no translation of it is registered. The fields a request was refused
+// on are described as the error carries them.
+func TestStatusErrorAnswersInTheLanguageOfTheProcess(t *testing.T) {
+	i18n.Register(i18n.Chinese, map[string]string{"the sample is sealed": "样本已封存"})
+	require.NoError(t, i18n.SetLanguage(i18n.Chinese))
+	t.Cleanup(func() { require.NoError(t, i18n.SetLanguage(i18n.English)) })
+
+	sealed := status.Convert(grpcserver.StatusError(types.NewError(http.StatusConflict, "the sample is sealed")))
+	require.Equal(t, codes.Aborted, sealed.Code())
+	require.Equal(t, "样本已封存", sealed.Message())
+
+	open := status.Convert(grpcserver.StatusError(types.NewError(http.StatusConflict, "the sample is open")))
+	require.Equal(t, "the sample is open", open.Message())
+
+	broken := status.Convert(grpcserver.StatusError(errors.New("dial tcp: connection refused")))
+	require.Equal(t, codes.Internal, broken.Code())
+	require.Equal(t, "服务器无法处理该请求。", broken.Message())
+
+	refused := status.Convert(grpcserver.StatusError(types.NewInvalidFields([]types.FieldViolation{{Field: "name", Description: "name为必填字段"}}, nil)))
+	require.Equal(t, "name为必填字段", refused.Message())
+	require.Len(t, refused.Details(), 1)
+	bad, ok := refused.Details()[0].(*errdetails.BadRequest)
+	require.True(t, ok, "%T", refused.Details()[0])
+	require.Equal(t, "name为必填字段", bad.GetFieldViolations()[0].GetDescription())
 }

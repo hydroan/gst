@@ -17,6 +17,7 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/controller"
+	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/middleware"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/tenant"
@@ -43,8 +44,9 @@ const (
 // built-in chain of the HTTP listener and the handler of the action, the call
 // through the server and the call function of the action, and both must answer
 // the status the scenario states — the HTTP status, and the gRPC code it maps
-// to (see TRANSPORTS.md, section 4) — the same msg, name the same fields when
-// the refusal names any, and leave the records the same. The scenarios the
+// to (see TRANSPORTS.md, section 4) — the same msg, in the language the
+// scenario has the process answer in, name the same fields when the refusal
+// names any, and leave the records the same. The scenarios the
 // transports answer differently on purpose state what each answers (see
 // TRANSPORTS.md, section 9): a change to one side alone turns the table red,
 // and a new difference has to be written into the table and the document
@@ -1785,10 +1787,42 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			want:  ok,
 			check: observedClientIP("203.0.113.9"),
 		},
+		// The sentences of a refusal are answered in the language the
+		// process answers in, on both transports alike: a sentence of the
+		// controller's own, the sentence of a field the validator refused,
+		// and the sentences each transport words by what its request lacks.
+		{
+			name: "Get answers NotFound in the language of the process", fixture: samples, phase: apiaction.Get, language: i18n.Chinese,
+			input: contractInput{id: "missing"},
+			want:  contractWant{status: http.StatusNotFound, msg: "请求的资源不存在。"},
+		},
+		{
+			name: "Create refuses a record failing validation in the language of the process", fixture: validated, phase: apiaction.Create, language: i18n.Chinese,
+			input: contractInput{record: map[string]any{}},
+			want:  contractWant{status: http.StatusBadRequest, msg: "name为必填字段", fields: []types.FieldViolation{{Field: "name", Description: "name为必填字段"}}},
+		},
+		{
+			name: "Create refuses a request carrying no record in the language of the process", fixture: samples, phase: apiaction.Create, language: i18n.Chinese,
+			want: contractWant{status: http.StatusBadRequest, msg: "请求体不能为空", grpc: &grpcAnswer{code: codes.InvalidArgument, msg: "record为必填字段"}},
+		},
+		{
+			name: "Get answers NotFound in the traditional script of a process answering in it", fixture: samples, phase: apiaction.Get, language: i18n.TraditionalChinese,
+			input: contractInput{id: "missing"},
+			want:  contractWant{status: http.StatusNotFound, msg: "請求的資源不存在。"},
+		},
+		{
+			name: "Create refuses a record failing validation in the traditional script of a process answering in it", fixture: validated, phase: apiaction.Create, language: i18n.TraditionalChinese,
+			input: contractInput{record: map[string]any{}},
+			want:  contractWant{status: http.StatusBadRequest, msg: "name為必填欄位", fields: []types.FieldViolation{{Field: "name", Description: "name為必填欄位"}}},
+		},
 	}
 
 	for _, s := range scenarios {
 		t.Run(s.name, func(t *testing.T) {
+			if s.language != "" {
+				require.NoError(t, i18n.SetLanguage(s.language))
+				t.Cleanup(func() { require.NoError(t, i18n.SetLanguage(i18n.English)) })
+			}
 			answered := make(map[string]contractAnswer, len(contractTransports))
 			for _, tr := range contractTransports {
 				t.Run(tr.name, func(t *testing.T) {
@@ -1818,18 +1852,20 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 }
 
 // contractScenario is one scenario of the contract table: the fixture and
-// the action its input is sent to, the input, prepared afresh for each
-// transport when prepare is set, what both transports must answer, and what
-// must hold afterwards of the answer and the records, checked on each
-// transport's own run.
+// the action its input is sent to, the language the process answers in while
+// the scenario runs, English when none is named, the input, prepared afresh
+// for each transport when prepare is set, what both transports must answer,
+// and what must hold afterwards of the answer and the records, checked on
+// each transport's own run.
 type contractScenario struct {
-	name    string
-	fixture contractFixture
-	phase   apiaction.Phase
-	input   contractInput
-	prepare func(t *testing.T) contractInput
-	want    contractWant
-	check   func(t *testing.T, in contractInput, got contractAnswer)
+	name     string
+	fixture  contractFixture
+	phase    apiaction.Phase
+	language string
+	input    contractInput
+	prepare  func(t *testing.T) contractInput
+	want     contractWant
+	check    func(t *testing.T, in contractInput, got contractAnswer)
 }
 
 // contractInput is what a scenario sends, on either transport: the id of

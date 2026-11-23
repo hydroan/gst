@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/client"
+	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/stretchr/testify/require"
 )
@@ -22,7 +23,8 @@ import (
 // found, while a path that is served under another method is method not
 // allowed, carrying the Allow header that names those methods. A near miss in
 // spelling, such as a trailing slash, is not redirected to the route it
-// resembles; it is not found, like any other path no route serves.
+// resembles; it is not found, like any other path no route serves. The
+// sentences are answered in the language the process answers in.
 func TestUnmatchedRequestsAnswerInTheEnvelope(t *testing.T) {
 	t.Run("a path no route serves", func(t *testing.T) {
 		cli, err := client.New(baseURL)
@@ -76,6 +78,19 @@ func TestUnmatchedRequestsAnswerInTheEnvelope(t *testing.T) {
 		require.Equal(t, http.StatusNotFound, rsp.StatusCode,
 			"response body: %s; Location: %s", body, rsp.Header.Get("Location"))
 		requireRefusalEnvelope(t, body, "not found")
+	})
+
+	t.Run("in the language of the process", func(t *testing.T) {
+		require.NoError(t, i18n.SetLanguage(i18n.Chinese))
+		t.Cleanup(func() { require.NoError(t, i18n.SetLanguage(i18n.English)) })
+		cli, err := client.New(baseURL)
+		require.NoError(t, err)
+
+		_, err = cli.Do(t.Context(), http.MethodGet, "/api/there-is-no-such-route", nil)
+		testutil.RequireError(t, err, http.StatusNotFound, "未找到")
+
+		_, err = cli.Do(t.Context(), http.MethodPost, "/-/healthz", nil)
+		testutil.RequireError(t, err, http.StatusMethodNotAllowed, "不支持该请求方法")
 	})
 }
 

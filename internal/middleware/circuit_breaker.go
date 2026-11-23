@@ -67,6 +67,6 @@ func CircuitBreaker() gin.HandlerFunc {
 
 		// The caller is told the one thing it can act on, which is to try again
 		// later.
-		response.Abort(c, types.NewError(http.StatusServiceUnavailable, "service unavailable"))
+		response.Abort(c, types.NewError(http.StatusServiceUnavailable, unavailableMsg))
 	}
 }

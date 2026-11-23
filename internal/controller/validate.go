@@ -1,15 +1,22 @@
 package controller
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin/binding"
+	"github.com/go-playground/locales"
 	"github.com/go-playground/locales/en"
+	"github.com/go-playground/locales/zh"
+	"github.com/go-playground/locales/zh_Hant_TW"
 	ut "github.com/go-playground/universal-translator"
 	"github.com/go-playground/validator/v10"
 	entranslations "github.com/go-playground/validator/v10/translations/en"
+	zhtranslations "github.com/go-playground/validator/v10/translations/zh"
+	"github.com/go-playground/validator/v10/translations/zh_tw"
+	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 )
@@ -66,21 +73,36 @@ var (
 	// (see init), whose errors fieldViolations names fields of; nil when
 	// gin's validator is not go-playground's.
 	validatorEngine *validator.Validate
-	// validatorTranslator renders the errors of validatorEngine as English
-	// sentences (see fieldViolations).
-	validatorTranslator ut.Translator
+	// validatorTranslators render the errors of validatorEngine as the
+	// sentences of the validator's own translations, one translator for
+	// each language the framework speaks (see fieldViolations).
+	validatorTranslators map[string]ut.Translator
 )
+
+// validatorSentences lists, by language the framework speaks, the locale of
+// the validator's translator of that language and the function registering
+// the validator's own sentences in it.
+var validatorSentences = map[string]struct {
+	locale   locales.Translator
+	register func(*validator.Validate, ut.Translator) error
+}{
+	i18n.English: {locale: en.New(), register: entranslations.RegisterDefaultTranslations},
+	i18n.Chinese: {locale: zh.New(), register: zhtranslations.RegisterDefaultTranslations},
+	// The validator words the traditional script the way Taiwan writes it.
+	i18n.TraditionalChinese: {locale: zh_Hant_TW.New(), register: zh_tw.RegisterDefaultTranslations},
+}
 
 // init sets gin's validator up for the answers the framework gives, at
 // package initialization so that it is set before any request, on either
 // transport, and before any validation a project runs through gin itself:
 // the validator names fields by their JSON key, the name the client sent
-// them under, renders each failure as the English sentence of its own
-// translations, "name is a required field", and knows the rule declaring a
-// field read-only (see modelschema.RuleReadOnly), which checks nothing: the
-// write flows read the declaration, and the validator would refuse a rule it
-// was never told of. A validator other than go-playground's is left as it
-// is, its errors answered without naming a field (see clientSafeBindError).
+// them under, renders each failure as the sentence of its own translations
+// in each language the framework speaks (see i18n.Languages), "name is a
+// required field" in English, and knows the rule declaring a field
+// read-only (see modelschema.RuleReadOnly), which checks nothing: the write
+// flows read the declaration, and the validator would refuse a rule it was
+// never told of. A validator other than go-playground's is left as it is,
+// its errors answered without naming a field (see clientSafeBindError).
 func init() {
 	if binding.Validator == nil {
 		return
@@ -94,44 +116,54 @@ func init() {
 	// under a rule it does not run; the registration fails for an empty rule
 	// name or a nil function alone.
 	_ = engine.RegisterValidation(modelschema.RuleReadOnly, func(validator.FieldLevel) bool { return true }, true)
-	english := en.New()
-	translator, _ := ut.New(english, english).GetTranslator(english.Locale())
-	if err := entranslations.RegisterDefaultTranslations(engine, translator); err != nil {
-		return
+	translators := make(map[string]ut.Translator, len(validatorSentences))
+	for _, language := range i18n.Languages() {
+		sentences, listed := validatorSentences[language]
+		if !listed {
+			panic("controller: validatorSentences lists no sentences of the validator in " + language + ", a language the framework speaks")
+		}
+		translator, _ := ut.New(sentences.locale, sentences.locale).GetTranslator(sentences.locale.Locale())
+		if err := sentences.register(engine, translator); err != nil {
+			return
+		}
+		translators[language] = translator
 	}
 	validatorEngine = engine
-	validatorTranslator = translator
+	validatorTranslators = translators
 }
 
 // fieldViolations returns the fields a validator error names, one violation
 // per field: the field by its JSON key path relative to the request (see
 // jsonFieldPath), with prefix in front, items[1]. for the item of a batch
-// validated on its own, and a sentence for the failure. The sentence is the
-// validator's own English sentence for the rule with the path in place of
-// the bare field name it begins with, "address.city is a required field";
-// for a rule the validator has no sentence for, one of its own or one a
-// project registered, it is the path and the rule, "address.zip failed the
-// hostname check", the parameter with the rule when it has one, "tag failed
-// the startswith=ab check": the text the validator renders those with
-// instead names the Go type of the request and is not the client's. nil for
-// any other error, and for the errors of a validator other than the one
-// init configured, whose sentences and field names are its own.
+// validated on its own, and a sentence for the failure, in the language the
+// process answers in (see i18n.Language). The sentence is the validator's
+// own sentence for the rule in that language with the path in place of the
+// bare field name it begins with, "address.city is a required field"; for a
+// rule the validator has no sentence for in that language, one of its own
+// or one a project registered, it is the path and the rule, "address.zip
+// failed the hostname check" (see failedCheckMsg), the parameter with
+// the rule when it has one, "tag failed the startswith=ab check": the text
+// the validator renders those with instead names the Go type of the request
+// and is not the client's. nil for any other error, and for the errors of a
+// validator other than the one init configured, whose sentences and field
+// names are its own.
 func fieldViolations(err error, prefix string) []types.FieldViolation {
 	var request *refusedRequestError
 	var fieldErrors validator.ValidationErrors
 	if validatorEngine == nil || binding.Validator == nil || binding.Validator.Engine() != validatorEngine || !errors.As(err, &request) || !errors.As(request.err, &fieldErrors) {
 		return nil
 	}
+	translator := validatorTranslators[i18n.Language()]
 	violations := make([]types.FieldViolation, 0, len(fieldErrors))
 	for _, fe := range fieldErrors {
 		path := prefix + jsonFieldPath(request.typ, fe)
-		description := fe.Translate(validatorTranslator)
+		description := fe.Translate(translator)
 		if description == fe.Error() {
 			rule := fe.Tag()
 			if param := fe.Param(); param != "" {
 				rule += "=" + param
 			}
-			description = path + " failed the " + rule + " check"
+			description = fmt.Sprintf(i18n.Translate(failedCheckMsg), path, rule)
 		} else {
 			description = path + strings.TrimPrefix(description, fe.Field())
 		}
