@@ -29,7 +29,9 @@ func checkModelSingularNaming(ignore gghelper.ProjectIgnore) []string {
 
 	// Common plural file names that are allowed in Go projects. data and
 	// stats name one body of content rather than many items; stats is the
-	// conventional short form of statistics.
+	// conventional short form of statistics. translations is the file a
+	// package registers the translations of its sentences in, the model
+	// package of a copied module among them.
 	allowedPluralFiles := map[string]bool{
 		"types":       true,
 		"errors":      true,
@@ -53,6 +55,8 @@ func checkModelSingularNaming(ignore gghelper.ProjectIgnore) []string {
 		"records":     true,
 		"data":        true,
 		"stats":       true,
+
+		"translations": true,
 	}
 	// Plural directory names that are allowed: types for a directory of
 	// shared types, and data and stats, which name one body of content.

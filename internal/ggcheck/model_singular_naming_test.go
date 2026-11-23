@@ -15,22 +15,27 @@ func TestModelSingularNamingAllowsExemptPlurals(t *testing.T) {
 
 	// types, data and stats are plural in form but name one body of content,
 	// so model directories and files may keep them; records, statistics and
-	// metrics are ordinary plurals.
+	// metrics are ordinary plurals. translations.go is the file a package
+	// registers the translations of its sentences in, kept as well, beside
+	// samples.go, an ordinary plural file.
 	for _, dir := range []string{"types", "data", "stats", "records", "statistics", "metrics"} {
 		if err := os.MkdirAll(filepath.Join(projectDir, "model", dir), 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
 	writeCheckFile(t, filepath.Join(projectDir, "model", "stats", "stats.go"), "package stats\n")
+	writeCheckFile(t, filepath.Join(projectDir, "model", "sample", "translations.go"), "package sample\n")
+	writeCheckFile(t, filepath.Join(projectDir, "model", "sample", "samples.go"), "package sample\n")
 
 	violations := runCheck(ggcheck.ModelSingularNaming)
 
-	if len(violations) != 3 {
-		t.Fatalf("expected the ordinary plural model directory violations only, got %#v", violations)
+	if len(violations) != 4 {
+		t.Fatalf("expected the ordinary plural model directory and file violations only, got %#v", violations)
 	}
 	for _, dir := range []string{"records", "statistics", "metrics"} {
 		assertViolationContains(t, violations, filepath.Join("model", dir), "should be singular")
 	}
+	assertViolationContains(t, violations, filepath.Join("model", "sample", "samples.go"), "should be singular")
 }
 
 func TestModelSingularNamingSkipsGitIgnoredPaths(t *testing.T) {
