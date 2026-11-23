@@ -62,10 +62,11 @@ func (Signup) Design() {
 
 // TestRouteIgnoresKeepServiceFilesForPrune verifies the full route ignore
 // contract on a nested-route service action: the action is disabled with its
-// match reported, its service file and directory are recorded as kept, and
-// pruneLeftovers honors the kept set so the file stays on disk. This
-// keeps an ignored module route file-identical with gg module copy output
-// instead of turning it into a deletion candidate.
+// match reported, so gg gen registers nothing for it, and its service file
+// stays on disk through gg prune, which reads the models without the rules
+// and so takes the file for one a model expects. This keeps an ignored
+// module route file-identical with gg module copy output instead of turning
+// it into a deletion candidate.
 func TestRouteIgnoresKeepServiceFilesForPrune(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
@@ -104,28 +105,25 @@ func TestRouteIgnoresKeepServiceFilesForPrune(t *testing.T) {
 		t.Fatalf("remaining actions = %d, want 0", len(remaining))
 	}
 
-	if !result.KeptServiceFiles[signupServiceFile] {
-		t.Fatalf("KeptServiceFiles = %v, want %q kept", result.KeptServiceFiles, signupServiceFile)
-	}
-	if !result.KeptServiceDirs[filepath.Clean(filepath.Dir(signupServiceFile))] {
-		t.Fatalf("KeptServiceDirs = %v, want %q kept", result.KeptServiceDirs, filepath.Dir(signupServiceFile))
-	}
-
-	// The ignored action drops out of the expected registration set, so
-	// without the kept set its file would be planned for deletion...
-	if plan := ggprune.PlanFiles([]string{signupServiceFile}, allModels, nil, ggconfig.PruneConfig{}); !slices.Equal(plan.Delete, []string{signupServiceFile}) {
+	// Read with the rules applied, the models expect no service file for the
+	// ignored action, and the file would be planned for deletion...
+	if plan := ggprune.PlanFiles([]string{signupServiceFile}, allModels, ggconfig.PruneConfig{}); !slices.Equal(plan.Delete, []string{signupServiceFile}) {
 		t.Fatalf("PlanFiles().Delete = %v, want %q after ignore", plan.Delete, signupServiceFile)
 	}
 
-	// ...but pruneLeftovers must keep the file on disk.
-	if err := os.MkdirAll(filepath.Dir(signupServiceFile), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(signupServiceFile, []byte("package account\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := pruneLeftovers(new(changes), []string{signupServiceFile}, allModels, result.KeptServiceFiles, result.KeptServiceDirs, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil); err != nil {
-		t.Fatal(err)
+	// ...which is why gg prune reads the models without them: with the rule
+	// in gst.yaml the action counts as enabled there, and its file stays on
+	// disk.
+	writeProjectFile(t, "go.mod", "module tmpapp\n\ngo 1.26\n")
+	writeProjectFile(t, ggconfig.FileName, "gen:\n  routes:\n    ignore:\n      /api/signup: [POST]\n")
+	writeProjectFile(t, signupServiceFile, "package account\n")
+	oldModule := module
+	module = ""
+	t.Cleanup(func() { module = oldModule })
+	var pruneErr error
+	output := captureOutput(t, func() { pruneErr = pruneRun() })
+	if pruneErr != nil || !strings.Contains(output, "Nothing to prune") {
+		t.Fatalf("pruneRun() error = %v, want nothing to prune:\n%s", pruneErr, output)
 	}
 	if _, err := os.Stat(signupServiceFile); err != nil {
 		t.Fatalf("ignored action's service file should survive prune: %v", err)

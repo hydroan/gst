@@ -153,6 +153,24 @@ func CopyableModuleNames() ([]string, error) {
 	return names, nil
 }
 
+// CopiedModuleNames returns the names of the framework modules the project in
+// the working directory holds a copy of: the copyable ones (see
+// CopyableModuleNames) whose model subtree, model/<name>, the project has,
+// gg module copy writing the models of a module there.
+func CopiedModuleNames() ([]string, error) {
+	names, err := CopyableModuleNames()
+	if err != nil {
+		return nil, err
+	}
+	copied := make([]string, 0, len(names))
+	for _, name := range names {
+		if info, statErr := os.Stat(filepath.Join(ggconst.DirModel, name)); statErr == nil && info.IsDir() {
+			copied = append(copied, name)
+		}
+	}
+	return copied, nil
+}
+
 func moduleByName(name string) (Module, error) {
 	modules, err := ListModules()
 	if err != nil {

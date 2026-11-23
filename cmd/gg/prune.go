@@ -77,15 +77,15 @@ func pruneRun() error {
 	// enabled makes prune treat the file as expected without extra bookkeeping.
 
 	// Scan the existing service files and the files under pb/
-	oldServiceFiles := existingServiceFiles()
-	oldPBFiles := existingPBFiles()
+	serviceFiles := existingServiceFiles()
+	pbFiles := existingPBFiles()
 	generatedPBFiles, err := generatedPBFiles(ignore, projectCfg)
 	if err != nil {
 		return err
 	}
 
 	log := new(changes)
-	declined, err := pruneLeftovers(log, oldServiceFiles, allModels, nil, nil, ignore, projectCfg.Prune, oldPBFiles, generatedPBFiles)
+	declined, err := pruneLeftovers(log, serviceFiles, allModels, ignore, projectCfg.Prune, pbFiles, generatedPBFiles)
 	if err != nil || declined {
 		return err
 	}
@@ -205,37 +205,35 @@ func remindUnreadPruneSettings() {
 
 // pruneLeftovers deletes, after asking once, what the models leave behind in
 // service/, middleware/, interceptor/ and pb/: the service files of disabled
-// actions among oldServiceFiles, the unmanaged files of the service
-// directories no model owns, the middleware and interceptors module copy
-// wrote for modules the project removed, with their register calls, the
-// files under pb/ among oldPBFiles that gg gen
-// would not write now, generatedPBFiles being the ones it writes, and the
-// directories all this leaves empty. It works everything out before
-// it asks, so a helper directory only a disabled action's service file
-// imports goes in the same run. Files in keptFiles
-// belong to gst.yaml-ignored actions: they no longer appear in the generated
-// registrations but must stay on disk, so they are never deletion candidates.
-// keptDirs protects their directories from orphan cleanup; both may be nil.
-// ignore, the project's ignore rules, decides which code counts as still
-// using a service directory, as it decides what gg check and gg gen read; it
-// protects nothing. The paths the gst.yaml prune.ignore entries in protect
-// cover are never deleted: not as disabled files, not as orphans, not as
-// empty directories; under pb/ an entry keeps the definitions alone (see
-// ggprune.PlanPBFiles). Of the ignore rules, only those keep a path (see
-// package ggprune). A file under pb/ it would delete that gg gen did not
-// generate fails it before anything is asked or deleted (see
-// ggprune.PlanPBFiles), a file it cannot delete once it has deleted the rest
-// (see deleteLeftovers). What it removes is recorded in log; declined
+// actions among serviceFiles, the unmanaged files of the service directories
+// no model owns, the middleware and interceptors module copy wrote for
+// modules the project removed, with their register calls, the files under
+// pb/ among pbFiles that gg gen would not write now, generatedPBFiles being
+// the ones it writes, and the directories all this leaves empty. It works
+// everything out before it asks, so a helper directory only a disabled
+// action's service file imports goes in the same run. allModels carry the
+// actions the gst.yaml route ignores take out of the generated registrations
+// as well: their service files stay on disk, so they count as expected and
+// are never deletion candidates. ignore, the project's ignore rules, decides
+// which code counts as still using a service directory, as it decides what
+// gg check and gg gen read; it protects nothing. The paths the gst.yaml
+// prune.ignore entries in protect cover are never deleted: not as disabled
+// files, not as orphans, not as empty directories; under pb/ an entry keeps
+// the definitions alone (see ggprune.PlanPBFiles). Of the ignore rules, only
+// those keep a path (see package ggprune). A file under pb/ it would delete
+// that gg gen did not generate fails it before anything is asked or deleted
+// (see ggprune.PlanPBFiles), a file it cannot delete once it has deleted the
+// rest (see deleteLeftovers). What it removes is recorded in log; declined
 // reports that the question was answered with a no, which it says itself.
-func pruneLeftovers(log *changes, oldServiceFiles []string, allModels []*modelinfo.Model, keptFiles, keptDirs map[string]bool, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig, oldPBFiles, generatedPBFiles []string) (declined bool, err error) {
+func pruneLeftovers(log *changes, serviceFiles []string, allModels []*modelinfo.Model, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig, pbFiles, generatedPBFiles []string) (declined bool, err error) {
 	warnMissingPruneIgnore(protect)
 
-	plan := ggprune.PlanFiles(oldServiceFiles, allModels, keptFiles, protect)
-	pbPlan, err := ggprune.PlanPBFiles(oldPBFiles, generatedPBFiles, protect)
+	plan := ggprune.PlanFiles(serviceFiles, allModels, protect)
+	pbPlan, err := ggprune.PlanPBFiles(pbFiles, generatedPBFiles, protect)
 	if err != nil {
 		return false, err
 	}
-	orphans, keptHelpers, keptHelperFiles, orphanHandlers := findOrphans(allModels, keptDirs, plan.Delete, ignore, protect)
+	orphans, keptHelpers, keptHelperFiles, orphanHandlers := findOrphans(allModels, plan.Delete, ignore, protect)
 	// A disabled action's file name inside a helper directory live code
 	// imports names a file of that package: kept with the directory (see
 	// ggprune.FindOrphanDirs), it leaves the deletion list.
@@ -294,7 +292,7 @@ func pruneLeftovers(log *changes, oldServiceFiles []string, allModels []*modelin
 // because live code imports them, with the files of deleting kept along
 // with them. When the project's code cannot be read in full, it warns and
 // finds no orphans.
-func findOrphans(allModels []*modelinfo.Model, keptDirs map[string]bool, deleting []string, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig) (orphans, keptHelpers []ggprune.OrphanDir, keptFiles []string, orphanHandlers []ggmodule.OrphanManagedFile) {
+func findOrphans(allModels []*modelinfo.Model, deleting []string, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig) (orphans, keptHelpers []ggprune.OrphanDir, keptFiles []string, orphanHandlers []ggmodule.OrphanManagedFile) {
 	orphanHandlers, err := orphanModuleFiles(protect)
 	if err != nil {
 		clioutput.Warn("failed to read the middleware or interceptor directory, so orphans are not checked: %v", err)
@@ -304,7 +302,7 @@ func findOrphans(allModels []*modelinfo.Model, keptDirs map[string]bool, deletin
 	for _, file := range orphanHandlers {
 		deleting = append(deleting, file.Path)
 	}
-	orphans, keptHelpers, keptFiles, err = ggprune.FindOrphanDirs(allModels, keptDirs, deleting, module, ignore, protect)
+	orphans, keptHelpers, keptFiles, err = ggprune.FindOrphanDirs(allModels, deleting, module, ignore, protect)
 	if err != nil {
 		clioutput.Warn("failed to trace which service directories live code imports, so orphan service directories are not checked: %v", err)
 		return nil, nil, nil, nil

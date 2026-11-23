@@ -31,12 +31,11 @@ import (
 //   - gg migrate schema reads a path the user names, so the Git rules do not
 //     apply there; below that path it leaves out what the go command leaves
 //     out, through ExcludedByGo.
-//   - gg prune, and gg gen --prune alike, reads the project's code through it
-//     as well: the models, the way gg gen does, and the code that may still
-//     import a service directory, so code the project ignores keeps none
-//     alive. What it deletes it reads whole: an ignored file there goes like
-//     any other, and gst.yaml's prune.ignore alone keeps a path (see package
-//     ggprune).
+//   - gg prune reads the project's code through it as well: the models, the
+//     way gg gen does, and the code that may still import a service
+//     directory, so code the project ignores keeps none alive. What it
+//     deletes it reads whole: an ignored file there goes like any other, and
+//     gst.yaml's prune.ignore alone keeps a path (see package ggprune).
 type ProjectIgnore struct {
 	matcher gitignore.Matcher
 	// root is the absolute path of the project, against which an absolute

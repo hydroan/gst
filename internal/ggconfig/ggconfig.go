@@ -25,8 +25,7 @@ type Config struct {
 	// Gen configures gg gen behavior.
 	Gen GenConfig `yaml:"gen"`
 
-	// Prune configures gg prune, and gg gen --prune, which prunes the same
-	// way.
+	// Prune configures gg prune.
 	Prune PruneConfig `yaml:"prune"`
 }
 

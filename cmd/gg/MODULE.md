@@ -346,15 +346,19 @@ stop
 | `requiredAssembly` | copy 之后项目必须自己写的调用，每项有 `import`、`function`、`reason`。copy 结束时逐条提示还没做的；gg check 的「Module assembly」检查项据此要求项目在非测试代码里调用它们 | 三个字段都不能为空；`function` 必须是导出的 Go 标识符 |
 | `postNotes` | copy 成功后逐行打印的提示，写 copy 自动化不了的后续步骤 | 去掉首尾空白，空行丢弃 |
 
+## 跟着框架升级
+
+复制来的模块是复制那一刻框架版本的源码，框架升级后要重新复制。`gg upgrade` 把 `go.mod` 升到 gg 的框架版本之后，对项目里每个复制过的模块（`model/<name>/` 目录存在的可复制模块）各做一次和 `gg module copy <name> --force` 一样的复制，再统一生成代码、执行 `go mod tidy`。它开始前只问一次（`--yes` 跳过），输出只列有变化的文件。见 README 的[升级框架](../../README.md#升级框架)。
+
 ## 删除复制来的模块
 
 copy 成功结束时，以及执行中途在写入或删除文件之后出错时，会提示：
 
 ```
-To remove copied module code, delete model/<name>, then run: gg gen --prune
+To remove copied module code, delete model/<name>, then run: gg gen and gg prune
 ```
 
-删掉 `model/<name>/` 后，模块的动作不再存在，`gg gen --prune` 会把对应的 service 文件、孤儿目录，以及这个模块复制来、成了孤儿的中间件、拦截器文件一次列出来，你确认后一起删掉，`middleware/middleware.go`、`interceptor/interceptor.go` 里它们的注册调用一并删掉。清理规则见 [PRUNE.md](PRUNE.md)。
+删掉 `model/<name>/` 后，模块的动作不再存在：`gg gen` 重新生成注册文件，`gg prune` 把对应的 service 文件、孤儿目录，以及这个模块复制来、成了孤儿的中间件、拦截器文件一次列出来，你确认后一起删掉，`middleware/middleware.go`、`interceptor/interceptor.go` 里它们的注册调用一并删掉。清理规则见 [PRUNE.md](PRUNE.md)。
 
 ## 终端输出的段落标题
 

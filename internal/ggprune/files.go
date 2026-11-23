@@ -115,15 +115,14 @@ type FilePlan struct {
 }
 
 // PlanFiles works out which existing service files prune deletes: the ones no
-// enabled action of models expects any more, except the ones in kept, which
-// belong to gst.yaml-ignored actions and must stay on disk, and the ones a
-// prune.ignore entry in protect covers, which it lists as ignored instead.
-// The test files paired with a deleted service file, create_test.go and
+// enabled action of models expects any more, except the ones a prune.ignore
+// entry in protect covers, which it lists as ignored instead. The test files
+// paired with a deleted service file, create_test.go and
 // create_internal_test.go beside create.go, go with it: once the service
 // file is gone they test nothing, and the service test organization check
 // refuses a test file without a source file. A prune.ignore entry covering
 // a test file keeps it like any other file.
-func PlanFiles(existing []string, models []*modelinfo.Model, kept map[string]bool, protect ggconfig.PruneConfig) FilePlan {
+func PlanFiles(existing []string, models []*modelinfo.Model, protect ggconfig.PruneConfig) FilePlan {
 	// Get list of service files that should currently exist
 	currentFiles := currentServiceFiles(models)
 
@@ -131,7 +130,7 @@ func PlanFiles(existing []string, models []*modelinfo.Model, kept map[string]boo
 	// each followed by the test files paired with it
 	filesToDelete := make([]string, 0)
 	for _, oldFile := range existing {
-		if !currentFiles[oldFile] && !kept[oldFile] {
+		if !currentFiles[oldFile] {
 			filesToDelete = append(filesToDelete, oldFile)
 			filesToDelete = append(filesToDelete, gghelper.PairedTestFiles(oldFile)...)
 		}

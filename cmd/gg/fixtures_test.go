@@ -351,9 +351,9 @@ const childProjectEnv = "GG_TEST_PROJECT_CHILD"
 // own: in the parent, newGenProject starts the child (see runInChild),
 // relays its verdict and returns ok false, on which the test returns at
 // once; in the child, told apart by childProjectEnv, it creates the project,
-// makes it the working directory and resets the gg command globals gen
-// reads (module, prune), restoring them when the test ends, and returns the
-// directory with ok true. The project's go.mod resolves the framework to
+// makes it the working directory and resets the gg command global gen reads,
+// module, restoring it when the test ends, and returns the directory with ok
+// true. The project's go.mod resolves the framework to
 // this repository, since generation compiles the column inspection program
 // against the framework for real. Generation also caches that inspection
 // under the user cache directory, keyed by project directory; nothing ever
@@ -375,16 +375,13 @@ func newGenProject(t *testing.T) (projectDir string, ok bool) {
 	}
 
 	oldModule := module
-	oldPrune := prune
 	t.Cleanup(func() {
 		module = oldModule
-		prune = oldPrune
 	})
 
 	projectDir = t.TempDir()
 	t.Chdir(projectDir)
 	module = ""
-	prune = false
 
 	writeProjectGoModAgainstRealFramework(t, projectDir)
 	cacheDir, err := modelinspect.CacheDir()

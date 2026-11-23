@@ -59,8 +59,9 @@ type changes struct {
 // number of lines about it: under the files created for LabelCreate, removed
 // for LabelRemove and updated for LabelUpdate and LabelFix; a file under
 // another label, one left as it is, is printed and not counted. A file the
-// run created and then wrote again is a file created: the second write is
-// neither printed nor counted. The line of
+// run created and then wrote again is a file created, and one it updated
+// and then wrote again is updated once: the second write, an update with no
+// detail to add, is neither printed nor counted. The line of
 //
 //	record(clioutput.LabelRemove, "pb/sample.pb.go", " (its model is no longer served over gRPC)")
 //
@@ -73,7 +74,9 @@ func (c *changes) record(label clioutput.Label, path string, detail string, args
 	case clioutput.LabelCreate:
 		counted = &c.created
 	case clioutput.LabelUpdate, clioutput.LabelFix:
-		if _, created := c.created[path]; created && label == clioutput.LabelUpdate {
+		_, created := c.created[path]
+		_, updated := c.updated[path]
+		if label == clioutput.LabelUpdate && (created || updated && detail == "") {
 			return
 		}
 		counted = &c.updated
@@ -131,10 +134,10 @@ func writeGeneratedFile(filename string, content string, log *changes) error {
 	return nil
 }
 
-// tidyModule tidies the module in the working directory once gg new, gg gen
-// or gg module copy has written its files, so that go.mod and go.sum hold
-// what the written sources import (see goModTidy), and records in log which
-// of the two it changed. In a Go workspace it runs no go mod tidy and says
+// tidyModule tidies the module in the working directory once gg new, gg gen,
+// gg module copy or gg upgrade has written its files, so that go.mod and
+// go.sum hold what the written sources import (see goModTidy), and records
+// in log which of the two it changed. In a Go workspace it runs no go mod tidy and says
 // why: the command reads no go.work, so it would look up a module the
 // workspace provides, or settle on a version the workspace does not build
 // with, while the workspace resolves the versions itself and adds no
@@ -148,17 +151,26 @@ func tidyModule(log *changes) error {
 		clioutput.Warn("go mod tidy skipped: the project is in a Go workspace, whose go.work go mod tidy does not read; run go mod tidy outside the workspace before building there")
 		return nil
 	}
+	return recordModuleFiles(log, func() error {
+		return errors.Wrap(goModTidy(), "go mod tidy failed")
+	})
+}
+
+// recordModuleFiles runs goCommand, a go command that may rewrite go.mod and
+// go.sum in the working directory, and records in log which of the two it
+// changed.
+func recordModuleFiles(log *changes, goCommand func() error) error {
 	moduleFiles := []string{"go.mod", "go.sum"}
 	before := make(map[string][]byte, len(moduleFiles))
 	for _, name := range moduleFiles {
-		// A file that cannot be read counts as missing: tidying reports what
-		// is wrong with it.
+		// A file that cannot be read counts as missing: the go command reports
+		// what is wrong with it.
 		if content, readErr := os.ReadFile(name); readErr == nil {
 			before[name] = content
 		}
 	}
-	if err = goModTidy(); err != nil {
-		return errors.Wrap(err, "go mod tidy failed")
+	if err := goCommand(); err != nil {
+		return err
 	}
 	for _, name := range moduleFiles {
 		content, readErr := os.ReadFile(name)

@@ -108,10 +108,12 @@ func TestVersionReportsTheBuild(t *testing.T) {
 // TestRunTellsACommandLineItCannotRunFromACommandThatFailed pins the code gg
 // exits with and what it prints last, on standard error: 2 for a command
 // line cobra refuses before the command starts — a command, a flag or
-// arguments gg does not have — with where the usage is and cobra's
-// suggestion after it; 1 for a command that ran and failed, its error alone;
-// 1 and nothing for a failure reported already; 0 for a command that went
-// well.
+// arguments gg does not have, under gg itself, under a group of commands or
+// under a command that runs on its own and has commands under it — with
+// where the usage is and cobra's suggestion after it; 1 for a command that
+// ran and failed, its error alone; 1 and nothing for a failure reported
+// already; 0 for a command that went well, the help a group prints when
+// called alone included.
 func TestRunTellsACommandLineItCannotRunFromACommandThatFailed(t *testing.T) {
 	writeGoMod(t, t.TempDir(), "example.com/app")
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
@@ -126,11 +128,16 @@ func TestRunTellsACommandLineItCannotRunFromACommandThatFailed(t *testing.T) {
 		want     string
 	}{
 		{name: "a command gg does not have", args: []string{"modul"}, wantCode: 2, want: "\n✘ unknown command \"modul\" for \"gg\"\n  Run 'gg --help' for usage.\n\nDid you mean this?\n\tmodule\n"},
+		{name: "a command a group does not have", args: []string{"config", "list"}, wantCode: 2, want: "\n✘ unknown command \"list\" for \"gg config\"\n  Run 'gg config --help' for usage.\n"},
+		{name: "a command another group does not have", args: []string{"module", "cpy"}, wantCode: 2, want: "\n✘ unknown command \"cpy\" for \"gg module\"\n  Run 'gg module --help' for usage.\n"},
+		{name: "a command gg gen does not have", args: []string{"gen", "tss"}, wantCode: 2, want: "\n✘ unknown command \"tss\" for \"gg gen\"\n  Run 'gg gen --help' for usage.\n"},
+		{name: "a command gg migrate does not have", args: []string{"migrate", "shcema", "--yes"}, wantCode: 2, want: "\n✘ unknown command \"shcema\" for \"gg migrate\"\n  Run 'gg migrate --help' for usage.\n"},
 		{name: "a flag the command does not have", args: []string{"gen", "--nope"}, wantCode: 2, want: "\n✘ unknown flag: --nope\n  Run 'gg gen --help' for usage.\n"},
 		{name: "arguments the command does not take", args: []string{"module", "add"}, wantCode: 2, want: "\n✘ accepts 1 arg(s), received 0\n  Run 'gg module add --help' for usage.\n"},
 		{name: "a command that fails while it runs", args: []string{"module", "add", "../sample"}, wantCode: 1, want: "\n✘ module command accepts a module name, not a path: ../sample\n"},
 		{name: "a failure reported already", args: []string{"reported"}, wantCode: 1},
 		{name: "a command that goes well", args: []string{"help", "gen"}},
+		{name: "a group called alone", args: []string{"module"}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			var code int
@@ -147,9 +154,10 @@ func TestRunTellsACommandLineItCannotRunFromACommandThatFailed(t *testing.T) {
 
 // TestFrameworkVersionMismatch pins the example frameworkVersionMismatch
 // gives, a gg built at one version of the framework in a project requiring
-// another, and where nothing is compared: the two the same, a gg built from
-// a working copy, a go.mod replacing the framework or requiring none, a Go
-// workspace, and a directory that is no project.
+// an older one, which gg upgrade moves; that a gg older than the project is
+// told the one way out it has; and where nothing is compared: the two the
+// same, a gg built from a working copy, a go.mod replacing the framework or
+// requiring none, a Go workspace, and a directory that is no project.
 func TestFrameworkVersionMismatch(t *testing.T) {
 	const requires = "module example.com/app\n\ngo 1.26\n\nrequire github.com/hydroan/gst v1.2.0\n"
 	for _, tt := range []struct {
@@ -159,9 +167,11 @@ func TestFrameworkVersionMismatch(t *testing.T) {
 		goWork string
 		want   string
 	}{
-		{name: "another version", built: "v1.3.0", goMod: requires, want: "gg is built from github.com/hydroan/gst v1.3.0, and go.mod requires v1.2.0: what one version generates need not build with the other\n" +
+		{name: "a newer gg", built: "v1.3.0", goMod: requires, want: "gg is built from github.com/hydroan/gst v1.3.0, and go.mod requires v1.2.0: what one version generates need not build with the other\n" +
 			"  To install the gg the project requires: go install github.com/hydroan/gst/cmd/gg@v1.2.0\n" +
-			"  To move the project to this gg: go get github.com/hydroan/gst@v1.3.0"},
+			"  To move the project to this gg: gg upgrade"},
+		{name: "an older gg", built: "v1.1.0", goMod: requires, want: "gg is built from github.com/hydroan/gst v1.1.0, and go.mod requires v1.2.0: what one version generates need not build with the other\n" +
+			"  To install the gg the project requires: go install github.com/hydroan/gst/cmd/gg@v1.2.0"},
 		{name: "the same version", built: "v1.2.0", goMod: requires},
 		{name: "a build recording no version", built: "(devel)", goMod: requires},
 		{name: "a build of a working copy with changes", built: "v1.3.0+dirty", goMod: requires},
@@ -195,8 +205,9 @@ func TestFrameworkVersionMismatch(t *testing.T) {
 // TestStartCommandHoldsProjectCommandsToTheFrameworkVersion pins which
 // commands the version of the framework is checked for: a project command
 // is refused in a project requiring another version than gg's, while gg new,
-// which starts a project, and the commands describing gg, help and
-// completion, run all the same.
+// which starts a project, gg upgrade, which moves the project to the version
+// of gg, and the commands describing gg, help and completion, run all the
+// same.
 func TestStartCommandHoldsProjectCommandsToTheFrameworkVersion(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/app\n\ngo 1.26\n\nrequire github.com/hydroan/gst v1.2.0\n"), 0o600); err != nil {
@@ -210,8 +221,10 @@ func TestStartCommandHoldsProjectCommandsToTheFrameworkVersion(t *testing.T) {
 	if _, err := executeRootCommand(t, "module", "list"); err == nil || !strings.HasPrefix(err.Error(), "gg is built from github.com/hydroan/gst v1.3.0, and go.mod requires v1.2.0") {
 		t.Fatalf("gg module list error = %v, want the version mismatch", err)
 	}
-	if err := startCommand(newCmd, nil); err != nil {
-		t.Fatalf("gg new is held to no version, got %v", err)
+	for _, cmd := range []*cobra.Command{newCmd, upgradeCmd} {
+		if err := startCommand(cmd, nil); err != nil {
+			t.Fatalf("gg %s is held to no version, got %v", cmd.Name(), err)
+		}
 	}
 	for _, args := range [][]string{{"help", "gen"}, {"completion", "bash"}} {
 		if _, err := executeRootCommand(t, args...); err != nil {

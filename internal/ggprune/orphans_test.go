@@ -24,7 +24,7 @@ func TestFindOrphanDirsFlagsUnreferencedDirs(t *testing.T) {
 	writeProjectFile(t, filepath.Join("service", "leftover", "leftover.go"), `package leftover
 `)
 
-	orphans, keptHelpers := findOrphanDirs(t, []*modelinfo.Model{orphanPruneModel()}, nil, ggconfig.PruneConfig{})
+	orphans, keptHelpers := findOrphanDirs(t, []*modelinfo.Model{orphanPruneModel()}, ggconfig.PruneConfig{})
 
 	wantDir := filepath.Join("service", "leftover")
 	if len(orphans) != 1 || orphans[0].Path != wantDir {
@@ -49,7 +49,7 @@ import _ "tmpapp/service/adminauth"
 	writeProjectFile(t, filepath.Join("service", "adminauth", "adminauth.go"), `package adminauth
 `)
 
-	orphans, keptHelpers := findOrphanDirs(t, []*modelinfo.Model{orphanPruneModel()}, nil, ggconfig.PruneConfig{})
+	orphans, keptHelpers := findOrphanDirs(t, []*modelinfo.Model{orphanPruneModel()}, ggconfig.PruneConfig{})
 
 	if len(orphans) != 0 {
 		t.Fatalf("imported helper dir should not be an orphan, got %#v", orphans)
@@ -84,7 +84,7 @@ import _ "tmpapp/service/sharedb"
 	writeProjectFile(t, filepath.Join("service", "sharedb", "sharedb.go"), `package sharedb
 `)
 
-	orphans, keptHelpers, keptFiles, err := ggprune.FindOrphanDirs([]*modelinfo.Model{orphanPruneModel()}, nil, []string{listFile}, "tmpapp", gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
+	orphans, keptHelpers, keptFiles, err := ggprune.FindOrphanDirs([]*modelinfo.Model{orphanPruneModel()}, []string{listFile}, "tmpapp", gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ import _ "tmpapp/service/helperb"
 	writeProjectFile(t, filepath.Join("service", "helperb", "helperb.go"), `package helperb
 `)
 
-	orphans, keptHelpers := findOrphanDirs(t, []*modelinfo.Model{orphanPruneModel()}, nil, ggconfig.PruneConfig{})
+	orphans, keptHelpers := findOrphanDirs(t, []*modelinfo.Model{orphanPruneModel()}, ggconfig.PruneConfig{})
 
 	if len(orphans) != 0 {
 		t.Fatalf("transitively imported helper dirs should not be orphans, got %#v", orphans)
@@ -127,30 +127,6 @@ import _ "tmpapp/service/helperb"
 		if keptHelpers[i].Path != want {
 			t.Fatalf("keptHelpers[%d].Path = %q, want %q", i, keptHelpers[i].Path, want)
 		}
-	}
-}
-
-func TestFindOrphanDirsKeepsHelperDirsImportedByKeptDirs(t *testing.T) {
-	setupOrphanPruneProject(t)
-
-	// The service file belongs to a gst.yaml-ignored action: no model action
-	// maps to it, but keptDirs marks its directory as owned.
-	writeProjectFile(t, filepath.Join("service", "iam", "user", "list.go"), `package user
-
-import _ "tmpapp/service/iam/adminauth"
-`)
-	writeProjectFile(t, filepath.Join("service", "iam", "adminauth", "adminauth.go"), `package adminauth
-`)
-
-	keptDirs := map[string]bool{filepath.Join("service", "iam", "user"): true}
-	orphans, keptHelpers := findOrphanDirs(t, nil, keptDirs, ggconfig.PruneConfig{})
-
-	if len(orphans) != 0 {
-		t.Fatalf("helper dir imported by kept service files should not be an orphan, got %#v", orphans)
-	}
-	wantDir := filepath.Join("service", "iam", "adminauth")
-	if len(keptHelpers) != 1 || keptHelpers[0].Path != wantDir {
-		t.Fatalf("keptHelpers = %#v, want single dir %q", keptHelpers, wantDir)
 	}
 }
 
@@ -205,7 +181,7 @@ func TestFindOrphanDirsKeepsHelperDirsImportedByLiveCode(t *testing.T) {
 			}
 			writeProjectFile(t, importer.path, importer.header+"package "+importer.pkg+"\n\nimport _ \"tmpapp/service/helper\"\n"+importer.tail)
 
-			orphans, keptHelpers := findOrphanDirs(t, []*modelinfo.Model{helperImportModel()}, nil, ggconfig.PruneConfig{Ignore: importer.protect})
+			orphans, keptHelpers := findOrphanDirs(t, []*modelinfo.Model{helperImportModel()}, ggconfig.PruneConfig{Ignore: importer.protect})
 
 			wantDir := filepath.Join("service", "helper")
 			if slices.ContainsFunc(orphans, func(orphan ggprune.OrphanDir) bool { return orphan.Path == wantDir }) {
@@ -264,7 +240,7 @@ func TestFindOrphanDirsIgnoresImportsFromCodeThatIsNotLive(t *testing.T) {
 				deleting = append(deleting, importer.path)
 			}
 
-			orphans, keptHelpers := findOrphanDirs(t, []*modelinfo.Model{helperImportModel()}, nil, ggconfig.PruneConfig{}, deleting...)
+			orphans, keptHelpers := findOrphanDirs(t, []*modelinfo.Model{helperImportModel()}, ggconfig.PruneConfig{}, deleting...)
 
 			wantDir := filepath.Join("service", "helper")
 			if !slices.ContainsFunc(orphans, func(orphan ggprune.OrphanDir) bool { return orphan.Path == wantDir }) {
@@ -309,7 +285,7 @@ func TestFindOrphanDirsFailsOnImportsItCannotRead(t *testing.T) {
 				lockPath(t, tt.locked)
 			}
 
-			orphans, keptHelpers, _, err := ggprune.FindOrphanDirs([]*modelinfo.Model{helperImportModel()}, nil, nil, "tmpapp", gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
+			orphans, keptHelpers, _, err := ggprune.FindOrphanDirs([]*modelinfo.Model{helperImportModel()}, nil, "tmpapp", gghelper.NewProjectIgnore(), ggconfig.PruneConfig{})
 
 			if err == nil || !strings.Contains(err.Error(), tt.want) {
 				t.Fatalf("FindOrphanDirs() error = %v, want one naming %s", err, tt.want)
@@ -368,7 +344,7 @@ func TestFindOrphanDirsSkipsIgnoredCodeItCannotRead(t *testing.T) {
 				lockPath(t, tt.locked)
 			}
 
-			orphans, keptHelpers := findOrphanDirs(t, []*modelinfo.Model{helperImportModel()}, nil, ggconfig.PruneConfig{})
+			orphans, keptHelpers := findOrphanDirs(t, []*modelinfo.Model{helperImportModel()}, ggconfig.PruneConfig{})
 
 			wantDir := filepath.Join("service", "helper")
 			if !slices.ContainsFunc(orphans, func(orphan ggprune.OrphanDir) bool { return orphan.Path == wantDir }) {
@@ -393,7 +369,7 @@ func TestFindOrphanDirsStaysOutOfSymlinkedDirectories(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	orphans, keptHelpers := findOrphanDirs(t, []*modelinfo.Model{helperImportModel()}, nil, ggconfig.PruneConfig{})
+	orphans, keptHelpers := findOrphanDirs(t, []*modelinfo.Model{helperImportModel()}, ggconfig.PruneConfig{})
 
 	wantDir := filepath.Join("service", "helper")
 	if !slices.ContainsFunc(orphans, func(orphan ggprune.OrphanDir) bool { return orphan.Path == wantDir }) {
@@ -411,7 +387,7 @@ func TestFindOrphanDirsKeepsNothingForAMissingImport(t *testing.T) {
 	setupHelperImportProject(t)
 	writeProjectFile(t, filepath.Join("cronjob", "cleanup.go"), "package cronjob\n\nimport _ \"tmpapp/service/missing\"\n")
 
-	_, keptHelpers := findOrphanDirs(t, []*modelinfo.Model{helperImportModel()}, nil, ggconfig.PruneConfig{})
+	_, keptHelpers := findOrphanDirs(t, []*modelinfo.Model{helperImportModel()}, ggconfig.PruneConfig{})
 
 	if len(keptHelpers) != 0 {
 		t.Fatalf("keptHelpers = %#v, want none for an import of a missing directory", keptHelpers)
@@ -443,7 +419,7 @@ func TestFindOrphanDirsJudgesEveryDirectoryOnItsOwn(t *testing.T) {
 		writeProjectFile(t, path, content)
 	}
 
-	orphans, _ := findOrphanDirs(t, []*modelinfo.Model{helperImportModel()}, nil, ggconfig.PruneConfig{})
+	orphans, _ := findOrphanDirs(t, []*modelinfo.Model{helperImportModel()}, ggconfig.PruneConfig{})
 
 	want := []ggprune.OrphanDir{
 		{Path: filepath.Join("service", ".cache"), Files: []string{filepath.Join("service", ".cache", "state.json")}},
@@ -473,7 +449,7 @@ func TestFindOrphanDirsLeavesOutWhatPruneIgnoreCovers(t *testing.T) {
 	writeProjectFile(t, filepath.Join("service", "legacy", "util.go"), "package legacy\n")
 	protect := ggconfig.PruneConfig{Ignore: []string{"service/kept", "service/legacy/helper.go"}}
 
-	orphans, _ := findOrphanDirs(t, []*modelinfo.Model{orphanPruneModel()}, nil, protect)
+	orphans, _ := findOrphanDirs(t, []*modelinfo.Model{orphanPruneModel()}, protect)
 
 	wantDir := filepath.Join("service", "legacy")
 	if len(orphans) != 1 || orphans[0].Path != wantDir {
@@ -498,7 +474,7 @@ func TestFindOrphanDirsLeavesOutWhatPruneDeletesAnyway(t *testing.T) {
 	writeProjectFile(t, filepath.Join("service", "stale", "main_test.go"), "package stale_test\n")
 	deleting := []string{filepath.Join("service", "stale", "list.go"), filepath.Join("service", "stale", "list_test.go")}
 
-	orphans, _ := findOrphanDirs(t, []*modelinfo.Model{orphanPruneModel()}, nil, ggconfig.PruneConfig{}, deleting...)
+	orphans, _ := findOrphanDirs(t, []*modelinfo.Model{orphanPruneModel()}, ggconfig.PruneConfig{}, deleting...)
 
 	wantDir := filepath.Join("service", "stale")
 	if len(orphans) != 1 || orphans[0].Path != wantDir {
@@ -525,10 +501,10 @@ func setupOrphanPruneProject(t *testing.T) {
 // module is tmpapp, reading it through the project's ignore rules as the test
 // left them and failing the test on an error. deleting are the files prune
 // deletes besides the orphans' own.
-func findOrphanDirs(t *testing.T, models []*modelinfo.Model, keptDirs map[string]bool, protect ggconfig.PruneConfig, deleting ...string) (orphans, keptHelpers []ggprune.OrphanDir) {
+func findOrphanDirs(t *testing.T, models []*modelinfo.Model, protect ggconfig.PruneConfig, deleting ...string) (orphans, keptHelpers []ggprune.OrphanDir) {
 	t.Helper()
 
-	orphans, keptHelpers, _, err := ggprune.FindOrphanDirs(models, keptDirs, deleting, "tmpapp", gghelper.NewProjectIgnore(), protect)
+	orphans, keptHelpers, _, err := ggprune.FindOrphanDirs(models, deleting, "tmpapp", gghelper.NewProjectIgnore(), protect)
 	if err != nil {
 		t.Fatal(err)
 	}

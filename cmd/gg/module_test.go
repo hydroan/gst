@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/ggmodule"
 	"github.com/hydroan/gst/internal/ggnew"
@@ -237,7 +238,7 @@ func TestRunModuleCopyGenAllowsPreexistingProjectCheckViolations(t *testing.T) {
 
 	var genErr error
 	output := captureStdout(t, func() {
-		genErr = runModuleCopyGen(baseline, nil)
+		genErr = runModuleCopyGen(baseline, nil, nil)
 	})
 	if genErr != nil {
 		t.Fatalf("runModuleCopyGen() error = %v, want nil for pre-existing violations", genErr)
@@ -264,7 +265,7 @@ func TestRunModuleCopyGenFailsOnNewProjectCheckViolations(t *testing.T) {
 
 	var genErr error
 	output := captureStdout(t, func() {
-		genErr = runModuleCopyGen(baseline, nil)
+		genErr = runModuleCopyGen(baseline, nil, nil)
 	})
 	if want := "nothing was generated: 1 violation in 1 of "; genErr == nil || !strings.HasPrefix(genErr.Error(), want) {
 		t.Fatalf("runModuleCopyGen() error = %v, want one starting with %q", genErr, want)
@@ -319,7 +320,7 @@ func (%[1]s) Design() {
 
 	var genErr error
 	captureStdout(t, func() {
-		genErr = runModuleCopyGen(baseline, []string{filepath.Join("service", "record", "create.go")})
+		genErr = runModuleCopyGen(baseline, []string{filepath.Join("service", "record", "create.go")}, nil)
 	})
 	if genErr != nil {
 		t.Fatalf("runModuleCopyGen() error = %v", genErr)
@@ -363,6 +364,8 @@ func (%[1]s) Design() {
 // one-time password package the mfa services import, reach go.mod and go.sum
 // and the project builds with no step of its own; a tidy that fails is
 // reported after the files are written, with the hint for removing them.
+// The copy lists the files of the module and the module files tidying
+// changed, not what its gg gen run generated.
 func TestRunModuleCopyTidiesTheProjectAfterWritingItsFiles(t *testing.T) {
 	projectDir, ok := newGenProject(t)
 	if !ok {
@@ -407,6 +410,11 @@ func TestRunModuleCopyTidiesTheProjectAfterWritingItsFiles(t *testing.T) {
 		if !strings.Contains(output, want) {
 			t.Fatalf("module copy output lacks %q:\n%s", want, output)
 		}
+	}
+	// What the gg gen run of the copy generated is not in the list: the copy
+	// reports the files of the module.
+	if strings.Contains(output, ggconst.SuffixGenGo) {
+		t.Fatalf("module copy lists a file its gg gen run generated:\n%s", output)
 	}
 	for _, file := range []string{"go.mod", "go.sum"} {
 		if !strings.Contains(readProjectFile(t, file), otpModule) {

@@ -7,7 +7,6 @@ import (
 
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconfig"
-	"github.com/hydroan/gst/internal/ggconst"
 )
 
 // RouteIgnoreMatch records one generated route disabled by a gst.yaml
@@ -33,33 +32,21 @@ type RouteIgnoreResult struct {
 	// project's own re-declaration of a framework route and should be scoped
 	// with "from".
 	MultiSourceRules []MultiSourceRule
-
-	// KeptServiceFiles are the service files owned by ignored Service()
-	// actions. Ignoring a route only removes its registrations from the
-	// generated files; the service files stay on disk so the project remains
-	// file-identical with gg module copy output, and prune must not treat
-	// them as deletable.
-	KeptServiceFiles map[string]bool
-
-	// KeptServiceDirs are the cleaned service directories that contain the
-	// kept service files, protected from orphan-directory cleanup.
-	KeptServiceDirs map[string]bool
 }
 
 // applyRouteIgnores disables every action whose generated route matches an
 // ignore rule. A disabled action drops out of the generated service and
 // router registration files (service/service.gen.go, router/router.gen.go)
 // and no new service file is generated for it, but existing service files
-// are kept on disk. Rules with a From prefix only apply to models declared
-// under that directory. ResolveRoutes runs it once the endpoints are
-// resolved, which the rules match against.
+// are kept on disk: gg prune reads the models without the rules, so the file
+// of a matched action stays one a model expects. Rules with a From prefix
+// only apply to models declared under that directory. ResolveRoutes runs it
+// once the endpoints are resolved, which the rules match against.
 func applyRouteIgnores(allModels []*Model, rules []ggconfig.RouteRule) RouteIgnoreResult {
 	result := RouteIgnoreResult{}
 	if len(rules) == 0 {
 		return result
 	}
-	result.KeptServiceFiles = make(map[string]bool)
-	result.KeptServiceDirs = make(map[string]bool)
 
 	matched := make([]bool, len(rules))
 	matchedDirs := make([]map[string]bool, len(rules))
@@ -73,11 +60,6 @@ func applyRouteIgnores(allModels []*Model, rules []ggconfig.RouteRule) RouteIgno
 			for i, rule := range rules {
 				if !rule.Match(method, finalRoute) || !rule.MatchesSource(m.ModelFilePath) {
 					continue
-				}
-				if act.Service {
-					target := ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
-					result.KeptServiceFiles[target.FilePath] = true
-					result.KeptServiceDirs[filepath.Clean(target.Dir)] = true
 				}
 				dropped = append(dropped, act)
 				matched[i] = true

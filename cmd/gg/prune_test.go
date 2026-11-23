@@ -54,7 +54,7 @@ func TestPruneLeftoversDeletesStalePBFiles(t *testing.T) {
 	var stdout string
 	withStdin(t, "y\n", func() {
 		stdout = captureOutput(t, func() {
-			if _, err := pruneLeftovers(new(changes), nil, nil, nil, nil, gghelper.NewProjectIgnore(), protect,
+			if _, err := pruneLeftovers(new(changes), nil, nil, gghelper.NewProjectIgnore(), protect,
 				[]string{current, currentGo, currentHandlers, registration, stale, staleGo, staleHandlers, kept, keptGo},
 				[]string{"pb/record.proto", "pb/record.gen.go", "pb/pb.gen.go", "pb/record.pb.go"}); err != nil {
 				t.Error(err)
@@ -321,7 +321,7 @@ func TestPruneLeftoversKeepsWhatPruneIgnoreCovers(t *testing.T) {
 	var stdout string
 	withStdin(t, "y\n", func() {
 		stdout = captureOutput(t, func() {
-			if _, err := pruneLeftovers(new(changes), []string{listFile, legacyFile}, nil, nil, nil, gghelper.NewProjectIgnore(), protect, nil, nil); err != nil {
+			if _, err := pruneLeftovers(new(changes), []string{listFile, legacyFile}, nil, gghelper.NewProjectIgnore(), protect, nil, nil); err != nil {
 				t.Error(err)
 			}
 		})
@@ -352,7 +352,7 @@ func TestPruneLeftoversRemindsOfUnreadSettingsBeforeAsking(t *testing.T) {
 	var stdout string
 	withStdin(t, "n\n", func() {
 		stdout = captureOutput(t, func() {
-			if _, err := pruneLeftovers(new(changes), []string{listFile}, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil); err != nil {
+			if _, err := pruneLeftovers(new(changes), []string{listFile}, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil); err != nil {
 				t.Error(err)
 			}
 		})
@@ -462,7 +462,7 @@ func TestPruneLeftoversListsEverythingAndAsksOnce(t *testing.T) {
 			var stdout string
 			withStdin(t, tt.answer, func() {
 				stdout = captureOutput(t, func() {
-					if _, err := pruneLeftovers(new(changes), []string{currentFile, disabledFile}, []*modelinfo.Model{pruneTestModel()}, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil); err != nil {
+					if _, err := pruneLeftovers(new(changes), []string{currentFile, disabledFile}, []*modelinfo.Model{pruneTestModel()}, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil); err != nil {
 						t.Error(err)
 					}
 				})
@@ -515,7 +515,7 @@ func TestPruneLeftoversDeletesThePairedTestFiles(t *testing.T) {
 	var stdout string
 	withStdin(t, "y\n", func() {
 		stdout = captureOutput(t, func() {
-			if _, err := pruneLeftovers(new(changes), []string{currentFile, disabledFile}, []*modelinfo.Model{pruneTestModel()}, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil); err != nil {
+			if _, err := pruneLeftovers(new(changes), []string{currentFile, disabledFile}, []*modelinfo.Model{pruneTestModel()}, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil); err != nil {
 				t.Error(err)
 			}
 		})
@@ -558,7 +558,7 @@ func TestPruneLeftoversCleansTheWholePackage(t *testing.T) {
 	var stdout string
 	withStdin(t, "y\n", func() {
 		stdout = captureOutput(t, func() {
-			if _, err := pruneLeftovers(new(changes), []string{disabledFile}, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil); err != nil {
+			if _, err := pruneLeftovers(new(changes), []string{disabledFile}, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil); err != nil {
 				t.Error(err)
 			}
 		})
@@ -615,7 +615,7 @@ func TestPruneLeftoversFailsKeepingOrphansWhenADisabledFileStays(t *testing.T) {
 	var pruneErr error
 	withStdin(t, "y\n", func() {
 		stdout = captureOutput(t, func() {
-			_, pruneErr = pruneLeftovers(new(changes), []string{currentFile, disabledFile}, []*modelinfo.Model{pruneTestModel()}, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil)
+			_, pruneErr = pruneLeftovers(new(changes), []string{currentFile, disabledFile}, []*modelinfo.Model{pruneTestModel()}, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil)
 		})
 	})
 
@@ -662,7 +662,7 @@ func TestPruneLeftoversKeepsTheServiceFilesOfAnImportedHelperDir(t *testing.T) {
 	var stdout string
 	withStdin(t, "y\n", func() {
 		stdout = captureOutput(t, func() {
-			if _, err := pruneLeftovers(new(changes), []string{currentFile, helperListFile}, []*modelinfo.Model{pruneTestModel()}, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil); err != nil {
+			if _, err := pruneLeftovers(new(changes), []string{currentFile, helperListFile}, []*modelinfo.Model{pruneTestModel()}, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil); err != nil {
 				t.Error(err)
 			}
 		})
@@ -701,7 +701,7 @@ func TestPruneLeftoversCleansUpAfterARemovedCopiedModule(t *testing.T) {
 		var stdout string
 		withStdin(t, "y\n", func() {
 			stdout = captureOutput(t, func() {
-				if _, err := pruneLeftovers(new(changes), nil, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil); err != nil {
+				if _, err := pruneLeftovers(new(changes), nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil); err != nil {
 					t.Error(err)
 				}
 			})
@@ -736,7 +736,7 @@ func TestPruneLeftoversCleansUpAfterARemovedCopiedModule(t *testing.T) {
 
 		withStdin(t, "y\n", func() {
 			captureOutput(t, func() {
-				if _, err := pruneLeftovers(new(changes), nil, nil, nil, nil, gghelper.NewProjectIgnore(), protect, nil, nil); err != nil {
+				if _, err := pruneLeftovers(new(changes), nil, nil, gghelper.NewProjectIgnore(), protect, nil, nil); err != nil {
 					t.Error(err)
 				}
 			})
@@ -767,7 +767,7 @@ func TestPruneLeftoversCleansUpAfterARemovedCopiedModule(t *testing.T) {
 		var stdout string
 		withStdin(t, "no\n", func() {
 			stdout = captureOutput(t, func() {
-				if _, err := pruneLeftovers(new(changes), nil, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil); err != nil {
+				if _, err := pruneLeftovers(new(changes), nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil); err != nil {
 					t.Error(err)
 				}
 			})
@@ -807,7 +807,7 @@ func SampleAuth() any {
 		var pruneErr error
 		withStdin(t, "y\n", func() {
 			stdout = captureOutput(t, func() {
-				_, pruneErr = pruneLeftovers(new(changes), nil, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil)
+				_, pruneErr = pruneLeftovers(new(changes), nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil)
 			})
 		})
 
@@ -842,7 +842,7 @@ func SampleAuth() any {
 		var stdout string
 		withStdin(t, "y\n", func() {
 			stdout = captureOutput(t, func() {
-				if _, pruneErr := pruneLeftovers(new(changes), nil, nil, nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil); pruneErr != nil {
+				if _, pruneErr := pruneLeftovers(new(changes), nil, nil, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil); pruneErr != nil {
 					t.Error(pruneErr)
 				}
 			})

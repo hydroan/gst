@@ -24,6 +24,8 @@ var moduleCopyOpts moduleCopyOptions
 var moduleCmd = &cobra.Command{
 	Use:   "module",
 	Short: "Manage the framework modules of the project",
+	Args:  cobra.NoArgs,
+	RunE:  showHelp,
 }
 
 var moduleListCmd = &cobra.Command{
@@ -154,7 +156,7 @@ func runModuleCopy(name string, opts moduleCopyOptions) error {
 		Plan:    plan,
 		Options: copyOpts,
 		RunGen: func() error {
-			return runModuleCopyGen(baseline, plan.ServiceTargets())
+			return runModuleCopyGen(baseline, plan.ServiceTargets(), nil)
 		},
 		OnSection: clioutput.Section,
 		// Every file the copy went over is listed under the label of what
@@ -200,29 +202,24 @@ var moduleCopyLabels = map[ggmodule.CopyWriteStatus]clioutput.Label{
 
 // runModuleCopyGen reuses gg gen's generator path for the copy: the service
 // files among targets, the ones the copy merges the module's source onto, are
-// created as shells (see genRunOptions.MergeShells), and generated-file logs
-// are suppressed so module copy output stays focused on local-source files.
-func runModuleCopyGen(baseline map[string]struct{}, targets []string) error {
-	// Module copy needs gg gen to create the target service shell, but it must not
-	// turn this copy operation into a prune/cleanup pass over user service files.
-	// Project checks stay enabled through genRunWithOptions(Quiet: true), scoped
-	// by baseline to violations introduced by this copy: pre-existing project
+// created as shells (see genRunOptions.MergeShells). What the run generates
+// is recorded in log; gg module copy passes none, so that its output stays
+// focused on the local-source files it copies, and gg upgrade passes the one
+// it counts every file it changed in.
+func runModuleCopyGen(baseline map[string]struct{}, targets []string, log *changes) error {
+	// Module copy needs gg gen to create the target service shell. Project
+	// checks stay enabled through genRunWithOptions(Quiet: true), scoped by
+	// baseline to violations introduced by this copy: pre-existing project
 	// violations must not block copying an unrelated module. The one check
 	// the copy itself fails, Module assembly, is left out and printed once
 	// the copy is done (see moduleCopyChecks). If copied module sources
 	// introduce new violations, fix the framework module or the check rule
 	// instead of bypassing validation here.
-	oldPrune := prune
-	prune = false
-	defer func() {
-		prune = oldPrune
-	}()
-
 	shells := make(map[string]struct{}, len(targets))
 	for _, target := range targets {
 		shells[filepath.Clean(target)] = struct{}{}
 	}
-	return genRunWithOptions(genRunOptions{Quiet: true, BaselineViolations: baseline, Checks: moduleCopyChecks(), MergeShells: shells})
+	return genRunWithOptions(genRunOptions{Quiet: true, Log: log, BaselineViolations: baseline, Checks: moduleCopyChecks(), MergeShells: shells})
 }
 
 func printModuleCopyPlan(plan *ggmodule.CopyPlan) {
@@ -250,7 +247,7 @@ func printModuleCopyPlanGroup(title string, files []string) {
 }
 
 func printModuleCopyCleanup(name string) {
-	clioutput.Note("To remove copied module code, delete model/%s, then run: gg gen --prune", name)
+	clioutput.Note("To remove copied module code, delete model/%s, then run: gg gen and gg prune", name)
 }
 
 // printModuleCopyStaleModelFiles previews the stale model files the copy

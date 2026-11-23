@@ -28,17 +28,10 @@ import (
 var genCmd = &cobra.Command{
 	Use:   "gen",
 	Short: "Generate the code the models declare",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return genRun()
 	},
-}
-
-// prune is gg gen's --prune flag: once the code is generated, gg gen prunes
-// the way gg prune does.
-var prune bool
-
-func init() {
-	genCmd.Flags().BoolVar(&prune, "prune", false, "After generating, prune what the models no longer need from service/, middleware/, interceptor/ and pb/, asking once before deleting")
 }
 
 type genRunOptions struct {
@@ -158,15 +151,7 @@ func genRunWithOptions(opts genRunOptions) error {
 		return err
 	}
 	reportIgnoreWarnings(scanned)
-	allModels, ignoreResult := scanned.models, scanned.routeIgnores
-
-	// Record the service files present before generating (if prune option
-	// is enabled): the ones this run does not write again are what prune
-	// deletes.
-	var oldServiceFiles []string
-	if prune {
-		oldServiceFiles = existingServiceFiles()
-	}
+	allModels := scanned.models
 
 	modelStmts := make([]ast.Stmt, 0)
 	serviceStmts := make([]ast.Stmt, 0)
@@ -458,15 +443,6 @@ func genRunWithOptions(opts genRunOptions) error {
 		})
 		if applyErr != nil {
 			return applyErr
-		}
-	}
-
-	// ============================================================
-	// Prune what the models no longer need
-	// ============================================================
-	if prune {
-		if _, pruneErr := pruneLeftovers(log, oldServiceFiles, allModels, ignoreResult.KeptServiceFiles, ignoreResult.KeptServiceDirs, ignore, projectCfg.Prune, existingPBFiles(), pbPaths); pruneErr != nil {
-			return pruneErr
 		}
 	}
 	return nil

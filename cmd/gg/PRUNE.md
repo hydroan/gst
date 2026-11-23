@@ -1,6 +1,6 @@
 # gg prune 清理逻辑
 
-**只动四个目录：`service/`、`middleware/`、`interceptor/` 和 `pb/`。** `gg prune` 和 `gg gen --prune` 清理 `service/` 里 model 不再需要的文件，被删掉的复制模块留在 `middleware/` 里的中间件文件和留在 `interceptor/` 里的 gRPC 拦截器文件（连同它们在 `middleware/middleware.go`、`interceptor/interceptor.go` 里的注册调用），以及 `pb/` 里 `gg gen` 不会再生成的 `.proto` 文件、和它们配套生成的 `.gen.go` 文件（各 `.proto` 旁边的处理器文件和每个 pb 包一个的 `pb.gen.go` 注册文件）以及由 `.proto` 编出来的 `.pb.go`、`_grpc.pb.go` 文件。项目的其他地方，一个文件都不删、不改。本文说明它们删什么、不删什么、按什么顺序删、在哪一步问你。
+**只动四个目录：`service/`、`middleware/`、`interceptor/` 和 `pb/`。** `gg prune` 清理 `service/` 里 model 不再需要的文件，被删掉的复制模块留在 `middleware/` 里的中间件文件和留在 `interceptor/` 里的 gRPC 拦截器文件（连同它们在 `middleware/middleware.go`、`interceptor/interceptor.go` 里的注册调用），以及 `pb/` 里 `gg gen` 不会再生成的 `.proto` 文件、和它们配套生成的 `.gen.go` 文件（各 `.proto` 旁边的处理器文件和每个 pb 包一个的 `pb.gen.go` 注册文件）以及由 `.proto` 编出来的 `.pb.go`、`_grpc.pb.go` 文件。项目的其他地方，一个文件都不删、不改。本文说明它删什么、不删什么、按什么顺序删、在哪一步问你。
 
 **删什么只认 `prune.ignore`**：`service/` 和 `pb/` 归 gg 管，要保持干净，放在里面的东西被 Git 忽略也好、被 Go 工具链忽略也好，用不上的照样是垃圾。所以 prune 删东西时读整个 `service/`，项目的 Git 忽略规则和 Go 工具链的内置忽略（名字以 `.` 或 `_` 开头的文件和目录、`vendor`、`testdata`、自带 `go.mod` 的子目录、`go.mod` 里 `ignore` 的目录）都不保护任何路径，想保留的路径写进 gst.yaml 的 `prune.ignore`。判断某个 service 目录还有没有代码在用时，prune 和 `gg check`、`gg gen` 一样按这两类规则认项目代码：被忽略的代码不算在用，所以清理完不会留下一直删不掉的目录。
 
@@ -33,15 +33,10 @@ partition "第 0 步：准备" {
   :读模块路径和 gst.yaml，扫描 model;
   :列出现有的 gg 管的 service 文件
   和 pb/ 下现有的 protobuf 文件;
-  note right
-    gg gen --prune 在生成代码之前列 service 文件，
-    生成完、删掉不再走 gRPC 的 model 留下的 Go 文件之后，
-    才列 pb/ 下的文件，再进入第 1 步
-  end note
 }
 partition "第 1 步：算出待删清单" {
   :停用的 service 文件 =
-  现有的 - 当前应有的 - 路由屏蔽保留的
+  现有的 - 当前应有的
   - prune.ignore 覆盖的;
   :过期的 protobuf 文件 =
   现有的 - 这次 gg gen 会写出的
@@ -86,12 +81,7 @@ stop
 
 ## 从哪里触发
 
-| 命令 | 做什么 |
-| --- | --- |
-| `gg prune` | 只清理，不生成代码 |
-| `gg gen --prune` | 先生成代码，再清理 |
-
-两个命令清理的范围和确认方式完全一样。`gg module copy` 在内部重新生成代码时不做 prune；`gg gen` 自己照常删的仍然会删：不再走 gRPC 的 model 在 `pb/` 下留下的 Go 文件，以及源文件里已经没有带列 model 的列引用文件（源文件删了或改了名，或者里面的 model 删了、挪去了别的文件、一个列都没有了）。
+清理只有 `gg prune` 这一个入口，它不生成代码。`gg gen` 不做 prune，`gg module copy`、`gg upgrade` 在内部重新生成代码时也不做；`gg gen` 自己照常删的仍然会删：不再走 gRPC 的 model 在 `pb/` 下留下的 Go 文件，以及源文件里已经没有带列 model 的列引用文件（源文件删了或改了名，或者里面的 model 删了、挪去了别的文件、一个列都没有了）。
 
 ## 几个说法
 
@@ -110,7 +100,7 @@ stop
 - 写成 `Service("archive")` 时对应 `service/sample/record/archive.go`；
 - 再加 `Flatten()` 时对应 `service/sample/archive.go`。
 
-**属于 model 的目录**：当前应有的 service 文件所在的目录。`gg gen --prune` 时，被 gst.yaml `gen.routes.ignore` 屏蔽的 action，其 service 文件所在的目录也算。
+**属于 model 的目录**：当前应有的 service 文件所在的目录。被 gst.yaml `gen.routes.ignore` 屏蔽的 action 在 prune 里仍算启用（见第 0 步），它的 service 文件所在的目录也在其中。
 
 **中间层目录**：`service/` 与属于 model 的目录之间的各级目录，包括 `service/` 本身。例如 `service/sample/record` 属于 model 时，`service/sample` 和 `service/` 都是中间层目录。
 
@@ -124,8 +114,6 @@ stop
 
 ## 第 0 步：准备
 
-`gg prune`：
-
 1. 从 `go.mod` 读出模块路径。项目里没有 `model/` 目录时报错退出。
 2. 读 gst.yaml。读之前，项目根目录下有 `.gg.yaml`、`.gg.yml`、`.gst.yaml`、`.gst.yml`、`gst.yml` 中的哪个，就对哪个打印一条警告：gg 不读它们。
 3. 扫描 `model/` 下的 model，读的文件和 `gg gen` 相同：跳过被 Git 忽略的、Go 工具链内置忽略的（见开头）和测试文件。项目有哪些 model 由 `gg gen` 说了算，prune 只处理它们留下的东西。一个 model 都没找到时打印 `No models found, pruning service files only` 并照常往下走，这时所有 gg 管的 service 文件都会进待删清单。
@@ -134,9 +122,7 @@ stop
 
 读不出模块路径、gst.yaml 写错（包括 `prune.ignore` 不合规）、model 文件解析失败、`.proto` 推导失败时，`gg prune` 打印错误并以失败退出，什么都不删。
 
-`gg prune` 对 service 文件不应用 gst.yaml 的 `gen.routes.ignore`：被屏蔽的 action 在这里仍算启用，它的 service 文件是当前应有的，所在目录属于 model。结果和 `gg gen --prune` 保留它们一样。对 `pb/` 下的文件则应用，因为它们的内容本来就是按屏蔽后的结果推导的。
-
-`gg gen --prune`：先读 gst.yaml、跑项目检查，不通过就既不生成也不清理；再扫描 model，在生成代码之前列出现有的 gg 管的 service 文件；然后生成代码，其间删掉不再走 gRPC 的 model 在 `pb/` 下留下的 Go 文件；生成完再列出 `pb/` 下现有的文件，最后进入第 1 步。这次在 `pb/` 下写出的全部文件（`.proto`、处理器 `.gen.go`、注册文件 `pb.gen.go`，以及编出来的 `.pb.go`、`_grpc.pb.go`）就是「会写出的」清单，所以这次生成新建的文件不会进待删清单。
+`gg prune` 对 service 文件不应用 gst.yaml 的 `gen.routes.ignore`：被屏蔽的 action 在这里仍算启用，它的 service 文件是当前应有的，所在目录属于 model。对 `pb/` 下的文件则应用，因为它们的内容本来就是按屏蔽后的结果推导的。
 
 ## 第 1 步：算出待删清单
 
@@ -144,7 +130,7 @@ stop
 
 ### 1.1 停用的 service 文件
 
-1. 现有的 gg 管的 service 文件，去掉当前应有的；`gg gen --prune` 时再去掉被路由屏蔽的 action 的 service 文件。
+1. 现有的 gg 管的 service 文件，去掉当前应有的。
 2. 每个停用的 service 文件后面跟上它磁盘上存在的配对测试文件。
 3. 剩下的里面被 `prune.ignore` 覆盖的，移出清单，列在 `Files Ignored By Config` 下面；配对测试文件也按同一条规则各自判断。
 4. 落在 1.2 保留的目录（含子目录）里的，移出清单：它们是被 import 的包的一部分，不管叫什么名字，删了项目编不过。移出后它们算活代码，它们 import 的目录按 1.2 重算，直到清单不再变化。这些文件列在 `Service Helper Directories Kept` 下面。
@@ -255,15 +241,15 @@ stop
 4. **过期的 protobuf 文件**：逐个删除，列一行 `REMOVE <路径>` 或打印 `Failed to delete ...`。清单里有 `.proto` 时，问之前先打印一条警告：它登记的 `reserved` 会随之消失，要先搬进替代它的文件。
 5. **空目录**：从最深的目录开始，删掉 `service/` 和 `pb/` 下的空目录；子目录删掉后变空的上层目录也一起删，`service/` 本身不删，`pb/` 空了则连它一起删（它只由 `gg gen` 创建）。每删一个列一行 `REMOVE <目录> (an empty directory)`。只有被 `prune.ignore` 覆盖的目录不删；被 Git 忽略的空目录、空的 `testdata` 目录照样删。
 
-全部删完时，`gg prune` 以一行结论收尾，写明删除、更新了几个路径和耗时，例如 `Pruned: 3 removed (120ms)`；`gg gen --prune` 把它们算进自己的结论行。
+全部删完时，`gg prune` 以一行结论收尾，写明删除、更新了几个路径和耗时，例如 `Pruned: 3 removed (120ms)`。
 
-删不掉的文件不会让这一步停下，其余照删；但只要有删不掉的文件，或者第 2 项出错，删完之后命令就报错退出（退出码 1），错误里写明删不掉的文件或第 2 项出错的原因，`gg gen --prune` 同样以出错结束。
+删不掉的文件不会让这一步停下，其余照删；但只要有删不掉的文件，或者第 2 项出错，删完之后命令就报错退出（退出码 1），错误里写明删不掉的文件或第 2 项出错的原因。
 
 ## 不会被删的东西
 
 - `service/`、`middleware/`、`interceptor/` 和 `pb/` 以外的一切。`middleware/`、`interceptor/` 里也只删孤儿文件，并从各自的注册文件删掉它们的注册调用；`pb/` 里只删 `.proto`、`.gen.go`、`.pb.go`、`_grpc.pb.go` 文件。
 - `middleware/`、`interceptor/` 里没有模块复制所有权标记的文件，以及所属模块的 `model/<name>/` 还在的文件。
-- 当前应有的 service 文件和它们的配对测试文件；`gg gen --prune` 时被路由屏蔽的 action 的 service 文件。
+- 当前应有的 service 文件和它们的配对测试文件，被路由屏蔽的 action 的 service 文件也在其中。
 - 这次 `gg gen` 会写出的 `.proto` 文件、配套的 `.gen.go` 文件和由 `.proto` 编出来的 Go 文件。
 - 属于 model 的目录、中间层目录里 gg 不认得的文件。
 - `prune.ignore` 覆盖的路径（`pb/` 下只保护 `.proto`）。忽略规则里只认它：被 Git 忽略的、Go 工具链内置忽略的路径没有这层保护。

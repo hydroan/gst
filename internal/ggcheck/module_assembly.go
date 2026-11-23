@@ -42,17 +42,11 @@ var ModuleAssembly = Check{
 // those subtrees is called through the project's copy of the package, so the
 // call is looked for under the copied import path.
 func checkModuleAssembly(ignore gghelper.ProjectIgnore) []string {
-	// Cheapest first: a name whose model subtree is absent was never copied,
-	// so a project that copied nothing reads no manifest and walks nothing.
-	names, err := ggmodule.CopyableModuleNames()
+	// Cheapest first: a project that copied no module reads no manifest and
+	// walks nothing.
+	copied, err := ggmodule.CopiedModuleNames()
 	if err != nil {
 		return []string{fmt.Sprintf("listing copyable framework modules: %v", err)}
-	}
-	copied := make([]string, 0, len(names))
-	for _, name := range names {
-		if info, statErr := os.Stat(filepath.Join(ggconst.DirModel, name)); statErr == nil && info.IsDir() {
-			copied = append(copied, name)
-		}
 	}
 	pending, err := ggmodule.RequiredAssembly(copied)
 	if err != nil {

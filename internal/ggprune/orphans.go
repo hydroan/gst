@@ -32,23 +32,16 @@ type OrphanDir struct {
 // directories: a file inside a kept directory is part of the package the
 // import needs, whatever it is named, and deleting it would break the build
 // the directory is kept for. It reads the project's code through ignore, as
-// gg check and gg gen do: code the project ignores keeps nothing. Directories in
-// keptDirs hold service files of gst.yaml-ignored actions and are treated as
-// owned; keptDirs may be nil. deleting are the files prune deletes besides
-// the orphans' own, the service files of disabled actions and the middleware
-// a removed module left behind; what they import keeps nothing.
-// What the gst.yaml prune.ignore entries in protect cover is never an orphan.
-// It returns an error, and no directories, when the imports of part of the
-// code it reads cannot be read, because a directory or a file cannot be
-// opened or its imports do not parse: an import it could not see might be all
-// that keeps a directory.
-func FindOrphanDirs(allModels []*modelinfo.Model, keptDirs map[string]bool, deleting []string, modulePath string, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig) (orphans, keptHelpers []OrphanDir, keptFiles []string, err error) {
+// gg check and gg gen do: code the project ignores keeps nothing. deleting
+// are the files prune deletes besides the orphans' own, the service files of
+// disabled actions and the middleware a removed module left behind; what
+// they import keeps nothing. What the gst.yaml prune.ignore entries in
+// protect cover is never an orphan. It returns an error, and no directories,
+// when the imports of part of the code it reads cannot be read, because a
+// directory or a file cannot be opened or its imports do not parse: an
+// import it could not see might be all that keeps a directory.
+func FindOrphanDirs(allModels []*modelinfo.Model, deleting []string, modulePath string, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig) (orphans, keptHelpers []OrphanDir, keptFiles []string, err error) {
 	currentDirs := currentServiceDirs(allModels)
-	for dir := range keptDirs {
-		currentDirs.ownedDirs = append(currentDirs.ownedDirs, dir)
-		addServiceDirAncestors(currentDirs.knownDirs, dir)
-	}
-	sort.Strings(currentDirs.ownedDirs)
 
 	// A file of deleting inside a directory live code imports is live code
 	// itself, so it is kept, and what it imports then counts: the directories

@@ -99,8 +99,8 @@ git init
 3. 在生成的 `service/**` 文件中实现业务逻辑或 hook，并把同名 `_test.go` 里的骨架换成接口测试
    （骨架被换掉之前 `go test` 会失败）。
 4. 使用 `gg check` 检查项目结构和依赖边界。
-5. 删除 model 或关闭 action 后，运行 `gg prune` 或 `gg gen --prune` 清理 model
-   不再需要的文件；它们只动 `service/`、`middleware/`、`interceptor/` 和 `pb/`。
+5. 删除 model 或关闭 action 后，运行 `gg prune` 清理 model 不再需要的文件；它只动
+   `service/`、`middleware/`、`interceptor/` 和 `pb/`。
 
 ## 模型 DSL
 
@@ -1036,13 +1036,13 @@ MySQL 默认明文连接。要加密时在 `[mysql]` 节打开 `tls_enabled`，�
 就返回什么语言。框架会英文（`en`）、简体中文和繁体中文三种，写了别的（如 `ja`）启动报错。点名具体查询参数或具体
 字段值的提示（如排序列写错、值放不进字段）联调时才遇到，始终是英文。
 
-常用配置命令：
+`gg config defaults` 打印框架的默认配置：不带参数是全部，带一个节名只打印那一节（连同它下面的子节）；
+`--format` 选 `ini`（默认，即配置文件的格式）、`json`、`toml`、`yaml`。内容走标准输出，要存成文件就重定向：
 
 ```bash
-gg config list
-gg config defaults --format ini
+gg config defaults
 gg config defaults server --format yaml
-gg config convert config.ini config.yaml
+gg config defaults > config.ini
 ```
 
 ### 日志输出
@@ -1227,14 +1227,22 @@ system root、网关头、gRPC、请求之外、工具链。
 
 | 命令 | 用途 |
 | --- | --- |
+| `gg new <module path>` | 创建业务项目，见[创建业务项目](#创建业务项目) |
 | `gg gen` | 根据 `model` DSL 生成注册文件、service action 文件和它们的测试骨架 |
-| `gg gen --prune` | 生成后联动清理 model 不再需要的文件，和 `gg prune` 相同 |
 | `gg gen ts` | 生成接口收发类型的 TypeScript 声明到 `generated/typescript/`，供前端复制使用 |
-| `gg module copy <name>` | 将内置模块复制为业务项目本地源码（model、service、中间件，项目用 gRPC 时还有模块的 gRPC 拦截器），并删除框架源已移除的过时 model/service 文件（`_test.go` 与生成文件除外）；`gg module` 各子命令的完整规则见 [cmd/gg/MODULE.md](cmd/gg/MODULE.md) |
 | `gg check` | 检查业务项目结构、命名、依赖边界和 tag 约束 |
+| `gg lint` | 用框架自己所用版本的 golangci-lint 检查项目代码，读项目里 `gg new` 写下的 `.golangci.yml`；不需要另外安装 golangci-lint |
 | `gg prune` | 清理 model 不再需要的文件，只动 `service/`、`middleware/`、`interceptor/` 和 `pb/`，删前问一次 |
 | `gg routes` | 按 model 的层级画出项目的 model 和它们声明的接口：方法、路径、动作、service 文件、是否公开；后面跟几个词就只留匹配的 |
 | `gg migrate` | 生成当前数据库方言的 schema，预览并按确认执行数据库迁移 |
+| `gg migrate schema [path]` | 只打印 model 对应的建表 SQL，可以只看某个文件或目录下的 model；标准输出只有 SQL，可以重定向到文件 |
+| `gg module list` | 列出框架内置模块，以及各自能不能登记、能不能复制 |
+| `gg module add <name>`、`gg module remove <name>` | 在项目的 `module/module.go` 里登记、取消登记一个内置模块，接口由框架在运行时注册 |
+| `gg module copy <name>` | 将内置模块复制为业务项目本地源码（model、service、中间件，项目用 gRPC 时还有模块的 gRPC 拦截器），并删除框架源已移除的过时 model/service 文件（`_test.go` 与生成文件除外）；`gg module` 各子命令的完整规则见 [cmd/gg/MODULE.md](cmd/gg/MODULE.md) |
+| `gg config defaults [section]` | 打印框架的默认配置，见[配置和迁移](#配置和迁移) |
+| `gg upgrade` | 把项目升到这个 gg 的框架版本，见[升级框架](#升级框架) |
+
+命令行写错（不存在的命令或参数）时 gg 以退出码 2 结束并指向 `--help`；命令跑了但失败是退出码 1。
 
 `gg check` 会检查依赖边界、model/service 文件边界、命名规范、`json` tag、
 REQ/RSP 命名、业务项目根目录结构、框架字段的列名，以及声明了 `GRPC()` 的 model 的 protobuf
@@ -1252,7 +1260,7 @@ REQ/RSP 命名、业务项目根目录结构、框架字段的列名，以及声
 在用），但删东西时这两类规则不保护任何路径，只认 `prune.ignore`，见下文。
 
 项目放在 go.work 工作区里时，gg 和 `go build` 一样按工作区解析依赖，不用额外设置。
-`go mod tidy` 不读 go.work，所以 `gg new`、`gg gen`、`gg module copy` 收尾时在工作区里不跑它，
+`go mod tidy` 不读 go.work，所以 `gg new`、`gg gen`、`gg module copy`、`gg upgrade` 收尾时在工作区里不跑它，
 只打印一行说明；要在工作区外构建这个项目，先在项目目录里跑一次 `go mod tidy`。
 但工作区里 `go build` 会报 `ambiguous import: google.golang.org/genproto/googleapis/rpc/status`：
 框架依赖的 cockroachdb/errors 还引用旧版的 genproto，和新版拆分出来的包重名。在 go.work
@@ -1261,6 +1269,28 @@ REQ/RSP 命名、业务项目根目录结构、框架字段的列名，以及声
 ```
 replace google.golang.org/genproto => google.golang.org/genproto v0.0.0-20261012220534-4341edf3f941
 ```
+
+### 升级框架
+
+gg 和项目依赖的框架必须是同一个版本：gg 按自己的版本生成代码，两边不一致时项目命令直接报错，并给出出路
+（安装项目要的那一版 gg，或者用 `gg upgrade` 把项目升上来）。升级按这个顺序做：
+
+```bash
+go install github.com/hydroan/gst/cmd/gg@latest
+gg upgrade
+gg migrate --dry-run
+```
+
+`gg upgrade` 把项目升到这个 gg 的框架版本，做的就是手工升级的那几步：`go get` 把 `go.mod` 里的框架版本改成 gg 的版本，
+把项目里用 `gg module copy` 复制过的框架模块按新版本重新复制一遍，重新生成代码，最后执行 `go mod tidy`；输出只列有变化的
+文件。中途哪一步失败（例如新版本多了一条检查规则，项目有代码没通过），修好后再跑一次 `gg upgrade` 即可。
+
+- 重新复制模块会覆盖项目在 `model/<模块>`、`service/<模块>` 下改过的内容，并删掉那里框架没有的文件，所以项目里有复制的
+  模块时先问一次，答 `y` 才开始，答别的什么都不改；`--yes` 跳过提问。
+- `go.mod` 用 `replace` 把框架指到别处，或项目在 go.work 工作区里时，项目用哪份框架由它们决定：`gg upgrade` 不改
+  `go.mod` 里的框架版本，也不动 `replace`，只把复制的模块和生成的代码对齐到那份框架。
+- 只往新版本升：gg 比项目旧时报错，并给出安装项目所需那一版 gg 的命令。
+- 数据库不归它管：升级后用 `gg migrate --dry-run` 看模型有没有带来表结构变化。
 
 ### 生成 TypeScript 类型
 
@@ -1312,7 +1342,7 @@ channel 与函数字段、键不是字符串或整数的 map，以及 `encoding/
 忽略只作用于生成的注册文件：`router/router.gen.go` 不注册路由、
 `service/service.gen.go` 不注册 service，也不会为其生成新的 service 文件；
 磁盘上已有的 service 文件（例如 `module copy` 拷贝来的）原样保留，
-`gg gen --prune` 和 `gg prune` 都不会把它们当作待删除文件，项目文件与
+`gg prune` 也不会把它们当作待删除文件，项目文件与
 `module copy` 输出保持一致。适合屏蔽 `module copy` 带来的不需要的接口，
 或把被框架模块占用的路径让给业务自己的实现：
 
@@ -1354,7 +1384,7 @@ gen:
         from: model/iam
 ```
 
-**`gg prune`（以及 `gg gen --prune`）只动 `service/`、`middleware/`、`interceptor/` 和 `pb/` 四个目录**，
+**`gg prune` 只动 `service/`、`middleware/`、`interceptor/` 和 `pb/` 四个目录**，
 项目其他地方一个文件都不删、不改。它清理停用 action 的 service 文件连同配对的测试
 文件、孤儿 service 目录、被删掉的复制模块留下的中间件和 gRPC 拦截器文件，以及 `pb/` 下这次
 `gg gen` 不会再写出的 `.proto` 文件、由它们编出来的 `.pb.go`、`_grpc.pb.go` 文件和对应的 `.gen.go` 适配文件
@@ -1535,7 +1565,7 @@ TestMain 时，再生成一个只声明 TestMain 的 `main_test.go`，用 `testu
 ### 为什么删除 action 后 service 文件还在？
 
 `gg gen` 默认保留已有 service 文件，避免误删手写业务代码。确认旧文件不再需要后
-运行 `gg prune`，或使用 `gg gen --prune`，清理规则见 [cmd/gg/PRUNE.md](cmd/gg/PRUNE.md)。
+运行 `gg prune`，清理规则见 [cmd/gg/PRUNE.md](cmd/gg/PRUNE.md)。
 
 ### 为什么测试跑完后 gst-test-mysql-8-4 这些容器还在运行？
 

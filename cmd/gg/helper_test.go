@@ -13,15 +13,16 @@ import (
 // TestChangesRecordPrintsEachChangeAndCountsEachFileOnce pins the example
 // record gives and what the log of a run counts: a file created, updated —
 // however many declarations were fixed in it — or removed once each, a file
-// the run created and wrote again as one created, with no line for the
-// second write, and a file under another label printed and not counted. A
-// quiet log counts the same and prints nothing; the summary leaves out the
-// kinds nothing was changed of, and is empty for a run that changed
-// nothing.
+// the run created and wrote again as one created and a file it updated
+// twice as one updated, with no line for the second write, and a file under
+// another label printed and not counted. A quiet log counts the same and
+// prints nothing; the summary leaves out the kinds nothing was changed of,
+// and is empty for a run that changed nothing.
 func TestChangesRecordPrintsEachChangeAndCountsEachFileOnce(t *testing.T) {
 	record := func(log *changes) {
 		log.record(clioutput.LabelCreate, "service/sample/create.go", "")
 		log.record(clioutput.LabelUpdate, "service/sample/create.go", "")
+		log.record(clioutput.LabelUpdate, "router/router.gen.go", "")
 		log.record(clioutput.LabelUpdate, "router/router.gen.go", "")
 		log.record(clioutput.LabelFix, "model/sample.go", ": numbered %s.%s pb:%q", "Sample", "Name", "1")
 		log.record(clioutput.LabelFix, "model/sample.go", ": numbered %s.%s pb:%q", "Sample", "Code", "2")
