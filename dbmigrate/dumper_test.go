@@ -157,11 +157,40 @@ func TestDumperCustomIndexes(t *testing.T) {
 		strings.Index(schema, "CREATE TABLE `samples`"),
 		strings.Index(schema, "idx_samples_tag_created_at"))
 
-	// The same plans render with dialect-specific quoting on postgres.
+	// An index statement stands on one line, a key that is an expression
+	// included: a migration plan shows it as the schema spells it.
+	require.Equal(t, []string{
+		"CREATE INDEX `idx_samples_tag_created_at` ON `samples` (`tag`,`created_at`);",
+		"CREATE UNIQUE INDEX `uniq_samples_title` ON `samples` (`title`,(CASE WHEN `deleted_at` IS NULL THEN 1 END));",
+	}, indexStatements(schema))
+
+	// The same plans render with dialect-specific quoting on postgres, a
+	// condition after the keys on the line of its statement as well.
 	schema, err = dumper.Dump(config.DBPostgres, &Sample{})
 	require.NoError(t, err)
-	require.Contains(t, schema, "idx_samples_tag_created_at")
-	require.Contains(t, schema, "uniq_samples_title")
+	require.Equal(t, []string{
+		`CREATE INDEX "idx_samples_tag_created_at" ON "samples" ("tag","created_at");`,
+		`CREATE UNIQUE INDEX "uniq_samples_title" ON "samples" ("title") WHERE "deleted_at" IS NULL;`,
+	}, indexStatements(schema))
+
+	schema, err = dumper.Dump(config.DBSqlite, &Sample{})
+	require.NoError(t, err)
+	require.Equal(t, []string{
+		"CREATE INDEX `idx_samples_tag_created_at` ON `samples` (`tag`,`created_at`);",
+		"CREATE UNIQUE INDEX `uniq_samples_title` ON `samples` (`title`) WHERE `deleted_at` IS NULL;",
+	}, indexStatements(schema))
+}
+
+// indexStatements returns the lines of a dumped schema that open an index
+// statement, in their order.
+func indexStatements(schema string) []string {
+	var statements []string
+	for line := range strings.SplitSeq(schema, "\n") {
+		if strings.HasPrefix(line, "CREATE INDEX") || strings.HasPrefix(line, "CREATE UNIQUE INDEX") {
+			statements = append(statements, line)
+		}
+	}
+	return statements
 }
 
 func TestDumperKeepsCallerOrder(t *testing.T) {

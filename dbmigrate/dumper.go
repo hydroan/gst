@@ -48,9 +48,9 @@ func NewSchemaDumper() (*SchemaDumper, error) {
 }
 
 // Dump renders dst as the target schema for driver: one CREATE TABLE per
-// model, each followed by the CREATE INDEX statements of the indexes it
-// declares through its optional Indexes method, and each annotated with the model
-// it came from. Models are sorted by type name, so the same input always
+// model, laid out a column a line and annotated with the model it came
+// from, each followed by the CREATE INDEX statements of the indexes it
+// declares through its optional Indexes method, a line each. Models are sorted by type name, so the same input always
 // renders the same schema.
 func (s *SchemaDumper) Dump(driver config.DBType, dst ...any) (string, error) {
 	s.mu.Lock()
@@ -160,12 +160,16 @@ func (s *SchemaDumper) Dump(driver config.DBType, dst ...any) (string, error) {
 	for _, stmt := range statements {
 		sql := normalizeSchemaSQL(driver, stmt.SQL)
 		// Only a CREATE TABLE opens a model's section of the schema, the one
-		// place the annotation belongs.
-		createsTable := strings.HasPrefix(strings.ToUpper(strings.TrimSpace(sql)), "CREATE TABLE")
-		if createsTable {
+		// place the annotation belongs, and only it is laid out over lines, a
+		// column each. An index statement stays on the one line it is
+		// written on: the formatter breaks one whose key is an expression or
+		// that carries a condition in the middle of either, and a migration
+		// plan shows the statement as the schema spells it.
+		if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(sql)), "CREATE TABLE") {
 			sb.WriteString("-- Model: " + stmt.ModelName + "\n")
+			sql = sqlfmt.Format(sql)
 		}
-		sb.WriteString(sqlfmt.Format(sql) + ";\n")
+		sb.WriteString(sql + ";\n")
 	}
 
 	return sb.String(), nil
