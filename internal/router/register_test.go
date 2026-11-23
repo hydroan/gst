@@ -40,8 +40,8 @@ func TestRegisterPanicsOnDeclarationMistakes(t *testing.T) {
 }
 
 // TestRegisterServesEveryPhaseUnderItsMethod pins the method the router serves
-// each phase under to apiaction.Phase.HTTPMethod, the table gg routes, gg
-// route-tree and gg gen's route ignore rules read as well: the engine routes
+// each phase under to apiaction.Phase.HTTPMethod, the table gg routes and
+// gg gen's route ignore rules read as well: the engine routes
 // the method, and Routes lists the route under it. A Stream action is the
 // one exception to the list: served under the GET that opens its connection,
 // it is listed under the stream word, what it is authorized by.

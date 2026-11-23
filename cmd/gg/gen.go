@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/clioutput"
@@ -26,7 +27,7 @@ import (
 
 var genCmd = &cobra.Command{
 	Use:   "gen",
-	Short: "generate service code",
+	Short: "Generate the code the models declare",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return genRun()
 	},
@@ -41,7 +42,13 @@ func init() {
 }
 
 type genRunOptions struct {
+	// Quiet keeps the run to the violations of its checks: the lines about
+	// the checks passed, the models read and the files written are left out.
 	Quiet bool
+	// Log receives what the run writes and removes; nil gives the run a log
+	// of its own, quiet when the run is. gg gen passes the one the line it
+	// ends on is read from.
+	Log *changes
 	// BaselineViolations lists project check violations that already existed
 	// before the caller started. The quiet pre-generation checks fail only on
 	// violations outside this baseline; module copy uses it so pre-existing
@@ -65,16 +72,41 @@ func (o genRunOptions) mergesShell(path string) bool {
 	return ok
 }
 
-// genRun generates the code and then tidies the module, so that go.mod and
-// go.sum hold what the written files import (see tidyModule).
+// genRun generates the code, tidies the module, so that go.mod and go.sum
+// hold what the written files import (see tidyModule), and ends on what the
+// run changed: the files it created, updated and removed, or that every
+// file was up to date. A run that created service files says what is left
+// to do in them.
 func genRun() error {
-	if err := genRunWithOptions(genRunOptions{}); err != nil {
+	started := time.Now()
+	log := new(changes)
+	if err := genRunWithOptions(genRunOptions{Log: log}); err != nil {
 		return err
 	}
-	return tidyModule()
+	if err := tidyModule(log); err != nil {
+		return err
+	}
+
+	summary := log.summary()
+	if summary == "" {
+		clioutput.Done("Nothing to generate: every file is up to date (%s)", elapsedSince(started))
+		return nil
+	}
+	clioutput.Done("Generated: %s (%s)", summary, elapsedSince(started))
+	for path := range log.created {
+		if strings.HasPrefix(path, ggconst.DirService+string(filepath.Separator)) && !strings.HasSuffix(path, ggconst.PatternTestFile) && !strings.HasSuffix(path, ggconst.SuffixGenGo) {
+			clioutput.Note("Next: write the logic of the new service files; the test of each fails on its first line until that line is deleted")
+			break
+		}
+	}
+	return nil
 }
 
 func genRunWithOptions(opts genRunOptions) error {
+	log := opts.Log
+	if log == nil {
+		log = &changes{quiet: opts.Quiet}
+	}
 	if len(module) == 0 {
 		var err error
 		module, err = gghelper.ModulePath(".")
@@ -86,7 +118,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	// Heal bare model.Version declarations before the checks run: the tag
 	// shape is framework-owned, and gen filling it in is what keeps the
 	// version-field check below from failing the very command that fixes it.
-	if err := fillVersionFieldTags(opts.Quiet); err != nil {
+	if err := fillVersionFieldTags(log); err != nil {
 		return err
 	}
 	// gst.yaml is read once, the warnings about the files next to it gg does
@@ -99,7 +131,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	// for the same reason (see fillPBTags); the definitions it derived on the
 	// way are the ones written below when it wrote no tag.
 	ignore := gghelper.NewProjectIgnore()
-	pbDerived, err := fillPBTags(opts.Quiet, ignore, projectCfg)
+	pbDerived, err := fillPBTags(log, ignore, projectCfg)
 	if err != nil {
 		return err
 	}
@@ -108,26 +140,17 @@ func genRunWithOptions(opts genRunOptions) error {
 	if checks == nil {
 		checks = generationChecks()
 	}
-	if runProjectChecks(checks, opts.Quiet, opts.BaselineViolations) > 0 {
-		return errors.New("project checks failed")
+	if err = runProjectChecks(checks, opts.Quiet, opts.BaselineViolations); err != nil {
+		return errors.Wrap(err, "nothing was generated")
 	}
 
 	// Ensure required files exist
-	if !opts.Quiet {
-		clioutput.Section("Ensure Required Files")
-	}
 	createdFiles, err := ggnew.EnsureFileExists()
+	for _, file := range createdFiles {
+		log.record(clioutput.LabelCreate, file, "")
+	}
 	if err != nil {
 		return err
-	}
-	if !opts.Quiet {
-		if len(createdFiles) == 0 {
-			clioutput.Success("", "Required files are present")
-		} else {
-			for _, file := range createdFiles {
-				clioutput.Success("CREATE", "%s", file)
-			}
-		}
 	}
 
 	scanned, err := scanModels(opts.Quiet, ignore, projectCfg)
@@ -145,14 +168,6 @@ func genRunWithOptions(opts genRunOptions) error {
 		oldServiceFiles = existingServiceFiles()
 	}
 
-	if !opts.Quiet {
-		if len(allModels) == 0 {
-			clioutput.Item("", "No models found, generating empty registration files")
-		} else {
-			clioutput.Success("", "%d models found", len(allModels))
-		}
-	}
-
 	modelStmts := make([]ast.Stmt, 0)
 	serviceStmts := make([]ast.Stmt, 0)
 	routerStmts := make([]ast.Stmt, 0)
@@ -162,7 +177,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	routerPkgs := make(map[string]string)
 	servicePkgs := make(map[string]string)
 	writeGenFile := func(filename string, content string) error {
-		return writeGeneratedFile(filename, content, !opts.Quiet)
+		return writeGeneratedFile(filename, content, log)
 	}
 
 	for _, m := range allModels {
@@ -231,9 +246,6 @@ func genRunWithOptions(opts genRunOptions) error {
 	// ============================================================
 	// Generate model/service/router/main files
 	// ============================================================
-	if !opts.Quiet {
-		clioutput.Section("Generate Files")
-	}
 	modelCode, err := gggen.BuildModelFile(module, ggconst.PkgModel, modelAliases, modelStmts...)
 	if err != nil {
 		return errors.Wrap(err, "build model/model.gen.go")
@@ -278,13 +290,14 @@ func genRunWithOptions(opts genRunOptions) error {
 	// Generate the typed column references of every model, so filters can
 	// name columns through the compiler instead of through string literals.
 	columnFiles, genErr := columns.Generate(module, ggconst.DirModel, allModels, ignore)
-	if !opts.Quiet {
-		for _, path := range columnFiles.Written {
-			clioutput.Success("GENERATE", "%s", path)
-		}
-		for _, path := range columnFiles.Removed {
-			clioutput.Success("REMOVE", "%s (its source declares no model with columns any more)", path)
-		}
+	for _, path := range columnFiles.Created {
+		log.record(clioutput.LabelCreate, path, "")
+	}
+	for _, path := range columnFiles.Updated {
+		log.record(clioutput.LabelUpdate, path, "")
+	}
+	for _, path := range columnFiles.Removed {
+		log.record(clioutput.LabelRemove, path, " (its source declares no model with columns any more)")
 	}
 	if genErr != nil {
 		return genErr
@@ -307,7 +320,7 @@ func genRunWithOptions(opts genRunOptions) error {
 		if !errors.Is(err, pb.ErrUnchecked) {
 			return errors.Wrap(err, "the Go files generated under "+ggconst.DirPB+"/ do not compile, a defect of gg gen")
 		}
-		clioutput.Warn("", "%v; go build reports what the check would have", err)
+		clioutput.Warn("%v; go build reports what the check would have", err)
 	}
 	pbPaths := make([]string, 0, len(pbFiles))
 	for _, f := range pbFiles {
@@ -332,9 +345,7 @@ func genRunWithOptions(opts genRunOptions) error {
 		if err = os.Remove(path); err != nil {
 			return errors.Wrapf(err, "remove %s", path)
 		}
-		if !opts.Quiet {
-			clioutput.Success("REMOVE", "%s (its model is no longer served over gRPC)", path)
-		}
+		log.record(clioutput.LabelRemove, path, " (its model is no longer served over gRPC)")
 	}
 
 	// generate main.go, which imports the interceptor and pb packages
@@ -349,17 +360,13 @@ func genRunWithOptions(opts genRunOptions) error {
 	if err = writeGenFile(ggconst.FileMain, mainCode); err != nil {
 		return err
 	}
-	if err = syncTestMainImports(extraDirs, ignore, opts.Quiet); err != nil {
+	if err = syncTestMainImports(extraDirs, ignore, log); err != nil {
 		return err
 	}
 
 	// ============================================================
 	// Apply actions to services
 	// ============================================================
-	if !opts.Quiet {
-		clioutput.Section("Apply Actions To Services")
-	}
-
 	fset := token.NewFileSet()
 	// applyFile writes the service file target locates: a new file is
 	// created with its test scaffolds, an existing one has the action's
@@ -397,9 +404,6 @@ func genRunWithOptions(opts genRunOptions) error {
 				if err != nil {
 					return err
 				}
-				if !opts.Quiet {
-					clioutput.Status(clioutput.StyleWarn, clioutput.SymbolSuccess, "UPDATE", "%s", safePath)
-				}
 				if err := gghelper.EnsureParentDir(safePath); err != nil {
 					return err
 				}
@@ -408,13 +412,9 @@ func genRunWithOptions(opts genRunOptions) error {
 				if err := os.WriteFile(safePath, []byte(code), ggconst.FileModeGenerated); err != nil {
 					return err
 				}
-			} else if !opts.Quiet {
-				clioutput.Item("SKIP", "%s", safePath)
+				log.record(clioutput.LabelUpdate, safePath, "")
 			}
 		} else {
-			if !opts.Quiet {
-				clioutput.Success("CREATE", "%s", safePath)
-			}
 			if err := gghelper.EnsureParentDir(safePath); err != nil {
 				return err
 			}
@@ -423,10 +423,11 @@ func genRunWithOptions(opts genRunOptions) error {
 			if err := os.WriteFile(safePath, []byte(code), ggconst.FileModeGenerated); err != nil {
 				return err
 			}
+			log.record(clioutput.LabelCreate, safePath, "")
 			if opts.mergesShell(target.FilePath) {
 				return nil
 			}
-			if err := scaffoldServiceTests(modelInfo, target, action, route, extraDirs, opts.Quiet); err != nil {
+			if err := scaffoldServiceTests(modelInfo, target, action, route, extraDirs, log); err != nil {
 				return err
 			}
 		}
@@ -464,17 +465,9 @@ func genRunWithOptions(opts genRunOptions) error {
 	// Prune what the models no longer need
 	// ============================================================
 	if prune {
-		if pruneErr := pruneLeftovers(oldServiceFiles, allModels, ignoreResult.KeptServiceFiles, ignoreResult.KeptServiceDirs, ignore, projectCfg.Prune, existingPBFiles(), pbPaths); pruneErr != nil {
+		if _, pruneErr := pruneLeftovers(log, oldServiceFiles, allModels, ignoreResult.KeptServiceFiles, ignoreResult.KeptServiceDirs, ignore, projectCfg.Prune, existingPBFiles(), pbPaths); pruneErr != nil {
 			return pruneErr
 		}
-	}
-
-	// ============================================================
-	// Completion message
-	// ============================================================
-	if !opts.Quiet {
-		clioutput.Section("Done")
-		clioutput.Done("Code generation completed successfully!")
 	}
 	return nil
 }
@@ -490,7 +483,7 @@ func genRunWithOptions(opts genRunOptions) error {
 // file the project already has, in its external or internal form, is kept
 // as it is, and so is a main_test.go that exists already, its imports of the
 // optional packages following main.go's (see syncTestMainImports).
-func scaffoldServiceTests(modelInfo *modelinfo.Model, target modelinfo.ServiceTargetInfo, action *dsl.Action, route string, extraDirs []string, quiet bool) error {
+func scaffoldServiceTests(modelInfo *modelinfo.Model, target modelinfo.ServiceTargetInfo, action *dsl.Action, route string, extraDirs []string, log *changes) error {
 	stem := strings.TrimSuffix(target.FilePath, ggconst.ExtensionGo)
 	if gghelper.FileExists(stem+ggconst.PatternTestFile) || gghelper.FileExists(stem+ggconst.PatternInternalTestFile) {
 		return nil
@@ -506,7 +499,7 @@ func scaffoldServiceTests(modelInfo *modelinfo.Model, target modelinfo.ServiceTa
 		if mainCode, err = gggen.GenerateServiceTestMain(module, target.PackageName, extraDirs...); err != nil {
 			return err
 		}
-		if err = writeGeneratedFile(mainTest, mainCode, !quiet); err != nil {
+		if err = writeGeneratedFile(mainTest, mainCode, log); err != nil {
 			return err
 		}
 	}
@@ -515,16 +508,16 @@ func scaffoldServiceTests(modelInfo *modelinfo.Model, target modelinfo.ServiceTa
 	if err != nil {
 		return err
 	}
-	return writeGeneratedFile(stem+ggconst.PatternTestFile, code, !quiet)
+	return writeGeneratedFile(stem+ggconst.PatternTestFile, code, log)
 }
 
 // syncTestMainImports makes every test file of the project declaring TestMain
 // in an external test package import the optional project packages the way
 // main.go does, extraDirs being the ones main.go imports (see
-// gggen.SyncTestMainImports), and prints the files it rewrites the way gopls
-// saves them (see gghelper.FormatFile), so an import a file gains lands in the
-// group gopls puts it in.
-func syncTestMainImports(extraDirs []string, ignore gghelper.ProjectIgnore, quiet bool) error {
+// gggen.SyncTestMainImports), recording in log the files it rewrites, which
+// it prints the way gopls saves them (see gghelper.FormatFile), so an import
+// a file gains lands in the group gopls puts it in.
+func syncTestMainImports(extraDirs []string, ignore gghelper.ProjectIgnore, log *changes) error {
 	files, err := gghelper.TestMainFiles(ignore)
 	if err != nil {
 		return err
@@ -542,12 +535,10 @@ func syncTestMainImports(extraDirs []string, ignore gghelper.ProjectIgnore, quie
 		if err != nil {
 			return errors.Wrapf(err, "formatting %s", path)
 		}
-		if !quiet {
-			clioutput.Status(clioutput.StyleWarn, clioutput.SymbolSuccess, "UPDATE", "%s", path)
-		}
 		if err := os.WriteFile(path, []byte(code), ggconst.FileModeGenerated); err != nil {
 			return err
 		}
+		log.record(clioutput.LabelUpdate, path, "")
 	}
 	return nil
 }
@@ -637,19 +628,18 @@ func protobufDefinitions(models []*modelinfo.Model, ignore gghelper.ProjectIgnor
 // and check reads them (see modelinfo.ScanModels): their routes resolved,
 // then the gst.yaml route and model ignores of projectCfg applied, so a
 // matched action behaves exactly like an action that was never declared.
-// Unless quiet, it lists what the ignores matched; the warnings about the
-// rules are its caller's to print (see reportIgnoreWarnings). gg gen and gg
-// gen ts both start from here, which keeps the TypeScript declarations on the
-// routes the generated router registers. The command reads gst.yaml (see
-// loadProjectConfig) once for every scan it makes.
+// Unless quiet, it prints one line counting the models and the routes left,
+// with how many the ignores took out: "13 models, 54 routes (2 routes
+// ignored by gst.yaml)"; the warnings about the rules are its caller's to
+// print (see reportIgnoreWarnings). gg gen and gg gen ts both start from
+// here, which keeps the TypeScript declarations on the routes the generated
+// router registers. The command reads gst.yaml (see loadProjectConfig) once
+// for every scan it makes.
 func scanModels(quiet bool, ignore gghelper.ProjectIgnore, projectCfg *ggconfig.Config) (scannedModels, error) {
 	if !gghelper.FileExists(ggconst.DirModel) {
 		return scannedModels{}, errors.Newf("model dir not found: %s", ggconst.DirModel)
 	}
 
-	if !quiet {
-		clioutput.Section("Scan Models")
-	}
 	scanned, err := modelinfo.ScanModels(module, ggconst.DirModel, ignore, projectCfg)
 	if err != nil {
 		return scannedModels{}, err
@@ -666,17 +656,23 @@ func scanModels(quiet bool, ignore gghelper.ProjectIgnore, projectCfg *ggconfig.
 	if conflicts := modelinfo.ServiceConflicts(scanned.Models); len(conflicts) > 0 {
 		return scannedModels{}, errors.Join(conflicts...)
 	}
-	if !quiet && len(scanned.RouteIgnores.Matches) > 0 {
-		clioutput.Section("Ignore Routes")
-		for _, match := range scanned.RouteIgnores.Matches {
-			clioutput.Item("IGNORE", "%s %s (%s)", match.Method, match.Path, match.Model)
+	if !quiet {
+		routes := 0
+		for _, m := range scanned.Models {
+			m.Design.Range(func(string, *dsl.Action) { routes++ })
 		}
-	}
-	if !quiet && len(scanned.ModelIgnores.Matches) > 0 {
-		clioutput.Section("Ignore Models")
-		for _, match := range scanned.ModelIgnores.Matches {
-			clioutput.Item("IGNORE", "model %s (%s)", match.Model, match.File)
+		var ignored []string
+		if n := len(scanned.RouteIgnores.Matches); n > 0 {
+			ignored = append(ignored, counted(n, "route"))
 		}
+		if n := len(scanned.ModelIgnores.Matches); n > 0 {
+			ignored = append(ignored, counted(n, "model registration"))
+		}
+		summary := counted(len(scanned.Models), "model") + ", " + counted(routes, "route") //gst:literal the word for what is counted
+		if len(ignored) > 0 {
+			summary += " (" + strings.Join(ignored, " and ") + " ignored by " + ggconfig.FileName + ")"
+		}
+		clioutput.Success("%s", summary)
 	}
 
 	return scannedModels{models: scanned.Models, routeIgnores: scanned.RouteIgnores, modelIgnores: scanned.ModelIgnores}, nil
@@ -692,19 +688,19 @@ func scanModels(quiet bool, ignore gghelper.ProjectIgnore, projectCfg *ggconfig.
 // prune print none, so a command prints each warning once.
 func reportIgnoreWarnings(scanned scannedModels) {
 	for _, rule := range scanned.routeIgnores.Unmatched {
-		clioutput.Warn("", "gst.yaml ignore rule matched no route: %s", rule.Raw)
+		clioutput.Warn("gst.yaml ignore rule matched no route: %s", rule.Raw)
 	}
 	for _, rule := range scanned.routeIgnores.MultiSourceRules {
-		clioutput.Warn("", "gst.yaml ignore rule %q matched models under %s; add \"from\" to scope it to one directory", rule.Raw, strings.Join(rule.Dirs, ", "))
+		clioutput.Warn("gst.yaml ignore rule %q matched models under %s; add \"from\" to scope it to one directory", rule.Raw, strings.Join(rule.Dirs, ", "))
 	}
 	for _, rule := range scanned.modelIgnores.Unmatched {
-		clioutput.Warn("", "gst.yaml model ignore rule matched no migrating model: %s", rule.Raw)
+		clioutput.Warn("gst.yaml model ignore rule matched no migrating model: %s", rule.Raw)
 	}
 	for _, rule := range scanned.modelIgnores.MultiSourceRules {
-		clioutput.Warn("", "gst.yaml model ignore rule %q matched models under %s; add \"from\" to scope it to one directory", rule.Raw, strings.Join(rule.Dirs, ", "))
+		clioutput.Warn("gst.yaml model ignore rule %q matched models under %s; add \"from\" to scope it to one directory", rule.Raw, strings.Join(rule.Dirs, ", "))
 	}
 	for _, match := range scanned.modelIgnores.LiveActionModels {
-		clioutput.Warn("", "gst.yaml ignores registration of model %s (%s) but its routes stay enabled; add gen.routes.ignore entries or ensure another model owns its table", match.Model, match.File)
+		clioutput.Warn("gst.yaml ignores registration of model %s (%s) but its routes stay enabled; add gen.routes.ignore entries or ensure another model owns its table", match.Model, match.File)
 	}
 }
 

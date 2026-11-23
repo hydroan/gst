@@ -39,14 +39,14 @@ starts.`,
 		// 1. Get module name
 		moduleName, err := gghelper.ModulePath(".")
 		if err != nil {
-			return errors.Wrap(err, "failed to get module path")
+			return err
 		}
 
 		program, err := buildMigrateProgramForMode(moduleName, false, "", nil)
 		if err != nil {
 			return err
 		}
-		return runGeneratedMigrateProgram(program, "Migration", "Preparing migration...")
+		return runGeneratedMigrateProgram(program)
 	},
 }
 
@@ -58,7 +58,7 @@ var migrateSchemaCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		moduleName, err := gghelper.ModulePath(".")
 		if err != nil {
-			return errors.Wrap(err, "failed to get module path")
+			return err
 		}
 
 		source := ""
@@ -73,7 +73,7 @@ var migrateSchemaCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		return runGeneratedMigrateProgram(program, "Migration Schema", "Preparing schema dump...")
+		return runGeneratedMigrateProgram(program)
 	},
 }
 
@@ -101,8 +101,8 @@ func buildMigrateSchemaProgram(moduleName string, source string, sourceFiles []s
 
 // buildMigrateProgramForMode assembles the migration program for the project:
 // the embedded sources, the generated project.go, and the flags that select
-// the mode, so that the sources, and with them the build Go caches, stay the
-// same between runs.
+// the mode and tell whether the terminal takes colors, so that the sources,
+// and with them the build Go caches, stay the same between runs.
 func buildMigrateProgramForMode(moduleName string, schemaOnly bool, schemaSource string, schemaSourceFiles []string) (gghelper.ProjectProgram, error) {
 	files := gghelper.MigrateProgram()
 	project, err := buildMigrateProjectFile(moduleName)
@@ -117,6 +117,7 @@ func buildMigrateProgramForMode(moduleName string, schemaOnly bool, schemaSource
 		"-accept-data-loss=" + strconv.FormatBool(migrateAcceptDataLoss),
 		"-schema-only=" + strconv.FormatBool(schemaOnly),
 		"-schema-source", schemaSource,
+		"-color=" + strconv.FormatBool(clioutput.Colored()),
 	}
 	for _, file := range schemaSourceFiles {
 		args = append(args, "-schema-source-file", file)
@@ -177,7 +178,7 @@ func migrateProjectImports(moduleName string) []string {
 	paths := make([]string, 0, len(ggconst.ProjectImportDirs))
 	for _, dir := range ggconst.ProjectImportDirs {
 		if !hasGoSources(dir) {
-			clioutput.Warn("", "%s/ has no Go files and is left out of the migration program; run gg gen to restore the scaffold", dir)
+			clioutput.Warn("%s/ has no Go files and is left out of the migration program; run gg gen to restore the scaffold", dir)
 			continue
 		}
 		paths = append(paths, moduleName+"/"+dir)
@@ -249,12 +250,16 @@ func migrateSourceFiles(source string, ignore gghelper.ProjectIgnore) ([]string,
 	return files, nil
 }
 
-func runGeneratedMigrateProgram(program gghelper.ProjectProgram, section string, message string) error {
-	clioutput.Section(section)
-	clioutput.Info("", "%s", message)
-
-	// Migration prints its own progress and prompts for confirmation, so its
-	// output and input stay connected to the terminal.
+// runGeneratedMigrateProgram builds the migration program inside the
+// project, which takes a moment it says so for, and runs it connected to the
+// terminal: the program prints the migration, asks before it applies it and
+// reports what stopped it, a failure this command then adds nothing to.
+func runGeneratedMigrateProgram(program gghelper.ProjectProgram) error {
+	clioutput.Progress("Building the migration program inside the project")
 	program.Stdout, program.Interactive = os.Stdout, true
-	return program.Run()
+	err := program.Run()
+	if errors.Is(err, gghelper.ErrProgramFailed) {
+		return errReported
+	}
+	return err
 }

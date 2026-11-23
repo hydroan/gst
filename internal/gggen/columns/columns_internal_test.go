@@ -41,17 +41,20 @@ func TestColumnsFileName(t *testing.T) {
 func TestWriteGeneratedFileIfChanged(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "record.gen.go")
 
-	written, err := writeGeneratedFileIfChanged(path, "package sample\n")
+	existed, written, err := writeGeneratedFileIfChanged(path, "package sample\n")
 	require.NoError(t, err)
+	require.False(t, existed, "a missing file is reported as one that did not exist")
 	require.True(t, written, "a missing file is written")
 
-	written, err = writeGeneratedFileIfChanged(path, "package sample\n")
+	existed, written, err = writeGeneratedFileIfChanged(path, "package sample\n")
 	require.NoError(t, err)
+	require.True(t, existed)
 	require.False(t, written, "a file already holding the content is left alone")
 
 	changed := "package sample\n\nvar RecordCols = struct{}{}\n"
-	written, err = writeGeneratedFileIfChanged(path, changed)
+	existed, written, err = writeGeneratedFileIfChanged(path, changed)
 	require.NoError(t, err)
+	require.True(t, existed, "a file whose content changed is reported as one that existed")
 	require.True(t, written, "a file whose content changed is rewritten")
 	content, err := os.ReadFile(path)
 	require.NoError(t, err)

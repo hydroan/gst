@@ -296,8 +296,8 @@ func register[M types.Model, REQ types.Request, RSP types.Response](router *gin.
 	authRequired := router != pub
 
 	// handle serves a phase's controller under the method the phase maps to,
-	// apiaction.Phase.HTTPMethod: the one table gg routes, gg route-tree and
-	// gg gen's route ignore rules read the method from as well.
+	// apiaction.Phase.HTTPMethod: the one table gg routes and gg gen's route
+	// ignore rules read the method from as well.
 	handle := func(phase apiaction.Phase, handler gin.HandlerFunc) {
 		method := phase.HTTPMethod()
 		router.Handle(method, relativePath, handler)

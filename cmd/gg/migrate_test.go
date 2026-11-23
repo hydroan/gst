@@ -80,8 +80,10 @@ import (
 			t.Fatalf("expected the migration program's %s to parse, got %v", name, err)
 		}
 	}
-	// The mode travels as flags, so the sources stay the same between runs.
-	if !slices.Equal(program.Args, []string{"-module", "sample", "-dry-run=false", "-yes=false", "-accept-data-loss=false", "-schema-only=false", "-schema-source", ""}) {
+	// The mode travels as flags, and so does whether the terminal takes
+	// colors, which the pipe a test runs under does not, so the sources stay
+	// the same between runs.
+	if !slices.Equal(program.Args, []string{"-module", "sample", "-dry-run=false", "-yes=false", "-accept-data-loss=false", "-schema-only=false", "-schema-source", "", "-color=false"}) {
 		t.Fatalf("unexpected migration program arguments: %q", program.Args)
 	}
 }
@@ -142,7 +144,7 @@ func TestMigrateProgramHasNothingToMigrateOnAnInMemorySqliteDatabase(t *testing.
 
 	out := runMigrateProgramForTest(t, true, false)
 
-	for _, want := range []string{"→ Target: in-memory database", "→ Nothing to migrate:"} {
+	for _, want := range []string{"→ Target: in-memory database", "✔ Nothing to migrate:"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("expected the migration output to contain %q, got:\n%s", want, out)
 		}
@@ -185,7 +187,7 @@ func TestMigrateProgramMigratesTheSqliteFileThePathNames(t *testing.T) {
 
 	out := runMigrateProgramForTest(t, false, true)
 
-	for _, want := range []string{"→ Target: ./data.db", missingSqliteFileNotice, "✔ Migration executed successfully."} {
+	for _, want := range []string{"→ Target: ./data.db", missingSqliteFileNotice, "\n✔ Applied "} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("expected the applied migration's output to contain %q, got:\n%s", want, out)
 		}
@@ -193,7 +195,7 @@ func TestMigrateProgramMigratesTheSqliteFileThePathNames(t *testing.T) {
 
 	out = runMigrateProgramForTest(t, true, false)
 
-	for _, want := range []string{"→ Target: ./data.db", "→ No changes detected."} {
+	for _, want := range []string{"→ Target: ./data.db", nothingToMigrate} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("expected the planned migration's output to contain %q, got:\n%s", want, out)
 		}
@@ -214,7 +216,7 @@ func TestMigrateProgramLeavesTheTablesNoModelDeclares(t *testing.T) {
 
 	out := runMigrateProgramForTest(t, true, false)
 
-	for _, want := range []string{"→ No changes detected.", "→ Left as they are, the tables no model declares: archives"} {
+	for _, want := range []string{nothingToMigrate, "→ Left as they are, the tables no model declares: archives"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("expected the migration output to contain %q, got:\n%s", want, out)
 		}
@@ -247,7 +249,7 @@ func TestMigrateProgramDropsAColumnOnlyOnceTheDataLossIsAccepted(t *testing.T) {
 		"▶ Data Loss",
 		"samples.legacy",
 		"? Apply the migration and drop the columns above with the data they hold? (y/N): ",
-		"→ Migration canceled.",
+		"→ Migration canceled: nothing was applied",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("expected the declined migration's output to contain %q, got:\n%s", want, out)
@@ -275,7 +277,7 @@ func TestMigrateProgramDropsAColumnOnlyOnceTheDataLossIsAccepted(t *testing.T) {
 			t.Fatalf("expected the refused migration's output to contain %q, got:\n%s", want, out)
 		}
 	}
-	if strings.Contains(out, "▶ Apply Migration") {
+	if strings.Contains(out, "✔ Applied ") {
 		t.Fatalf("expected nothing applied under --yes without --accept-data-loss, got:\n%s", out)
 	}
 
@@ -283,7 +285,7 @@ func TestMigrateProgramDropsAColumnOnlyOnceTheDataLossIsAccepted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected the migration program to drop the column once the data loss is accepted, got %v\n%s", err, out)
 	}
-	if out = runMigrateProgramForTest(t, true, false); !strings.Contains(out, "→ No changes detected.") {
+	if out = runMigrateProgramForTest(t, true, false); !strings.Contains(out, nothingToMigrate) {
 		t.Fatalf("expected nothing left to migrate after the column is dropped, got:\n%s", out)
 	}
 }
@@ -321,7 +323,7 @@ func TestMigrateProgramAsksBeforeRenamingAColumn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected the migration program to rename the column on a y, got %v\n%s", err, out)
 	}
-	for _, want := range []string{"? Rename column samples.title to name now, by the statement above? (y/N): ", "✔ Renamed.", "→ No changes detected."} {
+	for _, want := range []string{"? Rename column samples.title to name now, by the statement above? (y/N): ", "✔ Renamed", nothingToMigrate} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("expected the confirmed rename's output to contain %q, got:\n%s", want, out)
 		}
@@ -499,8 +501,10 @@ func runMigrateProgramForTest(t *testing.T, dryRun, yes bool) string {
 
 // runMigrateProgram builds the migration program in the mode the --dry-run,
 // --yes and --accept-data-loss flags select, runs it in the working directory
-// and returns what it printed, with the error it ended in. answers, when not
-// empty, is what the program reads at its prompts, in place of the terminal.
+// and returns what it printed, its questions and its failure on standard
+// error among it in the order a terminal shows them, with the error it ended
+// in. answers, when not empty, is what the program reads at its prompts, in
+// place of the terminal.
 func runMigrateProgram(t *testing.T, dryRun, yes, acceptDataLoss bool, answers string) (string, error) {
 	t.Helper()
 
@@ -508,12 +512,10 @@ func runMigrateProgram(t *testing.T, dryRun, yes, acceptDataLoss bool, answers s
 	migrateDryRun, migrateYes, migrateAcceptDataLoss = dryRun, yes, acceptDataLoss
 	defer func() { migrateDryRun, migrateYes, migrateAcceptDataLoss = oldDryRun, oldYes, oldAccept }()
 
-	var out bytes.Buffer
 	program, err := buildMigrateProgramForMode("tmpapp", false, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	program.Stdout = &out
 	if answers != "" {
 		typed := filepath.Join(t.TempDir(), "answers")
 		if err = os.WriteFile(typed, []byte(answers), 0o600); err != nil {
@@ -529,8 +531,11 @@ func runMigrateProgram(t *testing.T, dryRun, yes, acceptDataLoss bool, answers s
 		defer func() { os.Stdin = terminal }()
 		program.Interactive = true
 	}
-	err = program.Run()
-	return out.String(), err
+	out := captureOutput(t, func() {
+		program.Stdout = os.Stdout
+		err = program.Run()
+	})
+	return out, err
 }
 
 // execMigrateSampleDatabase runs statement against the sqlite database file
@@ -568,6 +573,10 @@ func queryMigrateSampleDatabase(t *testing.T, query string) string {
 // missingSqliteFileNotice is what the migration program prints below a plan
 // whose sqlite database file does not exist yet.
 const missingSqliteFileNotice = "→ The target database file does not exist yet: the plan starts from an empty database, and applying it creates the file."
+
+// nothingToMigrate is the line the migration program ends on when the
+// database holds what the models declare.
+const nothingToMigrate = "\n✔ Nothing to migrate: the database matches the models\n"
 
 // requireOnlySchemaSnapshotWritten fails the test unless the one file the
 // working directory holds beyond the files of before, a projectTree taken
@@ -627,7 +636,7 @@ func TestMigrateProgramRunsInsideAWorkspace(t *testing.T) {
 
 	out := runMigrateProgramForTest(t, true, false)
 
-	if want := "→ Nothing to migrate:"; !strings.Contains(out, want) {
+	if want := "✔ Nothing to migrate:"; !strings.Contains(out, want) {
 		t.Fatalf("expected the migration output to contain %q, got:\n%s", want, out)
 	}
 }

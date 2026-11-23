@@ -8,6 +8,7 @@
 package gghelper
 
 import (
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -24,8 +25,19 @@ import (
 // one whose module directive carries the deprecation comment go documents or
 // a quoted path, both of which go itself accepts. gg runs in the project, so
 // its commands pass ".".
+//
+// A dir holding no go.mod is not a project, which the error says with what
+// creates one: "no go.mod in the current directory: gg runs at the root of
+// a gst project, which gg new creates".
 func ModulePath(dir string) (string, error) {
 	content, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+	if errors.Is(err, fs.ErrNotExist) {
+		where := dir
+		if dir == "." {
+			where = "the current directory"
+		}
+		return "", errors.Newf("no go.mod in %s: gg runs at the root of a gst project, which gg new creates", where)
+	}
 	if err != nil {
 		return "", errors.Wrap(err, "failed to read go.mod")
 	}
@@ -69,19 +81,55 @@ func IsFrameworkProject(projectDir string) bool {
 // knows is skipped, so a newer Go release cannot break gg here; a statement it
 // knows but cannot read is an error.
 func RequiresFramework(projectDir string) (bool, error) {
+	version, _, err := FrameworkRequirement(projectDir)
+	return version != "", err
+}
+
+// FrameworkRequirement returns the version of the gst framework module the
+// go.mod in projectDir requires, read the way RequiresFramework reads it and
+// "" where that reports false, and whether the go.mod replaces the
+// framework module: the project then builds with what the replacement
+// names, a local copy as a rule, whatever version the requirement states.
+// For a go.mod holding
+//
+//	require github.com/hydroan/gst v1.2.0
+//	replace github.com/hydroan/gst => ../gst
+//
+// it returns v1.2.0 and true.
+func FrameworkRequirement(projectDir string) (version string, replaced bool, err error) {
 	path := filepath.Join(projectDir, "go.mod")
 	content, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
-		return false, nil
+		return "", false, nil
 	}
 	if err != nil {
-		return false, errors.Wrap(err, "failed to read go.mod")
+		return "", false, errors.Wrap(err, "failed to read go.mod")
 	}
 	file, err := modfile.ParseLax(path, content, nil)
 	if err != nil {
-		return false, errors.Wrap(err, "failed to parse go.mod")
+		return "", false, errors.Wrap(err, "failed to parse go.mod")
 	}
-	return slices.ContainsFunc(file.Require, func(require *modfile.Require) bool {
-		return require.Mod.Path == ggconst.ImportPathGst
-	}), nil
+	for _, require := range file.Require {
+		if require.Mod.Path == ggconst.ImportPathGst {
+			version = require.Mod.Version
+		}
+	}
+	// The lax parse reads no replace directive, which only the main module's
+	// go.mod carries, so the directives are read off the syntax it keeps: a
+	// line "replace path ..." or a line "path ..." of a replace block, the
+	// path written bare or quoted.
+	replaces := func(tokens []string) bool {
+		return len(tokens) > 0 && strings.Trim(tokens[0], "\"`") == ggconst.ImportPathGst
+	}
+	for _, stmt := range file.Syntax.Stmt {
+		switch stmt := stmt.(type) {
+		case *modfile.Line:
+			replaced = replaced || len(stmt.Token) > 1 && stmt.Token[0] == "replace" && replaces(stmt.Token[1:])
+		case *modfile.LineBlock:
+			if len(stmt.Token) == 1 && stmt.Token[0] == "replace" {
+				replaced = replaced || slices.ContainsFunc(stmt.Line, func(line *modfile.Line) bool { return replaces(line.Token) })
+			}
+		}
+	}
+	return version, replaced, nil
 }

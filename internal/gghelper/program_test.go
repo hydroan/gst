@@ -24,7 +24,7 @@ import (
 // TestEmbeddedProgramsAreMainPackages pins where the programs gg builds
 // inside a project come from: each is embedded from its own package under
 // program/, a main package the framework's build compiles, with no template
-// placeholder left for gg to fill.
+// placeholder left for gg to fill, and without the tests of that package.
 func TestEmbeddedProgramsAreMainPackages(t *testing.T) {
 	programs := map[string]map[string]string{
 		"migrate": gghelper.MigrateProgram(),
@@ -37,6 +37,7 @@ func TestEmbeddedProgramsAreMainPackages(t *testing.T) {
 			require.NoError(t, err, "%s/%s", name, file)
 			require.Equal(t, "main", parsed.Name.Name, "%s/%s", name, file)
 			require.NotContains(t, source, "{{", "%s/%s", name, file)
+			require.False(t, strings.HasSuffix(file, ggconst.PatternTestFile), "%s/%s", name, file)
 		}
 	}
 }
@@ -269,6 +270,19 @@ func TestProjectProgramRunsAgainstTheProjectModuleWithOverlay(t *testing.T) {
 	content, err = os.ReadFile("go.mod")
 	require.NoError(t, err)
 	require.Equal(t, goMod, string(content))
+}
+
+// TestProjectProgramThatFailsReturnsErrProgramFailed pins what Run returns
+// for a program that ran and exited with a failure: ErrProgramFailed,
+// whatever the code, the reason being what the program printed on stderr.
+func TestProjectProgramThatFailsReturnsErrProgramFailed(t *testing.T) {
+	t.Chdir(t.TempDir())
+	writeProjectFile(t, "go.mod", "module tmpapp\n\ngo 1.27\n")
+
+	program := gghelper.ProjectProgram{
+		Files: map[string]string{"main.go": "package main\n\nimport \"os\"\n\nfunc main() { os.Exit(3) }\n"},
+	}
+	require.ErrorIs(t, program.Run(), gghelper.ErrProgramFailed)
 }
 
 func TestProjectProgramPassesItsArguments(t *testing.T) {

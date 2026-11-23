@@ -1,12 +1,10 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
-	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
@@ -25,12 +23,12 @@ var moduleCopyOpts moduleCopyOptions
 
 var moduleCmd = &cobra.Command{
 	Use:   "module",
-	Short: "manage gst modules",
+	Short: "Manage the framework modules of the project",
 }
 
 var moduleListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "list framework modules",
+	Short: "List framework modules",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runModuleList(cmd)
@@ -39,7 +37,7 @@ var moduleListCmd = &cobra.Command{
 
 var moduleAddCmd = &cobra.Command{
 	Use:   "add <name>",
-	Short: "register a framework module in the current project",
+	Short: "Register a framework module in the current project",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runModuleAdd(args[0])
@@ -48,7 +46,7 @@ var moduleAddCmd = &cobra.Command{
 
 var moduleRemoveCmd = &cobra.Command{
 	Use:   "remove <name>",
-	Short: "unregister a framework module from the current project",
+	Short: "Unregister a framework module from the current project",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runModuleRemove(args[0])
@@ -57,7 +55,7 @@ var moduleRemoveCmd = &cobra.Command{
 
 var moduleCopyCmd = &cobra.Command{
 	Use:   "copy <name>",
-	Short: "copy a framework module into the current project",
+	Short: "Copy a framework module into the current project",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runModuleCopy(args[0], moduleCopyOpts)
@@ -112,9 +110,9 @@ func runModuleAdd(name string) error {
 
 	switch result.Status {
 	case ggmodule.ChangeSkipped:
-		clioutput.Item("SKIP", "%s already registered in %s", result.Module.Name, result.Path)
+		clioutput.Change(clioutput.LabelSkip, "%s already registered in %s", result.Module.Name, result.Path)
 	default:
-		clioutput.Success("ADD", "%s registered in %s", result.Module.Name, result.Path)
+		clioutput.Change(clioutput.LabelAdd, "%s registered in %s", result.Module.Name, result.Path)
 	}
 	return nil
 }
@@ -125,15 +123,17 @@ func runModuleRemove(name string) error {
 		return err
 	}
 
-	clioutput.Success("REMOVE", "%s unregistered from %s", result.Module.Name, result.Path)
+	clioutput.Change(clioutput.LabelRemove, "%s unregistered from %s", result.Module.Name, result.Path)
 	return nil
 }
 
 // runModuleCopy owns the command-level workflow only: build a checked plan,
 // show the current-project files that will be touched, confirm, execute, then
 // tidy the module so that go.mod and go.sum hold what the copied sources
-// import. Source analysis and AST rewriting live in internal/ggmodule.
+// import, and end on what the copy changed. Source analysis and AST rewriting
+// live in internal/ggmodule.
 func runModuleCopy(name string, opts moduleCopyOptions) error {
+	started := time.Now()
 	copyOpts := ggmodule.CopyOptions{Force: opts.Force}
 	plan, err := ggmodule.BuildCopyPlan(name, copyOpts)
 	if err != nil {
@@ -141,14 +141,15 @@ func runModuleCopy(name string, opts moduleCopyOptions) error {
 	}
 
 	printModuleCopyPlan(plan)
-	if !opts.Yes && !confirmModuleCopy(name) {
-		clioutput.Item("", "Module copy canceled")
+	if !opts.Yes && !clioutput.Confirm("Copy module %s into the current project?", name) {
+		clioutput.Item("Module copy canceled")
 		return nil
 	}
 
 	// Snapshot current project check violations before any file is written, so
 	// the copy-time gen run fails only on violations introduced by this copy.
 	baseline := collectProjectCheckBaseline()
+	log := new(changes)
 	exec := ggmodule.CopyExecution{
 		Plan:    plan,
 		Options: copyOpts,
@@ -156,7 +157,12 @@ func runModuleCopy(name string, opts moduleCopyOptions) error {
 			return runModuleCopyGen(baseline, plan.ServiceTargets())
 		},
 		OnSection: clioutput.Section,
-		OnFile:    printModuleCopyStatus,
+		// Every file the copy went over is listed under the label of what
+		// happened to it, the ones left as they are included: the list is
+		// the plan above, carried out.
+		OnFile: func(status ggmodule.CopyWriteStatus, path string) {
+			log.record(moduleCopyLabels[status], path, "")
+		},
 	}
 	if err := exec.Run(); err != nil {
 		if len(exec.WrittenFiles) > 0 || len(exec.DeletedFiles) > 0 {
@@ -165,32 +171,31 @@ func runModuleCopy(name string, opts moduleCopyOptions) error {
 		return err
 	}
 
-	if err := tidyModule(); err != nil {
+	if err := tidyModule(log); err != nil {
 		printModuleCopyCleanup(name)
 		return err
 	}
 
-	clioutput.Section("Done")
-	clioutput.Done("Module copied successfully")
+	if summary := log.summary(); summary != "" {
+		clioutput.Done("Copied module %s: %s (%s)", name, summary, elapsedSince(started))
+	} else {
+		clioutput.Done("Copied module %s: every file was up to date (%s)", name, elapsedSince(started))
+	}
 	printModuleCopyCleanup(name)
 	printModuleCopyAssembly()
-	printModuleCopyPostNotes(plan.PostNotes)
+	for _, note := range plan.PostNotes {
+		clioutput.Note("%s", note)
+	}
 	return nil
 }
 
-// printModuleCopyStatus prints what module copy did to one file, styled by
-// what happened to it.
-func printModuleCopyStatus(status ggmodule.CopyWriteStatus, path string) {
-	switch status {
-	case ggmodule.CopyWriteSkip:
-		clioutput.Item(string(status), "%s", path)
-	case ggmodule.CopyWriteUpdate:
-		clioutput.Status(clioutput.StyleWarn, clioutput.SymbolSuccess, string(status), "%s", path)
-	case ggmodule.CopyWriteCreate:
-		clioutput.Success(string(status), "%s", path)
-	case ggmodule.CopyWriteDelete:
-		clioutput.Status(clioutput.StyleWarn, clioutput.SymbolWarn, string(status), "%s", path)
-	}
+// moduleCopyLabels are the labels the files of a module copy are listed
+// under, by what the copy did to each.
+var moduleCopyLabels = map[ggmodule.CopyWriteStatus]clioutput.Label{
+	ggmodule.CopyWriteSkip:   clioutput.LabelSkip,
+	ggmodule.CopyWriteUpdate: clioutput.LabelUpdate,
+	ggmodule.CopyWriteCreate: clioutput.LabelCreate,
+	ggmodule.CopyWriteDelete: clioutput.LabelRemove,
 }
 
 // runModuleCopyGen reuses gg gen's generator path for the copy: the service
@@ -220,22 +225,6 @@ func runModuleCopyGen(baseline map[string]struct{}, targets []string) error {
 	return genRunWithOptions(genRunOptions{Quiet: true, BaselineViolations: baseline, Checks: moduleCopyChecks(), MergeShells: shells})
 }
 
-func confirmModuleCopy(name string) bool {
-	clioutput.Prompt("Copy module %s into the current project? (y/N): ", name)
-
-	reader := bufio.NewReader(os.Stdin)
-	response, err := reader.ReadString('\n')
-	if err != nil && len(response) == 0 {
-		return false
-	}
-	switch strings.ToLower(strings.TrimSpace(response)) {
-	case "y", "yes":
-		return true
-	default:
-		return false
-	}
-}
-
 func printModuleCopyPlan(plan *ggmodule.CopyPlan) {
 	clioutput.Section("Module Copy Plan")
 	printModuleCopyPlanGroup("Model files", plan.ModelTargets())
@@ -254,14 +243,14 @@ func printModuleCopyPlanGroup(title string, files []string) {
 		return
 	}
 	sort.Strings(files)
-	clioutput.Item("", "%s:", title)
+	clioutput.Item("%s", title)
 	for _, file := range files {
-		clioutput.Item("", "%s", file)
+		clioutput.Detail("%s", file)
 	}
 }
 
 func printModuleCopyCleanup(name string) {
-	clioutput.Item("", "To remove copied module code, delete model/%s, then run: gg gen --prune", name)
+	clioutput.Note("To remove copied module code, delete model/%s, then run: gg gen --prune", name)
 }
 
 // printModuleCopyStaleModelFiles previews the stale model files the copy
@@ -275,11 +264,11 @@ func printModuleCopyStaleModelFiles(plan *ggmodule.CopyPlan) {
 	}
 
 	clioutput.Section("Stale Target Model Files")
-	clioutput.Warn("", "The target model directory contains files no longer present in the framework source")
+	clioutput.Warn("The target model directory contains files no longer present in the framework source")
 	for _, file := range staleModelFiles {
-		clioutput.Item("", "%s", file)
+		clioutput.Item("%s", file)
 	}
-	clioutput.Item("", "These files will be deleted to keep the copied module in sync with the framework source")
+	clioutput.Item("These files will be deleted to keep the copied module in sync with the framework source")
 }
 
 // printModuleCopyStaleServiceFiles previews the stale service files the copy
@@ -292,11 +281,11 @@ func printModuleCopyStaleServiceFiles(plan *ggmodule.CopyPlan) {
 	}
 
 	clioutput.Section("Stale Target Service Files")
-	clioutput.Warn("", "The target service directory contains files no longer produced by this module copy plan")
+	clioutput.Warn("The target service directory contains files no longer produced by this module copy plan")
 	for _, file := range staleServiceFiles {
-		clioutput.Item("", "%s", file)
+		clioutput.Item("%s", file)
 	}
-	clioutput.Item("", "These files will be deleted to keep the copied module in sync with the framework source")
+	clioutput.Item("These files will be deleted to keep the copied module in sync with the framework source")
 }
 
 // printModuleCopyStaleMiddlewareFiles previews the module-owned middleware
@@ -310,11 +299,11 @@ func printModuleCopyStaleMiddlewareFiles(plan *ggmodule.CopyPlan) {
 	}
 
 	clioutput.Section("Stale Target Middleware Files")
-	clioutput.Warn("", "The middleware directory contains files owned by this module's copy but no longer declared by the module manifest")
+	clioutput.Warn("The middleware directory contains files owned by this module's copy but no longer declared by the module manifest")
 	for _, file := range staleMiddlewareFiles {
-		clioutput.Item("", "%s", file)
+		clioutput.Item("%s", file)
 	}
-	clioutput.Item("", "These files will be deleted together with their register calls in middleware/middleware.go, and the framework middleware import once nothing there uses it")
+	clioutput.Item("These files will be deleted together with their register calls in middleware/middleware.go, and the framework middleware import once nothing there uses it")
 }
 
 // printModuleCopyStaleInterceptorFiles previews the module-owned interceptor
@@ -329,11 +318,11 @@ func printModuleCopyStaleInterceptorFiles(plan *ggmodule.CopyPlan) {
 	}
 
 	clioutput.Section("Stale Target Interceptor Files")
-	clioutput.Warn("", "The interceptor directory contains files owned by this module's copy but no longer written by it: not declared by the module manifest, or the project no longer serves gRPC")
+	clioutput.Warn("The interceptor directory contains files owned by this module's copy but no longer written by it: not declared by the module manifest, or the project no longer serves gRPC")
 	for _, file := range staleInterceptorFiles {
-		clioutput.Item("", "%s", file)
+		clioutput.Item("%s", file)
 	}
-	clioutput.Item("", "These files will be deleted together with their register calls in interceptor/interceptor.go, and the framework interceptor import once nothing there uses it")
+	clioutput.Item("These files will be deleted together with their register calls in interceptor/interceptor.go, and the framework interceptor import once nothing there uses it")
 }
 
 // printModuleCopyAssembly prints the assembly calls the copied modules
@@ -344,17 +333,7 @@ func printModuleCopyStaleInterceptorFiles(plan *ggmodule.CopyPlan) {
 func printModuleCopyAssembly() {
 	for _, result := range ggcheck.Run([]ggcheck.Check{ggcheck.ModuleAssembly}) {
 		for _, violation := range result.Violations {
-			clioutput.Warn("ASSEMBLY", "%s", violation)
+			clioutput.Warn("Assembly left to the project: %s", violation)
 		}
-	}
-}
-
-func printModuleCopyPostNotes(notes []string) {
-	if len(notes) == 0 {
-		return
-	}
-	fmt.Println()
-	for _, note := range notes {
-		fmt.Println(note)
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
@@ -28,7 +29,7 @@ var typeScriptDir = filepath.Join("generated", "typescript")
 
 var tsCmd = &cobra.Command{
 	Use:   "ts",
-	Short: "generate TypeScript declarations of the API types",
+	Short: "Generate TypeScript declarations of the API types",
 	Long: `Generate the TypeScript declarations of the types the API routes declared in
 model Design() send and receive, into generated/typescript: a file per Go
 package of the model directory, mirroring its tree, plus a file named after the
@@ -46,11 +47,8 @@ modules that package registers, through gg module add or by hand: the types of
 a framework module go where a copy of the module would put them, iam/account.ts
 for the accounts of the iam module.`,
 	Args: cobra.NoArgs,
-	Run: func(cmd *cobra.Command, args []string) {
-		if err := genTypeScriptRun(); err != nil {
-			clioutput.Error("", "%v", err)
-			os.Exit(1)
-		}
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return genTypeScriptRun()
 	},
 }
 
@@ -62,16 +60,18 @@ func init() {
 // checks and reads the models the way gg gen does, so the declarations cover
 // exactly the routes the generated router registers, and reads the project's
 // module package for the routes registered at run time (see
-// typeScriptModuleRoots).
+// typeScriptModuleRoots). It ends on what it changed under the output
+// directory.
 func genTypeScriptRun() error {
+	started := time.Now()
 	if len(module) == 0 {
 		var err error
 		if module, err = gghelper.ModulePath("."); err != nil {
 			return err
 		}
 	}
-	if runProjectChecks(projectChecks, false, nil) > 0 {
-		return errors.New("project checks failed")
+	if err := runProjectChecks(projectChecks, false, nil); err != nil {
+		return errors.Wrap(err, "nothing was generated")
 	}
 	// The declarations mirror the models. A project with no model directory
 	// declares no route at all, and the run then removes what an earlier one
@@ -98,7 +98,6 @@ func genTypeScriptRun() error {
 		return errors.Wrap(err, "load the module package (run gg gen first if generated files are out of date)")
 	}
 
-	clioutput.Section("Generate TypeScript")
 	files, err := ts.Generate(ts.Config{
 		Dir:           ".",
 		ModulePath:    module,
@@ -114,16 +113,20 @@ func genTypeScriptRun() error {
 	case err != nil:
 		return errors.Wrap(err, "load the model packages (run gg gen first if generated files are out of date)")
 	}
-	if err = writeTypeScriptFiles(typeScriptDir, files); err != nil {
+	log := new(changes)
+	if err = writeTypeScriptFiles(typeScriptDir, files, log); err != nil {
 		return err
 	}
 
-	clioutput.Section("Done")
-	if len(files) == 0 {
-		clioutput.Done("No route declares a type, so %s holds nothing", typeScriptDir)
-		return nil
+	summary := log.summary()
+	switch {
+	case len(files) == 0:
+		clioutput.Done("No route declares a type, so %s holds nothing (%s)", typeScriptDir, elapsedSince(started))
+	case summary == "":
+		clioutput.Done("Nothing to generate: every declaration in %s is up to date (%s)", typeScriptDir, elapsedSince(started))
+	default:
+		clioutput.Done("Generated in %s: %s (%s)", typeScriptDir, summary, elapsedSince(started))
 	}
-	clioutput.Done("TypeScript declarations generated in %s", typeScriptDir)
 	return nil
 }
 
@@ -328,10 +331,10 @@ func isEmptyModel(t types.Type) bool {
 
 // writeTypeScriptFiles writes files under dir, skipping the unchanged ones, and
 // removes what an earlier run generated that no route needs any more, so the
-// directory mirrors the models. A file gg did not generate is never touched:
-// one in the way of an output file stops the run, one anywhere else is kept and
-// reported.
-func writeTypeScriptFiles(dir string, files []ts.File) error {
+// directory mirrors the models, recording in log what it wrote and removed.
+// A file gg did not generate is never touched: one in the way of an output
+// file stops the run, one anywhere else is kept and reported.
+func writeTypeScriptFiles(dir string, files []ts.File, log *changes) error {
 	header := ggconst.CodeGeneratedComment
 	wanted := make(map[string]bool, len(files))
 	for _, f := range files {
@@ -347,18 +350,19 @@ func writeTypeScriptFiles(dir string, files []ts.File) error {
 		}
 	}
 	for _, f := range files {
-		if err := writeGeneratedFile(filepath.Join(dir, filepath.FromSlash(f.Path)), f.Content, true); err != nil {
+		if err := writeGeneratedFile(filepath.Join(dir, filepath.FromSlash(f.Path)), f.Content, log); err != nil {
 			return err
 		}
 	}
-	return removeOrphanTypeScriptFiles(dir, wanted, header)
+	return removeOrphanTypeScriptFiles(dir, wanted, header, log)
 }
 
 // removeOrphanTypeScriptFiles removes the generated .ts files under dir the
 // current run did not write, and the directories that leaves empty, dir
 // included: a project that generates nothing keeps no output directory. A file
-// without the generated header is kept and reported.
-func removeOrphanTypeScriptFiles(dir string, wanted map[string]bool, header string) error {
+// without the generated header is kept and reported; the ones removed are
+// recorded in log.
+func removeOrphanTypeScriptFiles(dir string, wanted map[string]bool, header string, log *changes) error {
 	if !gghelper.FileExists(dir) {
 		return nil
 	}
@@ -379,7 +383,7 @@ func removeOrphanTypeScriptFiles(dir string, wanted map[string]bool, header stri
 			return errors.Wrapf(err, "read %s", path)
 		}
 		if !strings.HasPrefix(string(content), header) {
-			clioutput.Warn("KEEP", "%s was not generated by gg", path)
+			clioutput.Warn("%s is kept: it was not generated by gg", path)
 			return nil
 		}
 		// #nosec G122 -- path comes from walking the output directory, and only
@@ -387,7 +391,7 @@ func removeOrphanTypeScriptFiles(dir string, wanted map[string]bool, header stri
 		if err = os.Remove(path); err != nil {
 			return errors.Wrapf(err, "remove %s", path)
 		}
-		clioutput.Success("REMOVE", "%s (no route uses its types any more)", path)
+		log.record(clioutput.LabelRemove, path, " (no route uses its types any more)")
 		return nil
 	})
 	if err != nil {

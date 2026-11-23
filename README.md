@@ -1233,8 +1233,7 @@ system root、网关头、gRPC、请求之外、工具链。
 | `gg module copy <name>` | 将内置模块复制为业务项目本地源码（model、service、中间件，项目用 gRPC 时还有模块的 gRPC 拦截器），并删除框架源已移除的过时 model/service 文件（`_test.go` 与生成文件除外）；`gg module` 各子命令的完整规则见 [cmd/gg/MODULE.md](cmd/gg/MODULE.md) |
 | `gg check` | 检查业务项目结构、命名、依赖边界和 tag 约束 |
 | `gg prune` | 清理 model 不再需要的文件，只动 `service/`、`middleware/`、`interceptor/` 和 `pb/`，删前问一次 |
-| `gg routes` | 按 model 层级打印当前生成的接口路径 |
-| `gg route-tree` | 按 URL 层级打印当前生成的路由树 |
+| `gg routes` | 按 model 的层级画出项目的 model 和它们声明的接口：方法、路径、动作、service 文件、是否公开；后面跟几个词就只留匹配的 |
 | `gg migrate` | 生成当前数据库方言的 schema，预览并按确认执行数据库迁移 |
 
 `gg check` 会检查依赖边界、model/service 文件边界、命名规范、`json` tag、
@@ -1244,7 +1243,7 @@ REQ/RSP 命名、业务项目根目录结构、框架字段的列名，以及声
 定义那条由生成本身完成，不重复跑；索引声明和框架字段列名两条要先编译项目，生成前
 项目未必编得过，不在生成前跑）；检查失败会停止生成。
 
-`gg check`、`gg gen`（含 `gg gen ts`）、`gg routes` 和 `gg route-tree` 读项目
+`gg check`、`gg gen`（含 `gg gen ts`）和 `gg routes` 读项目
 代码时，跳过项目 Git 忽略规则排除的路径，也跳过 Go 工具链内置忽略的路径。
 后者不是 gg 自定的名单，就是 `go build ./...` 本来就不看的那些（见
 `go help packages`）：名字以 `.` 或 `_` 开头的文件和目录、`vendor`、
@@ -1331,7 +1330,7 @@ gen:
 ```
 
 - 每个 path 写一次，值是要忽略的 HTTP method 列表；`/api` 前缀可省略，
-  因此路径可直接粘贴 `gg routes` 的输出（其路径不带 `/api` 前缀）。
+  路径可直接粘贴 `gg routes` 的输出。
   参数段（`:id`）按位置匹配，不比较参数名。
 - 需要用自己的实现替换框架路由时，用对象形式加 `from`（如 `model/iam`）
   把规则限定到框架模块目录；否则规则会把业务自己声明的同路径 action 一并
@@ -1473,33 +1472,31 @@ service，比如多个 `Create`，应各自 `Service("name")` 起名，避免生
 
 ### 如何确认接口路径？
 
-修改 DSL 后运行：
+`gg routes` 读的是 model 的 DSL，读法和 `gg gen` 相同，改完 DSL 不用先生成就能看：
 
 ```bash
-gg gen
 gg routes
 ```
 
-如果想按 model 文件层级查看 model 和接口关系，可以运行：
+输出按 model 文件的层级画成树，和接口路径的嵌套一致：`model/sample/` 下的 model 挂在
+`model/sample.go` 声明的 model 下面，没有同名文件的目录单独成一层；`model/` 下的第一层各自顶格。每个 model 一行：
+文件，建表的标 `table`，同时走 gRPC 的标 `grpc`；它的接口在它下面，一行一个：方法、路径、
+动作、声明了 `Service()` 的动作的 service 文件，不需要认证的标 `public`，走 gRPC 的带 rpc 名。
+只建表、没有接口的 model 也在树上。
+
+后面跟几个词就只留匹配的：一个词留下「这一行或它所属 model 那一行里含有它」的接口，
+不分大小写，几个词要同时满足；命中项上面的各层照样留着，标出它在哪。带 `/` 的词还会当成
+一个真实地址，找出接它的接口：
 
 ```bash
-gg routes --model
+gg routes record
+gg routes public
+gg routes /api/records/42/items
+gg routes delete /api/records/42
 ```
 
-需要排查生成的请求、响应和路径参数绑定时，可以运行：
-
-```bash
-gg routes --detail
-```
-
-如果只想查看认证或公开路由，可以加上 scope 过滤：
-
-```bash
-gg routes --scope auth
-gg routes --scope pub
-```
-
-也可以启动服务后访问 Swagger 文档：
+`gg module add` 登记的框架模块在运行时注册接口，不在这个列表里，命令末尾会点名是哪些模块；
+要看全部接口，启动服务后访问 Swagger 文档：
 
 ```text
 /docs/index.html

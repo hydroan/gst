@@ -3079,7 +3079,7 @@ func TestGenRunWorksInsideAWorkspace(t *testing.T) {
 	t.Cleanup(func() { goModTidy = tidy })
 
 	var genErr error
-	output := captureStdout(t, func() { genErr = genRun() })
+	output := captureOutput(t, func() { genErr = genRun() })
 
 	require.NoError(t, genErr, output)
 	require.Contains(t, output, "go mod tidy skipped: the project is in a Go workspace")

@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"os/exec"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/clioutput"
@@ -21,11 +22,11 @@ const (
 
 var lintCmd = &cobra.Command{
 	Use:   "lint",
-	Short: "run golangci-lint",
+	Short: "Run golangci-lint",
 	Long:  "Run golangci-lint over the current project, at the version the framework pins.",
 	Args:  cobra.NoArgs,
-	Run: func(cmd *cobra.Command, args []string) {
-		lintRun()
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return lintRun()
 	},
 }
 
@@ -34,20 +35,29 @@ var lintCmd = &cobra.Command{
 // nothing is installed, whatever golangci-lint PATH holds plays no part, the
 // first run downloads and builds it and later ones find it built, network or
 // not. golangci-lint runs in the project directory, where it finds the
-// project's .golangci.yml, with the environment gg lint itself got.
-func lintRun() {
-	clioutput.Section("Run golangci-lint " + golangciLintVersion)
-	clioutput.Command("golangci-lint run ./...")
+// project's .golangci.yml, with the environment gg lint itself got. What
+// golangci-lint prints is the output of the command: the issues it found,
+// which fail the command without a line of gg's after them, or that it found
+// none.
+func lintRun() error {
+	clioutput.Command("golangci-lint run ./... (%s)", golangciLintVersion)
 
 	cmd, err := gghelper.PinnedCommand(golangciLintModule, golangciLintVersion, golangciLintPackage, "run", "./...")
 	if err != nil {
-		clioutput.Error("", "%v", err)
-		os.Exit(1)
+		return err
 	}
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		clioutput.Error("", "%v", errors.Wrap(err, "golangci-lint failed"))
-		os.Exit(1)
+	err = cmd.Run()
+	// golangci-lint exits with 1 for issues found, which it has listed and
+	// counted, and with another code for a run it could not make.
+	var exit *exec.ExitError
+	if errors.As(err, &exit) && exit.ExitCode() == golangciLintIssuesFound {
+		return errReported
 	}
+	return errors.Wrap(err, "golangci-lint failed")
 }
+
+// golangciLintIssuesFound is the code golangci-lint exits with when it found
+// issues.
+const golangciLintIssuesFound = 1

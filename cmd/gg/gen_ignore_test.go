@@ -124,7 +124,7 @@ func TestRouteIgnoresKeepServiceFilesForPrune(t *testing.T) {
 	if err := os.WriteFile(signupServiceFile, []byte("package account\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := pruneLeftovers([]string{signupServiceFile}, allModels, result.KeptServiceFiles, result.KeptServiceDirs, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil); err != nil {
+	if _, err := pruneLeftovers(new(changes), []string{signupServiceFile}, allModels, result.KeptServiceFiles, result.KeptServiceDirs, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(signupServiceFile); err != nil {
@@ -227,7 +227,7 @@ func (Sample) Design() {
 
 	for _, quiet := range []bool{true, false} {
 		var err error
-		output := captureStdout(t, func() { err = genRunWithOptions(genRunOptions{Quiet: quiet}) })
+		output := captureOutput(t, func() { err = genRunWithOptions(genRunOptions{Quiet: quiet}) })
 		if err != nil {
 			t.Fatalf("genRunWithOptions(Quiet: %v) error = %v", quiet, err)
 		}
@@ -297,7 +297,7 @@ func (Record) Design() {
 	writeProjectFile(t, filepath.Join(projectDir, "gst.yml"), "prune:\n  ignore:\n    - service/sample\n")
 
 	var genErr error
-	stdout := captureStdout(t, func() {
+	stdout := captureOutput(t, func() {
 		genErr = genRunWithOptions(genRunOptions{Quiet: true})
 	})
 	if genErr != nil {

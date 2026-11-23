@@ -12,8 +12,10 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 // The programs gg builds inside a project are embedded from their packages
@@ -34,8 +36,10 @@ func MigrateProgram() map[string]string { return programFiles("program/migrate")
 // name.
 func InspectProgram() map[string]string { return programFiles("program/inspect") }
 
-// programFiles reads the embedded files of dir. They are the framework's own,
-// so a failure to read one is a broken build, not a condition to handle.
+// programFiles reads the embedded files of dir but its tests, which are the
+// framework's to run and no part of the program. They are the framework's
+// own, so a failure to read one is a broken build, not a condition to
+// handle.
 func programFiles(dir string) map[string]string {
 	entries, err := fs.ReadDir(programs, dir)
 	if err != nil {
@@ -43,6 +47,9 @@ func programFiles(dir string) map[string]string {
 	}
 	files := make(map[string]string, len(entries))
 	for _, entry := range entries {
+		if strings.HasSuffix(entry.Name(), ggconst.PatternTestFile) {
+			continue
+		}
 		content, err := programs.ReadFile(path.Join(dir, entry.Name()))
 		if err != nil {
 			panic(err)
@@ -88,7 +95,8 @@ type ProjectProgram struct {
 }
 
 // Run compiles and runs the program. Stderr always goes to the terminal, so
-// build and runtime failures stay visible regardless of how stdout is wired.
+// build and runtime failures stay visible regardless of how stdout is wired;
+// a program that exits with a failure returns ErrProgramFailed.
 func (p ProjectProgram) Run() error {
 	tempDir, err := os.MkdirTemp("", "gg-run-*")
 	if err != nil {
@@ -156,11 +164,21 @@ func (p ProjectProgram) Run() error {
 	if p.Interactive {
 		runCmd.Stdin = os.Stdin
 	}
-	if err = runCmd.Run(); err != nil {
-		return errors.Wrap(err, "failed to run generated program")
+	err = runCmd.Run()
+	// A program that exits with a failure has said why on stderr; one a
+	// signal ended has not.
+	var exit *exec.ExitError
+	if errors.As(err, &exit) && exit.Exited() {
+		return ErrProgramFailed
 	}
-	return nil
+	return errors.Wrap(err, "failed to run generated program")
 }
+
+// ErrProgramFailed is what Run returns for a program that ran and exited
+// with a failure: the program has printed what failed, so the error says no
+// more than that it did, and a caller that leaves the report to the program
+// prints nothing after it.
+var ErrProgramFailed = errors.New("the program built inside the project failed, see its error above")
 
 // writeOverlayFile materializes the replacement contents under dir and
 // returns a go build overlay file mapping the original paths to them.

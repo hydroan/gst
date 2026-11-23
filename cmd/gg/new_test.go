@@ -47,6 +47,26 @@ func TestNewRefusesADirectoryHoldingWhatItCreates(t *testing.T) {
 	}
 }
 
+// TestNewListsWhatItCreatesAndWhatToDoNext pins what gg new prints: every
+// file it creates, go.mod among them and nothing of what go mod init and
+// git init say for themselves, then the line it ends on and the steps that
+// follow a new project: its directory, its first model, gg gen and a run.
+func TestNewListsWhatItCreatesAndWhatToDoNext(t *testing.T) {
+	t.Chdir(t.TempDir())
+	stubGoModTidy(t)
+
+	var err error
+	output := captureOutput(t, func() { _, err = executeRootCommand(t, "new", "example.com/sampleapp") })
+
+	require.NoError(t, err, output)
+	for _, line := range []string{"  CREATE  main.go\n", "  CREATE  model/model.gen.go\n", "  CREATE  go.mod\n"} {
+		require.Contains(t, output, line)
+	}
+	require.NotContains(t, output, "go: creating new go.mod")
+	require.NotContains(t, output, "hint:")
+	require.Regexp(t, `\n✔ Created sampleapp \([0-9.]+m?s\)\n\n▶ Next Steps\n  \$ cd sampleapp\n  → Declare the first model in a file under model/, its routes in Design\(\)\n  \$ gg gen\n  \$ go run \.\n$`, output)
+}
+
 // TestNewFillsAnExistingDirectoryWithoutConflicts pins that an existing
 // project directory holding nothing the project gets, as a cloned repository
 // holding only its README does, is filled like a new one: every file gg new

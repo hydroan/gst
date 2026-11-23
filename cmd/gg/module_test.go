@@ -90,7 +90,7 @@ func TestPrintModuleCopyPlanPreviewsStaleTargetModelFilesForDeletion(t *testing.
 		StaleModelFiles: []string{filepath.Join("model", "copytest", "design.go")},
 	}
 
-	output := captureStdout(t, func() {
+	output := captureOutput(t, func() {
 		printModuleCopyPlan(plan)
 	})
 
@@ -114,7 +114,7 @@ func TestPrintModuleCopyPlanPreviewsStaleTargetServiceFilesForDeletion(t *testin
 		StaleServiceFiles: []string{filepath.Join("service", "copytest", "adapter.go")},
 	}
 
-	output := captureStdout(t, func() {
+	output := captureOutput(t, func() {
 		printModuleCopyPlan(plan)
 	})
 
@@ -138,7 +138,7 @@ func TestPrintModuleCopyPlanPreviewsStaleTargetMiddlewareFilesForDeletion(t *tes
 		StaleMiddlewareFiles: []string{filepath.Join("middleware", "old_auth.go")},
 	}
 
-	output := captureStdout(t, func() {
+	output := captureOutput(t, func() {
 		printModuleCopyPlan(plan)
 	})
 
@@ -166,7 +166,7 @@ func TestPrintModuleCopyPlanListsMiddlewareTargets(t *testing.T) {
 		t.Fatalf("BuildCopyPlan() error = %v", err)
 	}
 
-	output := captureStdout(t, func() {
+	output := captureOutput(t, func() {
 		printModuleCopyPlan(plan)
 	})
 
@@ -266,8 +266,8 @@ func TestRunModuleCopyGenFailsOnNewProjectCheckViolations(t *testing.T) {
 	output := captureStdout(t, func() {
 		genErr = runModuleCopyGen(baseline, nil)
 	})
-	if genErr == nil || !strings.Contains(genErr.Error(), "project checks failed") {
-		t.Fatalf("runModuleCopyGen() error = %v, want project checks failed", genErr)
+	if want := "nothing was generated: 1 violation in 1 of "; genErr == nil || !strings.HasPrefix(genErr.Error(), want) {
+		t.Fatalf("runModuleCopyGen() error = %v, want one starting with %q", genErr, want)
 	}
 	if !strings.Contains(output, "accounts.go") {
 		t.Fatalf("module-copy generation should report the newly introduced violation:\n%s", output)
@@ -401,8 +401,12 @@ func TestRunModuleCopyTidiesTheProjectAfterWritingItsFiles(t *testing.T) {
 	if copyErr != nil {
 		t.Fatalf("runModuleCopy() error = %v:\n%s", copyErr, output)
 	}
-	if !strings.Contains(output, "Dependencies tidied") {
-		t.Fatalf("module copy should report the tidy it ran:\n%s", output)
+	// The copy lists the module files tidying changed and ends on what it
+	// wrote.
+	for _, want := range []string{"  UPDATE  go.mod\n", "\n✔ Copied module mfa: "} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("module copy output lacks %q:\n%s", want, output)
+		}
 	}
 	for _, file := range []string{"go.mod", "go.sum"} {
 		if !strings.Contains(readProjectFile(t, file), otpModule) {
@@ -422,10 +426,10 @@ func TestRunModuleCopyTidiesTheProjectAfterWritingItsFiles(t *testing.T) {
 	output = captureStdout(t, func() {
 		copyErr = runModuleCopy("mfa", moduleCopyOptions{Force: true, Yes: true})
 	})
-	if copyErr == nil || copyErr.Error() != "tidy failed" {
+	if copyErr == nil || copyErr.Error() != "go mod tidy failed: tidy failed" {
 		t.Fatalf("runModuleCopy() error = %v, want the tidy failure", copyErr)
 	}
-	if strings.Contains(output, "Module copied successfully") {
+	if strings.Contains(output, "Copied module") {
 		t.Fatalf("a failed tidy must not report success:\n%s", output)
 	}
 	if !strings.Contains(output, "To remove copied module code, delete model/mfa") {
@@ -491,7 +495,7 @@ func TestPrintModuleCopyAssemblyNamesThePendingCalls(t *testing.T) {
 	projectDir := newModuleCopyAssemblyProject(t)
 	t.Chdir(projectDir)
 
-	output := captureStdout(t, printModuleCopyAssembly)
+	output := captureOutput(t, printModuleCopyAssembly)
 	want := "module sample is copied but the project never calls authn.SetSampleGate (github.com/hydroan/gst/authn): the sample gate stays off until it is installed"
 	if !strings.Contains(output, want) {
 		t.Fatalf("output lacks the pending call %q:\n%s", want, output)
@@ -507,7 +511,7 @@ func init() {
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if output := captureStdout(t, printModuleCopyAssembly); output != "" {
+	if output := captureOutput(t, printModuleCopyAssembly); output != "" {
 		t.Fatalf("output = %q, want nothing once the project makes the call", output)
 	}
 }
@@ -588,6 +592,19 @@ func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
 
 	return captureStream(t, &os.Stdout, fn)
+}
+
+// captureOutput returns what fn writes to standard output and to standard
+// error, in the order it writes it: what a terminal shows of it.
+func captureOutput(t *testing.T, fn func()) string {
+	t.Helper()
+
+	return captureStream(t, &os.Stdout, func() {
+		stderr := os.Stderr
+		os.Stderr = os.Stdout
+		defer func() { os.Stderr = stderr }()
+		fn()
+	})
 }
 
 // captureStderr returns what fn writes to standard error, including what the

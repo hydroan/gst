@@ -2,13 +2,13 @@ package main
 
 import (
 	"go/build"
-	"io"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/clioutput"
@@ -20,7 +20,7 @@ import (
 
 var newCmd = &cobra.Command{
 	Use:   "new <module-path> [.]",
-	Short: "create a project",
+	Short: "Create a project",
 	Long: `Create a project whose module path is <module-path>: in a new directory named
 after the last element of the module path, or, when "." follows it, in the
 current directory, which must have that name. gg new refuses a directory
@@ -39,12 +39,13 @@ and initializes a Git repository unless the project lies inside one already.`,
 }
 
 // newProject creates the project whose module path is projectName, printing
-// each step: in a new directory named after the last element of projectName,
-// or, when inPlace, in the working directory, which must have that name. It
-// refuses a directory already holding an entry the project gets before it
-// creates anything; then it initializes the Go module, writes the files
-// ggnew.ProjectFiles lists, tidies the dependencies and initializes a Git
-// repository, unless the project lies inside one already.
+// each file it creates: in a new directory named after the last element of
+// projectName, or, when inPlace, in the working directory, which must have
+// that name. It refuses a directory already holding an entry the project
+// gets before it creates anything; then it initializes the Go module,
+// writes the files ggnew.ProjectFiles lists, tidies the dependencies and
+// initializes a Git repository, unless the project lies inside one already,
+// and ends on what to do next.
 func newProject(projectName string, inPlace bool) error {
 	if build.IsLocalImport(projectName) || filepath.IsAbs(projectName) {
 		return errors.Newf("%q is a directory, not a module path: to create the project in the current directory, run gg new <module-path> .", projectName)
@@ -73,77 +74,67 @@ func newProject(projectName string, inPlace bool) error {
 		return errors.Newf("%s already holds what gg new creates: %s; nothing was written", name, strings.Join(existing, ", "))
 	}
 
-	if inPlace {
-		clioutput.Section("Use Current Directory")
-		clioutput.Success("", "%s", name)
-	} else {
-		clioutput.Section("Create Project Directory")
+	started := time.Now()
+	if !inPlace {
 		if err := os.MkdirAll(projectDir, 0o755); err != nil {
-			clioutput.Error("", "failed to create project directory")
-			return err
+			return errors.Wrap(err, "failed to create the project directory")
 		}
-		clioutput.Success("", "%s", projectDir)
-
 		if err := os.Chdir(projectDir); err != nil {
 			return err
 		}
 	}
 
-	clioutput.Section("Initialize Go Module")
-	clioutput.Info("", "go mod init %s", projectName)
-	cmd := exec.Command("go", "mod", "init", projectName)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		clioutput.Error("", "go mod init failed")
-		return err
+	if err := runQuietly(exec.Command("go", "mod", "init", projectName)); err != nil {
+		return errors.Wrap(err, "go mod init failed")
 	}
-	clioutput.Success("", "Go module initialized")
 
-	clioutput.Section("Generate Project Files")
+	log := new(changes)
 	for _, file := range files {
 		writeErr := gghelper.EnsureParentDir(file.Path)
 		if writeErr == nil {
 			writeErr = os.WriteFile(file.Path, []byte(file.Content), ggconst.FileModeGenerated)
 		}
 		if writeErr != nil {
-			clioutput.Error("", "Failed to create %s", file.Path)
-			return writeErr
+			return errors.Wrapf(writeErr, "failed to create %s", file.Path)
 		}
-		clioutput.Success("CREATE", "%s", file.Path)
+		log.record(clioutput.LabelCreate, file.Path, "")
 	}
 
-	if err := tidyModule(); err != nil {
+	// Tidying completes the go.mod go mod init wrote and writes go.sum: the
+	// two are listed as created once they hold what the project builds with.
+	// It looks the framework up, over the network when it has to.
+	clioutput.Progress("Resolving the dependencies with go mod tidy")
+	if err := tidyModule(&changes{quiet: true}); err != nil {
 		return err
 	}
+	for _, name := range []string{"go.mod", "go.sum"} {
+		if gghelper.FileExists(name) {
+			log.record(clioutput.LabelCreate, name, "")
+		}
+	}
 
-	clioutput.Section("Initialize Git Repository")
 	// A project created inside a Git repository, a cloned one or a directory
 	// of a larger one, belongs to it: git init would nest a second repository,
 	// whose files the enclosing one never tracks. git rev-parse
 	// --is-inside-work-tree prints true anywhere inside a work tree and fails
 	// outside one.
 	if out, err := exec.Command("git", "rev-parse", "--is-inside-work-tree").Output(); err == nil && strings.TrimSpace(string(out)) == "true" {
-		clioutput.Info("", "Already inside a Git repository, git init skipped")
+		clioutput.Item("Inside a Git repository already: git init skipped")
 	} else {
-		cmd = exec.Command("git", "init")
-		cmd.Stdout = io.Discard
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			clioutput.Error("", "git init failed")
-			return err
+		if err := runQuietly(exec.Command("git", "init")); err != nil {
+			return errors.Wrap(err, "git init failed")
 		}
-		clioutput.Success("", "Git repository initialized")
+		clioutput.Success("Git repository initialized")
 	}
 
-	clioutput.Section("Project Initialization Completed")
-	clioutput.Done("Project %s created successfully!", clioutput.Text(clioutput.StyleBold, "%s", name))
+	clioutput.Done("Created %s (%s)", name, elapsedSince(started))
 	clioutput.Section("Next Steps")
 	if !inPlace {
 		clioutput.Command("cd %s", projectDir)
 	}
-	clioutput.Command("git add .")
-	clioutput.Command("git commit -m \"Initial commit\"")
+	clioutput.Item("Declare the first model in a file under %s/, its routes in Design()", ggconst.DirModel)
+	clioutput.Command("gg gen")
+	clioutput.Command("go run .")
 
 	return nil
 }

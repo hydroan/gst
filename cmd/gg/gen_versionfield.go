@@ -28,7 +28,7 @@ import (
 // check gives: an embedded declaration (the required change is the field
 // shape itself) and json:"-" (un-hiding a field its author silenced is a
 // semantic decision no tool should make).
-func fillVersionFieldTags(quiet bool) error {
+func fillVersionFieldTags(log *changes) error {
 	findings, err := ggcheck.VersionFieldFindings()
 	if err != nil {
 		return err
@@ -56,18 +56,15 @@ func fillVersionFieldTags(quiet bool) error {
 		if err := rewriteVersionFieldTags(path, fileFindings); err != nil {
 			return err
 		}
-		if !quiet {
-			for _, finding := range fileFindings {
-				fixes := make([]string, 0, 2)
-				if len(finding.Missing) > 0 {
-					fixes = append(fixes, `gorm:"`+strings.Join(finding.Missing, ";")+`"`)
-				}
-				if finding.JSONMissing {
-					fixes = append(fixes, `json:",omitempty"`)
-				}
-				clioutput.Success("FIX", "%s: filled %s on %s.%s",
-					gghelper.RelativePath(path), strings.Join(fixes, " and "), finding.Struct, finding.Field)
+		for _, finding := range fileFindings {
+			fixes := make([]string, 0, 2)
+			if len(finding.Missing) > 0 {
+				fixes = append(fixes, `gorm:"`+strings.Join(finding.Missing, ";")+`"`)
 			}
+			if finding.JSONMissing {
+				fixes = append(fixes, `json:",omitempty"`)
+			}
+			log.record(clioutput.LabelFix, gghelper.RelativePath(path), ": filled %s on %s.%s", strings.Join(fixes, " and "), finding.Struct, finding.Field)
 		}
 	}
 	return nil

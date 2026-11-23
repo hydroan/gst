@@ -2,11 +2,14 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/hydroan/gst/internal/ggcheck"
+	"github.com/hydroan/gst/internal/ggconst"
 )
 
 // TestProjectCheckHelpNumbersEveryCheckInRunOrder pins the help
@@ -108,6 +111,53 @@ func TestGenerationChecksLeaveOutWhatTheRunDoesItselfAndWhatAsksTheCompiledModel
 	want := slices.DeleteFunc(checkNames(projectChecks), func(name string) bool { return slices.Contains(left, name) })
 	if got := checkNames(generationChecks()); !slices.Equal(got, want) {
 		t.Fatalf("generationChecks() = %v, want %v", got, want)
+	}
+}
+
+// TestRunProjectChecksPrintsTheChecksThatFound pins the example
+// runProjectChecks gives: a check that found violations is printed under
+// its name with what it found, the ones that found none are not, and the
+// error counts the violations and the checks; a project the checks pass
+// gets one line counting them, and none when the run is quiet.
+func TestRunProjectChecksPrintsTheChecksThatFound(t *testing.T) {
+	writeGoMod(t, t.TempDir(), "tmpapp")
+	plural := filepath.Join(ggconst.DirModel, "samples.go")
+	writeProjectFile(t, plural, "package model\n")
+	checks := []ggcheck.Check{ggcheck.ModelSingularNaming, ggcheck.ModelFileNameHyphens}
+
+	var err error
+	output := captureStdout(t, func() { err = runProjectChecks(checks, false, nil) })
+	if want := "1 violation in 1 of 2 checks"; err == nil || err.Error() != want {
+		t.Fatalf("runProjectChecks() error = %v, want %q", err, want)
+	}
+	if want := "  ✘ Model singular naming (1)\n    Model file 'model/samples.go' should be singular (suggested: sample.go)\n"; output != want {
+		t.Fatalf("runProjectChecks() printed %q, want %q", output, want)
+	}
+
+	if err = os.Rename(plural, filepath.Join(ggconst.DirModel, "sample.go")); err != nil {
+		t.Fatal(err)
+	}
+	for quiet, want := range map[bool]string{false: "  ✔ 2 checks passed\n", true: ""} {
+		output = captureStdout(t, func() { err = runProjectChecks(checks, quiet, nil) })
+		if err != nil || output != want {
+			t.Fatalf("runProjectChecks(quiet %t) = %v, printed %q, want nil and %q", quiet, err, output, want)
+		}
+	}
+}
+
+// TestCheckRunOutsideAProjectSaysSoOnce pins that gg check in a directory
+// holding no go.mod stops before any check runs, on the one error saying
+// what gg runs in.
+func TestCheckRunOutsideAProjectSaysSoOnce(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	var err error
+	output := captureOutput(t, func() { err = checkRun() })
+	if want := "no go.mod in the current directory: gg runs at the root of a gst project, which gg new creates"; err == nil || err.Error() != want {
+		t.Fatalf("checkRun() error = %v, want %q", err, want)
+	}
+	if output != "" {
+		t.Fatalf("checkRun() printed %q, want nothing ahead of its error", output)
 	}
 }
 

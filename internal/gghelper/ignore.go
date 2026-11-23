@@ -23,9 +23,9 @@ import (
 //
 // Who goes by it, and how:
 //
-//   - gg check, gg gen with its ts subcommand, gg routes and gg route-tree
-//     read the project's code through Ignores and Walk, leaving out what
-//     either set of rules covers. So does apidocgen, the framework's own
+//   - gg check, gg gen with its ts subcommand and gg routes read the
+//     project's code through Ignores and Walk, leaving out what either set
+//     of rules covers. So does apidocgen, the framework's own
 //     program that registers the struct doc comments of internal/modelregistry
 //     and internal/tenant for the OpenAPI generator.
 //   - gg migrate schema reads a path the user names, so the Git rules do not

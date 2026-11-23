@@ -140,7 +140,7 @@ stop
 
 ## 第 1 步：算出待删清单
 
-这一步只算不删。开始时打印段落标题 `Prune Leftovers`；`prune.ignore` 里指向不存在路径的条目，逐条警告 `gst.yaml prune.ignore entry "..." names no file or directory`，不中断。
+这一步只算不删。`prune.ignore` 里指向不存在路径的条目，逐条警告 `gst.yaml prune.ignore entry "..." names no file or directory`，不中断。
 
 ### 1.1 停用的 service 文件
 
@@ -236,7 +236,7 @@ stop
 
 ## 第 2 步：列出并确认
 
-- **清单为空**（没有停用的 service 文件、孤儿目录、孤儿中间件与拦截器文件、过期的 protobuf 文件）：打印 `Nothing to prune`，删掉空目录（做法见第 3 步最后一项），不提问。之后照样列出 `Files Ignored By Config` 和 `Service Helper Directories Kept`，说明哪些东西因为什么留下。
+- **清单为空**（没有停用的 service 文件、孤儿目录、孤儿中间件与拦截器文件、过期的 protobuf 文件）：删掉空目录（做法见第 3 步最后一项），不提问，照样列出 `Files Ignored By Config` 和 `Service Helper Directories Kept`，说明哪些东西因为什么留下；`gg prune` 以 `Nothing to prune` 收尾，连空目录也没删到时就只有这一行。
 - **否则**先列出 `Files Ignored By Config`、`Service Helper Directories Kept`，再依次列出要删的：
   - `Disabled Service Files`：停用的 service 文件；
   - `Unmanaged Orphan Service Directories`：孤儿目录，每个标注 `(no current model maps to this directory)`，下面缩进列出要删的文件；
@@ -249,13 +249,15 @@ stop
 
 ## 第 3 步：按顺序删除
 
-1. **停用的 service 文件及其配对测试文件**：逐个删除，删掉的打印 `Deleted ...`，删不掉的打印 `Failed to delete ...` 并接着删后面的。
-2. **孤儿中间件、拦截器文件**：先中间件后拦截器，逐个删掉并打印 `Deleted ...`；再从各自的注册文件（`middleware/middleware.go`、`interceptor/interceptor.go`）删掉调用这些文件里函数的 `Register`、`RegisterAuth` 语句，框架 middleware、interceptor 包的导入没人用了也一并删掉，打印 `Removed their register calls from <注册文件>`。这一项出错时打印 `Failed to delete orphan module middleware or interceptor files, so orphan service directories are kept: ...`。
-3. **孤儿目录里的文件**：逐个删除，打印 `Deleted ...` 或 `Failed to delete ...`。孤儿目录是因为前两项的文件要删才成了孤儿，所以前两项有删不掉的文件时，孤儿目录全部保留；停用的 service 文件有删不掉的时打印 `Some disabled service files were not deleted, so orphan service directories are kept`。
-4. **过期的 protobuf 文件**：逐个删除，打印 `Deleted ...` 或 `Failed to delete ...`。清单里有 `.proto` 时，问之前先打印一条警告：它登记的 `reserved` 会随之消失，要先搬进替代它的文件。
-5. **空目录**：从最深的目录开始，删掉 `service/` 和 `pb/` 下的空目录；子目录删掉后变空的上层目录也一起删，`service/` 本身不删，`pb/` 空了则连它一起删（它只由 `gg gen` 创建）。每删一个打印 `Removed empty directory ...`。只有被 `prune.ignore` 覆盖的目录不删；被 Git 忽略的空目录、空的 `testdata` 目录照样删。
+1. **停用的 service 文件及其配对测试文件**：逐个删除，删掉的各列一行 `REMOVE <路径>`，删不掉的打印 `Failed to delete ...` 并接着删后面的。
+2. **孤儿中间件、拦截器文件**：先中间件后拦截器，逐个删掉并各列一行 `REMOVE <路径>`；再从各自的注册文件（`middleware/middleware.go`、`interceptor/interceptor.go`）删掉调用这些文件里函数的 `Register`、`RegisterAuth` 语句，框架 middleware、interceptor 包的导入没人用了也一并删掉，列一行 `UPDATE <注册文件> (their register calls removed)`。这一项出错时打印 `Failed to delete orphan module middleware or interceptor files, so orphan service directories are kept: ...`。
+3. **孤儿目录里的文件**：逐个删除，列一行 `REMOVE <路径>` 或打印 `Failed to delete ...`。孤儿目录是因为前两项的文件要删才成了孤儿，所以前两项有删不掉的文件时，孤儿目录全部保留；停用的 service 文件有删不掉的时打印 `Some disabled service files were not deleted, so orphan service directories are kept`。
+4. **过期的 protobuf 文件**：逐个删除，列一行 `REMOVE <路径>` 或打印 `Failed to delete ...`。清单里有 `.proto` 时，问之前先打印一条警告：它登记的 `reserved` 会随之消失，要先搬进替代它的文件。
+5. **空目录**：从最深的目录开始，删掉 `service/` 和 `pb/` 下的空目录；子目录删掉后变空的上层目录也一起删，`service/` 本身不删，`pb/` 空了则连它一起删（它只由 `gg gen` 创建）。每删一个列一行 `REMOVE <目录> (an empty directory)`。只有被 `prune.ignore` 覆盖的目录不删；被 Git 忽略的空目录、空的 `testdata` 目录照样删。
 
-删不掉的文件不会让这一步停下，其余照删；但只要有删不掉的文件，或者第 2 项出错，删完之后命令就报错退出（退出码 1），错误里写明删不掉的文件或第 2 项出错的原因，`gg prune` 不再打印 `Code pruning completed successfully!`，`gg gen --prune` 同样以出错结束。
+全部删完时，`gg prune` 以一行结论收尾，写明删除、更新了几个路径和耗时，例如 `Pruned: 3 removed (120ms)`；`gg gen --prune` 把它们算进自己的结论行。
+
+删不掉的文件不会让这一步停下，其余照删；但只要有删不掉的文件，或者第 2 项出错，删完之后命令就报错退出（退出码 1），错误里写明删不掉的文件或第 2 项出错的原因，`gg gen --prune` 同样以出错结束。
 
 ## 不会被删的东西
 
@@ -272,8 +274,6 @@ stop
 
 | 标题 | 什么时候出现 |
 | --- | --- |
-| `Scan Models` | `gg prune` 扫描 model |
-| `Prune Leftovers` | 开始清理，`gg prune` 和 `gg gen --prune` 都有 |
 | `Files Ignored By Config` | 有停用的 service 文件或 `pb/` 下的 `.proto` 被 `prune.ignore` 保住 |
 | `Service Helper Directories Kept` | 有被活代码 import 而保留的目录 |
 | `Disabled Service Files` | 有要删的停用 service 文件或它们的配对测试文件 |

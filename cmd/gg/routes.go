@@ -2,528 +2,477 @@ package main
 
 import (
 	"fmt"
-	"go/ast"
 	"go/parser"
 	"go/token"
 	"io"
-	"maps"
 	"net/http"
-	"os"
+	"net/url"
+	"path"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 
+	"charm.land/lipgloss/v2/tree"
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/clioutput"
+	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
+	"github.com/hydroan/gst/internal/modelinfo"
 	"github.com/spf13/cobra"
-	"github.com/stoewer/go-strcase"
 )
 
-type modelRoute struct {
-	Model  string
-	Req    string
-	Rsp    string
-	Source string
-	Scope  string
-	Path   string
-	Method string
-	Phase  string
-	Param  string
+var routesCmd = &cobra.Command{
+	Use:   "routes [text]...",
+	Short: "List the models of the project and the routes they declare",
+	Long: `List the models of the project and the routes they declare, read from the
+model declarations the way gg gen reads them, so the list is the one gg gen
+registers whether or not it has run.
+
+The models are laid out as trees, the way their files nest and their routes
+with them: the models of model/sample/ under the model of model/sample.go,
+a directory no file is named after standing for itself. A model is listed with its file, and with table
+when it has one and grpc when it is served over gRPC as well; each route
+under it with its method, path and action, the service file holding its
+logic when the action declares Service(), public when it takes no
+authentication, and the name of its rpc.
+
+Each text keeps the routes whose line, or whose model's line, holds it,
+letter case aside; several texts keep the routes holding all of them. A
+text with a slash is read as an address too, parameters filled in, and keeps
+the routes serving it. The models above a model kept stay, without routes,
+to say where it stands.`,
+	Example: `  gg routes
+  gg routes record                    the model, file, path or service names record
+  gg routes public                    the routes taking no authentication
+  gg routes /api/records/42/items     the routes serving this address
+  gg routes delete /api/records/42    the one deleting it`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return routesRun(cmd.OutOrStdout(), args)
+	},
 }
 
-type modelRoutesPrintOptions struct {
-	Detail bool
-	Filter string
-	Scope  string
-	color  bool
+// listedModel is a model of the project the way gg routes lists it: where it
+// is declared, what it is backed and served by, and the routes it declares.
+type listedModel struct {
+	Name   string // Record
+	File   string // model/sample/record.go
+	Table  bool   // the model declares Migrate()
+	GRPC   bool   // the model declares GRPC()
+	Routes []listedRoute
 }
 
-type modelRoutesCommandOptions struct {
-	detail bool
-	model  bool
-	scope  string
+// listedRoute is one route of a model the way gg routes lists it: an action
+// registered under a method and a path.
+type listedRoute struct {
+	Method  string // GET
+	Path    string // /api/samples/:sample/records
+	Action  string // List
+	Service string // service/sample/record/list.go, "" for an action declaring no Service()
+	Public  bool
+	RPC     string // ListRecord, "" for an action gRPC does not serve
 }
 
-var routesCmd = newRoutesCmd()
+// The words gg routes marks a model and a route with, which a text of the
+// command line matches like any other word of a line.
+const (
+	routeMarkTable  = "table"
+	routeMarkGRPC   = "grpc"
+	routeMarkPublic = "public"
+	routeMarkRPC    = "rpc"
+)
 
-func newRoutesCmd() *cobra.Command {
-	opts := new(modelRoutesCommandOptions)
-	cmd := &cobra.Command{
-		Use:   "routes [filter]",
-		Short: "print current route hierarchy",
-		Long: `Print the current route hierarchy.
-This command analyzes generated router registrations and displays routes grouped
-by model source files so developers can understand model and route structure.
+// routesRun lists the models of the project in the working directory and
+// their routes to w, the ones texts keep (see keepRoutes), as a tree (see
+// printRouteTree), and ends on how many there are. The framework modules
+// the project registers at run time declare no model of the project, so
+// their routes are not among them, which the last line says, naming the
+// modules.
+func routesRun(w io.Writer, texts []string) error {
+	modulePath, err := gghelper.ModulePath(".")
+	if err != nil {
+		return err
+	}
+	if !gghelper.FileExists(ggconst.DirModel) {
+		return errors.Newf("model dir not found: %s", ggconst.DirModel)
+	}
+	projectCfg, err := loadProjectConfig()
+	if err != nil {
+		return err
+	}
+	scanned, err := modelinfo.ScanModels(modulePath, ggconst.DirModel, gghelper.NewProjectIgnore(), projectCfg)
+	if err != nil {
+		return err
+	}
+	models := listModels(scanned.Models)
+	if len(models) == 0 {
+		fmt.Fprintf(w, "No model yet: declare the first one in a file under %s/\n", ggconst.DirModel)
+		return nil
+	}
 
-Optional filter parameter can match model names, source files, route paths, or phases.
-For example: 'gg routes record' will show router routes related to record.
-Use --model to display routes grouped by model source files.
-Use --scope auth or --scope pub to display only authenticated or public routes.`,
-		Args: cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			filter := ""
-			if len(args) > 0 {
-				filter = args[0]
+	listed := keepRoutes(models, texts)
+	printRouteTree(w, routeTree(models, listed))
+
+	routes, public := 0, 0
+	for _, m := range listed {
+		routes += len(m.Routes)
+		for _, r := range m.Routes {
+			if r.Public {
+				public++
 			}
-			return runModelRoutes(cmd.OutOrStdout(), filter, opts)
-		},
+		}
 	}
-	cmd.Flags().BoolVar(&opts.detail, "detail", false, "show request, response, param, and source details")
-	cmd.Flags().BoolVar(&opts.model, "model", false, "group routes by model source files")
-	cmd.Flags().StringVar(&opts.scope, "scope", "", "filter routes by scope: auth, pub, public")
-	return cmd
-}
+	if len(listed) == 0 {
+		fmt.Fprintf(w, "No model or route matches %s\n", strings.Join(texts, " "))
+	} else {
+		summary := fmt.Sprintf("%s, %s (%d public)", counted(len(listed), "model"), counted(routes, "route"), public) //gst:literal the word for what is counted
+		if len(texts) > 0 {
+			summary += ", matching " + strings.Join(texts, " ")
+		}
+		fmt.Fprintf(w, "\n%s\n", summary)
+	}
 
-func runModelRoutes(w io.Writer, filter string, opts *modelRoutesCommandOptions) error {
-	routerFile := filepath.Join(ggconst.DirRouter, ggconst.FileRouterGen)
-	routes, err := parseModelRoutesFromProject(routerFile, ggconst.DirModel)
+	modules, err := registeredFrameworkModules()
 	if err != nil {
 		return err
 	}
-	if len(routes) == 0 {
-		fmt.Fprintln(w, "No routes found. Please run 'gg gen' first to generate routes.")
-		return nil
+	if len(modules) > 0 {
+		fmt.Fprintf(w, "  %s\n", clioutput.Text(clioutput.StyleMuted,
+			"Not listed: the routes of the framework modules %s/ registers at run time (%s); the running service lists every route at /docs/index.html",
+			ggconst.DirModule, strings.Join(modules, ", ")))
 	}
-
-	scope, err := normalizeRouteScope(opts.scope)
-	if err != nil {
-		return err
-	}
-	if scope != "" {
-		routes = filterRoutesByScope(routes, scope)
-		if len(routes) == 0 {
-			fmt.Fprintf(w, "No routes found matching scope: %s\n", opts.scope)
-			return nil
-		}
-	}
-
-	if filter != "" {
-		routes = filterModelRoutes(routes, filter)
-		if len(routes) == 0 {
-			fmt.Fprintf(w, "No routes found matching filter: %s\n", filter)
-			return nil
-		}
-	}
-
-	printOpts := modelRoutesPrintOptions{
-		Detail: opts.detail,
-		Filter: filter,
-		Scope:  scope,
-	}
-	if opts.model {
-		printModelRoutes(w, routes, printOpts)
-		return nil
-	}
-	printRouterRoutes(w, routes, printOpts)
 	return nil
 }
 
-// parseModelRoutesFromProject parses generated router registrations and links
-// them to model files.
-func parseModelRoutesFromProject(routerFile, modelRoot string) ([]modelRoute, error) {
-	if !gghelper.FileExists(routerFile) {
-		return nil, errors.Newf("router file not found: %s. Please run 'gg gen' first", routerFile)
+// listModels returns the models gg routes lists for the models of a scan,
+// in the order of their files, a file before the directory named after it,
+// model/sample.go before model/sample/item.go: each with the routes its
+// design declares, in the order gg gen registers them, a model declaring
+// none included. The path of a route is the one the router registers (see
+// modelinfo.RouterTargetForAction), its service file the one gg gen writes
+// for an action declaring Service() (see modelinfo.ServiceTarget), and its
+// rpc the one the protobuf definition of a model declaring GRPC() carries
+// (see modelinfo.RPCName), which an action only HTTP carries has none of.
+func listModels(models []*modelinfo.Model) []listedModel {
+	listed := make([]listedModel, 0, len(models))
+	for _, m := range models {
+		entry := listedModel{Name: m.ModelName, File: m.ModelFilePath, Table: m.Design.Migrate, GRPC: m.Design.GRPC}
+		m.Design.Range(func(declared string, action *dsl.Action) {
+			registered, _ := modelinfo.RouterTargetForAction(declared, m.Design, action)
+			r := listedRoute{Method: action.Phase.HTTPMethod(), Path: registered, Action: action.Phase.Name(), Public: action.Public}
+			if action.Service {
+				r.Service = modelinfo.ServiceTarget(m, action, ggconst.DirModel, ggconst.DirService).FilePath
+			}
+			if m.Design.GRPC && !dsl.HTTPOnlyAction(action.Phase.Name()) {
+				r.RPC = modelinfo.RPCName(m, declared, action)
+			}
+			entry.Routes = append(entry.Routes, r)
+		})
+		listed = append(listed, entry)
 	}
+	slices.SortStableFunc(listed, func(a, b listedModel) int {
+		return strings.Compare(strings.TrimSuffix(a.File, ggconst.ExtensionGo), strings.TrimSuffix(b.File, ggconst.ExtensionGo))
+	})
+	return listed
+}
 
-	modelSources, err := scanModelSources(modelRoot, gghelper.NewProjectIgnore())
-	if err != nil {
-		return nil, err
+// keepRoutes returns the models and routes texts keep, all of them for no
+// text. A route is kept when every text matches it: its line or the line of
+// its model holds the text, letter case aside, or the text is an address the
+// route serves (see servesAddress). A model is kept with the routes kept of
+// it, and one declaring no route when its own line holds every text. With
+// the models Record of model/record.go, routes GET /api/records and DELETE
+// /api/records/:id, and Item of model/item.go, route GET /api/items:
+//
+//	record            keeps Record with both routes
+//	get               keeps Record with GET /api/records, Item with its route
+//	/api/records/7    keeps Record with DELETE /api/records/:id
+//	get /api/items    keeps Item with its route
+func keepRoutes(models []listedModel, texts []string) []listedModel {
+	if len(texts) == 0 {
+		return models
 	}
-
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, routerFile, nil, 0)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to parse router file %s", routerFile)
-	}
-
-	routes := make([]modelRoute, 0)
-	ast.Inspect(file, func(node ast.Node) bool {
-		call, ok := node.(*ast.CallExpr)
-		if !ok || !isRouterRegisterCall(call) {
+	var kept []listedModel
+	for _, m := range models {
+		header := strings.ToLower(strings.Join(m.headerCells(), " "))
+		matches := func(line string, served func(address string) bool) bool {
+			for _, text := range texts {
+				lower := strings.ToLower(text)
+				if !strings.Contains(header, lower) && !strings.Contains(line, lower) && !served(text) {
+					return false
+				}
+			}
 			return true
 		}
-
-		route, ok := modelRouteFromCall(call, modelSources)
-		if ok {
-			routes = append(routes, route)
+		routes := slices.DeleteFunc(slices.Clone(m.Routes), func(r listedRoute) bool {
+			return !matches(strings.ToLower(strings.Join(r.cells(), " ")), func(address string) bool {
+				return strings.Contains(address, "/") && servesAddress(r.Path, address)
+			})
+		})
+		if len(routes) > 0 || len(m.Routes) == 0 && matches("", func(string) bool { return false }) {
+			m.Routes = routes
+			kept = append(kept, m)
 		}
-		return true
-	})
-	return routes, nil
+	}
+	return kept
 }
 
-func modelRouteFromCall(call *ast.CallExpr, modelSources map[string]string) (modelRoute, bool) {
-	index, ok := call.Fun.(*ast.IndexListExpr)
-	if !ok || len(index.Indices) != 3 || len(call.Args) < 4 {
-		return modelRoute{}, false
+// servesAddress reports whether the route registered at pattern serves
+// address: a path, or a URL whose path is taken, in which every segment is
+// the pattern's own or stands where the pattern has a parameter.
+// /api/samples/:sample/items serves /api/samples/7/items,
+// http://localhost:8080/api/samples/7/items?_page=2 and
+// /api/samples/7/items/, and neither /api/samples/7 nor /api/samples//items.
+func servesAddress(pattern, address string) bool {
+	if parsed, err := url.Parse(address); err == nil && parsed.Path != "" {
+		address = parsed.Path
 	}
-
-	model := exprString(index.Indices[0])
-	req := exprString(index.Indices[1])
-	rsp := exprString(index.Indices[2])
-	path, ok := stringLiteralValue(call.Args[1])
-	if !ok {
-		return modelRoute{}, false
-	}
-	phase, ok := selectorName(call.Args[3])
-	if !ok {
-		return modelRoute{}, false
-	}
-
-	return modelRoute{
-		Model:  model,
-		Req:    req,
-		Rsp:    rsp,
-		Source: lookupModelSource(modelSources, model),
-		Scope:  routeScope(call.Args[0]),
-		// The registration carries the path the route is served at, which
-		// the listing prints as it is.
-		Path: apiaction.APIPath(path),
-		// The last argument names the phase the way gg gen writes it,
-		// service.<Phase.Name()> such as service.CreateMany; the route
-		// is served under the method the framework router registers that
-		// phase by.
-		Method: apiaction.Phase(strcase.SnakeCase(phase)).HTTPMethod(),
-		Phase:  phase,
-		Param:  routeParamName(call.Args[2]),
-	}, true
-}
-
-func isRouterRegisterCall(call *ast.CallExpr) bool {
-	index, ok := call.Fun.(*ast.IndexListExpr)
-	if !ok {
+	segments := strings.Split(strings.Trim(address, "/"), "/")
+	patternSegments := strings.Split(strings.Trim(pattern, "/"), "/")
+	if len(segments) != len(patternSegments) {
 		return false
 	}
-	selector, ok := index.X.(*ast.SelectorExpr)
-	if !ok || selector.Sel.Name != ggconst.FuncRegister {
-		return false
+	for i, segment := range segments {
+		if segment == "" || segment != patternSegments[i] && !strings.HasPrefix(patternSegments[i], ":") {
+			return false
+		}
 	}
-	ident, ok := selector.X.(*ast.Ident)
-	return ok && ident.Name == ggconst.PkgRouter
+	return true
 }
 
-func scanModelSources(modelRoot string, ignore gghelper.ProjectIgnore) (map[string]string, error) {
-	sources := make(map[string]string)
-	typeOnly := make(map[string]string)
-	duplicates := make(map[string]bool)
-
-	if _, err := os.Stat(modelRoot); os.IsNotExist(err) {
-		return sources, nil
-	}
-
-	sourceBase := filepath.Dir(modelRoot)
-	err := ignore.Walk(modelRoot, func(path string, info os.FileInfo) error {
-		if info.IsDir() || !strings.HasSuffix(info.Name(), ggconst.ExtensionGo) || strings.HasSuffix(info.Name(), ggconst.PatternTestFile) {
-			return nil
-		}
-
-		fset := token.NewFileSet()
-		file, err := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
-		if err != nil {
-			return errors.Wrapf(err, "failed to parse model file %s", path)
-		}
-
-		rel, err := filepath.Rel(sourceBase, path)
-		if err != nil {
-			rel = path
-		}
-		rel = filepath.ToSlash(rel)
-
-		for _, decl := range file.Decls {
-			genDecl, ok := decl.(*ast.GenDecl)
-			if !ok || genDecl.Tok != token.TYPE {
-				continue
-			}
-			for _, spec := range genDecl.Specs {
-				typeSpec, ok := spec.(*ast.TypeSpec)
-				if !ok {
-					continue
-				}
-				key := file.Name.Name + "." + typeSpec.Name.Name
-				sources[key] = rel
-				if existing, ok := typeOnly[typeSpec.Name.Name]; ok && existing != rel {
-					duplicates[typeSpec.Name.Name] = true
-					continue
-				}
-				typeOnly[typeSpec.Name.Name] = rel
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	for name, source := range typeOnly {
-		if !duplicates[name] {
-			sources[name] = source
-		}
-	}
-	return sources, nil
+// routeNode is a node of the tree gg routes prints: a model with the routes
+// listed of it, a model listed for the models under it alone, or a directory
+// of the model directory.
+type routeNode struct {
+	// key is the path under the model directory the node stands for, a model
+	// by its file less the extension: sample, sample/item.
+	key string
+	// model is nil for a directory.
+	model *listedModel
+	// above marks a model none of whose routes is listed: it is in the tree
+	// for the models under it.
+	above    bool
+	children []*routeNode
 }
 
-func lookupModelSource(sources map[string]string, model string) string {
-	key := strings.TrimPrefix(model, "*")
-	if source, ok := sources[key]; ok {
-		return source
+// routeTree arranges the models to list, kept, the way their files nest,
+// which is how their routes nest (see modelinfo.ResolveRoutes): the models
+// of a directory under the model the file named after the directory
+// declares, model/sample/item.go under the model of model/sample.go. Where
+// no file is named after a directory, or the file declares several models,
+// the directory is a node of its own. A model of models that is not among
+// kept is in the tree only above one that is, and then without routes. It
+// returns the nodes at the top, each level in the order of its paths.
+func routeTree(models, kept []listedModel) []*routeNode {
+	stem := func(m *listedModel) string {
+		return strings.TrimSuffix(strings.TrimPrefix(filepath.ToSlash(m.File), ggconst.DirModel+"/"), ggconst.ExtensionGo)
 	}
-	if _, typeName, ok := splitQualifiedType(key); ok {
-		if source, ok := sources[typeName]; ok {
-			return source
+	// The model a directory's models go under: the one model of the file
+	// named after the directory.
+	declared := make(map[string]int, len(models))
+	for i := range models {
+		declared[models[i].File]++
+	}
+	owners := make(map[string]*listedModel, len(models))
+	for i := range models {
+		if declared[models[i].File] == 1 {
+			owners[stem(&models[i])] = &models[i]
 		}
+	}
+
+	root := new(routeNode)
+	nodes := map[string]*routeNode{"": root}
+	// under returns the node the models of the directory key go under,
+	// adding it to the tree, with the nodes above it, when no model listed
+	// put it there.
+	var under func(key string) *routeNode
+	under = func(key string) *routeNode {
+		if node, ok := nodes[key]; ok {
+			return node
+		}
+		node := &routeNode{key: key}
+		if owner, ok := owners[key]; ok {
+			withoutRoutes := *owner
+			withoutRoutes.Routes = nil
+			node.model, node.above = &withoutRoutes, true
+		}
+		nodes[key] = node
+		parent := under(parentKey(key))
+		parent.children = append(parent.children, node)
+		return node
+	}
+	// A model comes after the model its directory is named after, the models
+	// being in the order of their files, so that one is in the tree by then
+	// when it is listed.
+	for i := range kept {
+		key := stem(&kept[i])
+		node := &routeNode{key: key, model: &kept[i]}
+		if declared[kept[i].File] == 1 {
+			nodes[key] = node
+		}
+		parent := under(parentKey(key))
+		parent.children = append(parent.children, node)
+	}
+	for _, node := range nodes {
+		slices.SortStableFunc(node.children, func(a, b *routeNode) int { return strings.Compare(a.key, b.key) })
+	}
+	return root.children
+}
+
+// parentKey returns the key of the directory holding the node of key: sample
+// for sample/item, and "" for sample, the model directory itself.
+func parentKey(key string) string {
+	if dir := path.Dir(key); dir != "." {
+		return dir
 	}
 	return ""
 }
 
-func filterModelRoutes(routes []modelRoute, filter string) []modelRoute {
-	filter = strings.ToLower(strings.Trim(filter, "/"))
-	if filter == "" {
-		return routes
-	}
-
-	filtered := make([]modelRoute, 0, len(routes))
-	for _, route := range routes {
-		fields := []string{
-			route.Model,
-			route.Req,
-			route.Rsp,
-			route.Source,
-			route.Scope,
-			route.Path,
-			route.Phase,
-			route.Param,
-		}
-		for _, field := range fields {
-			if strings.Contains(strings.ToLower(strings.Trim(field, "/")), filter) {
-				filtered = append(filtered, route)
-				break
+// printRouteTree prints the nodes to w, each the root of a tree of its
+// own, one after the other: a model on a line of its own, its routes under
+// it and after them the models nested under it; the columns after the path
+// lined up across all the trees, a column no route has anything in left
+// out, and no line trailing spaces. The branches are drawn by lipgloss.
+//
+//	Sample  model/sample.go  table  grpc
+//	├── POST    /api/samples                        Create  service/sample/create.go            rpc CreateSample
+//	├── GET     /api/samples                        List                                public  rpc ListSample
+//	└── Item  model/sample/item.go  table
+//	    └── DELETE  /api/samples/:sample/items/:id  Delete
+//	tool/
+//	└── Label  model/tool/label.go
+//	    └── GET     /api/tool/labels                List    service/tool/label/list.go
+func printRouteTree(w io.Writer, nodes []*routeNode) {
+	// The widths of the columns, and how far right the path reaching
+	// furthest ends: a path starts further right the deeper its model is
+	// nested, by the width of a branch a level, and the columns after it
+	// start in one place all the same.
+	var widths []int
+	pathEnd := 0
+	// level counts the branches a line stands behind: none for a node at the
+	// top, one more for each level under it.
+	var measure func(node *routeNode, level int)
+	measure = func(node *routeNode, level int) {
+		if node.model != nil {
+			for _, r := range node.model.Routes {
+				for i, cell := range r.cells() {
+					if i == len(widths) {
+						widths = append(widths, 0)
+					}
+					widths[i] = max(widths[i], len(cell))
+				}
+				pathEnd = max(pathEnd, (level+1)*treeBranchWidth+len(r.Path))
 			}
 		}
-	}
-	return filtered
-}
-
-func printModelRoutes(w io.Writer, routes []modelRoute, opts modelRoutesPrintOptions) {
-	opts.color = opts.color || routeColorEnabled(w)
-
-	fmt.Fprintf(w, "%s %s\n", routeText(opts.color, clioutput.StyleInfo, "%s", clioutput.SymbolSection), routeText(opts.color, clioutput.StyleBold, "Model Routes"))
-	fmt.Fprintf(w, "  %s models: %d, routes: %d, public: %d, auth: %d\n", routeText(opts.color, clioutput.StyleMuted, "%s", clioutput.SymbolItem), countRouteModels(routes), len(routes), countRouteScope(routes, "public"), countRouteScope(routes, "auth"))
-	if opts.Filter != "" {
-		fmt.Fprintf(w, "  %s filter: %s\n", routeText(opts.color, clioutput.StyleMuted, "%s", clioutput.SymbolItem), opts.Filter)
-	}
-	if opts.Scope != "" {
-		fmt.Fprintf(w, "  %s scope: %s\n", routeText(opts.color, clioutput.StyleMuted, "%s", clioutput.SymbolItem), opts.Scope)
-	}
-	fmt.Fprintln(w)
-
-	if len(routes) == 0 {
-		fmt.Fprintln(w, "No routes found.")
-		return
-	}
-
-	printModelRouteSourceTree(w, groupModelRoutesBySource(routes), opts)
-}
-
-func printRouterRoutes(w io.Writer, routes []modelRoute, opts modelRoutesPrintOptions) {
-	opts.color = opts.color || routeColorEnabled(w)
-
-	fmt.Fprintf(w, "%s %s\n", routeText(opts.color, clioutput.StyleInfo, "%s", clioutput.SymbolSection), routeText(opts.color, clioutput.StyleBold, "Router Routes"))
-	fmt.Fprintf(w, "  %s models: %d, routes: %d, public: %d, auth: %d\n", routeText(opts.color, clioutput.StyleMuted, "%s", clioutput.SymbolItem), countRouteModels(routes), len(routes), countRouteScope(routes, "public"), countRouteScope(routes, "auth"))
-	if opts.Filter != "" {
-		fmt.Fprintf(w, "  %s filter: %s\n", routeText(opts.color, clioutput.StyleMuted, "%s", clioutput.SymbolItem), opts.Filter)
-	}
-	if opts.Scope != "" {
-		fmt.Fprintf(w, "  %s scope: %s\n", routeText(opts.color, clioutput.StyleMuted, "%s", clioutput.SymbolItem), opts.Scope)
-	}
-	fmt.Fprintln(w)
-
-	if len(routes) == 0 {
-		fmt.Fprintln(w, "No routes found.")
-		return
-	}
-
-	printRouterRouteModels(w, groupRoutesByModel(routes), "", opts)
-}
-
-type modelRouteSourceGroup struct {
-	source string
-	routes []modelRoute
-}
-
-// unknownRouteSource stands for the source file of a route the router file
-// does not tell, grouped and shown under this name after every file.
-const unknownRouteSource = "unknown"
-
-func groupModelRoutesBySource(routes []modelRoute) []modelRouteSourceGroup {
-	groupMap := make(map[string][]modelRoute)
-	for _, route := range routes {
-		source := trimModelSourceRoot(route.Source)
-		if source == "" {
-			source = unknownRouteSource
+		for _, child := range node.children {
+			measure(child, level+1)
 		}
-		groupMap[source] = append(groupMap[source], route)
+	}
+	for _, node := range nodes {
+		measure(node, 0)
 	}
 
-	sources := slices.Sorted(maps.Keys(groupMap))
-	groups := make([]modelRouteSourceGroup, 0, len(sources))
-	for _, source := range sources {
-		groups = append(groups, modelRouteSourceGroup{
-			source: source,
-			routes: groupMap[source],
-		})
-	}
-	return groups
-}
-
-type modelRouteSourceNode struct {
-	name     string
-	group    *modelRouteSourceGroup
-	children map[string]*modelRouteSourceNode
-}
-
-type orderedModelRoutes struct {
-	model  string
-	routes []modelRoute
-}
-
-func printModelRouteSourceTree(w io.Writer, groups []modelRouteSourceGroup, opts modelRoutesPrintOptions) {
-	root := &modelRouteSourceNode{children: make(map[string]*modelRouteSourceNode)}
-	for i := range groups {
-		insertModelRouteSource(root, &groups[i])
-	}
-	printModelRouteSourceNodes(w, sortedModelRouteSourceNodes(root.children), "", opts)
-}
-
-func insertModelRouteSource(root *modelRouteSourceNode, group *modelRouteSourceGroup) {
-	node := root
-	for segment := range strings.SplitSeq(filepath.ToSlash(group.source), "/") {
-		if segment == "" {
-			continue
+	muted := func(text string) string { return clioutput.Text(clioutput.StyleMuted, "%s", text) }
+	// branch returns what lipgloss draws for the node at level: its line,
+	// and under it the lines of its routes and of the models nested under it.
+	var branch func(node *routeNode, level int) any
+	branch = func(node *routeNode, level int) any {
+		var label string
+		var routes []listedRoute
+		switch {
+		case node.model == nil:
+			label = muted(path.Base(node.key) + "/")
+		case node.above:
+			label = muted(strings.Join(node.model.headerCells(), routeCellGap))
+		default:
+			header := node.model.headerCells()
+			label = clioutput.Text(clioutput.StyleBold, "%s", header[0]) + routeCellGap + muted(strings.Join(header[1:], routeCellGap))
+			routes = node.model.Routes
 		}
-		if node.children == nil {
-			node.children = make(map[string]*modelRouteSourceNode)
-		}
-		child := node.children[segment]
-		if child == nil {
-			child = &modelRouteSourceNode{
-				name:     segment,
-				children: make(map[string]*modelRouteSourceNode),
+
+		var under []any
+		for _, r := range routes {
+			cells := r.cells()
+			// A line ends on its last cell holding something, so no line
+			// trails the padding of the empty ones after it.
+			last := 0
+			for i, cell := range cells {
+				if cell != "" {
+					last = i
+				}
 			}
-			node.children[segment] = child
-		}
-		node = child
-	}
-	node.group = group
-}
-
-func printModelRouteSourceNodes(w io.Writer, nodes []*modelRouteSourceNode, prefix string, opts modelRoutesPrintOptions) {
-	for i, node := range nodes {
-		isLast := i == len(nodes)-1
-		connector := "├─"
-		childPrefix := prefix + "│  "
-		if isLast {
-			connector = "└─"
-			childPrefix = prefix + "   "
-		}
-
-		if node.group != nil {
-			models := groupRoutesByModel(node.group.routes)
-			if len(models) == 1 {
-				fmt.Fprintf(w, "%s%s %s  %s\n", prefix, connector, node.name, modelRouteLabel(models[0], opts.color))
-				printRouteLines(w, models[0].routes, childPrefix, opts)
-			} else {
-				fmt.Fprintf(w, "%s%s %s  (%d models)\n", prefix, connector, node.name, len(models))
-				printModelRouteGroup(w, *node.group, childPrefix, opts)
+			styles := []clioutput.Style{routeMethodStyle(r.Method), clioutput.StylePlain, clioutput.StylePlain, clioutput.StyleMuted, clioutput.StyleWarn, clioutput.StyleMuted}
+			var line strings.Builder
+			for i, cell := range cells[:last+1] {
+				if widths[i] == 0 {
+					continue
+				}
+				line.WriteString(clioutput.Text(styles[i], "%s", cell))
+				switch i {
+				case last:
+				case routePathCell:
+					line.WriteString(strings.Repeat(" ", pathEnd-(level+1)*treeBranchWidth-len(cell)) + routeCellGap)
+				default:
+					line.WriteString(strings.Repeat(" ", widths[i]-len(cell)) + routeCellGap)
+				}
 			}
-		} else {
-			fmt.Fprintf(w, "%s%s %s/\n", prefix, connector, node.name)
+			under = append(under, line.String())
 		}
-		if len(node.children) > 0 {
-			printModelRouteSourceNodes(w, sortedModelRouteSourceNodes(node.children), childPrefix, opts)
+		for _, child := range node.children {
+			under = append(under, branch(child, level+1))
+		}
+		if len(under) == 0 {
+			return label
+		}
+		return tree.Root(label).Child(under...)
+	}
+	for _, node := range nodes {
+		for line := range strings.SplitSeq(fmt.Sprint(branch(node, 0)), "\n") {
+			fmt.Fprintln(w, strings.TrimRight(line, " "))
 		}
 	}
 }
 
-func printModelRouteGroup(w io.Writer, group modelRouteSourceGroup, prefix string, opts modelRoutesPrintOptions) {
-	models := groupRoutesByModel(group.routes)
-	for i, model := range models {
-		modelConnector := "├─"
-		modelChildPrefix := prefix + "│  "
-		if i == len(models)-1 {
-			modelConnector = "└─"
-			modelChildPrefix = prefix + "   "
-		}
-		fmt.Fprintf(w, "%s%s %s\n", prefix, modelConnector, modelRouteLabel(model, opts.color))
-		printRouteLines(w, model.routes, modelChildPrefix, opts)
+// routePathCell is the cell of a route's line holding its path (see
+// listedRoute.cells), routeCellGap what stands between two cells, and
+// treeBranchWidth how far right lipgloss moves a line for each level of the
+// tree: the width of the branch tree.DefaultEnumerator draws and of the
+// space after it.
+const (
+	routePathCell   = 1
+	routeCellGap    = "  "
+	treeBranchWidth = 4
+)
+
+// headerCells returns the words of the line of a model: its name, its file,
+// and the marks of what it is backed and served by.
+func (m listedModel) headerCells() []string {
+	cells := []string{m.Name, m.File}
+	if m.Table {
+		cells = append(cells, routeMarkTable)
 	}
-}
-
-func groupRoutesByModel(routes []modelRoute) []orderedModelRoutes {
-	indexes := make(map[string]int)
-	models := make([]orderedModelRoutes, 0)
-	for _, route := range routes {
-		index, ok := indexes[route.Model]
-		if !ok {
-			index = len(models)
-			indexes[route.Model] = index
-			models = append(models, orderedModelRoutes{model: route.Model})
-		}
-		models[index].routes = append(models[index].routes, route)
+	if m.GRPC {
+		cells = append(cells, routeMarkGRPC)
 	}
-	return models
+	return cells
 }
 
-func printRouterRouteModels(w io.Writer, models []orderedModelRoutes, prefix string, opts modelRoutesPrintOptions) {
-	for i, model := range models {
-		modelConnector := "├─"
-		modelChildPrefix := prefix + "│  "
-		if i == len(models)-1 {
-			modelConnector = "└─"
-			modelChildPrefix = prefix + "   "
-		}
-		fmt.Fprintf(w, "%s%s %s\n", prefix, modelConnector, modelRouteLabel(model, opts.color))
-		printRouteLines(w, model.routes, modelChildPrefix, opts)
+// cells returns the columns of the line of a route: method, path, action,
+// service file, the public mark and the rpc, each "" where the route has
+// none.
+func (r listedRoute) cells() []string {
+	cells := []string{r.Method, r.Path, r.Action, r.Service, "", ""}
+	if r.Public {
+		cells[4] = routeMarkPublic
 	}
-}
-
-func printRouteLines(w io.Writer, routes []modelRoute, prefix string, opts modelRoutesPrintOptions) {
-	for j, route := range routes {
-		routeConnector := "├─"
-		routeChildPrefix := prefix + "│  "
-		if j == len(routes)-1 {
-			routeConnector = "└─"
-			routeChildPrefix = prefix + "   "
-		}
-		fmt.Fprintf(w, "%s%s %s %s", prefix, routeConnector, routeText(opts.color, routeMethodStyle(route.Method), "%-6s", route.Method), route.Path)
-		if !opts.Detail {
-			fmt.Fprintln(w)
-			continue
-		}
-		fmt.Fprintln(w)
-		fmt.Fprintf(w, "%sphase: %s\n", routeChildPrefix, route.Phase)
-		if route.Param != "" {
-			fmt.Fprintf(w, "%sparam: %s\n", routeChildPrefix, route.Param)
-		}
-		fmt.Fprintf(w, "%sscope: %s\n", routeChildPrefix, route.Scope)
-		fmt.Fprintf(w, "%sreq:   %s\n", routeChildPrefix, route.Req)
-		fmt.Fprintf(w, "%srsp:   %s\n", routeChildPrefix, route.Rsp)
-		if route.Source != "" {
-			fmt.Fprintf(w, "%ssource: %s\n", routeChildPrefix, route.Source)
-		}
+	if r.RPC != "" {
+		cells[5] = routeMarkRPC + " " + r.RPC
 	}
+	return cells
 }
 
-func modelRouteLabel(model orderedModelRoutes, colorize bool) string {
-	return fmt.Sprintf("%s %s", model.model, routeScopeBadge(modelRouteScope(model.routes), colorize))
-}
-
-// routeMethodStyle is the style the route views of gg, gg routes and gg
-// route-tree, print an HTTP method in.
+// routeMethodStyle is the style gg routes prints an HTTP method in.
 func routeMethodStyle(method string) clioutput.Style {
 	switch method {
 	case http.MethodGet:
@@ -538,227 +487,42 @@ func routeMethodStyle(method string) clioutput.Style {
 	return clioutput.StylePlain
 }
 
-func routeScopeBadge(scope string, colorize bool) string {
-	style := clioutput.StyleMuted
-	switch scope {
-	case "auth":
-		style = clioutput.StyleBlue
-	case "public":
-		style = clioutput.StyleMagenta
-	}
-	return routeText(colorize, style, "[%s]", scope)
-}
-
-func routeText(colorize bool, style clioutput.Style, format string, args ...any) string {
-	if !colorize {
-		return fmt.Sprintf(format, args...)
-	}
-	return clioutput.Text(style, format, args...)
-}
-
-func routeColorEnabled(w io.Writer) bool {
-	file, ok := w.(*os.File)
-	if !ok {
-		return false
-	}
-	info, err := file.Stat()
+// registeredFrameworkModules returns the names of the framework modules the
+// module package of the project imports, sorted: the modules gg module add
+// registers, whose routes the framework registers at run time. A module
+// copied into the project is not among them: its models are the project's
+// own, and listed. For a module package holding
+//
+//	import (
+//		"github.com/hydroan/gst/module/helloworld"
+//		"github.com/hydroan/gst/module/iam"
+//	)
+//
+// it returns helloworld and iam.
+func registeredFrameworkModules() ([]string, error) {
+	sources, err := filepath.Glob(filepath.Join(ggconst.DirModule, "*"+ggconst.ExtensionGo))
 	if err != nil {
-		return false
+		return nil, err
 	}
-	return info.Mode()&os.ModeCharDevice != 0
-}
-
-func filterRoutesByScope(routes []modelRoute, scope string) []modelRoute {
-	filtered := make([]modelRoute, 0)
-	for _, route := range routes {
-		if route.Scope == scope {
-			filtered = append(filtered, route)
-		}
-	}
-	return filtered
-}
-
-func normalizeRouteScope(scope string) (string, error) {
-	switch strings.ToLower(strings.TrimSpace(scope)) {
-	case "":
-		return "", nil
-	case "auth":
-		return "auth", nil
-	case "pub", "public":
-		return "public", nil
-	default:
-		return "", errors.New("scope must be auth, pub, or public")
-	}
-}
-
-func trimModelSourceRoot(source string) string {
-	source = filepath.ToSlash(source)
-	prefix := strings.Trim(filepath.ToSlash(ggconst.DirModel), "/")
-	if prefix == "" || prefix == "." {
-		return source
-	}
-	if source == prefix {
-		return ""
-	}
-	return strings.TrimPrefix(source, prefix+"/")
-}
-
-func sortedModelRouteSourceNodes(children map[string]*modelRouteSourceNode) []*modelRouteSourceNode {
-	nodes := make([]*modelRouteSourceNode, 0, len(children))
-	for _, child := range children {
-		nodes = append(nodes, child)
-	}
-	sort.Slice(nodes, func(i, j int) bool {
-		left := modelRouteSourceNodeSortKey(nodes[i])
-		right := modelRouteSourceNodeSortKey(nodes[j])
-		if left != right {
-			return left < right
-		}
-		return nodes[i].name < nodes[j].name
-	})
-	return nodes
-}
-
-// modelRouteSourceNodeSortKey orders the nodes of one level of the source
-// tree: by name without the .go suffix, a file before a directory of the
-// same name, record.go before record/, and the routes whose source is
-// unknown (see unknownRouteSource) after every file and directory.
-func modelRouteSourceNodeSortKey(node *modelRouteSourceNode) string {
-	if node.group != nil && node.name == unknownRouteSource {
-		// Past every path: no UTF-8 encoding starts with this byte.
-		return "\xff"
-	}
-	name := strings.TrimSuffix(node.name, ggconst.ExtensionGo)
-	kind := "1"
-	if node.group != nil {
-		kind = "0"
-	}
-	return name + "\x00" + kind
-}
-
-func modelRouteScope(routes []modelRoute) string {
-	scopes := make(map[string]struct{})
-	for _, route := range routes {
-		if route.Scope != "" {
-			scopes[route.Scope] = struct{}{}
-		}
-	}
-	if len(scopes) == 1 {
-		for scope := range scopes {
-			return scope
-		}
-	}
-	return "mixed"
-}
-
-func countRouteModels(routes []modelRoute) int {
-	models := make(map[string]struct{})
-	for _, route := range routes {
-		models[route.Model] = struct{}{}
-	}
-	return len(models)
-}
-
-func countRouteScope(routes []modelRoute, scope string) int {
-	count := 0
-	for _, route := range routes {
-		if route.Scope == scope {
-			count++
-		}
-	}
-	return count
-}
-
-func routeScope(expr ast.Expr) string {
-	call, ok := expr.(*ast.CallExpr)
-	if !ok {
-		return "unknown"
-	}
-	name, ok := selectorName(call.Fun)
-	if !ok {
-		return "unknown"
-	}
-	switch name {
-	case ggconst.RouterPub:
-		return "public"
-	case ggconst.RouterAuth:
-		return "auth"
-	default:
-		return strings.ToLower(name)
-	}
-}
-
-func routeParamName(expr ast.Expr) string {
-	unary, ok := expr.(*ast.UnaryExpr)
-	if !ok {
-		return ""
-	}
-	lit, ok := unary.X.(*ast.CompositeLit)
-	if !ok {
-		return ""
-	}
-	for _, elt := range lit.Elts {
-		kv, ok := elt.(*ast.KeyValueExpr)
-		if !ok {
+	var modules []string
+	for _, source := range sources {
+		if strings.HasSuffix(source, ggconst.PatternTestFile) {
 			continue
 		}
-		key, ok := kv.Key.(*ast.Ident)
-		if !ok || key.Name != ggconst.GstControllerConfigParamName {
-			continue
+		file, err := parser.ParseFile(token.NewFileSet(), source, nil, parser.ImportsOnly)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to parse %s", source)
 		}
-		value, ok := stringLiteralValue(kv.Value)
-		if ok {
-			return value
+		for _, spec := range file.Imports {
+			importPath, err := strconv.Unquote(spec.Path.Value)
+			if err != nil {
+				continue
+			}
+			if path.Dir(importPath) == frameworkModuleTree {
+				modules = append(modules, path.Base(importPath))
+			}
 		}
 	}
-	return ""
-}
-
-func selectorName(expr ast.Expr) (string, bool) {
-	selector, ok := expr.(*ast.SelectorExpr)
-	if !ok {
-		return "", false
-	}
-	return selector.Sel.Name, true
-}
-
-func stringLiteralValue(expr ast.Expr) (string, bool) {
-	lit, ok := expr.(*ast.BasicLit)
-	if !ok || lit.Kind != token.STRING {
-		return "", false
-	}
-	value, err := strconv.Unquote(lit.Value)
-	if err != nil {
-		return "", false
-	}
-	return value, true
-}
-
-func exprString(expr ast.Expr) string {
-	switch value := expr.(type) {
-	case *ast.Ident:
-		return value.Name
-	case *ast.StarExpr:
-		return "*" + exprString(value.X)
-	case *ast.SelectorExpr:
-		return exprString(value.X) + "." + value.Sel.Name
-	case *ast.IndexExpr:
-		return exprString(value.X) + "[" + exprString(value.Index) + "]"
-	case *ast.IndexListExpr:
-		indices := make([]string, 0, len(value.Indices))
-		for _, index := range value.Indices {
-			indices = append(indices, exprString(index))
-		}
-		return exprString(value.X) + "[" + strings.Join(indices, ", ") + "]"
-	default:
-		return ""
-	}
-}
-
-func splitQualifiedType(value string) (string, string, bool) {
-	parts := strings.Split(value, ".")
-	if len(parts) != 2 {
-		return "", value, false
-	}
-	return parts[0], parts[1], true
+	slices.Sort(modules)
+	return slices.Compact(modules), nil
 }

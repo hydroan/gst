@@ -120,6 +120,66 @@ func TestIsFrameworkProject(t *testing.T) {
 	})
 }
 
+// TestModulePathOutsideAProject pins the error for a directory holding no
+// go.mod, which says what gg runs in and what creates it: the current
+// directory by that name, any other by its path.
+func TestModulePathOutsideAProject(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	_, err := gghelper.ModulePath(".")
+	if want := "no go.mod in the current directory: gg runs at the root of a gst project, which gg new creates"; err == nil || err.Error() != want {
+		t.Fatalf("ModulePath(.) error = %v, want %q", err, want)
+	}
+	_, err = gghelper.ModulePath(dir)
+	if want := "no go.mod in " + dir + ": gg runs at the root of a gst project, which gg new creates"; err == nil || err.Error() != want {
+		t.Fatalf("ModulePath(%s) error = %v, want %q", dir, err, want)
+	}
+}
+
+// TestFrameworkRequirement pins the example FrameworkRequirement gives, a
+// go.mod requiring the framework and replacing it, and the answers around
+// it: the version of a requirement not replaced, a replacement of another
+// module that is none of the framework, and no version where
+// RequiresFramework reports false.
+func TestFrameworkRequirement(t *testing.T) {
+	tests := []struct {
+		name         string
+		goMod        string
+		wantVersion  string
+		wantReplaced bool
+	}{
+		{name: "requires and replaces the framework", goMod: "module example.com/app\n\ngo 1.27\n\nrequire github.com/hydroan/gst v1.2.0\n\nreplace github.com/hydroan/gst => ../gst\n", wantVersion: "v1.2.0", wantReplaced: true},
+		{name: "requires the framework", goMod: "module example.com/app\n\ngo 1.27\n\nrequire github.com/hydroan/gst v0.0.0-20260102030405-0123456789ab\n", wantVersion: "v0.0.0-20260102030405-0123456789ab"},
+		{name: "replaces the framework in a block, its path quoted", goMod: "module example.com/app\n\ngo 1.27\n\nrequire github.com/hydroan/gst v1.2.0\n\nreplace (\n\texample.com/other => ../other\n\t\"github.com/hydroan/gst\" v1.2.0 => ../gst\n)\n", wantVersion: "v1.2.0", wantReplaced: true},
+		{name: "replaces another module", goMod: "module example.com/app\n\ngo 1.27\n\nrequire (\n\tgithub.com/hydroan/gst v1.2.0\n\texample.com/other v1.0.0\n)\n\nreplace example.com/other => ../other\n", wantVersion: "v1.2.0"},
+		{name: "requires no framework", goMod: "module example.com/app\n\ngo 1.27\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(tt.goMod), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			version, replaced, err := gghelper.FrameworkRequirement(dir)
+			if err != nil {
+				t.Fatalf("FrameworkRequirement() error = %v", err)
+			}
+			if version != tt.wantVersion || replaced != tt.wantReplaced {
+				t.Fatalf("FrameworkRequirement() = %q, %t, want %q, %t", version, replaced, tt.wantVersion, tt.wantReplaced)
+			}
+		})
+	}
+
+	t.Run("without a go.mod", func(t *testing.T) {
+		version, replaced, err := gghelper.FrameworkRequirement(t.TempDir())
+		if err != nil || version != "" || replaced {
+			t.Fatalf("FrameworkRequirement() = %q, %t, %v, want nothing without a go.mod", version, replaced, err)
+		}
+	})
+}
+
 func TestRequiresFramework(t *testing.T) {
 	tests := []struct {
 		name  string

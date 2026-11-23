@@ -44,7 +44,7 @@ import (
 // as they were — and what that derivation reports stops the run too. The
 // models are scanned quietly, through the gst.yaml of projectCfg gg gen read
 // (see scanModels).
-func fillPBTags(quiet bool, ignore gghelper.ProjectIgnore, projectCfg *ggconfig.Config) ([]pb.File, error) {
+func fillPBTags(log *changes, ignore gghelper.ProjectIgnore, projectCfg *ggconfig.Config) ([]pb.File, error) {
 	if !gghelper.FileExists(ggconst.DirModel) {
 		return nil, nil
 	}
@@ -79,10 +79,8 @@ func fillPBTags(quiet bool, ignore gghelper.ProjectIgnore, projectCfg *ggconfig.
 		if err = rewritePBTags(path, byPath[path]); err != nil {
 			return nil, err
 		}
-		if !quiet {
-			for _, tag := range byPath[path] {
-				clioutput.Success("FIX", "%s: numbered %s.%s pb:%q", path, tag.Struct, tag.Field, strconv.Itoa(int(tag.Number)))
-			}
+		for _, tag := range byPath[path] {
+			log.record(clioutput.LabelFix, path, ": numbered %s.%s pb:%q", tag.Struct, tag.Field, strconv.Itoa(int(tag.Number)))
 		}
 	}
 	if cfg, err = protobufConfig(scanned.models, ignore); err != nil {

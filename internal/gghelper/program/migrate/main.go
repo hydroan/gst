@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
@@ -32,9 +33,9 @@ import (
 	"github.com/hydroan/gst/bootstrap"
 )
 
-// The flags gg passes: the project's module path, the mode, and for a
-// schema dump of part of the models its source and the Go files under it, as
-// gg listed them.
+// The flags gg passes: the project's module path, the mode, for a schema
+// dump of part of the models its source and the Go files under it, as gg
+// listed them, and whether the terminal takes colors.
 var (
 	migrateModule            string
 	migrateDryRun            bool
@@ -43,6 +44,7 @@ var (
 	migrateSchemaOnly        bool
 	migrateSchemaSource      string
 	migrateSchemaSourceFiles fileList
+	migrateColor             bool
 )
 
 // fileList collects the values of a flag given more than once.
@@ -63,6 +65,7 @@ func main() {
 	flag.BoolVar(&migrateSchemaOnly, "schema-only", false, "dump the schema and stop")
 	flag.StringVar(&migrateSchemaSource, "schema-source", "", "the model source the schema dump covers; empty covers every registered model")
 	flag.Var(&migrateSchemaSourceFiles, "schema-source-file", "a Go file under schema-source; repeat for each")
+	flag.BoolVar(&migrateColor, "color", false, "color the output, for a terminal that takes colors")
 	flag.Parse()
 
 	// Load the configuration and initialize the router and modules, with
@@ -99,9 +102,8 @@ func main() {
 	printMigrationSummary(schemaFile, dbConfig, len(models))
 
 	if !migratable {
-		fmt.Println("\n▶ Result")
-		fmt.Println("  → Nothing to migrate: the application creates the tables of its in-memory database from the models every time it starts.")
-		fmt.Println("  → To migrate a database file, set sqlite.is_memory = false and point sqlite.path at the file.")
+		done("Nothing to migrate: the application creates the tables of its in-memory database from the models every time it starts")
+		note("To migrate a database file, set sqlite.is_memory = false and point sqlite.path at the file")
 		return
 	}
 
@@ -111,12 +113,13 @@ func main() {
 	}
 }
 
-// exitWithError prints a command-style error and exits without a panic stack.
+// exitWithError prints the error as the line a failed command ends on and
+// exits without a panic stack.
 func exitWithError(err error) {
 	if err == nil {
 		return
 	}
-	fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+	fmt.Fprintf(os.Stderr, "\n%s %v\n", paint(os.Stderr, colorRed, symbolError), err)
 	os.Exit(1)
 }
 
@@ -296,12 +299,13 @@ func modelPackagePath(filename string) (string, error) {
 }
 
 func printSchemaDump(schema string, modelCount int, source string) {
-	fmt.Println("\n▶ Model Schema")
-	fmt.Printf("  → Database: %s\n", config.App.Database.Type)
+	section("Model Schema")
+	item("Database: %s", config.App.Database.Type)
 	if strings.TrimSpace(source) != "" {
-		fmt.Printf("  → Source: %s\n", source)
+		item("Source: %s", source)
 	}
-	fmt.Printf("  → Matched models: %d\n\n", modelCount)
+	item("Models: %d", modelCount)
+	fmt.Println()
 	fmt.Println(strings.TrimRight(schema, "\n"))
 }
 
@@ -379,19 +383,11 @@ func getDatabaseConfig() (cfg *dbmigrate.DatabaseConfig, migratable bool) {
 
 // printMigrationSummary prints the target and generated schema path before any SQL is applied.
 func printMigrationSummary(schemaFile string, cfg *dbmigrate.DatabaseConfig, modelCount int) {
-	fmt.Println("\n▶ Database Migration")
-	fmt.Printf("  → Database: %s\n", config.App.Database.Type)
-	fmt.Printf("  → Target: %s\n", databaseTarget(cfg))
-	fmt.Printf("  → Registered models: %d\n", modelCount)
-	fmt.Printf("  ✔ Schema written: %s\n", schemaFile)
-	switch {
-	case migrateDryRun:
-		fmt.Println("  → Mode: dry run")
-	case migrateYes:
-		fmt.Println("  → Mode: apply without prompt")
-	default:
-		fmt.Println("  → Mode: confirm before apply")
-	}
+	section("Migrate")
+	item("Database: %s", config.App.Database.Type)
+	item("Target: %s", databaseTarget(cfg))
+	item("Models: %d", modelCount)
+	item("Schema: %s", schemaFile)
 }
 
 // databaseTarget formats the configured database target without printing
@@ -410,7 +406,8 @@ func databaseTarget(cfg *dbmigrate.DatabaseConfig) string {
 
 // performMigration plans the migration, offers the renames the plan
 // suspects, shows the plan with what a reviewer has to know beside it, and
-// applies it once confirmed.
+// applies it once confirmed. It ends on what came of it: nothing to migrate,
+// a dry run, or the statements applied and the time they took.
 func performMigration(schema string, cfg *dbmigrate.DatabaseConfig) error {
 	dbtyp := config.App.Database.Type
 
@@ -440,42 +437,44 @@ func performMigration(schema string, cfg *dbmigrate.DatabaseConfig) error {
 		if err = dbmigrate.ApplyRenames(confirmed, dbtyp, cfg); err != nil {
 			return err
 		}
-		fmt.Println("  ✔ Renamed.")
+		success("Renamed")
 		if plan, err = planned(); err != nil {
 			return err
 		}
 	}
 
-	fmt.Println("\n▶ Migration Plan")
-	undeclared := ""
-	if len(plan.UndeclaredTables) > 0 {
-		undeclared = "  → Left as they are, the tables no model declares: " + strings.Join(plan.UndeclaredTables, ", ") + "\n"
-	}
 	if !plan.Changed() {
-		fmt.Println("  → No changes detected.")
-		fmt.Print(undeclared)
+		if len(plan.UndeclaredTables) > 0 {
+			section("Plan")
+			item("Left as they are, the tables no model declares: %s", strings.Join(plan.UndeclaredTables, ", "))
+		}
+		done("Nothing to migrate: the database matches the models")
 		return nil
 	}
 
 	// Each statement goes under its position and ends in a semicolon, the
 	// positions as comments, so the block pastes into a database client as
-	// it stands.
+	// it stands; the line after them counts the statements by kind.
+	section("Plan")
 	for i, statement := range plan.Statements {
-		fmt.Printf("  -- [%d/%d]\n  %s;\n", i+1, len(plan.Statements), strings.ReplaceAll(statement, "\n", "\n  "))
+		fmt.Printf("  %s\n  %s;\n", paint(os.Stdout, colorGrey, fmt.Sprintf("-- [%d/%d]", i+1, len(plan.Statements))), strings.ReplaceAll(statement, "\n", "\n  "))
 	}
+	fmt.Printf("  %s\n", planSummary(plan.Statements))
 	if plan.CreatesDatabase {
-		fmt.Println("  → The target database file does not exist yet: the plan starts from an empty database, and applying it creates the file.")
+		item("The target database file does not exist yet: the plan starts from an empty database, and applying it creates the file.")
 	}
-	fmt.Print(undeclared)
+	if len(plan.UndeclaredTables) > 0 {
+		item("Left as they are, the tables no model declares: %s", strings.Join(plan.UndeclaredTables, ", "))
+	}
 
 	// The renames no one was asked about stay visible beside the plan that
 	// drops and adds in their place.
 	if pending := undecided(plan.Renames, declined); len(pending) > 0 {
-		fmt.Println("\n▶ Suspected Renames")
+		section("Suspected Renames")
 		for _, rename := range pending {
 			printRename(rename)
 		}
-		fmt.Println("  → The plan above drops and adds instead. Run gg migrate without --dry-run and --yes to be asked about each rename, or run its statement yourself, then migrate again.")
+		item("The plan above drops and adds instead. Run gg migrate without --dry-run and --yes to be asked about each rename, or run its statement yourself, then migrate again.")
 	}
 
 	// Dropping a column loses the data it holds, which someone has to accept:
@@ -483,21 +482,20 @@ func performMigration(schema string, cfg *dbmigrate.DatabaseConfig) error {
 	// where no one is asked, --accept-data-loss.
 	dropsData := len(plan.DroppedColumns) > 0
 	if dropsData {
-		fmt.Println("\n▶ Data Loss")
-		fmt.Printf("  → The plan drops these columns and the data they hold: %s\n", strings.Join(plan.DroppedColumns, ", "))
+		section("Data Loss")
+		item("The plan drops these columns and the data they hold: %s", strings.Join(plan.DroppedColumns, ", "))
 		switch {
 		case migrateAcceptDataLoss:
-			fmt.Println("  → --accept-data-loss is given: they are dropped when the plan is applied.")
+			item("--accept-data-loss is given: they are dropped when the plan is applied.")
 		case migrateDryRun || migrateYes:
-			fmt.Println("  → Declare a column in its model to keep it. To drop them, confirm when gg migrate asks, or pass --accept-data-loss with --yes.")
+			item("Declare a column in its model to keep it. To drop them, confirm when gg migrate asks, or pass --accept-data-loss with --yes.")
 		default:
-			fmt.Println("  → Declare a column in its model to keep it.")
+			item("Declare a column in its model to keep it.")
 		}
 	}
 
 	if migrateDryRun {
-		fmt.Println("\n▶ Result")
-		fmt.Println("  → Dry run completed. No changes were applied.")
+		done("Dry run: %s planned, nothing applied", counted(len(plan.Statements), "statement"))
 		return nil
 	}
 	accepted := migrateAcceptDataLoss
@@ -510,32 +508,84 @@ func performMigration(schema string, cfg *dbmigrate.DatabaseConfig) error {
 		if dropsData && !accepted {
 			question = "Apply the migration and drop the columns above with the data they hold?"
 		}
-		if !confirm("\n? " + question + " (y/N): ") {
-			fmt.Println("  → Migration canceled.")
+		if !confirm("\n", question) {
+			item("Migration canceled: nothing was applied")
 			return nil
 		}
 		// The question named the loss, so the yes accepts it.
 		accepted = true
 	}
 
-	fmt.Println("\n▶ Apply Migration")
-
-	// The statements shown above, as they stand, each announced as it starts.
+	// The statements shown above, as they stand. A terminal shows which one
+	// is running, on one line the next one takes over; the line is gone once
+	// the last is done, and nothing of it reaches a pipe or a file.
+	onTerminal := isTerminal(os.Stdout)
+	running := -1
+	started := time.Now()
 	err = dbmigrate.Apply(plan, dbtyp, cfg, &dbmigrate.ApplyOption{
 		AcceptDataLoss: accepted,
-		Progress: func(index int, statement string) {
-			first, _, more := strings.Cut(statement, "\n")
-			if more {
-				first += " ..."
+		Progress: func(index int, _ string) {
+			running = index
+			if onTerminal {
+				fmt.Printf("\r\x1b[2K  %s Applying %d/%d", paint(os.Stdout, colorGrey, symbolItem), index+1, len(plan.Statements))
 			}
-			fmt.Printf("  → [%d/%d] %s\n", index+1, len(plan.Statements), first)
 		},
 	})
-	if err != nil {
-		return err
+	if onTerminal && running >= 0 {
+		fmt.Print("\r\x1b[2K")
 	}
-	fmt.Println("  ✔ Migration executed successfully.")
+	if err != nil {
+		if running < 0 {
+			return err
+		}
+		// The error says which statement failed and what is left of the
+		// ones before it; the statement itself and the way on follow it.
+		return errors.Newf("%v\n    %s;\n  Run gg migrate again once the cause is gone: it plans from what the database then holds.",
+			err, strings.ReplaceAll(plan.Statements[running], "\n", "\n    "))
+	}
+	done("Applied %s (%s)", counted(len(plan.Statements), "statement"), elapsed(time.Since(started)))
 	return nil
+}
+
+// statementKinds are the openings planSummary counts the statements of a
+// plan by, in the order it names them; one statement opens with one of them
+// at most, the longer of two that share a start standing first.
+var statementKinds = []string{
+	"CREATE TABLE", "CREATE UNIQUE INDEX", "CREATE INDEX",
+	"ALTER TABLE", "ALTER INDEX",
+	"DROP TABLE", "DROP INDEX",
+}
+
+// planSummary counts the statements of a plan by the words they open with,
+// the kinds none opens with left out and whatever opens otherwise counted
+// last:
+//
+//	22 statements: 13 CREATE TABLE, 4 CREATE UNIQUE INDEX, 5 CREATE INDEX
+//	3 statements: 2 ALTER TABLE, 1 other
+func planSummary(statements []string) string {
+	counts := make([]int, len(statementKinds)+1)
+	for _, statement := range statements {
+		opening := strings.ToUpper(strings.Join(strings.Fields(statement), " "))
+		kind := len(statementKinds)
+		for i, name := range statementKinds {
+			if strings.HasPrefix(opening, name+" ") {
+				kind = i
+				break
+			}
+		}
+		counts[kind]++
+	}
+	var kinds []string
+	for i, count := range counts {
+		switch {
+		case count == 0:
+		case i == len(statementKinds):
+			kinds = append(kinds, fmt.Sprintf("%d other", count))
+		default:
+			kinds = append(kinds, fmt.Sprintf("%d %s", count, statementKinds[i]))
+		}
+	}
+	return counted(len(statements), "statement") + ": " + strings.Join(kinds, ", ")
 }
 
 // confirmRenames asks about each rename the plan suspects that was not
@@ -546,11 +596,11 @@ func confirmRenames(renames []dbmigrate.Rename, declined map[string]bool) []dbmi
 	if len(pending) == 0 {
 		return nil
 	}
-	fmt.Println("\n▶ Suspected Renames")
+	section("Suspected Renames")
 	confirmed := make([]dbmigrate.Rename, 0, len(pending))
 	for _, rename := range pending {
 		printRename(rename)
-		if confirm(fmt.Sprintf("? Rename %s now, by the statement above? (y/N): ", rename)) {
+		if confirm("", fmt.Sprintf("Rename %s now, by the statement above?", rename)) {
 			confirmed = append(confirmed, rename)
 		} else {
 			declined[rename.String()] = true
@@ -577,10 +627,10 @@ func undecided(renames []dbmigrate.Rename, declined map[string]bool) []dbmigrate
 //	    ALTER TABLE `samples` RENAME COLUMN `title` TO `subject`;
 func printRename(rename dbmigrate.Rename) {
 	if rename.Column == "" {
-		fmt.Printf("  → %s: %s keeps every column of %s. Left as it is, the plan creates %s empty and the rows stay in %s.\n",
+		item("%s: %s keeps every column of %s. Left as it is, the plan creates %s empty and the rows stay in %s.",
 			rename, rename.To, rename.Table, rename.To, rename.Table)
 	} else {
-		fmt.Printf("  → %s: both hold the same definition. Left as it is, the plan drops %s with its data and adds %s empty.\n",
+		item("%s: both hold the same definition. Left as it is, the plan drops %s with its data and adds %s empty.",
 			rename, rename.Column, rename.To)
 	}
 	for _, statement := range rename.Statements {
@@ -593,15 +643,111 @@ func printRename(rename dbmigrate.Rename) {
 // asked for, the answers typed ahead for the prompts after it.
 var answers = bufio.NewReader(os.Stdin)
 
-// confirm prints prompt and reports whether the answer typed is y or yes;
-// any other answer, an empty one included, is a no.
-func confirm(prompt string) bool {
-	fmt.Print(prompt)
+// confirm asks question, after lead, and reports whether the answer typed
+// is y or yes; any other answer, an empty one included, is a no. The
+// question goes to standard error, so it reaches the terminal of a run
+// whose output is piped or kept in a file. An answer that does not come from
+// a terminal is not echoed on it, so the line the question stands on is
+// ended for what is printed next.
+func confirm(lead, question string) bool {
+	fmt.Fprintf(os.Stderr, "%s%s %s (y/N): ", lead, paint(os.Stderr, colorCyan, symbolPrompt), question)
 	input, _ := answers.ReadString('\n')
+	if !isTerminal(os.Stdin) {
+		fmt.Fprintln(os.Stderr)
+	}
 	switch strings.ToLower(strings.TrimSpace(input)) {
 	case "y", "yes":
 		return true
 	default:
 		return false
+	}
+}
+
+// The lines of this program are shaped the way gg shapes its own, which the
+// package doing that, internal to the framework, is out of reach of a
+// program written as project code: a section title, the entries under it,
+// the line the run ends on with a note under it, in the same symbols and
+// the same colors, on the terminal gg found to take them.
+const (
+	symbolSection = "▶"
+	symbolSuccess = "✔"
+	symbolError   = "✘"
+	symbolItem    = "→"
+	symbolPrompt  = "?"
+
+	colorGreen = "92"
+	colorRed   = "91"
+	colorCyan  = "96"
+	colorGrey  = "90"
+	colorBold  = "1"
+)
+
+// section prints the title of a block of entries.
+func section(title string) {
+	fmt.Printf("\n%s %s\n", paint(os.Stdout, colorCyan, symbolSection), paint(os.Stdout, colorBold, title))
+}
+
+// item prints a plain entry.
+func item(format string, args ...any) {
+	fmt.Printf("  %s %s\n", paint(os.Stdout, colorGrey, symbolItem), fmt.Sprintf(format, args...))
+}
+
+// success prints an entry that went well.
+func success(format string, args ...any) {
+	fmt.Printf("  %s %s\n", paint(os.Stdout, colorGreen, symbolSuccess), fmt.Sprintf(format, args...))
+}
+
+// done prints the line a run that went well ends on.
+func done(format string, args ...any) {
+	fmt.Printf("\n%s %s\n", paint(os.Stdout, colorGreen, symbolSuccess), fmt.Sprintf(format, args...))
+}
+
+// note prints what to do next, under the line the run ends on.
+func note(format string, args ...any) {
+	fmt.Printf("  %s\n", paint(os.Stdout, colorGrey, fmt.Sprintf(format, args...)))
+}
+
+// paint returns text in the color when gg said the terminal takes colors,
+// and, for standard error, when it is a terminal itself: a standard error
+// redirected to a file carries no escape sequence. The sequence ending the
+// text is the one gg ends it with: bold is taken back alone, a color with
+// everything else.
+func paint(stream *os.File, color, text string) string {
+	if !migrateColor || stream == os.Stderr && !isTerminal(stream) {
+		return text
+	}
+	reset := "0"
+	if color == colorBold {
+		reset = "22"
+	}
+	return "\x1b[" + color + "m" + text + "\x1b[" + reset + "m"
+}
+
+// isTerminal reports whether file is a terminal rather than a pipe or a
+// regular file.
+func isTerminal(file *os.File) bool {
+	info, err := file.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
+}
+
+// counted writes a number of things the way a sentence does: "1 statement",
+// "22 statements".
+func counted(n int, noun string) string {
+	if n == 1 {
+		return "1 " + noun
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
+}
+
+// elapsed formats how long the statements took: 240ms under a second, 1.3s
+// under a minute, 1m12s from there on.
+func elapsed(d time.Duration) string {
+	switch {
+	case d < time.Second:
+		return d.Round(time.Millisecond).String()
+	case d < time.Minute:
+		return d.Round(100 * time.Millisecond).String()
+	default:
+		return d.Round(time.Second).String()
 	}
 }

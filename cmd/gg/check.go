@@ -2,21 +2,24 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"slices"
 	"strings"
+	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/ggcheck"
+	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/spf13/cobra"
 )
 
 var checkCmd = &cobra.Command{
 	Use:   "check",
-	Short: "check the project against the framework's conventions",
+	Short: "Check the project against the framework's conventions",
 	Long:  projectCheckHelp(),
-	Run: func(cmd *cobra.Command, args []string) {
-		checkRun()
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return checkRun()
 	},
 }
 
@@ -121,34 +124,64 @@ func projectCheckHelp() string {
 	return b.String()
 }
 
-func checkRun() {
-	totalViolations := runProjectChecks(projectChecks, false, nil)
-
-	clioutput.Section("Summary")
-	if totalViolations > 0 {
-		clioutput.Error("", "%d violations found", totalViolations)
-		os.Exit(1)
-	} else {
-		clioutput.Success("", "All checks passed")
+// checkRun runs every project check and ends on the outcome: how many
+// checks the project passed and the time they took, or, as the error of the
+// command, the violations they found (see runProjectChecks).
+func checkRun() error {
+	started := time.Now()
+	// Each check reads the go.mod of the project on its own: outside a
+	// project every one of them would report the same missing file.
+	if _, err := gghelper.ModulePath("."); err != nil {
+		return err
 	}
+	if err := runProjectChecks(projectChecks, true, nil); err != nil {
+		return err
+	}
+	clioutput.Done("%s passed (%s)", counted(len(projectChecks), "check"), elapsedSince(started))
+	return nil
 }
 
 // runProjectChecks runs the given project checks: projectChecks for gg check
 // and gg gen ts, generationChecks for gg gen and moduleCopyChecks for the gg
 // gen run of gg module copy.
 //
-// quiet suppresses output when the project is clean; violations always
-// print. Violations recorded in baseline are treated as pre-existing and
-// are neither counted nor printed, so callers such as module copy fail only
-// on violations introduced after the baseline snapshot. A nil baseline
-// keeps the full check behavior.
-func runProjectChecks(checks []ggcheck.Check, quiet bool, baseline map[string]struct{}) int {
-	results := filterProjectCheckResults(ggcheck.Run(checks), baseline)
-	total := totalProjectCheckViolations(results)
-	if !quiet || total > 0 {
-		printProjectCheckResults(results)
+// It prints the checks that found violations, each under its name with what
+// it found a line each, and returns the outcome as an error, the last line
+// of the command it fails:
+//
+//	✘ Column types (2)
+//	  model/sample.go:9: ...
+//	  model/sample.go:12: ...
+//
+//	12 violations in 3 of 35 checks
+//
+// A project every check passes returns nil; unless quiet, one line then
+// counts the checks: "27 checks passed".
+//
+// Violations recorded in baseline are treated as pre-existing and are
+// neither counted nor printed, so callers such as module copy fail only on
+// violations introduced after the baseline snapshot. A nil baseline keeps
+// the full check behavior.
+func runProjectChecks(checks []ggcheck.Check, quiet bool, baseline map[string]struct{}) error {
+	violations, failed := 0, 0
+	for _, result := range filterProjectCheckResults(ggcheck.Run(checks), baseline) {
+		if len(result.Violations) == 0 {
+			continue
+		}
+		failed++
+		violations += len(result.Violations)
+		clioutput.Status(clioutput.StyleError, clioutput.SymbolError, "%s (%d)", result.Name, len(result.Violations))
+		for _, violation := range result.Violations {
+			clioutput.Detail("%s", violation)
+		}
 	}
-	return total
+	if failed > 0 {
+		return errors.Newf("%s in %d of %s", counted(violations, "violation"), failed, counted(len(checks), "check"))
+	}
+	if !quiet {
+		clioutput.Success("%s passed", counted(len(checks), "check"))
+	}
+	return nil
 }
 
 // collectProjectCheckBaseline snapshots the current project check violations.
@@ -183,27 +216,4 @@ func filterProjectCheckResults(results []ggcheck.Result, baseline map[string]str
 		filtered = append(filtered, ggcheck.Result{Name: result.Name, Violations: violations})
 	}
 	return filtered
-}
-
-func printProjectCheckResults(results []ggcheck.Result) {
-	clioutput.Section("Project Checks")
-	for _, result := range results {
-		if len(result.Violations) == 0 {
-			clioutput.Success("", "%s", result.Name)
-			continue
-		}
-
-		clioutput.Error("", "%s (%d)", result.Name, len(result.Violations))
-		for _, violation := range result.Violations {
-			clioutput.Item("", "%s", violation)
-		}
-	}
-}
-
-func totalProjectCheckViolations(results []ggcheck.Result) int {
-	var total int
-	for _, result := range results {
-		total += len(result.Violations)
-	}
-	return total
 }

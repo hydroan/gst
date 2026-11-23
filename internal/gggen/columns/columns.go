@@ -27,9 +27,11 @@ import (
 
 // Result lists the column files a Generate run changed on disk.
 type Result struct {
-	// Written lists the files written because they were missing or their
-	// content changed; a file that is already current is not rewritten.
-	Written []string
+	// Created and Updated list the files written, in the order of their
+	// paths: the ones that were missing, and the ones whose content changed.
+	// A file that is already current is not rewritten.
+	Created []string
+	Updated []string
 
 	// Removed lists the generated files removed because their source file
 	// declares no model with columns any more (see removeOrphanColumnFiles).
@@ -72,7 +74,8 @@ func Generate(module string, modelDir string, models []*modelinfo.Model, ignore 
 	}
 
 	wanted := make(map[string]struct{}, len(byFile))
-	for file, entries := range byFile {
+	for _, file := range slices.Sorted(maps.Keys(byFile)) {
+		entries := byFile[file]
 		sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
 		target := columnsFileName(file)
 		wanted[target] = struct{}{}
@@ -80,12 +83,16 @@ func Generate(module string, modelDir string, models []*modelinfo.Model, ignore 
 		if renderErr != nil {
 			return result, renderErr
 		}
-		written, writeErr := writeGeneratedFileIfChanged(target, content)
+		existed, written, writeErr := writeGeneratedFileIfChanged(target, content)
 		if writeErr != nil {
 			return result, writeErr
 		}
-		if written {
-			result.Written = append(result.Written, target)
+		switch {
+		case !written:
+		case existed:
+			result.Updated = append(result.Updated, target)
+		default:
+			result.Created = append(result.Created, target)
 		}
 	}
 
@@ -121,19 +128,20 @@ func columnsFileName(source string) string {
 
 // writeGeneratedFileIfChanged writes content only when it differs from what is
 // on disk, so an unchanged model does not churn file timestamps, and reports
-// whether it wrote.
-func writeGeneratedFileIfChanged(path string, content string) (bool, error) {
+// whether the file existed and whether it wrote.
+func writeGeneratedFileIfChanged(path string, content string) (existed, written bool, err error) {
 	existing, err := os.ReadFile(path)
 	if err == nil && string(existing) == content {
-		return false, nil
+		return true, false, nil
 	}
 	if err != nil && !os.IsNotExist(err) {
-		return false, errors.Wrapf(err, "read %s", path)
+		return false, false, errors.Wrapf(err, "read %s", path)
 	}
+	existed = err == nil
 	if err = os.WriteFile(path, []byte(content), ggconst.FileModeGenerated); err != nil {
-		return false, errors.Wrapf(err, "write %s", path)
+		return existed, false, errors.Wrapf(err, "write %s", path)
 	}
-	return true, nil
+	return existed, true, nil
 }
 
 // removeOrphanColumnFiles deletes the generated column files of dir that wanted

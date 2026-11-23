@@ -47,7 +47,7 @@ type Partial struct {
 func (Partial) TableName() string { return "partials" }
 `)
 
-	if err := fillVersionFieldTags(true); err != nil {
+	if err := fillVersionFieldTags(&changes{quiet: true}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -98,7 +98,7 @@ func (Partial) TableName() string { return "partials" }
 	if violations := ggcheck.Run([]ggcheck.Check{ggcheck.VersionFieldDeclaration})[0].Violations; len(violations) != 0 {
 		t.Fatalf("healed file should pass the check, got %#v", violations)
 	}
-	if err := fillVersionFieldTags(true); err != nil {
+	if err := fillVersionFieldTags(&changes{quiet: true}); err != nil {
 		t.Fatal(err)
 	}
 	after, rereadErr := os.ReadFile(path)
@@ -197,7 +197,7 @@ type Bare struct {
 func (Bare) TableName() string { return "bares" }
 `)
 
-	if err := fillVersionFieldTags(true); err != nil {
+	if err := fillVersionFieldTags(&changes{quiet: true}); err != nil {
 		t.Fatal(err)
 	}
 	healed, err := os.ReadFile(path)
@@ -227,7 +227,7 @@ type Embedded struct {
 func (Embedded) TableName() string { return "embeddeds" }
 `)
 
-	err := fillVersionFieldTags(true)
+	err := fillVersionFieldTags(&changes{quiet: true})
 	if err == nil || !strings.Contains(err.Error(), "embeds model.Version") {
 		t.Fatalf("embedded declaration must abort generation, got %v", err)
 	}
@@ -253,7 +253,7 @@ type Hidden struct {
 func (Hidden) TableName() string { return "hiddens" }
 `)
 
-	err := fillVersionFieldTags(true)
+	err := fillVersionFieldTags(&changes{quiet: true})
 	if err == nil || !strings.Contains(err.Error(), "json:\"-\"") {
 		t.Fatalf("a hidden json field must abort generation, got %v", err)
 	}

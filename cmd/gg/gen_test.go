@@ -1380,7 +1380,11 @@ func TestCreate(t *testing.T) {}
 // gen: once the code is generated it runs go mod tidy, so the requirements
 // the written files add, here the assertion library the test scaffold of a
 // new service file imports, reach go.mod and go.sum and the project's tests
-// build with no step of its own; a failed tidy fails the command.
+// build with no step of its own; a failed tidy fails the command. It pins
+// what the run prints as well: the files it wrote, the module files tidying
+// changed among them, and none it left as it was; the line it ends on,
+// counting them, with what the new service file is owed under it; and for a
+// second run, which finds nothing to write, three lines in all.
 func TestGenRunTidiesTheProjectAfterWritingItsFiles(t *testing.T) {
 	projectDir, ok := newGenProject(t)
 	if !ok {
@@ -1434,7 +1438,23 @@ func (Item) Design() {
 	var genErr error
 	output := captureStdout(t, func() { genErr = genRun() })
 	require.NoError(t, genErr, output)
-	require.Contains(t, output, "Dependencies tidied")
+	// The run lists what it wrote, the module files tidying changed among
+	// it, and ends on the count and on what the new service file is owed.
+	for _, line := range []string{
+		"  CREATE  " + filepath.Join("service", "sample", "item", "create.go") + "\n",
+		"  CREATE  " + filepath.Join("service", "sample", "item", "create_test.go") + "\n",
+		"  UPDATE  go.mod\n",
+		"\n✔ Generated: ",
+		"  Next: write the logic of the new service files; the test of each fails on its first line until that line is deleted\n",
+	} {
+		require.Contains(t, output, line)
+	}
+	require.NotContains(t, output, "SKIP")
+
+	// A second run finds every file as the first left it.
+	output = captureStdout(t, func() { genErr = genRun() })
+	require.NoError(t, genErr, output)
+	require.Regexp(t, `^  ✔ \d+ checks passed\n  ✔ 1 model, 1 route\n\n✔ Nothing to generate: every file is up to date \([0-9.]+m?s\)\n$`, output)
 	for _, file := range []string{"go.mod", "go.sum"} {
 		require.Contains(t, readProjectFile(t, file), testifyModule, "%s after gg gen", file)
 	}
@@ -1443,7 +1463,7 @@ func (Item) Design() {
 
 	goModTidy = func() error { return errors.New("tidy failed") }
 	captureStdout(t, func() { genErr = genRun() })
-	require.EqualError(t, genErr, "tidy failed")
+	require.EqualError(t, genErr, "go mod tidy failed: tidy failed")
 }
 
 // TestGenRunRefusesTheRoutesTwoActionsRegisterAlike pins that gg gen stops

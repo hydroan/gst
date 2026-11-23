@@ -235,11 +235,15 @@ linters:
               desc: "framework code imports github.com/hydroan/gst/internal/grpcserver and github.com/hydroan/gst/internal/controller; the public package forwards to them for the generated code and the project"
         # Only the gg command prints. The packages it runs return what they
         # found, or report progress through callbacks the command passes, and
-        # the command decides how that shows.
+        # the command decides how that shows. The package is imported besides
+        # by its own tests and by the test holding the lines of the migration
+        # program, which prints inside the project, to the ones gg prints.
         clioutput:
           files:
             - "$all"
             - "!**/cmd/gg/**"
+            - "!**/internal/clioutput/**"
+            - "!**/internal/gghelper/program/migrate/main_test.go"
           deny:
             - pkg: "github.com/hydroan/gst/internal/clioutput$"
               desc: "only the gg command prints; return the result, or take a progress callback the command passes"
