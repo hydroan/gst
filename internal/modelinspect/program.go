@@ -15,7 +15,7 @@ import (
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 )
 
 // projectFileName is the file generated for the project next to the
@@ -62,10 +62,10 @@ const projectFileName = "project.go"
 //		ignoredModels = []any{&vm0.User{}}
 //		tableBackedModels = []any{&vm2.Record{}}
 //	}
-func buildProjectFile(module string, models []*modelinfo.Model) (string, error) {
-	unregistered := make([]*modelinfo.Model, 0, len(models))
-	ignored := make([]*modelinfo.Model, 0, len(models))
-	tableBacked := make([]*modelinfo.Model, 0, len(models))
+func buildProjectFile(module string, models []*modelsource.Model) (string, error) {
+	unregistered := make([]*modelsource.Model, 0, len(models))
+	ignored := make([]*modelsource.Model, 0, len(models))
+	tableBacked := make([]*modelsource.Model, 0, len(models))
 	for _, m := range models {
 		switch {
 		case m.RegisterIgnored:
@@ -80,7 +80,7 @@ func buildProjectFile(module string, models []*modelinfo.Model) (string, error) 
 	// One deterministic alias per package: the fixed prefix cannot collide
 	// with the program's own imports, and sorting keeps the file's text, and
 	// with it the inspection cache key, stable across runs.
-	extra := make([]*modelinfo.Model, 0, len(unregistered)+len(ignored)+len(tableBacked))
+	extra := make([]*modelsource.Model, 0, len(unregistered)+len(ignored)+len(tableBacked))
 	extra = append(extra, unregistered...)
 	extra = append(extra, ignored...)
 	extra = append(extra, tableBacked...)
@@ -97,7 +97,7 @@ func buildProjectFile(module string, models []*modelinfo.Model) (string, error) 
 	for i, path := range paths {
 		aliases[path] = fmt.Sprintf("vm%d", i)
 	}
-	sortByPackageAndName := func(entries []*modelinfo.Model) {
+	sortByPackageAndName := func(entries []*modelsource.Model) {
 		sort.Slice(entries, func(i, j int) bool {
 			if pi, pj := entries[i].ImportPath(), entries[j].ImportPath(); pi != pj {
 				return pi < pj
@@ -121,7 +121,7 @@ func buildProjectFile(module string, models []*modelinfo.Model) (string, error) 
 	var stmts []ast.Stmt
 	for _, group := range []struct {
 		name   string
-		models []*modelinfo.Model
+		models []*modelsource.Model
 	}{
 		{"unregisteredModels", unregistered},
 		{"ignoredModels", ignored},

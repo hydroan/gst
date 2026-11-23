@@ -15,7 +15,7 @@ import (
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/ggmodule"
 	"github.com/hydroan/gst/internal/ggprune"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 	"github.com/spf13/cobra"
 )
 
@@ -67,7 +67,7 @@ func pruneRun() error {
 	// Scan all models the way gg gen does: which models the project declares
 	// is gen's to say, and prune only works out what they leave behind.
 	ignore := gghelper.NewProjectIgnore()
-	allModels, err := modelinfo.FindModels(module, ggconst.DirModel, ignore)
+	allModels, err := modelsource.FindModels(module, ggconst.DirModel, ignore)
 	if err != nil {
 		return err
 	}
@@ -225,7 +225,7 @@ func remindUnreadPruneSettings() {
 // (see ggprune.PlanPBFiles), a file it cannot delete once it has deleted the
 // rest (see deleteLeftovers). What it removes is recorded in log; declined
 // reports that the question was answered with a no, which it says itself.
-func pruneLeftovers(log *changes, serviceFiles []string, allModels []*modelinfo.Model, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig, pbFiles, generatedPBFiles []string) (declined bool, err error) {
+func pruneLeftovers(log *changes, serviceFiles []string, allModels []*modelsource.Model, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig, pbFiles, generatedPBFiles []string) (declined bool, err error) {
 	warnMissingPruneIgnore(protect)
 
 	plan := ggprune.PlanFiles(serviceFiles, allModels, protect)
@@ -292,7 +292,7 @@ func pruneLeftovers(log *changes, serviceFiles []string, allModels []*modelinfo.
 // because live code imports them, with the files of deleting kept along
 // with them. When the project's code cannot be read in full, it warns and
 // finds no orphans.
-func findOrphans(allModels []*modelinfo.Model, deleting []string, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig) (orphans, keptHelpers []ggprune.OrphanDir, keptFiles []string, orphanHandlers []ggmodule.OrphanManagedFile) {
+func findOrphans(allModels []*modelsource.Model, deleting []string, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig) (orphans, keptHelpers []ggprune.OrphanDir, keptFiles []string, orphanHandlers []ggmodule.OrphanManagedFile) {
 	orphanHandlers, err := orphanModuleFiles(protect)
 	if err != nil {
 		clioutput.Warn("failed to read the middleware or interceptor directory, so orphans are not checked: %v", err)

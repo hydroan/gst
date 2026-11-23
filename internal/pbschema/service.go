@@ -12,7 +12,7 @@ import (
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen/jsonshape"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 	"github.com/hydroan/gst/internal/urlquery"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
@@ -22,7 +22,7 @@ import (
 
 // declareService builds the service of m in the file mirroring its model
 // file: <Model>Service with an rpc per action of every route (see
-// modelinfo.RPCName), each taking and returning the messages rpcMessages
+// RPCName), each taking and returning the messages rpcMessages
 // resolves. The model's own message is queued unless the model is virtual.
 // Two actions resolving to one rpc name are reported, and so is a model left
 // with no action to serve, every one being disabled, ignored by gst.yaml or
@@ -48,7 +48,7 @@ import (
 //	  // MergeItem is the Create action of Item on /api/items/merge.
 //	  rpc MergeItem ( MergeItemRequest ) returns ( MergeItemResponse );
 //	}
-func (g *Schema) declareService(m *modelinfo.Model) {
+func (g *Schema) declareService(m *modelsource.Model) {
 	s := jsonshape.Site{Subject: m.ImportPath() + "." + m.ModelName}
 	pkg := g.project.Package(m.ImportPath())
 	if pkg == nil || pkg.Types == nil {
@@ -86,7 +86,7 @@ func (g *Schema) declareService(m *modelinfo.Model) {
 		switch {
 		case dsl.HTTPOnlyAction(action.Phase.Name()):
 		case action.Phase == apiaction.PatchMany && standardAction(m, action):
-			batches[route] = m.ModelName + "Service." + modelinfo.RPCName(m, route, action)
+			batches[route] = m.ModelName + "Service." + RPCName(m, route, action)
 		case action.Phase == apiaction.Patch:
 			patches[route] = action
 		}
@@ -99,7 +99,7 @@ func (g *Schema) declareService(m *modelinfo.Model) {
 			return
 		}
 		served++
-		name := modelinfo.RPCName(m, route, action)
+		name := RPCName(m, route, action)
 		if previous, taken := routes[name]; taken {
 			g.project.Report(s, "the %s actions on routes %s and %s both become rpc %s; name one of them with Service(\"name\")", action.Phase.Name(), previous, route, name)
 			return
@@ -152,7 +152,7 @@ func (g *Schema) declareService(m *modelinfo.Model) {
 // and answering the model itself, run through the call of its kind
 // (CreateCall and its kind); a Stream action is a custom one whatever it
 // declares.
-func standardAction(m *modelinfo.Model, action *dsl.Action) bool {
+func standardAction(m *modelsource.Model, action *dsl.Action) bool {
 	self := "*" + m.ModelName
 	return action.Payload == self && action.Result == self && action.Phase != apiaction.Stream
 }
@@ -193,9 +193,9 @@ func standardAction(m *modelinfo.Model, action *dsl.Action) bool {
 //	  // item is the Item created.
 //	  Item item = 1;
 //	}
-func (g *Schema) rpcMessages(m *modelinfo.Model, scope *types.Scope, model *Message, file *ProtoFile, route string, action *dsl.Action, itemOf string, s jsonshape.Site) (*RPC, bool) {
-	r := &RPC{Name: modelinfo.RPCName(m, route, action), Service: m.ModelName + "Service", Model: m, Action: action}
-	r.Registered, r.Param = modelinfo.RouterTargetForAction(route, m.Design, action)
+func (g *Schema) rpcMessages(m *modelsource.Model, scope *types.Scope, model *Message, file *ProtoFile, route string, action *dsl.Action, itemOf string, s jsonshape.Site) (*RPC, bool) {
+	r := &RPC{Name: RPCName(m, route, action), Service: m.ModelName + "Service", Model: m, Action: action}
+	r.Registered, r.Param = modelsource.RouterTargetForAction(route, m.Design, action)
 	qualified := r.Service + "." + r.Name
 	var request, response *descriptorpb.DescriptorProto
 	var requestFields, responseFields []string
@@ -247,7 +247,7 @@ func (g *Schema) rpcMessages(m *modelinfo.Model, scope *types.Scope, model *Mess
 // fields are numbered after the committed definition (see numberFields);
 // the message takes name, claimed for owner, and comment, with the comment
 // of each field. It returns the parameters.
-func (g *Schema) addRequest(m *modelinfo.Model, file *ProtoFile, route string, action *dsl.Action, request *descriptorpb.DescriptorProto, requestFields []string, name, comment, owner string, s jsonshape.Site) ([]RequestParam, bool) {
+func (g *Schema) addRequest(m *modelsource.Model, file *ProtoFile, route string, action *dsl.Action, request *descriptorpb.DescriptorProto, requestFields []string, name, comment, owner string, s jsonshape.Site) ([]RequestParam, bool) {
 	params := requestParams(m, route, action)
 	fields := make([]*descriptorpb.FieldDescriptorProto, 0, len(params)+len(request.Field))
 	comments := make([]string, 0, len(params)+len(requestFields))
@@ -257,7 +257,7 @@ func (g *Schema) addRequest(m *modelinfo.Model, file *ProtoFile, route string, a
 	}
 	request.Field = append(fields, request.Field...)
 	requestFields = append(comments, requestFields...)
-	registered, _ := modelinfo.RouterTargetForAction(route, m.Design, action)
+	registered, _ := modelsource.RouterTargetForAction(route, m.Design, action)
 	for i, param := range params {
 		for _, field := range request.Field[i+1:] {
 			if field.GetName() == param.Name {
@@ -289,7 +289,7 @@ func (g *Schema) addRequest(m *modelinfo.Model, file *ProtoFile, route string, a
 
 // patchAction is the standard Patch of m, taking and answering the model:
 // the action the items of its standard PatchMany are the requests of.
-func patchAction(m *modelinfo.Model) *dsl.Action {
+func patchAction(m *modelsource.Model) *dsl.Action {
 	return &dsl.Action{Phase: apiaction.Patch, Payload: "*" + m.ModelName, Result: "*" + m.ModelName}
 }
 
@@ -315,7 +315,7 @@ func patchAction(m *modelinfo.Model) *dsl.Action {
 //	  // update_mask is the fields of item to apply, named as the message names them.
 //	  google.protobuf.FieldMask update_mask = 4;
 //	}
-func (g *Schema) patchRequest(m *modelinfo.Model, model *Message, file *ProtoFile, route, batch string, s jsonshape.Site) {
+func (g *Schema) patchRequest(m *modelsource.Model, model *Message, file *ProtoFile, route, batch string, s jsonshape.Site) {
 	action := patchAction(m)
 	request, requestFields, _, _ := standardMessages(m, model, file, route, action)
 	name := messageName(m, route, action, "Request")
@@ -328,7 +328,7 @@ func (g *Schema) patchRequest(m *modelinfo.Model, model *Message, file *ProtoFil
 type RPC struct {
 	Name    string // CreateItem
 	Service string // ItemService
-	Model   *modelinfo.Model
+	Model   *modelsource.Model
 	Action  *dsl.Action
 	// registered is the route the router registers the action under,
 	// records/:record/items/:id for its Get, the route the call is built on
@@ -483,7 +483,7 @@ func (g *Schema) typeMessage(scope *types.Scope, file *ProtoFile, action *dsl.Ac
 //	  // record is the Record found.
 //	  Record record = 1;
 //	}
-func standardMessages(m *modelinfo.Model, model *Message, file *ProtoFile, route string, action *dsl.Action) (request *descriptorpb.DescriptorProto, requestFields []string, response *descriptorpb.DescriptorProto, responseFields []string) {
+func standardMessages(m *modelsource.Model, model *Message, file *ProtoFile, route string, action *dsl.Action) (request *descriptorpb.DescriptorProto, requestFields []string, response *descriptorpb.DescriptorProto, responseFields []string) {
 	x := ModelFieldName(m)
 	switch action.Phase {
 	case apiaction.Create:

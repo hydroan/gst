@@ -27,8 +27,8 @@ import (
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/ggmodule"
 	"github.com/hydroan/gst/internal/goast"
-	"github.com/hydroan/gst/internal/modelinfo"
 	"github.com/hydroan/gst/internal/modelinspect"
+	"github.com/hydroan/gst/internal/modelsource"
 )
 
 // isGeneratedFileName reports whether a path is a file gg generates and owns.
@@ -339,23 +339,23 @@ func packageNameOf(dir string) string {
 var errModelsRefused = errors.New("the model files were refused")
 
 // scanModels reads the models of the project the way gg gen reads them
-// (see modelinfo.ScanModels), for the checks that read the models: gst.yaml
+// (see modelsource.ScanModels), for the checks that read the models: gst.yaml
 // for the ignore rules, go.mod for the module path, then the scan. An error
 // names what stopped the scan, marked errModelsRefused when the model files
 // did; the DSL design rules report it, once, and the other checks reading
 // the models return nothing for it.
-func scanModels(ignore gghelper.ProjectIgnore) (modelinfo.ScannedModels, error) {
+func scanModels(ignore gghelper.ProjectIgnore) (modelsource.ScannedModels, error) {
 	cfg, err := ggconfig.Load(".")
 	if err != nil {
-		return modelinfo.ScannedModels{}, errors.Wrap(err, "loading gst.yaml")
+		return modelsource.ScannedModels{}, errors.Wrap(err, "loading gst.yaml")
 	}
 	modulePath, err := gghelper.ModulePath(".")
 	if err != nil {
-		return modelinfo.ScannedModels{}, errors.Wrap(err, "reading the module path")
+		return modelsource.ScannedModels{}, errors.Wrap(err, "reading the module path")
 	}
-	scanned, err := modelinfo.ScanModels(modulePath, ggconst.DirModel, ignore, cfg)
+	scanned, err := modelsource.ScanModels(modulePath, ggconst.DirModel, ignore, cfg)
 	if err != nil {
-		return modelinfo.ScannedModels{}, errors.Mark(errors.Wrap(err, "scanning model designs"), errModelsRefused)
+		return modelsource.ScannedModels{}, errors.Mark(errors.Wrap(err, "scanning model designs"), errModelsRefused)
 	}
 	return scanned, nil
 }
@@ -388,7 +388,7 @@ func inspectedModelViolations(ignore gghelper.ProjectIgnore, what string, violat
 		return nil
 	}
 
-	declared := make(map[string]*modelinfo.Model, len(scanned.Models))
+	declared := make(map[string]*modelsource.Model, len(scanned.Models))
 	for _, m := range scanned.Models {
 		declared[m.ImportPath()+"."+m.ModelName] = m
 	}

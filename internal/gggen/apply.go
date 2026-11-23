@@ -16,7 +16,7 @@ import (
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/goast"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 )
 
 // applyServiceRoleName renames the service struct type and all associated receiver
@@ -553,7 +553,7 @@ func applyServiceTypeParam(indexListExpr *ast.IndexListExpr, paramIndex int, tar
 // rename path owns the struct name), and a deleted struct is
 // regenerated so gg gen always converges on a registrable service struct.
 // It reports whether the file was modified.
-func forceCanonicalServiceStruct(file *ast.File, action *dsl.Action, modelInfo *modelinfo.Model) bool {
+func forceCanonicalServiceStruct(file *ast.File, action *dsl.Action, modelInfo *modelsource.Model) bool {
 	if file == nil || action == nil || modelInfo == nil {
 		return false
 	}
@@ -849,7 +849,7 @@ func ensureModelImportSpec(file *ast.File, importPath, modelQualifier string) {
 //
 // It returns whether any changes were made to the file, and the error of a
 // file it rejects.
-func ApplyServiceFileWithModelSync(file *ast.File, action *dsl.Action, servicePkgName, modelDir string, modelInfo *modelinfo.Model) (bool, error) {
+func ApplyServiceFileWithModelSync(file *ast.File, action *dsl.Action, servicePkgName, modelDir string, modelInfo *modelsource.Model) (bool, error) {
 	if file == nil || action == nil {
 		return false, nil
 	}
@@ -923,7 +923,7 @@ func ApplyServiceFileWithModelSync(file *ast.File, action *dsl.Action, servicePk
 // such struct, the name of the model import, which is the model package name
 // unless the import declares another. It returns "" when the file shows
 // neither.
-func serviceModelName(file *ast.File, modelInfo *modelinfo.Model) string {
+func serviceModelName(file *ast.File, modelInfo *modelsource.Model) string {
 	if name := serviceModelPackageName(file); name != "" {
 		return name
 	}
@@ -1071,7 +1071,7 @@ func syncModelImports(file *ast.File, modelRoot, correctModelImportPath, importN
 // modelImportName returns the name a file refers to the model package it
 // imports through spec by: the name the import declares, or else the name
 // the package declares, which gg check pins to its directory name (see
-// modelinfo.ModelPackageName). It returns "" for an import of any package outside
+// modelsource.ModelPackageName). It returns "" for an import of any package outside
 // modelRoot, or one that gives the file no name to refer to it by:
 //
 //	"myproject/model/sample"                 // sample
@@ -1089,7 +1089,7 @@ func modelImportName(spec *ast.ImportSpec, modelRoot string) string {
 		}
 		return spec.Name.Name
 	}
-	return modelinfo.ModelPackageName(path.Base(importPath))
+	return modelsource.ModelPackageName(path.Base(importPath))
 }
 
 // syncModelPackageReferences updates package references in the code.

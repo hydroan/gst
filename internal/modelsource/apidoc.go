@@ -1,4 +1,4 @@
-package modelinfo
+package modelsource
 
 import (
 	"github.com/hydroan/gst/apidoc"

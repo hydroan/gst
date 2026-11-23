@@ -7,7 +7,7 @@ import (
 
 	"github.com/hydroan/gst/internal/gggen"
 	"github.com/hydroan/gst/internal/gghelper"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 )
 
 func TestRouterGstModelUse(t *testing.T) {
@@ -119,7 +119,7 @@ type Snapshot struct {
 
 	tests := []struct {
 		name       string
-		models     []*modelinfo.Model
+		models     []*modelsource.Model
 		wantPkg    string
 		wantNeeded bool
 	}{
@@ -201,7 +201,7 @@ func TestGstModelImportEntry(t *testing.T) {
 // a hand-built dsl.Design leaves undeclared action pointers nil, which panics
 // inside dsl.Design.Range. pkgDir is relative to the model directory; an
 // empty pkgDir places the file in the model root package.
-func modelInfosFromSource(t *testing.T, pkgDir, filename, source string) []*modelinfo.Model {
+func modelInfosFromSource(t *testing.T, pkgDir, filename, source string) []*modelsource.Model {
 	t.Helper()
 	modelDir := filepath.Join(t.TempDir(), "model")
 	fixtureDir := filepath.Join(modelDir, pkgDir)
@@ -213,7 +213,7 @@ func modelInfosFromSource(t *testing.T, pkgDir, filename, source string) []*mode
 		t.Fatal(err)
 	}
 
-	models, err := modelinfo.FindModels("tmpapp", modelDir, gghelper.ProjectIgnore{})
+	models, err := modelsource.FindModels("tmpapp", modelDir, gghelper.ProjectIgnore{})
 	if err != nil {
 		t.Fatal(err)
 	}

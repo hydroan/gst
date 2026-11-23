@@ -1,4 +1,4 @@
-package modelinfo_test
+package modelsource_test
 
 import (
 	"path/filepath"
@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/internal/ggconfig"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 )
 
 // migratingModelSource declares a table-backed model with one List action,
@@ -34,7 +34,7 @@ func TestApplyModelIgnoresDisablesRegistration(t *testing.T) {
 	models := findModels(t, map[string]string{filepath.Join("model", "iam", "user", "user.go"): migratingModelSource})
 	rules := []ggconfig.ModelRule{{Name: "User", From: "model/iam", Raw: "User"}}
 
-	result := modelinfo.ApplyModelIgnores(models, rules)
+	result := modelsource.ApplyModelIgnores(models, rules)
 
 	if len(result.Matches) != 1 || result.Matches[0].Model != "User" {
 		t.Fatalf("Matches = %+v, want exactly the User model", result.Matches)
@@ -73,7 +73,7 @@ func (User) Design() {
 `})
 	rules := []ggconfig.ModelRule{{Name: "User", From: "model/iam", Raw: "User"}}
 
-	result := modelinfo.ApplyModelIgnores(models, rules)
+	result := modelsource.ApplyModelIgnores(models, rules)
 
 	if len(result.Matches) != 0 {
 		t.Fatalf("Matches = %+v, want empty for an out-of-scope model", result.Matches)
@@ -116,7 +116,7 @@ func (Probe) Design() {
 `})
 	rules := []ggconfig.ModelRule{{Name: "Probe", Raw: "Probe"}}
 
-	result := modelinfo.ApplyModelIgnores(models, rules)
+	result := modelsource.ApplyModelIgnores(models, rules)
 
 	if len(result.Matches) != 0 {
 		t.Fatalf("Matches = %+v, want empty", result.Matches)
@@ -145,9 +145,9 @@ func (User) Design() {
 }
 `,
 	})
-	modelinfo.ResolveRoutes(models, nil)
+	modelsource.ResolveRoutes(models, nil)
 
-	result := modelinfo.ApplyModelIgnores(models, []ggconfig.ModelRule{{Name: "User", Raw: "User"}})
+	result := modelsource.ApplyModelIgnores(models, []ggconfig.ModelRule{{Name: "User", Raw: "User"}})
 
 	if len(result.Matches) != 2 {
 		t.Fatalf("len(Matches) = %d, want 2", len(result.Matches))
@@ -166,11 +166,11 @@ func TestApplyModelIgnoresAfterRouteIgnoresSeesDisabledActions(t *testing.T) {
 	// were all disabled there must not be reported as live.
 	models := findModels(t, map[string]string{filepath.Join("model", "iam", "user", "user.go"): migratingModelSource})
 	routeRules := parseRules(t, "GET /api/iam/admin/users")
-	if routeResult := modelinfo.ResolveRoutes(models, routeRules); len(routeResult.Matches) != 1 {
+	if routeResult := modelsource.ResolveRoutes(models, routeRules); len(routeResult.Matches) != 1 {
 		t.Fatalf("route Matches = %+v, want the List action", routeResult.Matches)
 	}
 
-	result := modelinfo.ApplyModelIgnores(models, []ggconfig.ModelRule{{Name: "User", From: "model/iam", Raw: "User"}})
+	result := modelsource.ApplyModelIgnores(models, []ggconfig.ModelRule{{Name: "User", From: "model/iam", Raw: "User"}})
 
 	if len(result.Matches) != 1 {
 		t.Fatalf("Matches = %+v, want the User model", result.Matches)

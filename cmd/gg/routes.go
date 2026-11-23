@@ -19,7 +19,8 @@ import (
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
+	"github.com/hydroan/gst/internal/pbschema"
 	"github.com/spf13/cobra"
 )
 
@@ -101,7 +102,7 @@ func routesRun(w io.Writer, texts []string) error {
 	if err != nil {
 		return err
 	}
-	scanned, err := modelinfo.ScanModels(modulePath, ggconst.DirModel, gghelper.NewProjectIgnore(), projectCfg)
+	scanned, err := modelsource.ScanModels(modulePath, ggconst.DirModel, gghelper.NewProjectIgnore(), projectCfg)
 	if err != nil {
 		return err
 	}
@@ -150,22 +151,22 @@ func routesRun(w io.Writer, texts []string) error {
 // model/sample.go before model/sample/item.go: each with the routes its
 // design declares, in the order gg gen registers them, a model declaring
 // none included. The path of a route is the one the router registers (see
-// modelinfo.RouterTargetForAction), its service file the one gg gen writes
-// for an action declaring Service() (see modelinfo.ServiceTarget), and its
+// modelsource.RouterTargetForAction), its service file the one gg gen writes
+// for an action declaring Service() (see modelsource.ServiceTarget), and its
 // rpc the one the protobuf definition of a model declaring GRPC() carries
-// (see modelinfo.RPCName), which an action only HTTP carries has none of.
-func listModels(models []*modelinfo.Model) []listedModel {
+// (see pbschema.RPCName), which an action only HTTP carries has none of.
+func listModels(models []*modelsource.Model) []listedModel {
 	listed := make([]listedModel, 0, len(models))
 	for _, m := range models {
 		entry := listedModel{Name: m.ModelName, File: m.ModelFilePath, Table: m.Design.Migrate, GRPC: m.Design.GRPC}
 		m.Design.Range(func(declared string, action *dsl.Action) {
-			registered, _ := modelinfo.RouterTargetForAction(declared, m.Design, action)
+			registered, _ := modelsource.RouterTargetForAction(declared, m.Design, action)
 			r := listedRoute{Method: action.Phase.HTTPMethod(), Path: registered, Action: action.Phase.Name(), Public: action.Public}
 			if action.Service {
-				r.Service = modelinfo.ServiceTarget(m, action, ggconst.DirModel, ggconst.DirService).FilePath
+				r.Service = modelsource.ServiceTarget(m, action, ggconst.DirModel, ggconst.DirService).FilePath
 			}
 			if m.Design.GRPC && !dsl.HTTPOnlyAction(action.Phase.Name()) {
-				r.RPC = modelinfo.RPCName(m, declared, action)
+				r.RPC = pbschema.RPCName(m, declared, action)
 			}
 			entry.Routes = append(entry.Routes, r)
 		})
@@ -257,7 +258,7 @@ type routeNode struct {
 }
 
 // routeTree arranges the models to list, kept, the way their files nest,
-// which is how their routes nest (see modelinfo.ResolveRoutes): the models
+// which is how their routes nest (see modelsource.ResolveRoutes): the models
 // of a directory under the model the file named after the directory
 // declares, model/sample/item.go under the model of model/sample.go. Where
 // no file is named after a directory, or the file declares several models,

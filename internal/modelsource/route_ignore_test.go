@@ -1,4 +1,4 @@
-package modelinfo_test
+package modelsource_test
 
 import (
 	"os"
@@ -10,12 +10,12 @@ import (
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/gghelper"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 )
 
 // TestResolveRoutesIgnoresDefaultEndpointActions verifies that route rules
 // disable exactly the default-endpoint actions they match. Like every case in
-// this file, it parses its models from source, the way modelinfo.FindModels
+// this file, it parses its models from source, the way modelsource.FindModels
 // does, so each design carries exactly the actions its DSL declares.
 func TestResolveRoutesIgnoresDefaultEndpointActions(t *testing.T) {
 	models := findModels(t, map[string]string{filepath.Join("model", "iam", "admin", "users.go"): `package admin
@@ -44,7 +44,7 @@ func (User) Design() {
 		"GET /api/iam/admin/users/:id",
 	)
 
-	result := modelinfo.ResolveRoutes(models, rules)
+	result := modelsource.ResolveRoutes(models, rules)
 
 	if len(result.Matches) != 2 {
 		t.Fatalf("len(Matches) = %d, want 2", len(result.Matches))
@@ -100,7 +100,7 @@ func (Notice) Design() {
 		"GET /api/notices/watch",
 	)
 
-	result := modelinfo.ResolveRoutes(models, rules)
+	result := modelsource.ResolveRoutes(models, rules)
 
 	if len(result.Unmatched) != 0 {
 		t.Fatalf("Unmatched = %v, want empty", result.Unmatched)
@@ -131,7 +131,7 @@ func (Box) Design() {
 	design := findDesign(t, models, "Box")
 	rules := parseRules(t, "POST /api/signup")
 
-	result := modelinfo.ResolveRoutes(models, rules)
+	result := modelsource.ResolveRoutes(models, rules)
 
 	if len(result.Matches) != 0 {
 		t.Fatalf("Matches = %v, want empty", result.Matches)
@@ -203,7 +203,7 @@ func (Admin) Design() {
 		rules := parseRules(t, "GET /api/iam/admin/users")
 		rules[0].From = "model/iam"
 
-		result := modelinfo.ResolveRoutes(allModels, rules)
+		result := modelsource.ResolveRoutes(allModels, rules)
 
 		if len(result.Matches) != 1 || result.Matches[0].Model != "User" {
 			t.Fatalf("Matches = %+v, want exactly the framework User model", result.Matches)
@@ -228,7 +228,7 @@ func (Admin) Design() {
 			t.Fatalf("len(allModels) = %d, want 2", len(allModels))
 		}
 
-		result := modelinfo.ResolveRoutes(allModels, parseRules(t, "GET /api/iam/admin/users"))
+		result := modelsource.ResolveRoutes(allModels, parseRules(t, "GET /api/iam/admin/users"))
 
 		if len(result.Matches) != 2 {
 			t.Fatalf("len(Matches) = %d, want 2", len(result.Matches))
@@ -244,13 +244,13 @@ func (Admin) Design() {
 }
 
 // findModels writes sources, keyed by their paths under a temporary project,
-// and returns the models modelinfo.FindModels finds in its model directory.
+// and returns the models modelsource.FindModels finds in its model directory.
 // The test moves into the project first, since ResolveRoutes reads model
 // file paths relative to the project root, as gg gen passes them. Tests
 // build their models this way because a directly built dsl.Design leaves
 // undeclared action fields nil, which panics inside dsl.Design.Range, so
 // they must go through the DSL parser.
-func findModels(t *testing.T, sources map[string]string) []*modelinfo.Model {
+func findModels(t *testing.T, sources map[string]string) []*modelsource.Model {
 	t.Helper()
 	projectDir := t.TempDir()
 	for path, source := range sources {
@@ -264,7 +264,7 @@ func findModels(t *testing.T, sources map[string]string) []*modelinfo.Model {
 	}
 	t.Chdir(projectDir)
 
-	models, err := modelinfo.FindModels("tmpapp", "model", gghelper.NewProjectIgnore())
+	models, err := modelsource.FindModels("tmpapp", "model", gghelper.NewProjectIgnore())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -287,7 +287,7 @@ func parseRules(t *testing.T, raws ...string) []ggconfig.RouteRule {
 
 // findDesign returns the Design for the named model, failing the test if
 // it is not present among models.
-func findDesign(t *testing.T, models []*modelinfo.Model, modelName string) *dsl.Design {
+func findDesign(t *testing.T, models []*modelsource.Model, modelName string) *dsl.Design {
 	t.Helper()
 	for _, m := range models {
 		if m.ModelName == modelName {

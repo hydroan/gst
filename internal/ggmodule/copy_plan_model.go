@@ -11,19 +11,19 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 )
 
-func (p *CopyPlan) findModels() ([]*modelinfo.Model, error) {
+func (p *CopyPlan) findModels() ([]*modelsource.Model, error) {
 	// The module source is the framework's own tree, not the project's, so
 	// no Git ignore rules apply to it: the zero ProjectIgnore leaves out only
 	// what the go command does, vendor and testdata among them. The files the
 	// module keeps out of the copy drop out after the scan, by path.
-	models, err := modelinfo.FindModels(frameworkModulePath, p.SourceModelDir, gghelper.ProjectIgnore{})
+	models, err := modelsource.FindModels(frameworkModulePath, p.SourceModelDir, gghelper.ProjectIgnore{})
 	if err != nil {
 		return nil, err
 	}
-	return slices.DeleteFunc(models, func(m *modelinfo.Model) bool {
+	return slices.DeleteFunc(models, func(m *modelsource.Model) bool {
 		return p.ignoredSourcePath(m.ModelFilePath)
 	}), nil
 }
@@ -126,7 +126,7 @@ func (p *CopyPlan) collectStaleModelFiles() error {
 	return nil
 }
 
-func (p *CopyPlan) targetModelInfo(source *modelinfo.Model) (*modelinfo.Model, error) {
+func (p *CopyPlan) targetModelInfo(source *modelsource.Model) (*modelsource.Model, error) {
 	// Reuse gg gen's service generator by projecting the framework model into
 	// the current project's model layout. The source model still drives action
 	// DSL; only module/package/path metadata changes.

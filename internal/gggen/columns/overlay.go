@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 )
 
 // columnInspectionPanic is what the inspection reports when it runs code that
@@ -62,7 +62,7 @@ const columnInspectionPlaceholder = `panic("` + columnInspectionPanic + `")`
 // a package-level var or an init function calling a left-out method reaches
 // its placeholder. Only the model directory is rewritten, the same scope the
 // inspection cache key covers.
-func InspectionOverlay(module string, modelDir string, models []*modelinfo.Model, ignore gghelper.ProjectIgnore) (map[string]string, error) {
+func InspectionOverlay(module string, modelDir string, models []*modelsource.Model, ignore gghelper.ProjectIgnore) (map[string]string, error) {
 	files, err := scanColumnInspectionFiles(module, modelDir, ignore)
 	if err != nil {
 		return nil, err
@@ -134,7 +134,7 @@ func scanColumnInspectionFiles(module string, modelDir string, ignore gghelper.P
 		if readErr != nil {
 			return errors.Wrapf(readErr, "read %s", path)
 		}
-		pkg := modelinfo.PackageImportPath(module, filepath.Dir(path))
+		pkg := modelsource.PackageImportPath(module, filepath.Dir(path))
 		// A file without the generated header is hand-written, whatever its
 		// name, and keeps participating in the build.
 		if strings.HasSuffix(name, ggconst.SuffixGenGo) && bytes.HasPrefix(content, []byte(ggconst.CodeGeneratedComment)) {

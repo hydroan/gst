@@ -1,4 +1,4 @@
-package modelinfo_test
+package modelsource_test
 
 import (
 	"path/filepath"
@@ -7,7 +7,7 @@ import (
 
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 )
 
 func TestServiceOutputRel(t *testing.T) {
@@ -49,7 +49,7 @@ func TestServiceOutputRel(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := modelinfo.ServiceOutputRel(tt.modelFile, modelDir)
+			got := modelsource.ServiceOutputRel(tt.modelFile, modelDir)
 			if got != tt.want {
 				t.Fatalf("ServiceOutputRel(%q, %q) = %q, want %q", tt.modelFile, modelDir, got, tt.want)
 			}
@@ -62,7 +62,7 @@ func TestServiceTarget(t *testing.T) {
 
 	modelDir := filepath.Join("repo", "model")
 	serviceDir := filepath.Join("repo", "service")
-	model := &modelinfo.Model{
+	model := &modelsource.Model{
 		ModulePath:    "github.com/acme/app",
 		ModelPkgName:  "authz",
 		ModelName:     "Role",
@@ -106,7 +106,7 @@ func TestServiceTarget(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := modelinfo.ServiceTarget(model, tt.action, modelDir, serviceDir)
+			got := modelsource.ServiceTarget(model, tt.action, modelDir, serviceDir)
 			if got.FilePath != tt.wantFile {
 				t.Fatalf("FilePath = %q, want %q", got.FilePath, tt.wantFile)
 			}
@@ -272,7 +272,7 @@ func (` + second + `) Design() {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var got []string
-			for _, err := range modelinfo.ServiceConflicts(findModels(t, tt.sources)) {
+			for _, err := range modelsource.ServiceConflicts(findModels(t, tt.sources)) {
 				got = append(got, err.Error())
 			}
 
@@ -300,7 +300,7 @@ func TestModelPackageName(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := modelinfo.ModelPackageName(tt.dirName); got != tt.want {
+			if got := modelsource.ModelPackageName(tt.dirName); got != tt.want {
 				t.Errorf("ModelPackageName(%q) = %q, want %q", tt.dirName, got, tt.want)
 			}
 		})
@@ -338,7 +338,7 @@ func TestModel_InModelRoot(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			m := &modelinfo.Model{ModulePath: "helloworld", ModelFileDir: tt.modelFileDir}
+			m := &modelsource.Model{ModulePath: "helloworld", ModelFileDir: tt.modelFileDir}
 			if got := m.InModelRoot("model"); got != tt.want {
 				t.Errorf("InModelRoot(%q) = %v, want %v", "model", got, tt.want)
 			}
@@ -355,11 +355,11 @@ func TestPackageImportPath(t *testing.T) {
 		{"", "tmpapp"},
 		{".", "tmpapp"},
 	} {
-		if got := modelinfo.PackageImportPath("tmpapp", tt.dir); got != tt.want {
+		if got := modelsource.PackageImportPath("tmpapp", tt.dir); got != tt.want {
 			t.Fatalf("PackageImportPath(tmpapp, %q) = %q, want %q", tt.dir, got, tt.want)
 		}
 	}
-	m := &modelinfo.Model{ModulePath: "tmpapp", ModelFileDir: "model/sample"}
+	m := &modelsource.Model{ModulePath: "tmpapp", ModelFileDir: "model/sample"}
 	if got := m.ImportPath(); got != "tmpapp/model/sample" {
 		t.Fatalf("ImportPath() = %q, want tmpapp/model/sample", got)
 	}

@@ -16,7 +16,7 @@ import (
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen"
 	"github.com/hydroan/gst/internal/gghelper"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 )
 
 // documentedPackage is a framework package declaring structs an application
@@ -63,7 +63,7 @@ func main() {
 // both go through this function, so the two can never disagree about what the
 // file should contain.
 func buildAPIDoc(pkg documentedPackage) (string, error) {
-	entries, err := modelinfo.ExtractAPIDocs(ggconst.ImportPathGst, pkg.dir, gghelper.NewProjectIgnore(), []string{ggconst.FileAPIDocGen})
+	entries, err := modelsource.ExtractAPIDocs(ggconst.ImportPathGst, pkg.dir, gghelper.NewProjectIgnore(), []string{ggconst.FileAPIDocGen})
 	if err != nil {
 		return "", errors.Wrapf(err, "extract %s api docs", pkg.dir)
 	}

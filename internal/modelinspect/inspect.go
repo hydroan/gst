@@ -12,7 +12,7 @@ package modelinspect
 
 import (
 	"github.com/hydroan/gst/internal/gghelper"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 )
 
 // ColumnInfo is one column of a model, as the inspection program reports it.
@@ -65,7 +65,7 @@ type ModelColumns struct {
 // inspected and reports inspected false: the program imports the project's
 // models against the framework, and such a project cannot hold column
 // references either.
-func Inspect(module string, modelDir string, models []*modelinfo.Model, ignore gghelper.ProjectIgnore, overlay func() (map[string]string, error)) ([]ModelColumns, bool, error) {
+func Inspect(module string, modelDir string, models []*modelsource.Model, ignore gghelper.ProjectIgnore, overlay func() (map[string]string, error)) ([]ModelColumns, bool, error) {
 	dependsOnGst, err := gghelper.RequiresFramework(".")
 	if err != nil || !dependsOnGst {
 		return nil, false, err

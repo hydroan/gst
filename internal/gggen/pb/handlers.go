@@ -10,7 +10,7 @@ import (
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/goast"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 	"github.com/hydroan/gst/internal/pbschema"
 	"github.com/stoewer/go-strcase"
 )
@@ -144,7 +144,7 @@ func serviceTypeName(service string) string {
 //	type recordService struct {
 //		UnimplementedRecordServiceServer
 //	}
-func (w *fileWriter) serviceType(service string, model *modelinfo.Model) {
+func (w *fileWriter) serviceType(service string, model *modelsource.Model) {
 	w.out.add(serviceTypeName(service)+" serves the rpcs of the "+service+" service through the actions of "+model.ModelName+
 		": every handler decodes its request message into what the action's call takes, runs the call and encodes what it answers into the response message.",
 		&ast.GenDecl{Tok: token.TYPE, Specs: []ast.Spec{&ast.TypeSpec{
@@ -234,7 +234,7 @@ func streamKind(action *dsl.Action) string {
 }
 
 // modelPkgType refers to the type typeName of the package of model.
-func (w *fileWriter) modelPkgType(model *modelinfo.Model, typeName string) ast.Expr {
+func (w *fileWriter) modelPkgType(model *modelsource.Model, typeName string) ast.Expr {
 	return sel(w.out.imports.ref(model.ImportPath(), model.ModelPkgName), typeName)
 }
 
@@ -242,7 +242,7 @@ func (w *fileWriter) modelPkgType(model *modelinfo.Model, typeName string) ast.E
 // ServiceCall takes it: the type as declared, *record.MergeReq for
 // Payload[*MergeReq], and the framework's *gstmodel.Empty for a side the
 // action does not declare.
-func (w *fileWriter) actionType(model *modelinfo.Model, typeName string) ast.Expr {
+func (w *fileWriter) actionType(model *modelsource.Model, typeName string) ast.Expr {
 	if typeName == "" || typeName == dsl.PayloadEmpty {
 		return star(sel(w.out.imports.fixedRef(ggconst.ImportPathModel), ggconst.FieldEmpty))
 	}

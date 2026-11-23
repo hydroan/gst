@@ -14,7 +14,7 @@ import (
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 )
 
 // CopyOptions configures the local-source copy workflow.
@@ -87,7 +87,7 @@ type moduleCopyAction struct {
 	Action     *dsl.Action
 	SourcePath string
 	TargetPath string
-	ModelInfo  *modelinfo.Model
+	ModelInfo  *modelsource.Model
 }
 
 // moduleCopyFile stores final target content. Conflict checks run against this
@@ -492,7 +492,7 @@ func projectServesGRPC(name string) (bool, error) {
 	}
 	replaced := filepath.Join(ggconst.DirModel, name) + string(filepath.Separator)
 	served := false
-	err := modelinfo.WalkModelFiles(ggconst.DirModel, gghelper.NewProjectIgnore(), func(path string) error {
+	err := modelsource.WalkModelFiles(ggconst.DirModel, gghelper.NewProjectIgnore(), func(path string) error {
 		if served || strings.HasPrefix(path, replaced) {
 			return nil
 		}

@@ -1,4 +1,4 @@
-package modelinfo_test
+package modelsource_test
 
 import (
 	"maps"
@@ -8,7 +8,7 @@ import (
 
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 )
 
 // TestResolveRoutesNestsEndpointsUnderParentParams pins the example of
@@ -74,7 +74,7 @@ func (Entry) Design() {
 	t.Run("endpoints", func(t *testing.T) {
 		models := findModels(t, sources)
 
-		modelinfo.ResolveRoutes(models, nil)
+		modelsource.ResolveRoutes(models, nil)
 
 		got := make(map[string]string, len(models))
 		for _, m := range models {
@@ -93,9 +93,9 @@ func (Entry) Design() {
 	t.Run("ignore rule", func(t *testing.T) {
 		models := findModels(t, sources)
 
-		result := modelinfo.ResolveRoutes(models, parseRules(t, "GET /api/samples/:sample/items"))
+		result := modelsource.ResolveRoutes(models, parseRules(t, "GET /api/samples/:sample/items"))
 
-		want := []modelinfo.RouteIgnoreMatch{{Method: "GET", Path: "/api/samples/:sample/items", Model: "Item"}}
+		want := []modelsource.RouteIgnoreMatch{{Method: "GET", Path: "/api/samples/:sample/items", Model: "Item"}}
 		if !slices.Equal(result.Matches, want) {
 			t.Fatalf("Matches = %+v, want %+v", result.Matches, want)
 		}
@@ -109,13 +109,13 @@ func (Entry) Design() {
 // TestItemParamDefaultsToID pins the examples of ItemParam: the parameter the
 // design declares, or :id.
 func TestItemParamDefaultsToID(t *testing.T) {
-	if got := modelinfo.ItemParam(&dsl.Design{Param: ":sample"}); got != ":sample" {
+	if got := modelsource.ItemParam(&dsl.Design{Param: ":sample"}); got != ":sample" {
 		t.Fatalf("ItemParam(Param(\"sample\")) = %q, want %q", got, ":sample")
 	}
-	if got := modelinfo.ItemParam(&dsl.Design{}); got != ":id" {
+	if got := modelsource.ItemParam(&dsl.Design{}); got != ":id" {
 		t.Fatalf("ItemParam(no Param) = %q, want %q", got, ":id")
 	}
-	if got := modelinfo.ItemParam(nil); got != ":id" {
+	if got := modelsource.ItemParam(nil); got != ":id" {
 		t.Fatalf("ItemParam(nil) = %q, want %q", got, ":id")
 	}
 }
@@ -149,7 +149,7 @@ func TestRouterTargetForAction(t *testing.T) {
 			action := &dsl.Action{Phase: tt.phase}
 			action.Exact = tt.exact
 
-			route, paramName := modelinfo.RouterTargetForAction(tt.route, design, action)
+			route, paramName := modelsource.RouterTargetForAction(tt.route, design, action)
 
 			if route != tt.wantRoute {
 				t.Fatalf("route = %q, want %q", route, tt.wantRoute)
@@ -260,10 +260,10 @@ func (` + name + `) Design() {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			models := findModels(t, tt.sources)
-			modelinfo.ResolveRoutes(models, nil)
+			modelsource.ResolveRoutes(models, nil)
 
 			var got []string
-			for _, err := range modelinfo.RouteConflicts(models) {
+			for _, err := range modelsource.RouteConflicts(models) {
 				got = append(got, err.Error())
 			}
 

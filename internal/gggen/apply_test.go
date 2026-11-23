@@ -12,7 +12,7 @@ import (
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen"
 	"github.com/hydroan/gst/internal/gghelper"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 )
@@ -1072,7 +1072,7 @@ func TestApplyServiceFileWithModelSync(t *testing.T) {
 		code           string
 		action         *dsl.Action
 		servicePkgName string
-		modelInfo      *modelinfo.Model
+		modelInfo      *modelsource.Model
 		want           string
 		// wantErr is the error of a file rejected before anything is
 		// rewritten, which want then repeats unchanged.
@@ -1104,7 +1104,7 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *identity.UserReq) (rsp *i
 				Phase:   apiaction.Create,
 			},
 			servicePkgName: "user",
-			modelInfo: &modelinfo.Model{
+			modelInfo: &modelsource.Model{
 				ModulePath:   "helloworld",
 				ModelFileDir: "model/auth",
 				ModelPkgName: "auth",
@@ -1154,7 +1154,7 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *auth.UserReq) (rsp *auth.
 				Phase:   apiaction.Create,
 			},
 			servicePkgName: "user",
-			modelInfo: &modelinfo.Model{
+			modelInfo: &modelsource.Model{
 				ModulePath:   "helloworld",
 				ModelFileDir: "model/auth",
 				ModelPkgName: "auth",
@@ -1203,7 +1203,7 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *oldpkg.UserReq) (rsp *old
 				Phase:   apiaction.Create,
 			},
 			servicePkgName: "user",
-			modelInfo: &modelinfo.Model{
+			modelInfo: &modelsource.Model{
 				ModulePath:   "helloworld",
 				ModelFileDir: "model/auth",
 				ModelPkgName: "auth",
@@ -1254,7 +1254,7 @@ func (r *Lister) List(ctx *gst.ServiceContext, req *archive.Record) (rsp *archiv
 				Phase:   apiaction.List,
 			},
 			servicePkgName: "record",
-			modelInfo: &modelinfo.Model{
+			modelInfo: &modelsource.Model{
 				ModulePath:   "helloworld",
 				ModelFileDir: "model/archive",
 				ModelPkgName: "archive",
@@ -1309,7 +1309,7 @@ func (p *Ping) Get(ctx *gst.ServiceContext, req *sample.Record) (rsp *sample.Pin
 				Phase:       apiaction.Get,
 			},
 			servicePkgName: "sample",
-			modelInfo: &modelinfo.Model{
+			modelInfo: &modelsource.Model{
 				ModulePath:   "helloworld",
 				ModelFileDir: "model/sample",
 				ModelPkgName: "sample",
@@ -1360,7 +1360,7 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *model_service.UserReq) (r
 				Phase:   apiaction.Create,
 			},
 			servicePkgName: "user",
-			modelInfo: &modelinfo.Model{
+			modelInfo: &modelsource.Model{
 				ModulePath:   "helloworld",
 				ModelFileDir: "model/service",
 				ModelPkgName: "service",
@@ -1411,7 +1411,7 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *sample.UserReq) (rsp *sam
 				Phase:   apiaction.Create,
 			},
 			servicePkgName: "user",
-			modelInfo: &modelinfo.Model{
+			modelInfo: &modelsource.Model{
 				ModulePath:   "helloworld",
 				ModelFileDir: "model/service",
 				ModelPkgName: "service",
@@ -1460,7 +1460,7 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *model_service.UserReq) (r
 				Phase:   apiaction.Create,
 			},
 			servicePkgName: "user",
-			modelInfo: &modelinfo.Model{
+			modelInfo: &modelsource.Model{
 				ModulePath:   "helloworld",
 				ModelFileDir: "model/sample",
 				ModelPkgName: "sample",
@@ -1512,7 +1512,7 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *service.UserReq) (rsp *se
 				Phase:   apiaction.Create,
 			},
 			servicePkgName: "user",
-			modelInfo: &modelinfo.Model{
+			modelInfo: &modelsource.Model{
 				ModulePath:   "helloworld",
 				ModelFileDir: "model/service",
 				ModelPkgName: "service",
@@ -1560,7 +1560,7 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *service.UserReq) (rsp *se
 				Phase:   apiaction.Create,
 			},
 			servicePkgName: "user",
-			modelInfo: &modelinfo.Model{
+			modelInfo: &modelsource.Model{
 				ModulePath:   "helloworld",
 				ModelFileDir: "model/service",
 				ModelPkgName: "service",
@@ -1611,7 +1611,7 @@ func (i *Creator) Create(ctx *gst.ServiceContext, req *v2.Item) (rsp *v2.Item, e
 				Phase:   apiaction.Create,
 			},
 			servicePkgName: "item",
-			modelInfo: &modelinfo.Model{
+			modelInfo: &modelsource.Model{
 				ModulePath:   "helloworld",
 				ModelFileDir: "model/api/v2",
 				ModelPkgName: "v2",
@@ -1666,7 +1666,7 @@ func (i *Creator) Create(ctx *gst.ServiceContext, req *v2.Item) (rsp *v2.Item, e
 				Phase:   apiaction.Create,
 			},
 			servicePkgName: "item",
-			modelInfo: &modelinfo.Model{
+			modelInfo: &modelsource.Model{
 				ModulePath:   "helloworld",
 				ModelFileDir: "model/api/v3",
 				ModelPkgName: "v3",
@@ -1719,7 +1719,7 @@ func (i *Creator) Create(ctx *gst.ServiceContext, req *recorditem.Item) (rsp *re
 				Phase:   apiaction.Create,
 			},
 			servicePkgName: "item",
-			modelInfo: &modelinfo.Model{
+			modelInfo: &modelsource.Model{
 				ModulePath:   "helloworld",
 				ModelFileDir: "model/archive",
 				ModelPkgName: "archive",
@@ -1771,7 +1771,7 @@ func (u *Creator) Create(ctx *gstfw.ServiceContext, req *gst.UserReq) (rsp *gst.
 				Phase:   apiaction.Create,
 			},
 			servicePkgName: "user",
-			modelInfo: &modelinfo.Model{
+			modelInfo: &modelsource.Model{
 				ModulePath:   "helloworld",
 				ModelFileDir: "model/gst",
 				ModelPkgName: "gst",
@@ -1824,7 +1824,7 @@ func (u *Creator) Create(ctx *gstfw.ServiceContext, req *model_gst.UserReq) (rsp
 }
 
 func TestApplyServiceFileWithModelSyncForcesCanonicalServiceStruct(t *testing.T) {
-	modelInfo := &modelinfo.Model{
+	modelInfo := &modelsource.Model{
 		ModulePath:   "helloworld",
 		ModelFileDir: "model",
 		ModelPkgName: "model",
@@ -1841,7 +1841,7 @@ func TestApplyServiceFileWithModelSyncForcesCanonicalServiceStruct(t *testing.T)
 		name string
 		code string
 		// modelInfo overrides the root model package the cases share.
-		modelInfo    *modelinfo.Model
+		modelInfo    *modelsource.Model
 		action       *dsl.Action
 		wantChanged  bool
 		wantContains []string // substrings that must appear in the rewritten file
@@ -1982,7 +1982,7 @@ import (
 
 var _ = gst.ServiceContext{}
 `,
-			modelInfo: &modelinfo.Model{
+			modelInfo: &modelsource.Model{
 				ModulePath:   "helloworld",
 				ModelFileDir: "model/service",
 				ModelPkgName: "service",

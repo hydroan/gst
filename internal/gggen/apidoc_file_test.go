@@ -6,12 +6,12 @@ import (
 
 	"github.com/hydroan/gst/apidoc"
 	"github.com/hydroan/gst/internal/gggen"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 )
 
 func TestBuildAPIDocFile(t *testing.T) {
-	entries := modelinfo.APIDocEntries{
-		Structs: []modelinfo.StructDocEntry{
+	entries := modelsource.APIDocEntries{
+		Structs: []modelsource.StructDocEntry{
 			{
 				PkgPath:  "example.com/proj/model",
 				TypeName: "User",
@@ -31,7 +31,7 @@ func TestBuildAPIDocFile(t *testing.T) {
 				},
 			},
 		},
-		Enums: []modelinfo.EnumDocEntry{
+		Enums: []modelsource.EnumDocEntry{
 			{
 				PkgPath:  "example.com/proj/model",
 				TypeName: "UserStatus",
@@ -73,8 +73,8 @@ func TestBuildAPIDocFile(t *testing.T) {
 // TestBuildAPIDocFileRegistersStructsAndEnums compares the whole file
 // BuildAPIDocFile generates for the example of its doc comment.
 func TestBuildAPIDocFileRegistersStructsAndEnums(t *testing.T) {
-	code, err := gggen.BuildAPIDocFile("helloworld", "model", modelinfo.APIDocEntries{
-		Structs: []modelinfo.StructDocEntry{{
+	code, err := gggen.BuildAPIDocFile("helloworld", "model", modelsource.APIDocEntries{
+		Structs: []modelsource.StructDocEntry{{
 			PkgPath:  "helloworld/model",
 			TypeName: "User",
 			Doc: apidoc.StructDoc{
@@ -82,7 +82,7 @@ func TestBuildAPIDocFileRegistersStructsAndEnums(t *testing.T) {
 				Fields:  map[string]string{"Name": "Name is the user name."},
 			},
 		}},
-		Enums: []modelinfo.EnumDocEntry{{
+		Enums: []modelsource.EnumDocEntry{{
 			PkgPath:  "helloworld/model",
 			TypeName: "UserRole",
 			Doc: apidoc.EnumDoc{
@@ -127,7 +127,7 @@ func init() {
 // TestBuildAPIDocFileWithoutEntries compares the whole file BuildAPIDocFile
 // generates when the models document nothing: an empty init and no import.
 func TestBuildAPIDocFileWithoutEntries(t *testing.T) {
-	code, err := gggen.BuildAPIDocFile("helloworld", "model", modelinfo.APIDocEntries{})
+	code, err := gggen.BuildAPIDocFile("helloworld", "model", modelsource.APIDocEntries{})
 	if err != nil {
 		t.Fatalf("BuildAPIDocFile() error = %v", err)
 	}

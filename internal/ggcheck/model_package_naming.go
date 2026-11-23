@@ -10,7 +10,7 @@ import (
 
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 )
 
 // ModelPackageNaming holds model package names to their directory names.
@@ -59,7 +59,7 @@ func checkModelPackageNaming(ignore gghelper.ProjectIgnore) []string {
 
 		// Go convention discourages underscores in package names, so the
 		// directory name is compared without them.
-		expectedName := modelinfo.ModelPackageName(dirName)
+		expectedName := modelsource.ModelPackageName(dirName)
 
 		// Allow black-box test files to use the `<package>_test` external test package name.
 		if strings.HasSuffix(path, ggconst.PatternTestFile) && packageName == expectedName+ggconst.SuffixTestPkg {

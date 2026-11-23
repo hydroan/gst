@@ -100,7 +100,7 @@ gst 是强约定框架（Apple 风格），不是自由框架（Windows 风格�
 例外，以下内容必须保持公开包 import：
 
 - module 源码 `internal/model/<module>`、`internal/service/<module>`：会被 `gg copy` 复制进业务项目，copy 只改写 module 子树自身的 internal import 前缀，公开包 import 原样保留；若引用其他 internal 包，复制后无法编译。module 的 `_test.go` 不参与 copy，可以引用 internal 包。
-- `internal/modelinfo`、`internal/gggen`、`internal/ggnew`、`internal/ggmodule`、`internal/ggconst` 中面向生成代码的 import 路径常量、模板和 testdata：属于生成到业务项目里的用户代码，必须写公开路径。
+- `internal/modelsource`、`internal/gggen`、`internal/ggnew`、`internal/ggmodule`、`internal/ggconst` 中面向生成代码的 import 路径常量、模板和 testdata：属于生成到业务项目里的用户代码，必须写公开路径。
 - `Example` 示例：godoc 里是给业务开发者看的代码，必须站在项目的角度写——只 import 项目自己也能 import 的公开包，列引用一律用生成的 `XxxCols`，不出现 internal 包和手工构造的列；功能性校验写在 `Test` 函数里，不写进 Example。
 - `internal/gghelper/program` 下的 `migrate`、`inspect`：gg 嵌入后写进临时目录、按项目的依赖版本编译运行的程序，站在项目的角度写，只 import 公开包。
 
@@ -108,7 +108,7 @@ gst 是强约定框架（Apple 风格），不是自由框架（Windows 风格�
 
 ### 结束收尾
 
-1. 修改完 `cmd/gg` 及它编译进去的框架包（如 `internal/dsl`、`internal/modelinfo`、`internal/gg*`）的代码后，需要及时安装最新版本的 `gg` 工具
+1. 修改完 `cmd/gg` 及它编译进去的框架包（如 `internal/dsl`、`internal/modelsource`、`internal/gg*`）的代码后，需要及时安装最新版本的 `gg` 工具
 2. 开发完后：必须并行执行 `make check` 和 `make test`，两者都通过才算完成（`make test` 靠测试缓存只重跑受改动影响的包）。如果没有修改代码，例如只修改了 Makefile、Markdown 等和代码无关的文件则都不需要执行
 
 

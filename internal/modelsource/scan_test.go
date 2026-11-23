@@ -1,4 +1,4 @@
-package modelinfo_test
+package modelsource_test
 
 import (
 	"path/filepath"
@@ -8,7 +8,7 @@ import (
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/gghelper"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 )
 
 // TestScanModelsReadsTheModelsTheWayGenDoes pins what ScanModels hands
@@ -71,10 +71,10 @@ func (Item) Design() {
 	if remaining := remainingPhases(collectActions(findDesign(t, scanned.Models, "Item"))); !slices.Equal(remaining, []apiaction.Phase{apiaction.Create}) {
 		t.Fatalf("remaining Item actions = %v, want only Create", remaining)
 	}
-	if want := []modelinfo.RouteIgnoreMatch{{Method: "GET", Path: "/api/samples/:sample/items", Model: "Item"}}; !slices.Equal(scanned.RouteIgnores.Matches, want) {
+	if want := []modelsource.RouteIgnoreMatch{{Method: "GET", Path: "/api/samples/:sample/items", Model: "Item"}}; !slices.Equal(scanned.RouteIgnores.Matches, want) {
 		t.Fatalf("RouteIgnores.Matches = %+v, want %+v", scanned.RouteIgnores.Matches, want)
 	}
-	if want := []modelinfo.ModelIgnoreMatch{{Model: "Sample", File: "model/sample.go"}}; !slices.Equal(scanned.ModelIgnores.Matches, want) {
+	if want := []modelsource.ModelIgnoreMatch{{Model: "Sample", File: "model/sample.go"}}; !slices.Equal(scanned.ModelIgnores.Matches, want) {
 		t.Fatalf("ModelIgnores.Matches = %+v, want %+v", scanned.ModelIgnores.Matches, want)
 	}
 	if findDesign(t, scanned.Models, "Sample").Migrate {
@@ -84,10 +84,10 @@ func (Item) Design() {
 
 // scanModels writes sources into a project directory, the way findModels
 // does, and scans it with cfg.
-func scanModels(t *testing.T, sources map[string]string, cfg *ggconfig.Config) modelinfo.ScannedModels {
+func scanModels(t *testing.T, sources map[string]string, cfg *ggconfig.Config) modelsource.ScannedModels {
 	t.Helper()
 	findModels(t, sources)
-	scanned, err := modelinfo.ScanModels("tmpapp", "model", gghelper.NewProjectIgnore(), cfg)
+	scanned, err := modelsource.ScanModels("tmpapp", "model", gghelper.NewProjectIgnore(), cfg)
 	if err != nil {
 		t.Fatal(err)
 	}

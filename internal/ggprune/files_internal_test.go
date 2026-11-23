@@ -7,11 +7,11 @@ import (
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 )
 
 func TestCurrentServiceFilesUsesFlattenTarget(t *testing.T) {
-	models := []*modelinfo.Model{flattenPruneModel()}
+	models := []*modelsource.Model{flattenPruneModel()}
 	got := currentServiceFiles(models)
 
 	wantCurrent := filepath.Join(ggconst.DirService, "authz", "role.go")
@@ -26,11 +26,11 @@ func TestCurrentServiceFilesUsesFlattenTarget(t *testing.T) {
 
 // flattenPruneModel returns a model whose only enabled action flattens its
 // service file into service/authz/role.go.
-func flattenPruneModel() *modelinfo.Model {
+func flattenPruneModel() *modelsource.Model {
 	disabled := func(phase apiaction.Phase) *dsl.Action {
 		return &dsl.Action{Phase: phase}
 	}
-	return &modelinfo.Model{
+	return &modelsource.Model{
 		ModulePath:    "github.com/acme/app",
 		ModelPkgName:  "authz",
 		ModelName:     "Role",

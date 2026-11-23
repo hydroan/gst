@@ -25,7 +25,7 @@ gst · HTTP 与 gRPC 两条传输线
     <div class="lane-head"><div class="http">HTTP 线</div><div class="shared">两边共用</div><div class="grpc">gRPC 线</div></div>
     <div class="arch-layer stage">
       <div class="arch-layer-title">① 声明 · 开发者写 model</div>
-      <div class="arch-box lane shared"><b>model/**/*.go：结构体 + Design()</b><ul><li>字段带 <code>json</code>、<code>gorm</code>、<code>pb</code> 三种 tag；<code>pb</code> 是 gRPC 字段号，1–10 留给框架（Base 的五个字段是 1–5，tenant.Scope 的 tenant_id 是 6），业务字段从 11 起，缺号由 gg gen 补上。</li><li><code>Design()</code> 顶层：<code>Migrate()</code>、<code>GRPC()</code>、<code>Endpoint()</code>、<code>Param()</code>、<code>Route()</code>；动作块 Create / Get / List / Update / Patch / Delete 及四个 Many、Import / Export / SSE、Stream。</li><li>块内关键字：<code>Public()</code>、<code>Exact()</code>、<code>Flatten()</code>、<code>Service()</code> 或 <code>Service("name")</code>、<code>Payload[T]()</code>、<code>Result[T]()</code>、<code>StreamingPayload[T]()</code>、<code>StreamingResult[T]()</code>。</li><li><code>internal/dsl</code> 在 gg 阶段解析并校验：非函数字面量的块、非关键字语句、流式动作没用 Service 起名，都在生成前报错；两个动作撞同一个 service 文件、类型或包，由 <code>internal/modelinfo</code> 跨模型文件查出，同样在生成前报错。</li></ul></div>
+      <div class="arch-box lane shared"><b>model/**/*.go：结构体 + Design()</b><ul><li>字段带 <code>json</code>、<code>gorm</code>、<code>pb</code> 三种 tag；<code>pb</code> 是 gRPC 字段号，1–10 留给框架（Base 的五个字段是 1–5，tenant.Scope 的 tenant_id 是 6），业务字段从 11 起，缺号由 gg gen 补上。</li><li><code>Design()</code> 顶层：<code>Migrate()</code>、<code>GRPC()</code>、<code>Endpoint()</code>、<code>Param()</code>、<code>Route()</code>；动作块 Create / Get / List / Update / Patch / Delete 及四个 Many、Import / Export / SSE、Stream。</li><li>块内关键字：<code>Public()</code>、<code>Exact()</code>、<code>Flatten()</code>、<code>Service()</code> 或 <code>Service("name")</code>、<code>Payload[T]()</code>、<code>Result[T]()</code>、<code>StreamingPayload[T]()</code>、<code>StreamingResult[T]()</code>。</li><li><code>internal/dsl</code> 在 gg 阶段解析并校验：非函数字面量的块、非关键字语句、流式动作没用 Service 起名，都在生成前报错；两个动作撞同一个 service 文件、类型或包，由 <code>internal/modelsource</code> 跨模型文件查出，同样在生成前报错。</li></ul></div>
     </div>
     <div class="arch-arrow">▼</div>
     <div class="arch-layer stage">
@@ -247,7 +247,7 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 
 - bootstrap 顺序：配置 → 日志 → 数据库与 redis 等 → `router.Init()`（内建链、路由、模块）→ `RegisterGo(router.Run, grpcserver.Run)`。
 - gRPC 监听只在有注册服务时启动；启动时若有非 Public 方法却没挂鉴权拦截器，打一条 Warn。
-- 停机：`controller.Probe.Drain()` 让 `/-/readyz` 答 503，`grpcserver.Drain()` 让 health 答 NOT_SERVING，等 shutdown_delay 过去，再跑 cleanup：`router.Stop` 与 `grpcserver.Stop` 并发、共用一个 30 秒窗口（HTTP 等在途请求、SSE 流即刻结束，WebSocket 连接的 ctx 即刻结束、各自以 1001 关闭，窗口用完还开着的直接切断；gRPC 的 GracefulStop 等一元调用、在途流的 ctx 即刻结束并答 Unavailable，窗口用完强制断开），之后组件在自己的 30 秒窗口里停。
+- 停机：`router.Drain()` 让 `/-/readyz` 答 503，`grpcserver.Drain()` 让 health 答 NOT_SERVING，等 shutdown_delay 过去，再跑 cleanup：`router.Stop` 与 `grpcserver.Stop` 并发、共用一个 30 秒窗口（HTTP 等在途请求、SSE 流即刻结束，WebSocket 连接的 ctx 即刻结束、各自以 1001 关闭，窗口用完还开着的直接切断；gRPC 的 GracefulStop 等一元调用、在途流的 ctx 即刻结束并答 Unavailable，窗口用完强制断开），之后组件在自己的 30 秒窗口里停。
 - 多副本下客户端靠这两个探针切走流量；k8s 的 readinessProbe 打 HTTP，gRPC 的 native health probe 打 health 服务，可指名一个服务。
 
 观测两边对齐：
@@ -267,8 +267,8 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 | 包 | 归属 | 职责 |
 |---|---|---|
 | `dsl` → `internal/dsl` | 共用 | 关键字、解析、校验；`HTTPOnlyAction` 是「哪些动作只有 HTTP 承载」的单点 |
-| `internal/modelinfo` | 共用 | 模型元信息：路由、参数、`RPCName`、`PBPackage`，pb 生成与骨架共用 |
-| `internal/pbschema` | 共用 | 从模型推导 protobuf 定义并与 pb/ 下已提交的文件对账，认不出的形状与破坏线上契约的改动在这里成为诊断；gen 与 check 各自只依赖它 |
+| `internal/modelsource` | 共用 | 从模型源码读出的模型元信息：设计、路由与参数、service 文件的位置，生成器、检查与 pb 推导共用 |
+| `internal/pbschema` | 共用 | rpc、protobuf 包与 Go 包的命名规则（`RPCName`、`AppName`）；从模型推导 protobuf 定义并与 pb/ 下已提交的文件对账，认不出的形状与破坏线上契约的改动在这里成为诊断；gen 与 check 各自只依赖它 |
 | `internal/gggen` | 共用 | 所有生成器；子包 `pb` 把 pbschema 推导出的定义打印成 .proto、出适配层与注册文件并驱动插件 |
 | `internal/ggcheck`、`ggprune`、`ggmodule` | 共用 | 业务项目的静态检查、过期产物清理、模块复制（中间件与拦截器一起管） |
 | `internal/gghelper` | 共用 | gg 的运行帮手；`PinnedCommand` 把固定版本的 protoc 插件与 golangci-lint 编到用户缓存目录再运行 |

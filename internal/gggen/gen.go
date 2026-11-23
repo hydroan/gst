@@ -12,7 +12,7 @@ import (
 
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 	"github.com/stoewer/go-strcase"
 )
 
@@ -66,7 +66,7 @@ func serviceFilterLogQuoted(modelName string, phase apiaction.Phase, action *dsl
 //
 //		return nil
 //	}
-func genServiceMethod1(info *modelinfo.Model, modelQualifier string, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
+func genServiceMethod1(info *modelsource.Model, modelQualifier string, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod1(
 		info.ModelVarName, info.ModelName, modelQualifier, phase, roleName,
 		StmtLogWithContext(info.ModelVarName),
@@ -86,7 +86,7 @@ func genServiceMethod1(info *modelinfo.Model, modelQualifier string, action *dsl
 //
 //		return nil
 //	}
-func genServiceMethod2(info *modelinfo.Model, modelQualifier string, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
+func genServiceMethod2(info *modelsource.Model, modelQualifier string, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod2(
 		info.ModelVarName, info.ModelName, modelQualifier, phase, roleName,
 		StmtLogWithContext(info.ModelVarName),
@@ -108,7 +108,7 @@ func genServiceMethod2(info *modelinfo.Model, modelQualifier string, action *dsl
 //
 //		return nil
 //	}
-func genServiceMethod3(info *modelinfo.Model, modelQualifier string, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
+func genServiceMethod3(info *modelsource.Model, modelQualifier string, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod3(
 		info.ModelVarName, info.ModelName, modelQualifier, phase, roleName,
 		StmtLogWithContext(info.ModelVarName),
@@ -129,7 +129,7 @@ func genServiceMethod3(info *modelinfo.Model, modelQualifier string, action *dsl
 //
 //		return rsp, nil
 //	}
-func genServiceMethod4(info *modelinfo.Model, modelQualifier string, action *dsl.Action, reqName, rspName string, phase apiaction.Phase, roleName string) *ast.FuncDecl {
+func genServiceMethod4(info *modelsource.Model, modelQualifier string, action *dsl.Action, reqName, rspName string, phase apiaction.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod4(
 		info.ModelVarName, modelQualifier, emptyReqPkgName(modelQualifier), reqName, rspName, phase, roleName,
 		StmtLogWithContext(info.ModelVarName),
@@ -154,7 +154,7 @@ func genServiceMethod4(info *modelinfo.Model, modelQualifier string, action *dsl
 //
 //		return users, nil
 //	}
-func genServiceMethod5(info *modelinfo.Model, modelQualifier string, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
+func genServiceMethod5(info *modelsource.Model, modelQualifier string, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod5(
 		info.ModelVarName, info.ModelName, modelQualifier, roleName,
 		StmtLogWithContext(info.ModelVarName),
@@ -175,7 +175,7 @@ func genServiceMethod5(info *modelinfo.Model, modelQualifier string, action *dsl
 //
 //		return data, nil
 //	}
-func genServiceMethod6(info *modelinfo.Model, modelQualifier string, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
+func genServiceMethod6(info *modelsource.Model, modelQualifier string, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod6(
 		info.ModelVarName, info.ModelName, modelQualifier, roleName,
 		StmtLogWithContext(info.ModelVarName),
@@ -196,7 +196,7 @@ func genServiceMethod6(info *modelinfo.Model, modelQualifier string, action *dsl
 //
 //		return nil
 //	}
-func genServiceMethod7(info *modelinfo.Model, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
+func genServiceMethod7(info *modelsource.Model, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod7(
 		info.ModelVarName, roleName,
 		StmtLogWithContext(info.ModelVarName),
@@ -217,7 +217,7 @@ func genServiceMethod7(info *modelinfo.Model, action *dsl.Action, phase apiactio
 //
 //		return user, opts, nil
 //	}
-func genServiceMethod8(info *modelinfo.Model, modelQualifier string, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
+func genServiceMethod8(info *modelsource.Model, modelQualifier string, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod8(
 		info.ModelVarName, info.ModelName, modelQualifier, roleName,
 		StmtLogWithContext(info.ModelVarName),
@@ -252,7 +252,7 @@ func genServiceMethod8(info *modelinfo.Model, modelQualifier string, action *dsl
 //
 //		return rsp, nil
 //	}
-func genServiceMethod9(info *modelinfo.Model, modelQualifier string, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
+func genServiceMethod9(info *modelsource.Model, modelQualifier string, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
 	results := []ast.Expr{ast.NewIdent("nil")}
 	if action.StreamingPayload && !action.StreamingResult {
 		results = []ast.Expr{ast.NewIdent("rsp"), ast.NewIdent("nil")}
@@ -310,7 +310,7 @@ func genServiceMethod9(info *modelinfo.Model, modelQualifier string, action *dsl
 // between ListBefore and ListAfter, the order the controllers invoke them
 // in. A model without a database table, one embedding model.Empty, gets no
 // hooks at all. GenerateServiceShell returns the same file without the hooks.
-func GenerateService(info *modelinfo.Model, action *dsl.Action, phase apiaction.Phase, servicePkgName string) *ast.File {
+func GenerateService(info *modelsource.Model, action *dsl.Action, phase apiaction.Phase, servicePkgName string) *ast.File {
 	return generateService(info, action, phase, servicePkgName, true)
 }
 
@@ -341,14 +341,14 @@ func GenerateService(info *modelinfo.Model, action *dsl.Action, phase apiaction.
 //
 //		return rsp, nil
 //	}
-func GenerateServiceShell(info *modelinfo.Model, action *dsl.Action, phase apiaction.Phase, servicePkgName string) *ast.File {
+func GenerateServiceShell(info *modelsource.Model, action *dsl.Action, phase apiaction.Phase, servicePkgName string) *ast.File {
 	return generateService(info, action, phase, servicePkgName, false)
 }
 
 // generateService builds the service file of the action: the struct, the
 // action method and, when hooks is set and the model has a database table,
 // the hook placeholders of the phase.
-func generateService(info *modelinfo.Model, action *dsl.Action, phase apiaction.Phase, servicePkgName string, hooks bool) *ast.File {
+func generateService(info *modelsource.Model, action *dsl.Action, phase apiaction.Phase, servicePkgName string, hooks bool) *ast.File {
 	if !action.Service {
 		return nil
 	}

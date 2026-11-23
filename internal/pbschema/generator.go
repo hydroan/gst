@@ -10,7 +10,7 @@ import (
 
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen/jsonshape"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 
@@ -21,7 +21,7 @@ type Schema struct {
 	cfg     Config
 	project *jsonshape.Project
 	AppName string // the last element of the module path, prefix of every protobuf package
-	models  []*modelinfo.Model
+	models  []*modelsource.Model
 
 	Files map[string]*ProtoFile // the files built so far, keyed by their name relative to pb/
 	// Messages holds an entry for every project type given a message so far;
@@ -105,11 +105,11 @@ func (f *ProtoFile) Dir() string { return path.Dir(f.Name) }
 
 // newSchema prepares a derivation of cfg over the loaded project for the
 // models declaring GRPC().
-func newSchema(cfg Config, project *jsonshape.Project, models []*modelinfo.Model) *Schema {
+func newSchema(cfg Config, project *jsonshape.Project, models []*modelsource.Model) *Schema {
 	return &Schema{
 		cfg:            cfg,
 		project:        project,
-		AppName:        modelinfo.AppName(cfg.ModulePath),
+		AppName:        AppName(cfg.ModulePath),
 		models:         models,
 		Files:          make(map[string]*ProtoFile),
 		Messages:       make(map[*types.TypeName]*Message),
@@ -181,7 +181,7 @@ func (g *Schema) buildQueued() {
 // modelType returns the type of the model m in the loaded project, nil when
 // the project holds no such package or type; declareService reports either
 // case.
-func (g *Schema) modelType(m *modelinfo.Model) *types.TypeName {
+func (g *Schema) modelType(m *modelsource.Model) *types.TypeName {
 	pkg := g.project.Package(m.ImportPath())
 	if pkg == nil || pkg.Types == nil {
 		return nil

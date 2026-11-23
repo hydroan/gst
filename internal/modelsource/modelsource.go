@@ -1,9 +1,9 @@
-// Package modelinfo reads the models of a project the way gg sees them: the
+// Package modelsource reads the models of a project the way gg sees them: the
 // model files under the model directory, each model with the design its DSL
 // declares, its routes resolved through the resource hierarchy and the
 // gst.yaml ignore rules, the service files its actions map to, and the doc
 // comments the API document registers.
-package modelinfo
+package modelsource
 
 import (
 	"os"

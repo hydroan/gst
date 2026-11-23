@@ -1,4 +1,4 @@
-package modelinfo_test
+package modelsource_test
 
 import (
 	"fmt"
@@ -8,13 +8,13 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/internal/gghelper"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 )
 
 func TestExtractAPIDocsStructs(t *testing.T) {
 	entries := extractTestAPIDocs(t)
 
-	byKey := make(map[string]modelinfo.StructDocEntry, len(entries.Structs))
+	byKey := make(map[string]modelsource.StructDocEntry, len(entries.Structs))
 	for _, entry := range entries.Structs {
 		byKey[entry.PkgPath+"."+entry.TypeName] = entry
 	}
@@ -56,7 +56,7 @@ func TestExtractAPIDocsStructs(t *testing.T) {
 func TestExtractAPIDocsEnums(t *testing.T) {
 	entries := extractTestAPIDocs(t)
 
-	var status *modelinfo.EnumDocEntry
+	var status *modelsource.EnumDocEntry
 	for i := range entries.Enums {
 		if entries.Enums[i].TypeName == "UserStatus" {
 			status = &entries.Enums[i]
@@ -104,7 +104,7 @@ func TestExtractAPIDocsDeterministicOrder(t *testing.T) {
 // in hidden, vendor and testdata directories and in directories holding a
 // go.mod of their own, and the file names excludes lists.
 func TestExtractAPIDocsSkipsFilesOutsideCodeGeneration(t *testing.T) {
-	entries, err := modelinfo.ExtractAPIDocs("example.com/proj", "testdata/apidocmodel", gghelper.NewProjectIgnore(), []string{"excluded.go"})
+	entries, err := modelsource.ExtractAPIDocs("example.com/proj", "testdata/apidocmodel", gghelper.NewProjectIgnore(), []string{"excluded.go"})
 	if err != nil {
 		t.Fatalf("ExtractAPIDocs() error = %v", err)
 	}
@@ -141,7 +141,7 @@ func TestExtractAPIDocsSkipsFilesOutsideCodeGeneration(t *testing.T) {
 // database model Record of the root package and the model Item of its
 // sample package, each with the path of its model file.
 func TestFindModels(t *testing.T) {
-	models, err := modelinfo.FindModels("example.com/proj", "testdata/findmodel", gghelper.NewProjectIgnore())
+	models, err := modelsource.FindModels("example.com/proj", "testdata/findmodel", gghelper.NewProjectIgnore())
 	if err != nil {
 		t.Fatalf("FindModels() error = %v", err)
 	}
@@ -162,10 +162,10 @@ func TestFindModels(t *testing.T) {
 // extractTestAPIDocs extracts the API docs of the model package in
 // testdata/apidocmodel, as a project of module example.com/proj would declare
 // it, failing the test on error.
-func extractTestAPIDocs(t *testing.T) modelinfo.APIDocEntries {
+func extractTestAPIDocs(t *testing.T) modelsource.APIDocEntries {
 	t.Helper()
 
-	entries, err := modelinfo.ExtractAPIDocs("example.com/proj", "testdata/apidocmodel", gghelper.NewProjectIgnore(), nil)
+	entries, err := modelsource.ExtractAPIDocs("example.com/proj", "testdata/apidocmodel", gghelper.NewProjectIgnore(), nil)
 	if err != nil {
 		t.Fatalf("ExtractAPIDocs() error = %v", err)
 	}
@@ -204,7 +204,7 @@ func (Record) Design() {
 		t.Fatal(err)
 	}
 
-	models, err := modelinfo.FindModels("example.com/app", modelDir, gghelper.NewProjectIgnore())
+	models, err := modelsource.FindModels("example.com/app", modelDir, gghelper.NewProjectIgnore())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,7 +246,7 @@ func (Scratch) Design() {
 		t.Fatal(err)
 	}
 
-	models, err := modelinfo.FindModels("example.com/app", modelDir, gghelper.NewProjectIgnore())
+	models, err := modelsource.FindModels("example.com/app", modelDir, gghelper.NewProjectIgnore())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -5,7 +5,7 @@ import (
 
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 	"github.com/stretchr/testify/require"
 )
 
@@ -27,13 +27,20 @@ func TestGoPackageOptionMirrorsTheDirectoryUnderPB(t *testing.T) {
 	require.Equal(t, "example.com/app/pb/record_item;recorditem", goPackageOption("example.com/app", "record_item"))
 }
 
+// TestRouteParamsReadsBothParameterForms pins the example of the routeParams
+// doc comment.
+func TestRouteParamsReadsBothParameterForms(t *testing.T) {
+	require.Equal(t, []string{"box", "shelf"}, routeParams("archive/boxes/:box/shelves/:shelf/documents"))
+	require.Empty(t, routeParams("archive/documents"))
+}
+
 // TestRequestParamsCarryEveryParameterOfTheRegisteredRoute pins the examples
 // of the requestParams doc comment: one string field per parameter of the
 // route the router registers the action under, in route order, the model's
 // own item parameter named id and every other one after itself.
 func TestRequestParamsCarryEveryParameterOfTheRegisteredRoute(t *testing.T) {
-	item := &modelinfo.Model{ModelName: "Item", Design: &dsl.Design{Endpoint: "records/:record/items"}}
-	document := &modelinfo.Model{ModelName: "Document", Design: &dsl.Design{Endpoint: "archive/documents", Param: ":document"}}
+	item := &modelsource.Model{ModelName: "Item", Design: &dsl.Design{Endpoint: "records/:record/items"}}
+	document := &modelsource.Model{ModelName: "Document", Design: &dsl.Design{Endpoint: "archive/documents", Param: ":document"}}
 
 	require.Equal(t, []RequestParam{
 		{Param: "record", Name: "record", comment: "the :record parameter of /api/records/:record/items/:id"},
@@ -53,9 +60,9 @@ func TestRequestParamsCarryEveryParameterOfTheRegisteredRoute(t *testing.T) {
 // TestMessageNameIsTheRPCNameAndTheKind pins the examples of the messageName
 // doc comment.
 func TestMessageNameIsTheRPCNameAndTheKind(t *testing.T) {
-	record := &modelinfo.Model{ModelName: "Record", Design: &dsl.Design{Endpoint: "records"}}
-	document := &modelinfo.Model{ModelName: "Document", Design: &dsl.Design{Endpoint: "archive/documents", Param: ":document"}}
-	entry := &modelinfo.Model{ModelName: "Entry", Design: &dsl.Design{Endpoint: "entries"}}
+	record := &modelsource.Model{ModelName: "Record", Design: &dsl.Design{Endpoint: "records"}}
+	document := &modelsource.Model{ModelName: "Document", Design: &dsl.Design{Endpoint: "archive/documents", Param: ":document"}}
+	entry := &modelsource.Model{ModelName: "Entry", Design: &dsl.Design{Endpoint: "entries"}}
 
 	require.Equal(t, "CreateRecordRequest", messageName(record, "records", &dsl.Action{Phase: apiaction.Create}, "Request"))
 	require.Equal(t, "ListDocumentByBoxRequest", messageName(document, "archive/boxes/:box/documents", &dsl.Action{Phase: apiaction.List}, "Request"))
@@ -65,8 +72,8 @@ func TestMessageNameIsTheRPCNameAndTheKind(t *testing.T) {
 // TestModelFieldNameIsTheModelInSnakeCase pins the examples of the
 // modelFieldName doc comment.
 func TestModelFieldNameIsTheModelInSnakeCase(t *testing.T) {
-	require.Equal(t, "record", ModelFieldName(&modelinfo.Model{ModelName: "Record"}))
-	require.Equal(t, "item_link", ModelFieldName(&modelinfo.Model{ModelName: "ItemLink"}))
+	require.Equal(t, "record", ModelFieldName(&modelsource.Model{ModelName: "Record"}))
+	require.Equal(t, "item_link", ModelFieldName(&modelsource.Model{ModelName: "ItemLink"}))
 }
 
 // TestCommentTextRecordsCommentsLikeProtoc pins the examples of the

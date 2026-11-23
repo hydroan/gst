@@ -14,7 +14,7 @@ import (
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 	"github.com/hydroan/gst/internal/types"
 )
 
@@ -32,7 +32,7 @@ var GRPCServiceContext = Check{
 // call has no request to read or response to write, so a service serving
 // both transports must do without it. A gRPC call enters the service type
 // the service file of an action gRPC serves declares (see
-// modelinfo.ServiceTarget): every method of that type, the hooks in
+// modelsource.ServiceTarget): every method of that type, the hooks in
 // whatever file declares them included, and the functions of that file;
 // from there it reaches every function of the project they call, in the
 // package or another, each call resolved the way the Go compiler reads it
@@ -80,7 +80,7 @@ func checkGRPCServiceContext(ignore gghelper.ProjectIgnore) []string {
 			if !act.Service || dsl.HTTPOnlyAction(act.Phase.Name()) {
 				return
 			}
-			target := modelinfo.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
+			target := modelsource.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
 			served[filepath.ToSlash(target.Dir)] = true
 			// A service file yet to be generated, or one the parser refused,
 			// holds no function to enter.

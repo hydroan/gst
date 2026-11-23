@@ -11,7 +11,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/pbschema"
 	"google.golang.org/genproto/googleapis/type/date"
 	"google.golang.org/genproto/googleapis/type/timeofday"
 	"google.golang.org/protobuf/proto"
@@ -59,7 +59,7 @@ func Compile(modulePath string, protos []File) ([]File, error) {
 	// they import one another by, and the one the compiler and the plugins
 	// see; the plugins' outputs are named the same way, and come back under
 	// pb/.
-	app := modelinfo.AppName(modulePath)
+	app := pbschema.AppName(modulePath)
 	sources := make(map[string]string, len(protos))
 	names := make([]string, 0, len(protos))
 	for _, f := range protos {

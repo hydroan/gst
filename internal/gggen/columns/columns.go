@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
-	"github.com/hydroan/gst/internal/modelinfo"
 	"github.com/hydroan/gst/internal/modelinspect"
+	"github.com/hydroan/gst/internal/modelsource"
 )
 
 // Result lists the column files a Generate run changed on disk.
@@ -46,7 +46,7 @@ type Result struct {
 // directory's own generated files is refused before anything is written, see
 // registrationFileOwner. When it fails, the result still lists what it wrote
 // and removed before the failure.
-func Generate(module string, modelDir string, models []*modelinfo.Model, ignore gghelper.ProjectIgnore) (Result, error) {
+func Generate(module string, modelDir string, models []*modelsource.Model, ignore gghelper.ProjectIgnore) (Result, error) {
 	var result Result
 
 	resolved, inspected, err := modelinspect.Inspect(module, modelDir, models, ignore, func() (map[string]string, error) {

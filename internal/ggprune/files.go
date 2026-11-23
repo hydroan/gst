@@ -32,7 +32,7 @@ import (
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen"
 	"github.com/hydroan/gst/internal/gghelper"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 )
 
 // ScanServiceFiles lists the service files under serviceDir that gg manages:
@@ -122,7 +122,7 @@ type FilePlan struct {
 // file is gone they test nothing, and the service test organization check
 // refuses a test file without a source file. A prune.ignore entry covering
 // a test file keeps it like any other file.
-func PlanFiles(existing []string, models []*modelinfo.Model, protect ggconfig.PruneConfig) FilePlan {
+func PlanFiles(existing []string, models []*modelsource.Model, protect ggconfig.PruneConfig) FilePlan {
 	// Get list of service files that should currently exist
 	currentFiles := currentServiceFiles(models)
 
@@ -143,12 +143,12 @@ func PlanFiles(existing []string, models []*modelinfo.Model, protect ggconfig.Pr
 
 // currentServiceFiles returns the service files the Service() actions of
 // allModels expect, such as service/sample/record/create.go for a Create.
-func currentServiceFiles(allModels []*modelinfo.Model) map[string]bool {
+func currentServiceFiles(allModels []*modelsource.Model) map[string]bool {
 	current := make(map[string]bool)
 	for _, m := range allModels {
 		m.Design.Range(func(route string, act *dsl.Action) {
 			if act.Service {
-				target := modelinfo.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
+				target := modelsource.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
 				current[target.FilePath] = true
 			}
 		})

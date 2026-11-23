@@ -18,7 +18,7 @@ import (
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen/ts"
 	"github.com/hydroan/gst/internal/gghelper"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 	"github.com/spf13/cobra"
 	"golang.org/x/tools/go/packages"
 )
@@ -76,7 +76,7 @@ func genTypeScriptRun() error {
 	// The declarations mirror the models. A project with no model directory
 	// declares no route at all, and the run then removes what an earlier one
 	// generated rather than leaving stale declarations behind.
-	var models []*modelinfo.Model
+	var models []*modelsource.Model
 	if gghelper.FileExists(ggconst.DirModel) {
 		projectCfg, err := loadProjectConfig()
 		if err != nil {
@@ -145,7 +145,7 @@ func applicationName() (string, error) {
 // Payload and Result types of every enabled action, the messages of a Stream
 // among them. Import and Export move files and SSE streams events, so their
 // types never travel as JSON, and *model.Empty carries no data.
-func typeScriptRoots(models []*modelinfo.Model) []ts.TypeRef {
+func typeScriptRoots(models []*modelsource.Model) []ts.TypeRef {
 	var roots []ts.TypeRef
 	for _, m := range models {
 		pkgPath := m.ImportPath()

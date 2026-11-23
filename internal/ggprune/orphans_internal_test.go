@@ -5,11 +5,11 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/internal/ggconst"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 )
 
 func TestCurrentServiceDirsUsesFlattenTarget(t *testing.T) {
-	got := currentServiceDirs([]*modelinfo.Model{flattenPruneModel()})
+	got := currentServiceDirs([]*modelsource.Model{flattenPruneModel()})
 	wantDir := filepath.Clean(filepath.Join(ggconst.DirService, "authz"))
 	oldDir := filepath.Clean(filepath.Join(ggconst.DirService, "authz", "role"))
 

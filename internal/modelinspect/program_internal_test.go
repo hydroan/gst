@@ -8,7 +8,7 @@ import (
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 	"github.com/stretchr/testify/require"
 )
 
@@ -17,23 +17,23 @@ import (
 // alias per model package, and the models beyond the registry by group, each
 // set in init for the variables main.go declares.
 func TestBuildProjectFile(t *testing.T) {
-	registered := &modelinfo.Model{
+	registered := &modelsource.Model{
 		ModulePath: "tmpapp", ModelPkgName: "sample", ModelName: "Record",
 		ModelFileDir: "model/sample", Design: &dsl.Design{Migrate: true},
 	}
-	summary := &modelinfo.Model{
+	summary := &modelsource.Model{
 		ModulePath: "tmpapp", ModelPkgName: "report", ModelName: "Summary",
 		ModelFileDir: "model/report", Design: &dsl.Design{},
 	}
-	trend := &modelinfo.Model{
+	trend := &modelsource.Model{
 		ModulePath: "tmpapp", ModelPkgName: "report", ModelName: "Trend",
 		ModelFileDir: "model/report", Design: &dsl.Design{},
 	}
-	note := &modelinfo.Model{
+	note := &modelsource.Model{
 		ModulePath: "tmpapp", ModelPkgName: "model", ModelName: "Note",
 		ModelFileDir: "model", Design: &dsl.Design{},
 	}
-	all := []*modelinfo.Model{registered, summary, trend, note}
+	all := []*modelsource.Model{registered, summary, trend, note}
 
 	file, err := buildProjectFile("tmpapp", all)
 	require.NoError(t, err)
@@ -86,7 +86,7 @@ func init() {
 	t.Run("ListsALoneTableBackedModelByName", func(t *testing.T) {
 		// With every model registered, the file still carries the
 		// table-backed entries: nothing else.
-		bare, err := buildProjectFile("tmpapp", []*modelinfo.Model{registered})
+		bare, err := buildProjectFile("tmpapp", []*modelsource.Model{registered})
 		require.NoError(t, err)
 		require.Equal(t, ggconst.CodeGeneratedComment+"\n\n"+`package main
 
@@ -108,24 +108,24 @@ func init() {
 // the capability guard. The file is the example of buildProjectFile's doc
 // comment.
 func TestBuildProjectFileListsIgnoredModelsApart(t *testing.T) {
-	ignored := &modelinfo.Model{
+	ignored := &modelsource.Model{
 		ModulePath: "tmpapp", ModelPkgName: "user", ModelName: "User",
 		ModelFileDir: "model/iam/user", ModelFilePath: "model/iam/user/user.go",
 		Design:          &dsl.Design{Migrate: false},
 		RegisterIgnored: true,
 	}
-	virtual := &modelinfo.Model{
+	virtual := &modelsource.Model{
 		ModulePath: "tmpapp", ModelPkgName: "report", ModelName: "Summary",
 		ModelFileDir: "model/report", ModelFilePath: "model/report/summary.go",
 		Design: &dsl.Design{Migrate: false},
 	}
-	registered := &modelinfo.Model{
+	registered := &modelsource.Model{
 		ModulePath: "tmpapp", ModelPkgName: "sample", ModelName: "Record",
 		ModelFileDir: "model/sample", ModelFilePath: "model/sample/record.go",
 		Design: &dsl.Design{Migrate: true},
 	}
 
-	file, err := buildProjectFile("tmpapp", []*modelinfo.Model{ignored, virtual, registered})
+	file, err := buildProjectFile("tmpapp", []*modelsource.Model{ignored, virtual, registered})
 	require.NoError(t, err)
 
 	require.Equal(t, ggconst.CodeGeneratedComment+"\n\n"+`package main

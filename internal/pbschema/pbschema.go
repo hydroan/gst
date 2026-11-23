@@ -30,7 +30,7 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/internal/gggen/jsonshape"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 )
 
 // pbTag is the struct tag naming a field's protobuf field number, as in
@@ -79,8 +79,8 @@ type Config struct {
 	// of every model package; its last element names the protobuf packages.
 	ModulePath string
 	// Models are the models of the project, their routes resolved (see
-	// modelinfo.ResolveRoutes). The ones declaring GRPC() get definitions.
-	Models []*modelinfo.Model
+	// modelsource.ResolveRoutes). The ones declaring GRPC() get definitions.
+	Models []*modelsource.Model
 	// Overlay is the build overlay the model packages are type-checked
 	// through, see jsonshape.Config.Overlay: the generated files of the
 	// previous run stubbed out, so a registration or column file still naming
@@ -137,7 +137,7 @@ func (e *DiagnosticsError) Error() string {
 // GRPC(), and a *DiagnosticsError, with no definitions at all, when any
 // diagnostic was reported.
 func Derive(cfg Config) (*Schema, error) {
-	models := make([]*modelinfo.Model, 0)
+	models := make([]*modelsource.Model, 0)
 	for _, m := range cfg.Models {
 		if m.Design != nil && m.Design.GRPC {
 			models = append(models, m)
@@ -146,7 +146,7 @@ func Derive(cfg Config) (*Schema, error) {
 	if len(models) == 0 {
 		return newSchema(cfg, nil, nil), nil
 	}
-	slices.SortFunc(models, func(a, b *modelinfo.Model) int {
+	slices.SortFunc(models, func(a, b *modelsource.Model) int {
 		return cmp.Or(strings.Compare(a.ModelFilePath, b.ModelFilePath), strings.Compare(a.ModelName, b.ModelName))
 	})
 

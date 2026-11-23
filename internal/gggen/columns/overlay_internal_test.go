@@ -11,7 +11,7 @@ import (
 
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 	"github.com/stretchr/testify/require"
 )
 
@@ -131,7 +131,7 @@ func archiveID() string {
 	// the only place still declaring its column var.
 	archiveColumns := filepath.Join("model", "archive", "archive.gen.go")
 	writeProjectFile(t, archiveColumns, ggconst.CodeGeneratedComment+"\n\npackage archive\n\nvar ArchiveCols = struct{ ID string }{ID: \"id\"}\n")
-	models := []*modelinfo.Model{{
+	models := []*modelsource.Model{{
 		ModulePath: "tmpapp", ModelPkgName: "sample", ModelName: "Record",
 		ModelFileDir: filepath.Join("model", "sample"), ModelFilePath: recordSource,
 	}}
@@ -198,7 +198,7 @@ func archiveID() string {
 func TestInspectionOverlayLeavesUnparsableFilesToTheCompiler(t *testing.T) {
 	t.Chdir(t.TempDir())
 	writeProjectFile(t, filepath.Join("model", "sample", "record.go"), "package sample\n\nfunc status() string {\n\treturn RecordCols.Status.Name()\n")
-	models := []*modelinfo.Model{{
+	models := []*modelsource.Model{{
 		ModulePath: "tmpapp", ModelPkgName: "sample", ModelName: "Record",
 		ModelFileDir: filepath.Join("model", "sample"),
 	}}

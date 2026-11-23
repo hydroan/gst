@@ -7,7 +7,7 @@ import (
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/gghelper"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 	"github.com/kr/pretty"
 )
 
@@ -31,14 +31,14 @@ func TestServiceActionLogQuoted(t *testing.T) {
 func TestGenServiceMethod1(t *testing.T) {
 	tests := []struct {
 		name  string
-		info  *modelinfo.Model
+		info  *modelsource.Model
 		phase apiaction.Phase
 		want  string
 	}{
 		{
 			// The example of the genServiceMethod1 doc comment.
 			name: "user",
-			info: &modelinfo.Model{
+			info: &modelsource.Model{
 				ModelPkgName: "model",
 				ModelName:    "User",
 				ModelVarName: "u",
@@ -71,14 +71,14 @@ func TestGenServiceMethod1(t *testing.T) {
 func TestGenServiceMethod2(t *testing.T) {
 	tests := []struct {
 		name  string
-		info  *modelinfo.Model
+		info  *modelsource.Model
 		phase apiaction.Phase
 		want  string
 	}{
 		{
 			// The example of the genServiceMethod2 doc comment.
 			name: "user",
-			info: &modelinfo.Model{
+			info: &modelsource.Model{
 				ModelPkgName: "model",
 				ModelName:    "User",
 				ModelVarName: "u",
@@ -111,14 +111,14 @@ func TestGenServiceMethod2(t *testing.T) {
 func TestGenServiceMethod3(t *testing.T) {
 	tests := []struct {
 		name  string
-		info  *modelinfo.Model
+		info  *modelsource.Model
 		phase apiaction.Phase
 		want  string
 	}{
 		{
 			// The example of the genServiceMethod3 doc comment.
 			name: "user",
-			info: &modelinfo.Model{
+			info: &modelsource.Model{
 				ModelPkgName: "model",
 				ModelName:    "User",
 				ModelVarName: "u",
@@ -151,7 +151,7 @@ func TestGenServiceMethod3(t *testing.T) {
 func TestGenServiceMethod4(t *testing.T) {
 	tests := []struct {
 		name    string
-		info    *modelinfo.Model
+		info    *modelsource.Model
 		reqName string
 		rspName string
 		phase   apiaction.Phase
@@ -160,7 +160,7 @@ func TestGenServiceMethod4(t *testing.T) {
 		{
 			// The example of the genServiceMethod4 doc comment.
 			name: "user",
-			info: &modelinfo.Model{
+			info: &modelsource.Model{
 				ModelPkgName: "model",
 				ModelName:    "User",
 				ModelVarName: "u",
@@ -181,7 +181,7 @@ func TestGenServiceMethod4(t *testing.T) {
 			// A bare action type name (the declared form of slice and map
 			// action types) is transcribed as a value type.
 			name: "box_bare_names_transcribed",
-			info: &modelinfo.Model{
+			info: &modelsource.Model{
 				ModelPkgName: "model",
 				ModelName:    "Box",
 				ModelVarName: "b",
@@ -200,7 +200,7 @@ func TestGenServiceMethod4(t *testing.T) {
 		},
 		{
 			name: "box_starred_names_transcribed",
-			info: &modelinfo.Model{
+			info: &modelsource.Model{
 				ModelPkgName: "model",
 				ModelName:    "Box",
 				ModelVarName: "b",
@@ -236,14 +236,14 @@ func TestGenServiceMethod4(t *testing.T) {
 func TestGenServiceMethod5(t *testing.T) {
 	tests := []struct {
 		name  string
-		info  *modelinfo.Model
+		info  *modelsource.Model
 		phase apiaction.Phase
 		want  string
 	}{
 		{
 			// The example of the genServiceMethod5 doc comment.
 			name: "user",
-			info: &modelinfo.Model{
+			info: &modelsource.Model{
 				ModelPkgName: "model",
 				ModelName:    "User",
 				ModelVarName: "u",
@@ -276,14 +276,14 @@ func TestGenServiceMethod5(t *testing.T) {
 func TestGenServiceMethod6(t *testing.T) {
 	tests := []struct {
 		name  string
-		info  *modelinfo.Model
+		info  *modelsource.Model
 		phase apiaction.Phase
 		want  string
 	}{
 		{
 			// The example of the genServiceMethod6 doc comment.
 			name: "user",
-			info: &modelinfo.Model{
+			info: &modelsource.Model{
 				ModelPkgName: "model",
 				ModelName:    "User",
 				ModelVarName: "u",
@@ -316,14 +316,14 @@ func TestGenServiceMethod6(t *testing.T) {
 func TestGenServiceMethod7(t *testing.T) {
 	tests := []struct {
 		name  string
-		info  *modelinfo.Model
+		info  *modelsource.Model
 		phase apiaction.Phase
 		want  string
 	}{
 		{
 			// The example of the genServiceMethod7 doc comment.
 			name: "user",
-			info: &modelinfo.Model{
+			info: &modelsource.Model{
 				ModelPkgName: "model",
 				ModelName:    "User",
 				ModelVarName: "u",
@@ -356,7 +356,7 @@ func TestGenServiceMethod7(t *testing.T) {
 func TestGenServiceMethod8(t *testing.T) {
 	tests := []struct {
 		name   string
-		info   *modelinfo.Model
+		info   *modelsource.Model
 		action *dsl.Action
 		phase  apiaction.Phase
 		role   string
@@ -365,7 +365,7 @@ func TestGenServiceMethod8(t *testing.T) {
 		{
 			// The example of the genServiceMethod8 doc comment.
 			name: "user",
-			info: &modelinfo.Model{
+			info: &modelsource.Model{
 				ModelPkgName: "model",
 				ModelName:    "User",
 				ModelVarName: "u",
@@ -384,7 +384,7 @@ func TestGenServiceMethod8(t *testing.T) {
 		{
 			// The Export action reuses the list pipeline, Filter included.
 			name: "export",
-			info: &modelinfo.Model{
+			info: &modelsource.Model{
 				ModelPkgName: "model",
 				ModelName:    "User",
 				ModelVarName: "u",
@@ -403,7 +403,7 @@ func TestGenServiceMethod8(t *testing.T) {
 		{
 			// An action naming its service logs its label, like the other hooks do.
 			name: "named_service",
-			info: &modelinfo.Model{
+			info: &modelsource.Model{
 				ModelPkgName: "model",
 				ModelName:    "User",
 				ModelVarName: "s",
@@ -438,7 +438,7 @@ func TestGenServiceMethod8(t *testing.T) {
 // TestGenServiceMethod9 pins the examples of the genServiceMethod9 doc
 // comment: the Stream scaffold of a server stream and of a client stream.
 func TestGenServiceMethod9(t *testing.T) {
-	feed := &modelinfo.Model{ModelPkgName: "model", ModelName: "Feed", ModulePath: "codegen", ModelFileDir: "model"}
+	feed := &modelsource.Model{ModelPkgName: "model", ModelName: "Feed", ModulePath: "codegen", ModelFileDir: "model"}
 	tests := []struct {
 		name   string
 		action *dsl.Action
@@ -484,7 +484,7 @@ func TestGenServiceMethod9(t *testing.T) {
 // builds for the example of its doc comment: a Create action on a database
 // model, which gets the before and after hooks.
 func TestGenerateServiceCreate(t *testing.T) {
-	info := &modelinfo.Model{
+	info := &modelsource.Model{
 		ModulePath:   "helloworld",
 		ModelPkgName: "model",
 		ModelName:    "User",
@@ -551,7 +551,7 @@ func (u *Creator) CreateAfter(ctx *gst.ServiceContext, user *model.User) error {
 // Create action of the model above, the struct and the action method and
 // none of the hook placeholders.
 func TestGenerateServiceShellOmitsTheHookPlaceholders(t *testing.T) {
-	info := &modelinfo.Model{
+	info := &modelsource.Model{
 		ModulePath:   "helloworld",
 		ModelPkgName: "model",
 		ModelName:    "User",
@@ -604,7 +604,7 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.U
 // hooks in the order the list controller invokes them, ListBefore, Filter
 // and ListAfter.
 func TestGenerateServiceList(t *testing.T) {
-	info := &modelinfo.Model{
+	info := &modelsource.Model{
 		ModulePath:   "helloworld",
 		ModelPkgName: "model",
 		ModelName:    "User",
@@ -676,7 +676,7 @@ func (u *Lister) ListAfter(ctx *gst.ServiceContext, users *[]*model.User) error 
 func TestGenerateServiceListEmptyPayload(t *testing.T) {
 	tests := []struct {
 		name          string
-		info          *modelinfo.Model
+		info          *modelsource.Model
 		wantImport    string
 		wantBase      string
 		wantSignature string
@@ -684,7 +684,7 @@ func TestGenerateServiceListEmptyPayload(t *testing.T) {
 	}{
 		{
 			name: "sub_package_model",
-			info: &modelinfo.Model{
+			info: &modelsource.Model{
 				ModulePath:   "helloworld",
 				ModelPkgName: "box",
 				ModelName:    "Box",
@@ -699,7 +699,7 @@ func TestGenerateServiceListEmptyPayload(t *testing.T) {
 		},
 		{
 			name: "root_model_package",
-			info: &modelinfo.Model{
+			info: &modelsource.Model{
 				ModulePath:   "helloworld",
 				ModelPkgName: "model",
 				ModelName:    "Box",
@@ -739,8 +739,8 @@ func TestGenerateServiceListEmptyPayload(t *testing.T) {
 }
 
 func TestGenerateServiceExport(t *testing.T) {
-	newInfo := func(isEmpty bool) *modelinfo.Model {
-		return &modelinfo.Model{
+	newInfo := func(isEmpty bool) *modelsource.Model {
+		return &modelsource.Model{
 			ModulePath:   "helloworld",
 			ModelPkgName: "model",
 			ModelName:    "User",
@@ -809,7 +809,7 @@ func TestGenerateServiceExport(t *testing.T) {
 }
 
 func TestGenerateServiceSSE(t *testing.T) {
-	info := &modelinfo.Model{
+	info := &modelsource.Model{
 		ModulePath:   "helloworld",
 		ModelPkgName: "model",
 		ModelName:    "User",
@@ -853,7 +853,7 @@ func TestGenerateServiceSSE(t *testing.T) {
 // struct embedding service.Base on the action's types, the Stream method of
 // its kind, the gst import the stream comes from, and no hook.
 func TestGenerateServiceStream(t *testing.T) {
-	info := &modelinfo.Model{
+	info := &modelsource.Model{
 		ModulePath:   "helloworld",
 		ModelPkgName: "model",
 		ModelName:    "Feed",

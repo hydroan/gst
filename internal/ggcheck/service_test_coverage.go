@@ -9,7 +9,7 @@ import (
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 )
 
 // ServiceTestCoverage requires a test file for every service file generated
@@ -57,7 +57,7 @@ func checkServiceTestCoverage(ignore gghelper.ProjectIgnore) []string {
 			if !act.Service {
 				return
 			}
-			target := modelinfo.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
+			target := modelsource.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
 			if seen[target.FilePath] {
 				return
 			}

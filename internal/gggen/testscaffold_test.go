@@ -13,13 +13,13 @@ import (
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/gggen"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 	"github.com/stretchr/testify/require"
 )
 
 // recordInfo is the model Record of the root model package of helloworld,
 // the model the scaffold examples are built for.
-var recordInfo = &modelinfo.Model{
+var recordInfo = &modelsource.Model{
 	ModulePath:   "helloworld",
 	ModelPkgName: "model",
 	ModelName:    "Record",
@@ -29,8 +29,8 @@ var recordInfo = &modelinfo.Model{
 }
 
 // recordTarget locates the service file of a default action of Record.
-func recordTarget(filename string) modelinfo.ServiceTargetInfo {
-	return modelinfo.ServiceTargetInfo{
+func recordTarget(filename string) modelsource.ServiceTargetInfo {
+	return modelsource.ServiceTargetInfo{
 		Dir:         "service/record",
 		FilePath:    "service/record/" + filename,
 		ImportPath:  "helloworld/service/record",
@@ -88,7 +88,7 @@ func TestCreate(t *testing.T) {
 
 // feedInfo is the model Feed of the root model package of helloworld, an
 // action model serving streams; feedTarget locates one of its service files.
-var feedInfo = &modelinfo.Model{
+var feedInfo = &modelsource.Model{
 	ModulePath:    "helloworld",
 	ModelPkgName:  "model",
 	ModelName:     "Feed",
@@ -98,8 +98,8 @@ var feedInfo = &modelinfo.Model{
 	Design:        &dsl.Design{Endpoint: "feeds"},
 }
 
-func feedTarget(file string) modelinfo.ServiceTargetInfo {
-	return modelinfo.ServiceTargetInfo{Dir: "service/feed", FilePath: "service/feed/" + file, ImportPath: "helloworld/service/feed", PackageName: "feed"}
+func feedTarget(file string) modelsource.ServiceTargetInfo {
+	return modelsource.ServiceTargetInfo{Dir: "service/feed", FilePath: "service/feed/" + file, ImportPath: "helloworld/service/feed", PackageName: "feed"}
 }
 
 // TestGenerateServiceTestOfAStream compares the test GenerateServiceTest
@@ -143,8 +143,8 @@ func TestWatch(t *testing.T) {
 func TestGenerateServiceTestExamples(t *testing.T) {
 	tests := []struct {
 		name     string
-		info     *modelinfo.Model
-		target   modelinfo.ServiceTargetInfo
+		info     *modelsource.Model
+		target   modelsource.ServiceTargetInfo
 		action   *dsl.Action
 		route    string
 		wantDoc  string
@@ -355,7 +355,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 		},
 		{
 			name: "flattened_file_takes_the_package_of_its_model",
-			info: &modelinfo.Model{
+			info: &modelsource.Model{
 				ModulePath:   "helloworld",
 				ModelPkgName: "archive",
 				ModelName:    "Document",
@@ -363,7 +363,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 				ModelFileDir: "model/archive",
 				Design:       &dsl.Design{},
 			},
-			target:   modelinfo.ServiceTargetInfo{Dir: "service/archive", FilePath: "service/archive/seal.go", ImportPath: "helloworld/service/archive", PackageName: "archive"},
+			target:   modelsource.ServiceTargetInfo{Dir: "service/archive", FilePath: "service/archive/seal.go", ImportPath: "helloworld/service/archive", PackageName: "archive"},
 			action:   &dsl.Action{Service: true, Payload: "*DocumentSealReq", Result: "*DocumentSealRsp", Phase: apiaction.Create, ServiceName: "seal", Flatten: true},
 			route:    "/api/archive/documents/seal",
 			wantDoc:  "// TestSeal covers POST /api/archive/documents/seal, served by Seal in seal.go.",
@@ -371,7 +371,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 		},
 		{
 			name: "model_package_named_like_a_framework_import_is_aliased",
-			info: &modelinfo.Model{
+			info: &modelsource.Model{
 				ModulePath:   "helloworld",
 				ModelPkgName: "client",
 				ModelName:    "Session",
@@ -379,7 +379,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 				ModelFileDir: "model/client",
 				Design:       &dsl.Design{},
 			},
-			target:   modelinfo.ServiceTargetInfo{Dir: "service/client/session", FilePath: "service/client/session/create.go", ImportPath: "helloworld/service/client/session", PackageName: "session"},
+			target:   modelsource.ServiceTargetInfo{Dir: "service/client/session", FilePath: "service/client/session/create.go", ImportPath: "helloworld/service/client/session", PackageName: "session"},
 			action:   &dsl.Action{Service: true, Payload: "*Session", Result: "*Session", Phase: apiaction.Create},
 			route:    "/api/client/sessions",
 			wantDoc:  "// TestCreate covers POST /api/client/sessions, served by Creator in create.go.",
@@ -387,7 +387,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 		},
 		{
 			name: "model_package_unlike_its_directory_is_imported_under_its_name",
-			info: &modelinfo.Model{
+			info: &modelsource.Model{
 				ModulePath:   "helloworld",
 				ModelPkgName: "recorditem",
 				ModelName:    "RecordItem",
@@ -395,7 +395,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 				ModelFileDir: "model/record_item",
 				Design:       &dsl.Design{},
 			},
-			target:   modelinfo.ServiceTargetInfo{Dir: "service/record_item", FilePath: "service/record_item/create.go", ImportPath: "helloworld/service/record_item", PackageName: "recorditem"},
+			target:   modelsource.ServiceTargetInfo{Dir: "service/record_item", FilePath: "service/record_item/create.go", ImportPath: "helloworld/service/record_item", PackageName: "recorditem"},
 			action:   &dsl.Action{Service: true, Payload: "*RecordItem", Result: "*RecordItem", Phase: apiaction.Create},
 			route:    "/api/record-items",
 			wantDoc:  "// TestCreate covers POST /api/record-items, served by Creator in create.go.",
@@ -465,7 +465,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 		},
 		{
 			name: "model_package_named_like_a_scaffold_variable_is_aliased",
-			info: &modelinfo.Model{
+			info: &modelsource.Model{
 				ModulePath:    "helloworld",
 				ModelPkgName:  "stream",
 				ModelName:     "Feed",
@@ -474,7 +474,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 				ModelFilePath: "model/stream/feed.go",
 				Design:        &dsl.Design{Endpoint: "stream/feeds"},
 			},
-			target:   modelinfo.ServiceTargetInfo{Dir: "service/stream/feed", FilePath: "service/stream/feed/watch.go", ImportPath: "helloworld/service/stream/feed", PackageName: "feed"},
+			target:   modelsource.ServiceTargetInfo{Dir: "service/stream/feed", FilePath: "service/stream/feed/watch.go", ImportPath: "helloworld/service/stream/feed", PackageName: "feed"},
 			action:   &dsl.Action{Service: true, Payload: "*FeedWatchReq", Result: "*FeedEvent", StreamingResult: true, Phase: apiaction.Stream, ServiceName: "watch"},
 			route:    "/api/stream/feeds/watch",
 			wantDoc:  "// TestWatch covers GET /api/stream/feeds/watch, served by Watch in watch.go.",
@@ -482,7 +482,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 		},
 		{
 			name: "model_package_named_like_the_client_variable_is_aliased",
-			info: &modelinfo.Model{
+			info: &modelsource.Model{
 				ModulePath:   "helloworld",
 				ModelPkgName: "cli",
 				ModelName:    "Session",
@@ -490,7 +490,7 @@ func TestGenerateServiceTestExamples(t *testing.T) {
 				ModelFileDir: "model/cli",
 				Design:       &dsl.Design{},
 			},
-			target:   modelinfo.ServiceTargetInfo{Dir: "service/cli/session", FilePath: "service/cli/session/create.go", ImportPath: "helloworld/service/cli/session", PackageName: "session"},
+			target:   modelsource.ServiceTargetInfo{Dir: "service/cli/session", FilePath: "service/cli/session/create.go", ImportPath: "helloworld/service/cli/session", PackageName: "session"},
 			action:   &dsl.Action{Service: true, Payload: "*Session", Result: "*Session", Phase: apiaction.Create},
 			route:    "/api/cli/sessions",
 			wantDoc:  "// TestCreate covers POST /api/cli/sessions, served by Creator in create.go.",

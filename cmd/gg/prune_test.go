@@ -13,7 +13,7 @@ import (
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen/pb"
 	"github.com/hydroan/gst/internal/gghelper"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 )
 
 // TestPruneLeftoversDeletesStalePBFiles pins that the files under pb/ gg gen
@@ -462,7 +462,7 @@ func TestPruneLeftoversListsEverythingAndAsksOnce(t *testing.T) {
 			var stdout string
 			withStdin(t, tt.answer, func() {
 				stdout = captureOutput(t, func() {
-					if _, err := pruneLeftovers(new(changes), []string{currentFile, disabledFile}, []*modelinfo.Model{pruneTestModel()}, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil); err != nil {
+					if _, err := pruneLeftovers(new(changes), []string{currentFile, disabledFile}, []*modelsource.Model{pruneTestModel()}, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil); err != nil {
 						t.Error(err)
 					}
 				})
@@ -515,7 +515,7 @@ func TestPruneLeftoversDeletesThePairedTestFiles(t *testing.T) {
 	var stdout string
 	withStdin(t, "y\n", func() {
 		stdout = captureOutput(t, func() {
-			if _, err := pruneLeftovers(new(changes), []string{currentFile, disabledFile}, []*modelinfo.Model{pruneTestModel()}, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil); err != nil {
+			if _, err := pruneLeftovers(new(changes), []string{currentFile, disabledFile}, []*modelsource.Model{pruneTestModel()}, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil); err != nil {
 				t.Error(err)
 			}
 		})
@@ -615,7 +615,7 @@ func TestPruneLeftoversFailsKeepingOrphansWhenADisabledFileStays(t *testing.T) {
 	var pruneErr error
 	withStdin(t, "y\n", func() {
 		stdout = captureOutput(t, func() {
-			_, pruneErr = pruneLeftovers(new(changes), []string{currentFile, disabledFile}, []*modelinfo.Model{pruneTestModel()}, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil)
+			_, pruneErr = pruneLeftovers(new(changes), []string{currentFile, disabledFile}, []*modelsource.Model{pruneTestModel()}, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil)
 		})
 	})
 
@@ -662,7 +662,7 @@ func TestPruneLeftoversKeepsTheServiceFilesOfAnImportedHelperDir(t *testing.T) {
 	var stdout string
 	withStdin(t, "y\n", func() {
 		stdout = captureOutput(t, func() {
-			if _, err := pruneLeftovers(new(changes), []string{currentFile, helperListFile}, []*modelinfo.Model{pruneTestModel()}, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil); err != nil {
+			if _, err := pruneLeftovers(new(changes), []string{currentFile, helperListFile}, []*modelsource.Model{pruneTestModel()}, gghelper.NewProjectIgnore(), ggconfig.PruneConfig{}, nil, nil); err != nil {
 				t.Error(err)
 			}
 		})
@@ -906,11 +906,11 @@ func init() {
 // Create, writes service/authz/role/role.go, so service/authz/role is a
 // directory a model owns and every other phase file there, list.go among
 // them, belongs to a disabled action.
-func pruneTestModel() *modelinfo.Model {
+func pruneTestModel() *modelsource.Model {
 	disabled := func(phase apiaction.Phase) *dsl.Action {
 		return &dsl.Action{Phase: phase}
 	}
-	return &modelinfo.Model{
+	return &modelsource.Model{
 		ModulePath:    "tmpapp",
 		ModelPkgName:  "authz",
 		ModelName:     "Role",

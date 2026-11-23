@@ -10,7 +10,7 @@ import (
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 )
 
 // DSLDesignRules runs the Design() validation that gates gg gen over every
@@ -26,7 +26,7 @@ var DSLDesignRules = Check{
 // placement and generation-semantic violations fail gg check with the same
 // rules that block gg gen, and then reports the conflicts among the routes
 // and the services of all the models the way gg gen refuses them (see
-// modelinfo.RouteConflicts and modelinfo.ServiceConflicts), the models read
+// modelsource.RouteConflicts and modelsource.ServiceConflicts), the models read
 // the way gg gen reads them. A
 // scan the model files stopped adds nothing, the faults being reported file
 // by file above; one gst.yaml or go.mod stopped is reported here, once for
@@ -40,7 +40,7 @@ func checkDSLDesignRules(ignore gghelper.ProjectIgnore) []string {
 
 	// The generator's own walk decides which model files take part, so a file
 	// gg gen reads is a file this check validates, and nothing else is.
-	err := modelinfo.WalkModelFiles(ggconst.DirModel, ignore, func(path string) error {
+	err := modelsource.WalkModelFiles(ggconst.DirModel, ignore, func(path string) error {
 		fset := token.NewFileSet()
 		file, parseErr := parser.ParseFile(fset, path, nil, parser.ParseComments)
 		if parseErr != nil {
@@ -63,10 +63,10 @@ func checkDSLDesignRules(ignore gghelper.ProjectIgnore) []string {
 		}
 		return violations
 	}
-	for _, conflict := range modelinfo.RouteConflicts(scanned.Models) {
+	for _, conflict := range modelsource.RouteConflicts(scanned.Models) {
 		violations = append(violations, conflict.Error())
 	}
-	for _, conflict := range modelinfo.ServiceConflicts(scanned.Models) {
+	for _, conflict := range modelsource.ServiceConflicts(scanned.Models) {
 		violations = append(violations, conflict.Error())
 	}
 	return violations

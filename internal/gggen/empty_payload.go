@@ -9,7 +9,7 @@ import (
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/goast"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 )
 
 const (
@@ -31,7 +31,7 @@ const (
 // its result yields ("gstmodel", true), and routed models in package sample
 // declaring both sides of every action yield ("model", false). Call it after
 // the route/model ignore passes so disabled actions no longer count as routed.
-func RouterGstModelUse(models []*modelinfo.Model) (pkgName string, needed bool) {
+func RouterGstModelUse(models []*modelsource.Model) (pkgName string, needed bool) {
 	pkgName = gstModelPkgName
 	for _, m := range models {
 		if m.Design == nil {

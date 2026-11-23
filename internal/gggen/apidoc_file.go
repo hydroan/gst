@@ -11,7 +11,7 @@ import (
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 )
 
 // BuildAPIDocFile generates the doc registration file, model/apidoc.gen.go, of
@@ -42,7 +42,7 @@ import (
 //			},
 //		})
 //	}
-func BuildAPIDocFile(modulePath, pkgName string, entries modelinfo.APIDocEntries) (string, error) {
+func BuildAPIDocFile(modulePath, pkgName string, entries modelsource.APIDocEntries) (string, error) {
 	// go/printer lays the registrations out by their positions: each field
 	// of a registered doc on a line of its own, so every node that starts a
 	// line takes the next line of the fabricated file the header started.
@@ -91,7 +91,7 @@ func BuildAPIDocFile(modulePath, pkgName string, entries modelinfo.APIDocEntries
 //
 // A struct without a comment has no Comment field, and one without
 // documented fields no Fields field.
-func apidocRegisterStmt(lines *goast.LineSet, entry modelinfo.StructDocEntry) ast.Stmt {
+func apidocRegisterStmt(lines *goast.LineSet, entry modelsource.StructDocEntry) ast.Stmt {
 	callPos := lines.Next()
 	doc := &ast.CompositeLit{Type: sel(ident(ggconst.PkgAPIDoc), "StructDoc"), Lbrace: callPos}
 	if entry.Doc.Comment != "" {
@@ -129,7 +129,7 @@ func apidocRegisterStmt(lines *goast.LineSet, entry modelinfo.StructDocEntry) as
 //
 // An enum without a comment has no Comment field, and a value without a
 // comment no Comment element.
-func apidocRegisterEnumStmt(lines *goast.LineSet, entry modelinfo.EnumDocEntry) ast.Stmt {
+func apidocRegisterEnumStmt(lines *goast.LineSet, entry modelsource.EnumDocEntry) ast.Stmt {
 	callPos := lines.Next()
 	doc := &ast.CompositeLit{Type: sel(ident(ggconst.PkgAPIDoc), "EnumDoc"), Lbrace: callPos}
 	if entry.Doc.Comment != "" {

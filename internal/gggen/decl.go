@@ -10,7 +10,7 @@ import (
 	"github.com/gertd/go-pluralize"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/ggconst"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 )
 
 var pluralizeCli = pluralize.NewClient()
@@ -47,7 +47,7 @@ func serviceScaffoldImports(phase apiaction.Phase) []string {
 //
 // A model in package io is aliased model_io only in the service file of an
 // Import action, the one that imports io.
-func serviceModelQualifier(info *modelinfo.Model, phase apiaction.Phase) string {
+func serviceModelQualifier(info *modelsource.Model, phase apiaction.Phase) string {
 	importPath := info.ImportPath()
 	aliases := ResolveImportConflicts(map[string]string{importPath: info.ModelPkgName}, importNames(serviceScaffoldImports(phase))...)
 	if alias := aliases[importPath]; alias != "" {
@@ -87,7 +87,7 @@ func modelImportSpec(importPath, modelQualifier string) *ast.ImportSpec {
 func importDecl(modulePath, modelFileDir, modelQualifier string, phase apiaction.Phase, otherPkg ...string) *ast.GenDecl {
 	genDecl := &ast.GenDecl{
 		Tok:   token.IMPORT,
-		Specs: []ast.Spec{modelImportSpec(modelinfo.PackageImportPath(modulePath, modelFileDir), modelQualifier)},
+		Specs: []ast.Spec{modelImportSpec(modelsource.PackageImportPath(modulePath, modelFileDir), modelQualifier)},
 	}
 	for _, importPath := range serviceScaffoldImports(phase) {
 		genDecl.Specs = append(genDecl.Specs, &ast.ImportSpec{Path: &ast.BasicLit{Kind: token.STRING, Value: strconv.Quote(importPath)}})

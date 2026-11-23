@@ -10,7 +10,7 @@ import (
 
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 )
 
 func TestMergeModuleServiceSourceCopiesWholeServiceFile(t *testing.T) {
@@ -792,7 +792,7 @@ func moduleCopyTestImportPaths(file *ast.File) []string {
 // placeholder the source does not define would stay in the copy as a hook
 // that runs on every request.
 func TestGenerateTargetServiceShellCarriesNoHookPlaceholders(t *testing.T) {
-	modelInfo := &modelinfo.Model{
+	modelInfo := &modelsource.Model{
 		ModulePath:   "tmpapp",
 		ModelPkgName: "copytest",
 		ModelName:    "CopyTest",

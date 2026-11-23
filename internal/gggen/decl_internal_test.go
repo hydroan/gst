@@ -10,7 +10,7 @@ import (
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/gghelper"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 	"github.com/kr/pretty"
 )
 
@@ -202,7 +202,7 @@ func TestServiceModelQualifier(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			info := &modelinfo.Model{ModulePath: "helloworld", ModelFileDir: tt.modelFileDir, ModelPkgName: tt.modelPkgName}
+			info := &modelsource.Model{ModulePath: "helloworld", ModelFileDir: tt.modelFileDir, ModelPkgName: tt.modelPkgName}
 			if got := serviceModelQualifier(info, tt.phase); got != tt.want {
 				t.Errorf("serviceModelQualifier() = %q, want %q", got, tt.want)
 			}

@@ -19,7 +19,7 @@ import (
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 	"golang.org/x/tools/go/ast/astutil"
 )
 
@@ -60,7 +60,7 @@ var serviceTestDoc = []string{
 // project deletes its first line, and then is the example request of the
 // action, typed by the action's request and response types. route is the
 // path the router registers the action at, API prefix included (see
-// modelinfo.RouterTargetForAction). For the Create action of the model Record
+// modelsource.RouterTargetForAction). For the Create action of the model Record
 // of the root model package of helloworld, registered at /api/records, it
 // generates
 //
@@ -133,7 +133,7 @@ var serviceTestDoc = []string{
 //
 // and a client stream sends a request then reads the answer with
 // CloseAndRecv, a bidirectional one sends, reads and closes its side.
-func GenerateServiceTest(info *modelinfo.Model, target modelinfo.ServiceTargetInfo, action *dsl.Action, route string) (string, error) {
+func GenerateServiceTest(info *modelsource.Model, target modelsource.ServiceTargetInfo, action *dsl.Action, route string) (string, error) {
 	name := serviceTestName(action)
 	doc := append([]string{
 		fmt.Sprintf("// %s covers %s %s, served by %s in %s.", name, action.Phase.HTTPMethod(), route, action.RoleName(), filepath.Base(target.FilePath)),
@@ -199,7 +199,7 @@ type serviceTestExample struct {
 // framework client. The model package is imported when the example refers to
 // it, under an alias when its name is one the scaffold takes, and under its
 // name when the path does not tell it (see importSpecName).
-func newServiceTestExample(info *modelinfo.Model, action *dsl.Action, route string) *serviceTestExample {
+func newServiceTestExample(info *modelsource.Model, action *dsl.Action, route string) *serviceTestExample {
 	example := &serviceTestExample{
 		setup: []ast.Stmt{
 			define(idents("cli", "err"), call(sel(ident("client"), "New"), call(sel(ident("testutil"), "BaseURL")))),

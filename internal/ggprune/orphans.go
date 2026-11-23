@@ -15,7 +15,7 @@ import (
 	"github.com/hydroan/gst/internal/ggconfig"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 )
 
 // OrphanDir is a service directory no model owns, with the unmanaged files in
@@ -40,7 +40,7 @@ type OrphanDir struct {
 // when the imports of part of the code it reads cannot be read, because a
 // directory or a file cannot be opened or its imports do not parse: an
 // import it could not see might be all that keeps a directory.
-func FindOrphanDirs(allModels []*modelinfo.Model, deleting []string, modulePath string, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig) (orphans, keptHelpers []OrphanDir, keptFiles []string, err error) {
+func FindOrphanDirs(allModels []*modelsource.Model, deleting []string, modulePath string, ignore gghelper.ProjectIgnore, protect ggconfig.PruneConfig) (orphans, keptHelpers []OrphanDir, keptFiles []string, err error) {
 	currentDirs := currentServiceDirs(allModels)
 
 	// A file of deleting inside a directory live code imports is live code
@@ -108,7 +108,7 @@ type serviceDirSet struct {
 // together with the directories above it: a Create writing
 // service/sample/record/create.go owns service/sample/record, which makes
 // service/sample/record, service/sample and service known.
-func currentServiceDirs(allModels []*modelinfo.Model) serviceDirSet {
+func currentServiceDirs(allModels []*modelsource.Model) serviceDirSet {
 	knownDirs := map[string]bool{
 		filepath.Clean(ggconst.DirService): true,
 	}
@@ -120,7 +120,7 @@ func currentServiceDirs(allModels []*modelinfo.Model) serviceDirSet {
 			if !act.Service {
 				return
 			}
-			dir := filepath.Clean(modelinfo.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService).Dir)
+			dir := filepath.Clean(modelsource.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService).Dir)
 			if !modelDirSet[dir] {
 				modelDirSet[dir] = true
 				modelDirs = append(modelDirs, dir)

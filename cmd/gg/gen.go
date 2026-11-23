@@ -20,7 +20,7 @@ import (
 	"github.com/hydroan/gst/internal/gggen/pb"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/ggnew"
-	"github.com/hydroan/gst/internal/modelinfo"
+	"github.com/hydroan/gst/internal/modelsource"
 	"github.com/hydroan/gst/internal/pbschema"
 	"github.com/spf13/cobra"
 )
@@ -174,7 +174,7 @@ func genRunWithOptions(opts genRunOptions) error {
 
 		m.Design.Range(func(s string, a *dsl.Action) {
 			if a.Service {
-				target := modelinfo.ServiceTarget(m, a, ggconst.DirModel, ggconst.DirService)
+				target := modelsource.ServiceTarget(m, a, ggconst.DirModel, ggconst.DirService)
 				servicePkgs[target.ImportPath] = target.PackageName
 			}
 			routerPkgs[m.ImportPath()] = m.ModelPkgName
@@ -214,10 +214,10 @@ func genRunWithOptions(opts genRunOptions) error {
 			// Both registrations below must carry this exact route string:
 			// the service registry keys services by route and phase, so the
 			// service side and the router side share one route value.
-			route, paramName := modelinfo.RouterTargetForAction(route, m.Design, act)
+			route, paramName := modelsource.RouterTargetForAction(route, m.Design, act)
 
 			if act.Service {
-				target := modelinfo.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
+				target := modelsource.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
 				serviceStmts = append(serviceStmts, gggen.StmtServiceRegister(importQualifier(serviceAliases, target.ImportPath, target.PackageName)+"."+act.RoleName(), act.Phase, route))
 			}
 			base := ggconst.RouterAuth
@@ -242,7 +242,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	// generate model/apidoc.gen.go, which registers struct and field doc
 	// comments so the OpenAPI document keeps schema descriptions in binaries
 	// deployed without Go source files.
-	docEntries, err := modelinfo.ExtractAPIDocs(module, ggconst.DirModel, ignore, nil)
+	docEntries, err := modelsource.ExtractAPIDocs(module, ggconst.DirModel, ignore, nil)
 	if err != nil {
 		return errors.Wrap(err, "extract api docs")
 	}
@@ -357,7 +357,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	// created with its test scaffolds, an existing one has the action's
 	// declarations synced into it. route is the route the router registers
 	// the action under.
-	applyFile := func(target modelinfo.ServiceTargetInfo, route string, code string, action *dsl.Action, modelInfo *modelinfo.Model) error {
+	applyFile := func(target modelsource.ServiceTargetInfo, route string, code string, action *dsl.Action, modelInfo *modelsource.Model) error {
 		servicePkgName := target.PackageName
 		safePath, err := gghelper.PathUnderRoot(target.FilePath, ggconst.DirService)
 		if err != nil {
@@ -425,7 +425,7 @@ func genRunWithOptions(opts genRunOptions) error {
 			if applyErr != nil {
 				return
 			}
-			target := modelinfo.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
+			target := modelsource.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
 			generate := gggen.GenerateService
 			if opts.mergesShell(target.FilePath) {
 				generate = gggen.GenerateServiceShell
@@ -437,7 +437,7 @@ func genRunWithOptions(opts genRunOptions) error {
 					applyErr = err
 					return
 				}
-				registered, _ := modelinfo.RouterTargetForAction(route, m.Design, act)
+				registered, _ := modelsource.RouterTargetForAction(route, m.Design, act)
 				applyErr = applyFile(target, registered, code, act, m)
 			}
 		})
@@ -459,7 +459,7 @@ func genRunWithOptions(opts genRunOptions) error {
 // file the project already has, in its external or internal form, is kept
 // as it is, and so is a main_test.go that exists already, its imports of the
 // optional packages following main.go's (see syncTestMainImports).
-func scaffoldServiceTests(modelInfo *modelinfo.Model, target modelinfo.ServiceTargetInfo, action *dsl.Action, route string, extraDirs []string, log *changes) error {
+func scaffoldServiceTests(modelInfo *modelsource.Model, target modelsource.ServiceTargetInfo, action *dsl.Action, route string, extraDirs []string, log *changes) error {
 	stem := strings.TrimSuffix(target.FilePath, ggconst.ExtensionGo)
 	if gghelper.FileExists(stem+ggconst.PatternTestFile) || gghelper.FileExists(stem+ggconst.PatternInternalTestFile) {
 		return nil
@@ -521,13 +521,13 @@ func syncTestMainImports(extraDirs []string, ignore gghelper.ProjectIgnore, log 
 
 // scannedModels is the model set code generation works from.
 type scannedModels struct {
-	models []*modelinfo.Model
+	models []*modelsource.Model
 	// routeIgnores records the actions the gst.yaml route ignores disabled,
 	// with the service files pruning must keep for them.
-	routeIgnores modelinfo.RouteIgnoreResult
+	routeIgnores modelsource.RouteIgnoreResult
 	// modelIgnores records the models the gst.yaml model ignores dropped from
 	// registration, with the rules reportIgnoreWarnings warns about.
-	modelIgnores modelinfo.ModelIgnoreResult
+	modelIgnores modelsource.ModelIgnoreResult
 }
 
 // protobufFiles renders the .proto files of the models declaring GRPC() and
@@ -535,7 +535,7 @@ type scannedModels struct {
 // the ones fillPBTags rendered, and compiles the Go files of the
 // definitions (see pb.Compile), the set gg gen writes, the rendered files
 // first.
-func protobufFiles(models []*modelinfo.Model, derived []pb.File, ignore gghelper.ProjectIgnore) ([]pb.File, error) {
+func protobufFiles(models []*modelsource.Model, derived []pb.File, ignore gghelper.ProjectIgnore) ([]pb.File, error) {
 	generated := derived
 	if generated == nil {
 		var err error
@@ -567,7 +567,7 @@ func definitionsOf(files []pb.File) []pb.File {
 // stubbed out (see columns.InspectionOverlay), so a run that deletes a model,
 // and prune after one, do not fail on a registration or column file still
 // naming it.
-func protobufConfig(models []*modelinfo.Model, ignore gghelper.ProjectIgnore) (pbschema.Config, error) {
+func protobufConfig(models []*modelsource.Model, ignore gghelper.ProjectIgnore) (pbschema.Config, error) {
 	overlay, err := columns.InspectionOverlay(module, ggconst.DirModel, models, ignore)
 	if err != nil {
 		return pbschema.Config{}, errors.Wrap(err, "overlay the model packages")
@@ -584,7 +584,7 @@ func protobufConfig(models []*modelinfo.Model, ignore gghelper.ProjectIgnore) (p
 // writes itself and gg prune keeps. The diagnostics of types protobuf cannot
 // describe come back as they are, one line each; any other failure is
 // wrapped.
-func protobufDefinitions(models []*modelinfo.Model, ignore gghelper.ProjectIgnore) ([]pb.File, error) {
+func protobufDefinitions(models []*modelsource.Model, ignore gghelper.ProjectIgnore) ([]pb.File, error) {
 	cfg, err := protobufConfig(models, ignore)
 	if err != nil {
 		return nil, err
@@ -601,7 +601,7 @@ func protobufDefinitions(models []*modelinfo.Model, ignore gghelper.ProjectIgnor
 }
 
 // scanModels reads the models of the model directory the way every command
-// and check reads them (see modelinfo.ScanModels): their routes resolved,
+// and check reads them (see modelsource.ScanModels): their routes resolved,
 // then the gst.yaml route and model ignores of projectCfg applied, so a
 // matched action behaves exactly like an action that was never declared.
 // Unless quiet, it prints one line counting the models and the routes left,
@@ -616,20 +616,20 @@ func scanModels(quiet bool, ignore gghelper.ProjectIgnore, projectCfg *ggconfig.
 		return scannedModels{}, errors.Newf("model dir not found: %s", ggconst.DirModel)
 	}
 
-	scanned, err := modelinfo.ScanModels(module, ggconst.DirModel, ignore, projectCfg)
+	scanned, err := modelsource.ScanModels(module, ggconst.DirModel, ignore, projectCfg)
 	if err != nil {
 		return scannedModels{}, err
 	}
 	// Two actions registering one path would stop the router at startup;
 	// the scan stops here instead, naming both.
-	if conflicts := modelinfo.RouteConflicts(scanned.Models); len(conflicts) > 0 {
+	if conflicts := modelsource.RouteConflicts(scanned.Models); len(conflicts) > 0 {
 		return scannedModels{}, errors.Join(conflicts...)
 	}
 	// Two actions writing one service file, one service type into a
 	// directory or two packages into one would leave a project that does
 	// not build, the one written first overwritten; the scan stops here
 	// instead, naming both.
-	if conflicts := modelinfo.ServiceConflicts(scanned.Models); len(conflicts) > 0 {
+	if conflicts := modelsource.ServiceConflicts(scanned.Models); len(conflicts) > 0 {
 		return scannedModels{}, errors.Join(conflicts...)
 	}
 	if !quiet {
