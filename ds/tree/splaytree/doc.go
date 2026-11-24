@@ -6,36 +6,37 @@ package splaytree
 
 /*
 ====================
-1. Zig 旋转（单旋转）
-- 适用场景：当要访问的节点 X 是根的 直接子节点 时（即 X 是根的左孩子或右孩子）。
-- 操作：进行 单次旋转，使 X 成为根节点。
+1. Zig rotation (single rotation)
+- Applies when: the node being accessed, X, is a direct child of the root
+  (its left or its right child).
+- Operation: a single rotation, which makes X the root.
 
-左 Zig 旋转:
-- X 变成新的根节点。
-- S 变成 X 的右孩子。
-- A 作为 X 的左子树
-旋转前
+Left zig rotation
+- X becomes the new root.
+- S becomes the right child of X.
+- A is the left subtree of X.
+Before
     S
    /
   X
  /
 A
-旋转后
+After
   X
  / \
 A   S
 
-右 Zig 旋转
-- X 变成新的根节点。
-- S 变成 X 的左孩子。
-- A 作为 X 的右子树。
-旋转前
+Right zig rotation
+- X becomes the new root.
+- S becomes the left child of X.
+- A is the right subtree of X.
+Before
   S
    \
     X
      \
       A
-旋转后
+After
     X
    / \
   S   A
@@ -43,18 +44,19 @@ A   S
 
 
 ==============================
-2. Zig-Zig 旋转（双旋转，同向）
-- 适用场景：
-  - 当 X 是 S 的 左孩子，且 S 是 G（祖父）的左孩子（即X 和 S 在同一方向）。
-  - 或者 X 是 S 的 右孩子，且 S 是 G 的右孩子。
+2. Zig-zig rotation (double rotation, same direction)
+- Applies when:
+  - X is the left child of S and S is the left child of G, the grandparent
+    (X and S lie in the same direction);
+  - or X is the right child of S and S is the right child of G.
 
-左 Zig-Zig 旋转
-- G 对 S 右旋
-- S 对 X 右旋
-- X 变成新的根节点。
-- S 变成 X 的右子树。
-- G 变成 S 的右子树。
-旋转前
+Left zig-zig rotation
+- Rotate right at G, which raises S.
+- Rotate right at S, which raises X.
+- X becomes the new root.
+- S becomes the right subtree of X.
+- G becomes the right subtree of S.
+Before
       G
      /
     S
@@ -62,20 +64,20 @@ A   S
   X
  /
 A
-旋转后
+After
       X
      / \
     A   S
          \
           G
 
-右 Zig-Zig 旋转
-- G 对 S 左旋
-- S 对 X 左旋
-- X 变成新的根节点。
-- S 变成 X 的左子树。
-- G 变成 S 的左子树
-旋转前
+Right zig-zig rotation
+- Rotate left at G, which raises S.
+- Rotate left at S, which raises X.
+- X becomes the new root.
+- S becomes the left subtree of X.
+- G becomes the left subtree of S.
+Before
   G
    \
     S
@@ -83,7 +85,7 @@ A
       X
        \
         A
-旋转后
+After
       X
      / \
     S   A
@@ -93,18 +95,19 @@ A
 
 
 ==============================
-3. Zig-Zag 旋转（双旋转，反向）
-适用场景：
-- 当 X 是 S 的 左孩子，但 S 是 G 的 右孩子（X 和 S 方向相反）。
-- 或者 X 是 S 的 右孩子，但 S 是 G 的 左孩子。
+3. Zig-zag rotation (double rotation, opposite directions)
+Applies when:
+- X is the left child of S but S is the right child of G (X and S lie in
+  opposite directions);
+- or X is the right child of S but S is the left child of G.
 
-左-右 Zig-Zag 旋转
-- S 对 X 右旋
-- G 对 X 左旋
-- X 变成新的根节点。
-- G 变成 X 的左子树。
-- S 变成 X 的右子树。
-旋转前
+Left-right zig-zag rotation
+- Rotate right at S, which raises X.
+- Rotate left at G, which raises X.
+- X becomes the new root.
+- G becomes the left subtree of X.
+- S becomes the right subtree of X.
+Before
       G
        \
         S
@@ -112,26 +115,26 @@ A
       X
      /
     A
-对 S 右旋：旋转 S 使 X 上升，并让 S 成为 X 的右子。
+After the right rotation at S: X rises, and S becomes the right child of X.
       G
        \
         X
        / \
       A   S
-对 G 左旋：旋转 G 使 X 上升，并让 G 成为 X 的左子。
+After the left rotation at G: X rises, and G becomes the left child of X.
       X
      / \
     G   S
-   /
-  A
+     \
+      A
 
-右-左 Zig-Zag 旋转
-- S 对 X 左旋
-- G 对 X 右旋
-- X 变成新的根节点。
-- S 变成 X 的左子树。
-- G 变成 X 的右子树。
-旋转前
+Right-left zig-zag rotation
+- Rotate left at S, which raises X.
+- Rotate right at G, which raises X.
+- X becomes the new root.
+- S becomes the left subtree of X.
+- G becomes the right subtree of X.
+Before
       G
      /
     S
@@ -139,28 +142,30 @@ A
       X
        \
         A
-对 S 左旋：旋转 S 使 X 上升，并让 S 成为 X 的左子。
+After the left rotation at S: X rises, and S becomes the left child of X.
       G
      /
     X
    / \
   S   A
-对 G 右旋：旋转 G 使 X 上升，并让 G 成为 X 的右子。
+After the right rotation at G: X rises, and G becomes the right child of X.
       X
      / \
     S   G
-         \
-          A
+       /
+      A
 
 
-总结
-旋转类型	触发条件	旋转次数
-Zig (单旋)	访问节点是根的直接子节点	1
-Zig-Zig (双旋，同向)	访问节点与父、祖父在同一方向	2
-Zig-Zag (双旋，反向)	访问节点与父、祖父在相反方向	2
-这些旋转保证了 Splay Tree 具有自调整性，即最近访问的节点更容易被访问，提高了查找的局部性，从而提升性能。
-
-
-
+Summary
+Rotation                    When                                   Rotations
+Zig (single)                the node accessed is a direct child    1
+                            of the root
+Zig-zig (double, same       the node, its parent and its           2
+direction)                  grandparent lie in the same direction
+Zig-zag (double, opposite   the node and its parent lie in         2
+directions)                 opposite directions
+These rotations are what makes a splay tree adjust itself: a node accessed
+recently is reached more easily, which improves the locality of lookups and
+with it their speed.
 
 */

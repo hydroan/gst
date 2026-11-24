@@ -4,83 +4,95 @@
 package rbtree
 
 /*
-红黑树性质
-- 节点要么是红色，要么是黑色。
-- 根节点必须是黑色。
-- 红色节点的子节点必须是黑色（不能连续两个红色）。
-- 从根到每个叶子路径上的黑色节点数量相同。
+Properties of a red-black tree
+- A node is either red or black.
+- The root is black.
+- The children of a red node are black (no two red nodes in a row).
+- Every path from the root to a leaf holds the same number of black nodes.
 
-插入：
-- 红黑树规定，插入的节点必须是红色的。而且，二叉查找树中新插入的节点都是放在叶子节点上。
-- 如果插入节点的父节点是黑色的，那我们什么都不用做，它仍然满足红黑树的定义。
-- 如果插入的节点是根节点，那我们直接改变它的颜色，把它变成黑色就可以了。
+Insertion
+- A node is inserted red, and, as in any binary search tree, as a leaf.
+- When the parent of the inserted node is black nothing is left to do: the
+  tree still is a red-black tree.
+- A node inserted as the root is simply turned black.
 
-- CASE 1：如果关注节点是 a，它的叔叔节点 d 是红色，我们就依次执行下面的操作：
-  - 将关注节点 a 的父节点 b、叔叔节点 d 的颜色都设置成黑色；
-  - 将关注节点 a 的祖父节点 c 的颜色设置成红色；
-  - 关注节点变成 a 的祖父节点 c；
-  - 跳到 CASE 2 或者 CASE 3。
+- CASE 1: the focus node is a and its uncle d is red. In order:
+  - turn a's parent b and its uncle d black;
+  - turn a's grandparent c red;
+  - the focus node becomes a's grandparent c;
+  - go on to CASE 2 or CASE 3.
 
-- CASE 2：如果关注节点是 a，它的叔叔节点 d 是黑色，关注节点 a 是其父节点 b 的右子节点，我们就依次执行下面的操作：
-  - 关注节点变成节点 a 的父节点 b；
-  - 围绕新的关注节点b 左旋；
-  - 跳到 CASE 3。
+- CASE 2: the focus node is a, its uncle d is black, and a is the right child
+  of its parent b. In order:
+  - the focus node becomes a's parent b;
+  - rotate left around the new focus node b;
+  - go on to CASE 3.
 
-- CASE 3：如果关注节点是 a，它的叔叔节点 d 是黑色，关注节点 a 是其父节点 b 的左子节点，我们就依次执行下面的操作：
-  - 围绕关注节点 a 的祖父节点 c 右旋；
-  - 将关注节点 a 的父节点 b、兄弟节点 c 的颜色互换。
-  - 调整结束。
-
-
-
-删除
-删除操作的平衡调整分为两步，第一步是针对删除节点初步调整。初步调整只是保证
-整棵红黑树在一个节点删除之后，仍然满足最后一条定义的要求，也就是说，每个节点，
-从该节点到达其可达叶子节点的所有路径，都包含相同数目的黑色节点；
-第二步是针对关注节点进行二次调整，让它满足红黑树的第三条定义，即不存在相邻的两个红色节点。
-
-针对删除节点初步调整
-- CASE 1：如果要删除的节点是 a，它只有一个子节点 b，那我们就依次进行下面的操作：
-  - 删除节点 a，并且把节点 b 替换到节点 a 的位置，这一部分操作跟普通的二叉查找树的删除操作一样；
-  - 节点 a 只能是黑色，节点 b 也只能是红色，其他情况均不符合红黑树的定义。这种情况下，我们把节点 b 改为黑色；
-  - 调整结束，不需要进行二次调整。
-
-- CASE 2：如果要删除的节点 a 有两个非空子节点，并且它的后继节点就是节点 a 的右子节点 c。我们就依次进行下面的操作：
-  - 如果节点 a 的后继节点就是右子节点 c，那右子节点 c 肯定没有左子树。
-    我们把节点 a 删除，并且将节点 c 替换到节点 a 的位置。这一部分操作跟普通的
-    二叉查找树的删除操作无异；
-  - 然后把节点 c 的颜色设置为跟节点 a 相同的颜色；
-  - 如果节点 c 是黑色，为了不违反红黑树的最后一条定义，我们给节点 c 的右子节点 d 多加一个黑色，
-    这个时候节点 d 就成了“红 - 黑”或者“黑 - 黑”；
-  - 这个时候，关注节点变成了节点 d，第二步的调整操作就会针对关注节点来做。
-
-- CASE 2：如果关注节点是 a，它的兄弟节点 c 是黑色的，并且节点 c 的左右子节点 d、e 都是黑色的，我们就依次进行下面的操作：
-  - 将关注节点 a 的兄弟节点 c 的颜色变成红色；
-  - 从关注节点 a 中去掉一个黑色，这个时候节点 a 就是单纯的红色或者黑色；
-  - 给关注节点 a 的父节点 b 添加一个黑色，这个时候节点 b 就变成了“红 - 黑”或者“黑 - 黑”；
-  - 关注节点从 a 变成其父节点 b；
-  - 继续从四种情况中选择符合的规则来调整。
-
-- CASE 3：如果关注节点是 a，它的兄弟节点 c 是黑色，c 的左子节点 d 是红色，c 的右子节点 e 是黑色，我们就依次进行下面的操作：
-  - 围绕关注节点 a 的兄弟节点 c 右旋；
-  - 节点 c 和节点 d 交换颜色；
-  - 关注节点不变；
-  - 跳转到 CASE 4，继续调整。
-
-- CASE 4：如果关注节点 a 的兄弟节点 c 是黑色的，并且 c 的右子节点是红色的，我们就依次进行下面的操作：
-  - 围绕关注节点 a 的父节点 b 左旋；
-  - 将关注节点 a 的兄弟节点 c 的颜色，跟关注节点 a 的父节点 b 设置成相同的颜色；
-  - 将关注节点 a 的父节点 b 的颜色设置为黑色；
-  - 从关注节点 a 中去掉一个黑色，节点 a 就变成了单纯的红色或者黑色；
-  - 将关注节点 a 的叔叔节点 e 设置为黑色；
-  - 调整结束。
+- CASE 3: the focus node is a, its uncle d is black, and a is the left child
+  of its parent b. In order:
+  - rotate right around a's grandparent c;
+  - swap the colors of a's parent b and its sibling c;
+  - the adjustment is done.
 
 
-正确的红黑树性质
-  1. 每个节点要么是红色，要么是黑色。
-  2. 根节点必须是黑色。
-  3. 每个叶子节点（NIL/空节点）都是黑色。
-  4. 红色节点不能有红色子节点（即不能出现两个连续的红色节点）。
-  5. 从任何一个节点到其所有叶子节点的黑色节点数量必须相同（黑色平衡）。
+
+Deletion
+Rebalancing after a deletion takes two steps. The first adjusts around the
+deleted node, and only makes sure the whole tree still meets the last
+property once the node is gone: for every node, all the paths from it to the
+leaves it reaches hold the same number of black nodes. The second adjusts
+around the focus node so that the tree meets the third property again: no two
+red nodes next to each other.
+
+First adjustment, around the deleted node
+- CASE 1: the node to delete is a and it has a single child, b. In order:
+  - delete a and put b in its place, as in any binary search tree;
+  - a can only be black and b can only be red, anything else would not be a
+    red-black tree; turn b black;
+  - the adjustment is done, and the second one is not needed.
+
+- CASE 2: the node to delete, a, has two non-nil children and its successor
+  is its right child c. In order:
+  - being a's successor, the right child c has no left subtree; delete a and
+    put c in its place, as in any binary search tree;
+  - then give c the color a has;
+  - if c is black, its right child d takes one more black, so as not to break
+    the last property, and d is now "red-black" or "black-black";
+  - the focus node is now d, and the second adjustment works on it.
+
+Second adjustment, around the focus node
+- CASE 2: the focus node is a, its sibling c is black, and c's children d
+  and e are both black. In order:
+  - turn a's sibling c red;
+  - take one black off the focus node a, which is then plain red or black;
+  - add one black to a's parent b, which is then "red-black" or
+    "black-black";
+  - the focus node moves from a to its parent b;
+  - go on with whichever of the four cases applies.
+
+- CASE 3: the focus node is a, its sibling c is black, c's left child d is
+  red and c's right child e is black. In order:
+  - rotate right around a's sibling c;
+  - swap the colors of c and d;
+  - the focus node stays;
+  - go on to CASE 4.
+
+- CASE 4: the sibling c of the focus node a is black and c's right child is
+  red. In order:
+  - rotate left around a's parent b;
+  - give a's sibling c the color of a's parent b;
+  - turn a's parent b black;
+  - take one black off the focus node a, which is then plain red or black;
+  - turn a's uncle e black;
+  - the adjustment is done.
+
+
+The properties of a red-black tree in full
+  1. A node is either red or black.
+  2. The root is black.
+  3. Every leaf (a nil node) is black.
+  4. A red node has no red child (no two red nodes in a row).
+  5. Every path from a node to its leaves holds the same number of black
+     nodes (black balance).
 
 */

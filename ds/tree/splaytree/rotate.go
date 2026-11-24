@@ -1,6 +1,6 @@
 package splaytree
 
-// rotateZigRight 右单旋（Zig 旋转）
+// rotateZigRight is the single right rotation (a zig).
 //
 //	Before Rotation:
 //	     g
@@ -40,7 +40,7 @@ func rotateZigRight[K comparable, V any](g *node[K, V]) *node[K, V] {
 	return p
 }
 
-// rotateZigLeft 左单旋（Zig 旋转）
+// rotateZigLeft is the single left rotation (a zig).
 //
 //	Before Rotation:
 //	     g
@@ -80,9 +80,9 @@ func rotateZigLeft[K comparable, V any](g *node[K, V]) *node[K, V] {
 	return p
 }
 
-// rotateZigZigRight 右双旋（Zig-Zig 旋转）
+// rotateZigZigRight is the double right rotation (a zig-zig).
 //
-// Step 1: 先对 g 和 p 进行 **Zig 右旋**
+// Step 1: a zig right rotation of g and p.
 //
 //	       g
 //	      / \
@@ -92,14 +92,14 @@ func rotateZigLeft[K comparable, V any](g *node[K, V]) *node[K, V] {
 //	  / \
 //	 A   B
 //
-//	Zig 右旋后：
+//	After the zig right rotation:
 //	     p
 //	    / \
 //	   x   g
 //	  / \  / \
 //	 A   B C  D
 //
-// Step 2: 再对 p 和 x 进行 **Zig 右旋**
+// Step 2: a zig right rotation of p and x.
 //
 //	  x
 //	 / \
@@ -151,9 +151,9 @@ func rotateZigZigRight[K comparable, V any](g *node[K, V]) *node[K, V] {
 	return x
 }
 
-// rotateZigZigLeft 左双旋（Zig-Zig 旋转）
+// rotateZigZigLeft is the double left rotation (a zig-zig).
 //
-// Step 1: 先对 g 和 p 进行 **Zig 左旋**
+// Step 1: a zig left rotation of g and p.
 //
 //	   g
 //	  / \
@@ -163,14 +163,14 @@ func rotateZigZigRight[K comparable, V any](g *node[K, V]) *node[K, V] {
 //	      / \
 //	     C   D
 //
-//	Zig 左旋后：
+//	After the zig left rotation:
 //	     p
 //	    / \
 //	   g   x
 //	  / \  / \
 //	 A   B C  D
 //
-// Step 2: 再对 p 和 x 进行 **Zig 左旋**
+// Step 2: a zig left rotation of p and x.
 //
 //	      x
 //	     / \
@@ -222,9 +222,9 @@ func rotateZigZigLeft[K comparable, V any](g *node[K, V]) *node[K, V] {
 	return x
 }
 
-// rotateZigZagRightLeft 右-左双旋（Zig-Zag 旋转）
+// rotateZigZagRightLeft is the right-left double rotation (a zig-zag).
 //
-// Step 1: 先对 p 和 x 进行 **Zig 右旋**
+// Step 1: a zig right rotation of p and x.
 //
 //	   g
 //	  / \
@@ -234,7 +234,7 @@ func rotateZigZigLeft[K comparable, V any](g *node[K, V]) *node[K, V] {
 //	  / \
 //	 A   B
 //
-//	右旋后：
+//	After the right rotation:
 //	     g
 //	    / \
 //	   D   x
@@ -243,7 +243,7 @@ func rotateZigZigLeft[K comparable, V any](g *node[K, V]) *node[K, V] {
 //	        / \
 //	       B   C
 //
-// Step 2: 再对 g 和 x 进行 **Zig 左旋**
+// Step 2: a zig left rotation of g and x.
 //
 //	    x
 //	   / \
@@ -292,9 +292,9 @@ func rotateZigZagRightLeft[K comparable, V any](g *node[K, V]) *node[K, V] {
 	return x
 }
 
-// rotateZigZagLeftRight 左-右双旋（Zig-Zag 旋转）
+// rotateZigZagLeftRight is the left-right double rotation (a zig-zag).
 //
-// Step 1: 先对 p 和 x 进行 **Zig 左旋**
+// Step 1: a zig left rotation of p and x.
 //
 //	     g
 //	    / \
@@ -304,7 +304,7 @@ func rotateZigZagRightLeft[K comparable, V any](g *node[K, V]) *node[K, V] {
 //	    / \
 //	   A   B
 //
-//	 左旋后：
+//	After the left rotation:
 //	      g
 //	     / \
 //	    x   C
@@ -313,7 +313,7 @@ func rotateZigZagRightLeft[K comparable, V any](g *node[K, V]) *node[K, V] {
 //	 /
 //	A
 //
-// Step 2: 再对 g 和 x 进行 **Zig 右旋**
+// Step 2: a zig right rotation of g and x.
 //
 //	    x
 //	   / \
