@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hydroan/gst/internal/gggen/jsonshape"
-	"github.com/hydroan/gst/internal/gggen/jsonshape/fixture/model/record"
-	"github.com/hydroan/gst/internal/gggen/jsonshape/fixture/model/sample"
+	"github.com/hydroan/gst/internal/jsonshape"
+	"github.com/hydroan/gst/internal/jsonshape/fixture/model/record"
+	"github.com/hydroan/gst/internal/jsonshape/fixture/model/sample"
 	"github.com/stretchr/testify/require"
 )
 

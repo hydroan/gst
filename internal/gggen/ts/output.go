@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/internal/ggconst"
-	"github.com/hydroan/gst/internal/gggen/jsonshape"
 	"github.com/hydroan/gst/internal/gst"
+	"github.com/hydroan/gst/internal/jsonshape"
 )
 
 // This file holds the layout of the output: the file the declarations of each

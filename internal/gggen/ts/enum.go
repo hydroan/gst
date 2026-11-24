@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hydroan/gst/internal/gggen/jsonshape"
+	"github.com/hydroan/gst/internal/jsonshape"
 )
 
 // enumType is the rendering of an enum type of the project (see

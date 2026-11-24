@@ -5,7 +5,7 @@ import (
 	"go/types"
 	"strings"
 
-	"github.com/hydroan/gst/internal/gggen/jsonshape"
+	"github.com/hydroan/gst/internal/jsonshape"
 )
 
 // render renders the declaration of a project type under its doc comment: an

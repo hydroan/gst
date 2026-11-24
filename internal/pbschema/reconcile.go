@@ -10,7 +10,7 @@ import (
 	"github.com/bufbuild/protocompile/parser"
 	"github.com/bufbuild/protocompile/reporter"
 	"github.com/hydroan/gst/internal/ggconst"
-	"github.com/hydroan/gst/internal/gggen/jsonshape"
+	"github.com/hydroan/gst/internal/jsonshape"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 

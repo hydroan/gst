@@ -6,10 +6,10 @@ import (
 	"math"
 	"net/netip"
 
-	ab "github.com/hydroan/gst/internal/gggen/jsonshape/fixture/a-b"
-	underscored "github.com/hydroan/gst/internal/gggen/jsonshape/fixture/a_b"
-	"github.com/hydroan/gst/internal/gggen/jsonshape/fixture/gst"
-	"github.com/hydroan/gst/internal/gggen/jsonshape/fixture/mode"
+	ab "github.com/hydroan/gst/internal/jsonshape/fixture/a-b"
+	underscored "github.com/hydroan/gst/internal/jsonshape/fixture/a_b"
+	"github.com/hydroan/gst/internal/jsonshape/fixture/gst"
+	"github.com/hydroan/gst/internal/jsonshape/fixture/mode"
 )
 
 // Rejected is a route type the generator refuses.

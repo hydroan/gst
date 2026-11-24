@@ -30,7 +30,7 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/internal/ggconst"
-	"github.com/hydroan/gst/internal/gggen/jsonshape"
+	"github.com/hydroan/gst/internal/jsonshape"
 	"github.com/hydroan/gst/internal/modelsource"
 )
 

@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hydroan/gst/internal/gggen/jsonshape"
+	"github.com/hydroan/gst/internal/jsonshape"
 )
 
 // Config describes one generation run.

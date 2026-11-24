@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hydroan/gst/internal/gggen/jsonshape"
+	"github.com/hydroan/gst/internal/jsonshape"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -24,8 +24,8 @@ var update = flag.Bool("update", false, "rewrite the golden files under testdata
 // module under; fixtureDir is where a generation run loads them from, so that
 // diagnostics name their files relative to it.
 const (
-	fixtureModule = "github.com/hydroan/gst/internal/gggen/jsonshape/fixture"
-	fixtureDir    = "../jsonshape"
+	fixtureModule = "github.com/hydroan/gst/internal/jsonshape/fixture"
+	fixtureDir    = "../../jsonshape"
 )
 
 var (

@@ -16,7 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/gggen/jsonshape"
+	"github.com/hydroan/gst/internal/jsonshape"
 	"github.com/hydroan/gst/internal/pbschema"
 	"golang.org/x/mod/modfile"
 	"golang.org/x/tools/go/packages"

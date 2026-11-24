@@ -6,14 +6,14 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/hydroan/gst/internal/gggen/jsonshape"
+	"github.com/hydroan/gst/internal/jsonshape"
 	"github.com/stretchr/testify/require"
 )
 
 // fixtureModule is the module path the fixture packages stand in for a
 // project module under. They are kept here for every generator that reads
 // shapes off a project; the TypeScript golden files render these very shapes.
-const fixtureModule = "github.com/hydroan/gst/internal/gggen/jsonshape/fixture"
+const fixtureModule = "github.com/hydroan/gst/internal/jsonshape/fixture"
 
 // TestLoadReadsTheShapesOfAProject pins what a loaded project answers: the
 // packages it holds, the types it declares and their doc comments, the keys a

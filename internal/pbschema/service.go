@@ -11,7 +11,7 @@ import (
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
-	"github.com/hydroan/gst/internal/gggen/jsonshape"
+	"github.com/hydroan/gst/internal/jsonshape"
 	"github.com/hydroan/gst/internal/modelsource"
 	"github.com/hydroan/gst/internal/urlquery"
 	"google.golang.org/protobuf/types/descriptorpb"

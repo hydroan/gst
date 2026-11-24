@@ -3,7 +3,7 @@ package ts
 import (
 	"go/types"
 
-	"github.com/hydroan/gst/internal/gggen/jsonshape"
+	"github.com/hydroan/gst/internal/jsonshape"
 )
 
 // generator walks the types reachable from the roots and renders their
