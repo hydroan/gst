@@ -44,10 +44,11 @@ var (
 	mu             sync.Mutex
 )
 
-type requestRootSpanKey struct{}
-
-// Init initializes the OpenTelemetry tracer with OTLP exporters, which Jaeger
-// and other tracing backends accept.
+// Init validates the [otel] configuration and, with tracing enabled, builds
+// the tracer provider it describes, which exports spans over OTLP in
+// batches, and installs it and the propagators as the global ones. A call
+// made while a provider is installed leaves that provider in place and
+// builds no other.
 func Init() error {
 	cfg, err := normalizeConfig(config.App.OTEL)
 	if err != nil {
@@ -64,20 +65,18 @@ func Init() error {
 		return nil
 	}
 
-	// Route internal SDK errors (e.g. export failures) through the application
-	// logger instead of the default stderr handler so they surface in the same
-	// log pipeline as everything else.
+	// Route the SDK's own errors, a failed export among them, to the otel log
+	// stream instead of the default stderr handler, so they surface in the
+	// same log pipeline as everything else.
 	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
 		logger.OTEL.Errorw("otel internal error", "err", err)
 	}))
 
-	// Create exporter
 	exporter, err := newExporter(cfg)
 	if err != nil {
 		return errors.Wrap(err, "failed to create exporter")
 	}
 
-	// Create resource
 	res, err := resource.New(
 		context.Background(),
 		resource.WithAttributes(resourceAttributes(cfg)...),
@@ -86,13 +85,11 @@ func Init() error {
 		return errors.Wrap(err, "failed to create resource")
 	}
 
-	// Create sampler
 	sampler, err := newSampler(cfg)
 	if err != nil {
 		return errors.Wrap(err, "failed to create sampler")
 	}
 
-	// Create tracer provider
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(
 			exporter,
@@ -102,10 +99,7 @@ func Init() error {
 		sdktrace.WithSampler(sampler),
 	)
 
-	// Set global tracer provider
 	otel.SetTracerProvider(tp)
-
-	// Set global propagator
 	// The trace id header comes last: it only speaks when the W3C headers
 	// carried no trace context (see traceIDHeaderPropagator).
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
@@ -114,13 +108,14 @@ func Init() error {
 		traceIDHeaderPropagator{},
 	))
 
-	// Create tracer
 	tracer = otel.Tracer(cfg.ServiceName)
-
-	// Store tracer provider for cleanup
 	tracerProvider = tp
-
-	initHotPathAttrs(cfg.ServiceName)
+	// The zero KeyValue, which is not valid, stands for no service name, so
+	// callers checking Valid() skip the attribute.
+	serviceNameAttr = attribute.KeyValue{}
+	if cfg.ServiceName != "" {
+		serviceNameAttr = semconv.ServiceName(cfg.ServiceName)
+	}
 
 	logger.OTEL.Infoz(
 		"otel tracing initialized",
@@ -151,146 +146,6 @@ func Close() error {
 	}
 	logger.OTEL.Info("otel tracer closed")
 	return nil
-}
-
-// Tracer returns the framework's tracer, or a no-op one while no tracer
-// provider is installed.
-func Tracer() trace.Tracer {
-	if tracerProvider == nil {
-		return noop.NewTracerProvider().Tracer("noop")
-	}
-	return tracer
-}
-
-// IsEnabled returns whether OpenTelemetry tracing is enabled.
-func IsEnabled() bool {
-	return config.App.OTEL.Enabled && tracerProvider != nil
-}
-
-// FrameworkSpanName returns the canonical name for gst-owned resource spans.
-// The format is component.GoModel.GoOperation so Jaeger labels map directly to
-// the framework type and method names used in code.
-func FrameworkSpanName(component string, resource string, operation string) string {
-	return joinSpanName(component, resource, operation)
-}
-
-// OperationSpanName returns the canonical name for gst-owned operation spans
-// that do not have a resource segment, such as middleware, cache, and RBAC.
-func OperationSpanName(component string, operation string) string {
-	return joinSpanName(component, operation)
-}
-
-// StartSpan starts a new span with the given name and options. The caller owns
-// the returned span and must end it after the traced operation finishes.
-func StartSpan(ctx context.Context, name string, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
-	if !IsEnabled() {
-		return ctx, trace.SpanFromContext(ctx)
-	}
-	return tracer.Start(ctx, name, opts...) //nolint:spancheck // Caller receives and ends the returned span.
-}
-
-// IsSpanRecording reports whether span is active and records telemetry data.
-func IsSpanRecording(span trace.Span) bool {
-	return span != nil && span.IsRecording()
-}
-
-// serviceNameAttr is the hot-path span attribute value derived from the
-// service name. Building it per request means string concatenation on every
-// traced request, which shows up directly in allocation profiles under load,
-// so Init precomputes it.
-// It is a plain variable instead of sync.OnceValue so re-running Init with a
-// different configuration (tests do this) refreshes it.
-var serviceNameAttr attribute.KeyValue
-
-func initHotPathAttrs(serviceName string) {
-	// Leave the zero (invalid) KeyValue when unset so callers checking Valid()
-	// skip the attribute.
-	serviceNameAttr = attribute.KeyValue{}
-	if serviceName != "" {
-		serviceNameAttr = attribute.String("service.name", serviceName)
-	}
-}
-
-// ServiceNameAttr returns the cached "service.name" span attribute. The result
-// is invalid when no service name is configured; callers must check Valid()
-// before appending it.
-func ServiceNameAttr() attribute.KeyValue { return serviceNameAttr }
-
-// ContextWithRequestRootSpan marks the current span as the root span of one
-// request.
-func ContextWithRequestRootSpan(ctx context.Context) context.Context {
-	span := trace.SpanFromContext(ctx)
-	if span == nil || !span.SpanContext().IsValid() {
-		return ctx
-	}
-	return context.WithValue(ctx, requestRootSpanKey{}, span)
-}
-
-// RequestRootContext returns ctx with the request root span restored as the current span.
-func RequestRootContext(ctx context.Context) context.Context {
-	if ctx == nil {
-		return context.Background()
-	}
-	span, ok := ctx.Value(requestRootSpanKey{}).(trace.Span)
-	if !ok || span == nil || !span.SpanContext().IsValid() {
-		return ctx
-	}
-	return trace.ContextWithSpan(ctx, span)
-}
-
-// spanNameSegmentCap is the most segments a span name has: the component,
-// the resource and the operation of FrameworkSpanName. joinSpanName sizes
-// its segment list to it, which keeps the list off the heap; the worst-case
-// test keeps the count honest when a segment is added.
-const spanNameSegmentCap = 3
-
-// spanNameSeparators rewrites the separators a segment may carry, a space, a
-// hyphen, a dot and a slash, as underscores, the separator the case
-// conversions of spanComponentName and spanSymbolName split words on.
-var spanNameSeparators = strings.NewReplacer(" ", "_", "-", "_", ".", "_", "/", "_")
-
-// joinSpanName joins the name of component and the names of symbols with
-// dots, leaving out the segments that have none: "database", "Record" and
-// "Get" make "database.Record.Get", "cache" and "get" make "cache.Get".
-func joinSpanName(component string, symbols ...string) string {
-	names := make([]string, 0, spanNameSegmentCap)
-	if component = spanComponentName(component); component != "" {
-		names = append(names, component)
-	}
-	for _, symbol := range symbols {
-		if name := spanSymbolName(symbol); name != "" {
-			names = append(names, name)
-		}
-	}
-	return strings.Join(names, ".")
-}
-
-// spanComponentName returns the snake_case name of a component segment:
-// "database" stays "database", "HTTPServer" and "http-server" both become
-// "http_server". A segment of lowercase letters alone, which the framework's
-// own components are, is returned as it is.
-func spanComponentName(segment string) string {
-	segment = strings.TrimSpace(segment)
-	if strings.IndexFunc(segment, func(r rune) bool { return r < 'a' || r > 'z' }) < 0 {
-		return segment
-	}
-	return strings.Trim(strcase.SnakeCase(spanNameSeparators.Replace(segment)), "_")
-}
-
-// spanSymbolName returns the UpperCamelCase name of a resource or operation
-// segment: "RoleBinding" stays "RoleBinding", "get" becomes "Get" and
-// "assign_role" becomes "AssignRole". A segment that starts with an
-// uppercase letter and carries no separator, a Go type or method name, is
-// returned as it is.
-func spanSymbolName(segment string) string {
-	segment = strings.TrimSpace(segment)
-	if segment == "" {
-		return ""
-	}
-	if !strings.ContainsAny(segment, " _-./") && segment[0] >= 'A' && segment[0] <= 'Z' {
-		return segment
-	}
-	return strcase.UpperCamelCase(spanNameSeparators.Replace(segment))
 }
 
 // normalizeConfig applies OTEL defaults and validates startup-only settings.
@@ -381,6 +236,7 @@ func resolveServiceVersion() string {
 
 // newExporter creates an OTLP trace exporter based on startup configuration.
 func newExporter(cfg config.OTEL) (sdktrace.SpanExporter, error) {
+	headers := maps.Clone(cfg.ExporterOTLPHeaders)
 	switch cfg.ExporterOTLPProtocol {
 	case config.OTLPProtocolHTTPProtobuf:
 		opts := []otlptracehttp.Option{}
@@ -390,8 +246,6 @@ func newExporter(cfg config.OTEL) (sdktrace.SpanExporter, error) {
 			opts = append(opts, otlptracehttp.WithEndpoint(cfg.ExporterOTLPTracesEndpoint), otlptracehttp.WithInsecure())
 		}
 
-		headers := make(map[string]string)
-		maps.Copy(headers, cfg.ExporterOTLPHeaders)
 		if len(headers) > 0 {
 			opts = append(opts, otlptracehttp.WithHeaders(headers))
 		}
@@ -409,8 +263,6 @@ func newExporter(cfg config.OTEL) (sdktrace.SpanExporter, error) {
 			opts = append(opts, otlptracegrpc.WithEndpoint(cfg.ExporterOTLPTracesEndpoint), otlptracegrpc.WithInsecure())
 		}
 
-		headers := make(map[string]string)
-		maps.Copy(headers, cfg.ExporterOTLPHeaders)
 		if len(headers) > 0 {
 			opts = append(opts, otlptracegrpc.WithHeaders(headers))
 		}
@@ -481,6 +333,140 @@ func newBatchSpanProcessorOptions(cfg config.OTEL) []sdktrace.BatchSpanProcessor
 		sdktrace.WithBatchTimeout(cfg.BSPScheduleDelay),
 		sdktrace.WithExportTimeout(cfg.BSPExportTimeout),
 	}
+}
+
+// Tracer returns the framework's tracer, or a no-op one while no tracer
+// provider is installed.
+func Tracer() trace.Tracer {
+	if tracerProvider == nil {
+		return noop.NewTracerProvider().Tracer("noop")
+	}
+	return tracer
+}
+
+// IsEnabled returns whether OpenTelemetry tracing is enabled.
+func IsEnabled() bool {
+	return config.App.OTEL.Enabled && tracerProvider != nil
+}
+
+// FrameworkSpanName returns the canonical name for gst-owned resource spans.
+// The format is component.GoModel.GoOperation so Jaeger labels map directly to
+// the framework type and method names used in code.
+func FrameworkSpanName(component string, resource string, operation string) string {
+	return joinSpanName(component, resource, operation)
+}
+
+// OperationSpanName returns the canonical name for gst-owned operation spans
+// that do not have a resource segment, such as middleware, cache, and RBAC.
+func OperationSpanName(component string, operation string) string {
+	return joinSpanName(component, operation)
+}
+
+// spanNameSegmentCap is the most segments a span name has: the component,
+// the resource and the operation of FrameworkSpanName. joinSpanName sizes
+// its segment list to it, which keeps the list off the heap; the worst-case
+// test keeps the count honest when a segment is added.
+const spanNameSegmentCap = 3
+
+// spanNameSeparators rewrites the separators a segment may carry, a space, a
+// hyphen, a dot and a slash, as underscores, the separator the case
+// conversions of spanComponentName and spanSymbolName split words on.
+var spanNameSeparators = strings.NewReplacer(" ", "_", "-", "_", ".", "_", "/", "_")
+
+// joinSpanName joins the name of component and the names of symbols with
+// dots, leaving out the segments that have none: "database", "Record" and
+// "Get" make "database.Record.Get", "cache" and "get" make "cache.Get".
+func joinSpanName(component string, symbols ...string) string {
+	names := make([]string, 0, spanNameSegmentCap)
+	if component = spanComponentName(component); component != "" {
+		names = append(names, component)
+	}
+	for _, symbol := range symbols {
+		if name := spanSymbolName(symbol); name != "" {
+			names = append(names, name)
+		}
+	}
+	return strings.Join(names, ".")
+}
+
+// spanComponentName returns the snake_case name of a component segment:
+// "database" stays "database", "HTTPServer" and "http-server" both become
+// "http_server". A segment of lowercase letters alone, which the framework's
+// own components are, is returned as it is.
+func spanComponentName(segment string) string {
+	segment = strings.TrimSpace(segment)
+	if strings.IndexFunc(segment, func(r rune) bool { return r < 'a' || r > 'z' }) < 0 {
+		return segment
+	}
+	return strings.Trim(strcase.SnakeCase(spanNameSeparators.Replace(segment)), "_")
+}
+
+// spanSymbolName returns the UpperCamelCase name of a resource or operation
+// segment: "RoleBinding" stays "RoleBinding", "get" becomes "Get" and
+// "assign_role" becomes "AssignRole". A segment that starts with an
+// uppercase letter and carries no separator, a Go type or method name, is
+// returned as it is.
+func spanSymbolName(segment string) string {
+	segment = strings.TrimSpace(segment)
+	if segment == "" {
+		return ""
+	}
+	if !strings.ContainsAny(segment, " _-./") && segment[0] >= 'A' && segment[0] <= 'Z' {
+		return segment
+	}
+	return strcase.UpperCamelCase(spanNameSeparators.Replace(segment))
+}
+
+// StartSpan starts a new span with the given name and options. The caller owns
+// the returned span and must end it after the traced operation finishes.
+func StartSpan(ctx context.Context, name string, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
+	if !IsEnabled() {
+		return ctx, trace.SpanFromContext(ctx)
+	}
+	return tracer.Start(ctx, name, opts...) //nolint:spancheck // Caller receives and ends the returned span.
+}
+
+// IsSpanRecording reports whether span is active and records telemetry data.
+func IsSpanRecording(span trace.Span) bool {
+	return span != nil && span.IsRecording()
+}
+
+// serviceNameAttr is the service.name span attribute of the configured
+// service name, built once by Init for the spans that carry it. It is a
+// plain variable instead of sync.OnceValue so re-running Init with a
+// different configuration (tests do this) refreshes it.
+var serviceNameAttr attribute.KeyValue
+
+// ServiceNameAttr returns the cached "service.name" span attribute. The result
+// is invalid when no service name is configured; callers must check Valid()
+// before appending it.
+func ServiceNameAttr() attribute.KeyValue { return serviceNameAttr }
+
+// requestRootSpanKey is the context key of the root span of a request.
+type requestRootSpanKey struct{}
+
+// ContextWithRequestRootSpan marks the current span as the root span of one
+// request; a context carrying no valid span is returned as it is.
+func ContextWithRequestRootSpan(ctx context.Context) context.Context {
+	span := trace.SpanFromContext(ctx)
+	if span == nil || !span.SpanContext().IsValid() {
+		return ctx
+	}
+	return context.WithValue(ctx, requestRootSpanKey{}, span)
+}
+
+// RequestRootContext returns ctx with the request root span restored as the
+// current span: ctx itself when it carries none, and a background context
+// for a nil ctx.
+func RequestRootContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	span, ok := ctx.Value(requestRootSpanKey{}).(trace.Span)
+	if !ok || span == nil || !span.SpanContext().IsValid() {
+		return ctx
+	}
+	return trace.ContextWithSpan(ctx, span)
 }
 
 // RecordError records err on the span as an exception event and marks the

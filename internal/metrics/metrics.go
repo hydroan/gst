@@ -12,12 +12,12 @@ import (
 	"go.uber.org/multierr"
 )
 
-// NAMESPACE and SUBSYSTEM prefix every metric of the framework; Prometheus
+// namespace and subsystem prefix every metric of the framework; Prometheus
 // joins them and the name with underscores, so a metric of the backend is
 // named gst_backend_<name> and one of the process gst_process_<name>.
 const (
-	NAMESPACE = "gst"
-	SUBSYSTEM = "backend"
+	namespace = "gst"
+	subsystem = "backend"
 )
 
 var (
@@ -41,23 +41,26 @@ var (
 	AuditWriteFailuresTotal prometheus.Counter
 )
 
+// Init builds the framework's metrics and registers them, with the build
+// info and process collectors, on the default Prometheus registry; it
+// reports every registration that failed.
 func Init() error {
 	State = prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: NAMESPACE,
-		Subsystem: SUBSYSTEM,
+		Namespace: namespace,
+		Subsystem: subsystem,
 		Name:      "state",
 		Help:      "The state of the backend",
 	})
 	Uptime = prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: NAMESPACE,
-		Subsystem: SUBSYSTEM,
+		Namespace: namespace,
+		Subsystem: subsystem,
 		Name:      "uptime",
 		Help:      "The uptime of the backend",
 	})
 	HTTPRequestsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: NAMESPACE,
-			Subsystem: SUBSYSTEM,
+			Namespace: namespace,
+			Subsystem: subsystem,
 			Name:      "http_requests_total",
 			Help:      "Total number of HTTP requests",
 		},
@@ -65,8 +68,8 @@ func Init() error {
 	)
 	HTTPRequestDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Namespace: NAMESPACE,
-			Subsystem: SUBSYSTEM,
+			Namespace: namespace,
+			Subsystem: subsystem,
 			Name:      "http_request_duration_seconds",
 			Help:      "HTTP request latencies in seconds",
 			Buckets:   prometheus.DefBuckets,
@@ -75,69 +78,69 @@ func Init() error {
 	)
 
 	ResponseTime = prometheus.NewHistogram(prometheus.HistogramOpts{
-		Namespace: NAMESPACE,
-		Subsystem: SUBSYSTEM,
+		Namespace: namespace,
+		Subsystem: subsystem,
 		Name:      "response_time_seconds",
 		Help:      "Response time in seconds",
 		Buckets:   prometheus.DefBuckets,
 	})
 	ErrorRate = prometheus.NewCounter(prometheus.CounterOpts{
-		Namespace: NAMESPACE,
-		Subsystem: SUBSYSTEM,
+		Namespace: namespace,
+		Subsystem: subsystem,
 		Name:      "error_total",
 		Help:      "Total number of errors",
 	})
 	MemoryTotal = prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: NAMESPACE,
-		Subsystem: SUBSYSTEM,
+		Namespace: namespace,
+		Subsystem: subsystem,
 		Name:      "memory_usage_total_bytes",
 		Help:      "Current memory total in bytes",
 	})
 	MemoryUsed = prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: NAMESPACE,
-		Subsystem: SUBSYSTEM,
+		Namespace: namespace,
+		Subsystem: subsystem,
 		Name:      "memory_usage_used_bytes",
 		Help:      "Current memory used in bytes",
 	})
 	MemoryUsedPercent = prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: NAMESPACE,
-		Subsystem: SUBSYSTEM,
+		Namespace: namespace,
+		Subsystem: subsystem,
 		Name:      "memory_usage_percent",
 		Help:      "Current memory used in percent",
 	})
 	CPUCount = prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: NAMESPACE,
-		Subsystem: SUBSYSTEM,
+		Namespace: namespace,
+		Subsystem: subsystem,
 		Name:      "cpu_count",
 		Help:      "Current cpu count",
 	})
 	CPUUsedPercent = prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: NAMESPACE,
-		Subsystem: SUBSYSTEM,
+		Namespace: namespace,
+		Subsystem: subsystem,
 		Name:      "cpu_used_percent",
 		Help:      "Current cpu used in percent",
 	})
 	ConcurrentConnections = prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: NAMESPACE,
-		Subsystem: SUBSYSTEM,
+		Namespace: namespace,
+		Subsystem: subsystem,
 		Name:      "concurrent_connections",
 		Help:      "Number of concurrent connections",
 	})
 	CacheHit = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace: NAMESPACE,
-		Subsystem: SUBSYSTEM,
+		Namespace: namespace,
+		Subsystem: subsystem,
 		Name:      "cache_hits_total",
 		Help:      "Total number of cache hits",
 	}, []string{"phase", "table"})
 	CacheMiss = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace: NAMESPACE,
-		Subsystem: SUBSYSTEM,
+		Namespace: namespace,
+		Subsystem: subsystem,
 		Name:      "cache_misses_total",
 		Help:      "Total number of cache misses",
 	}, []string{"phase", "table"})
 	QueueSize = prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: NAMESPACE,
-		Subsystem: SUBSYSTEM,
+		Namespace: namespace,
+		Subsystem: subsystem,
 		Name:      "queue_size",
 		Help:      "Current size of the task queue",
 	})
@@ -148,8 +151,8 @@ func Init() error {
 	// stored rules against the records they come from cannot see a
 	// disagreement that exists only in one process's memory.
 	AuthzPolicyDiverged = prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: NAMESPACE,
-		Subsystem: SUBSYSTEM,
+		Namespace: namespace,
+		Subsystem: subsystem,
 		Name:      "authz_policy_diverged",
 		Help:      "Whether the in-memory authorization policy set no longer agrees with storage",
 	})
@@ -163,8 +166,8 @@ func Init() error {
 	// subject is a label — those grow with the deployment and belong in the
 	// authz log, which carries them already.
 	AuthzDecisionsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace: NAMESPACE,
-		Subsystem: SUBSYSTEM,
+		Namespace: namespace,
+		Subsystem: subsystem,
 		Name:      "authz_decisions_total",
 		Help:      "Total authorization decisions by outcome, granting rule kind and denial reason",
 	}, []string{"effect", "allowed_by", "denied_by"})
@@ -174,8 +177,8 @@ func Init() error {
 	// nothing else reports the gap in the security record; the count is what
 	// an alert watches.
 	AuditWriteFailuresTotal = prometheus.NewCounter(prometheus.CounterOpts{
-		Namespace: NAMESPACE,
-		Subsystem: SUBSYSTEM,
+		Namespace: namespace,
+		Subsystem: subsystem,
 		Name:      "audit_write_failures_total",
 		Help:      "Total audit entries that could not be written",
 	})
@@ -203,12 +206,7 @@ func Init() error {
 		AuditWriteFailuresTotal,
 
 		collectors.NewBuildInfoCollector(),
-		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{Namespace: NAMESPACE}),
-		// collectors.NewGoCollector(),
-		// collectors.NewGoCollector(
-		// 	collectors.WithGoCollections(collectors.GoRuntimeMetricsCollection),
-		// 	collectors.WithGoCollections(collectors.GoRuntimeMemStatsCollection),
-		// ),
+		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{Namespace: namespace}),
 	}
 	errs := make([]error, 0, len(registered))
 	for _, collector := range registered {

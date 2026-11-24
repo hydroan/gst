@@ -1,5 +1,5 @@
-// Package debugpprof provides an HTTP server for pprof endpoints; the package name
-// avoids conflicting with the standard library "pprof" packages.
+// Package debugpprof provides an HTTP server for pprof endpoints; the package
+// name avoids conflicting with the standard library "pprof" packages.
 package debugpprof
 
 import (
@@ -16,6 +16,10 @@ import (
 
 var server *http.Server
 
+// Run serves the pprof endpoints on the configured address and returns when
+// the server ends: nil once Stop has shut it down, the error that kept it
+// from serving otherwise. With pprof disabled in the configuration it
+// returns nil at once. Mutex and block profiling are sampled from here on.
 func Run() error {
 	if !config.App.PprofEnabled {
 		return nil

@@ -33,8 +33,9 @@
 //	bsp_export_timeout = 30s
 //
 // Use traces_sampler=parentbased_traceidratio with traces_sampler_arg between
-// 0 and 1 to enable partial sampling while honoring upstream sampling decisions.
-// For example, traces_sampler_arg=0.1 samples about 10% of root traces.
+// 0 and 1 to enable partial sampling while honoring upstream sampling
+// decisions. For example, traces_sampler_arg=0.1 samples about 10% of root
+// traces.
 //
 // A project opens a span of its own with StartSpan, under a name
 // OperationSpanName builds, and records a failure on it with RecordError;

@@ -17,6 +17,10 @@ import (
 
 var server *http.Server
 
+// Run serves the statsviz page on the configured address and returns when
+// the server ends: nil once Stop has shut it down, the error that kept it
+// from serving otherwise. With statsviz disabled in the configuration it
+// returns nil at once.
 func Run() error {
 	if !config.App.StatsvizEnabled {
 		return nil

@@ -20,6 +20,9 @@ var (
 	mu      sync.Mutex
 )
 
+// Run starts the gops agent listening on the configured address and returns:
+// the agent serves on a goroutine of its own. With gops disabled in the
+// configuration it starts nothing.
 func Run() error {
 	mu.Lock()
 	defer mu.Unlock()
@@ -29,7 +32,8 @@ func Run() error {
 
 	if err := agent.Listen(agent.Options{
 		Addr: fmt.Sprintf("%s:%d", config.App.GopsListen, config.App.GopsPort),
-		// Never set ShutdownCleanup to true: gops then traps termination signals and calls os.Exit(1) itself.
+		// Never set ShutdownCleanup to true: gops then traps termination
+		// signals and calls os.Exit(1) itself.
 		ShutdownCleanup: false,
 		ConfigDir:       filepath.Join(os.TempDir(), "gops"),
 	}); err != nil {
@@ -42,6 +46,7 @@ func Run() error {
 	return nil
 }
 
+// Stop closes the gops agent Run started; with none running it does nothing.
 func Stop() {
 	mu.Lock()
 	defer mu.Unlock()

@@ -16,7 +16,7 @@ type Operation struct {
 	Method string
 	// Path is the route path, eg. "/api/records/{id}/disable".
 	Path string
-	// Phase is the framework action phase, eg. service.Create.
+	// Phase is the framework action phase, eg. apiaction.Create.
 	Phase apiaction.Phase
 	// CustomTypes reports whether the operation declares its own request and
 	// response types instead of reusing the model (custom action routes do,
@@ -30,8 +30,7 @@ type Operation struct {
 
 // OperationDoc holds an explicit summary and description for one operation.
 // Registered entries take precedence over DefaultSummary and
-// DefaultDescription, mirroring how an explicitly filled huma.Operation beats
-// huma's generated defaults.
+// DefaultDescription.
 type OperationDoc struct {
 	// Summary overrides the operation summary when non-empty.
 	Summary string
