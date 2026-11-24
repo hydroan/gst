@@ -142,7 +142,13 @@ func connectOptions(cfg config.Nats) ([]nats.Option, error) {
 	opts = append(opts, nats.ClosedHandler(func(nc *nats.Conn) {
 		logger.Nats.Warnw("nats connection closed")
 	}))
+	// The client reports an error of the connection itself, a permission
+	// refused or a failed flush, with no subscription.
 	opts = append(opts, nats.ErrorHandler(func(nc *nats.Conn, sub *nats.Subscription, err error) {
+		if sub == nil {
+			logger.Nats.Errorw("nats error", "error", err)
+			return
+		}
 		logger.Nats.Errorw("nats error", "error", err, "subject", sub.Subject)
 	}))
 
