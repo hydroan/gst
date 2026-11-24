@@ -63,15 +63,11 @@ func Detect(filename string) (Filetype, Mime) {
 		mtype := mimetype.Detect(buf)
 		return FiletypeAndMime(strings.TrimPrefix(mtype.Extension(), "."))
 
-	// If the filetype is FiletypeZIP, the filetype may be doc, xls, ppt, odt, ods, odp,
-	// you should check filetype again by package "mimetype".
+	// If the filetype is FiletypeZIP, the filetype may be docx, xlsx, pptx, odt,
+	// ods, odp, you should check filetype again by package "mimetype".
 	case string(FiletypeZIP):
 		mtype := mimetype.Detect(buf)
-		ft := strings.TrimPrefix(mtype.Extension(), ".")
-		if ft == "application/octec-stream" {
-			return FiletypeZIP, MimeZIP
-		}
-		return FiletypeAndMime(ft)
+		return FiletypeAndMime(strings.TrimPrefix(mtype.Extension(), "."))
 
 	// If the filetype is Unknown, the filetype may be text/plain files,
 	// you should check filetype again by package "mimetype".
@@ -117,15 +113,11 @@ func DetectBytes(data []byte) (Filetype, Mime) {
 		mtype := mimetype.Detect(data)
 		return FiletypeAndMime(strings.TrimPrefix(mtype.Extension(), "."))
 
-	// If the filetype is FiletypeZIP, the filetype may be doc, xls, ppt, odt, ods, odp,
-	// you should check filetype again by package "mimetype".
+	// If the filetype is FiletypeZIP, the filetype may be docx, xlsx, pptx, odt,
+	// ods, odp, you should check filetype again by package "mimetype".
 	case string(FiletypeZIP):
 		mtype := mimetype.Detect(data)
-		ft := strings.TrimPrefix(mtype.Extension(), ".")
-		if ft == "application/octec-stream" {
-			return FiletypeZIP, MimeZIP
-		}
-		return FiletypeAndMime(ft)
+		return FiletypeAndMime(strings.TrimPrefix(mtype.Extension(), "."))
 
 	// If the filetype is Unknown, the filetype may be text/plain files,
 	// you should check filetype again by package "mimetype".
