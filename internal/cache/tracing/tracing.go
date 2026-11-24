@@ -174,7 +174,7 @@ func orBackground(ctx context.Context) context.Context {
 // ctx. The caller owns the returned span and must end it after the cache
 // operation finishes.
 func (tw *Wrapper[T]) startSpan(ctx context.Context, operation string) (context.Context, trace.Span) {
-	tracer := gstotel.GetTracer()
+	tracer := gstotel.Tracer()
 	operationName := gstotel.OperationSpanName("cache", operation)
 	spanCtx, span := tracer.Start(ctx, operationName) //nolint:spancheck // Caller receives and ends the returned span.
 	return spanCtx, span                              //nolint:spancheck // Caller receives and ends the returned span.

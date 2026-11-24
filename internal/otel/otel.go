@@ -153,9 +153,9 @@ func Close() error {
 	return nil
 }
 
-// GetTracer returns the framework's tracer, or a no-op one while no tracer
+// Tracer returns the framework's tracer, or a no-op one while no tracer
 // provider is installed.
-func GetTracer() trace.Tracer {
+func Tracer() trace.Tracer {
 	if tracerProvider == nil {
 		return noop.NewTracerProvider().Tracer("noop")
 	}
