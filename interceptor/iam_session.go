@@ -4,7 +4,7 @@ import (
 	"context"
 
 	gstgrpc "github.com/hydroan/gst/grpc"
-	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
+	serviceiamsession "github.com/hydroan/gst/internal/moduleservice/iam/session"
 	"google.golang.org/grpc/metadata"
 )
 

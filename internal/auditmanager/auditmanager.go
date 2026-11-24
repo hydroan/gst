@@ -8,7 +8,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
-	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
+	modellogmgmt "github.com/hydroan/gst/internal/modulemodel/logmgmt"
 	"github.com/hydroan/gst/internal/types"
 	prommetrics "github.com/hydroan/gst/metrics"
 )

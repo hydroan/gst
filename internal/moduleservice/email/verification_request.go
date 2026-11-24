@@ -1,0 +1,68 @@
+package serviceemail
+
+import (
+	"net/http"
+
+	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
+	modelemail "github.com/hydroan/gst/internal/modulemodel/email"
+	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/service"
+	"go.uber.org/zap"
+)
+
+// VerificationRequestService handles public requests that start the email
+// verification flow for an eligible user account.
+type VerificationRequestService struct {
+	service.Base[*model.Empty, *modelemail.VerificationRequestReq, *modelemail.VerificationRequestRsp]
+}
+
+// Create starts an email verification flow and returns a generic acceptance
+// message so callers cannot infer whether the target account exists. An
+// address that is no email address (see isEmailAddress) is refused before any
+// of it: the refusal reads the request alone and tells nothing of an account.
+func (s *VerificationRequestService) Create(ctx *gst.ServiceContext, req *modelemail.VerificationRequestReq) (rsp *modelemail.VerificationRequestRsp, err error) {
+	log := s.WithContext(ctx, ctx.Phase())
+	rsp = &modelemail.VerificationRequestRsp{Msg: publicAcceptedMessage(iamEmailFlowKindVerification)}
+
+	email := normalizeEmailScope(req.Email)
+	if !isEmailAddress(email) {
+		return nil, gst.NewError(http.StatusBadRequest, emailMustBeValidEmailAddressMsg)
+	}
+
+	if _, err = reserveEmailThrottle(ctx, iamEmailFlowKindVerification, emailThrottleRequest, email, 0); err != nil {
+		if errors.Is(err, errEmailFlowThrottled) {
+			return rsp, nil
+		}
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToReserveVerificationRequestThrottleMsg, err)
+	}
+
+	user, err := currentAccountGateway().FindByEmail(ctx, email)
+	if err != nil {
+		if errors.Is(err, ErrAccountNotFound) {
+			return rsp, nil
+		}
+		if errors.Is(err, ErrAccountGatewayNotConfigured) {
+			log.Errorz("email account gateway is not configured", zap.Error(err))
+			return nil, newAccountGatewayNotConfiguredServiceError(err)
+		}
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToLoadVerificationAccountMsg, err)
+	}
+	if !eligibleVerificationAccount(user, email) {
+		return rsp, nil
+	}
+
+	token, flow, err := issueEmailFlow(ctx, iamEmailFlowKindVerification, iamEmailFlowState{
+		UserID: user.ID,
+		Email:  email,
+	})
+	if err != nil {
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToIssueVerificationFlowMsg, err)
+	}
+
+	if err = dispatchEmail(ctx, verificationDelivery(token, flow)); err != nil {
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToDispatchVerificationEmailMsg, err)
+	}
+
+	return rsp, nil
+}

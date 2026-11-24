@@ -62,9 +62,9 @@ func TestLoadModuleManifestReadsExcludeSourceFiles(t *testing.T) {
 	writeModuleManifestForTest(t, moduleDir, `{
 		"copy": {
 			"excludeSourceFiles": [
-				" internal/model/copytest/ignored.go ",
+				" internal/modulemodel/copytest/ignored.go ",
 				"",
-				"internal/model/copytest/../copytest/helper.go"
+				"internal/modulemodel/copytest/../copytest/helper.go"
 			]
 		}
 	}`)
@@ -73,8 +73,8 @@ func TestLoadModuleManifestReadsExcludeSourceFiles(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, []string{
-		"internal/model/copytest/ignored.go",
-		"internal/model/copytest/helper.go",
+		"internal/modulemodel/copytest/ignored.go",
+		"internal/modulemodel/copytest/helper.go",
 	}, manifest.Copy.ExcludeSourceFiles)
 }
 
@@ -83,9 +83,9 @@ func TestLoadModuleManifestReadsIncludeSourceFiles(t *testing.T) {
 	writeModuleManifestForTest(t, moduleDir, `{
 		"copy": {
 			"includeSourceFiles": [
-				" internal/service/copytest/standalone.go ",
+				" internal/moduleservice/copytest/standalone.go ",
 				"",
-				"internal/service/copytest/../copytest/orphan.go"
+				"internal/moduleservice/copytest/../copytest/orphan.go"
 			]
 		}
 	}`)
@@ -94,14 +94,14 @@ func TestLoadModuleManifestReadsIncludeSourceFiles(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, []string{
-		"internal/service/copytest/standalone.go",
-		"internal/service/copytest/orphan.go",
+		"internal/moduleservice/copytest/standalone.go",
+		"internal/moduleservice/copytest/orphan.go",
 	}, manifest.Copy.IncludeSourceFiles)
 }
 
 func TestLoadModuleManifestRejectsUnsafeIncludeSourceFiles(t *testing.T) {
 	moduleDir := t.TempDir()
-	writeModuleManifestForTest(t, moduleDir, `{"copy":{"includeSourceFiles":["../internal/service/copytest/standalone.go"]}}`)
+	writeModuleManifestForTest(t, moduleDir, `{"copy":{"includeSourceFiles":["../internal/moduleservice/copytest/standalone.go"]}}`)
 
 	_, err := loadModuleManifest(moduleDir)
 
@@ -203,7 +203,7 @@ func TestLoadModuleManifestRejectsNonStringArrayPostNotes(t *testing.T) {
 
 func TestLoadModuleManifestRejectsUnsafeExcludeSourceFiles(t *testing.T) {
 	moduleDir := t.TempDir()
-	writeModuleManifestForTest(t, moduleDir, `{"copy":{"excludeSourceFiles":["../internal/model/copytest/ignored.go"]}}`)
+	writeModuleManifestForTest(t, moduleDir, `{"copy":{"excludeSourceFiles":["../internal/modulemodel/copytest/ignored.go"]}}`)
 
 	_, err := loadModuleManifest(moduleDir)
 

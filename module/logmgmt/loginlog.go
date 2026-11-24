@@ -1,8 +1,8 @@
 package logmgmt
 
 import (
-	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
-	servicelogmgmt "github.com/hydroan/gst/internal/service/logmgmt"
+	modellogmgmt "github.com/hydroan/gst/internal/modulemodel/logmgmt"
+	servicelogmgmt "github.com/hydroan/gst/internal/moduleservice/logmgmt"
 	"github.com/hydroan/gst/internal/types"
 )
 

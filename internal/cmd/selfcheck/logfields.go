@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/hydroan/gst/internal/ggconst"
 	"golang.org/x/tools/go/packages"
 )
 
@@ -88,12 +89,12 @@ type fieldWrite struct {
 // key that is not a constant is skipped: golangci-lint's loggercheck holds
 // the pairs to their shape, and no linter compares the type a key is given
 // across the tree, which is why this check exists. The module sources under
-// internal/model and internal/service are copied into projects, which cannot
-// import internal/logfield, so they are held to the type rule alone, as a
-// project is. zap.Object, zap.Dict, zap.Namespace and zap.Inline nest keys
-// under the entry and are reported outside internal/logfield, whose key set
-// is fixed; a zap constructor constructorClasses does not know is reported so
-// the table stays complete.
+// internal/modulemodel and internal/moduleservice are copied into projects,
+// which cannot import internal/logfield, so they are held to the type rule
+// alone, as a project is. zap.Object, zap.Dict, zap.Namespace and zap.Inline
+// nest keys under the entry and are reported outside internal/logfield, whose
+// key set is fixed; a zap constructor constructorClasses does not know is
+// reported so the table stays complete.
 func checkLogFields(root string, pkgs []*packages.Package) ([]violation, error) {
 	checked := checkedPackages(pkgs)
 	module := ""
@@ -119,7 +120,7 @@ func checkLogFields(root string, pkgs []*packages.Package) ([]violation, error) 
 		}
 		for i, file := range p.Syntax {
 			path := relative(root, p.CompiledGoFiles[i])
-			if filepath.IsAbs(path) || strings.HasSuffix(path, "_test.go") {
+			if filepath.IsAbs(path) || strings.HasSuffix(path, ggconst.PatternTestFile) {
 				continue
 			}
 			report := func(pos ast.Node, format string, args ...any) {
@@ -240,7 +241,7 @@ func checkLogFields(root string, pkgs []*packages.Package) ([]violation, error) 
 // moduleSourceDirs are the directories, relative to the module, holding the
 // sources of the framework's modules, which gg module copy copies into a
 // project.
-var moduleSourceDirs = []string{"internal/model/", "internal/service/"}
+var moduleSourceDirs = []string{ggconst.DirModuleModel + "/", ggconst.DirModuleService + "/"}
 
 // isModuleSource reports whether the package at pkgPath is a module source,
 // one of moduleSourceDirs of module.

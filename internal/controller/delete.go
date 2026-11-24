@@ -7,7 +7,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
-	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
+	modellogmgmt "github.com/hydroan/gst/internal/modulemodel/logmgmt"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"

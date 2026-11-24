@@ -124,13 +124,14 @@ linters:
         # forwarding packages; the forwards serve projects (CLAUDE.md, package
         # ownership and internal import direction). The files left out are the
         # ones written as project code: godoc examples, the module sources
-        # gg module copy copies into a project (internal/model/<module> and
-        # internal/service/<module>), the programs gg embeds and builds inside
-        # a project (internal/gghelper/program), the middleware and interceptor
-        # source files the module manifests name, and module/helloworld, the
-        # module example projects are pointed to; so are the external tests of
-        # a forwarding package, which import the package they test. A trailing
-        # $ matches the package itself and not the packages under it.
+        # gg module copy copies into a project (internal/modulemodel/<module>
+        # and internal/moduleservice/<module>), the programs gg embeds and
+        # builds inside a project (internal/gghelper/program), the middleware
+        # and interceptor source files the module manifests name, and
+        # module/helloworld, the module example projects are pointed to; so are
+        # the external tests of a forwarding package, which import the package
+        # they test. A trailing $ matches the package itself and not the
+        # packages under it.
         forwarders:
           files:
             - "$all"
@@ -142,8 +143,8 @@ linters:
             - "!**/service/service_bench_test.go"
             - "!**/service/service_test.go"
             - "!**/cache/cache_benchmark_test.go"
-            - "!**/internal/model/**"
-            - "!**/internal/service/**"
+            - "!**/internal/modulemodel/**"
+            - "!**/internal/moduleservice/**"
             - "!**/internal/gghelper/program/**"
             - "!**/middleware/iam_session.go"
             - "!**/middleware/authz.go"
@@ -198,8 +199,8 @@ linters:
             - "!**/middleware/security_headers_test.go"
             - "!**/middleware/security_scheme_test.go"
             - "!**/middleware/timeout_test.go"
-            - "!**/internal/model/**"
-            - "!**/internal/service/**"
+            - "!**/internal/modulemodel/**"
+            - "!**/internal/moduleservice/**"
             - "!**/module/helloworld/**"
             - "!**/module/*/register_test.go"
           deny:

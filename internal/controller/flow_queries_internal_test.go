@@ -18,7 +18,7 @@ import (
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/auditmanager"
 	"github.com/hydroan/gst/internal/dbruntime"
-	modellogmgmt "github.com/hydroan/gst/internal/model/logmgmt"
+	modellogmgmt "github.com/hydroan/gst/internal/modulemodel/logmgmt"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"

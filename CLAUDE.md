@@ -99,7 +99,7 @@ gst 是强约定框架（Apple 风格），不是自由框架（Windows 风格�
 
 例外，以下内容必须保持公开包 import：
 
-- module 源码 `internal/model/<module>`、`internal/service/<module>`：会被 `gg copy` 复制进业务项目，copy 只改写 module 子树自身的 internal import 前缀，公开包 import 原样保留；若引用其他 internal 包，复制后无法编译。module 的 `_test.go` 不参与 copy，可以引用 internal 包。
+- module 源码 `internal/modulemodel/<module>`、`internal/moduleservice/<module>`：会被 `gg copy` 复制进业务项目，copy 只改写 module 子树自身的 internal import 前缀，公开包 import 原样保留；若引用其他 internal 包，复制后无法编译。module 的 `_test.go` 不参与 copy，可以引用 internal 包。
 - `internal/modelsource`、`internal/gggen`、`internal/ggnew`、`internal/ggmodule`、`internal/ggconst` 中面向生成代码的 import 路径常量、模板和 testdata：属于生成到业务项目里的用户代码，必须写公开路径。
 - `Example` 示例：godoc 里是给业务开发者看的代码，必须站在项目的角度写——只 import 项目自己也能 import 的公开包，列引用一律用生成的 `XxxCols`，不出现 internal 包和手工构造的列；功能性校验写在 `Test` 函数里，不写进 Example。
 - `internal/gghelper/program` 下的 `migrate`、`inspect`：gg 嵌入后写进临时目录、按项目的依赖版本编译运行的程序，站在项目的角度写，只 import 公开包。
@@ -162,7 +162,7 @@ gst 是强约定框架（Apple 风格），不是自由框架（Windows 风格�
 
 module 包中的接口测试用例规范：
 
-- 测试文件名要符合子 module 名，例如 module/iam/session_test.go 就是专门用来存放 session 相关接口的测试用例，其对应的接口实现放在 internal/{model,service}/iam/session 目录中。
+- 测试文件名要符合子 module 名，例如 module/iam/session_test.go 就是专门用来存放 session 相关接口的测试用例，其对应的接口实现放在 internal/{modulemodel,moduleservice}/iam/session 目录中。
 - 测试组织方式是一个接口对应一个顶层测试函数，各个顶层测试函数应该尽量避免相互影响。
 - 如果同一个接口有多种场景，则在这个接口对应的测试函数里 用 t.Run(...) 做子测试，如果只有一个场景，则不需要额外使用 t.Run(...) 来运行子测试。
 - 测试用到的辅助函数应该放在其对应的测试文件中，例如 session 子模块相关的测试辅助函数应该放在 session_test.go 中，account 子模块相关的测试辅助函数应该放在 account_test.go 中。并且测试用例使用到的辅助函数尽量放在顶层测试函数之后。

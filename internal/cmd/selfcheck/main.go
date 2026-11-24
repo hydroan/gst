@@ -64,15 +64,15 @@
 // internal/logfield declares keys more than one stream writes, one constructor
 // each, and checkLogFields holds the tree to them: a key of logfield's is
 // written through its constructor alone, the module sources under
-// internal/model and internal/service excepted, which are copied into projects
-// that cannot import logfield; every other key, ip and user_agent among them,
-// is written with one type wherever it appears, a key-value pair typed the way
-// zap.Any types its value, and a value of interface type, typed at run time, is
-// refused; zap.Object, zap.Dict, zap.Namespace and zap.Inline, which nest keys
-// of their own under the entry, belong to logfield alone, whose key set is
-// fixed. golangci-lint's loggercheck reads the key-value pairs for their
-// shape alone, and no linter compares the type a key is given across the
-// tree.
+// internal/modulemodel and internal/moduleservice excepted, which are copied
+// into projects that cannot import logfield; every other key, ip and
+// user_agent among them, is written with one type wherever it appears, a
+// key-value pair typed the way zap.Any types its value, and a value of
+// interface type, typed at run time, is refused; zap.Object, zap.Dict,
+// zap.Namespace and zap.Inline, which nest keys of their own under the entry,
+// belong to logfield alone, whose key set is fixed. golangci-lint's
+// loggercheck reads the key-value pairs for their shape alone, and no linter
+// compares the type a key is given across the tree.
 //
 // # Test seams
 //
@@ -131,7 +131,7 @@
 // tag in the model files a project writes and skips the subtrees gg module
 // copy writes there, copied module code being checked here, so
 // checkValidateTag reports a struct field carrying a validate tag in the
-// model sources of the framework's modules, under internal/model.
+// model sources of the framework's modules, under internal/modulemodel.
 //
 // # Message constants
 //

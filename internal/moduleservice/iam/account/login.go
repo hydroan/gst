@@ -1,0 +1,217 @@
+package serviceiamaccount
+
+import (
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/authn"
+	"github.com/hydroan/gst/authz/rbac"
+	"github.com/hydroan/gst/database"
+	modeliamaccount "github.com/hydroan/gst/internal/modulemodel/iam/account"
+	modeliamsession "github.com/hydroan/gst/internal/modulemodel/iam/session"
+	modeliamuser "github.com/hydroan/gst/internal/modulemodel/iam/user"
+	serviceiamsession "github.com/hydroan/gst/internal/moduleservice/iam/session"
+	"github.com/hydroan/gst/service"
+	"github.com/mssola/useragent"
+	"go.uber.org/zap"
+)
+
+type LoginService struct {
+	service.Base[*modeliamaccount.Login, *modeliamaccount.LoginReq, *modeliamaccount.LoginRsp]
+}
+
+// Create authenticates an IAM account and creates a new session.
+//
+// The local login path verifies username, password, and account status before
+// creating the session.
+func (l *LoginService) Create(ctx *gst.ServiceContext, req *modeliamaccount.LoginReq) (rsp *modeliamaccount.LoginRsp, err error) {
+	log := l.WithContext(ctx, ctx.Phase())
+	// Validate input
+	if req.Username == "" {
+		return nil, gst.NewError(http.StatusBadRequest, usernameRequiredMsg)
+	}
+	if req.Password == "" {
+		return nil, gst.NewError(http.StatusBadRequest, passwordRequiredMsg)
+	}
+
+	ua := useragent.New(ctx.UserAgent())
+	engineName, engineVersion := ua.Engine()
+	browserName, browserVersion := ua.Browser()
+
+	// Login observers hear the settled outcome of every attempt that passed
+	// input validation, no matter which branch below rejected it.
+	var targetUser *modeliamuser.User
+	defer func() {
+		event := authn.LoginEvent{
+			Kind:           authn.LoginEventFailed,
+			Username:       req.Username,
+			TenantID:       strings.TrimSpace(req.TenantID),
+			ClientIP:       ctx.ClientIP(),
+			UserAgent:      ctx.UserAgent(),
+			OS:             ua.OS(),
+			Platform:       ua.Platform(),
+			EngineName:     engineName,
+			EngineVersion:  engineVersion,
+			BrowserName:    browserName,
+			BrowserVersion: browserVersion,
+			At:             time.Now().UTC(),
+		}
+		if err == nil {
+			event.Kind = authn.LoginEventSucceeded
+		}
+		if targetUser != nil {
+			event.UserID = targetUser.ID
+		}
+		authn.NotifyLogin(ctx, event)
+	}()
+
+	// Find user by username
+	users := make([]*modeliamuser.User, 0)
+	if err = database.Database[*modeliamuser.User](ctx).WithLimit(1).WithQuery(&modeliamuser.User{Username: req.Username}).List(&users); err != nil {
+		return nil, gst.NewErrorWithCause(http.StatusUnauthorized, invalidUsernameOrPasswordMsg, err)
+	}
+	if len(users) == 0 {
+		return nil, gst.NewError(http.StatusUnauthorized, invalidUsernameOrPasswordMsg)
+	}
+	targetUser = users[0]
+
+	// Check if user is enabled
+	if targetUser.Status == modeliamuser.UserStatusInactive {
+		return nil, gst.NewError(http.StatusForbidden, accountDisabledMsg)
+	}
+	if targetUser.Status == modeliamuser.UserStatusLocked {
+		return nil, gst.NewError(http.StatusForbidden, accountLockedMsg)
+	}
+
+	credential, err := LoadPasswordCredential(ctx, targetUser.ID)
+	if err != nil {
+		return nil, gst.NewErrorWithCause(http.StatusUnauthorized, invalidUsernameOrPasswordMsg, err)
+	}
+	// Checked after the account is known to exist, so the counter is only ever
+	// keyed by a real username.
+	if err = ensureLoginNotLockedOut(ctx, targetUser.Username); err != nil {
+		return nil, err
+	}
+
+	// Verify password
+	if err = VerifyPasswordCredential(ctx, credential, req.Password); err != nil {
+		recordLoginFailure(ctx, targetUser.Username)
+		return nil, gst.NewErrorWithCause(http.StatusUnauthorized, invalidUsernameOrPasswordMsg, err)
+	}
+	// Resolved for every login, not only the ones that name a tenant: the
+	// principal in the response reports it, and it is what exempts a system
+	// root from the tenant membership check below.
+	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, targetUser.ID, rbac.SystemRoleRoot)
+	if err != nil {
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, authorizationUnavailableMsg, err)
+	}
+
+	tenantID := strings.TrimSpace(req.TenantID)
+	if tenantID != "" && !systemRoot {
+		if err = ensureLoginTenantMembership(ctx, targetUser.ID, tenantID); err != nil {
+			return nil, err
+		}
+	}
+
+	// The second-factor gate runs only after every first-factor check passed,
+	// so a failed second factor never reveals more than a failed password. The
+	// installed verifier owns the client-facing error shape.
+	if svcErr := verifyLoginSecondFactor(ctx, targetUser.ID, authn.LoginSecondFactor{
+		TOTPCode:   req.TOTPCode,
+		BackupCode: req.BackupCode,
+	}); svcErr != nil {
+		// A guessable proof, counted like the password it follows.
+		recordLoginFailure(ctx, targetUser.Username)
+		return nil, svcErr
+	}
+
+	now := time.Now()
+	// Create session
+	sessionID, err := serviceiamsession.NewSessionID()
+	if err != nil {
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToCreateSessionIDMsg, err)
+	}
+	expire := serviceiamsession.GetSessionExpiration()
+	expiresAt := now.Add(expire)
+
+	// Create session data for local user
+	sessionData := modeliamsession.Session{
+		ID:                 sessionID,
+		UserID:             targetUser.ID,
+		Username:           targetUser.Username,
+		TenantID:           tenantID,
+		MustChangePassword: credential.MustChangePassword,
+		ClientIP:           ctx.ClientIP(),
+		UserAgent:          ctx.UserAgent(),
+		OS:                 ua.OS(),
+		Platform:           ua.Platform(),
+		EngineName:         engineName,
+		BrowserName:        browserName,
+		IssuedAt:           now,
+		LastSeenAt:         now,
+		ExpiresAt:          expiresAt,
+	}
+	if err = serviceiamsession.Store.SaveSession(ctx, sessionData, expire); err != nil {
+		return nil, err
+	}
+	if err = serviceiamsession.Store.IndexSession(ctx, sessionData); err != nil {
+		// A snapshot no index names can never be listed or revoked, so the
+		// session is dropped rather than left behind unreachable.
+		_, _ = serviceiamsession.Store.DeleteSession(ctx, sessionID)
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToTrackUserSessionMsg, err)
+	}
+
+	// The account's failed attempts are forgotten once it proves the
+	// password, so a user who eventually gets it right starts from zero
+	// rather than one attempt short of a lockout.
+	serviceiamsession.Store.ClearLoginFailures(ctx, targetUser.Username)
+
+	serviceiamsession.SetCookie(ctx, sessionID, expire)
+
+	log.Infoz("user logged in successfully", zap.String("username", req.Username), zap.String("user_id", targetUser.ID))
+
+	email := ""
+	emailIdentity, err := LoadEmailIdentity(ctx, targetUser.ID)
+	if err != nil {
+		if !errors.Is(err, database.ErrRecordNotFound) {
+			log.Warnz("failed to load email identity for login response", zap.String("user_id", targetUser.ID), zap.Error(err))
+		}
+	} else {
+		email = emailIdentity.Email
+	}
+
+	return serviceiamsession.BuildAuthenticatedSessionRsp(sessionData, targetUser, email, now, systemRoot), nil
+}
+
+// verifyLoginSecondFactor runs the authn second-factor gate and shapes its
+// outcome as a service error: the installed verifier already answers with one
+// per the authn contract and is passed through untouched, while anything else
+// is an infrastructure failure reported as 500.
+func verifyLoginSecondFactor(ctx *gst.ServiceContext, userID string, factor authn.LoginSecondFactor) *gst.Error {
+	err := authn.VerifyLoginSecondFactor(ctx, userID, factor)
+	if err == nil {
+		return nil
+	}
+	var svcErr *gst.Error
+	if errors.As(err, &svcErr) {
+		return svcErr
+	}
+	return gst.NewErrorWithCause(http.StatusInternalServerError, failedToVerifySecondFactorMsg, err)
+}
+
+// ensureLoginTenantMembership refuses a login that names a tenant the user holds
+// no role in. The system root exemption is applied by the caller, which resolves
+// that fact for the response anyway.
+func ensureLoginTenantMembership(ctx *gst.ServiceContext, userID string, tenantID string) error {
+	roles, err := rbac.RBAC().RolesForSubject(ctx, tenantID, userID)
+	if err != nil {
+		return gst.NewErrorWithCause(http.StatusInternalServerError, authorizationUnavailableMsg, err)
+	}
+	if len(roles) == 0 {
+		return gst.NewError(http.StatusForbidden, userNotMemberOfTenantMsg)
+	}
+	return nil
+}

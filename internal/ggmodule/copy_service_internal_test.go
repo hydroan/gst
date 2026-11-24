@@ -20,7 +20,7 @@ import (
 	"fmt"
 
 	"github.com/hydroan/gst"
-	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
+	modelcopytest "github.com/hydroan/gst/internal/modulemodel/copytest"
 	"github.com/hydroan/gst/service"
 )
 
@@ -160,7 +160,7 @@ func TestMergeModuleServiceSourceDropsImportOnlyUsedByReplacedStruct(t *testing.
 
 import (
 	"github.com/hydroan/gst"
-	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
+	modelcopytest "github.com/hydroan/gst/internal/modulemodel/copytest"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
 )
@@ -225,7 +225,7 @@ func TestMergeModuleServiceSourceAllowsHookOnlySource(t *testing.T) {
 
 import (
 	"github.com/hydroan/gst"
-	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
+	modelcopytest "github.com/hydroan/gst/internal/modulemodel/copytest"
 	"github.com/hydroan/gst/service"
 )
 
@@ -306,7 +306,7 @@ func TestMergeModuleServiceSourceRetargetsMethodBodyParameterNames(t *testing.T)
 
 import (
 	"github.com/hydroan/gst"
-	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
+	modelcopytest "github.com/hydroan/gst/internal/modulemodel/copytest"
 	"github.com/hydroan/gst/service"
 )
 
@@ -376,7 +376,7 @@ func TestMergeModuleServiceSourceKeepsAFieldNamedLikeTheReceiver(t *testing.T) {
 
 import (
 	"github.com/hydroan/gst"
-	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
+	modelcopytest "github.com/hydroan/gst/internal/modulemodel/copytest"
 	"github.com/hydroan/gst/service"
 )
 
@@ -437,7 +437,7 @@ func TestMergeModuleServiceSourceRefusesAReceiverNameTheBodyUses(t *testing.T) {
 
 import (
 	"github.com/hydroan/gst"
-	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
+	modelcopytest "github.com/hydroan/gst/internal/modulemodel/copytest"
 	"github.com/hydroan/gst/service"
 )
 
@@ -494,7 +494,7 @@ func TestMergeModuleServiceSourceRejectsDuplicateMethodNames(t *testing.T) {
 
 import (
 	"github.com/hydroan/gst"
-	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
+	modelcopytest "github.com/hydroan/gst/internal/modulemodel/copytest"
 	"github.com/hydroan/gst/service"
 )
 
@@ -559,7 +559,7 @@ func TestMergeModuleServiceSourceKeepsNonServiceReceiverDoc(t *testing.T) {
 
 import (
 	"github.com/hydroan/gst"
-	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
+	modelcopytest "github.com/hydroan/gst/internal/modulemodel/copytest"
 	"github.com/hydroan/gst/service"
 )
 

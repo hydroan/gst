@@ -154,7 +154,7 @@ stop
 
 1. 校验模块名，规则同 add。
 2. 当前目录必须有 `go.mod`，也就是要在项目根目录运行；读出项目的模块路径。
-3. 找到框架源码，见上文。框架里必须有 `module/<name>/`、`internal/model/<name>/`、`internal/service/<name>/` 三个目录。
+3. 找到框架源码，见上文。框架里必须有 `module/<name>/`、`internal/modulemodel/<name>/`、`internal/moduleservice/<name>/` 三个目录。
 4. 读取并校验 `module/<name>/module.json`，没有这个文件就报错（模块不可 copy）。`includeSourceFiles`、`middleware` 和 `interceptors` 的条目在这一步就逐条核对，规则见「module.json」。
 5. 检查 `module/module.go`：导入了这个模块，并且文件里任何地方调用了它的 `Register`（带不带参数都算），就报 `framework module <name> is already registered; remove it before copying local source`；用 `.` 导入了这个模块也报错。这里的判断比 add 判断「已登记」更宽：只要像是登记，就拦下 copy。已经 add 的模块要先 remove。
 6. 规划 model 文件，见「model 文件」。
@@ -165,7 +165,7 @@ stop
 
 #### model 文件
 
-- **镜像复制**：`internal/model/<name>/` 下的 Go 源文件（含子目录）复制到 `model/<name>/` 下相同的相对路径。跳过测试文件、以 `.` 开头的文件、`vendor/` 和 `testdata/` 目录，以及 `excludeSourceFiles` 列出的文件。
+- **镜像复制**：`internal/modulemodel/<name>/` 下的 Go 源文件（含子目录）复制到 `model/<name>/` 下相同的相对路径。跳过测试文件、以 `.` 开头的文件、`vendor/` 和 `testdata/` 目录，以及 `excludeSourceFiles` 列出的文件。
 - **排除的文件不能被引用**：清单排除了 model 文件时，gg 先对框架的 model 目录做类型检查；被复制的文件引用了被排除的文件，就报错并指出是哪两个文件。
 - **读 DSL**：用和 `gg gen` 相同的解析器读这些 model 的 `Design()`，下一步据此规划 service 文件。
 - **过期 model 文件**：见「过期文件」。
@@ -176,7 +176,7 @@ service 目录不是镜像复制，分两类文件。
 
 **动作 service 文件**，放 DSL 动作的业务逻辑：
 
-- 每个 model 的 `Design()` 里启用且带 `Service()` 的动作，源文件是框架 `internal/service/<name>/` 下按 `gg gen` 规则算出的文件，目标是项目 `service/<name>/` 下按同一规则算出的文件，正好是之后 `gg gen` 会生成它的位置。
+- 每个 model 的 `Design()` 里启用且带 `Service()` 的动作，源文件是框架 `internal/moduleservice/<name>/` 下按 `gg gen` 规则算出的文件，目标是项目 `service/<name>/` 下按同一规则算出的文件，正好是之后 `gg gen` 会生成它的位置。
 - 源文件被 `excludeSourceFiles` 排除的动作跳过。
 - 源文件必须存在，并且至少声明一个 service 结构体（嵌入 `service.Base` 的结构体）。只有钩子方法、没有动作主方法也可以。
 - 几个动作对应同一个文件名时，合并成一个目标文件。
@@ -189,7 +189,7 @@ service 目录不是镜像复制，分两类文件。
 
 **辅助文件**，动作代码、中间件和拦截器用到的其他整个文件：
 
-- 从动作源文件、`includeSourceFiles`，以及要复制的中间件和拦截器文件对本模块 service 包的引用出发，对框架整个 `internal/service/<name>/` 目录做类型检查（这个目录必须能编译）。被引用的顶层声明在哪个文件，就把那个文件整个加入复制，再从新加入的文件接着找，直到找不出新文件。引用可以跨子包。中间件和拦截器文件本身不在这棵树里，只按它们导入的本模块 service 包和用到的包级声明来找。
+- 从动作源文件、`includeSourceFiles`，以及要复制的中间件和拦截器文件对本模块 service 包的引用出发，对框架整个 `internal/moduleservice/<name>/` 目录做类型检查（这个目录必须能编译）。被引用的顶层声明在哪个文件，就把那个文件整个加入复制，再从新加入的文件接着找，直到找不出新文件。引用可以跨子包。中间件和拦截器文件本身不在这棵树里，只按它们导入的本模块 service 包和用到的包级声明来找。
 - 空白导入（`import _`）的本模块子包，整个包的文件都加入；被排除的文件和声明了 service 结构体的文件除外。
 - 引用了被排除的文件，或者引用了一个声明了 service 结构体、却不被任何动作复制的文件，都报错：共享代码要放进辅助文件。
 - 辅助文件套用改写规则后整个写入。
@@ -213,8 +213,8 @@ service 目录不是镜像复制，分两类文件。
 
 复制的每个文件都不是原样照搬：
 
-- `package` 改成目标目录名（去掉标识符里不允许的字符），例如 `internal/model/email` 下的 `package modelemail` 变成 `model/email` 下的 `package email`。
-- 对本模块 model 目录的导入（`github.com/hydroan/gst/internal/model/<name>/...`）改成项目的 `model/<name>/...`；service、辅助、中间件文件还把本模块 service 目录的导入（`github.com/hydroan/gst/internal/service/<name>/...`）改成项目的 `service/<name>/...`。model 文件里对 service 目录的导入不改：model 引用 service 本身违反分层，留着它会在最后一条规则报错。
+- `package` 改成目标目录名（去掉标识符里不允许的字符），例如 `internal/modulemodel/email` 下的 `package modelemail` 变成 `model/email` 下的 `package email`。
+- 对本模块 model 目录的导入（`github.com/hydroan/gst/internal/modulemodel/<name>/...`）改成项目的 `model/<name>/...`；service、辅助、中间件文件还把本模块 service 目录的导入（`github.com/hydroan/gst/internal/moduleservice/<name>/...`）改成项目的 `service/<name>/...`。model 文件里对 service 目录的导入不改：model 引用 service 本身违反分层，留着它会在最后一条规则报错。
 - 改写后的导入按新路径的最后一段起名。和同文件的其他导入重名时，加 `model` 或 `service` 前缀做别名（例如 `modelsession`），还重名就在后面补 `x`。代码里的包名前缀跟着改。
 - 改写后的包名前缀如果被同一个文件里的同名声明遮住（例如函数里有个局部变量也叫 `session`），报错，要在模块源码里给那个声明改名。
 - 改写完仍然导入 `github.com/hydroan/gst/internal/...` 的文件报错：这种导入在框架里能编译，放进项目就不能。
@@ -340,7 +340,7 @@ stop
 | 字段 | 作用 | 校验 |
 | --- | --- | --- |
 | `excludeSourceFiles` | copy 完全跳过的源文件：不复制，也不参与 model 和动作的规划。被排除的动作 service 文件，它的动作也不复制；项目里以前复制过的这类文件算过期文件。被复制的代码还引用着它时报错 | 路径安全 |
-| `includeSourceFiles` | 即使没有动作引用，也必须作为辅助文件复制的文件，给只被项目自己的装配代码调用的钩子实现用 | 必须在 `internal/service/<name>/` 下、存在、不是测试文件、没被排除、没有声明 service 结构体 |
+| `includeSourceFiles` | 即使没有动作引用，也必须作为辅助文件复制的文件，给只被项目自己的装配代码调用的钩子实现用 | 必须在 `internal/moduleservice/<name>/` 下、存在、不是测试文件、没被排除、没有声明 service 结构体 |
 | `middleware` | 要复制的中间件，每项有 `sourceFile`、`scope`、`handler`，见「中间件」 | `sourceFile` 必须是 `middleware/*.go` 的非测试文件；`scope` 只能是 `global` 或 `auth`；`handler` 必须是合法的 Go 标识符，并且是源文件里一个不带参数的顶层函数 |
 | `interceptors` | 要复制的 gRPC 拦截器，每项同 `middleware`，见「拦截器」；只复制进用 gRPC 的项目 | `sourceFile` 必须是 `interceptor/*.go` 的非测试文件，其余同 `middleware` |
 | `requiredAssembly` | copy 之后项目必须自己写的调用，每项有 `import`、`function`、`reason`。copy 结束时逐条提示还没做的；gg check 的「Module assembly」检查项据此要求项目在非测试代码里调用它们 | 三个字段都不能为空；`function` 必须是导出的 Go 标识符 |

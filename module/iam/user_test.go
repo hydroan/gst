@@ -7,8 +7,8 @@ import (
 
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/database"
-	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
-	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
+	modeliamuser "github.com/hydroan/gst/internal/modulemodel/iam/user"
+	serviceiamsession "github.com/hydroan/gst/internal/moduleservice/iam/session"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/module/iam"

@@ -20,9 +20,9 @@ type moduleManifest struct {
 
 type moduleCopyManifest struct {
 	// ExcludeSourceFiles lists framework-root relative source files that module
-	// copy should skip, for example "internal/model/copytest/ignored.go". Excluded
-	// files are not copied and do not participate in copy-time model/action
-	// planning.
+	// copy should skip, for example
+	// "internal/modulemodel/copytest/ignored.go". Excluded files are not copied
+	// and do not participate in copy-time model/action planning.
 	ExcludeSourceFiles []string `json:"excludeSourceFiles"`
 	// IncludeSourceFiles lists framework-root relative files under the module's
 	// service source tree that copy must always carry as helper files, even when

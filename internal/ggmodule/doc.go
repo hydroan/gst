@@ -81,13 +81,14 @@
 //	require ./go.mod, read the project module path
 //	resolve the framework source through the project's module graph
 //	(go list -m github.com/hydroan/gst, downloading it once if missing)
-//	require module/<name>/, internal/model/<name>/, internal/service/<name>/
+//	require module/<name>/, internal/modulemodel/<name>/ and
+//	internal/moduleservice/<name>/
 //	load and validate module/<name>/module.json
 //	refuse a module that is still add-registered
 //	        |
 //	        v
 //	MODEL PLANNING
-//	  mirror internal/model/<name>/** (skip test files, dotfiles,
+//	  mirror internal/modulemodel/<name>/** (skip test files, dotfiles,
 //	  vendor/, testdata/, excluded sources) ----------> model files
 //	  fail if a mirrored file references an excluded one
 //	  non-exempt leftover target files ---------------> stale models
@@ -95,7 +96,7 @@
 //	        v
 //	ACTION PLANNING (DSL-driven)
 //	  every Design() action with Service():
-//	    source internal/service/<name>/<ServiceFilename()>
+//	    source internal/moduleservice/<name>/<ServiceFilename()>
 //	    target service/<name>/<ServiceFilename()>
 //	  each source must declare a service struct
 //	        |
@@ -153,7 +154,7 @@
 //     file, instead of shipping a package that cannot compile. (References
 //     from copied service files into excluded model files are outside both
 //     walks and surface through the copied project's build.)
-//   - includeSourceFiles: files under internal/service/<name>/ that copy
+//   - includeSourceFiles: files under internal/moduleservice/<name>/ that copy
 //     must always carry as helper files even when no action references
 //     them, for hook implementations reached only from project-owned
 //     assembly code (a login second-factor verifier, a login observer).
@@ -180,29 +181,30 @@
 //
 // # Model copy rules
 //
-// Model copy is a mirror: every Go source file under internal/model/<name>,
-// including nested subpackages, is copied to model/<name>/ at the same
-// relative path. Skipped are test files, dotfiles, files under vendor/ and
-// testdata/ directories, and manifest-excluded sources. When the manifest
-// excludes model files, the model tree is type-checked and a mirrored file
-// referencing an excluded one fails the copy at preflight.
+// Model copy is a mirror: every Go source file under
+// internal/modulemodel/<name>, including nested subpackages, is copied to
+// model/<name>/ at the same relative path. Skipped are test files, dotfiles,
+// files under vendor/ and testdata/ directories, and manifest-excluded
+// sources. When the manifest excludes model files, the model tree is
+// type-checked and a mirrored file referencing an excluded one fails the copy
+// at preflight.
 //
 // Each copied model file is rewritten, not copied verbatim:
 //
 //   - The package clause becomes the target directory name (sanitized to a
-//     valid identifier), so internal/model/copytest package modelcopytest
+//     valid identifier), so internal/modulemodel/copytest package modelcopytest
 //     becomes model/copytest package copytest.
-//   - Imports of the same module's internal model tree
-//     (github.com/hydroan/gst/internal/model/<name>...) are rewritten to
+//   - Imports of the same module's model tree
+//     (github.com/hydroan/gst/internal/modulemodel/<name>...) are rewritten to
 //     the project's model/<name> tree. Local import names follow the new
 //     path base, with deterministic aliases when names collide, and every
 //     package-qualified selector is retargeted. A rewritten qualifier that
 //     a same-file declaration would shadow fails the copy with a rename
 //     instruction for the module source.
-//   - Imports of the module's internal service tree are deliberately NOT
-//     rewritten in model files: a model importing service code is an
-//     architecture violation, and the next rule turns it into a copy error
-//     instead of hiding it in generated project code.
+//   - Imports of the module's service tree are deliberately NOT rewritten in
+//     model files: a model importing service code is an architecture
+//     violation, and the next rule turns it into a copy error instead of
+//     hiding it in generated project code.
 //   - Any surviving github.com/hydroan/gst/internal/... import fails the
 //     copy: such an import compiles inside the framework but never in the
 //     consumer project.
@@ -213,9 +215,10 @@
 //
 // Action service files carry the business logic of DSL-declared actions. For
 // every model whose Design() declares an action with Service(), the source is
-// the framework file at modelsource.ServiceTarget under internal/service/<name>/, and
-// the target is the same modelsource.ServiceTarget mapping under service/<name>/ —
-// exactly where a later gg gen would regenerate it. Rules:
+// the framework file at modelsource.ServiceTarget under
+// internal/moduleservice/<name>/, and the target is the same
+// modelsource.ServiceTarget mapping under service/<name>/ — exactly where a
+// later gg gen would regenerate it. Rules:
 //
 //   - The source file must exist and declare at least one service struct (a
 //     struct embedding service.Base); hook-only files are fine, the

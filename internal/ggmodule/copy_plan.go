@@ -140,8 +140,8 @@ func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 		FrameworkRoot:        frameworkRoot,
 		ModelDir:             ggconst.DirModel,
 		ServiceDir:           ggconst.DirService,
-		SourceModelDir:       filepath.Join(frameworkRoot, "internal", ggconst.DirModel, name),
-		SourceServiceDir:     filepath.Join(frameworkRoot, "internal", ggconst.DirService, name),
+		SourceModelDir:       filepath.Join(frameworkRoot, filepath.FromSlash(ggconst.DirModuleModel), name),
+		SourceServiceDir:     filepath.Join(frameworkRoot, filepath.FromSlash(ggconst.DirModuleService), name),
 		TargetModelDir:       filepath.Join(ggconst.DirModel, name),
 		TargetServiceDir:     filepath.Join(ggconst.DirService, name),
 		TargetMiddlewareDir:  ggconst.DirMiddleware,
@@ -333,7 +333,7 @@ func (p *CopyPlan) checkConflicts(force bool) error {
 // excluded, and must not declare a service struct: action service files are
 // copied through their DSL actions, not through the manifest.
 func (p *CopyPlan) resolveIncludeSourceFiles(includes []string) error {
-	servicePrefix := path.Join("internal", ggconst.DirService, p.Name) + "/"
+	servicePrefix := path.Join(ggconst.DirModuleService, p.Name) + "/"
 	for _, rel := range includes {
 		if !strings.HasPrefix(rel, servicePrefix) {
 			return errors.Newf("includeSourceFiles entry %q must live under %s", rel, servicePrefix)
@@ -370,10 +370,11 @@ func (p *CopyPlan) includeSourceFilePaths() []string {
 	return paths
 }
 
-// ignoredSourcePath matches module.json copy.excludeSourceFiles against source files
-// relative to the framework root. This keeps the manifest stable across projects:
-// "internal/model/copytest/ignored.go" means the same source file no matter where
-// the current app's model/service directories are configured.
+// ignoredSourcePath matches module.json copy.excludeSourceFiles against source
+// files relative to the framework root. This keeps the manifest stable across
+// projects: "internal/modulemodel/copytest/ignored.go" means the same source
+// file no matter where the current app's model/service directories are
+// configured.
 func (p *CopyPlan) ignoredSourcePath(sourcePath string) bool {
 	if len(p.ExcludeSourceFiles) == 0 {
 		return false

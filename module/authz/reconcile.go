@@ -3,7 +3,7 @@ package authz
 import (
 	"context"
 
-	serviceauthz "github.com/hydroan/gst/internal/service/authz"
+	serviceauthz "github.com/hydroan/gst/internal/moduleservice/authz"
 )
 
 // PolicyDrift is one disagreement between the stored authorization rules and

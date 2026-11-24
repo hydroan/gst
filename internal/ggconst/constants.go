@@ -105,6 +105,16 @@ const (
 	DirService     = "service"
 )
 
+// DirModuleModel and DirModuleService are the two trees of the framework that
+// hold the sources of its modules, as slash-separated paths under the
+// framework root; behind ImportPathGst they are import paths as well. gg
+// module copy carries DirModuleModel/<module> into DirModel/<module> of a
+// project and DirModuleService/<module> into its DirService/<module>.
+const (
+	DirModuleModel   = "internal/modulemodel"
+	DirModuleService = "internal/moduleservice"
+)
+
 // Package names
 const (
 	PkgMain      = "main"

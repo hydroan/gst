@@ -3,9 +3,9 @@ package mfa
 import (
 	"github.com/hydroan/gst/authn"
 	"github.com/hydroan/gst/internal/apiaction"
-	modelmfa "github.com/hydroan/gst/internal/model/mfa"
 	"github.com/hydroan/gst/internal/modelregistry"
-	servicemfa "github.com/hydroan/gst/internal/service/mfa"
+	modelmfa "github.com/hydroan/gst/internal/modulemodel/mfa"
+	servicemfa "github.com/hydroan/gst/internal/moduleservice/mfa"
 	"github.com/hydroan/gst/module"
 )
 

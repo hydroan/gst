@@ -9,13 +9,14 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hydroan/gst/internal/ggconst"
 	"golang.org/x/tools/go/packages"
 )
 
 // validateTagScope is the directory under the root holding the model sources
 // of the framework's modules, which gg module copy copies into a project's
 // model directory.
-const validateTagScope = "internal/model/"
+const validateTagScope = ggconst.DirModuleModel + "/"
 
 // validateTag is the struct tag go-playground/validator reads rules from when
 // it is used on its own, and the one the framework never reads.

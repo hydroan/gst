@@ -179,7 +179,7 @@ func uniqueTypeScriptRoots(roots []ts.TypeRef) []ts.TypeRef {
 const (
 	frameworkModuleTree = ggconst.ImportPathGst + "/" + ggconst.DirModule
 	funcModuleUse       = "Use"
-	frameworkModelTree  = ggconst.ImportPathGst + "/internal/" + ggconst.DirModel
+	frameworkModelTree  = ggconst.ImportPathGst + "/" + ggconst.DirModuleModel
 	frameworkEmptyPath  = ggconst.ImportPathGst + "/internal/modelregistry"
 )
 
@@ -275,9 +275,9 @@ func typeScriptModuleRoots(modulePath string) ([]ts.TypeRef, error) {
 // as {PkgPath: "github.com/hydroan/gst/module/helloworld", Name: "Req"} for
 // *helloworld.Req. An alias a framework module package declares forwards a
 // type of the module's models, and the root is the type it forwards:
-// {PkgPath: "github.com/hydroan/gst/internal/model/authz", Name: "Role"} for
-// *authz.Role. A type that carries no data (see isEmptyModel) is no root, and
-// neither is one written out without a name of its own, which has no
+// {PkgPath: "github.com/hydroan/gst/internal/modulemodel/authz", Name: "Role"}
+// for *authz.Role. A type that carries no data (see isEmptyModel) is no root,
+// and neither is one written out without a name of its own, which has no
 // declaration to name.
 func typeScriptRootOf(t types.Type) (ts.TypeRef, bool) {
 	if p, ok := types.Unalias(t).(*types.Pointer); ok {

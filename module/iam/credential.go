@@ -3,7 +3,7 @@ package iam
 import (
 	"context"
 
-	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
+	serviceiamaccount "github.com/hydroan/gst/internal/moduleservice/iam/account"
 )
 
 // NewPasswordCredential returns the password credential of the user userID,

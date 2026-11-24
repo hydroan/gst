@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/hydroan/gst/internal/ggconst"
 	"golang.org/x/tools/go/packages"
 )
 
@@ -56,7 +57,7 @@ func checkTestListing(root string, pkgs []*packages.Package) ([]violation, error
 		var flow *pathFlow
 		for i, file := range p.Syntax {
 			path := relative(root, p.CompiledGoFiles[i])
-			if filepath.IsAbs(path) || !strings.HasSuffix(path, "_test.go") || seen[path] {
+			if filepath.IsAbs(path) || !strings.HasSuffix(path, ggconst.PatternTestFile) || seen[path] {
 				continue
 			}
 			seen[path] = true

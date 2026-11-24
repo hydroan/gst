@@ -1,0 +1,68 @@
+package serviceemail
+
+import (
+	"net/http"
+	"strings"
+
+	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
+	modelemail "github.com/hydroan/gst/internal/modulemodel/email"
+	"github.com/hydroan/gst/service"
+	"go.uber.org/zap"
+)
+
+// ChangeResendService handles authenticated requests that resend confirmation
+// emails for an in-progress email change flow.
+type ChangeResendService struct {
+	service.Base[*modelemail.ChangeResend, *modelemail.ChangeResendReq, *modelemail.ChangeResendRsp]
+}
+
+// Create revalidates the current account and reissues the confirmation email for
+// the target new email address.
+func (s *ChangeResendService) Create(ctx *gst.ServiceContext, req *modelemail.ChangeResendReq) (rsp *modelemail.ChangeResendRsp, err error) {
+	log := s.WithContext(ctx, ctx.Phase())
+	if ctx == nil || strings.TrimSpace(ctx.UserID()) == "" {
+		return nil, gst.NewError(http.StatusBadRequest, authenticationRequiredMsg)
+	}
+
+	user, err := currentAccountGateway().GetByID(ctx, ctx.UserID())
+	if err != nil {
+		if errors.Is(err, ErrAccountGatewayNotConfigured) {
+			log.Errorz("email account gateway is not configured", zap.Error(err))
+			return nil, newAccountGatewayNotConfiguredServiceError(err)
+		}
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToLoadCurrentAccountMsg, err)
+	}
+	if err = validAccountSnapshot(user, ctx.UserID()); err != nil {
+		log.Errorz("email account gateway returned invalid email change resend account", zap.Error(err))
+		return nil, newAccountGatewayInvalidAccountServiceError(err)
+	}
+
+	newEmail := normalizeEmailScope(req.NewEmail)
+	if err = validateEmailChangeTarget(ctx, user, newEmail); err != nil {
+		log.Errorz("failed to validate email change resend target", zap.Error(err))
+		return nil, err
+	}
+
+	if _, err = reserveEmailThrottle(ctx, iamEmailFlowKindChangeConfirm, emailThrottleResend, newEmail, 0); err != nil {
+		if errors.Is(err, errEmailFlowThrottled) {
+			return &modelemail.ChangeResendRsp{Msg: "email change confirmation resent successfully"}, nil
+		}
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToReserveEmailChangeResendThrottleMsg, err)
+	}
+
+	confirmToken, confirmFlow, err := issueEmailFlow(ctx, iamEmailFlowKindChangeConfirm, iamEmailFlowState{
+		UserID:   user.ID,
+		OldEmail: normalizeAccountEmail(user.Email),
+		NewEmail: newEmail,
+		Email:    newEmail,
+	})
+	if err != nil {
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToIssueEmailChangeResendFlowMsg, err)
+	}
+	if err = dispatchEmail(ctx, changeConfirmDelivery(confirmToken, confirmFlow)); err != nil {
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToDispatchEmailChangeResendConfirmationMsg, err)
+	}
+
+	return &modelemail.ChangeResendRsp{Msg: "email change confirmation resent successfully"}, nil
+}

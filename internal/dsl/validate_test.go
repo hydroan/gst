@@ -35,8 +35,8 @@ func TestValidateFlattenUsage(t *testing.T) {
 		{
 			name:     "framework_module_package_scan_is_not_root_model_file",
 			source:   validateFrameworkModuleModelSource,
-			modelDir: "/repo/internal/model/authz",
-			filename: "/repo/internal/model/authz/role.go",
+			modelDir: "/repo/internal/modulemodel/authz",
+			filename: "/repo/internal/modulemodel/authz/role.go",
 		},
 		{
 			name:      "flatten_outside_action",

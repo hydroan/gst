@@ -1,0 +1,186 @@
+package servicemfa
+
+import (
+	"context"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"math/big"
+	"strings"
+	"time"
+
+	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/database"
+	modelmfa "github.com/hydroan/gst/internal/modulemodel/mfa"
+)
+
+const (
+	totpBackupCodeCount     = 10
+	totpBackupCodeRawLength = 16
+	totpBackupCodeGroupSize = 4
+	totpBackupCodeAlphabet  = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
+)
+
+// Column references for narrowed TOTPDevice updates; MFA services carry no
+// generated Cols vars. Usage writes stay narrowed to the columns they own so a
+// stale in-memory device snapshot can never write back a recovery-code hash
+// that a concurrently committed consumption already removed.
+var (
+	colTOTPDeviceBackupCodeHashes = gst.NewJSONStringsColumn[*modelmfa.TOTPDevice]("backup_code_hashes")
+	colTOTPDeviceLastUsedAt       = gst.NewTimeColumn[*modelmfa.TOTPDevice]("last_used_at")
+)
+
+var errTOTPBackupCodeInvalid = errors.New("invalid backup code")
+
+// GenerateTOTPBackupCodes creates one-time recovery codes for a new TOTP device.
+//
+// Each code is 16 characters drawn from an unambiguous Base32 alphabet,
+// formatted in groups of four for manual entry. Callers return these raw codes
+// only once to the user during device confirmation.
+func GenerateTOTPBackupCodes() ([]string, error) {
+	codes := make([]string, totpBackupCodeCount)
+	for i := range codes {
+		code, err := generateTOTPBackupCode()
+		if err != nil {
+			return nil, err
+		}
+		codes[i] = code
+	}
+	return codes, nil
+}
+
+// HashTOTPBackupCodes normalizes and hashes recovery codes before storage,
+// keyed by the owning device's TOTP secret.
+//
+// Stored devices keep only HMAC-SHA256 digests of normalized recovery codes,
+// so database reads never expose usable recovery credentials. A recovery code
+// is an 80-bit high-entropy random string, not a human-chosen password, so a
+// slow password hash would add cost without adding brute-force resistance;
+// HMAC keyed per device with the secret the device already owns needs no new
+// key management and keeps digests independent across devices.
+func HashTOTPBackupCodes(secret string, codes []string) ([]string, error) {
+	hashes := make([]string, 0, len(codes))
+	for _, code := range codes {
+		normalizedCode, err := normalizeTOTPBackupCode(code)
+		if err != nil {
+			return nil, err
+		}
+		hashes = append(hashes, hashTOTPBackupCode(secret, normalizedCode))
+	}
+	return hashes, nil
+}
+
+// hashTOTPBackupCode digests one normalized recovery code with the device
+// secret as the HMAC key.
+func hashTOTPBackupCode(secret, normalizedCode string) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(normalizedCode))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// consumeTOTPBackupCode verifies and removes one recovery code for the user.
+//
+// It opens a transaction, locks the user's active devices, compares the
+// normalized code against the stored HMAC digests, removes the matching
+// digest, and updates LastUsedAt. Replays fail because the digest is removed
+// in the same transaction that validates the code. It stays unexported because
+// callers must spend a verification attempt first; a public entry would let
+// recovery codes be guessed outside that budget.
+func consumeTOTPBackupCode(ctx *gst.ServiceContext, userID, code string) error {
+	if ctx == nil || strings.TrimSpace(userID) == "" {
+		return errors.New("authentication required")
+	}
+
+	return database.Transaction(ctx, func(ctx context.Context) error {
+		return consumeTOTPBackupCodeInTx(ctx, userID, code, time.Now().UTC())
+	})
+}
+
+// consumeTOTPBackupCodeInTx consumes a recovery code inside an existing device
+// transaction. The caller passes a transaction-carrying context created by
+// database.Transaction so backup-code consumption and any surrounding writes
+// commit or roll back together; the timestamp is supplied by the caller so all
+// updates in the higher-level transaction share the same logical operation time.
+func consumeTOTPBackupCodeInTx(ctx context.Context, userID, code string, now time.Time) error {
+	normalizedCode, err := normalizeTOTPBackupCode(code)
+	if err != nil {
+		return errTOTPBackupCodeInvalid
+	}
+
+	devices := make([]*modelmfa.TOTPDevice, 0)
+	if err := database.Database[*modelmfa.TOTPDevice](ctx).WithLock(database.LockUpdate).WithQuery(&modelmfa.TOTPDevice{
+		UserID:   strings.TrimSpace(userID),
+		IsActive: true,
+	}).List(&devices); err != nil {
+		return errors.Wrap(err, "list TOTP devices for backup code")
+	}
+
+	for _, device := range devices {
+		digest := hashTOTPBackupCode(device.Secret, normalizedCode)
+		for i, hash := range device.BackupCodeHashes {
+			// Compared in constant time.
+			if !hmac.Equal([]byte(digest), []byte(hash)) {
+				continue
+			}
+
+			device.BackupCodeHashes = append(device.BackupCodeHashes[:i], device.BackupCodeHashes[i+1:]...)
+			device.LastUsedAt = &now
+			if err := database.Database[*modelmfa.TOTPDevice](ctx).
+				WithSelect(colTOTPDeviceBackupCodeHashes, colTOTPDeviceLastUsedAt).
+				Update(device); err != nil {
+				return errors.Wrap(err, "consume TOTP backup code")
+			}
+			return nil
+		}
+	}
+
+	return errTOTPBackupCodeInvalid
+}
+
+// generateTOTPBackupCode creates one formatted recovery code from random bytes.
+func generateTOTPBackupCode() (string, error) {
+	var b strings.Builder
+	b.Grow(totpBackupCodeRawLength)
+	for range totpBackupCodeRawLength {
+		idx, err := rand.Int(rand.Reader, big.NewInt(int64(len(totpBackupCodeAlphabet))))
+		if err != nil {
+			return "", errors.Wrap(err, "generate TOTP backup code")
+		}
+		b.WriteByte(totpBackupCodeAlphabet[idx.Int64()])
+	}
+	return formatTOTPBackupCode(b.String()), nil
+}
+
+// normalizeTOTPBackupCode prepares user input for hash comparison.
+//
+// The normalizer trims surrounding whitespace, removes hyphens, uppercases the
+// code, and rejects anything outside the configured unambiguous Base32 alphabet.
+func normalizeTOTPBackupCode(code string) (string, error) {
+	code = strings.TrimSpace(code)
+	code = strings.ReplaceAll(code, "-", "")
+	code = strings.ToUpper(code)
+	if len(code) != totpBackupCodeRawLength {
+		return "", errTOTPBackupCodeInvalid
+	}
+	for _, r := range code {
+		if !strings.ContainsRune(totpBackupCodeAlphabet, r) {
+			return "", errTOTPBackupCodeInvalid
+		}
+	}
+	return code, nil
+}
+
+// formatTOTPBackupCode groups a normalized recovery code for display.
+func formatTOTPBackupCode(code string) string {
+	var b strings.Builder
+	b.Grow(totpBackupCodeRawLength + (totpBackupCodeRawLength / totpBackupCodeGroupSize) - 1)
+	for i, r := range code {
+		if i > 0 && i%totpBackupCodeGroupSize == 0 {
+			b.WriteByte('-')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}

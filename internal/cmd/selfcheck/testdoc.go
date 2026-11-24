@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/hydroan/gst/internal/ggconst"
 	"golang.org/x/tools/go/packages"
 )
 
@@ -37,13 +38,13 @@ func checkTestDoc(root string, pkgs []*packages.Package) ([]violation, error) {
 	for _, p := range pkgs {
 		for i, file := range p.Syntax {
 			path := relative(root, p.CompiledGoFiles[i])
-			if filepath.IsAbs(path) || !strings.HasSuffix(path, "_test.go") || ast.IsGenerated(file) || seen[path] {
+			if filepath.IsAbs(path) || !strings.HasSuffix(path, ggconst.PatternTestFile) || ast.IsGenerated(file) || seen[path] {
 				continue
 			}
 			seen[path] = true
 			for _, decl := range file.Decls {
 				for _, d := range documentedDecls(decl) {
-					if d.name == "_" || d.name == "init" || strings.HasPrefix(d.name, "Example") {
+					if d.name == "_" || d.name == ggconst.FuncInit || strings.HasPrefix(d.name, "Example") {
 						continue
 					}
 					text := d.doc.Text()

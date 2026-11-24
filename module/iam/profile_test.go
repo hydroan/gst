@@ -10,7 +10,7 @@ import (
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/datatypes"
-	modeliamprofile "github.com/hydroan/gst/internal/model/iam/profile"
+	modeliamprofile "github.com/hydroan/gst/internal/modulemodel/iam/profile"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/stretchr/testify/require"
 )

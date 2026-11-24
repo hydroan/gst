@@ -1,0 +1,102 @@
+package servicemfa
+
+import (
+	"bytes"
+	"encoding/base64"
+	"net/http"
+
+	"github.com/hydroan/gst"
+	modelmfa "github.com/hydroan/gst/internal/modulemodel/mfa"
+	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/service"
+	"github.com/pquerna/otp/totp"
+	"github.com/skip2/go-qrcode"
+	"go.uber.org/zap"
+)
+
+// TOTPBindService starts the TOTP binding flow for an authenticated account.
+//
+// The service validates the current user and session, generates a new TOTP
+// secret, renders the provisioning URL as a QR code, and stores the secret in a
+// short-lived binding challenge tied to the current user and session. The
+// response returns only the challenge ID and authenticator setup data, never the
+// raw secret as a standalone field.
+type TOTPBindService struct {
+	service.Base[*modelmfa.TOTPBind, *model.Empty, *modelmfa.TOTPBindRsp]
+}
+
+// Create creates a pending TOTP binding challenge and returns setup metadata.
+//
+// The method requires an authenticated account and session, generates a new
+// server-held secret, stores it in the binding challenge, and returns the
+// challenge ID with the provisioning URL and QR image for authenticator setup.
+func (t *TOTPBindService) Create(ctx *gst.ServiceContext, req *model.Empty) (rsp *modelmfa.TOTPBindRsp, err error) {
+	log := t.WithContext(ctx, ctx.Phase())
+
+	if len(ctx.UserID()) == 0 {
+		return nil, gst.NewError(http.StatusUnauthorized, authenticationRequiredMsg)
+	}
+	if len(ctx.Username()) == 0 {
+		return nil, gst.NewError(http.StatusUnauthorized, authenticationRequiredMsg)
+	}
+	sessionID, err := currentTOTPBindSessionID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Infoz("generating TOTP for user", zap.String("user_id", ctx.UserID()), zap.String("username", ctx.Username()))
+
+	key, err := totp.Generate(totp.GenerateOpts{
+		Issuer:      gst.FrameworkName,
+		AccountName: ctx.Username(),
+		SecretSize:  32, // 32 bytes = 256 bits
+	})
+	if err != nil {
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToGenerateTOTPKeyMsg, err)
+	}
+
+	qrCodeURL := key.URL()
+
+	qrCodeImage, err := generateQRCode(qrCodeURL)
+	if err != nil {
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToGenerateQRCodeImageMsg, err)
+	}
+
+	challengeID, _, err := issueTOTPBindChallenge(ctx, totpBindChallenge{
+		UserID:    ctx.UserID(),
+		SessionID: sessionID,
+		Username:  ctx.Username(),
+		Secret:    key.Secret(),
+	})
+	if err != nil {
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToIssueTOTPBindingChallengeMsg, err)
+	}
+
+	rsp = &modelmfa.TOTPBindRsp{
+		ChallengeID:        challengeID,
+		OtpauthURL:         qrCodeURL,
+		QRCodeImageDataURL: qrCodeImage,
+		Issuer:             gst.FrameworkName,
+		AccountName:        ctx.Username(),
+	}
+
+	log.Infoz("generated TOTP bind challenge",
+		zap.String("user_id", ctx.UserID()),
+		zap.String("challenge_id", challengeID))
+
+	return rsp, nil
+}
+
+// generateQRCode generates a QR code data URL.
+func generateQRCode(url string) (string, error) {
+	qrBytes, err := qrcode.Encode(url, qrcode.Medium, 256)
+	if err != nil {
+		return "", err
+	}
+
+	var buf bytes.Buffer
+	buf.WriteString("data:image/png;base64,")
+	buf.WriteString(base64.StdEncoding.EncodeToString(qrBytes))
+
+	return buf.String(), nil
+}

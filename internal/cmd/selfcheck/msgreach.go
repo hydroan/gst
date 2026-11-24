@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/goast"
 	"golang.org/x/tools/go/packages"
 )
@@ -219,7 +220,7 @@ func checkMsgReach(root string, pkgs []*packages.Package) ([]violation, error) {
 	}
 	for fn, flow := range flows {
 		rel := strings.TrimPrefix(fn.Pkg().Path(), module)
-		public := fn.Exported() && fn.Pkg().Name() != "main" && !strings.Contains(rel+"/", "/internal/")
+		public := fn.Exported() && fn.Pkg().Name() != ggconst.PkgMain && !strings.Contains(rel+"/", "/internal/")
 		flow.answers = flow.answers || !called[fn] || valued[fn] || public
 	}
 

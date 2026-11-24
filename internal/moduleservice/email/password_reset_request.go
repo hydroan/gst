@@ -1,0 +1,98 @@
+package serviceemail
+
+import (
+	"net/http"
+
+	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
+	modelemail "github.com/hydroan/gst/internal/modulemodel/email"
+	"github.com/hydroan/gst/service"
+	"go.uber.org/zap"
+)
+
+// PasswordResetRequestService handles public password reset requests that start
+// the email-driven password recovery flow.
+type PasswordResetRequestService struct {
+	service.Base[*modelemail.PasswordResetRequest, *modelemail.PasswordResetRequestReq, *modelemail.PasswordResetRequestRsp]
+}
+
+// Create starts the password reset flow for the provided email address.
+// It always returns the same public-facing message for accepted requests so the
+// caller cannot infer whether the account exists, while still enforcing throttle
+// limits before any token is created or email is sent. An address that is no
+// email address (see isEmailAddress) is refused before any of it: the refusal
+// reads the request alone and tells nothing of an account.
+func (s *PasswordResetRequestService) Create(ctx *gst.ServiceContext, req *modelemail.PasswordResetRequestReq) (rsp *modelemail.PasswordResetRequestRsp, err error) {
+	log := s.WithContext(ctx, ctx.Phase())
+	rsp = &modelemail.PasswordResetRequestRsp{Msg: publicAcceptedMessage(iamEmailFlowKindPasswordReset)}
+
+	email := normalizeEmailScope(req.Email)
+	if !isEmailAddress(email) {
+		return nil, gst.NewError(http.StatusBadRequest, emailMustBeValidEmailAddressMsg)
+	}
+
+	if _, err = reserveEmailThrottle(ctx, iamEmailFlowKindPasswordReset, emailThrottleRequest, email, 0); err != nil {
+		if errors.Is(err, errEmailFlowThrottled) {
+			return rsp, nil
+		}
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToReservePasswordResetThrottleMsg, err)
+	}
+
+	user, err := currentAccountGateway().FindByEmail(ctx, email)
+	if err != nil {
+		if errors.Is(err, ErrAccountNotFound) {
+			return rsp, nil
+		}
+		if errors.Is(err, ErrAccountGatewayNotConfigured) {
+			log.Errorz("email account gateway is not configured", zap.Error(err))
+			return nil, newAccountGatewayNotConfiguredServiceError(err)
+		}
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToLoadPasswordResetAccountMsg, err)
+	}
+	if !eligiblePasswordResetAccount(user, email) {
+		return rsp, nil
+	}
+
+	token, flow, err := issueEmailFlow(ctx, iamEmailFlowKindPasswordReset, iamEmailFlowState{
+		UserID: user.ID,
+		Email:  email,
+	})
+	if err != nil {
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToIssuePasswordResetFlowMsg, err)
+	}
+
+	if err = dispatchEmail(ctx, passwordResetDelivery(token, flow)); err != nil {
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToDispatchPasswordResetEmailMsg, err)
+	}
+
+	return rsp, nil
+}
+
+// eligiblePasswordResetAccount ensures the reset flow is only issued for an active
+// account whose persisted email still matches the normalized request email.
+func eligiblePasswordResetAccount(user *AccountSnapshot, email string) bool {
+	if user == nil || user.ID == "" {
+		return false
+	}
+	if normalizeAccountEmail(user.Email) != email {
+		return false
+	}
+	return user.Active
+}
+
+// passwordResetDelivery builds the delivery payload consumed by the configured
+// email sender. The template data mirrors the flow state so downstream renderers
+// can build reset links or customized message bodies.
+func passwordResetDelivery(token string, flow iamEmailFlowState) emailDelivery {
+	return emailDelivery{
+		To:       flow.Email,
+		Subject:  "Password reset",
+		Template: "iam/email/password-reset",
+		Data: map[string]any{
+			"token":      token,
+			"user_id":    flow.UserID,
+			"email":      flow.Email,
+			"expires_at": flow.ExpiresAt,
+		},
+	}
+}

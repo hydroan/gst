@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
-	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
+	modeliamaccount "github.com/hydroan/gst/internal/modulemodel/iam/account"
+	modeliamuser "github.com/hydroan/gst/internal/modulemodel/iam/user"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 )

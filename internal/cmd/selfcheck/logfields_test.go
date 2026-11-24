@@ -28,7 +28,7 @@ func TestCheckLogFields(t *testing.T) {
 	require.Equal(t, []violation{
 		{
 			File:    "internal/logfield/logfield.go",
-			Message: "Log field \"status\": a number at internal/logfield/logfield.go:11, a string at internal/service/sample/mismatch.go:7, a number at internal/service/sample/sample.go:8; a key has one type, a store mapping keys by type drops the entries of every other",
+			Message: "Log field \"status\": a number at internal/logfield/logfield.go:11, a string at internal/moduleservice/sample/mismatch.go:7, a number at internal/moduleservice/sample/sample.go:8; a key has one type, a store mapping keys by type drops the entries of every other",
 		},
 		{
 			File:    "sample/direct.go",

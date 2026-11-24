@@ -14,7 +14,7 @@ import (
 // constructor in, and a string handed to the translation, each for its own
 // package; the sentence a constant of internal/shared holds, handed over in
 // internal/answer and translated nowhere, for the package declaring it; the
-// sentence of a module source, internal/service/sample, that registers
+// sentence of a module source, internal/moduleservice/sample, that registers
 // through the public forwarder and leaves it out; the registration
 // answer.go writes outside translations.go; and, in
 // internal/answer/translations.go, the translations registered under a
@@ -79,8 +79,8 @@ func TestCheckTranslations(t *testing.T) {
 			Message: `Translation into zh of "the sample is quiet" at internal/answer/translations.go:35 is not registered under a constant its file declares: declare the sentence in that file and register the translation under the constant`,
 		},
 		{
-			File:    "internal/service/sample/translations.go",
-			Message: `Sentence "the sample is unpaid" at internal/service/sample/translations.go:9 is answered to clients and has no zh translation: register one in the translations.go of internal/service/sample, the package it belongs to`,
+			File:    "internal/moduleservice/sample/translations.go",
+			Message: `Sentence "the sample is unpaid" at internal/moduleservice/sample/translations.go:9 is answered to clients and has no zh translation: register one in the translations.go of internal/moduleservice/sample, the package it belongs to`,
 		},
 		{
 			File:    "internal/shared/translations.go",

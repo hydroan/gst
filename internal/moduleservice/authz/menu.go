@@ -1,0 +1,188 @@
+package serviceauthz
+
+import (
+	"net/http"
+	"slices"
+	"strings"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/authz/rbac"
+	"github.com/hydroan/gst/database"
+	modelauthz "github.com/hydroan/gst/internal/modulemodel/authz"
+	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/tenant"
+	"github.com/samber/lo"
+)
+
+// Column references for the visibility conditions below; module sources carry
+// no generated Cols vars, so the references are declared here.
+var (
+	colMenuID = gst.NewColumn[*modelauthz.Menu, string](modelauthz.KeyID)
+	colRoleID = gst.NewColumn[*modelauthz.Role, string](modelauthz.KeyID)
+)
+
+type MenuService struct {
+	service.Base[*modelauthz.Menu, *modelauthz.Menu, *modelauthz.Menu]
+}
+
+// Filter pushes menu visibility down into the query condition. List and Count
+// share the options this returns, so the total matches the rows the caller
+// receives; filtering the slice in ListAfter instead would leave the total at
+// the unfiltered count and break any client that pages on it.
+//
+// A subject with no visible menu yields an empty ID set, and IN over an empty
+// list matches nothing, so rows and total go to zero together.
+func (m *MenuService) Filter(ctx *gst.ServiceContext, menu *modelauthz.Menu, opts gst.QueryOptions) (*modelauthz.Menu, gst.QueryOptions, error) {
+	// The sentinel rows — the root anchor and the unknown/none placeholders —
+	// are tree bookkeeping, not menus anyone manages. They stay hidden from
+	// every caller, including system_root, which the visibility filter below
+	// deliberately never restricts.
+	opts.Filters = append(opts.Filters,
+		colMenuID.NotIn(modelauthz.RootID, modelauthz.UnknownID, modelauthz.NoneID))
+
+	menuIDs, restricted, err := visibleMenuIDs(ctx, m.WithContext(ctx, ctx.Phase()))
+	if err != nil {
+		return menu, opts, err
+	}
+	if restricted {
+		opts.Filters = append(opts.Filters, colMenuID.In(menuIDs...))
+	}
+
+	return menu, opts, nil
+}
+
+// ListAfter narrows expanded children, the one place role visibility cannot
+// become a query condition: children are preloaded separately, so the condition
+// Filter pushed down never reaches them. The top level is already handled by
+// Filter and is not revisited here, which keeps the rows returned and the total
+// in agreement.
+func (m *MenuService) ListAfter(ctx *gst.ServiceContext, data *[]*modelauthz.Menu) error {
+	// Without expanded children there is nothing left to narrow, so the common
+	// case resolves roles once, in Filter.
+	if !lo.SomeBy(*data, func(item *modelauthz.Menu) bool { return len(item.Children) > 0 }) {
+		return nil
+	}
+	menuIDs, restricted, err := visibleMenuIDs(ctx, m.WithContext(ctx, ctx.Phase()))
+	if err != nil {
+		return err
+	}
+	if !restricted {
+		return nil
+	}
+	visible := make(map[string]struct{}, len(menuIDs))
+	for _, id := range menuIDs {
+		visible[id] = struct{}{}
+	}
+	for i := range *data {
+		filterChildren((*data)[i], visible)
+	}
+
+	return nil
+}
+
+// visibleMenuIDs resolves the menu IDs the current subject may see. The flow
+// deliberately mirrors the RBAC data model:
+//   - system_root is a system-level role and bypasses menu filtering completely.
+//   - the built-in tenant administrator reaches every route of the request
+//     tenant without a policy, so it sees the whole catalog there.
+//   - RoleBinding maps the current subject ID to role IDs inside the request tenant.
+//   - Role.MenuIDs is the only source of visible menus. The same set grants the
+//     backend route permissions; this service is only shaping the frontend menu
+//     tree.
+//
+// restricted reports whether the caller has to narrow by the returned set. It
+// is false for system_root and the tenant administrator. A subject holding no
+// role here, or whose roles select no menu at all, yields an empty set with
+// restricted true, which the caller turns into an empty result.
+func visibleMenuIDs(ctx *gst.ServiceContext, log gst.Logger) ([]string, bool, error) {
+	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, ctx.UserID(), rbac.SystemRoleRoot)
+	if err != nil {
+		return nil, false, gst.NewErrorWithCause(http.StatusInternalServerError, authorizationUnavailableMsg, err)
+	}
+	if systemRoot {
+		return nil, false, nil
+	}
+	held, err := rbac.RBAC().RolesForSubject(ctx, requestTenant(ctx), ctx.UserID())
+	if err != nil {
+		return nil, false, gst.NewErrorWithCause(http.StatusInternalServerError, authorizationUnavailableMsg, err)
+	}
+	if slices.Contains(held, rbac.RoleAdmin) {
+		return nil, false, nil
+	}
+	// No tenant is named in the queries below: the rows they reach are already
+	// scoped to the tenant this request acts in.
+	roleBindings := make([]*modelauthz.RoleBinding, 0)
+	if err := database.Database[*modelauthz.RoleBinding](ctx).
+		WithQuery(&modelauthz.RoleBinding{SubjectID: ctx.UserID()}).
+		List(&roleBindings); err != nil {
+		return nil, false, gst.NewErrorWithCause(http.StatusInternalServerError, failedToLoadRoleBindingsMsg, err)
+	}
+	if len(roleBindings) == 0 {
+		return nil, true, nil
+	}
+
+	roleIDs := make([]string, 0, len(roleBindings))
+	for _, binding := range roleBindings {
+		if len(binding.RoleID) > 0 {
+			roleIDs = append(roleIDs, binding.RoleID)
+		}
+	}
+	if len(roleIDs) == 0 {
+		log.Warn("subject has role-binding records but no valid role ids")
+		return nil, true, nil
+	}
+	roles := make([]*modelauthz.Role, 0)
+	if err := database.Database[*modelauthz.Role](ctx).
+		WithQuery(nil, gst.QueryOptions{Filters: []gst.Filter{colRoleID.In(roleIDs...)}}).
+		List(&roles); err != nil {
+		return nil, false, gst.NewErrorWithCause(http.StatusInternalServerError, failedToLoadRolesMsg, err)
+	}
+	if len(roles) == 0 {
+		log.Warn("subject has role-binding records but no matching roles")
+		return nil, true, nil
+	}
+	for _, r := range roles {
+		log.Infow("role", "username", ctx.Username(), "role_name", r.Name)
+	}
+
+	seen := make(map[string]struct{})
+	menuIDs := make([]string, 0)
+	for _, role := range roles {
+		for _, id := range role.MenuIDs {
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			seen[id] = struct{}{}
+			menuIDs = append(menuIDs, id)
+		}
+	}
+
+	return menuIDs, true, nil
+}
+
+// requestTenant is the tenant the request acts in, the one its authorization
+// was decided in; a request carrying none acts in the default tenant, the way
+// the authorization decided it.
+func requestTenant(ctx *gst.ServiceContext) string {
+	if id := strings.TrimSpace(ctx.TenantID()); id != "" {
+		return id
+	}
+	return tenant.Default
+}
+
+// filterChildren narrows preloaded children by the same rule as the top level,
+// dropping every subtree the visible set does not name. Children are loaded by a
+// separate preload, so the condition Filter pushed down never applies to them.
+// Callers that are not narrowing at all skip this entirely.
+func filterChildren(menu *modelauthz.Menu, visible map[string]struct{}) {
+	if len(menu.Children) == 0 {
+		return
+	}
+	menu.Children = lo.Filter(menu.Children, func(item *modelauthz.Menu, _ int) bool {
+		_, ok := visible[item.ID]
+		return ok
+	})
+	for i := range menu.Children {
+		filterChildren(menu.Children[i], visible)
+	}
+}

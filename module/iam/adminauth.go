@@ -1,8 +1,8 @@
 package iam
 
 import (
-	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
-	"github.com/hydroan/gst/internal/service/iam/adminauth"
+	serviceiamaccount "github.com/hydroan/gst/internal/moduleservice/iam/account"
+	"github.com/hydroan/gst/internal/moduleservice/iam/adminauth"
 	"github.com/hydroan/gst/internal/types"
 )
 

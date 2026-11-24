@@ -18,10 +18,10 @@ func TestCopiedImportPathRewritesThePackagesOfTheCopiedTrees(t *testing.T) {
 		want       string
 		ok         bool
 	}{
-		{"github.com/hydroan/gst/internal/service/iam/account", "tmpapp/service/iam/account", true},
-		{"github.com/hydroan/gst/internal/service/iam", "tmpapp/service/iam", true},
-		{"github.com/hydroan/gst/internal/model/iam/user", "tmpapp/model/iam/user", true},
-		{"github.com/hydroan/gst/internal/service/iamx/account", "", false},
+		{"github.com/hydroan/gst/internal/moduleservice/iam/account", "tmpapp/service/iam/account", true},
+		{"github.com/hydroan/gst/internal/moduleservice/iam", "tmpapp/service/iam", true},
+		{"github.com/hydroan/gst/internal/modulemodel/iam/user", "tmpapp/model/iam/user", true},
+		{"github.com/hydroan/gst/internal/moduleservice/iamx/account", "", false},
 		{"github.com/hydroan/gst/authn", "", false},
 	}
 	for _, c := range cases {

@@ -1,0 +1,77 @@
+package serviceiamsession
+
+import (
+	"net/http"
+
+	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
+	modeliamsession "github.com/hydroan/gst/internal/modulemodel/iam/session"
+	"github.com/hydroan/gst/service"
+)
+
+// SessionDeleteService handles invalidation of a specified session for the current authenticated user.
+type SessionDeleteService struct {
+	service.Base[*modeliamsession.SelfSession, *modeliamsession.SessionDeleteReq, *modeliamsession.SessionDeleteRsp]
+}
+
+// Delete invalidates a specified session for the current authenticated user.
+// DELETE /api/iam/sessions/:id revokes the target session, while
+// DELETE /api/iam/sessions/others revokes every other indexed session of the
+// same user and keeps the current cookie-backed session active. The endpoint
+// remains idempotent: deleting a missing session still returns success.
+func (s *SessionDeleteService) Delete(ctx *gst.ServiceContext, req *modeliamsession.SessionDeleteReq) (rsp *modeliamsession.SessionDeleteRsp, err error) {
+	currentSessionID, currentSession, err := CurrentSession(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	targetSessionID := ctx.Param("id")
+	if targetSessionID == "" {
+		return nil, gst.NewError(http.StatusBadRequest, sessionIDRequiredMsg)
+	}
+	if targetSessionID == sessionsDeleteOthersID {
+		// DELETE /api/iam/sessions/others is a bulk self-service logout for
+		// secondary sessions. The current cookie-backed session must survive so
+		// the caller can continue using the API after the request completes.
+		if err = Store.DeleteUserSessionsExcept(ctx, currentSession.UserID, currentSessionID); err != nil {
+			return nil, err
+		}
+		return &modeliamsession.SessionDeleteRsp{}, nil
+	}
+
+	targetSession, err := Store.LoadSession(ctx, targetSessionID)
+	if err != nil {
+		if errors.Is(err, gst.ErrEntryNotFound) {
+			if targetSessionID == currentSessionID {
+				ClearCookie(ctx)
+			}
+			return &modeliamsession.SessionDeleteRsp{}, nil
+		}
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToLoadTargetSessionMsg, err)
+	}
+	if err = ValidateSession(targetSessionID, targetSession); err != nil {
+		_, _ = Store.DeleteSession(ctx, targetSessionID)
+		if targetSessionID == currentSessionID {
+			ClearCookie(ctx)
+		}
+		return &modeliamsession.SessionDeleteRsp{}, nil
+	}
+	if targetSession.UserID != currentSession.UserID {
+		return nil, gst.NewError(http.StatusForbidden, forbiddenMsg)
+	}
+
+	if _, err = Store.DeleteSession(ctx, targetSessionID); err != nil {
+		if errors.Is(err, gst.ErrEntryNotFound) {
+			if targetSessionID == currentSessionID {
+				ClearCookie(ctx)
+			}
+			return &modeliamsession.SessionDeleteRsp{}, nil
+		}
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToDeleteSessionMsg, err)
+	}
+	if targetSessionID == currentSessionID {
+		ClearCookie(ctx)
+	}
+
+	return &modeliamsession.SessionDeleteRsp{}, nil
+}

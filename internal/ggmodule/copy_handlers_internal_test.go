@@ -29,8 +29,8 @@ func TestBuildCopyPlanIncludesMiddlewareFiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(frameworkRoot, "middleware", "copy_auth.go"), []byte(`package middleware
 
 import (
-	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
-	servicecopytest "github.com/hydroan/gst/internal/service/copytest"
+	modelcopytest "github.com/hydroan/gst/internal/modulemodel/copytest"
+	servicecopytest "github.com/hydroan/gst/internal/moduleservice/copytest"
 )
 
 func CopyAuth() any {
@@ -68,7 +68,7 @@ func CopyAuth() any {
 			t.Fatalf("copied middleware missing %q:\n%s", want, middleware)
 		}
 	}
-	if strings.Contains(middleware, "github.com/hydroan/gst/internal/model/copytest") || strings.Contains(middleware, "github.com/hydroan/gst/internal/service/copytest") || strings.Contains(middleware, "modelcopytest") {
+	if strings.Contains(middleware, "github.com/hydroan/gst/internal/modulemodel/copytest") || strings.Contains(middleware, "github.com/hydroan/gst/internal/moduleservice/copytest") || strings.Contains(middleware, "modelcopytest") {
 		t.Fatalf("copied middleware leaked framework import artifacts:\n%s", middleware)
 	}
 }
@@ -681,7 +681,7 @@ func TestBuildCopyPlanIncludesTheHelpersAMiddlewareReaches(t *testing.T) {
 	}
 	if err := os.WriteFile(filepath.Join(frameworkRoot, "middleware", "copy_auth.go"), []byte(`package middleware
 
-import servicecopytest "github.com/hydroan/gst/internal/service/copytest"
+import servicecopytest "github.com/hydroan/gst/internal/moduleservice/copytest"
 
 func CopyAuth() any {
 	return servicecopytest.CopyAuthMarker()
@@ -689,7 +689,7 @@ func CopyAuth() any {
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	sourceServiceDir := filepath.Join(frameworkRoot, "internal", "service", "copytest")
+	sourceServiceDir := filepath.Join(frameworkRoot, "internal", "moduleservice", "copytest")
 	if err := os.WriteFile(filepath.Join(sourceServiceDir, "auth_helper.go"), []byte(`package servicecopytest
 
 func CopyAuthMarker() string {

@@ -22,8 +22,8 @@ func writeCopyTestInterceptor(t *testing.T, projectDir string) {
 	if err := os.WriteFile(filepath.Join(frameworkRoot, "interceptor", "copy_auth.go"), []byte(`package interceptor
 
 import (
-	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
-	servicecopytest "github.com/hydroan/gst/internal/service/copytest"
+	modelcopytest "github.com/hydroan/gst/internal/modulemodel/copytest"
+	servicecopytest "github.com/hydroan/gst/internal/moduleservice/copytest"
 )
 
 func CopyAuth() any {

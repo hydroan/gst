@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/client"
-	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
+	serviceiamsession "github.com/hydroan/gst/internal/moduleservice/iam/session"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/stretchr/testify/require"

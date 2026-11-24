@@ -27,10 +27,10 @@ type moduleCopyRewriteConfig struct {
 
 // normalizeModuleModelSource converts framework model files into the current
 // project package layout. The model directory name is the package name, so
-// internal/model/copytest package modelcopytest becomes model/copytest package copytest.
-// Copied model files can reference sibling model packages in the same framework
-// module, so those internal model imports must also be rewritten to the target
-// project's model/<module> tree.
+// internal/modulemodel/copytest package modelcopytest becomes model/copytest
+// package copytest. Copied model files can reference sibling model packages
+// in the same framework module, so those imports must also be rewritten to
+// the target project's model/<module> tree.
 func normalizeModuleModelSource(filename string, src []byte, config moduleCopyRewriteConfig) ([]byte, error) {
 	// Model files intentionally only rewrite copied model imports. If a model file
 	// imports a copied service package, keeping that import untouched preserves the
@@ -39,8 +39,8 @@ func normalizeModuleModelSource(filename string, src []byte, config moduleCopyRe
 }
 
 // normalizeModuleServiceSource rewrites helper files into the current service
-// package and maps framework internal model/service imports to the current
-// project's copied module package tree.
+// package and maps the imports of the module's own model and service trees to
+// the current project's copied module package tree.
 func normalizeModuleServiceSource(filename string, src []byte, config moduleCopyRewriteConfig) ([]byte, error) {
 	return normalizeModuleCopySource(filename, src, config, true)
 }
@@ -213,13 +213,13 @@ type copiedSubtree struct {
 // copiedSubtrees returns the two copied package trees of module as a project
 // at projectModulePath imports them, its models under modelDir and its
 // services under serviceDir: for module iam copied into tmpapp with the
-// default directories, github.com/hydroan/gst/internal/model/iam becomes
-// tmpapp/model/iam and github.com/hydroan/gst/internal/service/iam becomes
-// tmpapp/service/iam.
+// default directories, github.com/hydroan/gst/internal/modulemodel/iam becomes
+// tmpapp/model/iam and github.com/hydroan/gst/internal/moduleservice/iam
+// becomes tmpapp/service/iam.
 func copiedSubtrees(module, projectModulePath, modelDir, serviceDir string) [2]copiedSubtree {
 	return [2]copiedSubtree{
-		{kind: moduleCopyImportModel, source: frameworkModulePath + "/internal/model/" + module, target: projectModuleCopyImportRoot(projectModulePath, modelDir, module)},
-		{kind: moduleCopyImportService, source: frameworkModulePath + "/internal/service/" + module, target: projectModuleCopyImportRoot(projectModulePath, serviceDir, module)},
+		{kind: moduleCopyImportModel, source: path.Join(frameworkModulePath, ggconst.DirModuleModel, module), target: projectModuleCopyImportRoot(projectModulePath, modelDir, module)},
+		{kind: moduleCopyImportService, source: path.Join(frameworkModulePath, ggconst.DirModuleService, module), target: projectModuleCopyImportRoot(projectModulePath, serviceDir, module)},
 	}
 }
 
@@ -231,12 +231,12 @@ func (s copiedSubtree) holds(importPath string) bool {
 
 // CopiedImportPath returns the import path a project at projectModulePath
 // that copied module imports the framework package at importPath under, when
-// the package is in one of the module's copied trees, internal/model/<module>
-// or internal/service/<module>: the prefix gives way the way gg module copy
-// rewrites the imports of the copied sources, so
-// github.com/hydroan/gst/internal/service/iam/account of module iam, copied
-// into tmpapp, is tmpapp/service/iam/account. A package outside the trees is
-// reported false: a project imports it from the framework as it is.
+// the package is in one of the module's copied trees,
+// internal/modulemodel/<module> or internal/moduleservice/<module>: the prefix
+// gives way the way gg module copy rewrites the imports of the copied sources,
+// so github.com/hydroan/gst/internal/moduleservice/iam/account of module iam,
+// copied into tmpapp, is tmpapp/service/iam/account. A package outside the
+// trees is reported false: a project imports it from the framework as it is.
 func CopiedImportPath(importPath, module, projectModulePath string) (string, bool) {
 	for _, subtree := range copiedSubtrees(module, projectModulePath, ggconst.DirModel, ggconst.DirService) {
 		if subtree.holds(importPath) {

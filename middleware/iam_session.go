@@ -3,7 +3,7 @@ package middleware
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/apidoc"
-	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
+	serviceiamsession "github.com/hydroan/gst/internal/moduleservice/iam/session"
 	"github.com/hydroan/gst/requestctx"
 	"github.com/hydroan/gst/response"
 )

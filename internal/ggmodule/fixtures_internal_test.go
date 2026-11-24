@@ -100,8 +100,8 @@ func newModuleCopyPlanProject(t *testing.T) string {
 	frameworkRoot := filepath.Join(projectDir, "internal", "gst")
 	for _, dir := range []string{
 		filepath.Join(frameworkRoot, "module", "copytest"),
-		filepath.Join(frameworkRoot, "internal", "model", "copytest"),
-		filepath.Join(frameworkRoot, "internal", "service", "copytest"),
+		filepath.Join(frameworkRoot, "internal", "modulemodel", "copytest"),
+		filepath.Join(frameworkRoot, "internal", "moduleservice", "copytest"),
 		filepath.Join(frameworkRoot, "dsl"),
 		filepath.Join(frameworkRoot, "model"),
 		filepath.Join(frameworkRoot, "service"),
@@ -156,7 +156,7 @@ func writeCopyTestModuleSource(t *testing.T, projectDir string, manifest []byte)
 	if err := os.WriteFile(filepath.Join(frameworkRoot, "module", "copytest", moduleManifestFilename), manifest, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(frameworkRoot, "internal", "model", "copytest", "copytest.go"), []byte(`package modelcopytest
+	if err := os.WriteFile(filepath.Join(frameworkRoot, "internal", "modulemodel", "copytest", "copytest.go"), []byte(`package modelcopytest
 
 import (
 	"github.com/hydroan/gst/dsl"
@@ -186,7 +186,7 @@ func (CopyTest) Design() {
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	sourceServiceDir := filepath.Join(frameworkRoot, "internal", "service", "copytest")
+	sourceServiceDir := filepath.Join(frameworkRoot, "internal", "moduleservice", "copytest")
 	write := func(name string, content string) {
 		t.Helper()
 		if err := os.WriteFile(filepath.Join(sourceServiceDir, name), []byte(content), 0o600); err != nil {

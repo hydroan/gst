@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/ggconst"
 	"golang.org/x/tools/go/packages"
 )
 
@@ -398,7 +399,7 @@ func ignoredNames(p *packages.Package) (map[string]bool, error) {
 	names := make(map[string]bool)
 	fset := token.NewFileSet()
 	for _, path := range p.IgnoredFiles {
-		if !strings.HasSuffix(path, ".go") {
+		if !strings.HasSuffix(path, ggconst.ExtensionGo) {
 			continue
 		}
 		f, err := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)

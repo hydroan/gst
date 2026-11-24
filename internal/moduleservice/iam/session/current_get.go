@@ -1,0 +1,49 @@
+package serviceiamsession
+
+import (
+	"net/http"
+	"time"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/authz/rbac"
+	"github.com/hydroan/gst/database"
+	modeliamsession "github.com/hydroan/gst/internal/modulemodel/iam/session"
+	modeliamuser "github.com/hydroan/gst/internal/modulemodel/iam/user"
+	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/service"
+)
+
+// CurrentGetService handles retrieval of the current authenticated session.
+type CurrentGetService struct {
+	service.Base[*modeliamsession.Current, *model.Empty, *modeliamsession.CurrentGetRsp]
+}
+
+// Get returns the current authenticated session together with the latest user snapshot.
+func (c *CurrentGetService) Get(ctx *gst.ServiceContext, req *model.Empty) (rsp *modeliamsession.CurrentGetRsp, err error) {
+	_, currentSession, err := CurrentSession(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	currentUser := new(modeliamuser.User)
+	if err = database.Database[*modeliamuser.User](ctx).Get(currentUser, currentSession.UserID); err != nil {
+		return nil, gst.NewError(http.StatusUnauthorized, sessionInvalidMsg)
+	}
+	if err = ensureSessionUserActive(currentUser); err != nil {
+		return nil, err
+	}
+	email, err := loadSessionEmail(ctx, currentUser.ID)
+	if err != nil {
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToLoadEmailIdentityMsg, err)
+	}
+
+	// Resolved per request rather than read off the session snapshot, so a
+	// system role granted or revoked mid-session is reported here as it stands
+	// instead of as it stood at login.
+	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, currentUser.ID, rbac.SystemRoleRoot)
+	if err != nil {
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, authorizationUnavailableMsg, err)
+	}
+
+	return BuildAuthenticatedSessionRsp(currentSession, currentUser, email, time.Now(), systemRoot), nil
+}

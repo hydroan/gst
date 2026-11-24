@@ -1,7 +1,7 @@
 package authz
 
 import (
-	modelauthz "github.com/hydroan/gst/internal/model/authz"
+	modelauthz "github.com/hydroan/gst/internal/modulemodel/authz"
 	"github.com/hydroan/gst/internal/serviceregistry"
 	"github.com/hydroan/gst/internal/types"
 )

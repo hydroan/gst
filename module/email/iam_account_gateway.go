@@ -6,11 +6,11 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
-	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
-	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
-	serviceemail "github.com/hydroan/gst/internal/service/email"
-	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
-	serviceiamsession "github.com/hydroan/gst/internal/service/iam/session"
+	modeliamaccount "github.com/hydroan/gst/internal/modulemodel/iam/account"
+	modeliamuser "github.com/hydroan/gst/internal/modulemodel/iam/user"
+	serviceemail "github.com/hydroan/gst/internal/moduleservice/email"
+	serviceiamaccount "github.com/hydroan/gst/internal/moduleservice/iam/account"
+	serviceiamsession "github.com/hydroan/gst/internal/moduleservice/iam/session"
 	"github.com/hydroan/gst/internal/types"
 )
 

@@ -42,7 +42,7 @@ func TestNormalizeModuleModelSourceRewritesCopiedModelImports(t *testing.T) {
 	src := []byte(`package modelcopytestentry
 
 import (
-	modelcopytestsession "github.com/hydroan/gst/internal/model/copytest/session"
+	modelcopytestsession "github.com/hydroan/gst/internal/modulemodel/copytest/session"
 	"github.com/hydroan/gst/model"
 )
 
@@ -73,7 +73,7 @@ type ActionRsp = modelcopytestsession.ActionRsp
 			t.Fatalf("normalized model source missing %q:\n%s", want, code)
 		}
 	}
-	if strings.Contains(code, "github.com/hydroan/gst/internal/model/copytest/session") || strings.Contains(code, "modelcopytestsession") {
+	if strings.Contains(code, "github.com/hydroan/gst/internal/modulemodel/copytest/session") || strings.Contains(code, "modelcopytestsession") {
 		t.Fatalf("normalized model source leaked framework model import artifacts:\n%s", code)
 	}
 }
@@ -82,8 +82,8 @@ func TestNormalizeModuleServiceSourceAliasesConflictingCopiedImports(t *testing.
 	source := []byte(`package servicecopytestentry
 
 import (
-	modelcopytestsession "github.com/hydroan/gst/internal/model/copytest/session"
-	servicecopytestsession "github.com/hydroan/gst/internal/service/copytest/session"
+	modelcopytestsession "github.com/hydroan/gst/internal/modulemodel/copytest/session"
+	servicecopytestsession "github.com/hydroan/gst/internal/moduleservice/copytest/session"
 )
 
 func useCopiedSessionPackages() {
@@ -128,7 +128,7 @@ func TestNormalizeModuleServiceSourceRejectsDeclarationsShadowingCopiedImports(t
 			name: "local variable",
 			source: `package servicecopytestentry
 
-import modelcopytestsession "github.com/hydroan/gst/internal/model/copytest/session"
+import modelcopytestsession "github.com/hydroan/gst/internal/modulemodel/copytest/session"
 
 func loadSession(id string) string {
 	session := modelcopytestsession.Load(id)
@@ -140,7 +140,7 @@ func loadSession(id string) string {
 			name: "package-level function",
 			source: `package servicecopytestentry
 
-import modelcopytestsession "github.com/hydroan/gst/internal/model/copytest/session"
+import modelcopytestsession "github.com/hydroan/gst/internal/modulemodel/copytest/session"
 
 func session() string {
 	return modelcopytestsession.Name()
@@ -151,7 +151,7 @@ func session() string {
 			name: "function parameter",
 			source: `package servicecopytestentry
 
-import modelcopytestsession "github.com/hydroan/gst/internal/model/copytest/session"
+import modelcopytestsession "github.com/hydroan/gst/internal/modulemodel/copytest/session"
 
 func loadSession(session string) string {
 	return modelcopytestsession.Key(session)
@@ -162,7 +162,7 @@ func loadSession(session string) string {
 			name: "range binding",
 			source: `package servicecopytestentry
 
-import modelcopytestsession "github.com/hydroan/gst/internal/model/copytest/session"
+import modelcopytestsession "github.com/hydroan/gst/internal/modulemodel/copytest/session"
 
 func loadSessions(ids []string) {
 	for _, session := range ids {
@@ -204,7 +204,7 @@ func TestNormalizeModuleServiceSourceAllowsDeclarationsThatDoNotShadowCopiedImpo
 			name: "struct field",
 			source: `package servicecopytestentry
 
-import modelcopytestsession "github.com/hydroan/gst/internal/model/copytest/session"
+import modelcopytestsession "github.com/hydroan/gst/internal/modulemodel/copytest/session"
 
 type Entry struct {
 	session string
@@ -223,7 +223,7 @@ func loadSession(entry Entry) string {
 			name: "declaration initialized from the package it shadows",
 			source: `package servicecopytestentry
 
-import modelcopytestsession "github.com/hydroan/gst/internal/model/copytest/session"
+import modelcopytestsession "github.com/hydroan/gst/internal/modulemodel/copytest/session"
 
 func loadSession(id string) string {
 	session := modelcopytestsession.Load(id)
@@ -236,7 +236,7 @@ func loadSession(id string) string {
 			name: "declaration in a sibling scope",
 			source: `package servicecopytestentry
 
-import modelcopytestsession "github.com/hydroan/gst/internal/model/copytest/session"
+import modelcopytestsession "github.com/hydroan/gst/internal/modulemodel/copytest/session"
 
 func loadSession(id string) string {
 	if id == "" {
@@ -284,8 +284,8 @@ func TestNormalizeModuleCopySourceAcceptsShippedModuleSources(t *testing.T) {
 			continue
 		}
 		t.Run(module.Name, func(t *testing.T) {
-			normalizeSourceTree(t, frameworkModulePath+"/internal/model/"+module.Name+"/...", module.Name, normalizeModuleModelSource)
-			normalizeSourceTree(t, frameworkModulePath+"/internal/service/"+module.Name+"/...", module.Name, normalizeModuleServiceSource)
+			normalizeSourceTree(t, frameworkModulePath+"/internal/modulemodel/"+module.Name+"/...", module.Name, normalizeModuleModelSource)
+			normalizeSourceTree(t, frameworkModulePath+"/internal/moduleservice/"+module.Name+"/...", module.Name, normalizeModuleServiceSource)
 		})
 	}
 }

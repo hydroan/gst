@@ -9,8 +9,8 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/cronjob"
 	"github.com/hydroan/gst/internal/apiaction"
+	servicelogmgmt "github.com/hydroan/gst/internal/moduleservice/logmgmt"
 	"github.com/hydroan/gst/internal/router"
-	servicelogmgmt "github.com/hydroan/gst/internal/service/logmgmt"
 	"github.com/hydroan/gst/module"
 )
 

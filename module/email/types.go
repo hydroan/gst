@@ -1,6 +1,6 @@
 package email
 
-import modelemail "github.com/hydroan/gst/internal/model/email"
+import modelemail "github.com/hydroan/gst/internal/modulemodel/email"
 
 type (
 	EmailVerificationRequestReq = modelemail.VerificationRequestReq

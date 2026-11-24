@@ -1,5 +1,5 @@
 package authz
 
-import modelauthz "github.com/hydroan/gst/internal/model/authz"
+import modelauthz "github.com/hydroan/gst/internal/modulemodel/authz"
 
 type AuthzRule = modelauthz.AuthzRule

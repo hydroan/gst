@@ -1,0 +1,155 @@
+package serviceiamaccount
+
+import (
+	"context"
+	"net/http"
+	"time"
+
+	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/database"
+	modeliamaccount "github.com/hydroan/gst/internal/modulemodel/iam/account"
+	gstotel "github.com/hydroan/gst/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"golang.org/x/crypto/bcrypt"
+)
+
+const minAccountPasswordLength = 6
+
+// Column references for the narrow credential writes in this package; module
+// sources carry no generated Cols vars, so the references are declared once
+// here and shared by the password flows.
+var (
+	colUserID             = gst.NewColumn[*modeliamaccount.PasswordCredential, string]("user_id")
+	colPasswordHash       = gst.NewColumn[*modeliamaccount.PasswordCredential, string]("password_hash")
+	colMustChangePassword = gst.NewColumn[*modeliamaccount.PasswordCredential, bool]("must_change_password")
+	colPasswordChangedAt  = gst.NewTimeColumn[*modeliamaccount.PasswordCredential]("password_changed_at")
+)
+
+func validateChangePasswordInput(req *modeliamaccount.ChangePasswordReq) error {
+	if req == nil {
+		return gst.NewError(http.StatusBadRequest, changePasswordRequestRequiredMsg)
+	}
+	if req.OldPassword == "" {
+		return gst.NewError(http.StatusBadRequest, oldPasswordRequiredMsg)
+	}
+	return validateNewAccountPassword(req.NewPassword)
+}
+
+func validateResetPasswordInput(req *modeliamaccount.ResetPasswordReq) error {
+	if req == nil {
+		return gst.NewError(http.StatusBadRequest, resetPasswordRequestRequiredMsg)
+	}
+	if req.UserID == "" {
+		return gst.NewError(http.StatusBadRequest, userIDRequiredMsg)
+	}
+	return validateNewAccountPassword(req.NewPassword)
+}
+
+func validateNewAccountPassword(password string) error {
+	if password == "" {
+		return gst.NewError(http.StatusBadRequest, newPasswordRequiredMsg)
+	}
+	if len(password) < minAccountPasswordLength {
+		return gst.NewError(http.StatusBadRequest, passwordTooShortMsg)
+	}
+	return nil
+}
+
+// NewPasswordCredential creates a password credential for the given IAM user.
+func NewPasswordCredential(ctx context.Context, userID, password string, mustChangePassword bool) (*modeliamaccount.PasswordCredential, error) {
+	if userID == "" {
+		return nil, gst.NewError(http.StatusBadRequest, userIDRequiredMsg)
+	}
+
+	credential := &modeliamaccount.PasswordCredential{UserID: userID}
+	if err := ApplyPasswordCredentialUpdate(ctx, credential, password, mustChangePassword); err != nil {
+		return nil, err
+	}
+	return credential, nil
+}
+
+// LoadPasswordCredential loads the password credential owned by the given IAM user.
+func LoadPasswordCredential(ctx context.Context, userID string) (*modeliamaccount.PasswordCredential, error) {
+	if userID == "" {
+		return nil, gst.NewError(http.StatusBadRequest, userIDRequiredMsg)
+	}
+
+	credentials := make([]*modeliamaccount.PasswordCredential, 0, 1)
+	if err := database.Database[*modeliamaccount.PasswordCredential](ctx).
+		WithLimit(1).
+		WithQuery(&modeliamaccount.PasswordCredential{UserID: userID}).
+		List(&credentials); err != nil {
+		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, failedToLoadPasswordCredentialMsg, err)
+	}
+	if len(credentials) == 0 {
+		return nil, database.ErrRecordNotFound
+	}
+	return credentials[0], nil
+}
+
+// VerifyPasswordCredential verifies a plaintext password against a credential hash.
+// The bcrypt comparison is deliberately slow (tens of milliseconds) to resist
+// brute-force attacks, so it runs inside an iam.VerifyPassword span to keep that
+// cost visible in request traces. A password mismatch is an expected business
+// outcome and never marks the span as failed; only unexpected verification
+// errors are recorded as span errors.
+func VerifyPasswordCredential(ctx context.Context, credential *modeliamaccount.PasswordCredential, password string) error {
+	_, span := gstotel.StartSpan(ctx, gstotel.OperationSpanName("iam", "VerifyPassword"))
+	defer span.End()
+
+	if credential == nil {
+		err := errors.New("password credential is required")
+		gstotel.RecordError(span, err)
+		return err
+	}
+
+	// No recording gate here: the attribute is a single boolean already at hand,
+	// so there is nothing to skip building, and the bcrypt comparison above
+	// dominates this function by orders of magnitude. Gate where assembling the
+	// attributes costs something, not on principle.
+	err := bcrypt.CompareHashAndPassword([]byte(credential.PasswordHash), []byte(password))
+	span.SetAttributes(attribute.Bool("iam.password.match", err == nil))
+	if err != nil && !errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+		gstotel.RecordError(span, err)
+	}
+	return err
+}
+
+// ApplyPasswordCredentialUpdate replaces the credential hash and password-change state.
+func ApplyPasswordCredentialUpdate(ctx context.Context, credential *modeliamaccount.PasswordCredential, newPassword string, mustChangePassword bool) error {
+	if credential == nil {
+		return gst.NewError(http.StatusInternalServerError, passwordCredentialRequiredMsg)
+	}
+
+	passwordHash, err := hashAccountPassword(ctx, newPassword)
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+	credential.PasswordHash = passwordHash
+	credential.MustChangePassword = mustChangePassword
+	credential.PasswordChangedAt = &now
+	return nil
+}
+
+// hashAccountPassword hashes a plaintext password with bcrypt. Like the bcrypt
+// comparison in VerifyPasswordCredential, hashing is deliberately slow (tens of
+// milliseconds) to resist brute-force attacks, so it runs inside an
+// iam.HashPassword span to keep that cost visible in request traces.
+func hashAccountPassword(ctx context.Context, password string) (string, error) {
+	if err := validateNewAccountPassword(password); err != nil {
+		return "", err
+	}
+
+	_, span := gstotel.StartSpan(ctx, gstotel.OperationSpanName("iam", "HashPassword"))
+	defer span.End()
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		serviceErr := gst.NewErrorWithCause(http.StatusInternalServerError, failedToHashPasswordMsg, err)
+		gstotel.RecordError(span, serviceErr)
+		return "", serviceErr
+	}
+	return string(hashedPassword), nil
+}

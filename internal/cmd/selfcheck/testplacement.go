@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/ggconst"
 	"golang.org/x/tools/go/packages"
 )
 
@@ -30,7 +31,7 @@ func checkTestPlacement(root string, pkgs []*packages.Package) ([]violation, err
 		switch {
 		// The external test package, the one whose files declare package
 		// <name>_test.
-		case strings.HasSuffix(p.PkgPath, "_test"):
+		case strings.HasSuffix(p.PkgPath, ggconst.SuffixTestPkg):
 			for _, path := range p.CompiledGoFiles {
 				if strings.HasSuffix(path, internalTestSuffix) {
 					file := relative(root, path)
@@ -40,7 +41,7 @@ func checkTestPlacement(root string, pkgs []*packages.Package) ([]violation, err
 					})
 				}
 			}
-		case isInternalTestVariant(p) && p.Name != "main":
+		case isInternalTestVariant(p) && p.Name != ggconst.PkgMain:
 			movable, err := confirmExternal(root, p, externalCandidates(analyzeTestFiles(p)))
 			if err != nil {
 				return nil, err
@@ -235,7 +236,7 @@ func anyOutside(set, movable map[string]bool) bool {
 
 // isTestFile reports whether path names a Go test file.
 func isTestFile(path string) bool {
-	return strings.HasSuffix(path, "_test.go")
+	return strings.HasSuffix(path, ggconst.PatternTestFile)
 }
 
 // The confirmation: a candidate the static pass found is reported only once
@@ -309,7 +310,7 @@ func asExternal(src []byte, f *testFile, name, path string) []byte {
 		offset int
 		text   string
 	}
-	clause := "_test"
+	clause := ggconst.SuffixTestPkg
 	if len(f.qualify) > 0 {
 		clause += fmt.Sprintf("; import %s %q", name, path)
 	}

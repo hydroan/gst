@@ -170,7 +170,7 @@ func writeAssemblyFixtureCopiedHook(t *testing.T, projectDir string) {
 		"copy": {
 			"requiredAssembly": [
 				{
-					"import": "github.com/hydroan/gst/internal/service/hooked",
+					"import": "github.com/hydroan/gst/internal/moduleservice/hooked",
 					"function": "InstallHook",
 					"reason": "the hook stays uninstalled until the project installs it"
 				}

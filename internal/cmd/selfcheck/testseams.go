@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/ggconst"
 	"golang.org/x/tools/go/packages"
 )
 
@@ -30,7 +31,7 @@ const apiDirective = "//gst:api"
 // sources gg module copy copies into a project, and the test support the
 // public testutil package builds on, which a project's tests reach through
 // it.
-var projectSourceDirs = []string{"internal/model/", "internal/service/", "internal/testutil/"}
+var projectSourceDirs = []string{ggconst.DirModuleModel + "/", ggconst.DirModuleService + "/", "internal/testutil/"}
 
 // checkTestSeams reports the exported package-level functions and variables
 // of the internal packages under root that only test files use anywhere in
@@ -80,7 +81,7 @@ func checkTestSeams(root string, pkgs []*packages.Package) ([]violation, error) 
 				importedOutsideTests[strings.Trim(imp.Path.Value, `"`)] = true
 			}
 		}
-		if p.Name == "main" || !isInternalPackage(module, p.PkgPath) || isProjectSourcePackage(module, p) || isTestSupportPackage(p) {
+		if p.Name == ggconst.PkgMain || !isInternalPackage(module, p.PkgPath) || isProjectSourcePackage(module, p) || isTestSupportPackage(p) {
 			// Its uses of other packages' exports still count below.
 		} else {
 			directives := apiDirectives(p)
@@ -263,7 +264,7 @@ func isPackageLevelExport(obj types.Object) bool {
 func collectIgnoredNames(p *packages.Package, names map[string]bool, imported map[string]bool) error {
 	fset := token.NewFileSet()
 	for _, path := range p.IgnoredFiles {
-		if !strings.HasSuffix(path, ".go") || isTestFile(path) {
+		if !strings.HasSuffix(path, ggconst.ExtensionGo) || isTestFile(path) {
 			continue
 		}
 		f, err := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)

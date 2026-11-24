@@ -2,7 +2,7 @@ package email
 
 import (
 	"github.com/hydroan/gst/internal/apiaction"
-	serviceemail "github.com/hydroan/gst/internal/service/email"
+	serviceemail "github.com/hydroan/gst/internal/moduleservice/email"
 	"github.com/hydroan/gst/module"
 )
 

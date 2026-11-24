@@ -1,7 +1,7 @@
 package mfa
 
 import (
-	modelmfa "github.com/hydroan/gst/internal/model/mfa"
+	modelmfa "github.com/hydroan/gst/internal/modulemodel/mfa"
 )
 
 // TOTP API aliases.

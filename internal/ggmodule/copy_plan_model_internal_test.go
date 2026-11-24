@@ -10,8 +10,8 @@ import (
 
 func TestBuildCopyPlanRejectsExcludedModelFileStillReferenced(t *testing.T) {
 	projectDir := newModuleCopyPlanProject(t)
-	writeCopyTestModuleSource(t, projectDir, []byte(`{"copy":{"excludeSourceFiles":["internal/model/copytest/naming.go"]}}`))
-	sourceModelDir := filepath.Join(projectDir, "internal", "gst", "internal", "model", "copytest")
+	writeCopyTestModuleSource(t, projectDir, []byte(`{"copy":{"excludeSourceFiles":["internal/modulemodel/copytest/naming.go"]}}`))
+	sourceModelDir := filepath.Join(projectDir, "internal", "gst", "internal", "modulemodel", "copytest")
 	if err := os.WriteFile(filepath.Join(sourceModelDir, "naming.go"), []byte(`package modelcopytest
 
 const copyTestName = "copytest"
@@ -39,8 +39,8 @@ var _ = copyTestName
 
 func TestBuildCopyPlanAllowsExcludedModelFileWithoutReferences(t *testing.T) {
 	projectDir := newModuleCopyPlanProject(t)
-	writeCopyTestModuleSource(t, projectDir, []byte(`{"copy":{"excludeSourceFiles":["internal/model/copytest/naming.go"]}}`))
-	sourceModelDir := filepath.Join(projectDir, "internal", "gst", "internal", "model", "copytest")
+	writeCopyTestModuleSource(t, projectDir, []byte(`{"copy":{"excludeSourceFiles":["internal/modulemodel/copytest/naming.go"]}}`))
+	sourceModelDir := filepath.Join(projectDir, "internal", "gst", "internal", "modulemodel", "copytest")
 	if err := os.WriteFile(filepath.Join(sourceModelDir, "naming.go"), []byte(`package modelcopytest
 
 const copyTestName = "copytest"

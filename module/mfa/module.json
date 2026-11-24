@@ -2,7 +2,7 @@
   "copy": {
     "excludeSourceFiles": [],
     "includeSourceFiles": [
-      "internal/service/mfa/totp_login.go"
+      "internal/moduleservice/mfa/totp_login.go"
     ],
     "requiredAssembly": [
       {

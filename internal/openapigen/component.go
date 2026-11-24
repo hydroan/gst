@@ -24,12 +24,15 @@ var (
 
 // schemaComponentName derives a readable, package-qualified component name
 // for a type: the package path segments after the last "/model/" (a type in
-// the model root keeps its bare name), otherwise the last two package path
-// segments. Examples:
+// the model root keeps its bare name), the segments below the tree of the
+// framework's module models for a type declared there, which is the name the
+// type has in a project that copied the module into its model directory,
+// otherwise the last two package path segments. Examples:
 //
 //	myproject/model/sample.Record                    -> sample.Record
 //	myproject/model.Item                             -> Item
-//	.../gst/internal/model/iam/user.User             -> iam.user.User
+//	.../gst/internal/modulemodel/authz.Role          -> authz.Role
+//	.../gst/internal/modulemodel/iam/user.User       -> iam.user.User
 //	.../gst/module/iam.LoginReq                      -> module.iam.LoginReq
 func schemaComponentName(typ reflect.Type) string {
 	for typ.Kind() == reflect.Pointer {
@@ -54,6 +57,9 @@ func schemaComponentNameFromPath(pkgPath, name string) string {
 	if _, below, found := strings.CutLast(pkgPath, "/model/"); found {
 		return strings.ReplaceAll(below, "/", ".") + "." + name
 	}
+	if below, found := strings.CutPrefix(pkgPath, moduleModelTree+"/"); found {
+		return strings.ReplaceAll(below, "/", ".") + "." + name
+	}
 	if pkgPath == ggconst.DirModel || strings.HasSuffix(pkgPath, "/model") {
 		return name
 	}
@@ -64,6 +70,10 @@ func schemaComponentNameFromPath(pkgPath, name string) string {
 	}
 	return strings.Join(segments, ".") + "." + name
 }
+
+// moduleModelTree is the tree of packages declaring the models of the
+// framework's modules.
+const moduleModelTree = ggconst.ImportPathGst + "/" + ggconst.DirModuleModel
 
 // internalTypesPkgPath is where the framework's contracts are defined;
 // business code imports them from the root package, ggconst.ImportPathGst.

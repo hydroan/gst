@@ -1,0 +1,51 @@
+package serviceiamuser
+
+import (
+	"net/http"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/internal/moduleservice/iam/adminauth"
+	"github.com/hydroan/gst/model"
+	"github.com/hydroan/gst/service"
+
+	modeliamuser "github.com/hydroan/gst/internal/modulemodel/iam/user"
+	serviceiamaccount "github.com/hydroan/gst/internal/moduleservice/iam/account"
+)
+
+// AdminUserGetService handles GET /api/iam/admin/users/:id for privileged
+// administrators.
+//
+// The endpoint returns an IAM admin view only after the shared tenant-admin
+// authorization helper has validated both the actor's endpoint permission and
+// the target user's tenant visibility.
+type AdminUserGetService struct {
+	service.Base[*modeliamuser.User, *model.Empty, *modeliamuser.AdminUserGetRsp]
+}
+
+// Get returns one user visible to the current administrator.
+func (a *AdminUserGetService) Get(ctx *gst.ServiceContext, req *model.Empty) (rsp *modeliamuser.AdminUserGetRsp, err error) {
+	targetUserID := ctx.Param("id")
+	if targetUserID == "" {
+		return nil, gst.NewError(http.StatusBadRequest, userIDRequiredMsg)
+	}
+
+	// Load the actor and target before authorization so EnsureTenantAdmin can
+	// reject system-root targets and verify tenant membership using the
+	// concrete target user ID.
+	actor, target, err := serviceiamaccount.LoadActorAndTarget(ctx, targetUserID)
+	if err != nil {
+		return nil, err
+	}
+	// EnsureTenantAdmin grants system-root actors globally. For tenant admins
+	// it first checks route permission in the current tenant, then checks that
+	// the target user has a role binding in that same tenant.
+	if err = adminauth.EnsureTenantAdmin(ctx, actor, target); err != nil {
+		return nil, err
+	}
+
+	view, err := buildAdminUserView(ctx, target)
+	if err != nil {
+		return nil, err
+	}
+	return &modeliamuser.AdminUserGetRsp{User: view}, nil
+}

@@ -37,8 +37,8 @@ const translationsImportPath = "github.com/hydroan/gst/i18n"
 // moduleTreeImportPrefixes are the framework import prefixes whose next path
 // segment names the owning module.
 var moduleTreeImportPrefixes = []string{
-	"github.com/hydroan/gst/internal/model/",
-	"github.com/hydroan/gst/internal/service/",
+	"github.com/hydroan/gst/internal/modulemodel/",
+	"github.com/hydroan/gst/internal/moduleservice/",
 }
 
 // copyableModuleManifests returns every module that declares a copy manifest,
@@ -90,8 +90,8 @@ func parseModulePackages(t *testing.T, pattern string) map[string]*ast.File {
 }
 
 // TestCopyableModuleServicesInstallNoHookFromInit pins the assembly rule that
-// the service packages of a copied module, internal/service/<name> and every
-// package below it, must not install framework hooks from init.
+// the service packages of a copied module, internal/moduleservice/<name> and
+// every package below it, must not install framework hooks from init.
 //
 // Package init only runs when the package is linked, and on the copy path the
 // only import of service/<name> comes from the generated route registrations —
@@ -107,11 +107,11 @@ func parseModulePackages(t *testing.T, pattern string) map[string]*ast.File {
 func TestCopyableModuleServicesInstallNoHookFromInit(t *testing.T) {
 	for name := range copyableModuleManifests(t) {
 		t.Run(name, func(t *testing.T) {
-			dir := filepath.Join("..", "internal", "service", name)
+			dir := filepath.Join("..", "internal", "moduleservice", name)
 			if _, err := os.Stat(dir); os.IsNotExist(err) {
 				return
 			}
-			for path, file := range parseModulePackages(t, frameworkImportPrefix+"internal/service/"+name+"/...") {
+			for path, file := range parseModulePackages(t, frameworkImportPrefix+"internal/moduleservice/"+name+"/...") {
 				imports := importPathsByLocalName(file)
 				for _, decl := range file.Decls {
 					fn, ok := decl.(*ast.FuncDecl)
@@ -370,12 +370,14 @@ func importPathsByLocalName(file *ast.File) map[string]string {
 
 // TestCopyableModuleServiceTreesAreSelfContained pins the invariant gg module
 // copy is built on: a module's service tree may reach into its own model and
-// service packages and nowhere else in internal/model or internal/service.
+// service packages and nowhere else in internal/modulemodel or
+// internal/moduleservice.
 //
-// Copy carries internal/model/<name> and internal/service/<name> and computes
-// its helper closure inside that tree. A reference to another module's tree
-// therefore copies to a project that does not have it, and the failure lands on
-// the project as an unresolved import rather than on the module that caused it.
+// Copy carries internal/modulemodel/<name> and internal/moduleservice/<name>
+// and computes its helper closure inside that tree. A reference to another
+// module's tree therefore copies to a project that does not have it, and the
+// failure lands on the project as an unresolved import rather than on the
+// module that caused it.
 //
 // Cross-module access belongs in module/<name>, which is the adapter layer and
 // is never copied: both iamAccountAdministrator and iamAccountGateway live
@@ -384,12 +386,12 @@ func importPathsByLocalName(file *ast.File) map[string]string {
 func TestCopyableModuleServiceTreesAreSelfContained(t *testing.T) {
 	for name := range copyableModuleManifests(t) {
 		t.Run(name, func(t *testing.T) {
-			root := filepath.Join("..", "internal", "service", name)
+			root := filepath.Join("..", "internal", "moduleservice", name)
 			if _, err := os.Stat(root); os.IsNotExist(err) {
 				return
 			}
 
-			for path, file := range parseModulePackages(t, frameworkImportPrefix+"internal/service/"+name+"/...") {
+			for path, file := range parseModulePackages(t, frameworkImportPrefix+"internal/moduleservice/"+name+"/...") {
 				for _, spec := range file.Imports {
 					if spec.Path == nil {
 						continue

@@ -1,10 +1,10 @@
 package iam
 
 import (
-	modeliamaccount "github.com/hydroan/gst/internal/model/iam/account"
-	modeliamprofile "github.com/hydroan/gst/internal/model/iam/profile"
-	modeliamsession "github.com/hydroan/gst/internal/model/iam/session"
-	modeliamuser "github.com/hydroan/gst/internal/model/iam/user"
+	modeliamaccount "github.com/hydroan/gst/internal/modulemodel/iam/account"
+	modeliamprofile "github.com/hydroan/gst/internal/modulemodel/iam/profile"
+	modeliamsession "github.com/hydroan/gst/internal/modulemodel/iam/session"
+	modeliamuser "github.com/hydroan/gst/internal/modulemodel/iam/user"
 )
 
 // Account API aliases.

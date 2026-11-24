@@ -68,8 +68,8 @@ func (p *CopyPlan) actionServicePaths(sourceModel *modelsource.Model, targetMode
 	if p.FrameworkRoot == "" {
 		return filepath.Join(p.SourceServiceDir, action.ServiceFilename()), filepath.Join(p.TargetServiceDir, action.ServiceFilename())
 	}
-	modelDir := filepath.Join(p.FrameworkRoot, "internal", ggconst.DirModel)
-	serviceDir := filepath.Join(p.FrameworkRoot, "internal", ggconst.DirService)
+	modelDir := filepath.Join(p.FrameworkRoot, filepath.FromSlash(ggconst.DirModuleModel))
+	serviceDir := filepath.Join(p.FrameworkRoot, filepath.FromSlash(ggconst.DirModuleService))
 	sourceTarget := modelsource.ServiceTarget(sourceModel, action, modelDir, serviceDir)
 	targetTarget := modelsource.ServiceTarget(targetModel, action, p.ModelDir, p.ServiceDir)
 	return sourceTarget.FilePath, targetTarget.FilePath
@@ -99,7 +99,7 @@ func requireServiceSourceFile(action moduleCopyAction) error {
 // the copy writes reach for in the tree. See moduleServiceHelperClosure for
 // the walk and its guard rules.
 func (p *CopyPlan) collectHelperDependencyFiles(actions []moduleCopyAction) ([]string, error) {
-	importPrefix := frameworkModulePath + "/internal/service/" + p.Name
+	importPrefix := frameworkModulePath + "/" + ggconst.DirModuleService + "/" + p.Name
 	actionFiles := make(map[string]bool)
 	seeds := make([]string, 0)
 	for _, sourcePath := range actionSourcePaths(actions) {

@@ -2,8 +2,8 @@
   "copy": {
     "excludeSourceFiles": [],
     "includeSourceFiles": [
-      "internal/service/logmgmt/loginlog_observer.go",
-      "internal/service/logmgmt/cleanup.go"
+      "internal/moduleservice/logmgmt/loginlog_observer.go",
+      "internal/moduleservice/logmgmt/cleanup.go"
     ],
     "middleware": [],
     "requiredAssembly": [

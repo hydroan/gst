@@ -191,8 +191,8 @@ func newModuleCopyMiddlewarePlanProject(t *testing.T) string {
 	frameworkRoot := filepath.Join(projectDir, "internal", "gst")
 	for _, dir := range []string{
 		filepath.Join(frameworkRoot, "module", "copytest"),
-		filepath.Join(frameworkRoot, "internal", "model", "copytest"),
-		filepath.Join(frameworkRoot, "internal", "service", "copytest"),
+		filepath.Join(frameworkRoot, "internal", "modulemodel", "copytest"),
+		filepath.Join(frameworkRoot, "internal", "moduleservice", "copytest"),
 		filepath.Join(frameworkRoot, "middleware"),
 	} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {

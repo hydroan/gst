@@ -211,7 +211,7 @@ func TestAddServiceFilesMergesActionsSharingServiceFile(t *testing.T) {
 
 import (
 	"github.com/hydroan/gst"
-	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
+	modelcopytest "github.com/hydroan/gst/internal/modulemodel/copytest"
 	"github.com/hydroan/gst/service"
 )
 
@@ -305,7 +305,7 @@ func TestAddServiceFilesMergesActionsFromMultipleSourceServiceStructs(t *testing
 
 import (
 	"github.com/hydroan/gst"
-	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
+	modelcopytest "github.com/hydroan/gst/internal/modulemodel/copytest"
 	"github.com/hydroan/gst/service"
 )
 
@@ -425,7 +425,7 @@ func TestAddServiceFilesKeepsEmptyPayloadListRequest(t *testing.T) {
 
 import (
 	"github.com/hydroan/gst"
-	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
+	modelcopytest "github.com/hydroan/gst/internal/modulemodel/copytest"
 	"github.com/hydroan/gst/model"
 	"github.com/hydroan/gst/service"
 )
@@ -503,7 +503,7 @@ func TestAddServiceFilesUsesFlattenServicePackage(t *testing.T) {
 
 import (
 	"github.com/hydroan/gst"
-	modelcopytest "github.com/hydroan/gst/internal/model/copytest"
+	modelcopytest "github.com/hydroan/gst/internal/modulemodel/copytest"
 	"github.com/hydroan/gst/service"
 )
 
@@ -673,7 +673,7 @@ func TestBuildCopyPlanCopiesManifestIncludedServiceFiles(t *testing.T) {
 	// discovery never reaches it; the manifest include must force it in. It
 	// references a sibling that is equally unreachable, which must follow
 	// through the in-package closure seeded by the include.
-	entryServiceDir := filepath.Join(frameworkRoot, "internal", "service", "copytest", "entry")
+	entryServiceDir := filepath.Join(frameworkRoot, "internal", "moduleservice", "copytest", "entry")
 	if err := os.WriteFile(filepath.Join(entryServiceDir, "standalone.go"), []byte(`package servicecopytestentry
 
 func standaloneEntryHelper() string {
@@ -690,7 +690,7 @@ func standaloneOrphan() string {
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(frameworkRoot, "module", "copytest", moduleManifestFilename), []byte(`{"copy":{"includeSourceFiles":["internal/service/copytest/entry/standalone.go"]}}`), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(frameworkRoot, "module", "copytest", moduleManifestFilename), []byte(`{"copy":{"includeSourceFiles":["internal/moduleservice/copytest/entry/standalone.go"]}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	t.Chdir(projectDir)
@@ -721,23 +721,23 @@ func TestBuildCopyPlanRejectsInvalidIncludeSourceFiles(t *testing.T) {
 		wantErr  string
 	}{
 		"outside module service tree": {
-			manifest: `{"copy":{"includeSourceFiles":["internal/model/copytest/entry/entry.go"]}}`,
-			wantErr:  "must live under internal/service/copytest/",
+			manifest: `{"copy":{"includeSourceFiles":["internal/modulemodel/copytest/entry/entry.go"]}}`,
+			wantErr:  "must live under internal/moduleservice/copytest/",
 		},
 		"missing file": {
-			manifest: `{"copy":{"includeSourceFiles":["internal/service/copytest/entry/missing.go"]}}`,
+			manifest: `{"copy":{"includeSourceFiles":["internal/moduleservice/copytest/entry/missing.go"]}}`,
 			wantErr:  "not found",
 		},
 		"test file": {
-			manifest: `{"copy":{"includeSourceFiles":["internal/service/copytest/entry/standalone_test.go"]}}`,
+			manifest: `{"copy":{"includeSourceFiles":["internal/moduleservice/copytest/entry/standalone_test.go"]}}`,
 			wantErr:  "must not be a test file",
 		},
 		"also excluded": {
-			manifest: `{"copy":{"excludeSourceFiles":["internal/service/copytest/entry/standalone.go"],"includeSourceFiles":["internal/service/copytest/entry/standalone.go"]}}`,
+			manifest: `{"copy":{"excludeSourceFiles":["internal/moduleservice/copytest/entry/standalone.go"],"includeSourceFiles":["internal/moduleservice/copytest/entry/standalone.go"]}}`,
 			wantErr:  "also listed in excludeSourceFiles",
 		},
 		"action service file": {
-			manifest: `{"copy":{"includeSourceFiles":["internal/service/copytest/entry/create.go"]}}`,
+			manifest: `{"copy":{"includeSourceFiles":["internal/moduleservice/copytest/entry/create.go"]}}`,
 			wantErr:  "declares a service struct",
 		},
 	}
@@ -852,8 +852,8 @@ func TestBuildCopyPlanIgnoresFrameworkRootRelativeFiles(t *testing.T) {
 	frameworkRoot := filepath.Join(projectDir, "internal", "gst")
 	for _, dir := range []string{
 		filepath.Join(frameworkRoot, "module", "copytest"),
-		filepath.Join(frameworkRoot, "internal", "model", "copytest"),
-		filepath.Join(frameworkRoot, "internal", "service", "copytest"),
+		filepath.Join(frameworkRoot, "internal", "modulemodel", "copytest"),
+		filepath.Join(frameworkRoot, "internal", "moduleservice", "copytest"),
 		filepath.Join(frameworkRoot, "dsl"),
 		filepath.Join(frameworkRoot, "model"),
 	} {
@@ -882,15 +882,15 @@ type Empty struct{}
 	}
 	if err := os.WriteFile(filepath.Join(frameworkRoot, "module", "copytest", moduleManifestFilename), []byte(`{
 		"copy": {
-			"excludeSourceFiles": ["internal/model/copytest/ignored.go"]
+			"excludeSourceFiles": ["internal/modulemodel/copytest/ignored.go"]
 		}
 	}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(frameworkRoot, "internal", "service", "copytest", "service.go"), []byte("package servicecopytest\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(frameworkRoot, "internal", "moduleservice", "copytest", "service.go"), []byte("package servicecopytest\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(frameworkRoot, "internal", "model", "copytest", "kept.go"), []byte(`package modelcopytest
+	if err := os.WriteFile(filepath.Join(frameworkRoot, "internal", "modulemodel", "copytest", "kept.go"), []byte(`package modelcopytest
 
 import "github.com/hydroan/gst/model"
 
@@ -900,7 +900,7 @@ type Kept struct {
 `), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(frameworkRoot, "internal", "model", "copytest", "ignored.go"), []byte(`package modelcopytest
+	if err := os.WriteFile(filepath.Join(frameworkRoot, "internal", "modulemodel", "copytest", "ignored.go"), []byte(`package modelcopytest
 
 import (
 	"github.com/hydroan/gst/dsl"
@@ -946,7 +946,7 @@ func writeNestedCopyTestModuleSource(t *testing.T, projectDir string) {
 		t.Fatal(err)
 	}
 
-	sourceModelDir := filepath.Join(frameworkRoot, "internal", "model", "copytest", "entry")
+	sourceModelDir := filepath.Join(frameworkRoot, "internal", "modulemodel", "copytest", "entry")
 	if err := os.MkdirAll(sourceModelDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -972,7 +972,7 @@ func (Entry) Design() {
 		t.Fatal(err)
 	}
 
-	sourceEntryServiceDir := filepath.Join(frameworkRoot, "internal", "service", "copytest", "entry")
+	sourceEntryServiceDir := filepath.Join(frameworkRoot, "internal", "moduleservice", "copytest", "entry")
 	if err := os.MkdirAll(sourceEntryServiceDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -980,8 +980,8 @@ func (Entry) Design() {
 
 import (
 	"github.com/hydroan/gst"
-	modelcopytestentry "github.com/hydroan/gst/internal/model/copytest/entry"
-	"github.com/hydroan/gst/internal/service/copytest/shared"
+	modelcopytestentry "github.com/hydroan/gst/internal/modulemodel/copytest/entry"
+	"github.com/hydroan/gst/internal/moduleservice/copytest/shared"
 	"github.com/hydroan/gst/service"
 )
 
@@ -998,7 +998,7 @@ func (s *EntryCreateService) Create(ctx *gst.ServiceContext, req *modelcopyteste
 	}
 	if err := os.WriteFile(filepath.Join(sourceEntryServiceDir, "helper.go"), []byte(`package servicecopytestentry
 
-import modelcopytestentry "github.com/hydroan/gst/internal/model/copytest/entry"
+import modelcopytestentry "github.com/hydroan/gst/internal/modulemodel/copytest/entry"
 
 func entryHelper(req *modelcopytestentry.Entry) *modelcopytestentry.Entry {
 	return req
@@ -1015,7 +1015,7 @@ func standaloneEntryHelper() string {
 		t.Fatal(err)
 	}
 
-	sourceUnrelatedServiceDir := filepath.Join(frameworkRoot, "internal", "service", "copytest", "unrelated")
+	sourceUnrelatedServiceDir := filepath.Join(frameworkRoot, "internal", "moduleservice", "copytest", "unrelated")
 	if err := os.MkdirAll(sourceUnrelatedServiceDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -1028,7 +1028,7 @@ func Unrelated() string {
 		t.Fatal(err)
 	}
 
-	sourceSharedServiceDir := filepath.Join(frameworkRoot, "internal", "service", "copytest", "shared")
+	sourceSharedServiceDir := filepath.Join(frameworkRoot, "internal", "moduleservice", "copytest", "shared")
 	if err := os.MkdirAll(sourceSharedServiceDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -1063,7 +1063,7 @@ func Unreferenced() string {
 func TestBuildCopyPlanSkipsTestdataAndVendorModelSources(t *testing.T) {
 	projectDir := newModuleCopyPlanProject(t)
 	writeCopyTestModuleSource(t, projectDir, nil)
-	sourceModelDir := filepath.Join(projectDir, "internal", "gst", "internal", "model", "copytest")
+	sourceModelDir := filepath.Join(projectDir, "internal", "gst", "internal", "modulemodel", "copytest")
 	for _, dir := range []string{"testdata", "vendor"} {
 		if err := os.MkdirAll(filepath.Join(sourceModelDir, dir), 0o755); err != nil {
 			t.Fatal(err)

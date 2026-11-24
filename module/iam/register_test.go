@@ -12,7 +12,7 @@ import (
 	"github.com/hydroan/gst/interceptor"
 	"github.com/hydroan/gst/internal/grpcserver"
 	internalmiddleware "github.com/hydroan/gst/internal/middleware"
-	serviceiamaccount "github.com/hydroan/gst/internal/service/iam/account"
+	serviceiamaccount "github.com/hydroan/gst/internal/moduleservice/iam/account"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/module/iam"

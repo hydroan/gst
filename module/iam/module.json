@@ -1,10 +1,10 @@
 {
   "copy": {
     "excludeSourceFiles": [
-      "internal/service/iam/session/store_testseam.go"
+      "internal/moduleservice/iam/session/store_testseam.go"
     ],
     "includeSourceFiles": [
-      "internal/service/iam/account/baseline.go"
+      "internal/moduleservice/iam/account/baseline.go"
     ],
     "middleware": [
       {
@@ -22,7 +22,7 @@
     ],
     "requiredAssembly": [
       {
-        "import": "github.com/hydroan/gst/internal/service/iam/account",
+        "import": "github.com/hydroan/gst/internal/moduleservice/iam/account",
         "function": "SeedRoot",
         "reason": "IAM_ROOT_PASSWORD seeds no root account until the hook is installed, router.OnRoutesReady(SeedRoot)"
       }
