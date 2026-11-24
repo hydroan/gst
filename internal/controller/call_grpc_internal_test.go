@@ -190,7 +190,12 @@ func TestACallRefusedForItsMessageIsReportedAsTheClients(t *testing.T) {
 // server's failure to answer in time; a live call answers the status the
 // error maps to, logged at the level that answer calls for, the 408 of a
 // client slow to send at warn though it answers the code of a deadline that
-// passed.
+// passed. A live call whose stream reported the client gone is a canceled
+// one too, whatever its service returns: grpc ends a stream before it
+// cancels the stream's context, so a Send can fail Canceled while the
+// context still says nothing (see call.streamErr). A Canceled the service
+// returns with no such report is a failure of its own, a call it canceled
+// downstream, answered and logged like any other.
 func TestFailServiceTellsACancellationFromAPassedDeadline(t *testing.T) {
 	cause := errors.New("dial tcp: connection refused")
 	span := trace.SpanFromContext(context.Background())
@@ -225,6 +230,30 @@ func TestFailServiceTellsACancellationFromAPassedDeadline(t *testing.T) {
 		c := &call{ctx: ctx, span: span, log: rec}
 		require.Equal(t, codes.Canceled, status.Code(c.failService(cause)))
 		require.Empty(t, rec.errors, "a client that went away is not a failure of the server")
+	})
+
+	t.Run("a live call whose stream reported the client gone answers Canceled unlogged, whatever the service returns", func(t *testing.T) {
+		gone := status.Error(codes.Canceled, context.Canceled.Error())
+		for name, returned := range map[string]error{
+			"the stream's error as it came": gone,
+			"the stream's error wrapped":    errors.Wrap(gone, "send the next record"),
+			"an error of the service's own": cause,
+		} {
+			rec := &levelRecorder{}
+			c := &call{ctx: context.Background(), span: span, log: rec}
+			require.Equal(t, gone, c.streamErr(gone), name)
+			require.Equal(t, codes.Canceled, status.Code(c.failService(returned)), name)
+			require.Empty(t, rec.errors, "a client that went away is not a failure of the server: %s", name)
+			require.Empty(t, rec.warns, name)
+			require.Empty(t, rec.infos, name)
+		}
+	})
+
+	t.Run("a live call returning a Canceled no stream reported answers the mapped status and logs an error", func(t *testing.T) {
+		rec := &levelRecorder{}
+		c := &call{ctx: context.Background(), span: span, log: rec}
+		require.Equal(t, codes.Internal, status.Code(c.failService(status.Error(codes.Canceled, context.Canceled.Error()))))
+		require.Equal(t, []string{"service operation failed"}, rec.errors, "a call the service canceled downstream is the server's failure, as the HTTP line answers it")
 	})
 
 	t.Run("a call whose deadline passed answers DeadlineExceeded and logs an error", func(t *testing.T) {

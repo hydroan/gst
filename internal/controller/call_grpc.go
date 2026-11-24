@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/apiaction"
@@ -233,13 +234,15 @@ func (f Filter) value(key string) (string, error) {
 
 // call is one run of an action for an rpc: the call's context with the
 // parameters attached and the controller span started, the span, the log of
-// the action, and the service contexts built for the hooks and the service,
-// checked when the call ends for a response a service tried to write.
+// the action, the service contexts built for the hooks and the service,
+// checked when the call ends for a response a service tried to write, and
+// whether the call's stream reported the client gone (see streamErr).
 type call struct {
 	ctx   context.Context
 	span  trace.Span
 	log   gst.Logger
 	built []*gst.ServiceContext
+	gone  atomic.Bool
 }
 
 // beginCall attaches params and query to ctx as the parameters of the call
@@ -379,11 +382,32 @@ func (c *call) failService(err error) error {
 // grpcserver), and is not logged as a failure of the server's; a deadline
 // that passed is the server failing to answer in time, logged and recorded
 // like any failure (see failService and failWith).
+//
+// A call whose stream reported the client gone has ended Canceled as well,
+// though its context may not say so yet (see streamErr).
 func (c *call) ended() error {
 	if err := c.ctx.Err(); err != nil {
 		return status.FromContextError(err).Err()
 	}
+	if c.gone.Load() {
+		return status.FromContextError(context.Canceled).Err()
+	}
 	return nil
+}
+
+// streamErr returns err, what a Send or Recv of the call's stream returned,
+// noting the client gone when it is the stream's Canceled. grpc marks a
+// stream done before it cancels the stream's context, so a Send can fail
+// Canceled while the context still says nothing; the note is what makes the
+// call end as canceled all the same (see ended), whatever the service makes
+// of the error. Only the stream's own report counts: a Canceled the service
+// returns of itself, a call it canceled downstream, is its failure. The
+// service may send from a goroutine of its own, hence the atomic.
+func (c *call) streamErr(err error) error {
+	if status.Code(err) == codes.Canceled {
+		c.gone.Store(true)
+	}
+	return err
 }
 
 // finish ends a call whose flow or service returned, checking the service

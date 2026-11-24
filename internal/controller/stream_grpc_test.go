@@ -241,6 +241,40 @@ func TestServerStreamCallStreamsTheResponses(t *testing.T) {
 	})
 }
 
+// TestStreamCallsEndCanceledOnceTheStreamReportsTheClientGone pins that a
+// stream call reads the client's going away off its stream as well as off
+// its context: grpc marks a stream done before it cancels the stream's
+// context, so a Send or Recv can fail Canceled while the context still says
+// nothing. The call then ends Canceled and the controller logs no failure
+// of the server's, whether the service returns the stream's error as it
+// came or wrapped.
+func TestStreamCallsEndCanceledOnceTheStreamReportsTheClientGone(t *testing.T) {
+	gone := status.Error(codes.Canceled, context.Canceled.Error())
+	refuse := func(*sampleActionRsp) error { return gone }
+
+	for name, call := range map[string]func() error{
+		"a server stream whose send the stream refused": func() error {
+			watch := controller.ServerStreamCall[*sampleRecord, *sampleActionReq, *sampleActionRsp](watchRoute)
+			return watch(t.Context(), nil, &sampleActionReq{Note: "2"}, refuse)
+		},
+		"a bidirectional stream whose send the stream refused": func() error {
+			chat := controller.BidiStreamCall[*sampleRecord, *sampleActionReq, *sampleActionRsp](chatRoute)
+			return chat(t.Context(), nil, func() (*sampleActionReq, error) { return &sampleActionReq{Note: "a"}, nil }, refuse)
+		},
+		"a client stream whose receive the stream refused": func() error {
+			upload := controller.ClientStreamCall[*sampleRecord, *sampleActionReq, *sampleActionRsp](uploadRoute)
+			_, err := upload(t.Context(), nil, func() (*sampleActionReq, error) { return nil, gone })
+			return err
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			logged := recordControllerLog(t)
+			require.Equal(t, codes.Canceled, status.Code(call()))
+			require.Empty(t, logged(), "a client that went away is not a failure of the server")
+		})
+	}
+}
+
 // TestClientStreamCallReadsTheRequestsAndAnswers pins the client stream
 // call end to end: the service's Stream method reads the requests the
 // client sends until it is done, each validated the way a payload is, and

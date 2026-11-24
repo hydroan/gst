@@ -31,11 +31,12 @@ import (
 // method of the action's kind (see gst.ServerStreamer and its kind),
 // which the generated service file declares; a call finding none answers
 // Unimplemented. A stream ends the way the client ends it as well: once the
-// call's context is canceled or past its deadline, whatever the service
-// returns answers the context's status (see finishStream and failService),
-// a Recv waiting on the client returning with the context too, the
-// listener seeing to it, and a stream the listener's stop ended the same
-// way is answered Unavailable by the listener in its place (see
+// call's context is canceled or past its deadline, or the stream reported
+// the client gone ahead of the context (see call.streamErr), whatever the
+// service returns answers the status of that ending (see finishStream and
+// failService), a Recv waiting on the client returning with the context
+// too, the listener seeing to it, and a stream the listener's stop ended
+// the same way is answered Unavailable by the listener in its place (see
 // grpcserver).
 
 // ServerStreamCall returns the call of the Stream action on route whose
@@ -63,7 +64,7 @@ func ServerStreamCall[M gst.Model, REQ gst.Request, RSP gst.Response](route stri
 		}
 		_, err = a.traceServiceOperation(c.ctx, apiaction.Stream, func(spanCtx context.Context) (RSP, error) {
 			var zero RSP
-			return zero, svc.Stream(c.serviceContext(spanCtx, apiaction.Stream), req, gst.NewServerStream(send))
+			return zero, svc.Stream(c.serviceContext(spanCtx, apiaction.Stream), req, gst.NewServerStream(func(rsp RSP) error { return c.streamErr(send(rsp)) }))
 		})
 		if err != nil {
 			return c.failService(err)
@@ -129,7 +130,7 @@ func BidiStreamCall[M gst.Model, REQ gst.Request, RSP gst.Response](route string
 		in := a.requests(c, recv)
 		_, err = a.traceServiceOperation(c.ctx, apiaction.Stream, func(spanCtx context.Context) (RSP, error) {
 			var zero RSP
-			return zero, svc.Stream(c.serviceContext(spanCtx, apiaction.Stream), gst.NewBidiStream(in.recv, send))
+			return zero, svc.Stream(c.serviceContext(spanCtx, apiaction.Stream), gst.NewBidiStream(in.recv, func(rsp RSP) error { return c.streamErr(send(rsp)) }))
 		})
 		if refused := in.refusal(); refused != nil {
 			return refused
@@ -146,10 +147,15 @@ func BidiStreamCall[M gst.Model, REQ gst.Request, RSP gst.Response](route string
 // its deadline having passed, as the context's status, the way a stream
 // ends whatever its service returns (see failService), and otherwise as
 // finish does. A watch returning once its context is done thus ends
-// Canceled, as it does when it returns the send the client cut short.
+// Canceled, as it does when it returns the send the client cut short; and
+// so does a stream that reported the client gone ahead of its context (see
+// streamErr), which answers the status of that ending.
 func (c *call) finishStream() error {
 	if err := c.ctx.Err(); err != nil {
 		return c.failService(err)
+	}
+	if ended := c.ended(); ended != nil {
+		return ended
 	}
 	return c.finish()
 }
@@ -204,7 +210,7 @@ func (a *action[M, REQ, RSP]) requests(c *call, recv func() (REQ, error)) *reque
 				_ = reportFailure(c.log, c.span, "request message rejected", err, invalidArgument(err))
 				r.refuse(err)
 			}
-			return req, err
+			return req, c.streamErr(err)
 		}
 		a.normalizeRequest(&req)
 		if err := validateRequest(req); err != nil {
