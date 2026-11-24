@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/internal/gst"
+	"github.com/hydroan/gst/internal/logger"
 	"github.com/hydroan/gst/internal/model"
 	internalservice "github.com/hydroan/gst/internal/service"
-	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/service"
 	"github.com/stretchr/testify/require"
 )

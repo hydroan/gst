@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/hydroan/gst/internal/logger"
 	"github.com/hydroan/gst/internal/testutil/testlog"
-	"github.com/hydroan/gst/logger"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )

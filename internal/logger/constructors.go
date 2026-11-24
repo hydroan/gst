@@ -1,7 +1,6 @@
 package logger
 
 import (
-	"log"
 	"path/filepath"
 	"strings"
 
@@ -59,10 +58,10 @@ type Option struct {
 	Console       bool
 }
 
-// New builds a gst.Logger backed by *zap.Logger.
-// filename: the stream's log file, whose name without ".log" names the
-// stream in stdout mode ("/dev/stdout" for console)
-// opts: optional encoder options
+// New builds the logger of a stream of its own, a gst.Logger backed by a
+// *zap.Logger. filename is the stream's log file, whose name without ".log"
+// names the stream in stdout mode, "/dev/stdout" writing to the console; opts
+// adjust the encoder.
 func New(filename string, opts ...Option) *Logger {
 	cfg := readConf(filename)
 	built := named(cfg, zap.New(
@@ -74,15 +73,14 @@ func New(filename string, opts ...Option) *Logger {
 	return &Logger{zlog: built}
 }
 
-// NewGorm builds a gorm logger.Interface.
-// filename: the stream's log file, whose name without ".log" names the
-// stream in stdout mode ("/dev/stdout" for console)
+// newGorm builds the gorm logger.Interface of the stream filename names,
+// the way New reads it.
 //
 // The logger deliberately has no zap caller annotation: the wrapper depth
 // between business code and the log call varies per operation, so a fixed
 // AddCallerSkip would misattribute most statements. GormLogger.Trace walks
 // the stack itself and attaches the business caller as a plain field.
-func NewGorm(filename string) gormlogger.Interface {
+func newGorm(filename string) gormlogger.Interface {
 	cfg := readConf(filename)
 	built := named(cfg, zap.New(
 		newLogCore(cfg),
@@ -91,36 +89,23 @@ func NewGorm(filename string) gormlogger.Interface {
 	return &GormLogger{l: &Logger{zlog: built}}
 }
 
-// NewGin builds a *zap.Logger for Gin access logs.
-// filename: the stream's log file, whose name without ".log" names the
-// stream in stdout mode ("/dev/stdout" for console)
-func NewGin(filename string) *zap.Logger {
+// newAccess builds the *zap.Logger of a stream whose entries are their fields
+// alone, with no message and no level: the access logs of both listeners and
+// the HTTP body log. filename names the stream the way New reads it.
+func newAccess(filename string) *zap.Logger {
 	cfg := readConf(filename)
 	return named(cfg, zap.New(newLogCore(cfg, Option{DisableMsg: true, DisableLevel: true})))
 }
 
-// NewStdLog builds a *log.Logger backed by *zap.Logger.
-func NewStdLog() *log.Logger {
-	return zap.NewStdLog(NewZap(""))
-}
-
-// NewZap builds a *zap.Logger with optional filename and options.
-// filename: the stream's log file, whose name without ".log" names the
-// stream in stdout mode ("/dev/stdout" for console)
-// opts: optional encoder options
-func NewZap(filename string, opts ...Option) *zap.Logger {
+// newZap builds the *zap.Logger of the stream filename names, the way New
+// reads it.
+func newZap(filename string) *zap.Logger {
 	cfg := readConf(filename)
 	return named(cfg, zap.New(
-		newLogCore(cfg, opts...),
+		newLogCore(cfg),
 		zap.AddCaller(),
 		zap.AddStacktrace(zapcore.FatalLevel),
 	))
-}
-
-// NewSugared builds a *zap.SugaredLogger with optional filename and options:
-// the logger NewZap builds, sugared.
-func NewSugared(filename string, opts ...Option) *zap.SugaredLogger {
-	return NewZap(filename, opts...).Sugar()
 }
 
 // named names a logger after the stream it writes in stdout mode, where the

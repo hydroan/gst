@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/logger"
 	"github.com/hydroan/gst/internal/testutil/testlog"
-	"github.com/hydroan/gst/logger"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )

@@ -22,7 +22,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/errorstack"
 	"github.com/hydroan/gst/internal/instance"
-	"github.com/hydroan/gst/logger"
+	"github.com/hydroan/gst/internal/logger"
 	"github.com/stoewer/go-strcase"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"

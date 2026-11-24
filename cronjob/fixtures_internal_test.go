@@ -17,7 +17,7 @@ import (
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/lease"
-	"github.com/hydroan/gst/logger"
+	"github.com/hydroan/gst/internal/logger"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"

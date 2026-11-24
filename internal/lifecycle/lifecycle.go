@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/logfield"
-	"github.com/hydroan/gst/logger"
+	"github.com/hydroan/gst/internal/logger"
 	"go.uber.org/zap"
 )
 

@@ -1,171 +1,101 @@
+// Package logger is where the code of a project logs. App returns the stream
+// of the application's own entries, and each provider the framework ships
+// has a stream of its own, Kafka's for one, where a project logs its use of
+// the provider beside the provider's own entries. The streams are opened by
+// Init, which the bootstrap runs: a function called before that returns nil.
+//
+// Fallback and New build a logger for a component of the project's own, and
+// Init and Clean open and flush the streams where no bootstrap does, in a
+// test for one.
+//
+// The implementation lives in internal/logger; this package forwards the part
+// a project uses.
 package logger
 
 import (
-	"context"
-
-	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/gst"
-	"github.com/hydroan/gst/internal/logfield"
-	"github.com/hydroan/gst/internal/requestctx"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
+	"github.com/hydroan/gst/internal/logger"
 )
 
-// Logger implements gst.Logger interface.
-type Logger struct {
-	zlog *zap.Logger
-}
+type (
+	// Logger is the logger New builds; it implements gst.Logger.
+	Logger = logger.Logger
 
-var _ gst.Logger = (*Logger)(nil)
-
-func (l *Logger) Debug(args ...any) { l.zlog.Sugar().Debug(args...) }
-func (l *Logger) Info(args ...any)  { l.zlog.Sugar().Info(args...) }
-func (l *Logger) Warn(args ...any)  { l.zlog.Sugar().Warn(args...) }
-func (l *Logger) Error(args ...any) {
-	l.withErrorStack(zapcore.ErrorLevel, args).Sugar().Error(args...)
-}
-func (l *Logger) Fatal(args ...any) { l.zlog.Sugar().Fatal(args...) }
-
-func (l *Logger) Debugf(format string, args ...any) { l.zlog.Sugar().Debugf(format, args...) }
-func (l *Logger) Infof(format string, args ...any)  { l.zlog.Sugar().Infof(format, args...) }
-func (l *Logger) Warnf(format string, args ...any)  { l.zlog.Sugar().Warnf(format, args...) }
-func (l *Logger) Errorf(format string, args ...any) {
-	l.withErrorStack(zapcore.ErrorLevel, args).Sugar().Errorf(format, args...)
-}
-func (l *Logger) Fatalf(format string, args ...any) { l.zlog.Sugar().Fatalf(format, args...) }
-
-func (l *Logger) Debugw(msg string, keysValues ...any) { l.zlog.Sugar().Debugw(msg, keysValues...) }
-func (l *Logger) Infow(msg string, keysValues ...any)  { l.zlog.Sugar().Infow(msg, keysValues...) }
-func (l *Logger) Warnw(msg string, keysValues ...any)  { l.zlog.Sugar().Warnw(msg, keysValues...) }
-func (l *Logger) Errorw(msg string, keysValues ...any) { l.zlog.Sugar().Errorw(msg, keysValues...) }
-func (l *Logger) Fatalw(msg string, keysValues ...any) { l.zlog.Sugar().Fatalw(msg, keysValues...) }
-
-func (l *Logger) Debugz(msg string, fields ...zap.Field) { l.zlog.Debug(msg, fields...) }
-func (l *Logger) Infoz(msg string, fields ...zap.Field)  { l.zlog.Info(msg, fields...) }
-func (l *Logger) Warnz(msg string, fields ...zap.Field)  { l.zlog.Warn(msg, fields...) }
-func (l *Logger) Errorz(msg string, fields ...zap.Field) { l.zlog.Error(msg, fields...) }
-func (l *Logger) Fatalz(msg string, fields ...zap.Field) { l.zlog.Fatal(msg, fields...) }
-
-func (l *Logger) ZapLogger() *zap.Logger { return l.zlog }
-
-// With creates a new logger with additional string key-value pairs. Each pair
-// of arguments must be a key(string) followed by its value(string). If an odd
-// number of arguments is provided, an empty string will be appended as the last
-// value.
-//
-// Example 1 - Multiple With calls:
-//
-//	logger.With("phase", "update").
-//	      With("user", "admin").
-//	      With("trace_id", "123")
-//
-// Example 2 - Single With call with multiple fields:
-//
-//	logger.With(
-//	    "phase", "update",
-//	    "user", "admin",
-//	    "trace_id", "123",
-//	)
-//
-// Returns the original logger if no fields are provided or if only an empty key
-// is provided.
-func (l *Logger) With(fields ...string) gst.Logger {
-	if len(fields) == 0 {
-		return l
-	}
-	if len(fields) == 1 {
-		if len(fields[0]) == 0 {
-			return l
-		}
-	}
-	if len(fields)%2 != 0 {
-		fields = append(fields, "")
-	}
-
-	zapFields := make([]zap.Field, 0, len(fields)/2)
-	for i := 0; i < len(fields); i += 2 {
-		if len(fields[i]) == 0 {
-			continue
-		}
-		zapFields = append(zapFields, zap.String(fields[i], fields[i+1]))
-	}
-	return &Logger{zlog: l.zlog.With(zapFields...)}
-}
-
-// The keys of the fields withContextFields binds that no other stream
-// writes: the phase of the action, and the cron job or leader name of the
-// execution.
-const (
-	keyPhase   = "phase"
-	keyCronjob = "cronjob"
-	keyLeader  = "leader"
+	// Option configures the encoder and the writer of a logger New builds:
+	// DisableMsg, DisableLevel and DisableCaller leave the "msg", "level" and
+	// "caller" fields out of its entries, and Console mirrors a file sink to
+	// os.Stdout.
+	Option = logger.Option
 )
 
-// contextFieldCap is the most fields withContextFields binds: the nine it
-// always binds — phase, route, path, method, username, user id, trace id,
-// params, query — and the cron job or leader name (an identity carries at
-// most one of them). The field slice is sized to it once, so binding never
-// regrows it; a field added to withContextFields bumps it, which the
-// worst-case test enforces.
-const contextFieldCap = 10
+// App returns the general-purpose logger for a project's own code (model
+// hooks, service methods, etc.) that wants WithContext-enriched logging
+// without going through zap.S()/zap.L(). Unlike those globals, it never
+// mirrors output to stdout.
+func App() gst.Logger { return logger.App }
 
-// withContextFields binds the fields derived from a context — the request
-// metadata and the execution identity — to a derived logger. This runs for
-// every context-scoped logger, so all fields go through one zap WithLazy
-// call, which defers the copy of the logger core, its encoder and the
-// encoder's buffer to the derived logger's first entry: a derived logger
-// whose entries the level discards, or that writes none, never pays for
-// that copy, and pays only for the fields, the lazy core and the two logger
-// values. The fields hold strings and the clone of the route parameters
-// Metadata.Params hands out, so an entry written later reads the values the
-// context held. Chaining several calls here would cost a core copy per
-// link, so when adding metadata fields, extend appendContextFields instead.
-func (l *Logger) withContextFields(meta requestctx.Metadata, id execctx.Identity, phase apiaction.Phase) gst.Logger {
-	fields := make([]zap.Field, 0, contextFieldCap)
-	fields = append(fields, zap.String(keyPhase, string(phase)))
-	return &Logger{zlog: l.zlog.WithLazy(appendContextFields(fields, meta, id)...)}
-}
+// Cassandra returns the stream of the cassandra provider, as Elastic and the
+// functions after it return those of the other providers the framework
+// ships: where a project logs its own use of a provider. Until the provider
+// is compiled into the binary and its stage starts, the stream is a fallback
+// writing to the global stream under the provider's name; from then on it is
+// a stream of its own, a file of its own in file mode.
+func Cassandra() gst.Logger { return logger.Cassandra }
 
-// appendContextFields appends to fields the ones derived from a context,
-// the request metadata and the execution identity, for a logger derived
-// from the context (see withContextFields) and for a slog record written
-// on it (see slogHandler) alike.
-//
-// The request fields come from logfield, which fixes the key and the type of
-// each one for every stream writing it; see logfield.Params for why the route
-// parameters are an object and logfield.Query for why the query is one
-// string.
-//
-// The cron job name is present only inside a round and the leader name only
-// inside a tenure: a request's lines carry no empty field for a capability
-// they do not use.
-func appendContextFields(fields []zap.Field, meta requestctx.Metadata, id execctx.Identity) []zap.Field {
-	fields = append(fields,
-		logfield.Route(meta.Route()),
-		logfield.Path(meta.Path()),
-		logfield.Method(meta.Method()),
-		logfield.Username(meta.Username()),
-		logfield.UserID(meta.UserID()),
-		logfield.TraceID(id.TraceID),
-		logfield.Params(meta.Params()),
-		logfield.Query(meta.RawQuery()),
-	)
-	if len(id.Cronjob) > 0 {
-		fields = append(fields, zap.String(keyCronjob, id.Cronjob))
-	}
-	if len(id.Leader) > 0 {
-		fields = append(fields, zap.String(keyLeader, id.Leader))
-	}
-	return fields
-}
+// Elastic returns the stream of the elastic provider (see Cassandra).
+func Elastic() gst.Logger { return logger.Elastic }
 
-// WithContext creates a new logger carrying the request metadata and the
-// execution identity found on ctx.
-func (l *Logger) WithContext(ctx context.Context, phase apiaction.Phase) gst.Logger {
-	if ctx == nil {
-		return l.With(keyPhase, string(phase))
-	}
+// Etcd returns the stream of the etcd provider (see Cassandra).
+func Etcd() gst.Logger { return logger.Etcd }
 
-	return l.withContextFields(requestctx.FromContext(ctx), execctx.FromContext(ctx), phase)
-}
+// Influxdb returns the stream of the influxdb provider (see Cassandra).
+func Influxdb() gst.Logger { return logger.Influxdb }
+
+// Kafka returns the stream of the kafka provider (see Cassandra).
+func Kafka() gst.Logger { return logger.Kafka }
+
+// Ldap returns the stream of the ldap provider (see Cassandra).
+func Ldap() gst.Logger { return logger.Ldap }
+
+// Minio returns the stream of the minio provider (see Cassandra).
+func Minio() gst.Logger { return logger.Minio }
+
+// Mongo returns the stream of the mongo provider (see Cassandra).
+func Mongo() gst.Logger { return logger.Mongo }
+
+// Mqtt returns the stream of the mqtt provider (see Cassandra).
+func Mqtt() gst.Logger { return logger.Mqtt }
+
+// Nats returns the stream of the nats provider (see Cassandra).
+func Nats() gst.Logger { return logger.Nats }
+
+// RethinkDB returns the stream of the rethinkdb provider (see Cassandra).
+func RethinkDB() gst.Logger { return logger.RethinkDB }
+
+// RocketMQ returns the stream of the rocketmq provider (see Cassandra).
+func RocketMQ() gst.Logger { return logger.RocketMQ }
+
+// Scylla returns the stream of the scylla provider (see Cassandra).
+func Scylla() gst.Logger { return logger.Scylla }
+
+// Init builds every stream from the configuration. The bootstrap runs it; a
+// test that logs without one runs it itself. It fails when the configured
+// output is neither stdout nor file.
+func Init() error { return logger.Init() }
+
+// Clean flushes the loggers Init and New built and stops their buffered
+// writers, so a process about to exit, or a test about to read a log back,
+// sees everything that was logged.
+func Clean() { logger.Clean() }
+
+// Fallback builds a logger for the component named that owns no file and no
+// sink: it derives from the global logger Init installs, so its entries land
+// in the global stream tagged with the component's name. In a process that
+// never ran Init the global logger is zap's no-op and the entries are
+// dropped.
+func Fallback(component string) gst.Logger { return logger.Fallback(component) }
+
+// New builds a logger writing to a stream of its own: filename is the
+// stream's log file, whose name without ".log" names the stream in stdout
+// mode, and opts adjust its encoder.
+func New(filename string, opts ...Option) *Logger { return logger.New(filename, opts...) }

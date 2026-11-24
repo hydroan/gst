@@ -116,9 +116,9 @@ func TestEveryLoggerStampsTheProcessIdentity(t *testing.T) {
 
 	zap.S().Info("global")
 	New("typed.log").Infoz("typed")
-	NewGin("gin.log").Info("gin")
-	NewZap("plain.log").Info("plain")
-	NewSugared("sugared.log").Info("sugared")
+	newAccess("gin.log").Info("gin")
+	newZap("plain.log").Info("plain")
+	newZap("sugared.log").Sugar().Info("sugared")
 	// Clean flushes the entries out before the files are read; the cleanup
 	// runs it again, idly.
 	Clean()

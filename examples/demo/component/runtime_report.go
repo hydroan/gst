@@ -18,7 +18,7 @@ func reportRuntime(ctx context.Context) error {
 	for {
 		var stats runtime.MemStats
 		runtime.ReadMemStats(&stats)
-		logger.App.Infoz("runtime report", zap.Int("goroutines", runtime.NumGoroutine()), zap.Uint64("heap_bytes", stats.HeapAlloc))
+		logger.App().Infoz("runtime report", zap.Int("goroutines", runtime.NumGoroutine()), zap.Uint64("heap_bytes", stats.HeapAlloc))
 		select {
 		case <-ctx.Done():
 			return nil

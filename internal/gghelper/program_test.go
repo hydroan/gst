@@ -239,6 +239,7 @@ func inspectRewriteProblems(forwarded map[string][]forwardedType, rewrites map[s
 // says what the types are, which no model stores.
 var nonColumnTypes = map[string]string{
 	ggconst.ImportPathGst + "/internal/apidoc":                  "the doc comments, security schemes and operation wordings registered for the OpenAPI document, records of its registry",
+	ggconst.ImportPathGst + "/internal/logger":                  "the logger a project builds for a component of its own and the options it builds it with, tools of the code and no value of a model",
 	ggconst.ImportPathGst + "/internal/modelschema.Column":      "forwarded by inspect to gg's own programs, which describe a model's columns with it",
 	ggconst.ImportPathGst + "/internal/modelschema.ColumnClass": "forwarded by inspect to gg's own programs, which classify a model's columns with it",
 	ggconst.ImportPathGst + "/internal/gst.GrantSource":         "the source of an allowed authorization decision, a word a check answers and the authorization log carries",

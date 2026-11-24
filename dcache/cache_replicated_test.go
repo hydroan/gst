@@ -11,9 +11,9 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/dcache"
 	"github.com/hydroan/gst/internal/gst"
+	"github.com/hydroan/gst/internal/logger"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
 	"github.com/hydroan/gst/internal/testutil/testlog"
-	"github.com/hydroan/gst/logger"
 	"github.com/stretchr/testify/require"
 )
 

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/hydroan/gst/logger"
+	"github.com/hydroan/gst/internal/logger"
 )
 
 // initOnce keeps Init to a single pass per process.

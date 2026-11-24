@@ -141,6 +141,7 @@ linters:
             - "!**/datatypes/forward_test.go"
             - "!**/apidoc/forward_test.go"
             - "!**/otel/forward_test.go"
+            - "!**/logger/forward_test.go"
             - "!**/inspect/inspect_test.go"
             - "!**/service/service_bench_test.go"
             - "!**/service/service_test.go"
@@ -187,6 +188,8 @@ linters:
               desc: "framework code imports github.com/hydroan/gst/internal/apidoc; the public package forwards the registrations to generated project code and the module sources"
             - pkg: "github.com/hydroan/gst/otel$"
               desc: "framework code imports github.com/hydroan/gst/internal/otel; the public package forwards the span helpers to projects and the module sources"
+            - pkg: "github.com/hydroan/gst/logger$"
+              desc: "framework code imports github.com/hydroan/gst/internal/logger; the public package forwards the streams a project logs to and the loggers it builds to projects and the module sources"
         # The same rule for the public middleware package: the handlers of
         # the copyable modules are middleware source files gg module copy
         # carries into a project, so they live in the public package, and a

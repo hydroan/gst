@@ -11,7 +11,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/logger"
+	"github.com/hydroan/gst/internal/logger"
 )
 
 // globalLogFile is the file the global stream writes to, named after what

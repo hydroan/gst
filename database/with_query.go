@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/internal/gst"
+	"github.com/hydroan/gst/internal/logger"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"

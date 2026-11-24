@@ -154,7 +154,7 @@ func ExampleLock_TryRun_leaseLost() {
 	if errors.Is(err, lock.ErrLost) {
 		// The rebuild may be half done, and another holder may be redoing it:
 		// report it as not done.
-		logger.App.Warnw("report rebuild cut short", "err", err)
+		logger.App().Warnw("report rebuild cut short", "err", err)
 	}
 }
 

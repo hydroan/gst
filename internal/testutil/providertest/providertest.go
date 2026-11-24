@@ -12,8 +12,8 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/internal/logger"
 	"github.com/hydroan/gst/internal/testutil/testlog"
-	"github.com/hydroan/gst/logger"
 )
 
 // Run runs the tests of a provider package. Each prepare function starts a

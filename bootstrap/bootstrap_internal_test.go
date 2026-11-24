@@ -21,6 +21,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/internal/logger"
 	"github.com/hydroan/gst/internal/router"
 	"github.com/hydroan/gst/internal/testutil/testlog"
 	"github.com/stretchr/testify/require"
@@ -54,7 +55,7 @@ func TestTeardownStopsTheLogWritersLast(t *testing.T) {
 	for _, cleanup := range slices.Backward(cleanups) {
 		teardown = append(teardown, runtime.FuncForPC(reflect.ValueOf(cleanup).Pointer()).Name())
 	}
-	require.Equal(t, "github.com/hydroan/gst/logger.Clean", teardown[len(teardown)-1],
+	require.Equal(t, runtime.FuncForPC(reflect.ValueOf(logger.Clean).Pointer()).Name(), teardown[len(teardown)-1],
 		"the log writers must be the last thing torn down")
 }
 

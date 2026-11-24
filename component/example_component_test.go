@@ -43,7 +43,7 @@ func ExampleRegister() {
 			}
 			for _, event := range events {
 				if err := handleRecordEvent(ctx, event); err != nil && ctx.Err() == nil {
-					logger.App.Warnw("handling a record event failed", "err", err, "record", event.ID)
+					logger.App().Warnw("handling a record event failed", "err", err, "record", event.ID)
 				}
 			}
 		}
@@ -68,7 +68,7 @@ func ExampleRegister_transientFailure() {
 				// No retry brings a closed stream back: end the process.
 				return err
 			case err != nil:
-				logger.App.Warnw("reading record events failed, retrying", "err", err, "backoff", backoff)
+				logger.App().Warnw("reading record events failed, retrying", "err", err, "backoff", backoff)
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
@@ -80,7 +80,7 @@ func ExampleRegister_transientFailure() {
 			backoff = time.Second
 			for _, event := range events {
 				if err := handleRecordEvent(ctx, event); err != nil && ctx.Err() == nil {
-					logger.App.Warnw("handling a record event failed", "err", err, "record", event.ID)
+					logger.App().Warnw("handling a record event failed", "err", err, "record", event.ID)
 				}
 			}
 		}
@@ -107,7 +107,7 @@ func ExampleRegister_disabled() {
 			}
 			for _, event := range events {
 				if err := handleRecordEvent(ctx, event); err != nil && ctx.Err() == nil {
-					logger.App.Warnw("handling a record event failed", "err", err, "record", event.ID)
+					logger.App().Warnw("handling a record event failed", "err", err, "record", event.ID)
 				}
 			}
 		}
@@ -157,7 +157,7 @@ func ExampleRegister_blockingCall() {
 				return errors.Wrap(err, "read record stream")
 			}
 			if err := handleRecordEvent(ctx, event); err != nil && ctx.Err() == nil {
-				logger.App.Warnw("handling a record event failed", "err", err, "record", event.ID)
+				logger.App().Warnw("handling a record event failed", "err", err, "record", event.ID)
 			}
 		}
 	}, "record-stream")

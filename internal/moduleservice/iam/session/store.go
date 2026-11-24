@@ -600,11 +600,11 @@ func (store) ClearLoginFailures(ctx context.Context, username string) {
 // this is service code, and its output belongs in the application log with the
 // rest of what a request did.
 //
-// logger.App stays nil until logger initialization, so storage reached before
+// logger.App() stays nil until logger initialization, so storage reached before
 // then must not require a configured logger to stay safe.
 func logStoreWarning(msg, subject string, err error) {
-	if logger.App == nil {
+	if logger.App() == nil {
 		return
 	}
-	logger.App.Warnz(msg, zap.String("subject", subject), zap.Error(err))
+	logger.App().Warnz(msg, zap.String("subject", subject), zap.Error(err))
 }

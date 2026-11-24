@@ -38,6 +38,6 @@ func reportAudits(ctx context.Context) error {
 	for _, row := range rows {
 		digest[row.Action] = row.Total
 	}
-	logger.App.Infoz("audit digest", zap.Any("actions", digest))
+	logger.App().Infoz("audit digest", zap.Any("actions", digest))
 	return nil
 }

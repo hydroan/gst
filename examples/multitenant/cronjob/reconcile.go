@@ -24,9 +24,9 @@ func reconcilePolicies(ctx context.Context) error {
 		return err
 	}
 	if report.InSync() {
-		logger.App.Infoz("authorization rules in sync", zap.Int("checked", report.Checked), zap.Int("skipped", report.Skipped))
+		logger.App().Infoz("authorization rules in sync", zap.Int("checked", report.Checked), zap.Int("skipped", report.Skipped))
 		return nil
 	}
-	logger.App.Warnz("authorization rules drifted", zap.Int("drifts", len(report.Drifts)), zap.Any("first", report.Drifts[0]))
+	logger.App().Warnz("authorization rules drifted", zap.Int("drifts", len(report.Drifts)), zap.Any("first", report.Drifts[0]))
 	return nil
 }

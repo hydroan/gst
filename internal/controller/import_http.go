@@ -9,8 +9,8 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/gst"
+	"github.com/hydroan/gst/internal/logger"
 	"github.com/hydroan/gst/internal/response"
-	"github.com/hydroan/gst/logger"
 )
 
 // maxImportSize is the largest upload an import accepts, 5 MiB.

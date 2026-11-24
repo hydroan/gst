@@ -23,7 +23,7 @@ import (
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/instance"
 	"github.com/hydroan/gst/internal/logfield"
-	"github.com/hydroan/gst/logger"
+	"github.com/hydroan/gst/internal/logger"
 	"github.com/panjf2000/ants/v2"
 	"github.com/twmb/franz-go/pkg/kerr"
 	"github.com/twmb/franz-go/pkg/kgo"

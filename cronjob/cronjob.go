@@ -94,7 +94,7 @@ import (
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/lease"
 	"github.com/hydroan/gst/internal/lifecycle"
-	"github.com/hydroan/gst/logger"
+	"github.com/hydroan/gst/internal/logger"
 	"go.uber.org/zap"
 )
 

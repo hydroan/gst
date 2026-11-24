@@ -8,7 +8,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/gst"
-	"github.com/hydroan/gst/logger"
+	"github.com/hydroan/gst/internal/logger"
 )
 
 // Client is a service-level HTTP client for one gst backend: it carries the

@@ -1,6 +1,10 @@
 // Package logger holds the framework's log streams, one per component,
 // and the loggers behind them: Init opens the streams the configuration
 // names, and New builds a logger of its own for a component that has one.
+//
+// The public logger package forwards to projects the streams their own code
+// logs to, as functions, with Init, Clean, Fallback, New, Logger and Option;
+// the rest serves the framework alone, and framework code reaches both here.
 package logger
 
 import (
@@ -114,18 +118,18 @@ func Init() error {
 	Mongo = Fallback("mongo")
 	Mqtt = Fallback("mqtt")
 	Nats = Fallback("nats")
-	Scylla = Fallback("scylla")
 	RethinkDB = Fallback("rethinkdb")
 	RocketMQ = Fallback("rocketmq")
+	Scylla = Fallback("scylla")
 
-	Gin = NewGin("access.log")
-	HTTPBody = NewGin("http_body.log")
-	GRPC = NewGin("grpc.log")
+	Gin = newAccess("access.log")
+	HTTPBody = newAccess("http_body.log")
+	GRPC = newAccess("grpc.log")
 	// A panic entry is its message — the request, the panic and the stack —
 	// so the recovery log keeps the message and the level the access-log
 	// encoder leaves out.
-	Recovery = NewZap("recovery.log")
-	Gorm = NewGorm("gorm.log")
+	Recovery = newZap("recovery.log")
+	Gorm = newGorm("gorm.log")
 
 	return nil
 }
@@ -162,9 +166,9 @@ func Clean() {
 		Mongo,
 		Mqtt,
 		Nats,
-		Scylla,
 		RethinkDB,
 		RocketMQ,
+		Scylla,
 	}
 	for _, log := range logs {
 		if l, ok := log.(*Logger); ok {

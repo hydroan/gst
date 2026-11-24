@@ -4,7 +4,7 @@ import (
 	"sync"
 
 	"github.com/hydroan/gst/internal/gst"
-	"github.com/hydroan/gst/logger"
+	"github.com/hydroan/gst/internal/logger"
 )
 
 var (

@@ -8,9 +8,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/logfield"
+	"github.com/hydroan/gst/internal/logger"
 	prommetrics "github.com/hydroan/gst/internal/metrics"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -78,9 +78,9 @@ func accessLogger() gin.HandlerFunc {
 		if len(c.Errors) > 0 {
 			// A request that reported errors logs one entry per error, the
 			// error in a field of its own, like the gRPC access log's: the
-			// encoder of logger.Gin drops the message (see logger.NewGin).
-			// The field takes the last slot of the capacity, so each entry
-			// overwrites the previous one's.
+			// encoder of logger.Gin drops the message. The field takes the
+			// last slot of the capacity, so each entry overwrites the
+			// previous one's.
 			for _, e := range c.Errors.Errors() {
 				logger.Gin.Error(e, append(fields, zap.String("error", e))...)
 			}

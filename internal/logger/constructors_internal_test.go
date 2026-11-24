@@ -1,8 +1,6 @@
 package logger
 
 import (
-	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 
@@ -48,33 +46,15 @@ func TestConstructorsBuildEachLoggerFromItsOwnFile(t *testing.T) {
 		}()
 		go func() {
 			defer wg.Done()
-			names[i][1] = NewGin("beta.log").Name()
+			names[i][1] = newAccess("beta.log").Name()
 		}()
 		go func() {
 			defer wg.Done()
-			names[i][2] = NewZap("gamma.log").Name()
+			names[i][2] = newZap("gamma.log").Name()
 		}()
 	}
 	wg.Wait()
 	for i := range rounds {
 		require.Equal(t, [3]string{"alpha", "beta", "gamma"}, names[i])
 	}
-}
-
-// TestNewStdLogWritesThroughTheConfiguredStream pins the standard log
-// adapter NewStdLog builds: a line printed through it lands in the file the
-// logger configuration names, as an entry of the global stream.
-func TestNewStdLogWritesThroughTheConfiguredStream(t *testing.T) {
-	dir := t.TempDir()
-	t.Cleanup(Clean)
-	withLoggerInitConfig(t, dir, "global.log")
-	restoreGlobalLoggers(t)
-	require.NoError(t, Init())
-
-	NewStdLog().Print("sample line through the standard log")
-	Clean()
-
-	content, err := os.ReadFile(filepath.Join(dir, "global.log"))
-	require.NoError(t, err)
-	require.Contains(t, string(content), "sample line through the standard log")
 }

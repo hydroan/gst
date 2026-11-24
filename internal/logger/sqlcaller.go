@@ -23,7 +23,7 @@ import (
 // that decision.
 var sqlCallerSkipPrefixes = []string{
 	"gorm.io/",
-	"github.com/hydroan/gst/logger",
+	"github.com/hydroan/gst/internal/logger",
 	"github.com/hydroan/gst/database",
 }
 

@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/logger"
 	prommetrics "github.com/hydroan/gst/internal/metrics"
-	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 )
 

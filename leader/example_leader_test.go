@@ -44,7 +44,7 @@ func ExampleRegister() {
 				return ctx.Err()
 			case <-ticker.C:
 				if err := pollUpstream(ctx); err != nil && ctx.Err() == nil {
-					logger.App.Warnw("polling upstream failed", "err", err)
+					logger.App().Warnw("polling upstream failed", "err", err)
 				}
 			}
 		}
@@ -71,21 +71,21 @@ func ExampleRegister_outboxRelay() {
 		for {
 			records, err := pendingOutboxRecords(ctx, 100)
 			if err != nil && ctx.Err() == nil {
-				logger.App.Warnw("reading the outbox failed", "err", err)
+				logger.App().Warnw("reading the outbox failed", "err", err)
 			}
 			for _, record := range records {
 				if ctx.Err() != nil {
 					break
 				}
 				if err := sendOutboxRecord(ctx, record); err != nil {
-					logger.App.Warnw("sending an outbox record failed", "err", err, "record", record.ID)
+					logger.App().Warnw("sending an outbox record failed", "err", err, "record", record.ID)
 					break
 				}
 				err := database.Transaction(ctx, func(ctx context.Context) error {
 					return markOutboxRecordSent(ctx, record.ID)
 				})
 				if err != nil {
-					logger.App.Warnw("marking an outbox record sent failed", "err", err, "record", record.ID)
+					logger.App().Warnw("marking an outbox record sent failed", "err", err, "record", record.ID)
 					break
 				}
 			}
@@ -234,7 +234,7 @@ func ExampleRegister_returning() {
 				// No retry fixes this here: hand the name back.
 				return err
 			case err != nil:
-				logger.App.Warnw("relaying failed, retrying", "err", err)
+				logger.App().Warnw("relaying failed, retrying", "err", err)
 			}
 			select {
 			case <-ctx.Done():
@@ -272,7 +272,7 @@ func ExampleRegister_singleConnection() {
 				return errors.Wrap(err, "read upstream session")
 			}
 			if err := handleUpstreamMessage(ctx, buf[:n]); err != nil && ctx.Err() == nil {
-				logger.App.Warnw("handling an upstream message failed", "err", err)
+				logger.App().Warnw("handling an upstream message failed", "err", err)
 			}
 		}
 	}, "upstream-session")

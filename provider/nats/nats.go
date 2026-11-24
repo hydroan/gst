@@ -13,8 +13,8 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/internal/logger"
 	"github.com/hydroan/gst/internal/tlsconfig"
-	"github.com/hydroan/gst/logger"
 	"github.com/nats-io/nats.go"
 	"go.uber.org/zap"
 )

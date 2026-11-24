@@ -10,9 +10,9 @@ import (
 
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/logfield"
+	"github.com/hydroan/gst/internal/logger"
 	gstotel "github.com/hydroan/gst/internal/otel"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/logger"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"

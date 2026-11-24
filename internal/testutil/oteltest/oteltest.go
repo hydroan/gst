@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/logger"
 	gstotel "github.com/hydroan/gst/internal/otel"
-	"github.com/hydroan/gst/logger"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"

@@ -15,7 +15,8 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 )
 
-// GormLogger implements gorm logger.Interface
+// GormLogger implements gorm's logger.Interface on a gst.Logger: it writes the
+// SQL log (see Trace).
 type GormLogger struct{ l gst.Logger }
 
 var _ gormlogger.Interface = (*GormLogger)(nil)

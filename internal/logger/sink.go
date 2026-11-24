@@ -32,10 +32,10 @@ var (
 	bufferedLogWriters   []*zapcore.BufferedWriteSyncer
 )
 
-// newLogWriter selects log sink: the shared stdout sink in stdout mode, and in
-// file mode stdout/stderr or a rolling file, one sink per path shared by
-// every stream writing it (see fileLogWriter).
-// opts: opts[0].Console additionally mirrors a file sink to os.Stdout.
+// newLogWriter selects the sink of a stream: the shared stdout sink in stdout
+// mode, and in file mode stdout, stderr or a rolling file, one sink per path
+// shared by every stream writing it (see fileLogWriter). The Console of the
+// first of opts mirrors a file sink to os.Stdout as well.
 func newLogWriter(cfg logConfig, opts ...Option) zapcore.WriteSyncer {
 	if cfg.output == config.LoggerOutputStdout {
 		return stdoutLogWriter()
@@ -150,6 +150,8 @@ func stdoutLogWriter() zapcore.WriteSyncer {
 	return sharedStdoutWriter
 }
 
+// registerBufferedLogWriter records writer among the buffered sinks Clean
+// stops; a nil writer is none.
 func registerBufferedLogWriter(writer *zapcore.BufferedWriteSyncer) {
 	if writer == nil {
 		return
@@ -160,6 +162,9 @@ func registerBufferedLogWriter(writer *zapcore.BufferedWriteSyncer) {
 	bufferedLogWritersMu.Unlock()
 }
 
+// stopBufferedLogWriters stops every buffered sink the constructors built,
+// which writes out what each holds, and forgets them all: the next logger of
+// either mode starts its sink afresh.
 func stopBufferedLogWriters() {
 	sharedStdoutWriterMu.Lock()
 	sharedStdoutWriter = nil

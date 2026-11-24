@@ -35,7 +35,7 @@ func watchNotices(ctx context.Context) error {
 			if !ok {
 				return errors.New("the notice subscription closed")
 			}
-			logger.App.Infoz("notice received", zap.String("channel", notice.Channel), zap.String("payload", notice.Payload))
+			logger.App().Infoz("notice received", zap.String("channel", notice.Channel), zap.String("payload", notice.Payload))
 		}
 	}
 }

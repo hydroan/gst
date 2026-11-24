@@ -15,8 +15,8 @@ import (
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/logfield"
+	"github.com/hydroan/gst/internal/logger"
 	"github.com/hydroan/gst/internal/tlsconfig"
-	"github.com/hydroan/gst/logger"
 	"github.com/scylladb/gocqlx/v3"
 	"go.uber.org/zap"
 )

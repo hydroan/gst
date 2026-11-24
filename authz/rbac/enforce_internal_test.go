@@ -8,7 +8,7 @@ import (
 
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/gst"
-	"github.com/hydroan/gst/logger"
+	"github.com/hydroan/gst/internal/logger"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"

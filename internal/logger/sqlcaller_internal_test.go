@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/hydroan/gst/config"
@@ -15,7 +16,9 @@ func TestFrameworkSQLFramePredicate(t *testing.T) {
 		{"gorm.io/gorm.(*DB).Find", true},
 		{"gorm.io/gorm/callbacks.query", true},
 		{"gorm.io/driver/mysql.Migrator.CurrentDatabase", true},
-		{"github.com/hydroan/gst/logger.(*GormLogger).Trace", true},
+		// The frames of this package, named by where it really lives: the
+		// built-in prefix has to follow the package.
+		{reflect.TypeFor[GormLogger]().PkgPath() + ".(*GormLogger).Trace", true},
 		{"github.com/hydroan/gst/database.(*database[go.shape.*uint8]).List", true},
 		{"github.com/hydroan/gst/database.withWriteTransaction.func1", true},
 		{"github.com/hydroan/gst/database/sqlite.New", true},

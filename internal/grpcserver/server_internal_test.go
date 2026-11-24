@@ -19,8 +19,8 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/lifecycle"
+	"github.com/hydroan/gst/internal/logger"
 	"github.com/hydroan/gst/internal/streamctx"
-	"github.com/hydroan/gst/logger"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"

@@ -12,8 +12,8 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/logfield"
+	"github.com/hydroan/gst/internal/logger"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 )
 

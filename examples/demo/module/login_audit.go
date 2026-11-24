@@ -18,6 +18,6 @@ import (
 func auditLogin(ctx *gst.ServiceContext, event authn.LoginEvent) {
 	audit := &model.Audit{Action: "login_" + string(event.Kind), Actor: event.Username}
 	if err := database.Database[*model.Audit](ctx).Create(audit); err != nil {
-		logger.App.Errorz("audit login", zap.String("username", event.Username), zap.Error(err))
+		logger.App().Errorz("audit login", zap.String("username", event.Username), zap.Error(err))
 	}
 }

@@ -33,10 +33,10 @@ func RecordLoginEvent(ctx *gst.ServiceContext, event authn.LoginEvent) {
 		Browser:  fmt.Sprintf("%s %s", event.BrowserName, event.BrowserVersion),
 	}
 	if err := database.Database[*modellogmgmt.LoginLog](ctx).Create(entry); err != nil {
-		// logger.App stays nil until logger initialization; the observer must
+		// logger.App() stays nil until logger initialization; the observer must
 		// not require a configured logger to stay safe.
-		if logger.App != nil {
-			logger.App.Warnz("failed to write login log",
+		if logger.App() != nil {
+			logger.App().Warnz("failed to write login log",
 				zap.String("username", event.Username),
 				zap.String("login_status", string(entry.Status)),
 				zap.Error(err))

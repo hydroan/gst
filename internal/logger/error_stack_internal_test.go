@@ -145,8 +145,8 @@ func TestErrorFieldsAreWrittenAsTextWithTheErrorStack(t *testing.T) {
 
 	New("errorz.log").Errorz("operation failed", zap.Error(err))
 	New("errorw.log").Errorw("operation failed", "error", err)
-	NewZap("zap.log").Error("operation failed", zap.Error(err))
-	NewSugared("sugar.log").Errorw("operation failed", "error", err)
+	newZap("zap.log").Error("operation failed", zap.Error(err))
+	newZap("sugar.log").Sugar().Errorw("operation failed", "error", err)
 	Clean()
 
 	for _, file := range []string{"errorz.log", "errorw.log", "zap.log", "sugar.log"} {
@@ -229,7 +229,7 @@ func TestAnEntryCarriesOneErrorStack(t *testing.T) {
 	withLoggerInitConfig(t, dir, "")
 	first := newStackTracedError()
 
-	NewZap("once.log").With(zap.Error(first)).Error("operation failed", zap.NamedError("cause", errors.New("second failure")))
+	newZap("once.log").With(zap.Error(first)).Error("operation failed", zap.NamedError("cause", errors.New("second failure")))
 	Clean()
 
 	line, entry := readLogEntry(t, filepath.Join(dir, "once.log"))
