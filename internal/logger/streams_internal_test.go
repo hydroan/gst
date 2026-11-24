@@ -146,7 +146,7 @@ func TestInitBuildsTheListenerLoggers(t *testing.T) {
 	restoreGlobalLoggers(t)
 	require.NoError(t, Init())
 
-	require.NotNil(t, Gin)
+	require.NotNil(t, HTTP)
 	require.NotNil(t, HTTPBody)
 	require.NotNil(t, GRPC)
 	require.NotNil(t, Recovery)
@@ -217,14 +217,14 @@ func restoreGlobalLoggers(t *testing.T) {
 	} {
 		savedTyped[ref] = *ref
 	}
-	savedGin, savedHTTPBody, savedGorm := Gin, HTTPBody, Gorm
+	savedHTTP, savedHTTPBody, savedGorm := HTTP, HTTPBody, Gorm
 	savedZap := zap.L()
 
 	t.Cleanup(func() {
 		for ref, saved := range savedTyped {
 			*ref = saved
 		}
-		Gin, HTTPBody, Gorm = savedGin, savedHTTPBody, savedGorm
+		HTTP, HTTPBody, Gorm = savedHTTP, savedHTTPBody, savedGorm
 		zap.ReplaceGlobals(savedZap)
 	})
 }
@@ -242,7 +242,7 @@ func TestSyncingTheGlobalLoggerFlushesEveryStream(t *testing.T) {
 	App.Errorz("app stream")
 	Database.Errorz("database stream")
 	// The access-log encoder writes fields alone, no message.
-	Gin.Error("", zap.String("probe", "access stream"))
+	HTTP.Error("", zap.String("probe", "access stream"))
 
 	require.NoError(t, zap.L().Sync())
 

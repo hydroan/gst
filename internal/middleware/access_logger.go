@@ -78,14 +78,14 @@ func accessLogger() gin.HandlerFunc {
 		if len(c.Errors) > 0 {
 			// A request that reported errors logs one entry per error, the
 			// error in a field of its own, like the gRPC access log's: the
-			// encoder of logger.Gin drops the message. The field takes the
+			// encoder of logger.HTTP drops the message. The field takes the
 			// last slot of the capacity, so each entry overwrites the
 			// previous one's.
 			for _, e := range c.Errors.Errors() {
-				logger.Gin.Error(e, append(fields, zap.String("error", e))...)
+				logger.HTTP.Error(e, append(fields, zap.String("error", e))...)
 			}
 		} else {
-			logger.Gin.Info(path, fields...)
+			logger.HTTP.Info(path, fields...)
 		}
 	}
 }

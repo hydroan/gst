@@ -27,9 +27,9 @@ func TestAccessLoggerFieldsFitTheCapacityInTheWorstCase(t *testing.T) {
 	setupTracingTest(t)
 
 	core, logs := observer.New(zapcore.InfoLevel)
-	originalLogger := logger.Gin
-	logger.Gin = zap.New(core)
-	t.Cleanup(func() { logger.Gin = originalLogger })
+	originalLogger := logger.HTTP
+	logger.HTTP = zap.New(core)
+	t.Cleanup(func() { logger.HTTP = originalLogger })
 
 	standInRequestMetrics(t)
 
@@ -60,9 +60,9 @@ func TestAccessLoggerFieldsFitTheCapacityInTheWorstCase(t *testing.T) {
 // established none.
 func TestAccessLoggerCarriesTheTenantTheRequestActsIn(t *testing.T) {
 	core, logs := observer.New(zapcore.InfoLevel)
-	originalLogger := logger.Gin
-	logger.Gin = zap.New(core)
-	t.Cleanup(func() { logger.Gin = originalLogger })
+	originalLogger := logger.HTTP
+	logger.HTTP = zap.New(core)
+	t.Cleanup(func() { logger.HTTP = originalLogger })
 	standInRequestMetrics(t)
 
 	router := gin.New()

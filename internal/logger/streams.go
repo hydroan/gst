@@ -49,10 +49,10 @@ var (
 	RocketMQ  gst.Logger
 	Scylla    gst.Logger
 
-	// Gin is the access log of the HTTP listener and GRPC that of the gRPC
+	// HTTP is the access log of the HTTP listener and GRPC that of the gRPC
 	// listener, one entry per request or call; HTTPBody carries the request
 	// and response bodies the HTTP listener logs.
-	Gin      *zap.Logger
+	HTTP     *zap.Logger
 	HTTPBody *zap.Logger
 	GRPC     *zap.Logger
 	// Recovery records the panics the handlers of both listeners recover
@@ -122,7 +122,7 @@ func Init() error {
 	RocketMQ = Fallback("rocketmq")
 	Scylla = Fallback("scylla")
 
-	Gin = newAccess("access.log")
+	HTTP = newAccess("access.log")
 	HTTPBody = newAccess("http_body.log")
 	GRPC = newAccess("grpc.log")
 	// A panic entry is its message — the request, the panic and the stack —
@@ -178,7 +178,7 @@ func Clean() {
 
 	// The listeners' loggers: the HTTP access and body logs, the gRPC
 	// access log and the recovery log.
-	for _, log := range []*zap.Logger{Gin, HTTPBody, GRPC, Recovery} {
+	for _, log := range []*zap.Logger{HTTP, HTTPBody, GRPC, Recovery} {
 		if log != nil {
 			_ = log.Sync()
 		}
