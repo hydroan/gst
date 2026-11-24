@@ -44,12 +44,14 @@ import (
 //	if err != nil {
 //	    return nil, gst.NewError(http.StatusBadRequest, err.Error())
 //	}
-//	query.TenantID = tenant // mandatory scoping the client cannot influence
 //
 //	filters, err := s.QueryFilters(ctx)
 //	if err != nil {
 //	    return nil, gst.NewError(http.StatusBadRequest, err.Error())
 //	}
+//	// Mandatory scoping the client cannot influence is a filter: a field
+//	// of the query model left empty counts as not given.
+//	filters = append(filters, SampleCols.TenantID.Eq(tenant))
 //	opts := gst.QueryOptions{
 //	    AllowEmpty:    true,
 //	    PresentFields: s.QueryPresentFields(ctx),

@@ -176,9 +176,7 @@ func (Record) Design() {
 `{name}` 的 `gg gen` 直接拒绝。
 
 需要自增整数主键的资源改用 `model.AutoBase`，字段和默认 hook 与 `model.Base`
-一致，区别是 ID 由数据库在插入时分配（框架不会生成）。注意：这类模型通过
-`model.Register` 注入 seed 记录时必须显式指定 ID 或依赖唯一索引，否则重复启动会
-重复插入；`Base` 字符串 ID 的逗号分隔多 ID 查询写法对整数 ID 不适用。
+一致，区别是 ID 由数据库在插入时分配（框架不会生成）。
 
 ### 查询参数名
 
@@ -477,12 +475,13 @@ query, err := s.QueryModel(ctx)
 if err != nil {
 	return nil, gst.NewError(http.StatusBadRequest, err.Error())
 }
-query.TenantID = tenant // 客户端影响不了的强制条件
 
 filters, err := s.QueryFilters(ctx)
 if err != nil {
 	return nil, gst.NewError(http.StatusBadRequest, err.Error())
 }
+// 客户端影响不了的强制条件写成过滤条件：写在查询模型的字段上，值为空时会被当成没填
+filters = append(filters, appmodel.SampleCols.TenantID.Eq(tenant))
 opts := gst.QueryOptions{
 	AllowEmpty:    true,
 	PresentFields: s.QueryPresentFields(ctx),
