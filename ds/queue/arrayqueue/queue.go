@@ -1,3 +1,5 @@
+// Package arrayqueue is a generic first-in, first-out queue backed by a
+// slice. WithSafe makes a queue safe for concurrent use.
 package arrayqueue
 
 import (

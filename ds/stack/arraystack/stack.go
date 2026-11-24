@@ -1,3 +1,5 @@
+// Package arraystack is a generic last-in, first-out stack backed by a
+// slice. WithSafe makes a stack safe for concurrent use.
 package arraystack
 
 import (

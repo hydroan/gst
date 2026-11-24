@@ -1,3 +1,6 @@
+// Package circularbuffer is a generic circular buffer of a fixed size: once
+// full it overwrites its oldest element with each new one, or, with WithDrop,
+// refuses the new one. WithSafe makes a buffer safe for concurrent use.
 package circularbuffer
 
 import (

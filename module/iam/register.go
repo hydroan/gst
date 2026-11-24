@@ -1,3 +1,6 @@
+// Package iam is the identity and access module: users and their accounts,
+// login, and sessions, with the routes that serve them. Register adds its
+// models and routes to a project.
 package iam
 
 import (

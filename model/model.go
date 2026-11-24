@@ -1,3 +1,11 @@
+// Package model is what a project declares its models with: the base types a
+// model embeds, Base, AutoBase and Empty; Query and Cursor, which a model
+// embeds to shape how its list is read; Index, which declares an index, and
+// Version, which opts a model into optimistic locking; and Register, which
+// registers a database-backed model for table setup.
+//
+// The implementation lives in internal/model and internal/modelschema; this
+// package forwards the part a project uses.
 package model
 
 import (

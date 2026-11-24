@@ -1,3 +1,6 @@
+// Package skiplist is a generic skip list: keys kept in the order of a
+// comparison function, each with its value, and found, inserted and deleted in
+// logarithmic time on average. WithSafe makes a list safe for concurrent use.
 package skiplist
 
 import (

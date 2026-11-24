@@ -1,3 +1,6 @@
+// Package postgres is the PostgreSQL dialect of the framework's database
+// layer: Init opens the default connection when the configuration selects
+// PostgreSQL, and New opens a handle from a configuration of the caller's.
 package postgres
 
 import (

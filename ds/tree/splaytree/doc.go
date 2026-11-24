@@ -1,3 +1,7 @@
+// Package splaytree is a generic splay tree: a binary search tree holding
+// keys in the order of a comparison function, each with its value, in which a
+// lookup moves the node it ended on to the root, so keys looked up often stay
+// near it. WithSafe makes a tree safe for concurrent use.
 package splaytree
 
 /*

@@ -1,3 +1,8 @@
+// Package kafka is the Kafka provider: Client returns the default client the
+// bootstrap opened from the configuration, meant for producing and for
+// administration, Admin returns an admin client over it, and New opens a
+// client of the caller's own, which is how a consumer gets one carrying its
+// subscription.
 package kafka
 
 import (

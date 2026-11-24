@@ -1,3 +1,6 @@
+// Package ratelimiter is a gin middleware limiting the rate of requests per
+// key, with buckets kept in the process: a request over the limit is refused
+// with 429.
 package ratelimiter
 
 import (

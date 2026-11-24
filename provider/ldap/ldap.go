@@ -1,3 +1,7 @@
+// Package ldap is the LDAP provider: Client returns the connection the
+// bootstrap opened from the configuration, the helpers search the directory,
+// authenticate a user and manage users and groups through it, and New opens
+// another from a configuration of the caller's.
 package ldap
 
 import (

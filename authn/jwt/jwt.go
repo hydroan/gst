@@ -1,3 +1,8 @@
+// Package jwt issues and checks the tokens of a JWT login: GenTokens signs an
+// access token and a refresh token for a user, ParseToken and Verify check the
+// access token a request carries, and RefreshTokens trades a refresh token for
+// a new pair. The tokens are self-contained, so any process holding the
+// signing key checks them without a shared store.
 package jwt
 
 import (

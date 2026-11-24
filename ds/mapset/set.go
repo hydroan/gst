@@ -1,3 +1,6 @@
+// Package mapset is a generic set backed by a map. WithSorted makes a set
+// hand its elements out in the order of a comparison function, and WithSafe
+// makes it safe for concurrent use.
 package mapset
 
 import (

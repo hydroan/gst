@@ -1,3 +1,7 @@
+// Package trie is a generic trie: a tree keyed by sequences of K, the runes
+// of a string for one, in which keys sharing a prefix share the path that
+// spells it, each key with its value. WithSafe makes a trie safe for
+// concurrent use.
 package trie
 
 /*

@@ -1,3 +1,7 @@
+// Package minio is the MinIO provider: Client returns the client the
+// bootstrap opened from the configuration, the helpers work on buckets and
+// the objects in them, and New opens another from a configuration of the
+// caller's.
 package minio
 
 import (

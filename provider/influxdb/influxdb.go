@@ -1,3 +1,6 @@
+// Package influxdb is the InfluxDB provider: Client returns the client the
+// bootstrap opened from the configuration, the helpers query and write points
+// through it, and New opens another from a configuration of the caller's.
 package influxdb
 
 import (

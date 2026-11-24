@@ -1,3 +1,6 @@
+// Package authz is the RBAC authorization module: roles, role bindings,
+// authorization rules and menus, with the routes that manage them. Register
+// adds the module to a project.
 package authz
 
 import (

@@ -1,3 +1,6 @@
+// Package nats is the NATS provider: Client returns the connection the
+// bootstrap opened from the configuration, and New opens another from a
+// configuration of the caller's.
 package nats
 
 import (

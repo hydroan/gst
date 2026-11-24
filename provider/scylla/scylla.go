@@ -1,3 +1,6 @@
+// Package scylla is the ScyllaDB provider: Client returns the session the
+// bootstrap opened from the configuration, and New opens another from a
+// configuration of the caller's.
 package scylla
 
 import (

@@ -1,3 +1,7 @@
+// Package rocketmq is the RocketMQ provider: Producer and Admin return the
+// producer and the admin client the bootstrap started from the configuration,
+// and NewProducer, NewPushConsumer and NewAdmin build ones of the caller's
+// own.
 package rocketmq
 
 import (

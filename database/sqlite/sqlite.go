@@ -1,3 +1,6 @@
+// Package sqlite is the SQLite dialect of the framework's database layer:
+// Init opens the default connection when the configuration selects SQLite, and
+// New opens a handle from a configuration of the caller's.
 package sqlite
 
 import (

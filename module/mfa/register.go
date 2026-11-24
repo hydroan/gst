@@ -1,3 +1,7 @@
+// Package mfa is the module of multi-factor authentication by TOTP: the
+// routes an account binds, confirms and unbinds its authenticator with, the
+// administrative routes over the authenticators of other accounts, and the
+// second-factor gate of the login. Register wires them into a project.
 package mfa
 
 import (

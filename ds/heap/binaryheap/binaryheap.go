@@ -1,3 +1,6 @@
+// Package binaryheap is a generic binary heap ordered by a comparison
+// function: a min-heap by default, the smallest element coming out first, and
+// a max-heap with WithMaxHeap. WithSafe makes a heap safe for concurrent use.
 package binaryheap
 
 import (

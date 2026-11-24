@@ -1,3 +1,7 @@
+// Package elastic is the Elasticsearch provider: Client returns the client
+// the bootstrap opened from the configuration, New opens another from a
+// configuration of the caller's, and the helpers read, search and write
+// documents, manage indexes and compose queries.
 package elastic
 
 /*

@@ -1,3 +1,6 @@
+// Package mongo is the MongoDB provider: Client returns the client the
+// bootstrap opened from the configuration, Database and Collection return
+// handles of it, and New opens another from a configuration of the caller's.
 package mongo
 
 import (

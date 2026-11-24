@@ -1,3 +1,7 @@
+// Package column is the module that answers which distinct values the
+// columns of a table hold, for the tables and columns a project registers,
+// under the filters a request names among those columns. Register adds the
+// module to a project.
 package column
 
 import (

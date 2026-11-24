@@ -1,3 +1,6 @@
+// Package rbtree is a generic red-black tree: a self-balancing binary search
+// tree holding keys in the order of a comparison function, each with its
+// value. WithSafe makes a tree safe for concurrent use.
 package rbtree
 
 /*

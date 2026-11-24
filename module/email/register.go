@@ -1,3 +1,5 @@
+// Package email is the module of email verification, password reset by email
+// and email change for IAM accounts. Register adds its routes to a project.
 package email
 
 import (

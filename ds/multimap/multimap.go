@@ -1,3 +1,6 @@
+// Package multimap is a generic map holding any number of values under each
+// key, the values told apart by a comparison function. WithSafe makes a map
+// safe for concurrent use.
 package multimap
 
 import (

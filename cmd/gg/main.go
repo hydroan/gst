@@ -1,3 +1,6 @@
+// Gg works on the gst project in the current directory: it generates the code
+// the models declare, checks the project against the framework's conventions,
+// and migrates the database to the models.
 package main
 
 import (

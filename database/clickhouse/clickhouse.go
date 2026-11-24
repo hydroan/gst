@@ -1,3 +1,6 @@
+// Package clickhouse is the ClickHouse dialect of the framework's database
+// layer: Init opens the default connection when the configuration selects
+// ClickHouse, and New opens a handle from a configuration of the caller's.
 package clickhouse
 
 import (

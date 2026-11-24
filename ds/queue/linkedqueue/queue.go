@@ -1,3 +1,5 @@
+// Package linkedqueue is a generic first-in, first-out queue backed by a
+// linked list. WithSafe makes a queue safe for concurrent use.
 package linkedqueue
 
 import (

@@ -1,3 +1,7 @@
+// Package priorityqueue is a generic priority queue built on a binary heap
+// and ordered by a comparison function: the smallest element comes out first
+// by default, the largest with WithMaxPriority. WithSafe makes a queue safe
+// for concurrent use.
 package priorityqueue
 
 import (

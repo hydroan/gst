@@ -1,3 +1,5 @@
+// Package logmgmt is the module of login logs and operation logs: the two
+// models and the routes that read them. Register adds them to a project.
 package logmgmt
 
 import (

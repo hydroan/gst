@@ -1,3 +1,5 @@
+// Package filetype tells the type of a file from its content, as a Filetype
+// with its Mime, and converts an image file to JPEG or PNG.
 package filetype
 
 import (

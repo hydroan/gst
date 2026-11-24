@@ -1,3 +1,6 @@
+// Package etcd is the etcd provider: Client returns the client the bootstrap
+// opened from the configuration, and New opens another from a configuration
+// of the caller's.
 package etcd
 
 import (

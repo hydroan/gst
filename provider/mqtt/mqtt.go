@@ -1,3 +1,7 @@
+// Package mqtt is the MQTT provider: Client returns the client the bootstrap
+// opened from the configuration, Publish, Subscribe and Unsubscribe work on
+// topics through it, and New opens another from a configuration of the
+// caller's.
 package mqtt
 
 import (

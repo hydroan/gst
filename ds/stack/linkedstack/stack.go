@@ -1,3 +1,5 @@
+// Package linkedstack is a generic last-in, first-out stack backed by a
+// linked list. WithSafe makes a stack safe for concurrent use.
 package linkedstack
 
 import (

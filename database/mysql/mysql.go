@@ -1,3 +1,7 @@
+// Package mysql is the MySQL dialect of the framework's database layer: Init
+// opens the default connection when the configuration selects MySQL, New opens
+// a handle from a configuration of the caller's, and DryRun returns a handle
+// that builds statements without connecting.
 package mysql
 
 import (
