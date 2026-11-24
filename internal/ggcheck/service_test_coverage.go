@@ -90,5 +90,5 @@ func checkServiceTestCoverage(ignore gghelper.ProjectIgnore) []string {
 // file in its directory: <stem>_test.go or its internal form <stem>_internal_test.go.
 func serviceTestFileExists(servicePath string) bool {
 	stem := strings.TrimSuffix(servicePath, ggconst.ExtensionGo)
-	return gghelper.FileExists(stem+ggconst.PatternTestFile) || gghelper.FileExists(stem+ggconst.PatternInternalTestFile)
+	return gghelper.FileExists(stem+ggconst.SuffixTestFile) || gghelper.FileExists(stem+ggconst.SuffixInternalTestFile)
 }

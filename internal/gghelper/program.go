@@ -47,7 +47,7 @@ func programFiles(dir string) map[string]string {
 	}
 	files := make(map[string]string, len(entries))
 	for _, entry := range entries {
-		if strings.HasSuffix(entry.Name(), ggconst.PatternTestFile) {
+		if strings.HasSuffix(entry.Name(), ggconst.SuffixTestFile) {
 			continue
 		}
 		content, err := programs.ReadFile(path.Join(dir, entry.Name()))

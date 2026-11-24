@@ -32,7 +32,7 @@ func walkModelFiles(modelDir string, ignore gghelper.ProjectIgnore, excludes []s
 	return ignore.Walk(modelDir, func(path string, info os.FileInfo) error {
 		if info.IsDir() ||
 			!strings.HasSuffix(info.Name(), ggconst.ExtensionGo) ||
-			strings.HasSuffix(info.Name(), ggconst.PatternTestFile) ||
+			strings.HasSuffix(info.Name(), ggconst.SuffixTestFile) ||
 			slices.Contains(excludes, info.Name()) {
 			return nil
 		}

@@ -26,7 +26,7 @@ func checkModelFileNameHyphens(ignore gghelper.ProjectIgnore) []string {
 	}
 
 	err := ignore.Walk(ggconst.DirModel, func(path string, info os.FileInfo) error {
-		if info.IsDir() || !strings.HasSuffix(path, ggconst.ExtensionGo) || strings.Contains(path, ggconst.PatternTestFile) || isGeneratedFileName(path) {
+		if info.IsDir() || !strings.HasSuffix(path, ggconst.ExtensionGo) || strings.Contains(path, ggconst.SuffixTestFile) || isGeneratedFileName(path) {
 			return nil
 		}
 		fileName := strings.TrimSuffix(info.Name(), ggconst.ExtensionGo)

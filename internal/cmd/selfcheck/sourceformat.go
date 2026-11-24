@@ -48,7 +48,7 @@ func checkSourceFormat(root string, pkgs []*packages.Package) ([]violation, erro
 		}
 		for _, file := range p.Syntax {
 			rel := relative(root, p.Fset.Position(file.Pos()).Filename)
-			if strings.HasSuffix(rel, ggconst.PatternTestFile) || rel == sourceFormatHome || !inSourceFormatScope(rel) {
+			if strings.HasSuffix(rel, ggconst.SuffixTestFile) || rel == sourceFormatHome || !inSourceFormatScope(rel) {
 				continue
 			}
 			for _, spec := range file.Imports {

@@ -56,7 +56,7 @@ func checkServiceDependencies(modulePath string, ignore gghelper.ProjectIgnore) 
 	}
 
 	err := ignore.Walk(ggconst.DirService, func(path string, _ os.FileInfo) error {
-		if !strings.HasSuffix(path, ggconst.ExtensionGo) || strings.Contains(path, ggconst.PatternTestFile) {
+		if !strings.HasSuffix(path, ggconst.ExtensionGo) || strings.Contains(path, ggconst.SuffixTestFile) {
 			return nil
 		}
 
@@ -88,7 +88,7 @@ func checkDAODependencies(modulePath string, ignore gghelper.ProjectIgnore) []st
 	}
 
 	err := ignore.Walk(ggconst.DirDAO, func(path string, _ os.FileInfo) error {
-		if !strings.HasSuffix(path, ggconst.ExtensionGo) || strings.Contains(path, ggconst.PatternTestFile) {
+		if !strings.HasSuffix(path, ggconst.ExtensionGo) || strings.Contains(path, ggconst.SuffixTestFile) {
 			return nil
 		}
 
@@ -114,7 +114,7 @@ func checkModelDependencies(modulePath string, ignore gghelper.ProjectIgnore) []
 	}
 
 	err := ignore.Walk(ggconst.DirModel, func(path string, _ os.FileInfo) error {
-		if !strings.HasSuffix(path, ggconst.ExtensionGo) || strings.Contains(path, ggconst.PatternTestFile) {
+		if !strings.HasSuffix(path, ggconst.ExtensionGo) || strings.Contains(path, ggconst.SuffixTestFile) {
 			return nil
 		}
 

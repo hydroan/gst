@@ -338,7 +338,7 @@ func (p *CopyPlan) resolveIncludeSourceFiles(includes []string) error {
 		if !strings.HasPrefix(rel, servicePrefix) {
 			return errors.Newf("includeSourceFiles entry %q must live under %s", rel, servicePrefix)
 		}
-		if strings.HasSuffix(rel, ggconst.PatternTestFile) {
+		if strings.HasSuffix(rel, ggconst.SuffixTestFile) {
 			return errors.Newf("includeSourceFiles entry %q must not be a test file", rel)
 		}
 		if slices.Contains(p.ExcludeSourceFiles, rel) {

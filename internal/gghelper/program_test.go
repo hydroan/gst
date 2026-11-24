@@ -37,7 +37,7 @@ func TestEmbeddedProgramsAreMainPackages(t *testing.T) {
 			require.NoError(t, err, "%s/%s", name, file)
 			require.Equal(t, "main", parsed.Name.Name, "%s/%s", name, file)
 			require.NotContains(t, source, "{{", "%s/%s", name, file)
-			require.False(t, strings.HasSuffix(file, ggconst.PatternTestFile), "%s/%s", name, file)
+			require.False(t, strings.HasSuffix(file, ggconst.SuffixTestFile), "%s/%s", name, file)
 		}
 	}
 }

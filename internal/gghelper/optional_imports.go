@@ -27,7 +27,7 @@ func PresentOptionalImportDirs() []string {
 	var dirs []string
 	for _, dir := range ggconst.OptionalImportDirs {
 		files, _ := filepath.Glob(filepath.Join(dir, "*.go"))
-		if slices.ContainsFunc(files, func(path string) bool { return !strings.HasSuffix(path, ggconst.PatternTestFile) }) {
+		if slices.ContainsFunc(files, func(path string) bool { return !strings.HasSuffix(path, ggconst.SuffixTestFile) }) {
 			dirs = append(dirs, dir)
 		}
 	}
@@ -49,7 +49,7 @@ func PresentOptionalImportDirs() []string {
 func TestMainFiles(ignore ProjectIgnore) ([]string, error) {
 	var files []string
 	err := ignore.Walk(".", func(path string, info os.FileInfo) error {
-		if info.IsDir() || !strings.HasSuffix(info.Name(), ggconst.PatternTestFile) {
+		if info.IsDir() || !strings.HasSuffix(info.Name(), ggconst.SuffixTestFile) {
 			return nil
 		}
 		src, err := os.ReadFile(path)

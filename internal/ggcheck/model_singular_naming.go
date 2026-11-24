@@ -90,7 +90,7 @@ func checkModelSingularNaming(ignore gghelper.ProjectIgnore) []string {
 					path, client.Singular(dirName))
 				violations = append(violations, violation)
 			}
-		} else if strings.HasSuffix(path, ggconst.ExtensionGo) && !strings.Contains(path, ggconst.PatternTestFile) {
+		} else if strings.HasSuffix(path, ggconst.ExtensionGo) && !strings.Contains(path, ggconst.SuffixTestFile) {
 			// Skip framework-generated files.
 			if isGeneratedFileName(path) {
 				return nil

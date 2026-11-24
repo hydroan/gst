@@ -199,7 +199,7 @@ func migrateProjectImports(moduleName string) []string {
 func hasGoSources(dir string) bool {
 	sources, _ := filepath.Glob(filepath.Join(dir, "*.go"))
 	for _, source := range sources {
-		if !strings.HasSuffix(source, ggconst.PatternTestFile) {
+		if !strings.HasSuffix(source, ggconst.SuffixTestFile) {
 			return true
 		}
 	}
@@ -219,7 +219,7 @@ func migrateSourceFiles(source string, ignore gghelper.ProjectIgnore) ([]string,
 		return nil, nil
 	}
 	isSource := func(path string) bool {
-		return strings.HasSuffix(path, ggconst.ExtensionGo) && !strings.HasSuffix(path, ggconst.PatternTestFile)
+		return strings.HasSuffix(path, ggconst.ExtensionGo) && !strings.HasSuffix(path, ggconst.SuffixTestFile)
 	}
 	info, err := os.Stat(source)
 	if err != nil {

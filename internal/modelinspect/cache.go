@@ -67,7 +67,7 @@ func inspectionCacheKey(files map[string]string, modelDir string, ignore gghelpe
 	err = ignore.Walk(modelDir, func(path string, info os.FileInfo) error {
 		if info.IsDir() ||
 			!strings.HasSuffix(path, ggconst.ExtensionGo) ||
-			strings.HasSuffix(path, ggconst.PatternTestFile) ||
+			strings.HasSuffix(path, ggconst.SuffixTestFile) ||
 			strings.HasSuffix(path, ggconst.SuffixGenGo) {
 			return nil
 		}

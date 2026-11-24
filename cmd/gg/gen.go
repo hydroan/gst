@@ -87,7 +87,7 @@ func genRun() error {
 	}
 	clioutput.Done("Generated: %s (%s)", summary, elapsedSince(started))
 	for path := range log.created {
-		if strings.HasPrefix(path, ggconst.DirService+string(filepath.Separator)) && !strings.HasSuffix(path, ggconst.PatternTestFile) && !strings.HasSuffix(path, ggconst.SuffixGenGo) {
+		if strings.HasPrefix(path, ggconst.DirService+string(filepath.Separator)) && !strings.HasSuffix(path, ggconst.SuffixTestFile) && !strings.HasSuffix(path, ggconst.SuffixGenGo) {
 			clioutput.Note("Next: write the logic of the new service files; the test of each fails on its first line until that line is deleted")
 			break
 		}
@@ -461,7 +461,7 @@ func genRunWithOptions(opts genRunOptions) error {
 // optional packages following main.go's (see syncTestMainImports).
 func scaffoldServiceTests(modelInfo *modelsource.Model, target modelsource.ServiceTargetInfo, action *dsl.Action, route string, extraDirs []string, log *changes) error {
 	stem := strings.TrimSuffix(target.FilePath, ggconst.ExtensionGo)
-	if gghelper.FileExists(stem+ggconst.PatternTestFile) || gghelper.FileExists(stem+ggconst.PatternInternalTestFile) {
+	if gghelper.FileExists(stem+ggconst.SuffixTestFile) || gghelper.FileExists(stem+ggconst.SuffixInternalTestFile) {
 		return nil
 	}
 
@@ -484,7 +484,7 @@ func scaffoldServiceTests(modelInfo *modelsource.Model, target modelsource.Servi
 	if err != nil {
 		return err
 	}
-	return writeGeneratedFile(stem+ggconst.PatternTestFile, code, log)
+	return writeGeneratedFile(stem+ggconst.SuffixTestFile, code, log)
 }
 
 // syncTestMainImports makes every test file of the project declaring TestMain

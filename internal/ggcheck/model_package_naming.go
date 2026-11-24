@@ -62,7 +62,7 @@ func checkModelPackageNaming(ignore gghelper.ProjectIgnore) []string {
 		expectedName := modelsource.ModelPackageName(dirName)
 
 		// Allow black-box test files to use the `<package>_test` external test package name.
-		if strings.HasSuffix(path, ggconst.PatternTestFile) && packageName == expectedName+ggconst.SuffixTestPkg {
+		if strings.HasSuffix(path, ggconst.SuffixTestFile) && packageName == expectedName+ggconst.SuffixTestPkg {
 			return nil
 		}
 

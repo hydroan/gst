@@ -120,7 +120,7 @@ func checkLogFields(root string, pkgs []*packages.Package) ([]violation, error) 
 		}
 		for i, file := range p.Syntax {
 			path := relative(root, p.CompiledGoFiles[i])
-			if filepath.IsAbs(path) || strings.HasSuffix(path, ggconst.PatternTestFile) {
+			if filepath.IsAbs(path) || strings.HasSuffix(path, ggconst.SuffixTestFile) {
 				continue
 			}
 			report := func(pos ast.Node, format string, args ...any) {

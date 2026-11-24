@@ -30,7 +30,7 @@ func checkModelFileBoundaries(ignore gghelper.ProjectIgnore) []string {
 	}
 
 	err := ignore.Walk(ggconst.DirModel, func(path string, info os.FileInfo) error {
-		if info.IsDir() || !strings.HasSuffix(path, ggconst.ExtensionGo) || strings.Contains(path, ggconst.PatternTestFile) {
+		if info.IsDir() || !strings.HasSuffix(path, ggconst.ExtensionGo) || strings.Contains(path, ggconst.SuffixTestFile) {
 			return nil
 		}
 

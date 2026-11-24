@@ -127,7 +127,7 @@ func scanColumnInspectionFiles(module string, modelDir string, ignore gghelper.P
 	}
 	err := ignore.Walk(modelDir, func(path string, info os.FileInfo) error {
 		name := info.Name()
-		if info.IsDir() || !strings.HasSuffix(name, ggconst.ExtensionGo) || strings.HasSuffix(name, ggconst.PatternTestFile) {
+		if info.IsDir() || !strings.HasSuffix(name, ggconst.ExtensionGo) || strings.HasSuffix(name, ggconst.SuffixTestFile) {
 			return nil
 		}
 		content, readErr := os.ReadFile(path)

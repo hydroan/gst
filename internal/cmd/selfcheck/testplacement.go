@@ -236,7 +236,7 @@ func anyOutside(set, movable map[string]bool) bool {
 
 // isTestFile reports whether path names a Go test file.
 func isTestFile(path string) bool {
-	return strings.HasSuffix(path, ggconst.PatternTestFile)
+	return strings.HasSuffix(path, ggconst.SuffixTestFile)
 }
 
 // The confirmation: a candidate the static pass found is reported only once

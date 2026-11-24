@@ -507,7 +507,7 @@ func registeredFrameworkModules() ([]string, error) {
 	}
 	var modules []string
 	for _, source := range sources {
-		if strings.HasSuffix(source, ggconst.PatternTestFile) {
+		if strings.HasSuffix(source, ggconst.SuffixTestFile) {
 			continue
 		}
 		file, err := parser.ParseFile(token.NewFileSet(), source, nil, parser.ImportsOnly)

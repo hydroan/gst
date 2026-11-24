@@ -53,7 +53,7 @@ func checkJSONTagNaming(ignore gghelper.ProjectIgnore) []string {
 
 		violations = append(violations, checkFileModelJSONTagNaming(path)...)
 
-		if strings.HasSuffix(path, ggconst.PatternTestFile) {
+		if strings.HasSuffix(path, ggconst.SuffixTestFile) {
 			return nil
 		}
 		dir := filepath.Dir(path)

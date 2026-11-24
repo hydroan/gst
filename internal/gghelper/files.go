@@ -75,7 +75,7 @@ func PathUnderRoot(path, root string) (string, error) {
 func PairedTestFiles(servicePath string) []string {
 	stem := strings.TrimSuffix(servicePath, ggconst.ExtensionGo)
 	var tests []string
-	for _, path := range []string{stem + ggconst.PatternTestFile, stem + ggconst.PatternInternalTestFile} {
+	for _, path := range []string{stem + ggconst.SuffixTestFile, stem + ggconst.SuffixInternalTestFile} {
 		if _, err := os.Stat(path); err == nil {
 			tests = append(tests, path)
 		}

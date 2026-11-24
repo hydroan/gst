@@ -74,7 +74,7 @@ func checkModelTableNameDeclaration(ignore gghelper.ProjectIgnore) []string {
 			return nil
 		}
 		base := filepath.Base(path)
-		if !strings.HasSuffix(base, ggconst.ExtensionGo) || strings.HasSuffix(base, ggconst.PatternTestFile) || isGeneratedFileName(path) {
+		if !strings.HasSuffix(base, ggconst.ExtensionGo) || strings.HasSuffix(base, ggconst.SuffixTestFile) || isGeneratedFileName(path) {
 			return nil
 		}
 

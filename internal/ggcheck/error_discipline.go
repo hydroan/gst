@@ -195,7 +195,7 @@ func collectProject(modulePath string, ignore gghelper.ProjectIgnore) (*errDiscA
 		if info.IsDir() {
 			return nil
 		}
-		if !strings.HasSuffix(path, ggconst.ExtensionGo) || strings.HasSuffix(path, ggconst.PatternTestFile) {
+		if !strings.HasSuffix(path, ggconst.ExtensionGo) || strings.HasSuffix(path, ggconst.SuffixTestFile) {
 			return nil
 		}
 		analysis.collectFile(path)

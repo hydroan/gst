@@ -38,7 +38,7 @@ func checkTestDoc(root string, pkgs []*packages.Package) ([]violation, error) {
 	for _, p := range pkgs {
 		for i, file := range p.Syntax {
 			path := relative(root, p.CompiledGoFiles[i])
-			if filepath.IsAbs(path) || !strings.HasSuffix(path, ggconst.PatternTestFile) || ast.IsGenerated(file) || seen[path] {
+			if filepath.IsAbs(path) || !strings.HasSuffix(path, ggconst.SuffixTestFile) || ast.IsGenerated(file) || seen[path] {
 				continue
 			}
 			seen[path] = true

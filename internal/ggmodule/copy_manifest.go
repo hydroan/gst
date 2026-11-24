@@ -164,7 +164,7 @@ func cleanModuleCopyHandlers(field string, values []moduleCopyHandlerManifest) (
 		// project package of the same name with the same filename. That
 		// avoids hidden copy-time routing rules in copytest/register.go or
 		// arbitrary manifest target paths.
-		if path.Dir(sourceFile) != sourceDir || !strings.HasSuffix(path.Base(sourceFile), ggconst.ExtensionGo) || strings.HasSuffix(path.Base(sourceFile), ggconst.PatternTestFile) {
+		if path.Dir(sourceFile) != sourceDir || !strings.HasSuffix(path.Base(sourceFile), ggconst.ExtensionGo) || strings.HasSuffix(path.Base(sourceFile), ggconst.SuffixTestFile) {
 			return nil, errors.Newf("%s[%d].sourceFile must match %s/*.go: %s", field, i, sourceDir, sourceFile)
 		}
 

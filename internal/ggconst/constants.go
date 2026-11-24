@@ -33,15 +33,17 @@ const (
 	ImportPathIO = "io"
 )
 
-// File patterns and extensions
+// File extensions and name suffixes
 const (
-	ExtensionGo     = ".go"
-	ExtensionProto  = ".proto"
-	PatternTestFile = "_test.go"
-	// PatternInternalTestFile ends the name of an internal test file, the
+	ExtensionGo    = ".go"
+	ExtensionProto = ".proto"
+	// SuffixTestFile ends the name of a test file: create_test.go beside
+	// create.go.
+	SuffixTestFile = "_test.go"
+	// SuffixInternalTestFile ends the name of an internal test file, the
 	// test file of a package that reaches its unexported code:
 	// create_internal_test.go beside create.go.
-	PatternInternalTestFile = "_internal" + PatternTestFile
+	SuffixInternalTestFile = "_internal" + SuffixTestFile
 	// SuffixTestPkg ends the name of an external test package: record_test
 	// for the package record.
 	SuffixTestPkg = "_test"

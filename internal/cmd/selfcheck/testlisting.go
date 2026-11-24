@@ -57,7 +57,7 @@ func checkTestListing(root string, pkgs []*packages.Package) ([]violation, error
 		var flow *pathFlow
 		for i, file := range p.Syntax {
 			path := relative(root, p.CompiledGoFiles[i])
-			if filepath.IsAbs(path) || !strings.HasSuffix(path, ggconst.PatternTestFile) || seen[path] {
+			if filepath.IsAbs(path) || !strings.HasSuffix(path, ggconst.SuffixTestFile) || seen[path] {
 				continue
 			}
 			seen[path] = true

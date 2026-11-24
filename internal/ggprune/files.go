@@ -72,7 +72,7 @@ func isManagedServiceFile(path string) bool {
 		return false
 	}
 	fileName := filepath.Base(path)
-	if strings.HasSuffix(fileName, ggconst.PatternTestFile) {
+	if strings.HasSuffix(fileName, ggconst.SuffixTestFile) {
 		return false
 	}
 	if phaseFileNames()[fileName] {

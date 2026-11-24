@@ -555,7 +555,7 @@ func TestMainFile(dir string) (string, error) {
 
 	fset := token.NewFileSet()
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ggconst.PatternTestFile) {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ggconst.SuffixTestFile) {
 			continue
 		}
 		path := filepath.Join(dir, entry.Name())

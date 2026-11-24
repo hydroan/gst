@@ -50,7 +50,7 @@ func checkGormDatatypesBan(ignore gghelper.ProjectIgnore) []string {
 		if info.IsDir() {
 			return nil
 		}
-		if !strings.HasSuffix(path, ggconst.ExtensionGo) || strings.HasSuffix(path, ggconst.PatternTestFile) || isGeneratedFileName(path) {
+		if !strings.HasSuffix(path, ggconst.ExtensionGo) || strings.HasSuffix(path, ggconst.SuffixTestFile) || isGeneratedFileName(path) {
 			return nil
 		}
 		violations = append(violations, checkFileGormDatatypes(path)...)

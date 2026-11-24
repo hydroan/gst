@@ -46,7 +46,7 @@ func checkTransactionClosureContext(ignore gghelper.ProjectIgnore) []string {
 			return nil
 		}
 
-		if !strings.HasSuffix(path, ggconst.ExtensionGo) || strings.HasSuffix(path, ggconst.PatternTestFile) {
+		if !strings.HasSuffix(path, ggconst.ExtensionGo) || strings.HasSuffix(path, ggconst.SuffixTestFile) {
 			return nil
 		}
 
