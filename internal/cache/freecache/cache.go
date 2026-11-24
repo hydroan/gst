@@ -1,3 +1,9 @@
+// Package freecache adapts github.com/coocood/freecache to gst.Cache: a cache
+// sized in bytes that stores serialized values, encoded through codec, so it
+// is for plain data only (see the public cache package). It keeps a lifetime
+// per entry at the granularity of a second: a lifetime under a second is
+// refused with gst.ErrTTLNotSupported, and one between two seconds is rounded
+// up to the next.
 package freecache
 
 import (

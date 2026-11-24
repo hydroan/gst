@@ -1,3 +1,9 @@
+// Package bigcache adapts github.com/allegro/bigcache/v3 to gst.Cache: a
+// sharded cache that stores serialized values, encoded through codec, so it
+// is for plain data only (see the public cache package). The backend expires
+// entries on one window shared by all of them, which is set past any process
+// lifetime: an entry never expires, and a lifetime of its own is refused with
+// gst.ErrTTLNotSupported.
 package bigcache
 
 import (

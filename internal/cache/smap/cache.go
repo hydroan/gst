@@ -1,3 +1,6 @@
+// Package smap adapts sync.Map to gst.Cache: a map of live values with no
+// expiration and no entry bound. An entry stays until it is deleted, and a
+// lifetime is refused with gst.ErrTTLNotSupported.
 package smap
 
 import (

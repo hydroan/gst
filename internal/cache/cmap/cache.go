@@ -1,3 +1,7 @@
+// Package cmap adapts github.com/orcaman/concurrent-map/v2 to gst.Cache: a
+// sharded map of live values with no expiration and no entry bound. An entry
+// stays until it is deleted, and a lifetime is refused with
+// gst.ErrTTLNotSupported.
 package cmap
 
 import (

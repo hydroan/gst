@@ -1,3 +1,8 @@
+// Package ccache adapts github.com/karlseguin/ccache/v3 to gst.Cache: a cache
+// of live values with a lifetime per entry, bounded by the per-type entry
+// bound (see capacity). An entry stored without a lifetime is given one far
+// past any process lifetime, the backend having no notion of an entry that
+// never expires.
 package ccache
 
 import (

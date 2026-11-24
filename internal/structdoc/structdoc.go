@@ -3,10 +3,10 @@
 // fields and constants never reach the API surface, so their comments stay
 // out of the extracted documentation.
 //
-// It is the single comment-extraction implementation shared by the OpenAPI
-// generator (runtime fallback when source files are available), the model
-// registry (embedded Base source) and gg code generation (build-time
-// extraction of business model comments).
+// It is the one comment extraction the framework's tooling shares: modelsource
+// reads the comments of a project's model files through it, for the apidoc
+// registration gg gen writes, and jsonshape takes the text of a comment the
+// same way for the descriptions generated from the shape of a type.
 package structdoc
 
 import (

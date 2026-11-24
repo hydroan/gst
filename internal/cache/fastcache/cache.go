@@ -1,3 +1,9 @@
+// Package fastcache adapts github.com/VictoriaMetrics/fastcache to gst.Cache:
+// a cache sized in bytes that stores serialized values, encoded through
+// codec, so it is for plain data only (see the public cache package). It has
+// no expiration, so a lifetime is refused with gst.ErrTTLNotSupported, and an
+// entry larger than the backend holds in one chunk is refused rather than
+// dropped without a word.
 package fastcache
 
 import (

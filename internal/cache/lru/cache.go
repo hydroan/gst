@@ -1,3 +1,7 @@
+// Package lru adapts github.com/hashicorp/golang-lru/v2 to gst.Cache: a cache
+// of live values that evicts the least recently used entry past the per-type
+// entry bound (see capacity). It has no expiration, so a lifetime is refused
+// with gst.ErrTTLNotSupported.
 package lru
 
 import (

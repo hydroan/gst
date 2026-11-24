@@ -1,3 +1,7 @@
+// Package auditmanager writes the operation log: an entry for every operation
+// the audit configuration does not exclude, written by the handler that
+// performed the operation, before the request answers. The controller flows
+// are its one caller.
 package auditmanager
 
 import (

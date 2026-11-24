@@ -1,3 +1,17 @@
+// Package dbruntime holds the database runtime below the public database
+// package: what that package, the dialect packages and the framework's other
+// users of the database share, and a project never sees.
+//
+// It keeps the default handle and prepares the table of every registered
+// model as the process starts (see InitDatabase and Wait); it holds the steps
+// every dialect takes on a handle it opens, the pool limits, tracing, the
+// translation of the errors a client's data causes and the replicas behind a
+// handle (see ConfigurePool, InstallTracing, InstallErrorTranslation and
+// AttachResolver); it carries a transaction on a context (see WithTx and
+// Handle) and serializes what the processes of a deployment starting together
+// must run one at a time (see Serialized); and it defines the framework's
+// time base (see UTCMillisecond) and the statements renaming a table or an
+// index in each dialect (see RenameTableSQL and RenameIndexSQL).
 package dbruntime
 
 import (
