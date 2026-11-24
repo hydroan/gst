@@ -6,8 +6,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/hydroan/gst/internal/modelregistry"
-	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/internal/model"
+	internalservice "github.com/hydroan/gst/internal/service"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/service"
@@ -16,7 +16,7 @@ import (
 
 type testUser struct {
 	Name string
-	modelregistry.Base
+	model.Base
 }
 
 // TestRegisterResolvesAPointerInstance pins the service types Register
@@ -64,10 +64,10 @@ func TestRegisterPanicsOnAnInterfaceType(t *testing.T) {
 	})
 }
 
-func TestBaseAliasesServiceRegistryBase(t *testing.T) {
+func TestBaseAliasesTheInternalBase(t *testing.T) {
 	require.Equal(
 		t,
-		reflect.TypeFor[serviceregistry.Base[*testUser, *testUser, *testUser]](),
+		reflect.TypeFor[internalservice.Base[*testUser, *testUser, *testUser]](),
 		reflect.TypeFor[service.Base[*testUser, *testUser, *testUser]](),
 	)
 }
@@ -91,11 +91,11 @@ func TestRegisterInjectsTheServiceLogger(t *testing.T) {
 	service.Register[*canonical](service.Create, records)
 
 	for _, phase := range []service.Phase{service.Create, service.Delete} {
-		s, ok := serviceregistry.Resolve[*testUser, *testUser, *testUser](serviceregistry.Key(phase, samples)).(*base)
+		s, ok := internalservice.Resolve[*testUser, *testUser, *testUser](internalservice.Key(phase, samples)).(*base)
 		require.True(t, ok)
 		require.NotNil(t, s.Logger, "phase %s", phase)
 	}
-	s, ok := serviceregistry.Resolve[*testUser, *testUser, *testUser](serviceregistry.Key(service.Create, records)).(*canonical)
+	s, ok := internalservice.Resolve[*testUser, *testUser, *testUser](internalservice.Key(service.Create, records)).(*canonical)
 	require.True(t, ok)
 	require.NotNil(t, s.Logger)
 }
@@ -104,7 +104,7 @@ func TestRegisterInjectsTheServiceLogger(t *testing.T) {
 func requireResolvesTo[S any](t *testing.T, phase service.Phase, route string) {
 	t.Helper()
 
-	got := serviceregistry.Resolve[*testUser, *testUser, *testUser](serviceregistry.Key(phase, route))
+	got := internalservice.Resolve[*testUser, *testUser, *testUser](internalservice.Key(phase, route))
 	require.Equal(t, reflect.TypeFor[*S](), reflect.TypeOf(got), "route %q phase %q", route, phase)
 }
 

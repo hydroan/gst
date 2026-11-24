@@ -18,8 +18,8 @@ import (
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/datatypes"
 	"github.com/hydroan/gst/internal/i18n"
-	"github.com/hydroan/gst/internal/modelregistry"
-	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/internal/model"
+	"github.com/hydroan/gst/internal/service"
 	"github.com/hydroan/gst/internal/testutil/swap"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
@@ -27,7 +27,7 @@ import (
 
 // normalizeProbeModel is the model fixture of the request-normalization tests.
 type normalizeProbeModel struct {
-	modelregistry.Base
+	model.Base
 }
 
 type normalizeProbeItem struct {
@@ -47,7 +47,7 @@ type normalizeProbeRsp struct {
 }
 
 type normalizeProbeService struct {
-	serviceregistry.Base[*normalizeProbeModel, *normalizeProbeReq, *normalizeProbeRsp]
+	service.Base[*normalizeProbeModel, *normalizeProbeReq, *normalizeProbeRsp]
 }
 
 func (s *normalizeProbeService) Create(_ *types.ServiceContext, req *normalizeProbeReq) (*normalizeProbeRsp, error) {

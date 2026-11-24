@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/modelregistry"
-	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/internal/model"
+	"github.com/hydroan/gst/internal/service"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
@@ -32,19 +32,19 @@ type streamedEvent struct {
 // what tells the document which side sends one message and which a stream.
 type (
 	noteWatcher struct {
-		serviceregistry.Base[*openapiActionModel, *streamedNote, *streamedEvent]
+		service.Base[*openapiActionModel, *streamedNote, *streamedEvent]
 	}
 	eventTailer struct {
-		serviceregistry.Base[*openapiActionModel, *modelregistry.Empty, *streamedEvent]
+		service.Base[*openapiActionModel, *model.Empty, *streamedEvent]
 	}
 	noteUploader struct {
-		serviceregistry.Base[*openapiActionModel, *streamedNote, *streamedEvent]
+		service.Base[*openapiActionModel, *streamedNote, *streamedEvent]
 	}
 	noteIngester struct {
-		serviceregistry.Base[*openapiActionModel, *streamedNote, *modelregistry.Empty]
+		service.Base[*openapiActionModel, *streamedNote, *model.Empty]
 	}
 	noteChatter struct {
-		serviceregistry.Base[*openapiActionModel, *streamedNote, *streamedEvent]
+		service.Base[*openapiActionModel, *streamedNote, *streamedEvent]
 	}
 )
 
@@ -52,7 +52,7 @@ func (*noteWatcher) Stream(*types.ServiceContext, *streamedNote, *types.ServerSt
 	return nil
 }
 
-func (*eventTailer) Stream(*types.ServiceContext, *modelregistry.Empty, *types.ServerStream[*streamedEvent]) error {
+func (*eventTailer) Stream(*types.ServiceContext, *model.Empty, *types.ServerStream[*streamedEvent]) error {
 	return nil
 }
 
@@ -60,8 +60,8 @@ func (*noteUploader) Stream(*types.ServiceContext, *types.ClientStream[*streamed
 	return &streamedEvent{}, nil
 }
 
-func (*noteIngester) Stream(*types.ServiceContext, *types.ClientStream[*streamedNote]) (*modelregistry.Empty, error) {
-	return &modelregistry.Empty{}, nil
+func (*noteIngester) Stream(*types.ServiceContext, *types.ClientStream[*streamedNote]) (*model.Empty, error) {
+	return &model.Empty{}, nil
 }
 
 func (*noteChatter) Stream(*types.ServiceContext, *types.BidiStream[*streamedNote, *streamedEvent]) error {
@@ -82,11 +82,11 @@ const (
 // The services register once, in init: the registry refuses the second
 // registration of a route, which a test run again would make.
 func init() {
-	serviceregistry.RegisterInstance[*openapiActionModel, *streamedNote, *streamedEvent](apiaction.Stream, streamWatchRoute, &noteWatcher{})
-	serviceregistry.RegisterInstance[*openapiActionModel, *modelregistry.Empty, *streamedEvent](apiaction.Stream, streamTailRoute, &eventTailer{})
-	serviceregistry.RegisterInstance[*openapiActionModel, *streamedNote, *streamedEvent](apiaction.Stream, streamUploadRoute, &noteUploader{})
-	serviceregistry.RegisterInstance[*openapiActionModel, *streamedNote, *modelregistry.Empty](apiaction.Stream, streamIngestRoute, &noteIngester{})
-	serviceregistry.RegisterInstance[*openapiActionModel, *streamedNote, *streamedEvent](apiaction.Stream, streamChatRoute, &noteChatter{})
+	service.RegisterInstance[*openapiActionModel, *streamedNote, *streamedEvent](apiaction.Stream, streamWatchRoute, &noteWatcher{})
+	service.RegisterInstance[*openapiActionModel, *model.Empty, *streamedEvent](apiaction.Stream, streamTailRoute, &eventTailer{})
+	service.RegisterInstance[*openapiActionModel, *streamedNote, *streamedEvent](apiaction.Stream, streamUploadRoute, &noteUploader{})
+	service.RegisterInstance[*openapiActionModel, *streamedNote, *model.Empty](apiaction.Stream, streamIngestRoute, &noteIngester{})
+	service.RegisterInstance[*openapiActionModel, *streamedNote, *streamedEvent](apiaction.Stream, streamChatRoute, &noteChatter{})
 }
 
 // TestSetDocumentsAStreamAsTheConnectionItsRequestOpens pins the entry of a
@@ -120,7 +120,7 @@ func TestSetDocumentsAStreamAsTheConnectionItsRequestOpens(t *testing.T) {
 			name: "a server stream taking no request",
 			path: streamTailRoute,
 			set: func() {
-				set[*openapiActionModel, *modelregistry.Empty, *streamedEvent](streamTailRoute, true, apiaction.Stream)
+				set[*openapiActionModel, *model.Empty, *streamedEvent](streamTailRoute, true, apiaction.Stream)
 			},
 			client:  "The client sends no message.",
 			server:  "The server sends a stream of " + event + " messages.",
@@ -140,7 +140,7 @@ func TestSetDocumentsAStreamAsTheConnectionItsRequestOpens(t *testing.T) {
 			name: "a client stream answering no response",
 			path: streamIngestRoute,
 			set: func() {
-				set[*openapiActionModel, *streamedNote, *modelregistry.Empty](streamIngestRoute, true, apiaction.Stream)
+				set[*openapiActionModel, *streamedNote, *model.Empty](streamIngestRoute, true, apiaction.Stream)
 			},
 			client: "The client sends a stream of " + note + " messages and ends it with a frame holding null.",
 			server: "The server sends no message.",

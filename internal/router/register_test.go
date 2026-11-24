@@ -7,7 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/router"
 	"github.com/stretchr/testify/require"
 )
@@ -26,16 +26,16 @@ func TestRegisterPanicsOnDeclarationMistakes(t *testing.T) {
 	group := gin.New().Group("")
 
 	require.PanicsWithValue(t, "router: register requires a non-empty route", func() {
-		router.Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](group, "  ", nil, apiaction.Create, apiaction.List)
+		router.Register[*model.Empty, *model.Empty, *model.Empty](group, "  ", nil, apiaction.Create, apiaction.List)
 	})
 	require.PanicsWithValue(t, `router: register of route "samples" requires at least one phase`, func() {
-		router.Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](group, "samples", nil)
+		router.Register[*model.Empty, *model.Empty, *model.Empty](group, "samples", nil)
 	})
 	require.PanicsWithValue(t, `router: register of route "/api/samples": no HTTP route serves the phase CreateBefore, DeleteAfter; a hook phase runs inside its action`, func() {
-		router.Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](group, "samples", nil, apiaction.Create, apiaction.DeleteAfter, apiaction.CreateBefore)
+		router.Register[*model.Empty, *model.Empty, *model.Empty](group, "samples", nil, apiaction.Create, apiaction.DeleteAfter, apiaction.CreateBefore)
 	})
 	require.PanicsWithValue(t, `controller: route "/api/samples/:id/bind": request type *router_test.sampleBinder is an interface with methods or a pointer to one, which no request body decodes into; declare a concrete type, or any`, func() {
-		router.Register[*modelregistry.Empty, *sampleBinder, *modelregistry.Empty](group, "samples/:id/bind", nil, apiaction.Create)
+		router.Register[*model.Empty, *sampleBinder, *model.Empty](group, "samples/:id/bind", nil, apiaction.Create)
 	})
 }
 
@@ -54,7 +54,7 @@ func TestRegisterServesEveryPhaseUnderItsMethod(t *testing.T) {
 		apiaction.Import, apiaction.Export, apiaction.SSE, apiaction.Stream,
 	}
 	for _, phase := range phases {
-		router.Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](group, "phase-methods/"+string(phase), nil, phase)
+		router.Register[*model.Empty, *model.Empty, *model.Empty](group, "phase-methods/"+string(phase), nil, phase)
 	}
 
 	served := make(map[string]string, len(phases))
@@ -89,9 +89,9 @@ func TestRouteAnswersTheMethodARouteIsListedUnder(t *testing.T) {
 	}
 	group := engine.Group("", probe)
 	engine.NoRoute(probe)
-	router.Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](group, "route-methods/:id/tail", nil, apiaction.Stream, apiaction.Create)
-	router.Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](group, "route-methods/:id/events", nil, apiaction.SSE)
-	router.Register[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty](group, "route-methods/:id", nil, apiaction.Get, apiaction.Update)
+	router.Register[*model.Empty, *model.Empty, *model.Empty](group, "route-methods/:id/tail", nil, apiaction.Stream, apiaction.Create)
+	router.Register[*model.Empty, *model.Empty, *model.Empty](group, "route-methods/:id/events", nil, apiaction.SSE)
+	router.Register[*model.Empty, *model.Empty, *model.Empty](group, "route-methods/:id", nil, apiaction.Get, apiaction.Update)
 
 	for _, tt := range []struct {
 		name       string

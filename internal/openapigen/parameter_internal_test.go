@@ -9,7 +9,7 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/hydroan/gst/internal/datatypes"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/stretchr/testify/require"
@@ -20,8 +20,8 @@ import (
 type openapiTimeFilterModel struct {
 	ExpiresAt *time.Time `json:"expires_at,omitempty" query:"expires_at"`
 
-	modelregistry.Query
-	modelregistry.Base
+	model.Query
+	model.Base
 }
 
 func init() {
@@ -48,18 +48,18 @@ func TestAddQueryParametersUsesDateTimeFormatForTimeFields(t *testing.T) {
 }
 
 type openapiPlainQueryModel struct {
-	modelregistry.Base
+	model.Base
 }
 
 type openapiCursorQueryModel struct {
-	modelregistry.Cursor
-	modelregistry.Base
+	model.Cursor
+	model.Base
 }
 
 type openapiFeedQueryModel struct {
-	modelregistry.Query
-	modelregistry.Cursor
-	modelregistry.Base
+	model.Query
+	model.Cursor
+	model.Base
 }
 
 // The query branches are exported: the decoder walks into exported embedded
@@ -80,7 +80,7 @@ type OpenAPISecondQueryBranch struct {
 type openapiShallowQueryModel struct {
 	OpenAPIFirstQueryBranch
 	OpenAPISecondQueryBranch
-	modelregistry.Base
+	model.Base
 }
 
 func TestAddQueryParametersIncludesEmbeddedFrameworkParameters(t *testing.T) {
@@ -149,9 +149,9 @@ func TestAddQueryParametersIncludesEmbeddedFrameworkParameters(t *testing.T) {
 			}
 
 			// Framework parameters live in the "_" namespace and describe
-			// themselves through the doc comments modelregistry registers from
-			// its embedded source, so the description must hold up in a binary
-			// shipped without Go source files.
+			// themselves through the doc comments the model package registers
+			// from its embedded source, so the description must hold up in a
+			// binary shipped without Go source files.
 			for _, name := range tt.parameters {
 				if !strings.HasPrefix(name, "_") {
 					continue
@@ -207,8 +207,8 @@ type openapiFilterQueryModel struct {
 	First     openapiQueryPart  `json:"first" gorm:"embedded;embeddedPrefix:first_" query:"first"`
 	*OpenAPIQueryExtra
 
-	modelregistry.Query
-	modelregistry.Base
+	model.Query
+	model.Base
 }
 
 // openapiPlainFilterQueryModel is openapiFilterQueryModel paging by offset
@@ -224,7 +224,7 @@ type openapiPlainFilterQueryModel struct {
 	First     openapiQueryPart  `json:"first" gorm:"embedded;embeddedPrefix:first_" query:"first"`
 	*OpenAPIQueryExtra
 
-	modelregistry.Base
+	model.Base
 }
 
 // TestAddQueryParametersDocumentsWhatTheURLQueryTakes pins the documented
@@ -273,8 +273,8 @@ type openapiExpandableQueryModel struct {
 	Children []*openapiExpandableQueryModel `json:"children,omitempty" gorm:"foreignKey:ParentID;constraint:-"`
 	Parent   *openapiExpandableQueryModel   `json:"parent,omitempty" gorm:"foreignKey:ParentID;references:ID;constraint:-"`
 
-	modelregistry.Query
-	modelregistry.Base
+	model.Query
+	model.Base
 }
 
 func (*openapiExpandableQueryModel) Expands() []string { return []string{"Children", "Parent"} }
@@ -324,7 +324,7 @@ func TestAddQueryParametersDocumentsFieldOperatorFilters(t *testing.T) {
 	addQueryParameters[*openapiPlainQueryModel, *openapiPlainQueryModel, *openapiPlainQueryModel](op, true)
 	parameters = queryParametersByName(t, op)
 	if strings.Contains(parameters["id"].Description, "[op]=value") {
-		t.Fatalf("id description = %q, models without modelregistry.Query must not advertise operator filters", parameters["id"].Description)
+		t.Fatalf("id description = %q, models without model.Query must not advertise operator filters", parameters["id"].Description)
 	}
 }
 
@@ -333,8 +333,8 @@ func TestAddQueryParametersDocumentsFieldOperatorFilters(t *testing.T) {
 type openapiTagsFilterModel struct {
 	Tags datatypes.JSONSlice[string] `json:"tags" query:"tags"`
 
-	modelregistry.Query
-	modelregistry.Base
+	model.Query
+	model.Base
 }
 
 // TestAddQueryParametersDocumentsEachOperatorOfAColumnWithoutABareKey pins
@@ -357,7 +357,7 @@ func TestAddQueryParametersDocumentsEachOperatorOfAColumnWithoutABareKey(t *test
 type enumQueryModel struct {
 	Status enumFieldStatus `json:"status" query:"status"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func TestAddQueryParametersSetsEnumValues(t *testing.T) {

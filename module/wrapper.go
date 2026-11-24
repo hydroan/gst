@@ -2,12 +2,12 @@ package module
 
 import (
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/modelregistry"
-	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/internal/model"
+	"github.com/hydroan/gst/internal/service"
 	"github.com/hydroan/gst/internal/types"
 )
 
-var _ types.Module[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty] = &Wrapper[*modelregistry.Empty, *modelregistry.Empty, *modelregistry.Empty]{}
+var _ types.Module[*model.Empty, *model.Empty, *model.Empty] = &Wrapper[*model.Empty, *model.Empty, *model.Empty]{}
 
 type Wrapper[M types.Model, REQ types.Request, RSP types.Response] struct {
 	route string
@@ -20,7 +20,7 @@ func (w *Wrapper[M, REQ, RSP]) Service() types.Service[M, REQ, RSP] {
 	if w.svc != nil {
 		return w.svc
 	}
-	return &serviceregistry.Base[M, REQ, RSP]{}
+	return &service.Base[M, REQ, RSP]{}
 }
 
 func (w *Wrapper[M, REQ, RSP]) Route() string {

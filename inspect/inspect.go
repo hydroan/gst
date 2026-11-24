@@ -7,7 +7,7 @@
 // rules live in. This package forwards the ones it asks: the column resolution
 // and the checks of the framework columns, the tenant indexes and the date
 // columns of internal/modelschema, the query name check of internal/urlquery,
-// and the query opt-in and the ID accessor check of internal/modelregistry.
+// and the query opt-in and the ID accessor check of internal/model.
 // The program therefore resolves and refuses exactly what the framework
 // resolves and refuses at runtime, instead of carrying a second copy of the
 // rules that would drift from it.
@@ -20,7 +20,7 @@ package inspect
 import (
 	"reflect"
 
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/urlquery"
 )
@@ -85,7 +85,7 @@ func ValidateQueryNames(typ reflect.Type) error {
 // asks it of every model it inspects, so gg check refuses what table
 // preparation refuses at startup.
 func ValidateIDAccessors(typ reflect.Type) error {
-	return modelregistry.ValidateIDAccessors(typ)
+	return model.ValidateIDAccessors(typ)
 }
 
 // ClassifyColumn reports the aggregate capability of a column, which decides
@@ -104,8 +104,8 @@ func IsJSONStringsType(typ reflect.Type) bool {
 // IsQueryable reports whether m opted in to framework query parameters by
 // embedding model.Query. The inspection program uses it to keep only the
 // unregistered models that own a filter and sort column namespace; the
-// judgment stays sealed in internal/modelregistry, forwarded here for the
+// judgment stays sealed in internal/model, forwarded here for the
 // same reason column resolution is.
 func IsQueryable(m any) bool {
-	return modelregistry.IsQueryable(m)
+	return model.IsQueryable(m)
 }

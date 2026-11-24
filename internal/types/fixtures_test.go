@@ -1,6 +1,6 @@
 package types_test
 
-import "github.com/hydroan/gst/internal/modelregistry"
+import "github.com/hydroan/gst/internal/model"
 
 // The models the tests of this package build column references against. They
 // live here rather than in one feature's test file because the tests of
@@ -25,7 +25,7 @@ func (sampleTable) TableName() string { return "samples" }
 type sampleRecord struct {
 	Code string `json:"code"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*sampleRecord) TableName() string { return "sample_records" }

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -15,21 +15,21 @@ type syncBenchPlainItem struct {
 	Code string `gorm:"size:191"`
 	Name string `gorm:"size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 type syncBenchUniqueItem struct {
 	Code string `gorm:"size:191;uniqueIndex"`
 	Name string `gorm:"size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 type syncBenchIndexerItem struct {
 	Code string `gorm:"size:191"`
 	Name string `gorm:"size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*syncBenchIndexerItem) TableName() string { return "sync_bench_indexer_items" }

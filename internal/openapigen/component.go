@@ -10,7 +10,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/ggconst"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/types"
 	"go.uber.org/zap"
 )
@@ -24,15 +24,18 @@ var (
 
 // schemaComponentName derives a readable, package-qualified component name
 // for a type: the package path segments after the last "/model/" (a type in
-// the model root keeps its bare name), the segments below the tree of the
-// framework's module models for a type declared there, which is the name the
-// type has in a project that copied the module into its model directory,
-// otherwise the last two package path segments. Examples:
+// the model root of a project keeps its bare name), the segments below the
+// tree of the framework's module models for a type declared there, which is
+// the name the type has in a project that copied the module into its model
+// directory, otherwise the last two package path segments, those of the
+// framework's own model package among them, which is no project's model
+// root. Examples:
 //
 //	myproject/model/sample.Record                    -> sample.Record
 //	myproject/model.Item                             -> Item
 //	.../gst/internal/modulemodel/authz.Role          -> authz.Role
 //	.../gst/internal/modulemodel/iam/user.User       -> iam.user.User
+//	.../gst/internal/model.Empty                     -> internal.model.Empty
 //	.../gst/module/iam.LoginReq                      -> module.iam.LoginReq
 func schemaComponentName(typ reflect.Type) string {
 	for typ.Kind() == reflect.Pointer {
@@ -60,7 +63,7 @@ func schemaComponentNameFromPath(pkgPath, name string) string {
 	if below, found := strings.CutPrefix(pkgPath, moduleModelTree+"/"); found {
 		return strings.ReplaceAll(below, "/", ".") + "." + name
 	}
-	if pkgPath == ggconst.DirModel || strings.HasSuffix(pkgPath, "/model") {
+	if pkgPath != ggconst.ImportPathInternalModel && (pkgPath == ggconst.DirModel || strings.HasSuffix(pkgPath, "/model")) {
 		return name
 	}
 
@@ -155,7 +158,7 @@ func componentDescriptionName(typ, modelTyp reflect.Type) string {
 // registerSchema registers Model, Model Payload and Model Result into the
 // openapi3 schema.
 func registerSchema[M types.Model, REQ types.Request, RSP types.Response](reqKey, rspKey string, reqSchemaRef *openapi3.SchemaRef, rspSchemaRef *openapi3.SchemaRef) {
-	if !modelregistry.IsEmpty[M]() {
+	if !model.IsEmpty[M]() {
 		typ := reflect.TypeFor[M]()
 		name := uniqueComponentName(typ)
 		docMutex.Lock()
@@ -170,7 +173,7 @@ func registerSchema[M types.Model, REQ types.Request, RSP types.Response](reqKey
 		docMutex.Unlock()
 	}
 
-	if !modelregistry.IsEmpty[REQ]() {
+	if !model.IsEmpty[REQ]() {
 		name := componentDescriptionName(reflect.TypeFor[REQ](), reflect.TypeFor[M]())
 
 		docMutex.Lock()
@@ -192,7 +195,7 @@ func registerSchema[M types.Model, REQ types.Request, RSP types.Response](reqKey
 
 	{
 		name := componentDescriptionName(reflect.TypeFor[RSP](), reflect.TypeFor[M]())
-		if modelregistry.IsEmpty[RSP]() {
+		if model.IsEmpty[RSP]() {
 			markEmptyResponseData(rspSchemaRef)
 		}
 
@@ -213,7 +216,7 @@ func registerSchema[M types.Model, REQ types.Request, RSP types.Response](reqKey
 }
 
 func newRequestBody[REQ types.Request](reqKey string) *openapi3.RequestBodyRef {
-	if modelregistry.IsEmpty[REQ]() {
+	if model.IsEmpty[REQ]() {
 		return nil
 	}
 	return &openapi3.RequestBodyRef{

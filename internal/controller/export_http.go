@@ -8,7 +8,7 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/filetype"
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/types"
@@ -97,7 +97,7 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		// result takes over — so the exporter receives no rows and parses the
 		// query parameters itself.
 		data := make([]M, 0)
-		if !modelregistry.IsVirtual(m) {
+		if !model.IsVirtual(m) {
 			// types.QueryLimit caps the records exported, none or a value of
 			// zero or less exporting every record. A value that is no integer
 			// is refused rather than read as no cap.
@@ -114,7 +114,7 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			// own types.QueryFormat, resolved after the export bytes exist, and
 			// types.QueryLimit, read above: they refuse both from any other
 			// action. A virtual resource's service parsing on its own gets them
-			// taken off the same way (see serviceregistry's QueryModel).
+			// taken off the same way (see service.Base.QueryModel).
 			query = urlquery.WithoutExportKeys(query)
 
 			var err error

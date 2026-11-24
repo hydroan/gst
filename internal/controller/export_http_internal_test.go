@@ -10,8 +10,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/modelregistry"
-	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/internal/model"
+	"github.com/hydroan/gst/internal/service"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
@@ -108,14 +108,14 @@ func TestExportAttachmentNamesTheFileOfTheFormat(t *testing.T) {
 type exportVirtualSample struct {
 	Name string `json:"name,omitempty" query:"name"`
 
-	modelregistry.Query
-	modelregistry.Empty
+	model.Query
+	model.Empty
 }
 
 // exportVirtualSampleService is the exporter a virtual resource registers: it
 // builds the export bytes itself and never receives controller-listed rows.
 type exportVirtualSampleService struct {
-	serviceregistry.Base[*exportVirtualSample, *exportVirtualSample, *exportVirtualSample]
+	service.Base[*exportVirtualSample, *exportVirtualSample, *exportVirtualSample]
 
 	gotModels int
 }
@@ -172,15 +172,15 @@ func TestExportHandlerVirtualModelSkipsListing(t *testing.T) {
 type exportFormatSample struct {
 	Name string `json:"name,omitempty" query:"name"`
 
-	modelregistry.Query
-	modelregistry.Base
+	model.Query
+	model.Base
 }
 
 // exportFormatSampleService stops the request deliberately at the Filter step,
 // so the test needs no database: reaching Filter proves the query bind
 // accepted the request.
 type exportFormatSampleService struct {
-	serviceregistry.Base[*exportFormatSample, *exportFormatSample, *exportFormatSample]
+	service.Base[*exportFormatSample, *exportFormatSample, *exportFormatSample]
 
 	filterReached bool
 }

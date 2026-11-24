@@ -14,7 +14,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/datatypes"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/tenant"
@@ -214,7 +214,7 @@ type TestUser struct {
 	IsActive *bool                       `json:"is_active"`
 	Remark   *string                     `json:"remark,omitempty" gorm:"size:10240" query:"remark"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (t *TestUser) TableName() string { return "test_users" }
@@ -245,7 +245,7 @@ type TestScoredRecord struct {
 	Token   sampleToken                       `json:"token"`
 	Grade   sql.NullString                    `json:"grade"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestScoredRecord) TableName() string { return "test_scored_records" }
@@ -285,7 +285,7 @@ type TestTypedRecord struct {
 	Payload string              `json:"payload" gorm:"type:json"`
 	Clock   datatypes.TimeOfDay `json:"clock"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestTypedRecord) TableName() string { return "test_typed_records" }
@@ -297,7 +297,7 @@ type TestUser2 struct {
 	IsActive *bool   `json:"is_active"`
 	Remark   *string `json:"remark,omitempty" gorm:"size:10240" query:"remark"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (t *TestUser2) Purge() bool       { return true }
@@ -309,7 +309,7 @@ type TestItem struct {
 	Score       float64 `json:"score"`
 	BoxID       string  `json:"box_id"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestItem) TableName() string { return "test_items" }
@@ -320,7 +320,7 @@ type TestPlainItem struct {
 	Name          string `json:"name" gorm:"size:191"`
 	CreateAfterID string `json:"-" gorm:"-"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestPlainItem) TableName() string { return "test_plain_items" }
@@ -338,7 +338,7 @@ type TestConstrainedRecord struct {
 	Code  string `json:"code" gorm:"size:4"`
 	Level int    `json:"level" gorm:"check:level BETWEEN 1 AND 5"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestConstrainedRecord) TableName() string { return "test_constrained_records" }
@@ -348,7 +348,7 @@ func (*TestConstrainedRecord) TableName() string { return "test_constrained_reco
 type TestRequiredRecord struct {
 	Label *string `json:"label" gorm:"size:16;not null"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestRequiredRecord) TableName() string { return "test_required_records" }
@@ -359,7 +359,7 @@ type TestConstrainedEntry struct {
 	RecordID string                 `json:"record_id" gorm:"size:36"`
 	Record   *TestConstrainedRecord `json:"-" gorm:"foreignKey:RecordID"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestConstrainedEntry) TableName() string { return "test_constrained_entries" }
@@ -370,7 +370,7 @@ type TestUniqueItem struct {
 	CreateAfterID string `json:"-" gorm:"-"`
 	UpdateAfterID string `json:"-" gorm:"-"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestUniqueItem) TableName() string { return "test_unique_items" }
@@ -394,7 +394,7 @@ type TestIndexerUniqueItem struct {
 	Kind string `json:"kind" gorm:"size:191"`
 	Name string `json:"name" gorm:"size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestIndexerUniqueItem) TableName() string { return "test_indexer_unique_items" }
@@ -413,7 +413,7 @@ type TestMixedUniqueItem struct {
 	Ref  string `json:"ref" gorm:"size:191"`
 	Name string `json:"name" gorm:"size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestMixedUniqueItem) TableName() string { return "test_mixed_unique_items" }
@@ -428,13 +428,13 @@ type TestAutoItem struct {
 	Code string `json:"code" gorm:"size:191"`
 	Name string `json:"name" gorm:"size:191"`
 
-	modelregistry.AutoBase
+	model.AutoBase
 }
 
 func (*TestAutoItem) TableName() string { return "test_auto_items" }
 func (*TestAutoItem) Purge() bool       { return true }
 
-// TestSoftDeleteItem keeps the modelregistry.Base default Purge (soft delete)
+// TestSoftDeleteItem keeps the model.Base default Purge (soft delete)
 // so write tests can assert how writes treat soft-deleted rows. Its table is
 // migrated on demand inside the tests that need it and cleaned up with raw SQL
 // because soft-deleted rows are invisible to List.
@@ -442,12 +442,12 @@ type TestSoftDeleteItem struct {
 	Code string `json:"code" gorm:"size:191;uniqueIndex"`
 	Name string `json:"name" gorm:"size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestSoftDeleteItem) TableName() string { return "test_soft_delete_items" }
 
-// TestTenantSoftDeleteItem is tenant-scoped and keeps the modelregistry.Base
+// TestTenantSoftDeleteItem is tenant-scoped and keeps the model.Base
 // default Purge (soft delete), so the WithDeleted tests can assert that lifting
 // the soft-delete condition never lifts tenant scoping: the tenant predicate
 // ignores GORM's Unscoped flag by design (see tenant.ID). Its table is migrated
@@ -456,7 +456,7 @@ type TestTenantSoftDeleteItem struct {
 	Name string `json:"name" gorm:"size:191"`
 
 	tenant.Scope
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestTenantSoftDeleteItem) TableName() string { return "test_tenant_soft_delete_items" }
@@ -468,7 +468,7 @@ type TestTenantAutoItem struct {
 	Name string `json:"name" gorm:"size:191"`
 
 	tenant.Scope
-	modelregistry.AutoBase
+	model.AutoBase
 }
 
 func (*TestTenantAutoItem) TableName() string { return "test_tenant_auto_items" }
@@ -480,7 +480,7 @@ type TestTenantUniqueItem struct {
 	Code string `json:"code" gorm:"size:191;uniqueIndex"`
 
 	tenant.Scope
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestTenantUniqueItem) TableName() string { return "test_tenant_unique_items" }
@@ -493,7 +493,7 @@ type TestTenantCompositeItem struct {
 	Name string `json:"name" gorm:"size:191"`
 
 	tenant.Scope
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestTenantCompositeItem) TableName() string { return "test_tenant_composite_items" }
@@ -510,7 +510,7 @@ type TestPermissionItem struct {
 	Origin   string  `json:"origin" gorm:"<-:create;size:191"`
 	Reviewer *string `json:"reviewer" gorm:"<-:update;size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestPermissionItem) TableName() string { return "test_permission_items" }
@@ -523,7 +523,7 @@ type TestColumnlessItem struct {
 	Name  string `json:"name" gorm:"size:191"`
 	Total int    `json:"total" gorm:"->;-:migration"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestColumnlessItem) TableName() string { return "test_columnless_items" }
@@ -536,7 +536,7 @@ type TestStampedItem struct {
 	Name      string `json:"name" gorm:"size:191"`
 	StampedAt int64  `json:"stamped_at" gorm:"autoUpdateTime:milli"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestStampedItem) TableName() string { return "test_stamped_items" }
@@ -548,7 +548,7 @@ func (*TestStampedItem) TableName() string { return "test_stamped_items" }
 // ClosedAt; it exists so the tests can point a measure at a column that can
 // hold NULL.
 //
-// It deliberately keeps the modelregistry.Base default Purge, so its rows soft
+// It deliberately keeps the model.Base default Purge, so its rows soft
 // delete. That is what lets the aggregate tests assert the rule an aggregate is
 // most likely to break: scanning into a plain result row parses no model, so
 // without the model the soft-delete condition disappears and an aggregate
@@ -561,7 +561,7 @@ type TestAggregateRecord struct {
 	OccurredAt time.Time  `json:"occurred_at"`
 	ClosedAt   *time.Time `json:"closed_at"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestAggregateRecord) TableName() string { return "test_aggregate_records" }
@@ -572,7 +572,7 @@ func (*TestAggregateRecord) TableName() string { return "test_aggregate_records"
 type TestReadingRecord struct {
 	Reading *int64 `json:"reading"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestReadingRecord) TableName() string { return "test_reading_records" }
@@ -585,7 +585,7 @@ type TestCursorSnapshot struct {
 	Label      string    `json:"label" gorm:"size:191"`
 	SnapshotAt time.Time `json:"snapshot_at"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestCursorSnapshot) TableName() string { return "test_cursor_snapshots" }
@@ -601,7 +601,7 @@ type TestDatedCursor struct {
 	Label string         `json:"label" gorm:"size:191"`
 	Day   datatypes.Date `json:"day"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestDatedCursor) TableName() string { return "test_dated_cursors" }
@@ -618,7 +618,7 @@ type TestDatedRecord struct {
 	Day   datatypes.Date  `json:"day" gorm:"not null"`
 	Due   *datatypes.Date `json:"due"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestDatedRecord) TableName() string { return "test_dated_records" }
@@ -633,7 +633,7 @@ type TestRecordTag struct {
 	Label    string `json:"label" gorm:"size:191"`
 	Category string `json:"category" gorm:"size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestRecordTag) TableName() string { return "test_record_tags" }
@@ -647,7 +647,7 @@ type TestTagAlias struct {
 	RecordID string `json:"record_id" gorm:"size:191"`
 	Label    string `json:"label" gorm:"size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestTagAlias) TableName() string { return "test_record_tags" }
@@ -658,7 +658,7 @@ type TestTagNote struct {
 	TagID string `json:"tag_id" gorm:"size:191"`
 	Body  string `json:"body" gorm:"size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestTagNote) TableName() string { return "test_tag_notes" }
@@ -867,7 +867,7 @@ type TestPayment struct {
 	Amount  int64     `json:"amount"`
 	PaidAt  time.Time `json:"paid_at"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestPayment) TableName() string { return "test_payments" }
@@ -877,7 +877,7 @@ type TestRefund struct {
 	Amount    int64     `json:"amount"`
 	SettledAt time.Time `json:"settled_at"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestRefund) TableName() string { return "test_refunds" }
@@ -970,7 +970,7 @@ type TestAccount struct {
 	Name string `json:"name" gorm:"size:191"`
 	Tier string `json:"tier" gorm:"size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestAccount) TableName() string { return "test_accounts" }
@@ -1027,7 +1027,7 @@ type TestVisibleAccount struct {
 	Name       string         `json:"name" gorm:"size:191"`
 	Visibility TestVisibility `json:"visibility" gorm:"size:32"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestVisibleAccount) TableName() string { return "test_visible_accounts" }
@@ -1052,7 +1052,7 @@ type TestMarkedRecord struct {
 	Mark   *string `json:"mark" gorm:"size:191;not null"`
 	Amount int64   `json:"amount"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestMarkedRecord) TableName() string { return "test_marked_records" }
@@ -1094,7 +1094,7 @@ func seedAccountExample() {
 type TestHookConfig struct {
 	Value string `json:"value" gorm:"size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestHookConfig) TableName() string { return "test_hook_configs" }
@@ -1104,7 +1104,7 @@ type TestHookBox struct {
 	ConfigID string `json:"config_id" gorm:"size:191"`
 	Value    string `json:"value" gorm:"size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestHookBox) TableName() string { return "test_hook_boxes" }
@@ -1132,7 +1132,7 @@ type TestHookedSample struct {
 	ConfigID string          `json:"config_id" gorm:"size:191"`
 	Config   *TestHookConfig `json:"config,omitempty" gorm:"foreignKey:ConfigID;constraint:-"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestHookedSample) TableName() string { return "test_hooked_samples" }
@@ -1161,7 +1161,7 @@ type TestCategory struct {
 	ParentID string          `json:"parent_id" gorm:"size:191;not null;index:idx_parent_id"`
 	Children []*TestCategory `json:"children,omitempty" gorm:"foreignKey:ParentID"`
 	Parent   *TestCategory   `json:"parent,omitempty" gorm:"foreignKey:ParentID;references:ID"`
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestCategory) TableName() string { return "test_categories" }
@@ -1181,7 +1181,7 @@ type TestExtendedCategory struct {
 	ParentID string `json:"parent_id" gorm:"size:191"`
 	*TestCategoryRelations
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestExtendedCategory) TableName() string { return "test_extended_categories" }
@@ -1196,7 +1196,7 @@ type TestOwnerRecord struct {
 	Name    string            `json:"name" gorm:"size:191"`
 	Entries []*TestOwnedEntry `json:"entries,omitempty" gorm:"foreignKey:OwnerID;constraint:-"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestOwnerRecord) TableName() string { return "test_owner_records" }
@@ -1207,7 +1207,7 @@ type TestOwnedEntry struct {
 	OwnerID string `json:"owner_id" gorm:"size:191"`
 	Name    string `json:"name" gorm:"size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestOwnedEntry) TableName() string { return "test_owned_entries" }
@@ -1219,7 +1219,7 @@ type TestHolderRecord struct {
 	Name    string           `json:"name" gorm:"size:191"`
 	Entries []*TestHeldEntry `json:"entries,omitempty" gorm:"foreignKey:HolderID;constraint:-"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestHolderRecord) TableName() string { return "test_holder_records" }
@@ -1229,7 +1229,7 @@ type TestHeldEntry struct {
 	HolderID string `json:"holder_id" gorm:"size:191"`
 	Name     string `json:"name" gorm:"size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestHeldEntry) TableName() string { return "test_held_entries" }
@@ -1241,7 +1241,7 @@ type TestZeroValueRecord struct {
 	Name      string         `json:"name" gorm:"size:191"`
 	DeletedAt gorm.DeletedAt `json:"-" gorm:"zeroValue:1970-01-01 00:00:00;default:'1970-01-01 00:00:00'"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TestZeroValueRecord) TableName() string { return "test_zero_value_records" }
@@ -1280,8 +1280,8 @@ type TestPairedRecord struct {
 	Second TestPart       `json:"second" query:"second" gorm:"embedded;embeddedPrefix:second_"`
 	Code   TestTaggedCode `json:"code" gorm:"size:191"`
 
-	modelregistry.Query
-	modelregistry.Base
+	model.Query
+	model.Base
 }
 
 func (*TestPairedRecord) TableName() string { return "test_paired_records" }

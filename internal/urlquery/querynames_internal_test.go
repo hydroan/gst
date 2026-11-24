@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/stretchr/testify/require"
 )
 
@@ -14,8 +14,8 @@ import (
 type widenedKeyTestModel struct {
 	ID string `json:"id" gorm:"primaryKey;size:191" query:"id"`
 
-	modelregistry.Query
-	modelregistry.Base
+	model.Query
+	model.Base
 }
 
 // TestValidateQueryNames pins the query tags a model may carry: a name
@@ -42,7 +42,7 @@ func TestValidateQueryNames(t *testing.T) {
 			Name  string `json:"name" query:"title"`
 			Title string `json:"title" query:"title"`
 
-			modelregistry.Base
+			model.Base
 		}
 		require.EqualError(t, ValidateQueryNames(reflect.TypeFor[*sample]()),
 			`model sample: query name "title" is declared by Name and Title; `+
@@ -54,7 +54,7 @@ func TestValidateQueryNames(t *testing.T) {
 			Title  string `json:"title" query:"title"`
 			Search string `json:"search" gorm:"-" query:"title"`
 
-			modelregistry.Base
+			model.Base
 		}
 		require.ErrorContains(t, ValidateQueryNames(reflect.TypeFor[*sample]()), `query name "title" is declared by Title and Search`)
 	})
@@ -64,7 +64,7 @@ func TestValidateQueryNames(t *testing.T) {
 			Title  string `json:"title" query:"title"`
 			Secret string `json:"-" query:"title"`
 
-			modelregistry.Base
+			model.Base
 		}
 		require.ErrorContains(t, ValidateQueryNames(reflect.TypeFor[*sample]()), `query name "title" is declared by Secret and Title`)
 	})
@@ -74,8 +74,8 @@ func TestValidateQueryNames(t *testing.T) {
 			Hint string `json:"hint" query:"_hint"`
 			Mode string `json:"mode" gorm:"-" query:"_mode"`
 
-			modelregistry.Query
-			modelregistry.Base
+			model.Query
+			model.Base
 		}
 		err := ValidateQueryNames(reflect.TypeFor[*sample]())
 		require.ErrorContains(t, err, `query name "_hint" of Hint takes the "_" namespace of the framework's own parameters`)
@@ -90,7 +90,7 @@ func TestValidateQueryNames(t *testing.T) {
 			Path  string `json:"path" query:"a.b"`
 			First part   `json:"first" gorm:"embedded;embeddedPrefix:first_" query:"first"`
 
-			modelregistry.Base
+			model.Base
 		}
 		err := ValidateQueryNames(reflect.TypeFor[*sample]())
 		require.ErrorContains(t, err, `query tag "a.b" of Path holds "."`)

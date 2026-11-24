@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/stretchr/testify/require"
@@ -21,7 +21,7 @@ type syncCollectMergedItem struct {
 	Code string `gorm:"size:191;uniqueIndex"`
 	Ref  string `gorm:"size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*syncCollectMergedItem) TableName() string { return "sync_collect_merged_items" }
@@ -35,7 +35,7 @@ type syncCollectCompositeItem struct {
 	Code string `gorm:"size:191"`
 	Kind string `gorm:"size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*syncCollectCompositeItem) TableName() string { return "sync_collect_composite_items" }
@@ -48,7 +48,7 @@ func (*syncCollectCompositeItem) Indexes() []modelschema.Index {
 type syncCollectPlainIndexItem struct {
 	Code string `gorm:"size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*syncCollectPlainIndexItem) TableName() string { return "sync_collect_plain_index_items" }
@@ -59,7 +59,7 @@ func (*syncCollectPlainIndexItem) Indexes() []modelschema.Index {
 }
 
 type syncCollectPrimaryOnlyItem struct {
-	modelregistry.Base
+	model.Base
 }
 
 func (*syncCollectPrimaryOnlyItem) TableName() string { return "sync_collect_primary_only_items" }
@@ -77,7 +77,7 @@ type syncCollectTenantItem struct {
 	Ref  string `gorm:"size:191;uniqueIndex"`
 
 	tenant.Scope
-	modelregistry.Base
+	model.Base
 }
 
 func (*syncCollectTenantItem) TableName() string { return "sync_collect_tenant_items" }

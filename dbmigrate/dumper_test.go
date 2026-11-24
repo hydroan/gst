@@ -6,7 +6,7 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/dbmigrate"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/stretchr/testify/require"
 )
@@ -15,7 +15,7 @@ type User struct {
 	Username string `json:"username"`
 	Addr     string `json:"addr"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*User) TableName() string { return "users" }
@@ -23,7 +23,7 @@ func (*User) TableName() string { return "users" }
 type Box struct {
 	Name string `json:"name"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*Box) TableName() string { return "boxes" }
@@ -36,7 +36,7 @@ type Sample struct {
 	Title string `json:"title" gorm:"size:191"`
 	Tag   string `json:"tag" gorm:"size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*Sample) TableName() string { return "samples" }
@@ -56,7 +56,7 @@ func (*Sample) Indexes() []modelschema.Index {
 type DefaultedRecord struct {
 	Label string `json:"label" gorm:"size:32;default:none"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*DefaultedRecord) TableName() string { return "defaulted_records" }
@@ -67,7 +67,7 @@ func (*DefaultedRecord) TableName() string { return "defaulted_records" }
 type ConflictSampleA struct {
 	Kind string `json:"kind" gorm:"size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*ConflictSampleA) TableName() string { return "conflict_samples" }
@@ -79,7 +79,7 @@ func (*ConflictSampleA) Indexes() []modelschema.Index {
 type ConflictSampleB struct {
 	Kind string `json:"kind" gorm:"size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*ConflictSampleB) TableName() string { return "conflict_samples" }

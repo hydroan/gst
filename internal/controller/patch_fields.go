@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"go.uber.org/zap"
@@ -187,7 +187,7 @@ func patchFieldsOf(typ reflect.Type) *patchFieldTable {
 						// A framework base type is not looked into: its
 						// fields are the framework's to write, their keys
 						// kept as the managed ones.
-						if modelregistry.IsFrameworkBase(structType) {
+						if model.IsFrameworkBase(structType) {
 							for baseField := range structType.Fields() {
 								if key := jsonKey(baseField); key != "" {
 									managed[key] = struct{}{}

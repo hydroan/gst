@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/internal/datatypes"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -18,13 +18,13 @@ import (
 type baseQueryItem struct {
 	Code string `json:"code"`
 
-	modelregistry.Base
+	model.Base
 }
 
 type autoBaseQueryItem struct {
 	Code string `json:"code"`
 
-	modelregistry.AutoBase
+	model.AutoBase
 }
 
 type sliceQueryItem struct {
@@ -34,7 +34,7 @@ type sliceQueryItem struct {
 	Weights datatypes.JSONSlice[float64] `json:"weights"`
 	Digest  []byte                       `json:"digest"`
 
-	modelregistry.Base
+	model.Base
 }
 
 // valuedQueryItem carries the columns that are one struct or map each: an
@@ -45,7 +45,7 @@ type valuedQueryItem struct {
 	Grade sql.NullString    `json:"grade"`
 	Meta  datatypes.JSONMap `json:"meta"`
 
-	modelregistry.Base
+	model.Base
 }
 
 // presenceQueryItem carries the zero values presence makes conditions of;
@@ -59,7 +59,7 @@ type presenceQueryItem struct {
 	Rank    int     `json:"rank"`
 	Secret  int     `json:"-" query:"secret"`
 
-	modelregistry.Base
+	model.Base
 }
 
 // WidenedQueryPart is the struct widenedQueryItem embeds and then widens. Its
@@ -77,14 +77,14 @@ type widenedQueryItem struct {
 	Name  string `json:"name" query:"name"`
 
 	WidenedQueryPart
-	modelregistry.Base
+	model.Base
 }
 
 // serializedQueryItem stores a slice through gorm's JSON serializer.
 type serializedQueryItem struct {
 	Tags []string `json:"tags" gorm:"serializer:json"`
 
-	modelregistry.Base
+	model.Base
 }
 
 // queryPart is embedded twice in pairedQueryItem, under two prefixes, beside
@@ -98,7 +98,7 @@ type pairedQueryItem struct {
 	First  queryPart `json:"first" gorm:"embedded;embeddedPrefix:first_"`
 	Second queryPart `json:"second" gorm:"embedded;embeddedPrefix:second_"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func TestStructConditionsMapTheQueriedFieldsToTheirColumns(t *testing.T) {

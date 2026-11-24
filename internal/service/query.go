@@ -1,0 +1,147 @@
+package service
+
+import (
+	"reflect"
+
+	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/requestctx"
+	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/urlquery"
+)
+
+// The Query methods below translate the request's URL query parameters into
+// the arguments a database query is built from, so a service that implements a
+// list action itself parses the request exactly like the framework list
+// controller does.
+//
+// A model whose List action declares its own Result type takes over the whole
+// request, and the controller no longer parses the query for it. Rather than
+// reimplementing the parsing, such a service asks its own base for the parsed
+// arguments; the model they are parsed against is the base's own M, so a
+// service can never accidentally parse a request against the wrong model.
+//
+// Each method maps to one database query argument:
+//
+//	QueryModel         -> the query value Database.WithQuery takes
+//	QueryFilters       -> QueryOptions.Filters, from field[op]=value
+//	QueryPresentFields -> QueryOptions.PresentFields, so enabled=false filters
+//	QueryOrders        -> Database.WithOrder
+//	QueryPagination    -> Database.WithPagination
+//	QueryCursor        -> Database.WithCursor
+//
+// Which parameters a request may use is decided by the model: every model
+// pages, model.Query opts in to sorting, expansion and the operator filters
+// and model.Cursor to the cursor, and a parameter the model did not opt in
+// to is ignored rather than rejected. Two things always fail: a malformed
+// filter, because silently dropping a mistyped filter would widen the result
+// set, and a page or an order beside the cursor of a model embedding
+// model.Cursor, which QueryCursor refuses the way the framework's own list
+// does, a feed taking neither.
+//
+// A typical list service builds its query like this:
+//
+//	query, err := s.QueryModel(ctx)
+//	if err != nil {
+//	    return nil, gst.NewError(http.StatusBadRequest, err.Error())
+//	}
+//	query.TenantID = tenant // mandatory scoping the client cannot influence
+//
+//	filters, err := s.QueryFilters(ctx)
+//	if err != nil {
+//	    return nil, gst.NewError(http.StatusBadRequest, err.Error())
+//	}
+//	opts := types.QueryOptions{
+//	    AllowEmpty:    true,
+//	    PresentFields: s.QueryPresentFields(ctx),
+//	    Filters:       filters,
+//	}
+//
+//	cursor, err := s.QueryCursor(ctx)
+//	if err != nil {
+//	    return nil, gst.NewError(http.StatusBadRequest, err.Error())
+//	}
+//	orders, err := s.QueryOrders(ctx)
+//	if err != nil {
+//	    return nil, gst.NewError(http.StatusBadRequest, err.Error())
+//	}
+//	err = database.Database[*Sample](ctx).
+//	    WithQuery(query, opts).
+//	    WithCursor(cursor).
+//	    WithOrder(orders...).
+//	    WithPagination(s.QueryPagination(ctx)).
+//	    List(&items)
+//
+// A service that also reports a total must count with the very same query
+// value and options, otherwise the total and the page disagree.
+
+// QueryModel returns a new model with its own query fields filled from the
+// request, ready to be passed to Database.WithQuery.
+//
+// The keys QueryFilters owns never reach the decoder, and neither do framework
+// parameters the model cannot carry, nor, in an export, the export's own
+// _format and _limit; every other key must map to a field of the model, so a
+// mistyped filter name is reported instead of silently widening the result
+// set. The model is returned even when decoding fails, so a caller that
+// tolerates partial input can still use it.
+func (Base[M, REQ, RSP]) QueryModel(ctx *types.ServiceContext) (M, error) {
+	m := reflect.New(reflect.TypeFor[M]().Elem()).Interface().(M) //nolint:errcheck
+	query := requestctx.QueryValues(ctx)
+	if ctx.Phase() == apiaction.Export {
+		query = urlquery.WithoutExportKeys(query)
+	}
+	return m, urlquery.Decode(query, m)
+}
+
+// QueryFilters returns the field-level operator filters ("field[op]=value") of
+// the request, plus the bare framework timestamp keys ("created_at",
+// "updated_at"), which act as exact-match filters. The field must resolve to a
+// filterable column of the model and the operator must be known; anything else
+// is rejected so a mistyped filter can never silently widen the result set.
+// Filters require the model to embed model.Query.
+func (Base[M, REQ, RSP]) QueryFilters(ctx *types.ServiceContext) ([]types.Filter, error) {
+	return urlquery.Filters(requestctx.QueryValues(ctx), zeroModel[M]())
+}
+
+// QueryPresentFields returns the model filter keys the request provided
+// explicitly, so the database layer keeps their zero values (false, 0) as real
+// conditions instead of dropping them as unset.
+func (Base[M, REQ, RSP]) QueryPresentFields(ctx *types.ServiceContext) map[string]struct{} {
+	return urlquery.PresentFields(requestctx.QueryValues(ctx))
+}
+
+// QueryOrders returns the ORDER BY terms of the request, ready to be passed to
+// Database.WithOrder. Models embedding model.Query take them from _sort_by;
+// any other model yields no order. An unknown column or direction is a client
+// error and is reported as such.
+func (Base[M, REQ, RSP]) QueryOrders(ctx *types.ServiceContext) ([]types.Order, error) {
+	return urlquery.Orders(requestctx.QueryValues(ctx), zeroModel[M]())
+}
+
+// QueryPagination returns the page and size arguments of the request, ready to
+// be passed to Database.WithPagination: the size of _size, 20 when left out
+// and 100 at most, the listener refusing a larger one, and the page of
+// _page. The returned page is always at least 1, so a service slicing
+// in-memory pages or computing offsets itself can use it without normalizing
+// again.
+func (Base[M, REQ, RSP]) QueryPagination(ctx *types.ServiceContext) (page, size int) {
+	return urlquery.Pagination(requestctx.QueryValues(ctx))
+}
+
+// QueryCursor returns the cursor position of the request, ready to be passed
+// to Database.WithCursor. Models that did not embed model.Cursor yield a zero
+// cursor, which WithCursor treats as a no-op; a request without _cursor_value
+// yields the feed's first page, ordered but unbounded. An unknown cursor
+// column, a cursor value the column's Go type cannot represent, and a _page
+// or a _sort_by beside the cursor, a feed being read from its cursor on in
+// the cursor's order, are client errors and are reported as such.
+func (Base[M, REQ, RSP]) QueryCursor(ctx *types.ServiceContext) (types.Cursor, error) {
+	return urlquery.Cursor(requestctx.QueryValues(ctx), zeroModel[M]())
+}
+
+// zeroModel returns the typed nil of M. The parsers only read the model's type
+// to assert its query capabilities and resolve its columns, so allocating one
+// would be wasted work.
+func zeroModel[M types.Model]() M {
+	var m M
+	return m
+}

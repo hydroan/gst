@@ -2,7 +2,7 @@ package authz
 
 import (
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/module"
 )
 
@@ -50,7 +50,7 @@ import (
 func Register() {
 	// Register AuthzRule explicitly because the policy adapter manages this
 	// table instead of a public CRUD module.
-	modelregistry.Register[*AuthzRule]()
+	model.Register[*AuthzRule]()
 
 	module.Use[
 		*Role,
@@ -97,7 +97,7 @@ func Register() {
 
 	module.Use[
 		*Routes,
-		*modelregistry.Empty,
+		*model.Empty,
 		*RoutesRsp](
 		&RoutesModule{},
 		module.CRUD(apiaction.List),

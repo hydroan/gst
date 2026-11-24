@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/testutil"
 )
 
@@ -22,16 +22,16 @@ func TestMain(m *testing.M) {
 	testutil.Run(m, testutil.Server{
 		Database: testutil.DatabaseUnderTest(),
 		Register: func() {
-			modelregistry.Register[*sampleRecord]()
-			modelregistry.Register[*sampleCounter]()
-			modelregistry.Register[*versionedSample]()
-			modelregistry.Register[*validatedSample]()
-			modelregistry.Register[*shapedSample]()
-			modelregistry.Register[*nestedSample]()
-			modelregistry.Register[*datedSample]()
-			modelregistry.Register[*feedSample]()
-			modelregistry.Register[*scopedSample]()
-			modelregistry.Register[*stagedSample]()
+			model.Register[*sampleRecord]()
+			model.Register[*sampleCounter]()
+			model.Register[*versionedSample]()
+			model.Register[*validatedSample]()
+			model.Register[*shapedSample]()
+			model.Register[*nestedSample]()
+			model.Register[*datedSample]()
+			model.Register[*feedSample]()
+			model.Register[*scopedSample]()
+			model.Register[*stagedSample]()
 			registerFixtureServices()
 		},
 	})

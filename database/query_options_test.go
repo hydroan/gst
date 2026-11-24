@@ -9,7 +9,7 @@ import (
 
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/datatypes"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/types"
@@ -20,15 +20,15 @@ import (
 type queryableTestUser struct {
 	Name string `json:"name" query:"name"`
 
-	modelregistry.Query
-	modelregistry.Base
+	model.Query
+	model.Base
 }
 
 type cursorableTestUser struct {
 	Name string `json:"name" query:"name"`
 
-	modelregistry.Cursor
-	modelregistry.Base
+	model.Cursor
+	model.Base
 }
 
 // cursorNullableTestUser carries a unique column that may be NULL: every row
@@ -36,7 +36,7 @@ type cursorableTestUser struct {
 type cursorNullableTestUser struct {
 	Code *string `json:"code"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*cursorNullableTestUser) TableName() string { return "cursor_nullable_test_users" }
@@ -385,7 +385,7 @@ func TestDatabaseWithCursor(t *testing.T) {
 // column references carry no table and read as plain names.
 type virtualUser struct {
 	Name string `json:"name"`
-	modelregistry.Empty
+	model.Empty
 }
 
 func TestDatabaseWithSelect(t *testing.T) {

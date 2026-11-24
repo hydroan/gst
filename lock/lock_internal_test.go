@@ -20,7 +20,7 @@ import (
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/lease"
 	"github.com/hydroan/gst/internal/lifecycle"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
 	"github.com/hydroan/gst/logger"
@@ -56,7 +56,7 @@ func run(m *testing.M) int {
 	}
 	// Registered before the database opens, so its table is created with the
 	// lease table.
-	modelregistry.Register[*hookedRecord]()
+	model.Register[*hookedRecord]()
 	if err := errors.Join(gstsqlite.Init(), gstmysql.Init(), gstpostgres.Init()); err != nil {
 		panic(err)
 	}
@@ -377,7 +377,7 @@ type hookedRecord struct {
 	// afterCreate is what the hook runs; unexported, so it is no column.
 	afterCreate func(ctx context.Context) error
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*hookedRecord) TableName() string { return "lock_hooked_records" }

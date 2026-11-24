@@ -7,7 +7,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/auditmanager"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	modellogmgmt "github.com/hydroan/gst/internal/modulemodel/logmgmt"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/internal/types"
@@ -22,7 +22,7 @@ func TestMain(m *testing.M) {
 
 // auditSample is the resource an audit entry is recorded for.
 type auditSample struct {
-	modelregistry.Base
+	model.Base
 }
 
 func (auditSample) TableName() string { return "audit_samples" }

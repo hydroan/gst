@@ -9,7 +9,7 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/stretchr/testify/require"
 )
@@ -17,13 +17,13 @@ import (
 type openapiDefaultCreateModel struct {
 	Name string `json:"name"`
 
-	modelregistry.Base
+	model.Base
 }
 
 type openapiCustomCreateModel struct {
 	Name string `json:"name"`
 
-	modelregistry.Base
+	model.Base
 }
 
 type openapiCustomCreateRequest struct {
@@ -259,7 +259,7 @@ func TestResponsesOfAnswersItsExample(t *testing.T) {
 type openapiCustomBatchModel struct {
 	Name string `json:"name"`
 
-	modelregistry.Base
+	model.Base
 }
 
 type openapiCustomBatchRequest struct {
@@ -359,7 +359,7 @@ type openapiWriteModel struct {
 	Stage   string `json:"stage" binding:"readonly"`
 	Summary string `json:"summary" gorm:"-" binding:"readonly"`
 
-	modelregistry.Base
+	model.Base
 }
 
 // openapiOwnKeyModel declares a primary key of its own over the framework
@@ -369,7 +369,7 @@ type openapiOwnKeyModel struct {
 	ID   string `json:"id" gorm:"primaryKey;size:191"`
 	Name string `json:"name"`
 
-	modelregistry.Base
+	model.Base
 }
 
 // openapiRequiredModel requires Name and Code by its binding rules, Code
@@ -381,7 +381,7 @@ type openapiRequiredModel struct {
 	Note string   `json:"note"`
 	Tags []string `json:"tags" gorm:"serializer:json" binding:"dive,required"`
 
-	modelregistry.Base
+	model.Base
 }
 
 // TestSetMarksTheFieldsABindingRequires pins that a field the binding rules
@@ -460,7 +460,7 @@ type openapiScopedModel struct {
 	Name string `json:"name"`
 
 	tenant.Scope
-	modelregistry.Base
+	model.Base
 }
 
 // TestSetDocumentsWhoNamesTheTenant pins that the tenant_id a create body

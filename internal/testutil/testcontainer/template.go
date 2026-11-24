@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 )
 
@@ -75,7 +75,7 @@ func noSchemaTemplatePublish() {}
 // which is indistinguishable from copying a template except in how long it
 // takes.
 func prepareSchemaTemplate(host string, port uint, database string) func() {
-	fingerprint := modelschema.Fingerprint(modelregistry.RegisteredModels())
+	fingerprint := modelschema.Fingerprint(model.RegisteredModels())
 	if len(fingerprint) == 0 {
 		// Nothing registered, so there is no schema to carry over.
 		return noSchemaTemplatePublish

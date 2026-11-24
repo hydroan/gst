@@ -3,7 +3,7 @@ package modelschema_test
 import (
 	"testing"
 
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/stretchr/testify/require"
 )
@@ -12,7 +12,7 @@ type versionedRecord struct {
 	Name    string
 	Version modelschema.Version `json:"version,omitempty" gorm:"not null;default:1"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*versionedRecord) TableName() string { return "versioned_records" }
@@ -20,7 +20,7 @@ func (*versionedRecord) TableName() string { return "versioned_records" }
 type taggedVersionRecord struct {
 	Revision modelschema.Version `json:"rev,omitempty" gorm:"column:rev;not null;default:1"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*taggedVersionRecord) TableName() string { return "tagged_version_records" }
@@ -30,7 +30,7 @@ func (*taggedVersionRecord) TableName() string { return "tagged_version_records"
 type capitalizedTagVersionRecord struct {
 	Version modelschema.Version `json:"version,omitempty" gorm:"Column:ver;not null;default:1"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*capitalizedTagVersionRecord) TableName() string { return "capitalized_tag_version_records" }
@@ -38,7 +38,7 @@ func (*capitalizedTagVersionRecord) TableName() string { return "capitalized_tag
 type plainRecord struct {
 	Name string
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*plainRecord) TableName() string { return "plain_records" }
@@ -70,7 +70,7 @@ func TestVersionDeclarationEnforcement(t *testing.T) {
 	type embeddedVersionRecord struct {
 		modelschema.Version
 
-		modelregistry.Base
+		model.Base
 	}
 	require.PanicsWithValue(t,
 		"model modelschema_test.embeddedVersionRecord embeds model.Version; optimistic locking requires a named field: Version model.Version `json:\"version,omitempty\" gorm:\"not null;default:1\"` (an embedded Version is not recognized and the lock would silently not engage)",
@@ -81,14 +81,14 @@ func TestVersionDeclarationEnforcement(t *testing.T) {
 	type missingDefaultRecord struct {
 		Version modelschema.Version `json:"version,omitempty" gorm:"not null"`
 
-		modelregistry.Base
+		model.Base
 	}
 	require.Panics(t, func() { modelschema.IsVersioned(&missingDefaultRecord{}) })
 
 	type bareVersionRecord struct {
 		Version modelschema.Version
 
-		modelregistry.Base
+		model.Base
 	}
 	require.Panics(t, func() { modelschema.IsVersioned(&bareVersionRecord{}) })
 
@@ -98,14 +98,14 @@ func TestVersionDeclarationEnforcement(t *testing.T) {
 	type missingOmitemptyRecord struct {
 		Version modelschema.Version `json:"version" gorm:"not null;default:1"`
 
-		modelregistry.Base
+		model.Base
 	}
 	require.Panics(t, func() { modelschema.IsVersioned(&missingOmitemptyRecord{}) })
 
 	type hiddenVersionRecord struct {
 		Version modelschema.Version `json:"-" gorm:"not null;default:1"`
 
-		modelregistry.Base
+		model.Base
 	}
 	require.Panics(t, func() { modelschema.IsVersioned(&hiddenVersionRecord{}) })
 
@@ -116,13 +116,13 @@ func TestVersionDeclarationEnforcement(t *testing.T) {
 	type tolerantTagRecord struct {
 		Version modelschema.Version `json:",omitempty" gorm:" Not Null ; default: 1"`
 
-		modelregistry.Base
+		model.Base
 	}
 	require.True(t, modelschema.IsVersioned(&tolerantTagRecord{}))
 	type joinedTagRecord struct {
 		Version modelschema.Version `json:"version,omitempty" gorm:"notnull;default:1"`
 
-		modelregistry.Base
+		model.Base
 	}
 	require.True(t, modelschema.IsVersioned(&joinedTagRecord{}))
 
@@ -132,13 +132,13 @@ func TestVersionDeclarationEnforcement(t *testing.T) {
 	type spacedTagRecord struct {
 		Version modelschema.Version `json:"version,omitempty" gorm:"not  null;default:1"`
 
-		modelregistry.Base
+		model.Base
 	}
 	require.Panics(t, func() { modelschema.IsVersioned(&spacedTagRecord{}) })
 	type commentedTagRecord struct {
 		Version modelschema.Version `json:"version,omitempty" gorm:"comment:a\\;not null;default:1"`
 
-		modelregistry.Base
+		model.Base
 	}
 	require.Panics(t, func() { modelschema.IsVersioned(&commentedTagRecord{}) })
 }

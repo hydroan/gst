@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
@@ -49,7 +49,7 @@ type patchFieldsShapedRecord struct {
 	Address patchFieldsAddress `json:"address"`
 	patchFieldsAudit
 
-	modelregistry.Base
+	model.Base
 }
 
 type patchFieldsAddress struct {
@@ -292,7 +292,7 @@ type patchFieldsVersionedRecord struct {
 	Name    string              `json:"name"`
 	Version modelschema.Version `json:"version,omitempty" gorm:"not null;default:1"`
 
-	modelregistry.Base
+	model.Base
 }
 
 // TestVersionOmittedReportsTheVersionAPatchDoesNotName pins the one check

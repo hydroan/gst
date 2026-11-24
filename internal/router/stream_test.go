@@ -12,9 +12,9 @@ import (
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/middleware"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/router"
-	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/internal/service"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
@@ -47,7 +47,7 @@ type feedNote struct {
 // names, then with the note of its request, and refuses the note refusedNote
 // the way a service refuses a request.
 type feedWatcher struct {
-	serviceregistry.Base[*modelregistry.Empty, *feedNote, *feedNote]
+	service.Base[*model.Empty, *feedNote, *feedNote]
 }
 
 func (s *feedWatcher) Stream(ctx *types.ServiceContext, req *feedNote, stream *types.ServerStream[*feedNote]) error {
@@ -63,7 +63,7 @@ func (s *feedWatcher) Stream(ctx *types.ServiceContext, req *feedNote, stream *t
 // feedUploader serves the client stream: it answers the notes it was sent,
 // joined.
 type feedUploader struct {
-	serviceregistry.Base[*modelregistry.Empty, *feedNote, *feedNote]
+	service.Base[*model.Empty, *feedNote, *feedNote]
 }
 
 func (s *feedUploader) Stream(_ *types.ServiceContext, stream *types.ClientStream[*feedNote]) (*feedNote, error) {
@@ -83,7 +83,7 @@ func (s *feedUploader) Stream(_ *types.ServiceContext, stream *types.ClientStrea
 // feedChatter serves the bidirectional stream: it answers every note as it
 // arrives.
 type feedChatter struct {
-	serviceregistry.Base[*modelregistry.Empty, *feedNote, *feedNote]
+	service.Base[*model.Empty, *feedNote, *feedNote]
 }
 
 func (s *feedChatter) Stream(_ *types.ServiceContext, stream *types.BidiStream[*feedNote, *feedNote]) error {
@@ -104,17 +104,17 @@ func (s *feedChatter) Stream(_ *types.ServiceContext, stream *types.BidiStream[*
 // The services register in init and the routes after router.Init, the split
 // generated code has (see sse_test.go).
 func init() {
-	serviceregistry.RegisterInstance[*modelregistry.Empty, *feedNote, *feedNote](apiaction.Stream, streamWatchRoute, &feedWatcher{})
-	serviceregistry.RegisterInstance[*modelregistry.Empty, *feedNote, *feedNote](apiaction.Stream, streamUploadRoute, &feedUploader{})
-	serviceregistry.RegisterInstance[*modelregistry.Empty, *feedNote, *feedNote](apiaction.Stream, streamChatRoute, &feedChatter{})
+	service.RegisterInstance[*model.Empty, *feedNote, *feedNote](apiaction.Stream, streamWatchRoute, &feedWatcher{})
+	service.RegisterInstance[*model.Empty, *feedNote, *feedNote](apiaction.Stream, streamUploadRoute, &feedUploader{})
+	service.RegisterInstance[*model.Empty, *feedNote, *feedNote](apiaction.Stream, streamChatRoute, &feedChatter{})
 }
 
 // registerStreamRoutes registers the stream routes; TestMain calls it after
 // router.Init, mirroring where generated route registration runs.
 func registerStreamRoutes() {
 	for _, route := range []string{streamWatchRoute, streamUploadRoute, streamChatRoute} {
-		router.Register[*modelregistry.Empty, *feedNote, *feedNote](
-			router.Auth(), route, &types.ControllerConfig[*modelregistry.Empty]{}, apiaction.Stream,
+		router.Register[*model.Empty, *feedNote, *feedNote](
+			router.Auth(), route, &types.ControllerConfig[*model.Empty]{}, apiaction.Stream,
 		)
 	}
 }

@@ -6,7 +6,7 @@ import (
 
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/grpcserver"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -21,7 +21,7 @@ type SampleRecord struct {
 	Name string
 	Tag  string
 
-	modelregistry.Base
+	model.Base
 }
 
 func (r *SampleRecord) TableName() string { return "testutil_sample_records" }
@@ -59,7 +59,7 @@ type ZeroValueRecord struct {
 	tenant.Scope
 	DeletedAt gorm.DeletedAt `gorm:"zeroValue:1970-01-01 00:00:00;default:'1970-01-01 00:00:00'" json:"-" query:"-" url:"-"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (r *ZeroValueRecord) TableName() string { return "testutil_zero_value_records" }

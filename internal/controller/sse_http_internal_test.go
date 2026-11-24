@@ -11,7 +11,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/internal/service"
 	"github.com/hydroan/gst/internal/streamctx"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/hydroan/gst/internal/types"
@@ -23,7 +23,7 @@ import (
 // sseSampleService streams until its context ends and returns that ending,
 // wrapped the way service code wraps an error.
 type sseSampleService struct {
-	serviceregistry.Base[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel]
+	service.Base[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel]
 }
 
 func (*sseSampleService) SSE(ctx *types.ServiceContext) error {

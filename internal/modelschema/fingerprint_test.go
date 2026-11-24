@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/stretchr/testify/require"
 )
@@ -16,7 +16,7 @@ import (
 type fingerprintSample struct {
 	Name string `gorm:"size:64"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*fingerprintSample) TableName() string { return "fingerprint_samples" }
@@ -26,7 +26,7 @@ func (*fingerprintSample) Indexes() []modelschema.Index {
 }
 
 type fingerprintSampleWithoutField struct {
-	modelregistry.Base
+	model.Base
 }
 
 func (*fingerprintSampleWithoutField) TableName() string { return "fingerprint_samples" }
@@ -38,7 +38,7 @@ func (*fingerprintSampleWithoutField) Indexes() []modelschema.Index {
 type fingerprintSampleOtherTable struct {
 	Name string `gorm:"size:64"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*fingerprintSampleOtherTable) TableName() string { return "other_fingerprint_samples" }

@@ -9,7 +9,7 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/hydroan/gst/apidoc"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 )
 
 // registerFixtureDoc registers the doc comments the generator is expected to
@@ -30,7 +30,7 @@ func registerFixtureDoc(typeName, comment string, fields map[string]string) {
 type openapiTimeQueryModel struct {
 	ExpiresAt *time.Time `json:"expires_at,omitempty" query:"expires_at"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func init() {
@@ -44,8 +44,8 @@ type openapiEmbeddedQueryModel struct {
 	// the framework pagination parameter, which lives in the "_" namespace.
 	Page string `json:"page" query:"page"`
 
-	modelregistry.Query
-	modelregistry.Base
+	model.Query
+	model.Base
 }
 
 // enumFieldStatus is a demo enum type for schema decoration tests.

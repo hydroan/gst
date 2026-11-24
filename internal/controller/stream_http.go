@@ -12,7 +12,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/lifecycle"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/streamctx"
@@ -72,7 +72,7 @@ var errServicePanicked = errors.New("controller: the service of the stream panic
 func StreamHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
 	route := routeFromConfig(cfg...)
 	a := newAction[M, REQ, RSP](route, apiaction.Stream)
-	noRequest, noResponse := modelregistry.IsEmpty[REQ](), modelregistry.IsEmpty[RSP]()
+	noRequest, noResponse := model.IsEmpty[REQ](), model.IsEmpty[RSP]()
 	return func(c *gin.Context) {
 		_, span, ok := a.beginRequest(c)
 		defer span.End()

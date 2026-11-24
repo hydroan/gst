@@ -40,7 +40,7 @@ import (
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/middleware"
 	"github.com/hydroan/gst/internal/router"
-	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/internal/service"
 	"github.com/hydroan/gst/logger"
 	prommetrics "github.com/hydroan/gst/metrics"
 	"github.com/hydroan/gst/module"
@@ -126,7 +126,7 @@ func Bootstrap() error {
 		rbac.Init,
 
 		// service
-		serviceregistry.Init,
+		service.Init,
 
 		controller.Init,
 

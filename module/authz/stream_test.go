@@ -11,9 +11,9 @@ import (
 
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/router"
-	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/internal/service"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/internal/types"
@@ -87,10 +87,10 @@ type probeTail struct {
 // probeTailer serves the probe's Stream action over HTTP: one message naming
 // the thing of the route, then the end of the stream.
 type probeTailer struct {
-	serviceregistry.Base[*modelregistry.Empty, *modelregistry.Empty, *probeTail]
+	service.Base[*model.Empty, *model.Empty, *probeTail]
 }
 
-func (s *probeTailer) Stream(ctx *types.ServiceContext, _ *modelregistry.Empty, stream *types.ServerStream[*probeTail]) error {
+func (s *probeTailer) Stream(ctx *types.ServiceContext, _ *model.Empty, stream *types.ServerStream[*probeTail]) error {
 	return stream.Send(&probeTail{Thing: ctx.Param("thing")})
 }
 
@@ -98,14 +98,14 @@ func (s *probeTailer) Stream(ctx *types.ServiceContext, _ *modelregistry.Empty, 
 // generated code has; TestMain hands registerProbeStream to the server as its
 // Routes.
 func init() {
-	serviceregistry.RegisterInstance[*modelregistry.Empty, *modelregistry.Empty, *probeTail](apiaction.Stream, "probe-things/:thing/tail", &probeTailer{})
+	service.RegisterInstance[*model.Empty, *model.Empty, *probeTail](apiaction.Stream, "probe-things/:thing/tail", &probeTailer{})
 }
 
 // registerProbeStream serves the probe's Stream action over HTTP at
 // probeTailRoute, behind the session check and the authorization.
 func registerProbeStream() error {
-	router.Register[*modelregistry.Empty, *modelregistry.Empty, *probeTail](
-		router.Auth(), "probe-things/:thing/tail", &types.ControllerConfig[*modelregistry.Empty]{}, apiaction.Stream,
+	router.Register[*model.Empty, *model.Empty, *probeTail](
+		router.Auth(), "probe-things/:thing/tail", &types.ControllerConfig[*model.Empty]{}, apiaction.Stream,
 	)
 	return nil
 }

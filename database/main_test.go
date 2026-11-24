@@ -3,7 +3,7 @@ package database_test
 import (
 	"testing"
 
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/testutil"
 )
 
@@ -20,34 +20,34 @@ func TestMain(m *testing.M) {
 	testutil.Run(m, testutil.Server{
 		Database: testutil.DatabaseUnderTest(),
 		Register: func() {
-			modelregistry.Register[*TestUser]()
-			modelregistry.Register[*TestItem]()
-			modelregistry.Register[*TestPlainItem]()
-			modelregistry.Register[*TestUniqueItem]()
-			modelregistry.Register[*TestConstrainedRecord]()
-			modelregistry.Register[*TestConstrainedEntry]()
-			modelregistry.Register[*TestRequiredRecord]()
-			modelregistry.Register[*TestIndexerUniqueItem]()
-			modelregistry.Register[*TestMixedUniqueItem]()
-			modelregistry.Register[*TestAutoItem]()
-			modelregistry.Register[*TestHookConfig]()
-			modelregistry.Register[*TestHookBox]()
-			modelregistry.Register[*TestCategory]()
-			modelregistry.Register[*TestAggregateRecord]()
-			modelregistry.Register[*TestCursorSnapshot]()
-			modelregistry.Register[*TestDatedCursor]()
-			modelregistry.Register[*TestDatedRecord]()
-			modelregistry.Register[*TestRecordTag]()
-			modelregistry.Register[*TestTagNote]()
-			modelregistry.Register[*TestPayment]()
-			modelregistry.Register[*TestRefund]()
-			modelregistry.Register[*TestAccount]()
-			modelregistry.Register[*TestMarkedRecord]()
-			modelregistry.Register[*TestScoredRecord]()
-			modelregistry.Register[*TestTypedRecord]()
-			modelregistry.Register[*TestHolderRecord]()
-			modelregistry.Register[*TestHeldEntry]()
-			modelregistry.Register[*TestZeroValueRecord]()
+			model.Register[*TestUser]()
+			model.Register[*TestItem]()
+			model.Register[*TestPlainItem]()
+			model.Register[*TestUniqueItem]()
+			model.Register[*TestConstrainedRecord]()
+			model.Register[*TestConstrainedEntry]()
+			model.Register[*TestRequiredRecord]()
+			model.Register[*TestIndexerUniqueItem]()
+			model.Register[*TestMixedUniqueItem]()
+			model.Register[*TestAutoItem]()
+			model.Register[*TestHookConfig]()
+			model.Register[*TestHookBox]()
+			model.Register[*TestCategory]()
+			model.Register[*TestAggregateRecord]()
+			model.Register[*TestCursorSnapshot]()
+			model.Register[*TestDatedCursor]()
+			model.Register[*TestDatedRecord]()
+			model.Register[*TestRecordTag]()
+			model.Register[*TestTagNote]()
+			model.Register[*TestPayment]()
+			model.Register[*TestRefund]()
+			model.Register[*TestAccount]()
+			model.Register[*TestMarkedRecord]()
+			model.Register[*TestScoredRecord]()
+			model.Register[*TestTypedRecord]()
+			model.Register[*TestHolderRecord]()
+			model.Register[*TestHeldEntry]()
+			model.Register[*TestZeroValueRecord]()
 		},
 	})
 }

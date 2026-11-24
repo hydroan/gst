@@ -8,7 +8,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dbruntime"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/types"
@@ -189,7 +189,7 @@ func (db *database[M]) Create(objs ...M) (err error) {
 	}
 	// One batch is one multi-row INSERT; without overridden create hooks the
 	// statement's own atomicity is the whole contract.
-	if (db.noHook || !modelregistry.OverridesCreateHooks(db.m)) && len(objs) <= batchSize {
+	if (db.noHook || !model.OverridesCreateHooks(db.m)) && len(objs) <= batchSize {
 		return db.withSingleStatementWrite(write)
 	}
 	return db.withWriteTransaction(write)
@@ -338,7 +338,7 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 	// A delete by conditions hands the hooks no record of the rows its
 	// statement removes (see ErrConditionsWithDeleteHooks). ClickHouse runs
 	// no hooks, so the check follows its branch.
-	if conditioned && !db.noHook && modelregistry.OverridesDeleteHooks(db.m) {
+	if conditioned && !db.noHook && model.OverridesDeleteHooks(db.m) {
 		return errors.Wrap(ErrConditionsWithDeleteHooks, "Delete")
 	}
 	done, span := db.trace(apiaction.Delete, len(objs))
@@ -492,7 +492,7 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 	// partly right: one naming several records that must all exist runs in a
 	// transaction, so finding fewer rows than named rolls it back, and so do
 	// several records checked by version, a statement each.
-	if (db.noHook || !modelregistry.OverridesDeleteHooks(db.m)) && len(objs) <= batchSize && (!strict || expected <= 1) && (!guarded || len(objs) <= 1) {
+	if (db.noHook || !model.OverridesDeleteHooks(db.m)) && len(objs) <= batchSize && (!strict || expected <= 1) && (!guarded || len(objs) <= 1) {
 		return db.withSingleStatementWrite(write)
 	}
 	return db.withWriteTransaction(write)
@@ -719,7 +719,7 @@ func (db *database[M]) Update(objs ...M) (err error) {
 	// record turns out missing, so only a single-record call is a single
 	// statement; without overridden update hooks its own atomicity is the
 	// whole contract.
-	if (db.noHook || !modelregistry.OverridesUpdateHooks(db.m)) && len(objs) == 1 {
+	if (db.noHook || !model.OverridesUpdateHooks(db.m)) && len(objs) == 1 {
 		return db.withSingleStatementWrite(write)
 	}
 	return db.withWriteTransaction(write)
@@ -731,7 +731,7 @@ func (db *database[M]) Update(objs ...M) (err error) {
 // excluded. deleted_at belongs to Delete; omitting it means callers cannot
 // soft-delete a row or resurrect one through Update. created_at and
 // created_by need no omission: gorm's create-only permission on them (see
-// modelregistry.Base) keeps the statement off them, Select("*") included, so
+// model.Base) keeps the statement off them, Select("*") included, so
 // callers cannot forge creation audit data either.
 // updated_at stays writable because GORM's auto-update-time handling always
 // overwrites it with the current time, even under a narrowed WithSelect, and
@@ -991,9 +991,9 @@ func cloneDryRunModel[M types.Model](obj M) M {
 	}
 	cloned := reflect.New(elem.Type())
 	cloned.Elem().Set(elem)
-	model, ok := reflect.TypeAssert[M](cloned)
+	copied, ok := reflect.TypeAssert[M](cloned)
 	if !ok {
 		return obj
 	}
-	return model
+	return copied
 }

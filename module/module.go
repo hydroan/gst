@@ -35,9 +35,9 @@ import (
 	"sync/atomic"
 
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/router"
-	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/internal/service"
 	"github.com/hydroan/gst/internal/types"
 )
 
@@ -147,7 +147,7 @@ func Use[M types.Model, REQ types.Request, RSP types.Response](mod types.Module[
 		<-notify
 
 		if registersModel(options) {
-			modelregistry.Register[M]()
+			model.Register[M]()
 		}
 
 		// The route registers by the path it is served at, however the
@@ -169,10 +169,10 @@ func Use[M types.Model, REQ types.Request, RSP types.Response](mod types.Module[
 				// services by path and phase.
 				switch option.mode {
 				case useRouteModeCRUD:
-					serviceregistry.RegisterInstance[M, REQ, RSP](p, crudRoute(route, param, p), mod.Service())
+					service.RegisterInstance[M, REQ, RSP](p, crudRoute(route, param, p), mod.Service())
 					registerCRUDRouter(mod, route, param, p)
 				case useRouteModeExact:
-					serviceregistry.RegisterInstance[M, REQ, RSP](p, route, mod.Service())
+					service.RegisterInstance[M, REQ, RSP](p, route, mod.Service())
 					registerRouter(mod, route, nil, p)
 				}
 			}

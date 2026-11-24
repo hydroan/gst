@@ -3,7 +3,7 @@ package dbruntime
 import (
 	"time"
 
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"gorm.io/gorm"
 )
 
@@ -47,7 +47,7 @@ func NowUTC() time.Time { return UTCMillisecond(time.Now()) }
 func InitDatabase(db *gorm.DB) error {
 	if tablePreparationStarted.CompareAndSwap(0, 1) {
 		go func() {
-			for m := range modelregistry.TableChan {
+			for m := range model.TableChan {
 				prepareTable(db, m)
 			}
 		}()

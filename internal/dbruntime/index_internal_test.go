@@ -3,7 +3,7 @@ package dbruntime
 import (
 	"testing"
 
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/mysql"
@@ -16,7 +16,7 @@ type indexedRecord struct {
 	Code string `gorm:"index:idx_indexed_records_code"`
 	Kind string
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*indexedRecord) TableName() string { return "indexed_records" }
@@ -32,7 +32,7 @@ func (*indexedRecord) Indexes() []modelschema.Index {
 type renamedRecord struct {
 	Kind string
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*renamedRecord) TableName() string { return "renamed_records" }
@@ -46,7 +46,7 @@ type occupiedRecord struct {
 	Code string
 	Kind string
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*occupiedRecord) TableName() string { return "occupied_records" }
@@ -61,7 +61,7 @@ type unnamedRecord struct {
 	Code string `gorm:"size:64"`
 	Kind string `gorm:"size:64"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*unnamedRecord) Indexes() []modelschema.Index {
@@ -74,7 +74,7 @@ type sizedRecord struct {
 	Code string `gorm:"size:64"`
 	Kind string `gorm:"size:64"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*sizedRecord) TableName() string { return "sized_records" }
@@ -87,7 +87,7 @@ func (*sizedRecord) Indexes() []modelschema.Index {
 type invalidRecord struct {
 	Name string
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*invalidRecord) TableName() string { return "invalid_records" }
@@ -102,7 +102,7 @@ func (*invalidRecord) Indexes() []modelschema.Index {
 type conflictKindRecord struct {
 	Kind string
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*conflictKindRecord) TableName() string { return "conflict_kind_records" }
@@ -114,7 +114,7 @@ func (*conflictKindRecord) Indexes() []modelschema.Index {
 type conflictKindTwin struct {
 	Kind string
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*conflictKindTwin) TableName() string { return "conflict_kind_records" }

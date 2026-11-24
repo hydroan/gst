@@ -6,7 +6,7 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/types"
 )
 
@@ -34,7 +34,7 @@ const (
 // standard success envelope returned by the controller.
 func setImport[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeFor[M]()
-	custom := !modelregistry.AreTypesEqual[M, REQ, RSP]()
+	custom := !model.AreTypesEqual[M, REQ, RSP]()
 	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, apiaction.Import)
 	rspKey := actionComponentKey(reflect.TypeFor[RSP](), typ, path, apiaction.Import)
 	rspSchemaRef := newSchemaRefWithDocs(apiResponse[RSP]{})
@@ -84,11 +84,11 @@ func importFileRequestBody() *openapi3.RequestBodyRef {
 // cap on the records listed where the controller lists them: a virtual
 // resource's export service lists its records itself.
 func setExport[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
-	custom := !modelregistry.AreTypesEqual[M, REQ, RSP]()
+	custom := !model.AreTypesEqual[M, REQ, RSP]()
 
 	op := newOperation(path, apiaction.Export, reflect.TypeFor[M](), custom)
 	op.Parameters = append(op.Parameters, exportFormatParameter())
-	if !modelregistry.IsVirtual(*new(M)) {
+	if !model.IsVirtual(*new(M)) {
 		op.Parameters = append(op.Parameters, exportLimitParameter())
 	}
 	op.Responses = exportFileResponses(custom)

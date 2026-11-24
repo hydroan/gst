@@ -7,8 +7,8 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/modelregistry"
-	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/internal/model"
+	"github.com/hydroan/gst/internal/service"
 	"github.com/hydroan/gst/internal/types"
 )
 
@@ -31,7 +31,7 @@ const (
 // the client's by name in the description, an OpenAPI document holding no
 // place for what the request of a GET goes on to send.
 func setStream[M types.Model, REQ types.Request, RSP types.Response](route, path string, pathItem *openapi3.PathItem) {
-	custom := !modelregistry.AreTypesEqual[M, REQ, RSP]()
+	custom := !model.AreTypesEqual[M, REQ, RSP]()
 	sent, _ := streamMessage[REQ]()
 	answered, answeredSchema := streamMessage[RSP]()
 
@@ -51,7 +51,7 @@ func setStream[M types.Model, REQ types.Request, RSP types.Response](route, path
 // reference to it, no name and the schema itself for a type without one. A
 // side sending no message, *model.Empty, has neither.
 func streamMessage[T any]() (name string, schema *openapi3.SchemaRef) {
-	if modelregistry.IsEmpty[T]() {
+	if model.IsEmpty[T]() {
 		return "", nil
 	}
 	schema = newSchemaRefWithDocs(*new(T))
@@ -92,7 +92,7 @@ func streamMessage[T any]() (name string, schema *openapi3.SchemaRef) {
 // sends no message.", and an action whose service declares no Stream method
 // is described by its messages alone, "The client sends SampleReq messages."
 func streamExchange[M types.Model, REQ types.Request, RSP types.Response](route, sent, answered string) string {
-	svc := serviceregistry.Resolve[M, REQ, RSP](serviceregistry.Key(apiaction.Stream, route))
+	svc := service.Resolve[M, REQ, RSP](service.Key(apiaction.Stream, route))
 	_, serverStream := svc.(types.ServerStreamer[REQ, RSP])
 	_, clientStream := svc.(types.ClientStreamer[REQ, RSP])
 	_, bidiStream := svc.(types.BidiStreamer[REQ, RSP])
@@ -103,7 +103,7 @@ func streamExchange[M types.Model, REQ types.Request, RSP types.Response](route,
 
 	var client, server string
 	switch {
-	case modelregistry.IsEmpty[REQ]():
+	case model.IsEmpty[REQ]():
 		client = "The client sends no message."
 	case clientStream || bidiStream:
 		client = "The client sends a stream of " + messages(sent) + " and ends it with a frame holding null."
@@ -113,7 +113,7 @@ func streamExchange[M types.Model, REQ types.Request, RSP types.Response](route,
 		client = "The client sends " + messages(sent) + "."
 	}
 	switch {
-	case modelregistry.IsEmpty[RSP]():
+	case model.IsEmpty[RSP]():
 		server = "The server sends no message."
 	case serverStream || bidiStream:
 		server = "The server sends a stream of " + messages(answered) + "."

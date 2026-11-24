@@ -8,7 +8,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/dbruntime"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/types"
 	"gorm.io/gorm"
 	"gorm.io/plugin/dbresolver"
@@ -490,7 +490,7 @@ func parseRegisteredModels(handle *gorm.DB) {
 		once, _ = parsedHandles.LoadOrStore(key, new(sync.Once))
 	}
 	once.(*sync.Once).Do(func() { //nolint:errcheck
-		for _, m := range modelregistry.RegisteredModels() {
+		for _, m := range model.RegisteredModels() {
 			_ = (&gorm.Statement{DB: handle}).Parse(m)
 		}
 	})
@@ -525,7 +525,7 @@ func databaseFor[M types.Model](ctx context.Context, base *gorm.DB) types.Databa
 	// site's WithReplica(false) overrides it back, and inside a transaction
 	// the resolver leaves the statement alone entirely. With no replicas
 	// configured the clause is inert and the read stays on the primary.
-	if modelregistry.PrefersReplica(*new(M)) {
+	if model.PrefersReplica(*new(M)) {
 		ins = ins.Clauses(dbresolver.Read)
 	}
 	chain := &database[M]{

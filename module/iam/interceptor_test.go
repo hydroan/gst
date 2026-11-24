@@ -14,10 +14,10 @@ import (
 	gstgrpc "github.com/hydroan/gst/grpc"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/grpcserver"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	modeliamaccount "github.com/hydroan/gst/internal/modulemodel/iam/account"
 	serviceiamsession "github.com/hydroan/gst/internal/moduleservice/iam/session"
-	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/internal/service"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/testutil/iamtest"
 	"github.com/stretchr/testify/require"
@@ -166,10 +166,10 @@ type probeSessionRsp struct {
 // probeSessionService is the service behind the probe's Session action: it
 // reads the current session the way the module's own actions do.
 type probeSessionService struct {
-	serviceregistry.Base[*modelregistry.Empty, *modelregistry.Empty, *probeSessionRsp]
+	service.Base[*model.Empty, *model.Empty, *probeSessionRsp]
 }
 
-func (*probeSessionService) Get(sc *types.ServiceContext, _ *modelregistry.Empty) (*probeSessionRsp, error) {
+func (*probeSessionService) Get(sc *types.ServiceContext, _ *model.Empty) (*probeSessionRsp, error) {
 	sessionID, _, err := serviceiamsession.CurrentSession(sc)
 	if err != nil {
 		return nil, err
@@ -203,8 +203,8 @@ func grpcProbe(t *testing.T) *grpc.ClientConn {
 		// Session runs the framework's call function over the probe's
 		// Session action, the way a generated handler runs a service, so the
 		// call goes through the check of the HTTP-only methods as well.
-		serviceregistry.RegisterInstance[*modelregistry.Empty, *modelregistry.Empty, *probeSessionRsp](apiaction.Get, probeSessionRoute, &probeSessionService{})
-		sessionCall := gstgrpc.ServiceCall[*modelregistry.Empty, *modelregistry.Empty, *probeSessionRsp](apiaction.Get, probeSessionRoute)
+		service.RegisterInstance[*model.Empty, *model.Empty, *probeSessionRsp](apiaction.Get, probeSessionRoute, &probeSessionService{})
+		sessionCall := gstgrpc.ServiceCall[*model.Empty, *model.Empty, *probeSessionRsp](apiaction.Get, probeSessionRoute)
 		session := grpc.MethodDesc{
 			MethodName: "Session",
 			Handler: func(_ any, ctx context.Context, dec func(any) error, unary grpc.UnaryServerInterceptor) (any, error) {
@@ -213,7 +213,7 @@ func grpcProbe(t *testing.T) *grpc.ClientConn {
 					return nil, err
 				}
 				handler := func(ctx context.Context, _ any) (any, error) {
-					rsp, err := sessionCall(ctx, nil, gstgrpc.Query{}, new(modelregistry.Empty))
+					rsp, err := sessionCall(ctx, nil, gstgrpc.Query{}, new(model.Empty))
 					if err != nil {
 						return nil, err
 					}

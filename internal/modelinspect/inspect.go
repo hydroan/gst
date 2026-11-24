@@ -34,7 +34,7 @@ type ColumnInfo struct {
 // modelschema.ValidateColumnTypes refused in the types of its columns, what
 // modelschema.ValidateFrameworkColumns refused in its columns, what
 // urlquery.ValidateQueryNames refused in its query tags and what
-// modelregistry.ValidateIDAccessors refused in its ID accessors, each "" when
+// model.ValidateIDAccessors refused in its ID accessors, each "" when
 // nothing.
 type ModelColumns struct {
 	PkgPath                  string       `json:"pkg_path"`
@@ -56,7 +56,7 @@ type ModelColumns struct {
 // indexes, what modelschema.ValidateColumnTypes refused in the types of its columns,
 // what modelschema.ValidateFrameworkColumns refused in its columns,
 // what urlquery.ValidateQueryNames refused in its query tags and what
-// modelregistry.ValidateIDAccessors refused in its ID accessors. The result
+// model.ValidateIDAccessors refused in its ID accessors. The result
 // comes from the cache when every input of the inspection is unchanged,
 // otherwise from a build and run of the program. The build takes the files
 // overlay returns in place of the project's own, which gg gen uses to stub out

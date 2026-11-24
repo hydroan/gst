@@ -7,7 +7,7 @@ import (
 
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/execctx"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	modellogmgmt "github.com/hydroan/gst/internal/modulemodel/logmgmt"
 	"github.com/hydroan/gst/internal/requestctx"
@@ -63,7 +63,7 @@ func writeFieldsOf[M types.Model](typ reflect.Type) (readOnly, unwritten [][]int
 			for holder.Kind() == reflect.Pointer {
 				holder = holder.Elem()
 			}
-			if step.Anonymous && modelregistry.IsFrameworkBase(holder) {
+			if step.Anonymous && model.IsFrameworkBase(holder) {
 				return true
 			}
 		}
@@ -122,10 +122,10 @@ func (a *action[M, REQ, RSP]) clearServerFields(records ...M) {
 // operationLog returns the operation log entry of the request ctx carries,
 // with the fields every action records filled in: who acted, from where, on
 // which request, in which trace. The flow adds the record and the payloads.
-func operationLog(ctx context.Context, model string) *modellogmgmt.OperationLog {
+func operationLog(ctx context.Context, modelName string) *modellogmgmt.OperationLog {
 	meta := requestctx.FromContext(ctx)
 	return &modellogmgmt.OperationLog{
-		Model:     model,
+		Model:     modelName,
 		IP:        meta.ClientIP(),
 		User:      meta.Username(),
 		TraceID:   execctx.FromContext(ctx).TraceID,

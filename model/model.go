@@ -1,7 +1,7 @@
 package model
 
 import (
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"gorm.io/gorm"
@@ -20,24 +20,24 @@ type (
 	// updated_by, created_at, updated_at and deleted_at. A model re-declaring one
 	// of the fields keeps its column; the start and gg check refuse one renaming
 	// it.
-	Base = modelregistry.Base
+	Base = model.Base
 
 	// AutoBase provides the same common fields and default hooks as Base but
 	// uses an auto-increment integer primary key assigned by the database. Its
 	// columns are fixed the way Base's are.
-	AutoBase = modelregistry.AutoBase
+	AutoBase = model.AutoBase
 
 	// Query enables sorting, expansion and the operator filters when
 	// embedded by a model. Paging is no part of it: every list pages by
 	// _page and _size.
-	Query = modelregistry.Query
+	Query = model.Query
 
 	// Cursor makes the list of a model embedding it a feed, read by cursor
 	// in place of pages.
-	Cursor = modelregistry.Cursor
+	Cursor = model.Cursor
 
 	// Empty marks a model as an action-only type that does not map to a database table.
-	Empty = modelregistry.Empty
+	Empty = model.Empty
 
 	// Index declares one secondary index on a model's table, the single way
 	// models declare indexes: a model implements the optional
@@ -65,7 +65,7 @@ type (
 // the programs being source it embeds, but the programs do not, here or in a
 // project, where gg gen, gg check and gg migrate run them.
 func RegisteredModels() []any {
-	return modelregistry.RegisteredModels()
+	return model.RegisteredModels()
 }
 
 // ValidateIndexes refuses in model's Indexes() declarations what the
@@ -102,5 +102,5 @@ func ValidateIndexes(db *gorm.DB, model any) error {
 //  2. Ensure the model package is imported by the application entrypoint.
 //  3. The function is safe for concurrent use.
 func Register[M types.Model]() {
-	modelregistry.Register[M]()
+	model.Register[M]()
 }

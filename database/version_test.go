@@ -7,7 +7,7 @@ import (
 
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/dbruntime"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
@@ -26,7 +26,7 @@ type versionedNote struct {
 	Body    string              `json:"body" gorm:"size:191"`
 	Version modelschema.Version `json:"version,omitempty" gorm:"not null;default:1"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*versionedNote) TableName() string { return "versioned_notes" }
@@ -39,7 +39,7 @@ type versionedScoredNote struct {
 	Score   int                 `json:"score" gorm:"->;default:0"`
 	Version modelschema.Version `json:"version,omitempty" gorm:"not null;default:1"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*versionedScoredNote) TableName() string { return "versioned_scored_notes" }
@@ -350,7 +350,7 @@ type legacyAdoptedNote struct {
 	Title   string              `json:"title" gorm:"size:191"`
 	Version modelschema.Version `json:"version,omitempty" gorm:"not null;default:1"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*legacyAdoptedNote) TableName() string { return "legacy_adopted_notes" }

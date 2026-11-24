@@ -16,6 +16,7 @@ func TestSchemaComponentName(t *testing.T) {
 	}{
 		{"model subpackage", "myproject/model/sample", "Record", "sample.Record"},
 		{"model root", "myproject/model", "Item", "Item"},
+		{"the framework's own model package", "github.com/hydroan/gst/internal/model", "Empty", "internal.model.Empty"},
 		{"module model package", "github.com/hydroan/gst/internal/modulemodel/authz", "Role", "authz.Role"},
 		{"module model subpackage", "github.com/hydroan/gst/internal/modulemodel/iam/user", "User", "iam.user.User"},
 		{"non-model package", "github.com/hydroan/gst/module/iam", "LoginReq", "module.iam.LoginReq"},

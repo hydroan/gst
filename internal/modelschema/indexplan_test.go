@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/internal/datatypes"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/mysql"
@@ -20,7 +20,7 @@ type IndexedSample struct {
 	Code string `json:"code" gorm:"index:idx_indexed_samples_code"`
 	Kind string `json:"kind"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*IndexedSample) TableName() string { return "indexed_samples" }
@@ -36,14 +36,14 @@ func (*IndexedSample) Indexes() []modelschema.Index {
 type PlainSample struct {
 	Name string `json:"name"`
 
-	modelregistry.Base
+	model.Base
 }
 
 // EmptyFieldsSample declares an index without fields.
 type EmptyFieldsSample struct {
 	Kind string
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*EmptyFieldsSample) TableName() string { return "empty_fields_samples" }
@@ -56,7 +56,7 @@ func (*EmptyFieldsSample) Indexes() []modelschema.Index {
 type UnknownFieldSample struct {
 	Kind string
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*UnknownFieldSample) TableName() string { return "unknown_field_samples" }
@@ -69,7 +69,7 @@ func (*UnknownFieldSample) Indexes() []modelschema.Index {
 type RepeatedColumnSample struct {
 	Kind string
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*RepeatedColumnSample) TableName() string { return "repeated_column_samples" }
@@ -82,7 +82,7 @@ func (*RepeatedColumnSample) Indexes() []modelschema.Index {
 type DuplicateDeclSample struct {
 	Kind string
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*DuplicateDeclSample) TableName() string { return "duplicate_decl_samples" }
@@ -100,7 +100,7 @@ type TagNameConflictSample struct {
 	Code string `gorm:"index:idx_tag_name_conflict_samples_kind"`
 	Kind string
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TagNameConflictSample) TableName() string { return "tag_name_conflict_samples" }
@@ -114,7 +114,7 @@ func (*TagNameConflictSample) Indexes() []modelschema.Index {
 type TagColumnsConflictSample struct {
 	Code string `gorm:"index:custom_code_idx"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TagColumnsConflictSample) TableName() string { return "tag_columns_conflict_samples" }
@@ -129,7 +129,7 @@ func (*TagColumnsConflictSample) Indexes() []modelschema.Index {
 type UniqueTagConflictSample struct {
 	Code string `gorm:"unique"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*UniqueTagConflictSample) TableName() string { return "unique_tag_conflict_samples" }
@@ -142,7 +142,7 @@ func (*UniqueTagConflictSample) Indexes() []modelschema.Index {
 type NoTableNameSample struct {
 	Kind string
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*NoTableNameSample) Indexes() []modelschema.Index {
@@ -154,7 +154,7 @@ func (*NoTableNameSample) Indexes() []modelschema.Index {
 type ColumnNameSample struct {
 	Kind string
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*ColumnNameSample) TableName() string { return "column_name_samples" }
@@ -176,7 +176,7 @@ type EmbeddedIndexSample struct {
 	First  EmbeddedIndexPart `json:"first" gorm:"embedded;embeddedPrefix:first_"`
 	Second EmbeddedIndexPart `json:"second" gorm:"embedded;embeddedPrefix:second_"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*EmbeddedIndexSample) TableName() string { return "embedded_index_samples" }
@@ -252,7 +252,7 @@ func TestParseIndexPlansNamesEmbeddedFieldsByPath(t *testing.T) {
 type QualifiedIndexSample struct {
 	Code string `json:"code" gorm:"size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*QualifiedIndexSample) TableName() string { return "audit.qualified_samples" }
@@ -282,7 +282,7 @@ type LongTableNameSample struct {
 	Code string
 	Kind string
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*LongTableNameSample) TableName() string {
@@ -315,11 +315,11 @@ func TestParseIndexPlansTruncatesLongNames(t *testing.T) {
 type (
 	LimitNameSample struct {
 		Kind string
-		modelregistry.Base
+		model.Base
 	}
 	OverLimitNameSample struct {
 		Kind string
-		modelregistry.Base
+		model.Base
 	}
 )
 
@@ -460,7 +460,7 @@ func TestIndexPlanCreateSQL(t *testing.T) {
 type PurgedUniqueSample struct {
 	Code string `json:"code" gorm:"size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*PurgedUniqueSample) TableName() string { return "purged_unique_samples" }
@@ -554,7 +554,7 @@ func newSchemaDB(t *testing.T) *gorm.DB {
 type UnsizedIndexSample struct {
 	Owner string `json:"owner"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*UnsizedIndexSample) TableName() string { return "unsized_index_samples" }
@@ -567,7 +567,7 @@ func (*UnsizedIndexSample) Indexes() []modelschema.Index {
 type SizedIndexSample struct {
 	Owner string `json:"owner" gorm:"size:36"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*SizedIndexSample) TableName() string { return "sized_index_samples" }
@@ -581,7 +581,7 @@ func (*SizedIndexSample) Indexes() []modelschema.Index {
 type JSONIndexSample struct {
 	Attrs datatypes.JSON[json.RawMessage] `json:"attrs"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*JSONIndexSample) TableName() string { return "json_index_samples" }

@@ -174,13 +174,11 @@ func uniqueTypeScriptRoots(roots []ts.TypeRef) []ts.TypeRef {
 
 // Where the framework keeps what its modules are made of, by import path: the
 // module package, whose Use registers a route and whose tree holds a package
-// per module, the tree of the modules' models, and the package declaring the
-// type model.Empty names.
+// per module, and the tree of the modules' models.
 const (
 	frameworkModuleTree = ggconst.ImportPathGst + "/" + ggconst.DirModule
 	funcModuleUse       = "Use"
 	frameworkModelTree  = ggconst.ImportPathGst + "/" + ggconst.DirModuleModel
-	frameworkEmptyPath  = ggconst.ImportPathGst + "/internal/modelregistry"
 )
 
 // typeScriptDeclaredTrees returns the package trees outside the project whose
@@ -314,7 +312,7 @@ func isEmptyModel(t types.Type) bool {
 		return false
 	}
 	// The type carries the name a model embeds it under.
-	if obj := named.Obj(); obj.Pkg() != nil && obj.Pkg().Path() == frameworkEmptyPath && obj.Name() == ggconst.FieldEmpty {
+	if obj := named.Obj(); obj.Pkg() != nil && obj.Pkg().Path() == ggconst.ImportPathInternalModel && obj.Name() == ggconst.FieldEmpty {
 		return true
 	}
 	fields, ok := named.Underlying().(*types.Struct)

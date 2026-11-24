@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/stretchr/testify/require"
@@ -17,8 +17,8 @@ import (
 type listQueryableTestModel struct {
 	Name string `query:"name"`
 
-	modelregistry.Query
-	modelregistry.Base
+	model.Query
+	model.Base
 }
 
 func TestDecodeListQueryGatesQueryKeys(t *testing.T) {
@@ -34,19 +34,19 @@ func TestDecodeListQueryGatesQueryKeys(t *testing.T) {
 		type plainModel struct {
 			Name string `query:"name"`
 
-			modelregistry.Base
+			model.Base
 		}
 		var m plainModel
 		require.EqualError(t, decodeListQuery(&m, map[string][]string{"_sort_by": {"created_at desc"}}),
 			`unsupported query parameter "_sort_by"`,
-			"a model that did not embed modelregistry.Query must not accept the List controls")
+			"a model that did not embed model.Query must not accept the List controls")
 	})
 
 	t.Run("ListsEveryRejectedKeyAtOnce", func(t *testing.T) {
 		type plainModel struct {
 			Name string `query:"name"`
 
-			modelregistry.Base
+			model.Base
 		}
 		var m plainModel
 		require.EqualError(t, decodeListQuery(&m, map[string][]string{
@@ -85,26 +85,26 @@ func TestListQueryTakesOneWayOfPagingPerModel(t *testing.T) {
 	type plainModel struct {
 		Name string `query:"name"`
 
-		modelregistry.Base
+		model.Base
 	}
 	type feedModel struct {
 		Name string `query:"name"`
 
-		modelregistry.Cursor
-		modelregistry.Base
+		model.Cursor
+		model.Base
 	}
 	type queryModel struct {
 		Name string `query:"name"`
 
-		modelregistry.Query
-		modelregistry.Base
+		model.Query
+		model.Base
 	}
 	type queryFeedModel struct {
 		Name string `query:"name"`
 
-		modelregistry.Query
-		modelregistry.Cursor
-		modelregistry.Base
+		model.Query
+		model.Cursor
+		model.Base
 	}
 
 	for _, tt := range []struct {
@@ -146,8 +146,8 @@ type filterKeyTestModel struct {
 	Name string `query:"name"`
 	Age  int    `json:"age" query:"age"`
 
-	modelregistry.Query
-	modelregistry.Base
+	model.Query
+	model.Base
 }
 
 func TestDecodeListQueryIgnoresFilterKeys(t *testing.T) {
@@ -166,27 +166,27 @@ func TestDecodeListQueryIgnoresFilterKeys(t *testing.T) {
 type listBenchmarkModel struct {
 	Name string `query:"name"`
 
-	modelregistry.Base
+	model.Base
 }
 
 type listBenchmarkQueryableModel struct {
 	Name string `query:"name"`
 
-	modelregistry.Query
-	modelregistry.Base
+	model.Query
+	model.Base
 }
 
 type listBenchmarkPlainModel struct {
 	Name string `query:"name"`
 
-	modelregistry.Base
+	model.Base
 }
 
 type listBenchmarkCursorableModel struct {
 	Name string `query:"name"`
 
-	modelregistry.Cursor
-	modelregistry.Base
+	model.Cursor
+	model.Base
 }
 
 var (
@@ -276,7 +276,7 @@ type expandQueryTestModel struct {
 	ChildItems []*expandQueryTestModel `gorm:"foreignKey:ParentID"`
 	Entries    []*expandQueryTestEntry `gorm:"foreignKey:OwnerID"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*expandQueryTestModel) Expands() []string {
@@ -289,14 +289,14 @@ type expandQueryTestEntry struct {
 	OwnerID string                 `gorm:"size:191"`
 	Notes   []*expandQueryTestNote `gorm:"foreignKey:EntryID"`
 
-	modelregistry.Base
+	model.Base
 }
 
 // expandQueryTestNote is held by expandQueryTestEntry and holds nothing.
 type expandQueryTestNote struct {
 	EntryID string `gorm:"size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 // TestParseExpandQueryResolvesTheExpandableAssociations pins how _expand and

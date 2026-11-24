@@ -14,10 +14,10 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/auditmanager"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	modellogmgmt "github.com/hydroan/gst/internal/modulemodel/logmgmt"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/internal/service"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
@@ -29,7 +29,7 @@ import (
 type flowSample struct {
 	Name string `json:"name"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (flowSample) TableName() string { return "controller_flow_samples" }
@@ -40,7 +40,7 @@ type sealedFlowSample struct {
 	Name string `json:"name"`
 	Code string `json:"code" gorm:"size:191;<-:create"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (sealedFlowSample) TableName() string { return "controller_sealed_flow_samples" }
@@ -53,7 +53,7 @@ type stagedFlowSample struct {
 	Stage string    `json:"stage" binding:"readonly"`
 	Tally flowTally `json:"tally" gorm:"embedded" binding:"readonly"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (stagedFlowSample) TableName() string { return "controller_staged_flow_samples" }
@@ -69,18 +69,18 @@ type flowTally struct {
 type lockedFlowSample struct {
 	Stage string `json:"stage" binding:"readonly"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (lockedFlowSample) TableName() string { return "controller_locked_flow_samples" }
 
 // replicaFlowSample is flowSample with its reads preferring a replica (see
-// modelregistry.PrefersReplica). Its tables are where useReplica puts them,
+// model.PrefersReplica). Its tables are where useReplica puts them,
 // not on the default database.
 type replicaFlowSample struct {
 	Name string `json:"name"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (replicaFlowSample) TableName() string { return "controller_replica_flow_samples" }
@@ -91,7 +91,7 @@ func (replicaFlowSample) PreferReplica() bool { return true }
 // is its one instance, registered once for the process, so a rerun of the
 // test clears it and reads its own call.
 type sealedAfterHook struct {
-	serviceregistry.Base[*sealedFlowSample, *sealedFlowSample, *sealedFlowSample]
+	service.Base[*sealedFlowSample, *sealedFlowSample, *sealedFlowSample]
 	seen string
 }
 
@@ -103,8 +103,8 @@ func (h *sealedAfterHook) UpdateAfter(_ *types.ServiceContext, m *sealedFlowSamp
 var sealedAfter = &sealedAfterHook{}
 
 func init() {
-	modelregistry.Register[*flowSample]()
-	modelregistry.Register[*sealedFlowSample]()
+	model.Register[*flowSample]()
+	model.Register[*sealedFlowSample]()
 }
 
 // plainServiceContext builds the service contexts of a flow run outside any
@@ -317,7 +317,7 @@ func TestPatchFlowRecordsTheRecordIDInTheOperationLog(t *testing.T) {
 type setIDUUIDRecord struct {
 	Name string `json:"name"`
 
-	modelregistry.Base
+	model.Base
 }
 
 // setIDIntegerRecord is keyed by an auto-increment integer, whose id takes a
@@ -325,7 +325,7 @@ type setIDUUIDRecord struct {
 type setIDIntegerRecord struct {
 	Name string `json:"name"`
 
-	modelregistry.AutoBase
+	model.AutoBase
 }
 
 // TestSetIDAcceptsAnyValueForUUIDKeyedModel pins that a string-keyed model

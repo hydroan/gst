@@ -11,8 +11,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/modelregistry"
-	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/internal/model"
+	"github.com/hydroan/gst/internal/service"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
@@ -31,14 +31,14 @@ var registeredTestServices sync.Map
 // shared across the runs, and the test resets that state first.
 func registerTestService[M types.Model, REQ types.Request, RSP types.Response](phase apiaction.Phase, route string, svc types.Service[M, REQ, RSP]) {
 	if _, registered := registeredTestServices.LoadOrStore(string(phase)+"|"+route, true); !registered {
-		serviceregistry.RegisterInstance[M, REQ, RSP](phase, route, svc)
+		service.RegisterInstance[M, REQ, RSP](phase, route, svc)
 	}
 }
 
 // handlerRouteModel is the model fixture the handler tests share:
 // the route-dispatch and hook-tracing tests here, and the SSE test.
 type handlerRouteModel struct {
-	modelregistry.Base
+	model.Base
 }
 
 // handlerRouteReq and handlerRouteRsp are shared by both action services
@@ -53,7 +53,7 @@ type handlerRouteRsp struct {
 }
 
 type handlerStartService struct {
-	serviceregistry.Base[*handlerRouteModel, *handlerRouteReq, *handlerRouteRsp]
+	service.Base[*handlerRouteModel, *handlerRouteReq, *handlerRouteRsp]
 }
 
 func (s *handlerStartService) Create(*types.ServiceContext, *handlerRouteReq) (*handlerRouteRsp, error) {
@@ -61,7 +61,7 @@ func (s *handlerStartService) Create(*types.ServiceContext, *handlerRouteReq) (*
 }
 
 type handlerStopService struct {
-	serviceregistry.Base[*handlerRouteModel, *handlerRouteReq, *handlerRouteRsp]
+	service.Base[*handlerRouteModel, *handlerRouteReq, *handlerRouteRsp]
 }
 
 func (s *handlerStopService) Create(*types.ServiceContext, *handlerRouteReq) (*handlerRouteRsp, error) {
@@ -98,7 +98,7 @@ func TestCreateHandlerDispatchesActionServiceByRoute(t *testing.T) {
 // handlerListBeforeService overrides one list hook and leaves the other to the
 // framework base.
 type handlerListBeforeService struct {
-	serviceregistry.Base[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel]
+	service.Base[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel]
 }
 
 func (*handlerListBeforeService) ListBefore(*types.ServiceContext, *[]*handlerRouteModel) error {
@@ -115,7 +115,7 @@ func TestTraceServiceHookSpansOnlyOverriddenHooks(t *testing.T) {
 	a := newAction[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel]("samples", apiaction.List, apiaction.ListBefore, apiaction.ListAfter)
 
 	t.Run("the_default_service_exports_no_hook_span", func(t *testing.T) {
-		svc := serviceregistry.Resolve[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel]("samples/unregistered")
+		svc := service.Resolve[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel]("samples/unregistered")
 		data := make([]*handlerRouteModel, 0)
 		require.NoError(t, a.traceServiceHook(context.Background(), apiaction.ListBefore, svc, bareServiceContext, func(sc *types.ServiceContext) error {
 			return svc.ListBefore(sc, &data)

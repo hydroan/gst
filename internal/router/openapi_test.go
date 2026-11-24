@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/router"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
@@ -21,8 +21,8 @@ const pagedRecordRoute = "paged-records"
 type pagedRecord struct {
 	Name string `json:"name" query:"name"`
 
-	modelregistry.Query
-	modelregistry.Base
+	model.Query
+	model.Base
 }
 
 // registerDocumentedRoute registers that route; TestMain calls it after

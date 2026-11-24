@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 )
@@ -46,7 +46,7 @@ import (
 // feed is a service-side cursor, built with types.CursorForward on a Desc
 // order.
 func Cursor(q url.Values, m types.Model) (types.Cursor, error) {
-	if !modelregistry.IsCursorable(m) {
+	if !model.IsCursorable(m) {
 		return types.Cursor{}, nil
 	}
 	var untaken []string

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
@@ -22,8 +22,8 @@ type parameterTestModel struct {
 	Secret    string    `json:"-" query:"secret"`
 	Note      string    `json:"note"`
 
-	modelregistry.Query
-	modelregistry.Base
+	model.Query
+	model.Base
 }
 
 // plainParameterTestModel embeds no model.Query, so no column takes an
@@ -31,7 +31,7 @@ type parameterTestModel struct {
 type plainParameterTestModel struct {
 	Title string `json:"title" query:"title"`
 
-	modelregistry.Base
+	model.Base
 }
 
 // stampedParameterTestModel names a field of its own created_at, a key Decode
@@ -45,7 +45,7 @@ type stampedParameterTestModel struct {
 type queriedStampedParameterTestModel struct {
 	Stamp string `json:"stamp" query:"created_at"`
 
-	modelregistry.Query
+	model.Query
 }
 
 // TestParameters pins the parameters a list takes, in the order of the

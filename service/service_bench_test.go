@@ -3,7 +3,7 @@ package service_test
 import (
 	"testing"
 
-	"github.com/hydroan/gst/internal/serviceregistry"
+	internalservice "github.com/hydroan/gst/internal/service"
 	"github.com/hydroan/gst/service"
 )
 
@@ -12,8 +12,8 @@ func BenchmarkResolveRegisteredService(b *testing.B) {
 	route := newRoute("samples/bench")
 	service.Register[*svc](service.Create, route)
 
-	key := serviceregistry.Key(service.Create, route)
+	key := internalservice.Key(service.Create, route)
 	for b.Loop() {
-		_ = serviceregistry.Resolve[*testUser, *testUser, *testUser](key)
+		_ = internalservice.Resolve[*testUser, *testUser, *testUser](key)
 	}
 }

@@ -122,7 +122,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/instance"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"gorm.io/gorm"
 )
@@ -203,7 +203,7 @@ var (
 // instant claimed can be unfinished, so a value other than slot_ms reads as
 // settled too.
 type row struct {
-	modelregistry.AutoBase
+	model.AutoBase
 	Name             string `gorm:"size:191;not null"`  // "cron:<job>"; each capability prefixes its own names, within nameMaxLength
 	Holder           string `gorm:"size:32;not null"`   // token minted per claim, never reused
 	Instance         string `gorm:"size:191;not null"`  // the process holding it; for reading logs only
@@ -226,7 +226,7 @@ func (*row) Indexes() []modelschema.Index {
 func init() {
 	// Importing this package brings the table and the transaction guard: a
 	// project that links no capability built on leases carries neither.
-	modelregistry.Register[*row]()
+	model.Register[*row]()
 	dbruntime.SetTransactionGuard(Verify)
 }
 

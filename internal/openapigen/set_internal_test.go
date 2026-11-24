@@ -12,7 +12,7 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 )
 
 func TestSetMarksPublicRouteSecurity(t *testing.T) {
@@ -60,7 +60,7 @@ type openapiActionModel struct {
 	// Name is the record name.
 	Name string `json:"name"`
 
-	modelregistry.Base
+	model.Base
 }
 
 type openapiFirstActionReq struct {
@@ -249,7 +249,7 @@ type openapiDeletableModel struct {
 	// Name is the record name.
 	Name string `json:"name"`
 
-	modelregistry.Base
+	model.Base
 }
 
 // TestSetDocumentsNoDataForDefaultDeletes asserts that a delete the framework
@@ -307,7 +307,7 @@ type openapiTreeNode struct {
 	Children []*openapiTreeNode `json:"children,omitempty"`
 	Parent   *openapiTreeNode   `json:"parent,omitempty"`
 
-	modelregistry.Base
+	model.Base
 }
 
 // TestSetResolvesSelfReferentialSchemaRefs asserts that the $ref emitted for a
@@ -339,7 +339,7 @@ type openapiTreeHolder struct {
 	Nodes []*openapiTreeNode `json:"nodes,omitempty"`
 	Extra []*openapiTreeNode `json:"extra,omitempty"`
 
-	modelregistry.Base
+	model.Base
 }
 
 // TestSetBuildsExampleWithoutNullPlaceholders asserts that the generated
@@ -404,7 +404,7 @@ type openapiExampleShapeModel struct {
 	// StartedAt is a date-time formatted string.
 	StartedAt time.Time `json:"started_at"`
 
-	modelregistry.Base
+	model.Base
 }
 
 // TestSetBuildsExampleHonouringFormatAndEnum asserts that an example value
@@ -447,7 +447,7 @@ type openapiAnyMapModel struct {
 	// Attributes holds user-defined keys and values.
 	Attributes map[string]any `json:"attributes"`
 
-	modelregistry.Base
+	model.Base
 }
 
 // TestSetBuildsExampleForUntypedMapValues asserts that a schema declaring no
@@ -475,7 +475,7 @@ type openapiItemsModel struct {
 	// Items are the lines of the record.
 	Items []openapiItemsLine `json:"items" gorm:"serializer:json"`
 
-	modelregistry.Base
+	model.Base
 }
 
 // openapiItemsLine is a line of openapiItemsModel, named by an id of its own.
@@ -508,7 +508,7 @@ type openapiKeyModel struct {
 	// Name is the record name.
 	Name string `json:"name"`
 
-	modelregistry.Base
+	model.Base
 }
 
 // componentKeyCharset is the character set the OpenAPI spec allows in a

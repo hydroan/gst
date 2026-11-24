@@ -10,9 +10,9 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/internal/service"
 	"github.com/hydroan/gst/internal/types"
 	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -35,7 +35,7 @@ type action[M types.Model, REQ types.Request, RSP types.Response] struct {
 	name       string          // struct name of M, recorded in span attributes and logs
 	typesEqual bool            // whether M, REQ, and RSP are the same type
 	phase      apiaction.Phase // the primary phase, the one the handler or call serves
-	serviceKey string          // service registry key, resolved per request via serviceregistry.Resolve
+	serviceKey string          // service registry key, resolved per request via service.Resolve
 
 	reqKind reflect.Kind // original kind of REQ before pointer dereferencing
 	reqTyp  reflect.Type // struct type underlying REQ, used to build zero requests
@@ -71,7 +71,7 @@ type action[M types.Model, REQ types.Request, RSP types.Response] struct {
 
 // newAction builds the action of the primary phase on route, the one the
 // handler or call is registered under, whose served path keys the service
-// registry lookup together with the phase (see serviceregistry.Key); an
+// registry lookup together with the phase (see service.Key); an
 // empty route resolves no service, degrading to the no-op default service.
 // hookPhases lists the additional service hook phases the action traces
 // (for example the before/after phases of a CRUD operation), so their span
@@ -102,7 +102,7 @@ func newAction[M types.Model, REQ types.Request, RSP types.Response](route strin
 	for _, hookPhase := range hookPhases {
 		serviceSpans[hookPhase] = newPhaseSpan("service", name, hookPhase)
 	}
-	typesEqual := modelregistry.AreTypesEqual[M, REQ, RSP]()
+	typesEqual := model.AreTypesEqual[M, REQ, RSP]()
 	itemParam := ""
 	if itemPhases[phase] && typesEqual {
 		itemParam = apiaction.LastRouteParam(route)
@@ -125,7 +125,7 @@ func newAction[M types.Model, REQ types.Request, RSP types.Response](route strin
 		name:           name,
 		typesEqual:     typesEqual,
 		phase:          phase,
-		serviceKey:     serviceregistry.Key(phase, route),
+		serviceKey:     service.Key(phase, route),
 		reqKind:        reqKind,
 		reqTyp:         reqTyp,
 		controllerSpan: newPhaseSpan("controller", name, phase),
@@ -194,7 +194,7 @@ func (a *action[M, REQ, RSP]) newRequest() REQ {
 // key. Resolution stays per request so services registered after route
 // registration are still picked up.
 func (a *action[M, REQ, RSP]) service() types.Service[M, REQ, RSP] {
-	return serviceregistry.Resolve[M, REQ, RSP](a.serviceKey)
+	return service.Resolve[M, REQ, RSP](a.serviceKey)
 }
 
 // serviceMethod returns the method of a service serving phase, the one the
@@ -300,7 +300,7 @@ func (a *action[M, REQ, RSP]) traceServiceHook(parentCtx context.Context, phase 
 		return httpOnlyMethodCalled(sc)
 	}
 	span := a.serviceSpan(phase)
-	if !gstotel.IsEnabled() || !serviceregistry.OverridesHook(svc, span.operation) {
+	if !gstotel.IsEnabled() || !service.OverridesHook(svc, span.operation) {
 		return run(parentCtx)
 	}
 	_, err := traceServiceCall[struct{}](parentCtx, span, a.name, func(spanCtx context.Context) (struct{}, error) {

@@ -18,7 +18,7 @@ var IDAccessors = Check{
 
 // checkIDAccessors reports the models declaring an ID of their own that take
 // an ID accessor from the framework base they embed, which table preparation
-// refuses at startup (see modelregistry.ValidateIDAccessors). Which ID Go
+// refuses at startup (see model.ValidateIDAccessors). Which ID Go
 // resolves on a model and which type declares each accessor are the
 // compiler's to decide from the structs the model embeds, so the check asks
 // the models themselves through the column inspection (see

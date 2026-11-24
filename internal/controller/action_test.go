@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/internal/controller"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,7 +41,7 @@ func TestHandlersRefuseARequestTypeNoBodyDecodesInto(t *testing.T) {
 type lockedSample struct {
 	Stage string `json:"stage" binding:"readonly"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (lockedSample) TableName() string { return "controller_locked_samples" }

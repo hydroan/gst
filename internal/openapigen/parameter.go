@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
@@ -59,7 +59,7 @@ func parseParametersFromPath(path string) []*openapi3.ParameterRef {
 // refuses the paging parameters and documents none.
 func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op *openapi3.Operation, paged bool) {
 	// Model-field query filters are available only to the default CRUD path.
-	if !modelregistry.AreTypesEqual[M, REQ, RSP]() {
+	if !model.AreTypesEqual[M, REQ, RSP]() {
 		return
 	}
 
@@ -78,10 +78,10 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 	queries := make([]*openapi3.ParameterRef, 0, len(params))
 	for _, param := range params {
 		field, owner := structFieldAt(typ, param.Index)
-		if !paged && owner == reflect.TypeFor[modelregistry.Cursor]() {
+		if !paged && owner == reflect.TypeFor[model.Cursor]() {
 			continue
 		}
-		if paged && param.Name == types.QuerySortBy && modelregistry.IsCursorable(m) {
+		if paged && param.Name == types.QuerySortBy && model.IsCursorable(m) {
 			continue
 		}
 		description := openAPIDocComment(field.Name, modelFieldDocs(reflect.New(owner).Interface())[field.Name])
@@ -115,7 +115,7 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 		count := func() *openapi3.SchemaRef {
 			return &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeInteger}}}
 		}
-		if !modelregistry.IsCursorable(m) {
+		if !model.IsCursorable(m) {
 			queries = append(queries, queryParameter(types.QueryPage, count(),
 				"The one-based page number; zero is the first page, and a negative value is refused."))
 		}

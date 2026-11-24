@@ -7,7 +7,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	modeliamaccount "github.com/hydroan/gst/internal/modulemodel/iam/account"
 	modeliamprofile "github.com/hydroan/gst/internal/modulemodel/iam/profile"
 	modeliamuser "github.com/hydroan/gst/internal/modulemodel/iam/user"
@@ -131,10 +131,10 @@ func Register() {
 	// Register the backing IAM tables. The root account comes from SeedRoot
 	// above; the project's other baseline accounts go through CreateAccount in
 	// a startup hook of its own.
-	modelregistry.Register[*modeliamuser.User]()
-	modelregistry.Register[*modeliamaccount.PasswordCredential]()
-	modelregistry.Register[*modeliamaccount.EmailIdentity]()
-	modelregistry.Register[*modeliamprofile.Profile]()
+	model.Register[*modeliamuser.User]()
+	model.Register[*modeliamaccount.PasswordCredential]()
+	model.Register[*modeliamaccount.EmailIdentity]()
+	model.Register[*modeliamprofile.Profile]()
 }
 
 // GetSessionExpiration returns the configured session expiration time.

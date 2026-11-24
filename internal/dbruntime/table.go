@@ -11,7 +11,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/logfield"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
@@ -29,7 +29,7 @@ var tablePreparationStarted atomic.Int32
 // counts on that ordering: a model still counts as pending for the whole of
 // ensureTable, not just for the time it sits on the queue.
 func prepareTable(db *gorm.DB, m types.Model) {
-	defer modelregistry.TableDone()
+	defer model.TableDone()
 
 	// Touching the version metadata here makes a defective model.Version
 	// declaration (embedded, or missing its required tag) fail at startup
@@ -99,7 +99,7 @@ func preparationFailed() error {
 // name its URL query parameters unambiguously (see
 // urlquery.ValidateQueryNames) and, when it declares an ID of its own over
 // its base's, declare the ID accessors that go with it (see
-// modelregistry.ValidateIDAccessors); a model failing any of them is refused
+// model.ValidateIDAccessors); a model failing any of them is refused
 // before anything touches the database, whatever the database.
 //
 // With database.auto_migrate enabled it runs gorm AutoMigrate and creates
@@ -131,7 +131,7 @@ func ensureTable(handler *gorm.DB, m types.Model) error {
 	if err = urlquery.ValidateQueryNames(reflect.TypeOf(m)); err != nil {
 		return err
 	}
-	if err = modelregistry.ValidateIDAccessors(reflect.TypeOf(m)); err != nil {
+	if err = model.ValidateIDAccessors(reflect.TypeOf(m)); err != nil {
 		return err
 	}
 
@@ -238,7 +238,7 @@ func Wait() error {
 	var lastLogTime time.Time
 
 	for {
-		pending := modelregistry.TablesPending()
+		pending := model.TablesPending()
 		if pending == 0 {
 			break
 		}
@@ -279,7 +279,7 @@ func awaitTableProgress(lastLogTime time.Time) {
 	defer timer.Stop()
 
 	select {
-	case <-modelregistry.TablesChanged():
+	case <-model.TablesChanged():
 	case <-timer.C:
 	}
 }

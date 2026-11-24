@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"slices"
 
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 )
@@ -54,7 +54,7 @@ func Parameters(typ reflect.Type) ([]Parameter, error) {
 		return nil, nil
 	}
 	var columns map[string]modelschema.Column
-	if modelregistry.IsQueryable(reflect.New(typ).Interface()) {
+	if model.IsQueryable(reflect.New(typ).Interface()) {
 		if columns, err = modelschema.FilterableIndex(typ); err != nil {
 			return nil, err
 		}

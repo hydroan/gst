@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 )
@@ -21,7 +21,7 @@ import (
 // with a SQL error. The value carried in each Order is the database column
 // name, while the URL names the column by its query name.
 func Orders(q url.Values, m types.Model) ([]types.Order, error) {
-	if !modelregistry.IsQueryable(m) {
+	if !model.IsQueryable(m) {
 		return nil, nil
 	}
 	expression := strings.TrimSpace(q.Get(types.QuerySortBy))

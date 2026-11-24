@@ -8,7 +8,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/logfield"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
@@ -301,7 +301,7 @@ func traceModelHook[M types.Model](ctx context.Context, phase apiaction.Phase, p
 	}
 	// An unoverridden hook is the framework base's no-op: it still runs, but
 	// there is nothing to time.
-	if !modelregistry.OverridesHook(*new(M), phase) {
+	if !model.OverridesHook(*new(M), phase) {
 		return fn(hookCtx)
 	}
 

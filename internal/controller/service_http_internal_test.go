@@ -11,7 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/internal/service"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
@@ -30,7 +30,7 @@ type (
 // payloadService answers every action with the note it was given, so a test
 // reads back what the handler bound.
 type payloadService struct {
-	serviceregistry.Base[*handlerRouteModel, *payloadReq, *payloadRsp]
+	service.Base[*handlerRouteModel, *payloadReq, *payloadRsp]
 }
 
 // requiredReq is a payload with a required field, which the zero request of
@@ -40,7 +40,7 @@ type requiredReq struct {
 }
 
 type requiredService struct {
-	serviceregistry.Base[*handlerRouteModel, *requiredReq, *payloadRsp]
+	service.Base[*handlerRouteModel, *requiredReq, *payloadRsp]
 }
 
 func (*requiredService) Create(_ *types.ServiceContext, req *requiredReq) (*payloadRsp, error) {

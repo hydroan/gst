@@ -6,31 +6,31 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 )
 
 // hideUnwrittenFields hides, in the request body schemaRef documents for
-// phase, a write of model by the framework's own flow, the fields the write
-// takes no value for: the audit columns and timestamps of the framework base
-// the model embeds (see modelregistry.IsFrameworkBase), which the framework
-// writes, the columns gorm leaves out of the write, an insert writing none
-// it writes on update only or never, an update none it writes on insert only
-// or never (see modelschema.Column), the fields the model declares read-only
-// (see modelschema.IsReadOnly), which the server writes alone, a column or
-// not, and the primary key of an update, whose route names the record. A
-// create takes the primary key, optional: the insert keeps a key the client
-// names and generates one otherwise. A patch requires none of the fields its
-// binding rules require, checking the ones it names alone. A batch body
-// holds the records in its items array; an item of a batch update keeps the
-// primary key, which names the record the item writes, as a required field,
-// as the flow refuses an item without one.
+// phase, a write of a model of type typ by the framework's own flow, the
+// fields the write takes no value for: the audit columns and timestamps of
+// the framework base the model embeds (see model.IsFrameworkBase), which the
+// framework writes, the columns gorm leaves out of the write, an insert
+// writing none it writes on update only or never, an update none it writes on
+// insert only or never (see modelschema.Column), the fields the model
+// declares read-only (see modelschema.IsReadOnly), which the server writes
+// alone, a column or not, and the primary key of an update, whose route names
+// the record. A create takes the primary key, optional: the insert keeps a
+// key the client names and generates one otherwise. A patch requires none of
+// the fields its binding rules require, checking the ones it names alone. A
+// batch body holds the records in its items array; an item of a batch update
+// keeps the primary key, which names the record the item writes, as a
+// required field, as the flow refuses an item without one.
 //
 // For a model embedding model.Base beside Name, Code `gorm:"<-:create"`,
 // Stamp `gorm:"<-:update"`, Mark `gorm:"->"` and Stage `binding:"readonly"`,
 // a create documents code, id and name, an update or a patch name and stamp,
 // and an item of a batch update or patch id, name and stamp, id required.
-func hideUnwrittenFields(schemaRef *openapi3.SchemaRef, model reflect.Type, phase apiaction.Phase) {
+func hideUnwrittenFields(schemaRef *openapi3.SchemaRef, typ reflect.Type, phase apiaction.Phase) {
 	if schemaRef == nil || schemaRef.Value == nil {
 		return
 	}
@@ -40,7 +40,7 @@ func hideUnwrittenFields(schemaRef *openapi3.SchemaRef, model reflect.Type, phas
 	if batch {
 		schema = batchItemSchema(schema)
 	}
-	columns, err := modelschema.Columns(model)
+	columns, err := modelschema.Columns(typ)
 	if schema == nil || err != nil {
 		return
 	}
@@ -50,7 +50,7 @@ func hideUnwrittenFields(schemaRef *openapi3.SchemaRef, model reflect.Type, phas
 		schema.Required = nil
 	}
 	for _, col := range columns {
-		key, base, ok := bodyKey(model, col.Index)
+		key, base, ok := bodyKey(typ, col.Index)
 		if !ok {
 			continue
 		}
@@ -68,11 +68,11 @@ func hideUnwrittenFields(schemaRef *openapi3.SchemaRef, model reflect.Type, phas
 			schema.Required = slices.DeleteFunc(schema.Required, func(name string) bool { return name == key })
 		}
 	}
-	for model.Kind() == reflect.Pointer {
-		model = model.Elem()
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
 	}
 	fields := make(map[string]schemaDocField)
-	collectSchemaDocFields(model, fields, make(map[reflect.Type]bool))
+	collectSchemaDocFields(typ, fields, make(map[reflect.Type]bool))
 	for key, field := range fields {
 		if modelschema.IsReadOnly(field.field.Tag) {
 			delete(schema.Properties, key)
@@ -81,14 +81,13 @@ func hideUnwrittenFields(schemaRef *openapi3.SchemaRef, model reflect.Type, phas
 	}
 }
 
-// bodyKey returns the key the JSON object of model holds the field at index
-// under, a column's path (see modelschema.Column.Index), and whether the field
-// is one of a framework base's; ok is false for a field the object does not
-// hold at its top level, one inside a struct field encoded as a value of its
-// own, or one JSON leaves out. For the ID of a model embedding model.Base it
-// returns "id", true, true.
-func bodyKey(model reflect.Type, index []int) (key string, base, ok bool) {
-	typ := model
+// bodyKey returns the key the JSON object of a model of type typ holds the
+// field at index under, a column's path (see modelschema.Column.Index), and
+// whether the field is one of a framework base's; ok is false for a field the
+// object does not hold at its top level, one inside a struct field encoded as
+// a value of its own, or one JSON leaves out. For the ID of a model embedding
+// model.Base it returns "id", true, true.
+func bodyKey(typ reflect.Type, index []int) (key string, base, ok bool) {
 	for _, i := range index[:len(index)-1] {
 		for typ.Kind() == reflect.Pointer {
 			typ = typ.Elem()
@@ -98,7 +97,7 @@ func bodyKey(model reflect.Type, index []int) (key string, base, ok bool) {
 			return "", false, false
 		}
 		typ = step.Type
-		base = base || modelregistry.IsFrameworkBase(typ)
+		base = base || model.IsFrameworkBase(typ)
 	}
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()

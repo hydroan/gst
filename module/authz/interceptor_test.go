@@ -16,7 +16,7 @@ import (
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/i18n"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	modeliamuser "github.com/hydroan/gst/internal/modulemodel/iam/user"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/types"
@@ -199,7 +199,7 @@ func grpcAuthzProbe(t *testing.T) *grpc.ClientConn {
 				},
 			}
 		}
-		listUsers := gstgrpc.ServiceCall[*modeliamuser.User, *modelregistry.Empty, *modeliamuser.AdminUserListRsp](apiaction.List, userAdminPath)
+		listUsers := gstgrpc.ServiceCall[*modeliamuser.User, *model.Empty, *modeliamuser.AdminUserListRsp](apiaction.List, userAdminPath)
 		users := grpc.MethodDesc{
 			MethodName: "ListUsers",
 			Handler: func(_ any, ctx context.Context, dec func(any) error, unary grpc.UnaryServerInterceptor) (any, error) {
@@ -208,7 +208,7 @@ func grpcAuthzProbe(t *testing.T) *grpc.ClientConn {
 					return nil, err
 				}
 				handler := func(ctx context.Context, _ any) (any, error) {
-					if _, err := listUsers(ctx, nil, gstgrpc.Query{}, new(modelregistry.Empty)); err != nil {
+					if _, err := listUsers(ctx, nil, gstgrpc.Query{}, new(model.Empty)); err != nil {
 						return nil, err
 					}
 					return &emptypb.Empty{}, nil

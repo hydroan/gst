@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
@@ -49,10 +49,10 @@ var listCursorQueryKeys = map[string]struct{}{
 // _sort_by when the flow reads the cursor.
 func decodeListQuery[M types.Model](m M, query map[string][]string) error {
 	rejected := make([]string, 0)
-	if !modelregistry.IsQueryable(m) {
+	if !model.IsQueryable(m) {
 		rejected = append(rejected, matchQueryKeys(query, listQueryKeys)...)
 	}
-	if !modelregistry.IsCursorable(m) {
+	if !model.IsCursorable(m) {
 		rejected = append(rejected, matchQueryKeys(query, listCursorQueryKeys)...)
 	}
 	if len(rejected) > 0 {

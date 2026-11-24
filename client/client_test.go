@@ -10,7 +10,7 @@ import (
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/execctx"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/router"
 	"github.com/hydroan/gst/internal/testutil"
 	"github.com/hydroan/gst/internal/types"
@@ -28,8 +28,8 @@ type TestRecord struct {
 	Note string `json:"note,omitempty"`
 	Tag  string `json:"tag,omitempty"`
 
-	modelregistry.Query
-	modelregistry.Base
+	model.Query
+	model.Base
 }
 
 func (r *TestRecord) TableName() string {
@@ -40,7 +40,7 @@ func (r *TestRecord) Purge() bool { return true }
 
 func TestMain(m *testing.M) {
 	testutil.Run(m, testutil.Server{
-		Register: func() { modelregistry.Register[*TestRecord]() },
+		Register: func() { model.Register[*TestRecord]() },
 		Routes: func() error {
 			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record", nil, apiaction.Create)
 			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/:id", &types.ControllerConfig[*TestRecord]{ParamName: "id"}, apiaction.Delete)

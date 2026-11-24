@@ -29,6 +29,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen/jsonshape"
 	"github.com/hydroan/gst/internal/modelsource"
 )
@@ -57,11 +58,11 @@ type frameworkField struct {
 // from the caller when the record is created and never written again, so a
 // value a message carries for it could never take effect.
 var frameworkFields = map[string]frameworkField{
-	"id":         {number: 1, pkg: modelRegistryPath, comment: "The identifier of the record, assigned when it is created."},
-	"created_by": {number: 2, pkg: modelRegistryPath, comment: "The id of the user who created the record."},
-	"updated_by": {number: 3, pkg: modelRegistryPath, comment: "The id of the user who last updated the record."},
-	"created_at": {number: 4, pkg: modelRegistryPath, comment: "When the record was created."},
-	"updated_at": {number: 5, pkg: modelRegistryPath, comment: "When the record was last updated."},
+	"id":         {number: 1, pkg: ggconst.ImportPathInternalModel, comment: "The identifier of the record, assigned when it is created."},
+	"created_by": {number: 2, pkg: ggconst.ImportPathInternalModel, comment: "The id of the user who created the record."},
+	"updated_by": {number: 3, pkg: ggconst.ImportPathInternalModel, comment: "The id of the user who last updated the record."},
+	"created_at": {number: 4, pkg: ggconst.ImportPathInternalModel, comment: "When the record was created."},
+	"updated_at": {number: 5, pkg: ggconst.ImportPathInternalModel, comment: "When the record was last updated."},
 	"tenant_id":  {number: 6, pkg: tenantPath, comment: "The tenant the record belongs to, stamped from the caller when the record is created.", outputOnly: true},
 }
 

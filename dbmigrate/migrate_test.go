@@ -15,7 +15,7 @@ import (
 	"github.com/hydroan/gst/config"
 	gstmysql "github.com/hydroan/gst/database/mysql"
 	"github.com/hydroan/gst/dbmigrate"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
 	"github.com/stretchr/testify/require"
@@ -548,7 +548,7 @@ func postgresIndexCount(t *testing.T, cfg *dbmigrate.DatabaseConfig, table, inde
 type TagIndexedWidget struct {
 	Tag string `json:"tag" gorm:"size:191;index"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*TagIndexedWidget) TableName() string { return "widgets" }
@@ -556,7 +556,7 @@ func (*TagIndexedWidget) TableName() string { return "widgets" }
 type PlainWidget struct {
 	Tag string `json:"tag" gorm:"size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*PlainWidget) TableName() string { return "widgets" }
@@ -846,7 +846,7 @@ func TestMigrateRefusesASQLiteColumnChangeItCannotPlan(t *testing.T) {
 type SampleWithIntegerAmount struct {
 	Amount int64 `json:"amount"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*SampleWithIntegerAmount) TableName() string { return "amount_samples" }
@@ -854,7 +854,7 @@ func (*SampleWithIntegerAmount) TableName() string { return "amount_samples" }
 type SampleWithTextAmount struct {
 	Amount string `json:"amount" gorm:"size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*SampleWithTextAmount) TableName() string { return "amount_samples" }

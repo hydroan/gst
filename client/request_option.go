@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/google/go-querystring/query"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/types"
 )
 
@@ -20,11 +20,11 @@ type RequestOption func(*requestConfig)
 // requestConfig carries the per-request state RequestOption can populate.
 type requestConfig struct {
 	// query holds the framework-owned query parameters a model declares.
-	// Their names come from the url tags on modelregistry.Query and
-	// modelregistry.Cursor, the single authority for those names.
+	// Their names come from the url tags on model.Query and
+	// model.Cursor, the single authority for those names.
 	query struct {
-		modelregistry.Query
-		modelregistry.Cursor
+		model.Query
+		model.Cursor
 	}
 	// page and size are the paging parameters every list takes, which no
 	// model declares; zero leaves one out.

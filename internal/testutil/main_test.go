@@ -3,7 +3,7 @@ package testutil_test
 import (
 	"testing"
 
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/testutil"
 )
 
@@ -13,8 +13,8 @@ import (
 func TestMain(m *testing.M) {
 	testutil.Run(m, testutil.Server{
 		Register: func() {
-			modelregistry.Register[*SampleRecord]()
-			modelregistry.Register[*ZeroValueRecord]()
+			model.Register[*SampleRecord]()
+			model.Register[*ZeroValueRecord]()
 			registerProbeService()
 		},
 	})

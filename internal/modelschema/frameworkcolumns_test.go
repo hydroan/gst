@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/stretchr/testify/require"
@@ -18,7 +18,7 @@ import (
 type frameworkColumnsSample struct {
 	Name string
 
-	modelregistry.Base
+	model.Base
 	tenant.Scope
 }
 
@@ -26,7 +26,7 @@ type frameworkColumnsSample struct {
 type autoFrameworkColumnsSample struct {
 	Name string
 
-	modelregistry.AutoBase
+	model.AutoBase
 }
 
 // redeclaredDeletedAtSample re-declares the soft-delete field under the
@@ -34,7 +34,7 @@ type autoFrameworkColumnsSample struct {
 type redeclaredDeletedAtSample struct {
 	DeletedAt gorm.DeletedAt `json:"-"`
 
-	modelregistry.Base
+	model.Base
 }
 
 // renamedFrameworkColumnsSample re-declares two framework fields under
@@ -43,13 +43,13 @@ type renamedFrameworkColumnsSample struct {
 	CreatedBy string         `gorm:"column:author"`
 	DeletedAt gorm.DeletedAt `json:"-" gorm:"column:removed_at"`
 
-	modelregistry.Base
+	model.Base
 }
 
 // prefixedTenantSample embeds tenant.Scope under a prefix, which renames the
 // tenant column.
 type prefixedTenantSample struct {
-	modelregistry.Base
+	model.Base
 	tenant.Scope `gorm:"embeddedPrefix:owner_"`
 }
 
@@ -65,7 +65,7 @@ type auditStamp struct {
 type embeddedStampSample struct {
 	Audit auditStamp `gorm:"embedded;embeddedPrefix:audit_"`
 
-	modelregistry.Base
+	model.Base
 }
 
 // TestValidateFrameworkColumns pins which models keep the framework's columns

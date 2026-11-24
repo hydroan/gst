@@ -31,10 +31,10 @@ type documentedPackage struct {
 }
 
 // documentedPackages are the packages apidocgen registers the doc comments
-// of: the base models and the query parameter structs of
-// internal/modelregistry, and the tenant scope of internal/tenant.
+// of: the base models and the query parameter structs of internal/model, and
+// the tenant scope of internal/tenant.
 var documentedPackages = []documentedPackage{
-	{dir: "internal/modelregistry", name: "modelregistry"},
+	{dir: "internal/model", name: ggconst.PkgModel},
 	{dir: "internal/tenant", name: "tenant"},
 }
 

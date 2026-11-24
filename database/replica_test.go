@@ -24,7 +24,7 @@ import (
 	gstpostgres "github.com/hydroan/gst/database/postgres"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/dbruntime/dbnode"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -61,7 +61,7 @@ func (l *roleCaptureLogger) last() string {
 type routedRecord struct {
 	Note string `json:"note" gorm:"size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*routedRecord) TableName() string { return "routed_records" }
@@ -72,7 +72,7 @@ func (*routedRecord) TableName() string { return "routed_records" }
 type replicaFirstRecord struct {
 	Note string `json:"note" gorm:"size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*replicaFirstRecord) TableName() string { return "replica_first_records" }
@@ -85,7 +85,7 @@ func (*replicaFirstRecord) PreferReplica() bool { return true }
 type replicaFirstHookedRecord struct {
 	Note string `json:"note" gorm:"size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*replicaFirstHookedRecord) TableName() string { return "replica_first_hooked_records" }

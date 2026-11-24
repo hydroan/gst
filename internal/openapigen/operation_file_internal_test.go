@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/types"
 )
 
@@ -14,7 +14,7 @@ type openapiExportModel struct {
 	// Name is the sample name.
 	Name string `json:"name" query:"name"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func TestSetExportDocumentsFileDownload(t *testing.T) {
@@ -98,7 +98,7 @@ func TestSetExportDocumentsNoPagingParameters(t *testing.T) {
 type openapiVirtualExportModel struct {
 	Name string `json:"name" query:"name"`
 
-	modelregistry.Empty
+	model.Empty
 }
 
 func TestSetExportDocumentsTheCapOfATableBackedExportAlone(t *testing.T) {
@@ -118,7 +118,7 @@ type openapiImportModel struct {
 	// Name is the sample name.
 	Name string `json:"name"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func TestSetImportDocumentsMultipartUpload(t *testing.T) {

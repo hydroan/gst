@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/stretchr/testify/require"
@@ -15,7 +15,7 @@ import (
 type tenantUniqueSample struct {
 	Code string `gorm:"size:64"`
 
-	modelregistry.Base
+	model.Base
 	tenant.Scope
 }
 
@@ -29,7 +29,7 @@ type tenantGlobalUniqueSample struct {
 	Code string `gorm:"size:64"`
 	Name string `gorm:"size:64"`
 
-	modelregistry.Base
+	model.Base
 	tenant.Scope
 }
 
@@ -46,7 +46,7 @@ func (tenantGlobalUniqueSample) Indexes() []modelschema.Index {
 type tenantPlainIndexSample struct {
 	Code string `gorm:"size:64"`
 
-	modelregistry.Base
+	model.Base
 	tenant.Scope
 }
 
@@ -59,7 +59,7 @@ func (tenantPlainIndexSample) Indexes() []modelschema.Index {
 type unscopedUniqueSample struct {
 	Code string `gorm:"size:64"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (unscopedUniqueSample) Indexes() []modelschema.Index {

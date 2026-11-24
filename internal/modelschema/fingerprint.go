@@ -17,7 +17,7 @@ import (
 // column definition out of, and the indexes they declare, each beside the
 // plan the framework resolves it into (see IndexPlan). It is empty for no
 // models; the callers pass the registered ones (see
-// modelregistry.RegisteredModels).
+// model.RegisteredModels).
 //
 // The hash answers one question — may a schema prepared for an earlier run be
 // reused as it is — and is built to err towards saying no. It hashes

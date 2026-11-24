@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/internal/datatypes"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
@@ -43,9 +43,9 @@ type filterTestModel struct {
 	// Meta is a JSON document, matched by its text and never compared.
 	Meta datatypes.JSONMap `json:"meta" query:"meta"`
 
-	modelregistry.Query
-	modelregistry.Cursor
-	modelregistry.Base
+	model.Query
+	model.Cursor
+	model.Base
 }
 
 // gormTypedTestModel holds columns whose Go shape does not tell what gorm
@@ -60,8 +60,8 @@ type gormTypedTestModel struct {
 	Payload string              `json:"payload" gorm:"type:json" query:"payload"`
 	Clock   datatypes.TimeOfDay `json:"clock" query:"clock"`
 
-	modelregistry.Query
-	modelregistry.Base
+	model.Query
+	model.Base
 }
 
 // namedPart is embedded by name twice in namedEmbeddingTestModel, beside a
@@ -79,8 +79,8 @@ type namedEmbeddingTestModel struct {
 	Second namedPart  `json:"second" gorm:"embedded;embeddedPrefix:second_" query:"second"`
 	Third  *namedPart `json:"third" gorm:"embedded;embeddedPrefix:third_" query:"third"`
 
-	modelregistry.Query
-	modelregistry.Base
+	model.Query
+	model.Base
 }
 
 // HiddenCredentials is embedded by embeddingTestModel: its column is hidden
@@ -94,7 +94,7 @@ type embeddingTestModel struct {
 	HiddenCredentials
 	Name string `json:"name" query:"name"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*embeddingTestModel) TableName() string { return "embedding_test_models" }
@@ -108,8 +108,8 @@ type PointerExtra struct {
 type pointerEmbeddingTestModel struct {
 	*PointerExtra
 
-	modelregistry.Query
-	modelregistry.Base
+	model.Query
+	model.Base
 }
 
 // hiddenNamedEmbeddingTestModel embeds namedPart by name twice, once hidden
@@ -119,9 +119,9 @@ type hiddenNamedEmbeddingTestModel struct {
 	Shown  namedPart `json:"shown" gorm:"embedded;embeddedPrefix:shown_" query:"shown"`
 	Hidden namedPart `json:"-" gorm:"embedded;embeddedPrefix:hidden_" query:"hidden"`
 
-	modelregistry.Query
-	modelregistry.Cursor
-	modelregistry.Base
+	model.Query
+	model.Cursor
+	model.Base
 }
 
 func TestFilters(t *testing.T) {
@@ -248,7 +248,7 @@ func TestFilters(t *testing.T) {
 		type plainModel struct {
 			Age int `json:"age"`
 
-			modelregistry.Base
+			model.Base
 		}
 		_, err := Filters(url.Values{
 			"age[gt]": {"1"},
@@ -987,8 +987,8 @@ func TestParsedConditionsReadThroughColumnReferences(t *testing.T) {
 }
 
 type cursorTestModel struct {
-	modelregistry.Cursor
-	modelregistry.Base
+	model.Cursor
+	model.Base
 }
 
 // cursorUniqueTestModel carries the two kinds of column a cursor may page
@@ -1000,8 +1000,8 @@ type cursorUniqueTestModel struct {
 	Shard      string    `json:"shard" query:"shard"`
 	Slot       int       `json:"slot" query:"slot"`
 
-	modelregistry.Cursor
-	modelregistry.Base
+	model.Cursor
+	model.Base
 }
 
 func (cursorUniqueTestModel) TableName() string { return "cursor_unique_test_models" }
@@ -1024,8 +1024,8 @@ type cursorTypedTestModel struct {
 	Active  sql.NullBool        `json:"active" gorm:"not null" query:"active"`
 	Clock   datatypes.TimeOfDay `json:"clock" query:"clock"`
 
-	modelregistry.Cursor
-	modelregistry.Base
+	model.Cursor
+	model.Base
 }
 
 func (cursorTypedTestModel) TableName() string { return "cursor_typed_test_models" }
@@ -1040,26 +1040,26 @@ func (cursorTypedTestModel) Indexes() []modelschema.Index {
 }
 
 type cursorAutoTestModel struct {
-	modelregistry.Cursor
-	modelregistry.AutoBase
+	model.Cursor
+	model.AutoBase
 }
 
 type plainTestModel struct {
-	modelregistry.Base
+	model.Base
 }
 
 // queryTestModel pages both ways, by offset and by cursor, the way a model
 // embedding model.Query does.
 type queryTestModel struct {
-	modelregistry.Query
-	modelregistry.Base
+	model.Query
+	model.Base
 }
 
 // queryAutoTestModel takes filters on the unsigned column of an
 // auto-increment id.
 type queryAutoTestModel struct {
-	modelregistry.Query
-	modelregistry.AutoBase
+	model.Query
+	model.AutoBase
 }
 
 // TestPagination pins the page and the size a list reads off the query,

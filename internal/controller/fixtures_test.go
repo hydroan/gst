@@ -21,10 +21,10 @@ import (
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/datatypes"
 	"github.com/hydroan/gst/internal/middleware"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/internal/service"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
@@ -42,8 +42,8 @@ type sampleRecord struct {
 	Secret  string `json:"-" query:"secret"`
 	Virtual string `json:"virtual,omitempty" query:"virtual" gorm:"-"`
 
-	modelregistry.Query
-	modelregistry.Base
+	model.Query
+	model.Base
 }
 
 func (sampleRecord) TableName() string { return "controller_samples" }
@@ -53,7 +53,7 @@ func (sampleRecord) TableName() string { return "controller_samples" }
 type sampleCounter struct {
 	Name string `json:"name"`
 
-	modelregistry.AutoBase
+	model.AutoBase
 }
 
 func (sampleCounter) TableName() string { return "controller_counters" }
@@ -67,7 +67,7 @@ type versionedSample struct {
 	Code    string              `json:"code" binding:"omitempty,max=3"`
 	Version modelschema.Version `json:"version,omitempty" gorm:"not null;default:1"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (versionedSample) TableName() string { return "controller_versioned_samples" }
@@ -79,7 +79,7 @@ type validatedSample struct {
 	Name string `json:"name" binding:"required"`
 	Note string `json:"note"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (validatedSample) TableName() string { return "controller_validated_samples" }
@@ -98,7 +98,7 @@ type shapedSample struct {
 	Address sampleAddress `json:"address" gorm:"serializer:json"`
 	SampleAudit
 
-	modelregistry.Base
+	model.Base
 }
 
 func (shapedSample) TableName() string { return "controller_shaped_samples" }
@@ -111,8 +111,8 @@ type nestedSample struct {
 	ParentID string          `json:"parent_id" gorm:"size:191;not null"`
 	Children []*nestedSample `json:"children,omitempty" gorm:"foreignKey:ParentID;constraint:-"`
 
-	modelregistry.Query
-	modelregistry.Base
+	model.Query
+	model.Base
 }
 
 func (nestedSample) TableName() string { return "controller_nested_samples" }
@@ -135,8 +135,8 @@ type datedSample struct {
 	Count    int                 `json:"count" query:"count"`
 	Clock    datatypes.TimeOfDay `json:"clock" query:"clock"`
 
-	modelregistry.Query
-	modelregistry.Base
+	model.Query
+	model.Base
 }
 
 func (datedSample) TableName() string { return "controller_dated_samples" }
@@ -146,9 +146,9 @@ func (datedSample) TableName() string { return "controller_dated_samples" }
 type feedSample struct {
 	Name string `json:"name" query:"name"`
 
-	modelregistry.Query
-	modelregistry.Cursor
-	modelregistry.Base
+	model.Query
+	model.Cursor
+	model.Base
 }
 
 func (feedSample) TableName() string { return "controller_feed_samples" }
@@ -159,7 +159,7 @@ type scopedSample struct {
 	Name string `json:"name"`
 
 	tenant.Scope
-	modelregistry.Base
+	model.Base
 }
 
 func (scopedSample) TableName() string { return "controller_scoped_samples" }
@@ -175,7 +175,7 @@ type stagedSample struct {
 	Tally    stageTally `json:"tally" gorm:"embedded;embeddedPrefix:tally_" binding:"readonly"`
 	Summary  string     `json:"summary,omitempty" gorm:"-" binding:"readonly"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (stagedSample) TableName() string { return "controller_staged_samples" }
@@ -245,28 +245,28 @@ func registerFixtureServices() {
 		apiaction.Create, apiaction.Delete, apiaction.Update, apiaction.Patch, apiaction.List,
 		apiaction.CreateMany, apiaction.DeleteMany, apiaction.UpdateMany, apiaction.PatchMany,
 	} {
-		serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](phase, refusalRoute, &refusingService{})
+		service.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](phase, refusalRoute, &refusingService{})
 	}
 	for _, phase := range []apiaction.Phase{apiaction.Create, apiaction.Update, apiaction.Patch} {
-		serviceregistry.RegisterInstance[*stagedSample, *stagedSample, *stagedSample](phase, stagingRoute, &stagingService{})
+		service.RegisterInstance[*stagedSample, *stagedSample, *stagedSample](phase, stagingRoute, &stagingService{})
 	}
-	serviceregistry.RegisterInstance[*feedSample, *feedSample, *feedSample](apiaction.List, pageRoute, &pageObservingService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.List, filterRefusalRoute, &filterRefusingService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.List, hangingRoute, &hangingService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.Import, importRoute, &importingService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.Import, refusedImportRoute, &refusingService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.Export, exportRoute, &exportingService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.Create, observedRoute, &observingService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.Create, cookieBeforeRoute, &cookieBeforeService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.Create, cookieAfterRoute, &cookieAfterService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](apiaction.Create, actionRoute, &actionService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](apiaction.List, actionRoute, &actionService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](apiaction.Get, actionItemRoute, &actionService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](apiaction.Stream, watchRoute, &watchService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](apiaction.Stream, uploadRoute, &uploadService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](apiaction.Stream, chatRoute, &chatService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](apiaction.Stream, silentRoute, &actionService{})
-	serviceregistry.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](apiaction.Stream, forkRoute, forkingChat)
+	service.RegisterInstance[*feedSample, *feedSample, *feedSample](apiaction.List, pageRoute, &pageObservingService{})
+	service.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.List, filterRefusalRoute, &filterRefusingService{})
+	service.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.List, hangingRoute, &hangingService{})
+	service.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.Import, importRoute, &importingService{})
+	service.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.Import, refusedImportRoute, &refusingService{})
+	service.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.Export, exportRoute, &exportingService{})
+	service.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.Create, observedRoute, &observingService{})
+	service.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.Create, cookieBeforeRoute, &cookieBeforeService{})
+	service.RegisterInstance[*sampleRecord, *sampleRecord, *sampleRecord](apiaction.Create, cookieAfterRoute, &cookieAfterService{})
+	service.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](apiaction.Create, actionRoute, &actionService{})
+	service.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](apiaction.List, actionRoute, &actionService{})
+	service.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](apiaction.Get, actionItemRoute, &actionService{})
+	service.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](apiaction.Stream, watchRoute, &watchService{})
+	service.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](apiaction.Stream, uploadRoute, &uploadService{})
+	service.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](apiaction.Stream, chatRoute, &chatService{})
+	service.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](apiaction.Stream, silentRoute, &actionService{})
+	service.RegisterInstance[*sampleRecord, *sampleActionReq, *sampleActionRsp](apiaction.Stream, forkRoute, forkingChat)
 }
 
 // stagingService sets the stage of a staged sample, a field its model
@@ -275,7 +275,7 @@ func registerFixtureServices() {
 // before a create and an update refuse a stage that reached them, which
 // only a client could have sent: the flow clears it first.
 type stagingService struct {
-	serviceregistry.Base[*stagedSample, *stagedSample, *stagedSample]
+	service.Base[*stagedSample, *stagedSample, *stagedSample]
 }
 
 // hookedStage is the stage the staging service sets.
@@ -306,7 +306,7 @@ func (*stagingService) PatchBefore(_ *types.ServiceContext, m *stagedSample) err
 // HTTP response carries, in the hook before and the hook after the record
 // is written, for the calls that pin where a call refuses that.
 type cookieBeforeService struct {
-	serviceregistry.Base[*sampleRecord, *sampleRecord, *sampleRecord]
+	service.Base[*sampleRecord, *sampleRecord, *sampleRecord]
 }
 
 func (*cookieBeforeService) CreateBefore(sc *types.ServiceContext, _ *sampleRecord) error {
@@ -315,7 +315,7 @@ func (*cookieBeforeService) CreateBefore(sc *types.ServiceContext, _ *sampleReco
 }
 
 type cookieAfterService struct {
-	serviceregistry.Base[*sampleRecord, *sampleRecord, *sampleRecord]
+	service.Base[*sampleRecord, *sampleRecord, *sampleRecord]
 }
 
 func (*cookieAfterService) CreateAfter(sc *types.ServiceContext, _ *sampleRecord) error {
@@ -330,7 +330,7 @@ const refusedMsg = "sample refused"
 // turns down a request its business rules forbid, and refuses listings in
 // both of the list hooks.
 type refusingService struct {
-	serviceregistry.Base[*sampleRecord, *sampleRecord, *sampleRecord]
+	service.Base[*sampleRecord, *sampleRecord, *sampleRecord]
 }
 
 func refusal() error { return types.NewError(http.StatusConflict, refusedMsg) }
@@ -371,7 +371,7 @@ func (*refusingService) Import(*types.ServiceContext, io.Reader) ([]*sampleRecor
 // it in Filter, the hook a service scopes a listing to what the caller may
 // see in.
 type filterRefusingService struct {
-	serviceregistry.Base[*sampleRecord, *sampleRecord, *sampleRecord]
+	service.Base[*sampleRecord, *sampleRecord, *sampleRecord]
 }
 
 func (*filterRefusingService) Filter(_ *types.ServiceContext, m *sampleRecord, opts types.QueryOptions) (*sampleRecord, types.QueryOptions, error) {
@@ -381,7 +381,7 @@ func (*filterRefusingService) Filter(_ *types.ServiceContext, m *sampleRecord, o
 // pageObservingService records how many records the listing of a feed hands
 // its after hook: the page the client is answered with.
 type pageObservingService struct {
-	serviceregistry.Base[*feedSample, *feedSample, *feedSample]
+	service.Base[*feedSample, *feedSample, *feedSample]
 }
 
 // observedPage is the number of records the last listing on pageRoute
@@ -396,7 +396,7 @@ func (*pageObservingService) ListAfter(_ *types.ServiceContext, records *[]*feed
 // importingService parses an uploaded file holding a JSON array of samples,
 // leaving their persistence to the import handler.
 type importingService struct {
-	serviceregistry.Base[*sampleRecord, *sampleRecord, *sampleRecord]
+	service.Base[*sampleRecord, *sampleRecord, *sampleRecord]
 }
 
 func (*importingService) Import(_ *types.ServiceContext, r io.Reader) ([]*sampleRecord, error) {
@@ -410,7 +410,7 @@ func (*importingService) Import(_ *types.ServiceContext, r io.Reader) ([]*sample
 // exportingService writes the name of every record an export hands it, a
 // line each, so a test reads off the file which records the export listed.
 type exportingService struct {
-	serviceregistry.Base[*sampleRecord, *sampleRecord, *sampleRecord]
+	service.Base[*sampleRecord, *sampleRecord, *sampleRecord]
 }
 
 func (*exportingService) Export(_ *types.ServiceContext, records ...*sampleRecord) ([]byte, error) {
@@ -457,7 +457,7 @@ var (
 // observingService records what its CreateBefore hook finds on the service
 // context, the way a hook reads the request it runs for.
 type observingService struct {
-	serviceregistry.Base[*sampleRecord, *sampleRecord, *sampleRecord]
+	service.Base[*sampleRecord, *sampleRecord, *sampleRecord]
 }
 
 func (*observingService) CreateBefore(sc *types.ServiceContext, _ *sampleRecord) error {
@@ -513,7 +513,7 @@ var awaitEntered = make(chan struct{}, 1)
 // actionHang, returning the error the context reports. Its List and Get
 // answer the same, for the query a GET action reads.
 type actionService struct {
-	serviceregistry.Base[*sampleRecord, *sampleActionReq, *sampleActionRsp]
+	service.Base[*sampleRecord, *sampleActionReq, *sampleActionRsp]
 }
 
 func (*actionService) Create(sc *types.ServiceContext, req *sampleActionReq) (*sampleActionRsp, error) {
@@ -570,7 +570,7 @@ func fireHangCancel() {
 // and returns what the context reports, the way a flow cut short by its
 // client fails.
 type hangingService struct {
-	serviceregistry.Base[*sampleRecord, *sampleRecord, *sampleRecord]
+	service.Base[*sampleRecord, *sampleRecord, *sampleRecord]
 }
 
 func (*hangingService) ListBefore(sc *types.ServiceContext, _ *[]*sampleRecord) error {
@@ -842,7 +842,7 @@ func countShapedNamed(t *testing.T, name string) int {
 // The silent route registers the action service, which streams nothing,
 // for the call to refuse.
 type watchService struct {
-	serviceregistry.Base[*sampleRecord, *sampleActionReq, *sampleActionRsp]
+	service.Base[*sampleRecord, *sampleActionReq, *sampleActionRsp]
 }
 
 func (*watchService) Stream(sc *types.ServiceContext, req *sampleActionReq, stream *types.ServerStream[*sampleActionRsp]) error {
@@ -868,7 +868,7 @@ func (*watchService) Stream(sc *types.ServiceContext, req *sampleActionReq, stre
 }
 
 type uploadService struct {
-	serviceregistry.Base[*sampleRecord, *sampleActionReq, *sampleActionRsp]
+	service.Base[*sampleRecord, *sampleActionReq, *sampleActionRsp]
 }
 
 func (*uploadService) Stream(sc *types.ServiceContext, stream *types.ClientStream[*sampleActionReq]) (*sampleActionRsp, error) {
@@ -893,7 +893,7 @@ func (*uploadService) Stream(sc *types.ServiceContext, stream *types.ClientStrea
 }
 
 type chatService struct {
-	serviceregistry.Base[*sampleRecord, *sampleActionReq, *sampleActionRsp]
+	service.Base[*sampleRecord, *sampleActionReq, *sampleActionRsp]
 }
 
 func (*chatService) Stream(sc *types.ServiceContext, stream *types.BidiStream[*sampleActionReq, *sampleActionRsp]) error {
@@ -927,7 +927,7 @@ func (*chatService) Stream(sc *types.ServiceContext, stream *types.BidiStream[*s
 // through the transport, which orders it after the read. The test reads
 // what the goroutine got through read.
 type forkingChatService struct {
-	serviceregistry.Base[*sampleRecord, *sampleActionReq, *sampleActionRsp]
+	service.Base[*sampleRecord, *sampleActionReq, *sampleActionRsp]
 	read chan error
 }
 

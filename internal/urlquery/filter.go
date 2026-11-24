@@ -10,7 +10,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/datatypes"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/types"
 )
@@ -35,7 +35,7 @@ func Filters(q url.Values, m types.Model) ([]types.Filter, error) {
 	if len(keys) == 0 {
 		return nil, nil
 	}
-	if !modelregistry.IsQueryable(m) {
+	if !model.IsQueryable(m) {
 		return nil, UnsupportedParameterError(keys)
 	}
 	sort.Strings(keys)

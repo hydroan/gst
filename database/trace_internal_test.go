@@ -8,7 +8,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
@@ -25,7 +25,7 @@ import (
 // never written, it only names the spans and overrides one hook so that the
 // hook span exists.
 type traceSample struct {
-	modelregistry.Base
+	model.Base
 }
 
 func (*traceSample) TableName() string { return "trace_samples" }

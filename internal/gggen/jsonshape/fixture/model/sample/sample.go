@@ -11,14 +11,14 @@ import (
 	"github.com/hydroan/gst/internal/datatypes"
 	"github.com/hydroan/gst/internal/gggen/jsonshape/fixture/model/record"
 	"github.com/hydroan/gst/internal/gggen/jsonshape/fixture/pkg/notifier"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"gorm.io/gorm"
 )
 
 // Sample is a resource kept by the sample service.
 type Sample struct {
-	modelregistry.Base
+	model.Base
 
 	// Name is the display name.
 	Name     string  `json:"name"`

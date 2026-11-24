@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/stretchr/testify/require"
 )
@@ -18,7 +18,7 @@ import (
 type templateSample struct {
 	Name string
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*templateSample) TableName() string { return "template_samples" }
@@ -32,12 +32,12 @@ func TestSchemaTemplate(t *testing.T) {
 	// Registering the model gives this binary a schema to fingerprint. Taking
 	// it back off the queue and reporting it done leaves the pending count
 	// where the test found it, since nothing here drains that queue.
-	modelregistry.Register[*templateSample]()
-	<-modelregistry.TableChan
-	modelregistry.TableDone()
+	model.Register[*templateSample]()
+	<-model.TableChan
+	model.TableDone()
 
 	ctx := context.Background()
-	template := schemaTemplatePrefix + modelschema.Fingerprint(modelregistry.RegisteredModels())
+	template := schemaTemplatePrefix + modelschema.Fingerprint(model.RegisteredModels())
 
 	// The first setup stands in for the binary that finds no template: it
 	// migrates on its own and leaves the result behind for the ones after it.

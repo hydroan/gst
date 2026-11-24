@@ -6,8 +6,8 @@ import (
 
 	"github.com/hydroan/gst/config"
 	. "github.com/hydroan/gst/dsl"
-	"github.com/hydroan/gst/internal/modelregistry"
-	"github.com/hydroan/gst/internal/serviceregistry"
+	"github.com/hydroan/gst/internal/model"
+	"github.com/hydroan/gst/internal/service"
 	"github.com/hydroan/gst/internal/types"
 )
 
@@ -27,7 +27,7 @@ func (*VersionModule) Pub() bool     { return true }
 
 // Version represents the backend version information for frontend update detection
 type Version struct {
-	modelregistry.Empty
+	model.Empty
 }
 
 // Design defines the API routes for version checking
@@ -54,7 +54,7 @@ type VersionRsp struct {
 }
 
 type VersionService struct {
-	serviceregistry.Base[*Version, *Version, *VersionRsp]
+	service.Base[*Version, *Version, *VersionRsp]
 }
 
 // List returns version information including build details and runtime info

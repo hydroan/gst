@@ -21,6 +21,13 @@ const (
 	ImportPathGRPC      = "github.com/hydroan/gst/grpc"
 	ImportPathDatatypes = "github.com/hydroan/gst/datatypes"
 
+	// ImportPathInternalModel is the package the public model package
+	// forwards, where the framework's own model types are declared: the path
+	// reflection and the type checker report for model.Base, model.Empty and
+	// their siblings. The tooling tells those types by it; generated code
+	// imports ImportPathModel.
+	ImportPathInternalModel = ImportPathGst + "/internal/model"
+
 	// ImportPathIO is the standard library package the Import method of a
 	// generated service file reads its input through.
 	ImportPathIO = "io"

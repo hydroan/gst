@@ -15,7 +15,7 @@ import (
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/goast"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 )
 
 // ErrorDiscipline requires the errors leaving service methods and
@@ -30,7 +30,7 @@ var ErrorDiscipline = Check{
 // points of a model type (see collectModelTypes).
 var hookMethods = func() map[string]bool {
 	set := map[string]bool{}
-	for _, name := range modelregistry.HookMethodNames() {
+	for _, name := range model.HookMethodNames() {
 		set[name] = true
 	}
 	return set

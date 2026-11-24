@@ -5,7 +5,7 @@ import (
 
 	gstgrpc "github.com/hydroan/gst/grpc"
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -16,7 +16,7 @@ import (
 type sampleModel struct {
 	Name string `json:"name"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (sampleModel) TableName() string { return "grpc_samples" }

@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/stretchr/testify/require"
@@ -24,7 +24,7 @@ import (
 type plainRecord struct {
 	Name string
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*plainRecord) TableName() string { return "plain_records" }
@@ -34,7 +34,7 @@ func (*plainRecord) TableName() string { return "plain_records" }
 type unsizedOwnerRecord struct {
 	Owner string
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*unsizedOwnerRecord) TableName() string { return "unsized_owner_records" }
@@ -99,7 +99,7 @@ func TestEnsureTablePassesWhenDisabledAndTableExists(t *testing.T) {
 type undeclaredRecord struct {
 	Name string
 
-	modelregistry.Base
+	model.Base
 }
 
 func TestEnsureTableRejectsUndeclaredTableName(t *testing.T) {
@@ -117,7 +117,7 @@ func TestEnsureTableRejectsUndeclaredTableName(t *testing.T) {
 type renamedColumnRecord struct {
 	DeletedAt gorm.DeletedAt `json:"-" gorm:"column:removed_at"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*renamedColumnRecord) TableName() string { return "renamed_column_records" }
@@ -137,7 +137,7 @@ func TestEnsureTableRejectsARenamedFrameworkColumn(t *testing.T) {
 type globallyUniqueTenantRecord struct {
 	Code string `gorm:"size:64"`
 
-	modelregistry.Base
+	model.Base
 	tenant.Scope
 }
 
@@ -163,7 +163,7 @@ func TestEnsureTableRejectsAUniqueIndexLeavingOutTheTenant(t *testing.T) {
 type libraryDatedRecord struct {
 	Day gormdatatypes.Date
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*libraryDatedRecord) TableName() string { return "library_dated_records" }
@@ -184,7 +184,7 @@ type clashingQueryRecord struct {
 	Name  string `json:"name" query:"title"`
 	Title string `json:"title" query:"title"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*clashingQueryRecord) TableName() string { return "clashing_query_records" }
@@ -204,7 +204,7 @@ func TestEnsureTableRejectsAQueryNameDeclaredTwice(t *testing.T) {
 type shadowedIDRecord struct {
 	ID string `json:"id" gorm:"primaryKey;size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*shadowedIDRecord) TableName() string { return "shadowed_id_records" }
@@ -224,7 +224,7 @@ func TestEnsureTableRejectsAShadowedIDWithoutItsAccessors(t *testing.T) {
 type raceRecord struct {
 	Name string `gorm:"size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*raceRecord) TableName() string { return "race_records" }
@@ -284,7 +284,7 @@ func TestMigrateTableCreatesOnceAcrossProcesses(t *testing.T) {
 type uniqueRecord struct {
 	Code string `gorm:"size:191"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*uniqueRecord) TableName() string { return "unique_records" }
@@ -413,9 +413,9 @@ func TestWaitReturnsOnceTheQueueDrains(t *testing.T) {
 
 	// Queue a model and take it off the way the processing goroutine does, so
 	// it counts as pending until its TableDone lands.
-	modelregistry.Register[*plainRecord]()
-	<-modelregistry.TableChan
-	require.Equal(t, 1, modelregistry.TablesPending())
+	model.Register[*plainRecord]()
+	<-model.TableChan
+	require.Equal(t, 1, model.TablesPending())
 
 	returned := make(chan error, 1)
 	go func() { returned <- Wait() }()
@@ -426,7 +426,7 @@ func TestWaitReturnsOnceTheQueueDrains(t *testing.T) {
 	case <-time.After(50 * time.Millisecond):
 	}
 
-	modelregistry.TableDone()
+	model.TableDone()
 
 	select {
 	case err := <-returned:
@@ -455,8 +455,8 @@ func TestWaitReportsATableThePreparationCouldNotGet(t *testing.T) {
 	// Queued and taken off the way the processing goroutine does, then
 	// prepared here: the model declares no table name, so it is one no
 	// database could have given it.
-	modelregistry.Register[*undeclaredRecord]()
-	<-modelregistry.TableChan
+	model.Register[*undeclaredRecord]()
+	<-model.TableChan
 	prepareTable(db, &undeclaredRecord{})
 
 	err := Wait()
@@ -469,7 +469,7 @@ func TestWaitReportsATableThePreparationCouldNotGet(t *testing.T) {
 type holderRecord struct {
 	Entries []*heldRecord `gorm:"foreignKey:HolderID"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*holderRecord) TableName() string { return "holder_records" }
@@ -478,7 +478,7 @@ func (*holderRecord) TableName() string { return "holder_records" }
 type heldRecord struct {
 	HolderID string
 
-	modelregistry.Base
+	model.Base
 }
 
 func (*heldRecord) TableName() string { return "held_records" }
@@ -497,11 +497,11 @@ func TestPrepareTableParsesTheModelWithoutAutoMigrate(t *testing.T) {
 	require.NoError(t, db.Exec("CREATE TABLE held_records (id TEXT PRIMARY KEY)").Error)
 	require.NoError(t, db.Exec("CREATE TABLE holder_records (id TEXT PRIMARY KEY)").Error)
 
-	modelregistry.Register[*heldRecord]()
-	<-modelregistry.TableChan
+	model.Register[*heldRecord]()
+	<-model.TableChan
 	prepareTable(db, &heldRecord{})
-	modelregistry.Register[*holderRecord]()
-	<-modelregistry.TableChan
+	model.Register[*holderRecord]()
+	<-model.TableChan
 	prepareTable(db, &holderRecord{})
 	require.NoError(t, preparationFailed())
 

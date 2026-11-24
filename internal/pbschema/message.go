@@ -12,7 +12,7 @@ import (
 
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen/jsonshape"
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/stoewer/go-strcase"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
@@ -55,19 +55,18 @@ var timeTypes = map[string]struct{ typeName, proto string }{
 	"gorm.io/gorm.DeletedAt":                                {WellKnownTimestamp, timestampProto},
 }
 
-// modelRegistryPath and tenantPath are the packages declaring the
-// framework's model base and its tenant scope, whose promoted keys carry
-// fixed field numbers (see frameworkFields).
-const (
-	modelRegistryPath = ggconst.ImportPathGst + "/internal/modelregistry"
-	tenantPath        = ggconst.ImportPathGst + "/internal/tenant"
-)
+// tenantPath is the package declaring the framework's tenant scope. Its
+// promoted key and those of the model base, which
+// ggconst.ImportPathInternalModel declares, carry fixed field numbers (see
+// frameworkFields).
+const tenantPath = ggconst.ImportPathGst + "/internal/tenant"
 
-// The query markers of the model registry a model embeds to opt in to the
-// framework's List controls, named after the types themselves.
+// The query parameter structs of the internal model package, which a model
+// embeds to opt in to the framework's List controls, named after the types
+// themselves.
 var (
-	queryMarkerName  = reflect.TypeFor[modelregistry.Query]().Name()
-	cursorMarkerName = reflect.TypeFor[modelregistry.Cursor]().Name()
+	queryMarkerName  = reflect.TypeFor[model.Query]().Name()
+	cursorMarkerName = reflect.TypeFor[model.Cursor]().Name()
 )
 
 // queryControls is what the List request of a model carries of the
@@ -87,7 +86,7 @@ var allQueryControls = queryControls{sort: true, page: true, cursor: true, expan
 
 // queryControlsOf reports the controls the List request of the model type
 // obj carries, by the markers it embeds, directly or through one another:
-// the reading modelregistry.IsQueryable and IsCursorable make of a model at
+// the reading model.IsQueryable and IsCursorable make of a model at
 // run time.
 func queryControlsOf(obj *types.TypeName) queryControls {
 	var queryable, cursorable bool
@@ -114,7 +113,7 @@ func embeddedMarkers(st *types.Struct) (queryable, cursorable bool) {
 		if !ok {
 			continue
 		}
-		if named.Obj().Pkg() != nil && named.Obj().Pkg().Path() == modelRegistryPath {
+		if named.Obj().Pkg() != nil && named.Obj().Pkg().Path() == ggconst.ImportPathInternalModel {
 			switch named.Obj().Name() {
 			case queryMarkerName:
 				queryable = true

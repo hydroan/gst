@@ -3,7 +3,7 @@ package modelschema_test
 import (
 	"testing"
 
-	"github.com/hydroan/gst/internal/modelregistry"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/stretchr/testify/require"
 )
@@ -20,7 +20,7 @@ type identifyingSample struct {
 	Alias *string `json:"alias"`
 	Token *string `json:"token" gorm:"not null"`
 
-	modelregistry.Base
+	model.Base
 }
 
 func (identifyingSample) TableName() string { return "identifying_samples" }
