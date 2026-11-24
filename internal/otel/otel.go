@@ -1,0 +1,528 @@
+// Package otel is the framework's OpenTelemetry tracing: it builds the tracer
+// provider from the [otel] configuration and exports spans over OTLP, names
+// the spans the framework owns, and records errors and recovered panics on
+// them.
+//
+// The public otel package forwards to projects the part they trace their own
+// work with, and documents the configuration; the rest serves the framework
+// alone, and framework code reaches both here.
+package otel
+
+import (
+	"context"
+	"fmt"
+	"maps"
+	"net/url"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/errorstack"
+	"github.com/hydroan/gst/internal/instance"
+	"github.com/hydroan/gst/logger"
+	"github.com/stoewer/go-strcase"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
+	"go.uber.org/zap"
+)
+
+var (
+	tracer         trace.Tracer
+	tracerProvider *sdktrace.TracerProvider
+	mu             sync.Mutex
+)
+
+type requestRootSpanKey struct{}
+
+// Init initializes the OpenTelemetry tracer with OTLP exporters, which Jaeger
+// and other tracing backends accept.
+func Init() error {
+	cfg, err := normalizeConfig(config.App.OTEL)
+	if err != nil {
+		return err
+	}
+	if !cfg.Enabled {
+		logger.OTEL.Info("otel tracing is disabled")
+		return nil
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if tracerProvider != nil {
+		return nil
+	}
+
+	// Route internal SDK errors (e.g. export failures) through the application
+	// logger instead of the default stderr handler so they surface in the same
+	// log pipeline as everything else.
+	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
+		logger.OTEL.Errorw("otel internal error", "err", err)
+	}))
+
+	// Create exporter
+	exporter, err := newExporter(cfg)
+	if err != nil {
+		return errors.Wrap(err, "failed to create exporter")
+	}
+
+	// Create resource
+	res, err := resource.New(
+		context.Background(),
+		resource.WithAttributes(resourceAttributes(cfg)...),
+	)
+	if err != nil {
+		return errors.Wrap(err, "failed to create resource")
+	}
+
+	// Create sampler
+	sampler, err := newSampler(cfg)
+	if err != nil {
+		return errors.Wrap(err, "failed to create sampler")
+	}
+
+	// Create tracer provider
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(
+			exporter,
+			newBatchSpanProcessorOptions(cfg)...,
+		),
+		sdktrace.WithResource(res),
+		sdktrace.WithSampler(sampler),
+	)
+
+	// Set global tracer provider
+	otel.SetTracerProvider(tp)
+
+	// Set global propagator
+	// The trace id header comes last: it only speaks when the W3C headers
+	// carried no trace context (see traceIDHeaderPropagator).
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+		traceIDHeaderPropagator{},
+	))
+
+	// Create tracer
+	tracer = otel.Tracer(cfg.ServiceName)
+
+	// Store tracer provider for cleanup
+	tracerProvider = tp
+
+	initHotPathAttrs(cfg.ServiceName)
+
+	logger.OTEL.Infoz(
+		"otel tracing initialized",
+		zap.String("service_name", cfg.ServiceName),
+		zap.String("exporter_otlp_protocol", string(cfg.ExporterOTLPProtocol)),
+		zap.String("traces_sampler", string(cfg.TracesSampler)),
+	)
+
+	return nil
+}
+
+// Close closes the OpenTelemetry tracer provider.
+func Close() error {
+	mu.Lock()
+	defer mu.Unlock()
+
+	if tracerProvider == nil {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err := tracerProvider.Shutdown(ctx)
+	tracerProvider = nil
+	if err != nil {
+		return errors.Wrap(err, "failed to shutdown tracer provider")
+	}
+	logger.OTEL.Info("otel tracer closed")
+	return nil
+}
+
+// GetTracer returns the framework's tracer, or a no-op one while no tracer
+// provider is installed.
+func GetTracer() trace.Tracer {
+	if tracerProvider == nil {
+		return noop.NewTracerProvider().Tracer("noop")
+	}
+	return tracer
+}
+
+// IsEnabled returns whether OpenTelemetry tracing is enabled.
+func IsEnabled() bool {
+	return config.App.OTEL.Enabled && tracerProvider != nil
+}
+
+// FrameworkSpanName returns the canonical name for gst-owned resource spans.
+// The format is component.GoModel.GoOperation so Jaeger labels map directly to
+// the framework type and method names used in code.
+func FrameworkSpanName(component string, resource string, operation string) string {
+	return joinSpanName(component, resource, operation)
+}
+
+// OperationSpanName returns the canonical name for gst-owned operation spans
+// that do not have a resource segment, such as middleware, cache, and RBAC.
+func OperationSpanName(component string, operation string) string {
+	return joinSpanName(component, operation)
+}
+
+// StartSpan starts a new span with the given name and options. The caller owns
+// the returned span and must end it after the traced operation finishes.
+func StartSpan(ctx context.Context, name string, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
+	if !IsEnabled() {
+		return ctx, trace.SpanFromContext(ctx)
+	}
+	return tracer.Start(ctx, name, opts...) //nolint:spancheck // Caller receives and ends the returned span.
+}
+
+// IsSpanRecording reports whether span is active and records telemetry data.
+func IsSpanRecording(span trace.Span) bool {
+	return span != nil && span.IsRecording()
+}
+
+// serviceNameAttr is the hot-path span attribute value derived from the
+// service name. Building it per request means string concatenation on every
+// traced request, which shows up directly in allocation profiles under load,
+// so Init precomputes it.
+// It is a plain variable instead of sync.OnceValue so re-running Init with a
+// different configuration (tests do this) refreshes it.
+var serviceNameAttr attribute.KeyValue
+
+func initHotPathAttrs(serviceName string) {
+	// Leave the zero (invalid) KeyValue when unset so callers checking Valid()
+	// skip the attribute.
+	serviceNameAttr = attribute.KeyValue{}
+	if serviceName != "" {
+		serviceNameAttr = attribute.String("service.name", serviceName)
+	}
+}
+
+// ServiceNameAttr returns the cached "service.name" span attribute. The result
+// is invalid when no service name is configured; callers must check Valid()
+// before appending it.
+func ServiceNameAttr() attribute.KeyValue { return serviceNameAttr }
+
+// ContextWithRequestRootSpan marks the current span as the root span of one
+// request.
+func ContextWithRequestRootSpan(ctx context.Context) context.Context {
+	span := trace.SpanFromContext(ctx)
+	if span == nil || !span.SpanContext().IsValid() {
+		return ctx
+	}
+	return context.WithValue(ctx, requestRootSpanKey{}, span)
+}
+
+// RequestRootContext returns ctx with the request root span restored as the current span.
+func RequestRootContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	span, ok := ctx.Value(requestRootSpanKey{}).(trace.Span)
+	if !ok || span == nil || !span.SpanContext().IsValid() {
+		return ctx
+	}
+	return trace.ContextWithSpan(ctx, span)
+}
+
+// spanNameSegmentCap is the most segments a span name has: the component,
+// the resource and the operation of FrameworkSpanName. joinSpanName sizes
+// its segment list to it, which keeps the list off the heap; the worst-case
+// test keeps the count honest when a segment is added.
+const spanNameSegmentCap = 3
+
+// spanNameSeparators rewrites the separators a segment may carry, a space, a
+// hyphen, a dot and a slash, as underscores, the separator the case
+// conversions of spanComponentName and spanSymbolName split words on.
+var spanNameSeparators = strings.NewReplacer(" ", "_", "-", "_", ".", "_", "/", "_")
+
+// joinSpanName joins the name of component and the names of symbols with
+// dots, leaving out the segments that have none: "database", "Record" and
+// "Get" make "database.Record.Get", "cache" and "get" make "cache.Get".
+func joinSpanName(component string, symbols ...string) string {
+	names := make([]string, 0, spanNameSegmentCap)
+	if component = spanComponentName(component); component != "" {
+		names = append(names, component)
+	}
+	for _, symbol := range symbols {
+		if name := spanSymbolName(symbol); name != "" {
+			names = append(names, name)
+		}
+	}
+	return strings.Join(names, ".")
+}
+
+// spanComponentName returns the snake_case name of a component segment:
+// "database" stays "database", "HTTPServer" and "http-server" both become
+// "http_server". A segment of lowercase letters alone, which the framework's
+// own components are, is returned as it is.
+func spanComponentName(segment string) string {
+	segment = strings.TrimSpace(segment)
+	if strings.IndexFunc(segment, func(r rune) bool { return r < 'a' || r > 'z' }) < 0 {
+		return segment
+	}
+	return strings.Trim(strcase.SnakeCase(spanNameSeparators.Replace(segment)), "_")
+}
+
+// spanSymbolName returns the UpperCamelCase name of a resource or operation
+// segment: "RoleBinding" stays "RoleBinding", "get" becomes "Get" and
+// "assign_role" becomes "AssignRole". A segment that starts with an
+// uppercase letter and carries no separator, a Go type or method name, is
+// returned as it is.
+func spanSymbolName(segment string) string {
+	segment = strings.TrimSpace(segment)
+	if segment == "" {
+		return ""
+	}
+	if !strings.ContainsAny(segment, " _-./") && segment[0] >= 'A' && segment[0] <= 'Z' {
+		return segment
+	}
+	return strcase.UpperCamelCase(spanNameSeparators.Replace(segment))
+}
+
+// normalizeConfig applies OTEL defaults and validates startup-only settings.
+func normalizeConfig(cfg config.OTEL) (config.OTEL, error) {
+	if cfg.ExporterOTLPProtocol == "" {
+		cfg.ExporterOTLPProtocol = config.OTLPProtocolHTTPProtobuf
+	}
+
+	switch cfg.ExporterOTLPProtocol {
+	case config.OTLPProtocolHTTPProtobuf:
+		if cfg.ExporterOTLPTracesEndpoint == "" {
+			cfg.ExporterOTLPTracesEndpoint = "http://localhost:4318/v1/traces"
+		}
+	case config.OTLPProtocolGRPC:
+		if cfg.ExporterOTLPTracesEndpoint == "" {
+			cfg.ExporterOTLPTracesEndpoint = "http://localhost:4317"
+		}
+	default:
+		return cfg, errors.Errorf("unsupported otlp protocol: %s", cfg.ExporterOTLPProtocol)
+	}
+
+	if cfg.ExporterOTLPCompression == "" {
+		cfg.ExporterOTLPCompression = config.OTLPCompressionNone
+	}
+	switch cfg.ExporterOTLPCompression {
+	case config.OTLPCompressionNone, config.OTLPCompressionGzip:
+	default:
+		return cfg, errors.Errorf("unsupported otlp compression: %s", cfg.ExporterOTLPCompression)
+	}
+
+	if cfg.TracesSampler == "" {
+		cfg.TracesSampler = config.TracesSamplerParentBasedAlwaysOn
+	}
+	if _, err := newSampler(cfg); err != nil {
+		return cfg, err
+	}
+
+	if cfg.BSPMaxQueueSize <= 0 {
+		cfg.BSPMaxQueueSize = sdktrace.DefaultMaxQueueSize
+	}
+	if cfg.BSPMaxExportBatchSize <= 0 {
+		cfg.BSPMaxExportBatchSize = min(sdktrace.DefaultMaxExportBatchSize, cfg.BSPMaxQueueSize)
+	}
+	if cfg.BSPMaxExportBatchSize > cfg.BSPMaxQueueSize {
+		return cfg, errors.Errorf("bsp max export batch size %d exceeds max queue size %d", cfg.BSPMaxExportBatchSize, cfg.BSPMaxQueueSize)
+	}
+	if cfg.BSPScheduleDelay <= 0 {
+		cfg.BSPScheduleDelay = time.Duration(sdktrace.DefaultScheduleDelay) * time.Millisecond
+	}
+	if cfg.BSPExportTimeout <= 0 {
+		cfg.BSPExportTimeout = time.Duration(sdktrace.DefaultExportTimeout) * time.Millisecond
+	}
+
+	return cfg, nil
+}
+
+// resourceAttributes builds the OpenTelemetry resource attributes describing
+// this process, so traces can be told apart by environment and by instance
+// when multiple replicas are running in production. The instance is the
+// process identity every other part of the framework names itself by, so a
+// trace and the log entries behind it point at the same process.
+func resourceAttributes(cfg config.OTEL) []attribute.KeyValue {
+	attrs := []attribute.KeyValue{
+		semconv.ServiceName(cfg.ServiceName),
+		semconv.ServiceVersion(resolveServiceVersion()),
+		semconv.DeploymentEnvironment(string(config.App.Mode)),
+		semconv.ServiceInstanceID(instance.ID()),
+	}
+	if hostname := instance.Hostname(); hostname != "" {
+		attrs = append(attrs, semconv.HostName(hostname))
+	}
+	return attrs
+}
+
+// resolveServiceVersion returns the service.version resource attribute value.
+// It prefers the resolved application version (populated from VCS build info,
+// see config.AppInfo.setBuildInfo), falling back to the git commit hash and
+// finally "unknown" when neither is available.
+func resolveServiceVersion() string {
+	if v := strings.TrimSpace(config.App.AppInfo.Version); v != "" {
+		return v
+	}
+	if commit := strings.TrimSpace(config.App.AppInfo.GitCommit); commit != "" {
+		return commit
+	}
+	return "unknown"
+}
+
+// newExporter creates an OTLP trace exporter based on startup configuration.
+func newExporter(cfg config.OTEL) (sdktrace.SpanExporter, error) {
+	switch cfg.ExporterOTLPProtocol {
+	case config.OTLPProtocolHTTPProtobuf:
+		opts := []otlptracehttp.Option{}
+		if isEndpointURL(cfg.ExporterOTLPTracesEndpoint) {
+			opts = append(opts, otlptracehttp.WithEndpointURL(cfg.ExporterOTLPTracesEndpoint))
+		} else {
+			opts = append(opts, otlptracehttp.WithEndpoint(cfg.ExporterOTLPTracesEndpoint), otlptracehttp.WithInsecure())
+		}
+
+		headers := make(map[string]string)
+		maps.Copy(headers, cfg.ExporterOTLPHeaders)
+		if len(headers) > 0 {
+			opts = append(opts, otlptracehttp.WithHeaders(headers))
+		}
+		if cfg.ExporterOTLPCompression == config.OTLPCompressionGzip {
+			opts = append(opts, otlptracehttp.WithCompression(otlptracehttp.GzipCompression))
+		}
+
+		return otlptracehttp.New(context.Background(), opts...)
+
+	case config.OTLPProtocolGRPC:
+		opts := []otlptracegrpc.Option{}
+		if isEndpointURL(cfg.ExporterOTLPTracesEndpoint) {
+			opts = append(opts, otlptracegrpc.WithEndpointURL(cfg.ExporterOTLPTracesEndpoint))
+		} else {
+			opts = append(opts, otlptracegrpc.WithEndpoint(cfg.ExporterOTLPTracesEndpoint), otlptracegrpc.WithInsecure())
+		}
+
+		headers := make(map[string]string)
+		maps.Copy(headers, cfg.ExporterOTLPHeaders)
+		if len(headers) > 0 {
+			opts = append(opts, otlptracegrpc.WithHeaders(headers))
+		}
+		if cfg.ExporterOTLPCompression == config.OTLPCompressionGzip {
+			opts = append(opts, otlptracegrpc.WithCompressor("gzip"))
+		}
+
+		return otlptracegrpc.New(context.Background(), opts...)
+
+	default:
+		return nil, errors.Errorf("unsupported otlp protocol: %s", cfg.ExporterOTLPProtocol)
+	}
+}
+
+func isEndpointURL(endpoint string) bool {
+	u, err := url.Parse(endpoint)
+	return err == nil && u.Scheme != "" && u.Host != ""
+}
+
+// newSampler creates an OpenTelemetry sampler from standard sampler names.
+func newSampler(cfg config.OTEL) (sdktrace.Sampler, error) {
+	switch cfg.TracesSampler {
+	case config.TracesSamplerAlwaysOn:
+		return sdktrace.AlwaysSample(), nil
+	case config.TracesSamplerAlwaysOff:
+		return sdktrace.NeverSample(), nil
+	case config.TracesSamplerTraceIDRatio:
+		ratio, err := traceIDRatioSamplerArg(cfg.TracesSamplerArg)
+		if err != nil {
+			return nil, err
+		}
+		return sdktrace.TraceIDRatioBased(ratio), nil
+	case config.TracesSamplerParentBasedAlwaysOn:
+		return sdktrace.ParentBased(sdktrace.AlwaysSample()), nil
+	case config.TracesSamplerParentBasedAlwaysOff:
+		return sdktrace.ParentBased(sdktrace.NeverSample()), nil
+	case config.TracesSamplerParentBasedTraceIDRatio:
+		ratio, err := traceIDRatioSamplerArg(cfg.TracesSamplerArg)
+		if err != nil {
+			return nil, err
+		}
+		return sdktrace.ParentBased(sdktrace.TraceIDRatioBased(ratio)), nil
+	default:
+		return nil, errors.Errorf("unsupported traces sampler: %s", cfg.TracesSampler)
+	}
+}
+
+func traceIDRatioSamplerArg(arg string) (float64, error) {
+	arg = strings.TrimSpace(arg)
+	if arg == "" {
+		return 1, nil
+	}
+
+	ratio, err := strconv.ParseFloat(arg, 64)
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to parse traces sampler arg")
+	}
+	if ratio < 0 || ratio > 1 {
+		return 0, errors.Errorf("traces sampler arg must be between 0 and 1: %s", arg)
+	}
+	return ratio, nil
+}
+
+func newBatchSpanProcessorOptions(cfg config.OTEL) []sdktrace.BatchSpanProcessorOption {
+	return []sdktrace.BatchSpanProcessorOption{
+		sdktrace.WithMaxQueueSize(cfg.BSPMaxQueueSize),
+		sdktrace.WithMaxExportBatchSize(cfg.BSPMaxExportBatchSize),
+		sdktrace.WithBatchTimeout(cfg.BSPScheduleDelay),
+		sdktrace.WithExportTimeout(cfg.BSPExportTimeout),
+	}
+}
+
+// RecordError records err on the span as an exception event and marks the
+// span status as Error.
+//
+// If any error in the unwrap chain carries a stack trace captured at its
+// creation point (e.g. errors from github.com/cockroachdb/errors), the
+// deepest such stack trace is recorded as the exception.stacktrace attribute
+// so the span points at where the error actually happened. Otherwise the
+// stack trace of this RecordError call site is recorded instead.
+func RecordError(span trace.Span, err error) {
+	if !IsSpanRecording(span) || err == nil {
+		return
+	}
+	if stackTrace := errorstack.Origin(err); stackTrace != "" {
+		span.RecordError(err, trace.WithAttributes(semconv.ExceptionStacktrace(stackTrace)))
+	} else {
+		span.RecordError(err, trace.WithStackTrace(true))
+	}
+	span.SetStatus(codes.Error, err.Error())
+}
+
+// The attributes RecordPanic sets on a span beside the exception event:
+// panicKey marks the failure as a panic, recoveredKey carries what was
+// recovered, as %v renders it.
+const (
+	panicKey     = attribute.Key("error.panic")
+	recoveredKey = attribute.Key("error.recovered")
+)
+
+// RecordPanic records on span a panic its caller recovered: the error
+// describing the panic, the way RecordError records one, its stack starting
+// at the caller, so the span points at the recovery and, below it, at where
+// the panic was raised; and the attributes that tell a panic from any other
+// failure, error.panic and, as error.recovered, what was recovered. It
+// returns the error describing the panic, for the caller to report further,
+// whether or not span records.
+func RecordPanic(span trace.Span, recovered any) error {
+	err := errors.NewWithDepthf(1, "panic recovered: %v", recovered)
+	if IsSpanRecording(span) {
+		RecordError(span, err)
+		span.SetAttributes(panicKey.Bool(true), recoveredKey.String(fmt.Sprint(recovered)))
+	}
+	return err
+}

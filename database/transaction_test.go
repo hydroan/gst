@@ -7,8 +7,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
+	gstotel "github.com/hydroan/gst/internal/otel"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
-	gstotel "github.com/hydroan/gst/otel"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"

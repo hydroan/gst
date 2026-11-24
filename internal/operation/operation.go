@@ -9,7 +9,7 @@ import (
 	"context"
 
 	"github.com/hydroan/gst/internal/execctx"
-	gstotel "github.com/hydroan/gst/otel"
+	gstotel "github.com/hydroan/gst/internal/otel"
 	"go.opentelemetry.io/otel/trace"
 )
 

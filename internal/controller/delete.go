@@ -9,8 +9,8 @@ import (
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/gst"
 	modellogmgmt "github.com/hydroan/gst/internal/modulemodel/logmgmt"
+	gstotel "github.com/hydroan/gst/internal/otel"
 	"github.com/hydroan/gst/logger"
-	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )

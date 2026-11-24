@@ -10,7 +10,7 @@ import (
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/operation"
-	gstotel "github.com/hydroan/gst/otel"
+	gstotel "github.com/hydroan/gst/internal/otel"
 	"github.com/robfig/cron/v3"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"

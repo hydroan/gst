@@ -13,8 +13,8 @@ import (
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
+	gstotel "github.com/hydroan/gst/internal/otel"
 	"github.com/hydroan/gst/internal/service"
-	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )

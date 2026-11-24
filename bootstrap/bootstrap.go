@@ -40,11 +40,11 @@ import (
 	"github.com/hydroan/gst/internal/lifecycle"
 	prommetrics "github.com/hydroan/gst/internal/metrics"
 	"github.com/hydroan/gst/internal/middleware"
+	gstotel "github.com/hydroan/gst/internal/otel"
 	"github.com/hydroan/gst/internal/router"
 	"github.com/hydroan/gst/internal/service"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/module"
-	gstotel "github.com/hydroan/gst/otel"
 	gstredis "github.com/hydroan/gst/redis"
 	"go.uber.org/zap"
 )

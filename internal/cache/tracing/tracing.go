@@ -24,7 +24,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/gst"
-	gstotel "github.com/hydroan/gst/otel"
+	gstotel "github.com/hydroan/gst/internal/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"

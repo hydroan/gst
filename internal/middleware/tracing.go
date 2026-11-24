@@ -10,8 +10,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/execctx"
+	gstotel "github.com/hydroan/gst/internal/otel"
 	"github.com/hydroan/gst/internal/requestctx"
-	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"

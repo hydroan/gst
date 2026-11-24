@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/internal/gst"
-	gstotel "github.com/hydroan/gst/otel"
+	gstotel "github.com/hydroan/gst/internal/otel"
 	"go.opentelemetry.io/otel/attribute"
 )
 
