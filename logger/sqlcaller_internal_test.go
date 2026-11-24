@@ -19,14 +19,12 @@ func TestFrameworkSQLFramePredicate(t *testing.T) {
 		{"github.com/hydroan/gst/database.(*database[go.shape.*uint8]).List", true},
 		{"github.com/hydroan/gst/database.withWriteTransaction.func1", true},
 		{"github.com/hydroan/gst/database/sqlite.New", true},
-		{"github.com/hydroan/gst/dao.QueryModelsMapWithOptions", true},
 		{"github.com/hydroan/gst/internal/controller.ListHandler.func1", false},
 		{"github.com/hydroan/gst/model.(*Sample).CreateAfter", false},
 		{"example.com/app/service/report.latestEntry", false},
 		{"testing.tRunner", false},
 		// Prefixes match at a package boundary: a sibling package sharing the
 		// prefix as a name prefix is not a framework frame.
-		{"github.com/hydroan/gst/daox.Migrate", false},
 		{"github.com/hydroan/gst/databases.New", false},
 	}
 	for _, tt := range tests {
@@ -106,7 +104,6 @@ func TestSkippedSQLFramePredicateWithoutConfigMatchesFrameworkPredicate(t *testi
 
 	for _, function := range []string{
 		"gorm.io/gorm.(*DB).Find",
-		"github.com/hydroan/gst/dao.QueryModelsMapWithOptions",
 		"example.com/app/dao.QueryHelper",
 		"example.com/app/service/report.latestEntry",
 	} {

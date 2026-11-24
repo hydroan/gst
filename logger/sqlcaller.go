@@ -12,11 +12,9 @@ import (
 
 // sqlCallerSkipPrefixes are the built-in function-path prefixes of frames
 // that sit between a SQL log entry and the code that issued the SQL: gorm
-// itself and the framework packages wrapping statement execution. The dao
-// package is included so its helpers surface their business caller instead
-// of the helper body. Projects extend the list through
-// logger.sql_caller_skip_prefixes; these built-in entries always stay in
-// force.
+// itself and the framework packages wrapping statement execution. Projects
+// extend the list through logger.sql_caller_skip_prefixes; these built-in
+// entries always stay in force.
 //
 // The controller package is deliberately absent: it holds the statements it
 // issues, and the only frame beneath it is the router's handler dispatch
@@ -27,7 +25,6 @@ var sqlCallerSkipPrefixes = []string{
 	"gorm.io/",
 	"github.com/hydroan/gst/logger",
 	"github.com/hydroan/gst/database",
-	"github.com/hydroan/gst/dao",
 }
 
 // isFrameworkSQLFrame reports whether the function belongs to gorm or to a
