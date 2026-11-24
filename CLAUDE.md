@@ -31,6 +31,7 @@ gst 是强约定框架（Apple 风格），不是自由框架（Windows 风格�
 6. 需要拍板的点（命名、口径、取舍、批次先后）既不要自己定也不要卡住：列选项、给推荐方案和理由、说清影响面，然后问我。推荐方案先查先例：能参照别家的拍板点，多查几家原文（规范、平台、框架都看，只查一家不算），取多数做法并注明出处，与多数相反先说理由；没有先例或没法参照的，明说没有，再给自己的设计与理由。命名的范围：包名，以及新增的导出名（含 internal 包），在动手前一次列完再问我；包内非导出名、文件名、测试名自己定。
 7. 排查、审查同理：发现按第 5 条分两堆，小问题直接修掉并在汇报里列出；大问题先给证据链和定性结论（是框架的问题还是使用方的问题、凭什么这么判），每条都带可选方案与推荐方案，规则文件要跟着改的把措辞一并给出；证据不足就直说不足并给出取证办法，不要用推测顶上。并行审查一律全量交叉：每个子 agent 拿同一份任务书，独立、完整地只读审查全部范围，不按模块、区域或维度切片；用 Workflow 时同样如此。
 8. 修 bug 一律先讲清楚再动手：缺陷的现象与触发场景、根因所在、参照的先例、具体改法与涉及文件、变动量、契约影响、验收办法，缺一不可，只给一句概括的不算方案；每批做完，紧接着给出下一批那一个缺陷的这份说明，等我批准再动。
+9. 搬包、下沉、改名、重构这类批次，不用我提醒，验收前把动到的包的非测试文件通读一遍，按「代码质量优化」第 2、4 条顺手优化；只在包内使用的导出名收成包内名字，其余要改导出名的照第 5 条报给我。汇报里单列「顺手优化」一节，没有发现也写明读过。只改一两行的小修不在此列。
 
 ### 代码质量优化
 
@@ -92,7 +93,7 @@ gst 是强约定框架（Apple 风格），不是自由框架（Windows 风格�
 
 - 只给项目用、或主要给项目用的能力，是顶层公开包，实现就写在包里，如 `bootstrap`、`database`、`controller`、`cronjob`、`leader`。
 - 只有框架自己用的包一律放 `internal`：项目开发者看不到，就不必理解这些细节。
-- 项目和框架都大量使用的能力，实现下沉到与公开包同名的 internal 包，再由顶层包做 alias 转发，只转发项目用得到的那部分，框架私用的符号不暴露。下沉只为把框架要用、却不该让项目看到的导出符号挡在公开面之外；它不是新包的默认形态：包里没有这样的符号、也指不出哪处代码已经需要它，就按第一条把实现写在公开包里，不为转发拆成两个包。转发是唯一形状，符号只是空函数、常量或类型也一样，公开包自己不声明任何东西：根包 `gst` 转发 `internal/gst`，`datatypes` 转发 `internal/datatypes`，`model` 转发 `internal/model` 与 `internal/modelschema`，`service` 转发 `internal/service` 与 `internal/apiaction`，`sse` 转发 `internal/sse`，`router` 转发 `internal/router` 与 `internal/apiaction` 的 `APIPath`，`middleware` 转发 `internal/middleware`，`dsl` 转发 `internal/dsl`，`tenant` 转发 `internal/tenant`，`i18n` 转发 `internal/i18n`，`apidoc` 转发 `internal/apidoc`，`otel` 转发 `internal/otel`。`grpc` 是混合形态：生成代码和项目用到的调用函数、拦截器与调用者类型转发 `internal/controller`、`internal/grpcserver`，只有生成代码用的转换帮手（Narrow、UTF8、Value 等）按第一条实现就写在包里。
+- 项目和框架都大量使用的能力，实现下沉到与公开包同名的 internal 包，再由顶层包做 alias 转发，只转发项目用得到的那部分，框架私用的符号不暴露。下沉只为把框架要用、却不该让项目看到的导出符号挡在公开面之外；它不是新包的默认形态：包里没有这样的符号、也指不出哪处代码已经需要它，就按第一条把实现写在公开包里，不为转发拆成两个包。转发是唯一形状，符号只是空函数、常量或类型也一样，公开包自己不声明任何东西：根包 `gst` 转发 `internal/gst`，`datatypes` 转发 `internal/datatypes`，`model` 转发 `internal/model` 与 `internal/modelschema`，`service` 转发 `internal/service` 与 `internal/apiaction`，`sse` 转发 `internal/sse`，`router` 转发 `internal/router` 与 `internal/apiaction` 的 `APIPath`，`middleware` 转发 `internal/middleware`，`dsl` 转发 `internal/dsl`，`tenant` 转发 `internal/tenant`，`i18n` 转发 `internal/i18n`，`apidoc` 转发 `internal/apidoc`，`otel` 转发 `internal/otel`，`logger` 转发 `internal/logger`。`grpc` 是混合形态：生成代码和项目用到的调用函数、拦截器与调用者类型转发 `internal/controller`、`internal/grpcserver`，只有生成代码用的转换帮手（Narrow、UTF8、Value 等）按第一条实现就写在包里。
 - middleware 与 interceptor 是例外：中间件和拦截器大多是给项目用的，所以这两个包按谁挂载分家，而不是像 router、dsl 那样全部在 internal 实现、公开包只转发。框架内建链上的中间件与拦截器是框架逻辑，只有它们算核心，放 internal/middleware 与 internal/grpcserver，由 internal/router、internal/grpcserver 装配；项目经 Register、RegisterAuth 自己挂的（如 Timeout、JwtAuth）是项目能力，同模块一样是业务侧，实现直接写在公开包里，不进 internal，也不得改动内建链与监听器的逻辑；随 gg module copy 复制的中间件同样在公开包，只引用公开包。公开包对 Register、RegisterAuth 这类挂载入口只做转发。框架自己构建、交给项目挂载的中间件（如 CircuitBreaker）实现在 internal/middleware，公开包只转发它的构造函数。
 
 引用方向随之固定：internal 包（含测试）需要这些能力时直接引用对应的 internal 包，禁止反向 import 公开包，避免 internal → 公开 → internal 的依赖绕行和潜在 import 环；框架自身代码（含公开包）使用 internal 能力时同样直接引用 internal 实现包，公开转发包只服务业务项目。如果所需符号只存在于公开的转发包，把实现下沉到它转发的 internal 包、公开包照旧只转发，而不是让 internal 反向引用；实现就写在公开包里的（第一条），internal 包直接引用它，不为此另建同名 internal 包。
