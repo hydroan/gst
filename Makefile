@@ -44,7 +44,7 @@ define install_tool
 endef
 
 # run_tool runs the tool at the path $(1), with the environment TOOL_ENV
-# sets, empty but for test.
+# sets: lint and test each set one, and it is empty for the rest.
 define run_tool
 	@echo "$(notdir $(1)) $(2)"; \
 		$(TOOL_ENV) "$(1)" $(2)
@@ -132,6 +132,13 @@ vet:
 # The example modules are linted too (see vet), each against the .golangci.yml
 # gg new writes into a project, so the rules a generated project is held to are
 # the rules the examples demonstrate.
+#
+# The linter runs under GOMEMLIMIT, the Go runtime's soft memory limit: with
+# no result cached it analyzes the whole module and, left to itself, grows to
+# about twice the limit; at the limit the runtime collects garbage more often
+# instead. make check runs beside make test, and the test binaries need that
+# memory.
+lint: TOOL_ENV = GOMEMLIMIT=3GiB
 lint:
 	$(call install_tool,$(GOLANGCI_LINT),$(GOLANGCI_LINT_PKG),$(GOLANGCI_LINT_VERSION))
 	@echo "Running golangci-lint..."
