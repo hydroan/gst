@@ -360,15 +360,9 @@ const childProjectEnv = "GG_TEST_PROJECT_CHILD"
 // reads a throwaway project's entry again, so the entry is removed when the
 // test ends. A test calls newGenProject first: whatever it does before the
 // call, it does in both processes. A test whose subtests call it calls
-// parallelInParent first instead. Under -short, what make test-short
-// passes, the test is skipped before any of this: these cases, building
-// against the framework for real, are what keeps the suite past a minute,
-// and make test runs them.
+// parallelInParent first instead.
 func newGenProject(t *testing.T) (projectDir string, ok bool) {
 	t.Helper()
-	if testing.Short() {
-		t.Skip("builds a project against the framework; make test runs it, make test-short leaves it out")
-	}
 	if os.Getenv(childProjectEnv) == "" {
 		runInChild(t)
 		return "", false

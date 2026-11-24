@@ -1,4 +1,4 @@
-.PHONY: check build format vet lint selfcheck ggcheck test test-short testv testvv generate fix install uninstall help testcachefix
+.PHONY: check build format vet lint selfcheck ggcheck test testv testvv generate fix install uninstall help testcachefix precompile
 
 # Tool versions - must match go.mod exactly
 GOLANGCI_LINT_VERSION := $(shell go list -m -f '{{.Version}}' github.com/golangci/golangci-lint/v2)
@@ -72,7 +72,6 @@ help:
 	@echo "  selfcheck      - Check the framework's source against the rules golangci-lint cannot express"
 	@echo "  ggcheck        - Run gg gen and gg check on the example projects with the gg built from the tree"
 	@echo "  test           - Run unit tests, a line per package"
-	@echo "  test-short     - Run the main module's unit tests alone, the gg end-to-end cases skipped"
 	@echo "  testv          - Run unit tests, a line per test"
 	@echo "  testvv         - Run unit tests with the full go test -v output"
 	@echo "  generate       - Regenerate the framework's own generated sources"
@@ -235,11 +234,28 @@ testcachefix:
 	@mkdir -p "$(GO_BIN_DIR)"
 	@go build -o "$(TESTCACHEFIX)" ./internal/cmd/testcachefix
 
+# go compiles a package it has no cached copy of in every command that needs
+# it: commands running at once do not wait for one another, and the cache
+# holds a package only once a compile of it has ended. With the build cache
+# empty, the test run, the go commands its tests start and a make check
+# running beside it would each compile the same dependencies, the largest of
+# them at over a gigabyte a compile, and together ask for several times the
+# memory of the machine. Compiling them once first leaves each of those
+# commands its own packages to compile: in the form a plain go command asks
+# for, and in the -trimpath form gg builds its programs in, the two the
+# tests' commands use. go list -export compiles without linking, so with
+# everything cached the two return in about a second each.
+precompile:
+	@echo "Compiling the dependencies the tests' go commands share..."
+	@$(TOOL_ENV) go list -export ./... > /dev/null
+	@$(TOOL_ENV) go list -export -trimpath ./... > /dev/null
+
 # run_test_suite runs one gotestsum suite, with the arguments after -- given,
 # records every test binary the run links and files the results under their
 # link keys afterwards, whatever the run's status, which it then reports. The
-# write-back is given TEST_FLAGS too: the test flags among them, -short for
-# one, are part of the keys.
+# write-back is given TEST_FLAGS too: go keys a result on the test flags of
+# its run, so one set in TEST_FLAGS has to be in the keys the results are
+# filed under.
 define run_test_suite
 	@record="$$(mktemp -d)"; \
 		echo "gotestsum $(TEST_OUTPUT) -- $(TEST_FLAGS) $(1)"; \
@@ -257,7 +273,7 @@ define run_test_suite_in
 endef
 
 test: TOOL_ENV = PATH="$(TEST_PATH)"
-test: testcachefix
+test: testcachefix precompile
 	$(call install_tool,$(GOTESTSUM),$(GOTESTSUM_PKG),$(GOTESTSUM_VERSION))
 	@echo "Running unit tests (the per-dialect suites run against mysql here)..."
 	$(call run_test_suite,./...)
@@ -270,19 +286,6 @@ test: testcachefix
 	$(call run_test_suite_in,examples/cluster,./...)
 	$(call run_test_suite_in,examples/multitenant,./...)
 	$(call run_test_suite_in,examples/stress,./...)
-
-# test-short runs the main module alone with -short, the signal for a change
-# in progress: the gg command's cases that build a project against the
-# framework, a minute or more together, skip themselves (see newGenProject in
-# cmd/gg), and the per-dialect suites and the example projects are left out.
-# make test is the verdict. -short is a test flag, so the two share no cached
-# results.
-test-short: TOOL_ENV = PATH="$(TEST_PATH)"
-test-short: TEST_FLAGS += -short
-test-short: testcachefix
-	$(call install_tool,$(GOTESTSUM),$(GOTESTSUM_PKG),$(GOTESTSUM_VERSION))
-	@echo "Running unit tests in short mode (main module; the gg end-to-end cases skipped)..."
-	$(call run_test_suite,./...)
 
 # Run unit tests with more output: testv and testvv run what test runs, with
 # the output switched to a line per test, or to what go test -v prints.
