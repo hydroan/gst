@@ -3,7 +3,7 @@ package middleware_test
 import (
 	"testing"
 
-	"github.com/hydroan/gst/apidoc"
+	"github.com/hydroan/gst/internal/apidoc"
 	"github.com/hydroan/gst/middleware"
 	"github.com/stretchr/testify/require"
 )

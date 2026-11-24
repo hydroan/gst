@@ -30,6 +30,11 @@ type documentedPackage struct {
 	name string
 }
 
+// apidocPath is the import path the generated files reach the apidoc registry
+// by: they are framework code, which imports the package behind the public
+// one a project's model/apidoc.gen.go imports.
+const apidocPath = ggconst.ImportPathGst + "/internal/" + ggconst.PkgAPIDoc
+
 // documentedPackages are the packages apidocgen registers the doc comments
 // of: the base models and the query parameter structs of internal/model, and
 // the tenant scope of internal/tenant.
@@ -68,7 +73,7 @@ func buildAPIDoc(pkg documentedPackage) (string, error) {
 		return "", errors.Wrapf(err, "extract %s api docs", pkg.dir)
 	}
 
-	code, err := gggen.BuildAPIDocFile(ggconst.ImportPathGst, pkg.name, entries)
+	code, err := gggen.BuildAPIDocFile(ggconst.ImportPathGst, pkg.name, apidocPath, entries)
 	if err != nil {
 		return "", errors.Wrapf(err, "build %s api doc file", pkg.dir)
 	}

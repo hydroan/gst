@@ -4,7 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hydroan/gst/apidoc"
+	"github.com/hydroan/gst/internal/apidoc"
+	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen"
 	"github.com/hydroan/gst/internal/modelsource"
 )
@@ -46,7 +47,7 @@ func TestBuildAPIDocFile(t *testing.T) {
 		},
 	}
 
-	code, err := gggen.BuildAPIDocFile("example.com/proj", "model", entries)
+	code, err := gggen.BuildAPIDocFile("example.com/proj", "model", ggconst.ImportPathAPIDoc, entries)
 	if err != nil {
 		t.Fatalf("BuildAPIDocFile() error = %v", err)
 	}
@@ -73,7 +74,7 @@ func TestBuildAPIDocFile(t *testing.T) {
 // TestBuildAPIDocFileRegistersStructsAndEnums compares the whole file
 // BuildAPIDocFile generates for the example of its doc comment.
 func TestBuildAPIDocFileRegistersStructsAndEnums(t *testing.T) {
-	code, err := gggen.BuildAPIDocFile("helloworld", "model", modelsource.APIDocEntries{
+	code, err := gggen.BuildAPIDocFile("helloworld", "model", ggconst.ImportPathAPIDoc, modelsource.APIDocEntries{
 		Structs: []modelsource.StructDocEntry{{
 			PkgPath:  "helloworld/model",
 			TypeName: "User",
@@ -127,7 +128,7 @@ func init() {
 // TestBuildAPIDocFileWithoutEntries compares the whole file BuildAPIDocFile
 // generates when the models document nothing: an empty init and no import.
 func TestBuildAPIDocFileWithoutEntries(t *testing.T) {
-	code, err := gggen.BuildAPIDocFile("helloworld", "model", modelsource.APIDocEntries{})
+	code, err := gggen.BuildAPIDocFile("helloworld", "model", ggconst.ImportPathAPIDoc, modelsource.APIDocEntries{})
 	if err != nil {
 		t.Fatalf("BuildAPIDocFile() error = %v", err)
 	}

@@ -8,8 +8,8 @@ import (
 	"sync"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/hydroan/gst/apidoc"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/apidoc"
 )
 
 var (

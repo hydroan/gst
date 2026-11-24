@@ -41,7 +41,7 @@ func scaffoldFiles(modulePath string) (map[string]string, error) {
 	if files["model/"+ggconst.FileModelGen], err = gggen.BuildModelFile(modulePath, ggconst.PkgModel, nil); err != nil {
 		return nil, errors.Wrap(err, "build model/model.gen.go")
 	}
-	if files["model/"+ggconst.FileAPIDocGen], err = gggen.BuildAPIDocFile(modulePath, ggconst.PkgModel, modelsource.APIDocEntries{}); err != nil {
+	if files["model/"+ggconst.FileAPIDocGen], err = gggen.BuildAPIDocFile(modulePath, ggconst.PkgModel, ggconst.ImportPathAPIDoc, modelsource.APIDocEntries{}); err != nil {
 		return nil, errors.Wrap(err, "build model/apidoc.gen.go")
 	}
 	if files["service/"+ggconst.FileServiceGen], err = gggen.BuildServiceFile(modulePath, ggconst.PkgService, nil); err != nil {

@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/hydroan/gst/apidoc"
+	"github.com/hydroan/gst/internal/apidoc"
 )
 
 // registryDocModel deliberately carries no doc comments: everything the

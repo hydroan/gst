@@ -2,7 +2,7 @@
 
 package tenant
 
-import "github.com/hydroan/gst/apidoc"
+import "github.com/hydroan/gst/internal/apidoc"
 
 func init() {
 	apidoc.Register("github.com/hydroan/gst/internal/tenant", "Scope", apidoc.StructDoc{

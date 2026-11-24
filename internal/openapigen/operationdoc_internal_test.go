@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/hydroan/gst/apidoc"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/apidoc"
 )
 
 func TestOperationIDDerivesFromPath(t *testing.T) {

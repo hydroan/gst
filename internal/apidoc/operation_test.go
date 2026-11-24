@@ -3,8 +3,8 @@ package apidoc_test
 import (
 	"testing"
 
-	"github.com/hydroan/gst/apidoc"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/apidoc"
 )
 
 func TestRegisterOperationAndLookupOperation(t *testing.T) {

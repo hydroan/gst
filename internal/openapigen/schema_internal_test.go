@@ -10,7 +10,7 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3gen"
-	"github.com/hydroan/gst/apidoc"
+	"github.com/hydroan/gst/internal/apidoc"
 	"github.com/hydroan/gst/internal/datatypes"
 	"gorm.io/gorm"
 )

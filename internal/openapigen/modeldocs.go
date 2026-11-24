@@ -3,7 +3,7 @@ package openapigen
 import (
 	"reflect"
 
-	"github.com/hydroan/gst/apidoc"
+	"github.com/hydroan/gst/internal/apidoc"
 )
 
 // modelFieldDocs returns a map with the doc comment for each field of the

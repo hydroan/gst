@@ -4,8 +4,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/apidoc"
 	"github.com/hydroan/gst/authn/jwt"
+	"github.com/hydroan/gst/internal/apidoc"
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"

@@ -1,7 +1,7 @@
 package modelsource
 
 import (
-	"github.com/hydroan/gst/apidoc"
+	"github.com/hydroan/gst/internal/apidoc"
 )
 
 // StructDocEntry describes the doc comments of one struct extracted from a

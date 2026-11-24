@@ -246,7 +246,7 @@ func genRunWithOptions(opts genRunOptions) error {
 	if err != nil {
 		return errors.Wrap(err, "extract api docs")
 	}
-	apidocCode, err := gggen.BuildAPIDocFile(module, ggconst.PkgModel, docEntries)
+	apidocCode, err := gggen.BuildAPIDocFile(module, ggconst.PkgModel, ggconst.ImportPathAPIDoc, docEntries)
 	if err != nil {
 		return errors.Wrap(err, "build model/apidoc.gen.go")
 	}

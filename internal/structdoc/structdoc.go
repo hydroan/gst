@@ -17,7 +17,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hydroan/gst/apidoc"
+	"github.com/hydroan/gst/internal/apidoc"
 )
 
 // Docs holds everything extracted from one Go source file.
