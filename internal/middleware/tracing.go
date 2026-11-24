@@ -196,10 +196,10 @@ func tracing() gin.HandlerFunc {
 		} else {
 			// Tracing off: the id the request carries when it is a W3C trace
 			// id, a new one otherwise, the rule the propagator applies with
-			// tracing on (see requestctx.TraceIDOf); the span id is new either
+			// tracing on (see execctx.TraceIDOf); the span id is new either
 			// way.
 			ctx = c.Request.Context()
-			traceID = requestctx.TraceIDOf(c.Request.Header.Get(execctx.HeaderTraceID))
+			traceID = execctx.TraceIDOf(c.Request.Header.Get(execctx.HeaderTraceID))
 			spanID = execctx.NewSpanID()
 		}
 

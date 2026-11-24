@@ -256,7 +256,7 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 - 失败日志：controller 对它作答的每一次失败记一条，级别两边同一条规则，按答复的 HTTP 状态定（`gst.FailureLevel`）。服务端自己的故障（5xx，或没带状态的错误）记 Error，并记进 controller 与 service 的 span。客户端原因的失败不记进这两个 span：403、408、412、429 记 Warn，其余 4xx 记 Info，三种 409（重复键、乐观锁冲突、外键不满足）也在其中。408 与 504 在 gRPC 上同映射到 DeadlineExceeded，级别照状态分开：408 是客户端没按时送到，记 Warn；504 是服务端没按时答完，记 Error。
 - 客户端地址：两边对同名的转发头部都把多行（gRPC 是多个元数据值）用逗号合起来读，再按 server.trusted_proxies 从右往左认。
 - 指标：HTTP 是 `gst_backend_*`，gRPC 保持库默认 `grpc_server_*`，方便现成看板。
-- 追踪：HTTP 的 tracing 中间件与 gRPC 的 otelgrpc 各起服务端 span，trace id 都盖进 ctx；没带 W3C 头时两边都认 X-Trace-ID，但只认 W3C trace id 形态的值、其他值另生成（`requestctx.TraceIDOf`，开关 OTel 都是这一条），并都把 trace id 回写给客户端（HTTP 的 `X-Trace-ID` 头、gRPC 的 `x-trace-id` 元数据）。服务端 span 的状态两边同口径（OTel HTTP 语义约定，otelgrpc 也照它）：成功和 4xx 留 Unset，5xx 或处理器在 ctx 上报了错设 Error，不设 Ok。
+- 追踪：HTTP 的 tracing 中间件与 gRPC 的 otelgrpc 各起服务端 span，trace id 都盖进 ctx；没带 W3C 头时两边都认 X-Trace-ID，但只认 W3C trace id 形态的值、其他值另生成（`execctx.TraceIDOf`，开关 OTel 都是这一条），并都把 trace id 回写给客户端（HTTP 的 `X-Trace-ID` 头、gRPC 的 `x-trace-id` 元数据）。服务端 span 的状态两边同口径（OTel HTTP 语义约定，otelgrpc 也照它）：成功和 4xx 留 Unset，5xx 或处理器在 ctx 上报了错设 Error，不设 Ok。
 - panic：两边共用 logger.Recovery 写 recovery.log，并记在 span 上；HTTP 在响应还没写出时答信封，已经开始写出（流式）时不再追加任何内容，只把 panic 记到 ctx 上让访问日志与 span 带上。
 - 测试：`testutil.Run` 同时起两个空闲端口的监听，`testutil.GRPCTarget()` 给 `grpc.NewClient`；测试二进制没注册任何 gRPC 服务（声明 TestMain 的文件没导入 `pb` 包）时 `GRPCTarget()` 直接 panic 点名要加的导入；`gg gen` 每次运行都让外部测试包里声明 TestMain 的文件随 main.go 空白导入 `pb`（和 `interceptor`），漏了或多了由 gg check 的「TestMain imports」规则报出。
 

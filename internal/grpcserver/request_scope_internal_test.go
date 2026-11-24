@@ -53,7 +53,7 @@ func TestTraceIDTravelsUnderTheSharedHeaderInLowerCase(t *testing.T) {
 // TestCallsDescribedByAnActionCarryItsRouteAndMethod), the peer's address,
 // the authority the call was addressed to, the user agent, no TLS on a
 // plaintext listener — and the trace id, the caller's x-trace-id when it is
-// a W3C trace id and a generated one otherwise (see requestctx.TraceIDOf,
+// a W3C trace id and a generated one otherwise (see execctx.TraceIDOf,
 // the rule the HTTP listener reads the header by too), published back in the
 // response header either way.
 func TestCallsCarryTheRequestMetadataAndTraceID(t *testing.T) {

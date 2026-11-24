@@ -4,10 +4,9 @@
 // arrived on — which logging and the storage layer read off a context (see
 // WithMetadata and FromContext). Beside it stand the keys those fields are
 // stored under on a gin context, with the accessors memoizing what gin would
-// parse anew at every call (see GinQuery and GinClientIP); the trace id a
-// request may bring along (see TraceIDOf); and the stance on forwarding
-// headers both listeners resolve the client address by (see TrustedProxies
-// and ClientIP).
+// parse anew at every call (see GinQuery and GinClientIP); and the stance on
+// forwarding headers both listeners resolve the client address by (see
+// TrustedProxies and ClientIP).
 //
 // The public requestctx package forwards the part the middleware of a
 // project and the copied module files use.

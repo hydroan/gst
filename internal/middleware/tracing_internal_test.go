@@ -70,7 +70,7 @@ func TestTracingUsesIncomingTraceIDHeader(t *testing.T) {
 
 // TestTracingHoldsTheTraceIDHeaderToOneRuleWhenOTELDisabled pins the branch
 // with tracing off: the middleware reads X-Trace-ID the way the propagator
-// does with tracing on (see requestctx.TraceIDOf), keeping a W3C trace id
+// does with tracing on (see execctx.TraceIDOf), keeping a W3C trace id
 // and replacing anything else, an absent header included, with a new id of
 // the same form; the id it stamps on the context is the one it publishes
 // in the gin context and hands the caller back, so the annotations

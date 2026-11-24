@@ -1,17 +1,17 @@
 // Package execctx carries the identity of the unit of work a context belongs
 // to. Every part of the framework that annotates its output with that
 // identity — statement comments, the SQL log, the business log — reads it
-// from here, whatever kind of work is running; and an execution outside any
-// trace takes the ids it travels under from here too (see NewTraceID and
-// NewSpanID).
+// from here, whatever kind of work is running; and the ids an execution
+// travels under come from here too: new ones for an execution outside any
+// trace (see NewTraceID and NewSpanID), and the trace id a request brought
+// along, when it is one (see TraceIDOf).
 //
 // The identity is deliberately kept apart from requestctx: an HTTP request is
 // one kind of execution, and requestctx describes the request-specific facts
-// of that kind — route, method, user, parameters. This package imports
-// nothing of the framework, and requestctx takes from it only the id of a
-// request that brought none: the request middleware stamps the identity,
-// NewServiceContext attaches the request metadata, and each consumer reads
-// whichever it needs.
+// of that kind — route, method, user, parameters. Neither package imports
+// the other, and this one imports nothing of the framework: the request
+// middleware stamps the identity, NewServiceContext attaches the request
+// metadata, and each consumer reads whichever it needs.
 package execctx
 
 import (

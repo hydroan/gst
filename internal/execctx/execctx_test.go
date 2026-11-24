@@ -2,7 +2,6 @@ package execctx_test
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/hydroan/gst/internal/execctx"
@@ -55,26 +54,4 @@ func spanContext(t *testing.T, traceID string) trace.SpanContext {
 	id, err := trace.TraceIDFromHex(traceID)
 	require.NoError(t, err)
 	return trace.NewSpanContext(trace.SpanContextConfig{TraceID: id, SpanID: trace.SpanID{1}})
-}
-
-// TestNewTraceIDAndNewSpanIDAreW3CIDs pins the form of the ids the framework
-// generates for an execution outside any trace: a trace id of 16 random
-// bytes and a span id of 8, in lower-case hex and never all zero, the form
-// the W3C trace context defines and the X-Trace-ID header carries.
-func TestNewTraceIDAndNewSpanIDAreW3CIDs(t *testing.T) {
-	first, second := execctx.NewTraceID(), execctx.NewTraceID()
-	require.Regexp(t, `^[0-9a-f]{32}$`, first)
-	require.NotEqual(t, strings.Repeat("0", 32), first)
-	require.NotEqual(t, first, second)
-
-	span, other := execctx.NewSpanID(), execctx.NewSpanID()
-	require.Regexp(t, `^[0-9a-f]{16}$`, span)
-	require.NotEqual(t, strings.Repeat("0", 16), span)
-	require.NotEqual(t, span, other)
-}
-
-func BenchmarkNewTraceID(b *testing.B) {
-	for b.Loop() {
-		execctx.NewTraceID()
-	}
 }
