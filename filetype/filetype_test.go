@@ -1,12 +1,6 @@
 package filetype_test
 
 import (
-	"image"
-	"image/jpeg"
-	"image/png"
-	"io"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/hydroan/gst/filetype"
@@ -158,50 +152,6 @@ func TestDetectFiletype(t *testing.T) {
 			})
 		})
 	}
-}
-
-// TestConvertImageWritesTheFormatAskedForUnderTheTemporaryDirectory pins
-// the two conversions on images the test encodes itself: each writes the
-// converted image under the temporary directory, named like the source, in
-// the format asked for whatever the source's, and a file that is no image
-// converts to nothing. The sources live in a directory of their own, so a
-// converted image named like its source overwrites nothing.
-func TestConvertImageWritesTheFormatAskedForUnderTheTemporaryDirectory(t *testing.T) {
-	sources := t.TempDir()
-	t.Setenv("TMPDIR", t.TempDir())
-	picture := image.NewRGBA(image.Rect(0, 0, 4, 4))
-	encode := func(name string, encode func(w io.Writer) error) string {
-		t.Helper()
-		path := filepath.Join(sources, name)
-		file, err := os.Create(path)
-		require.NoError(t, err)
-		require.NoError(t, encode(file))
-		require.NoError(t, file.Close())
-		return path
-	}
-	pngSource := encode("sample.png", func(w io.Writer) error { return png.Encode(w, picture) })
-	jpgSource := encode("sample.jpg", func(w io.Writer) error { return jpeg.Encode(w, picture, nil) })
-	textSource := filepath.Join(sources, "sample.txt")
-	require.NoError(t, os.WriteFile(textSource, []byte("sample text\n"), 0o600))
-
-	jpg, err := filetype.ConvertImageToJPG(pngSource)
-	require.NoError(t, err)
-	require.Equal(t, filepath.Join(os.TempDir(), "sample.png"), jpg)
-	kind, mime := filetype.Detect(jpg)
-	require.Equal(t, filetype.FiletypeJPG, kind)
-	require.Equal(t, filetype.MimeJPG, mime)
-
-	converted, err := filetype.ConvertImageToPNG(jpgSource)
-	require.NoError(t, err)
-	require.Equal(t, filepath.Join(os.TempDir(), "sample.jpg"), converted)
-	kind, mime = filetype.Detect(converted)
-	require.Equal(t, filetype.FiletypePNG, kind)
-	require.Equal(t, filetype.MimePNG, mime)
-
-	_, err = filetype.ConvertImageToJPG(textSource)
-	require.Error(t, err, "a text file is no image to convert")
-	_, err = filetype.ConvertImageToPNG(textSource)
-	require.Error(t, err)
 }
 
 // TestMimeByFiletypeAnswersTheTableAndUnknownOtherwise pins the lookup of a
