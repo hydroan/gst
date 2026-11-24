@@ -36,8 +36,8 @@ const (
 	FilterOpIsNull     FilterOp = "isnull"     // null check: value true means IS NULL, false means IS NOT NULL
 )
 
-// Service-only operators: for service code building Filters
-// directly, reusable and injection-safe alternatives to raw SQL fragments.
+// Service-only operators: for service code building Filters directly,
+// reusable and injection-safe alternatives to raw SQL fragments.
 const (
 	FilterOpRegex        FilterOp = "regex"        // regular expression match: column REGEXP value (dialect-aware)
 	FilterOpNotRegex     FilterOp = "notregex"     // regular expression exclusion: NOT (column REGEXP value)

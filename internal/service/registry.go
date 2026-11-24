@@ -6,7 +6,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/gst"
 )
@@ -15,8 +14,6 @@ var (
 	mu       sync.RWMutex
 	services = make(map[string]any)
 )
-
-var errNotFoundService = errors.New("no service instance matches the given route and phase, skip processing service layer")
 
 // RegisterInstance registers a concrete service instance for the route and
 // phase.

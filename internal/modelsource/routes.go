@@ -156,17 +156,17 @@ func RouterTargetForAction(route string, design *dsl.Design, action *dsl.Action)
 	return route, paramName
 }
 
-// buildHierarchicalEndpoints constructs complete hierarchical endpoint paths for all models.
-// It maps directory structures to their corresponding endpoint names and builds full endpoint paths
-// by replacing directory names with their custom endpoint names (if defined).
+// buildHierarchicalEndpoints constructs complete hierarchical endpoint paths
+// for all models. It maps directory structures to their corresponding
+// endpoint names and builds full endpoint paths by replacing directory names
+// with their custom endpoint names (if defined).
 //
 // For example:
 //   - model/sample.go with Endpoint("samples") -> samples
 //   - model/sample/item.go with Endpoint("items") -> samples/items
 //   - model/sample/item/entry.go with Endpoint("entries") -> samples/items/entries
 func buildHierarchicalEndpoints(allModels []*Model) {
-	// Create a map to store directory-to-endpoint mappings
-	// This will store what endpoint name should be used for each directory
+	// The endpoint each directory is addressed by, keyed by directory.
 	dirEndpointMap := make(map[string]string)
 
 	// First pass: build directory-to-endpoint mapping
@@ -175,18 +175,17 @@ func buildHierarchicalEndpoints(allModels []*Model) {
 			continue
 		}
 
-		// Extract directory from model file path
 		modelFilePath := m.pathInModelDir()
 		fileDir := path.Dir(modelFilePath)
 		if fileDir == "." {
 			fileDir = ""
 		}
 
-		// Get the filename without extension
 		fileName := strings.TrimSuffix(path.Base(modelFilePath), ggconst.ExtensionGo)
 
-		// Determine the directory path that this model defines endpoint for
-		// The rule is: model file defines endpoint for the directory path formed by modelDir + fileName
+		// A model file names the endpoint of the directory formed by its own
+		// directory and its file name: model/sample/item.go names that of
+		// sample/item.
 		var targetDir string
 		if fileDir == "" {
 			targetDir = fileName
@@ -194,25 +193,23 @@ func buildHierarchicalEndpoints(allModels []*Model) {
 			targetDir = path.Join(fileDir, fileName)
 		}
 
-		// Store the endpoint mapping for the target directory
 		if m.Design.Endpoint != "" {
 			dirEndpointMap[targetDir] = m.Design.Endpoint
 		}
 	}
 
-	// Second pass: build complete endpoints by replacing directory names with mapped endpoints
+	// Second pass: build the complete endpoints, each directory name replaced
+	// by the endpoint mapped to it.
 	for _, m := range allModels {
 		if m.Design == nil {
 			continue
 		}
 
-		// Extract directory from model file path
 		fileDir := path.Dir(m.pathInModelDir())
 		if fileDir == "." {
 			fileDir = ""
 		}
 
-		// Store the original endpoint from DSL
 		originalEndpoint := m.Design.Endpoint
 
 		if fileDir == "" {
@@ -220,7 +217,6 @@ func buildHierarchicalEndpoints(allModels []*Model) {
 			continue
 		}
 
-		// Build the complete endpoint path by replacing directory names with mapped endpoints
 		var endpointParts []string
 		pathParts := strings.Split(fileDir, "/")
 
@@ -228,26 +224,22 @@ func buildHierarchicalEndpoints(allModels []*Model) {
 		for i := range pathParts {
 			currentPath := strings.Join(pathParts[:i+1], "/")
 			if mappedEndpoint, exists := dirEndpointMap[currentPath]; exists {
-				// Use the mapped endpoint for this directory
 				endpointParts = append(endpointParts, mappedEndpoint)
 			} else {
-				// No mapping found, use directory name
 				endpointParts = append(endpointParts, pathParts[i])
 			}
 		}
 
-		// Add the current model's original endpoint
 		endpointParts = append(endpointParts, originalEndpoint)
 
-		// Join all parts to form the complete endpoint
 		m.Design.Endpoint = strings.Join(endpointParts, "/")
 	}
 }
 
-// propagateParentParams propagates the parameter of every parent resource into
-// the endpoints of its descendants, so a nested resource is addressed inside the
-// scope of the resources it belongs to. The endpoints are organized in a trie,
-// which hands each of them its ancestors in one lookup.
+// propagateParentParams propagates the parameter of every parent resource
+// into the endpoints of its descendants, so a nested resource is addressed
+// inside the scope of the resources it belongs to. The endpoints are organized
+// in a trie, which hands each of them its ancestors in one lookup.
 //
 // For example, with model/sample.go declaring Endpoint("samples") and
 // Param("sample"), model/sample/item.go declaring Endpoint("items") and
@@ -263,24 +255,21 @@ func buildHierarchicalEndpoints(allModels []*Model) {
 // so the last one registers routes such as GET and POST
 // /api/samples/:sample/items/:item/entries.
 func propagateParentParams(allModels []*Model) {
-	nodeFormater := trie.WithNodeFormatter[string, *Model](func(v *Model, depth int, hasValue bool) string {
+	nodeFormatter := trie.WithNodeFormatter[string, *Model](func(v *Model, depth int, hasValue bool) string {
 		if !hasValue || v == nil {
 			return "<nil>"
 		}
 		return fmt.Sprintf("%s (param: %s)", v.Design.Endpoint, v.Design.Param)
 	})
-	keyFormater := trie.WithKeyFormatter[string, *Model](func(k string, v *Model, depth int, hasValue bool) string {
+	keyFormatter := trie.WithKeyFormatter[string, *Model](func(k string, v *Model, depth int, hasValue bool) string {
 		return k
 	})
 
-	// Create a trie tree to organize endpoints hierarchically
-	// Key type is string, value type is *Model
-	tree, err := trie.New[string, *Model](nodeFormater, keyFormater)
+	tree, err := trie.New[string, *Model](nodeFormatter, keyFormatter)
 	if err != nil {
 		panic(err)
 	}
 
-	// Build the trie tree
 	for _, m := range allModels {
 		// Split endpoint into segments for trie insertion
 		// e.g., "samples/items/entries" -> ["samples", "items", "entries"]
@@ -292,35 +281,31 @@ func propagateParentParams(allModels []*Model) {
 		// Get all ancestors (including self) for this endpoint
 		ancestors := tree.PathAncestors(strings.Split(model.Design.Endpoint, "/"))
 
-		// Build the new endpoint path by inserting parameters from all ancestors
 		newPathSegments := make([]string, 0)
 
-		// Process each ancestor to build the hierarchical path with parameters
-		// Note: ancestors[len(ancestors)-1] is the model itself, so we exclude it from parameter propagation
+		// The last ancestor is the model itself, which adds no parameter of
+		// its own to its endpoint.
 		for i, ancestor := range ancestors {
-			// Add path segments from this ancestor level
 			if i == 0 {
 				// First ancestor: add all its path segments
 				newPathSegments = append(newPathSegments, ancestor.Keys...)
 			} else {
-				// Subsequent ancestors: add only the new segments (difference from previous)
+				// Subsequent ancestors: add only the segments the previous one
+				// does not have.
 				prevAncestor := ancestors[i-1]
 				if len(ancestor.Keys) > len(prevAncestor.Keys) {
-					// Add the new segments
 					newSegments := ancestor.Keys[len(prevAncestor.Keys):]
 					newPathSegments = append(newPathSegments, newSegments...)
 				}
 			}
 
-			// Add the parameter for this ancestor (if it has one)
-			// But skip the last ancestor (which is the model itself) to avoid duplicate parameters
+			// The parameter of this ancestor, if it has one.
 			if i < len(ancestors)-1 && ancestor.Value != nil && len(ancestor.Value.Design.Param) > 0 {
 				param := ancestor.Value.Design.Param
 				newPathSegments = append(newPathSegments, param)
 			}
 		}
 
-		// Update the model's endpoint with the new path that includes all ancestor parameters
 		if len(newPathSegments) > 0 {
 			newEndpoint := strings.Join(newPathSegments, "/")
 			model.Design.Endpoint = newEndpoint

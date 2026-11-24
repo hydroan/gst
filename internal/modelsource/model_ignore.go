@@ -67,7 +67,7 @@ func ApplyModelIgnores(allModels []*Model, rules []ggconfig.ModelRule) ModelIgno
 			if matchedDirs[i] == nil {
 				matchedDirs[i] = make(map[string]bool)
 			}
-			matchedDirs[i][ModelRootDir(m.ModelFilePath)] = true
+			matchedDirs[i][modelRootDir(m.ModelFilePath)] = true
 
 			match := ModelIgnoreMatch{Model: m.ModelName, File: m.ModelFilePath}
 			result.Matches = append(result.Matches, match)

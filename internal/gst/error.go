@@ -158,6 +158,8 @@ func (e *Error) Error() string {
 	return e.msg + ": " + e.cause.Error()
 }
 
+// Unwrap returns the internal cause the error carries, nil when it carries
+// none: what errors.Is and errors.As look through to.
 func (e *Error) Unwrap() error {
 	if e == nil {
 		return nil

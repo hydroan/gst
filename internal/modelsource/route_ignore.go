@@ -66,7 +66,7 @@ func applyRouteIgnores(allModels []*Model, rules []ggconfig.RouteRule) RouteIgno
 				if matchedDirs[i] == nil {
 					matchedDirs[i] = make(map[string]bool)
 				}
-				matchedDirs[i][ModelRootDir(m.ModelFilePath)] = true
+				matchedDirs[i][modelRootDir(m.ModelFilePath)] = true
 				result.Matches = append(result.Matches, RouteIgnoreMatch{
 					Method: method,
 					Path:   "/" + strings.Join(ggconfig.NormalizeRoutePath(finalRoute), "/"),
@@ -106,11 +106,11 @@ type MultiSourceRule struct {
 	Dirs []string
 }
 
-// ModelRootDir returns the first two path segments of a model file path
+// modelRootDir returns the first two path segments of a model file path
 // (e.g. "model/iam" for "model/iam/user/user.go"), the granularity at which
 // module copy lays out framework modules. Files directly under the model
 // root yield just the root (e.g. "model" for "model/user.go").
-func ModelRootDir(modelFilePath string) string {
+func modelRootDir(modelFilePath string) string {
 	parts := strings.SplitN(filepath.ToSlash(modelFilePath), "/", 3)
 	if len(parts) < 3 {
 		return parts[0]

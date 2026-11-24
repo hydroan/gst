@@ -3,10 +3,15 @@ package service
 import (
 	"fmt"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/logger"
 	"go.uber.org/zap"
 )
+
+// errNotFoundService words the debug entry Resolve writes when no service is
+// registered under a key.
+var errNotFoundService = errors.New("no service instance matches the given route and phase, skip processing service layer")
 
 // Resolve returns the registered service for a key produced by Key.
 //

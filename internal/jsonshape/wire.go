@@ -261,9 +261,9 @@ const (
 // one as 17:30:00, a datatypes.JSONMap an object and a datatypes.JSON the
 // value it holds, among the ones of the libraries a model is built from; a
 // datatypes.JSONSlice is the slice it is declared over, and needs no entry.
-// The JSON v2 experiment turns json.RawMessage into an
-// alias of jsontext.Value, so both names are listed. The OpenAPI document of
-// a running server describes the same types from the same knowledge, by
+// The JSON v2 experiment turns json.RawMessage into an alias of
+// jsontext.Value, so both names are listed. The OpenAPI document of a
+// running server describes the same types from the same knowledge, by
 // reflection, under the same format names (see internal/openapigen's
 // knownJSONWrites).
 var builtins = map[string]struct {

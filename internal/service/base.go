@@ -10,6 +10,12 @@ import (
 
 var _ gst.Service[*model.Empty, any, any] = (*Base[*model.Empty, any, any])(nil)
 
+// Base is the service every service embeds: it implements gst.Service with
+// defaults, the actions answering the zero response and the hooks doing
+// nothing, so a service declares only the methods it has something to do in.
+// Import, Export and SSE have no default worth serving and say so. It also
+// lends the Query helpers a list service parses its request with (see
+// QueryModel).
 type Base[M gst.Model, REQ gst.Request, RSP gst.Response] struct{ gst.Logger }
 
 func (Base[M, REQ, RSP]) Create(*gst.ServiceContext, REQ) (RSP, error) { return *new(RSP), nil }
@@ -72,6 +78,8 @@ func (Base[M, REQ, RSP]) SSE(*gst.ServiceContext) error {
 	return errors.New("sse service is not implemented")
 }
 
+// Filter returns the query model and its options as they came: the default
+// adds no condition of its own.
 func (Base[M, REQ, RSP]) Filter(_ *gst.ServiceContext, m M, opts gst.QueryOptions) (M, gst.QueryOptions, error) {
 	return m, opts, nil
 }

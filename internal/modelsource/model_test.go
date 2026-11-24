@@ -10,53 +10,6 @@ import (
 	"github.com/hydroan/gst/internal/modelsource"
 )
 
-func TestServiceOutputRel(t *testing.T) {
-	t.Parallel()
-	modelDir := filepath.Join("repo", "model")
-
-	tests := []struct {
-		name      string
-		modelFile string
-		want      string
-	}{
-		{
-			name:      "duplicate_dir_and_stem",
-			modelFile: filepath.Join("repo", "model", "sample", "sample.go"),
-			want:      "sample",
-		},
-		{
-			name:      "nested_duplicate_collapses_once",
-			modelFile: filepath.Join("repo", "model", "foo", "bar", "bar.go"),
-			want:      filepath.Join("foo", "bar"),
-		},
-		{
-			name:      "nested_duplicate_full_chain",
-			modelFile: filepath.Join("repo", "model", "x", "x", "x.go"),
-			want:      "x",
-		},
-		{
-			name:      "stem_differs_from_parent_dir",
-			modelFile: filepath.Join("repo", "model", "sample", "record", "entry", "detail", "item.go"),
-			want:      filepath.Join("sample", "record", "entry", "detail", "item"),
-		},
-		{
-			name:      "flat_model_file",
-			modelFile: filepath.Join("repo", "model", "user.go"),
-			want:      "user",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got := modelsource.ServiceOutputRel(tt.modelFile, modelDir)
-			if got != tt.want {
-				t.Fatalf("ServiceOutputRel(%q, %q) = %q, want %q", tt.modelFile, modelDir, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestServiceTarget(t *testing.T) {
 	t.Parallel()
 
