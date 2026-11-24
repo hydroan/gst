@@ -5,7 +5,7 @@ import (
 	"slices"
 
 	"github.com/hydroan/gst/internal/gst"
-	prommetrics "github.com/hydroan/gst/metrics"
+	prommetrics "github.com/hydroan/gst/internal/metrics"
 )
 
 // maxRoleHierarchy is how many links a subject may reach a role through,

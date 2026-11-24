@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/errors"
-	prommetrics "github.com/hydroan/gst/metrics"
+	prommetrics "github.com/hydroan/gst/internal/metrics"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 )

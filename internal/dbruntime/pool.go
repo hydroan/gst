@@ -6,7 +6,7 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/dbruntime/dbnode"
-	prommetrics "github.com/hydroan/gst/metrics"
+	prommetrics "github.com/hydroan/gst/internal/metrics"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )

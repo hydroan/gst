@@ -8,9 +8,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/logfield"
+	prommetrics "github.com/hydroan/gst/internal/metrics"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/logger"
-	prommetrics "github.com/hydroan/gst/metrics"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )

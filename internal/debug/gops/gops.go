@@ -1,3 +1,7 @@
+// Package gops runs the gops agent, through which the gops command inspects
+// the running process, when the configuration enables it (config.App's
+// GopsEnabled): bootstrap starts it with the process and stops it as the
+// process shuts down.
 package gops
 
 import (

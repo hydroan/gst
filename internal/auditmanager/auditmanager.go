@@ -13,8 +13,8 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/gst"
+	prommetrics "github.com/hydroan/gst/internal/metrics"
 	modellogmgmt "github.com/hydroan/gst/internal/modulemodel/logmgmt"
-	prommetrics "github.com/hydroan/gst/metrics"
 )
 
 // writeTimeout bounds the statement that writes one entry. The entry is

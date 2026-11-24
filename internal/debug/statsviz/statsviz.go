@@ -1,3 +1,7 @@
+// Package statsviz serves the statsviz page, live charts of the Go runtime's
+// metrics, on a listener of its own when the configuration enables it
+// (config.App's StatsvizEnabled): bootstrap starts the server with the
+// process and stops it as the process shuts down.
 package statsviz
 
 import (
