@@ -8,12 +8,12 @@ import (
 	"github.com/hydroan/gst/internal/cache/codec"
 	"github.com/hydroan/gst/internal/cache/registry"
 	"github.com/hydroan/gst/internal/cache/tracing"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/redis/go-redis/v9"
 )
 
 var (
-	_ types.Cache[any] = cache[any]{}
+	_ gst.Cache[any] = cache[any]{}
 
 	// handles memoizes the traced handle per value type. The handle is
 	// stateless, so one per type serves every caller and the wrapper is not
@@ -40,8 +40,8 @@ type cache[T any] struct{}
 // bytes do not decode as T: Get drops it, logs the key at Warn and answers
 // ErrEntryNotFound, so a stale or foreign encoding reads as a miss instead of
 // a failure.
-func Cache[T any]() types.Cache[T] {
-	return registry.Load(handles, func() types.Cache[T] {
+func Cache[T any]() gst.Cache[T] {
+	return registry.Load(handles, func() gst.Cache[T] {
 		return tracing.NewWrapper[T](cache[T]{}, "redis")
 	})
 }
@@ -75,12 +75,12 @@ func (c cache[T]) Get(ctx context.Context, key string) (T, error) {
 	data, err := client.Get(ctx, Key(key)).Bytes()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return zero, types.ErrEntryNotFound
+			return zero, gst.ErrEntryNotFound
 		}
 		return zero, errors.WithStack(err)
 	}
 	if len(data) == 0 {
-		return zero, types.ErrEntryNotFound
+		return zero, gst.ErrEntryNotFound
 	}
 	var result T
 	if err = json.Unmarshal(data, &result); err != nil {

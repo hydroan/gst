@@ -7,9 +7,9 @@ import (
 
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/gst"
 	modelauthz "github.com/hydroan/gst/internal/modulemodel/authz"
 	"github.com/hydroan/gst/internal/tenant"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/module/authz"
 	"github.com/stretchr/testify/require"
 )
@@ -28,7 +28,7 @@ func TestReconcilePoliciesDetectsDrift(t *testing.T) {
 	t.Run("reports a permission no record derives", func(t *testing.T) {
 		role := uuid.NewV7().String()
 		object := "/api/reconcile/" + role
-		require.NoError(t, rbac.RBAC().SetRolePermissions(ctx, tenant.Default, role, []types.Permission{
+		require.NoError(t, rbac.RBAC().SetRolePermissions(ctx, tenant.Default, role, []gst.Permission{
 			{Object: object, Action: "GET"},
 		}))
 		t.Cleanup(func() { _ = rbac.RBAC().SetRolePermissions(ctx, tenant.Default, role, nil) })
@@ -69,7 +69,7 @@ func TestReconcilePoliciesDetectsDrift(t *testing.T) {
 func TestReconcilePoliciesSkipsRulesNoRecordDerives(t *testing.T) {
 	ctx := context.Background()
 
-	require.NoError(t, rbac.RBAC().SetPermissionsForAuthenticated(ctx, []types.Permission{
+	require.NoError(t, rbac.RBAC().SetPermissionsForAuthenticated(ctx, []gst.Permission{
 		{Object: "/api/reconcile/open", Action: "GET"},
 	}))
 

@@ -7,8 +7,8 @@ import (
 
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	modellogmgmt "github.com/hydroan/gst/internal/modulemodel/logmgmt"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	"go.opentelemetry.io/otel/trace"
@@ -63,7 +63,7 @@ func (a *action[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceContext s
 	cur.SetUpdatedBy("")
 
 	// 1.Perform business logic processing before partial update resource.
-	if err := a.traceServiceHook(ctx, apiaction.PatchBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
+	if err := a.traceServiceHook(ctx, apiaction.PatchBefore, svc, newServiceContext, func(sc *gst.ServiceContext) error {
 		return svc.PatchBefore(sc, cur)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
@@ -75,7 +75,7 @@ func (a *action[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceContext s
 		return zero, failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after partial update resource.
-	if err := a.traceServiceHook(ctx, apiaction.PatchAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
+	if err := a.traceServiceHook(ctx, apiaction.PatchAfter, svc, newServiceContext, func(sc *gst.ServiceContext) error {
 		return svc.PatchAfter(sc, cur)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
@@ -86,7 +86,7 @@ func (a *action[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceContext s
 	// feeds both columns; Response carries the resulting row instead. The
 	// entry names the patched record by its own id: the body need not carry
 	// one, the route named the record.
-	if err := audit.RecordOperation(ctx, req, types.OperationPatch,
+	if err := audit.RecordOperation(ctx, req, gst.OperationPatch,
 		func() *modellogmgmt.OperationLog {
 			record, _ := json.Marshal(req)
 			respData, _ := json.Marshal(cur)

@@ -10,12 +10,12 @@ package service
 
 import (
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/service"
-	"github.com/hydroan/gst/internal/types"
 )
 
 // Base is the default no-op service implementation exposed to application services.
-type Base[M types.Model, REQ types.Request, RSP types.Response] = service.Base[M, REQ, RSP]
+type Base[M gst.Model, REQ gst.Request, RSP gst.Response] = service.Base[M, REQ, RSP]
 
 // Phase is a phase of an action: the action itself, Create and its kind,
 // Import, Export, SSE and Stream, and, for the CRUD and batch actions, the
@@ -104,6 +104,6 @@ const (
 //     and the service.Logger will be set later, while the framework bootstraps.
 //   - If Register is called after initialization (e.g., in Init function),
 //     logger.Service is already available, and the service.Logger will be set directly.
-func Register[S types.Service[M, REQ, RSP], M types.Model, REQ types.Request, RSP types.Response](phase apiaction.Phase, route string) {
+func Register[S gst.Service[M, REQ, RSP], M gst.Model, REQ gst.Request, RSP gst.Response](phase apiaction.Phase, route string) {
 	service.Register[S, M, REQ, RSP](phase, route)
 }

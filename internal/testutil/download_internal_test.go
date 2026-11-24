@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/client"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,7 +39,7 @@ func TestDownloadCSVParsesRecordsAndSetsTheFormat(t *testing.T) {
 	records := DownloadCSV(t, cli, "/api/samples/export", client.WithQuery("tag", "one"))
 
 	require.Equal(t, [][]string{{"name", "tag"}, {"sample-a", "one"}, {"sample-b", "two"}}, records)
-	require.Equal(t, "csv", (*seen)[types.QueryFormat])
+	require.Equal(t, "csv", (*seen)[gst.QueryFormat])
 	require.Equal(t, "one", (*seen)["tag"])
 }
 

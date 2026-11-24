@@ -74,10 +74,10 @@ package cache
 
 import (
 	"github.com/hydroan/gst/internal/cache/defaultcache"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // Cache returns the process-wide typed cache backed by the forwarded backend.
-func Cache[T any]() types.Cache[T] {
+func Cache[T any]() gst.Cache[T] {
 	return defaultcache.Cache[T]()
 }

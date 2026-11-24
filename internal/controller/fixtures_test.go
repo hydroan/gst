@@ -20,13 +20,13 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/datatypes"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/middleware"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/service"
 	"github.com/hydroan/gst/internal/tenant"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -281,7 +281,7 @@ type stagingService struct {
 // hookedStage is the stage the staging service sets.
 const hookedStage = "hooked"
 
-func (*stagingService) CreateBefore(_ *types.ServiceContext, m *stagedSample) error {
+func (*stagingService) CreateBefore(_ *gst.ServiceContext, m *stagedSample) error {
 	if m.Stage != "" {
 		return refusal()
 	}
@@ -289,7 +289,7 @@ func (*stagingService) CreateBefore(_ *types.ServiceContext, m *stagedSample) er
 	return nil
 }
 
-func (*stagingService) UpdateBefore(_ *types.ServiceContext, m *stagedSample) error {
+func (*stagingService) UpdateBefore(_ *gst.ServiceContext, m *stagedSample) error {
 	if m.Stage != "" {
 		return refusal()
 	}
@@ -297,7 +297,7 @@ func (*stagingService) UpdateBefore(_ *types.ServiceContext, m *stagedSample) er
 	return nil
 }
 
-func (*stagingService) PatchBefore(_ *types.ServiceContext, m *stagedSample) error {
+func (*stagingService) PatchBefore(_ *gst.ServiceContext, m *stagedSample) error {
 	m.Stage = hookedStage
 	return nil
 }
@@ -309,7 +309,7 @@ type cookieBeforeService struct {
 	service.Base[*sampleRecord, *sampleRecord, *sampleRecord]
 }
 
-func (*cookieBeforeService) CreateBefore(sc *types.ServiceContext, _ *sampleRecord) error {
+func (*cookieBeforeService) CreateBefore(sc *gst.ServiceContext, _ *sampleRecord) error {
 	sc.SetCookie(&http.Cookie{Name: "probe", Value: "set"})
 	return nil
 }
@@ -318,7 +318,7 @@ type cookieAfterService struct {
 	service.Base[*sampleRecord, *sampleRecord, *sampleRecord]
 }
 
-func (*cookieAfterService) CreateAfter(sc *types.ServiceContext, _ *sampleRecord) error {
+func (*cookieAfterService) CreateAfter(sc *gst.ServiceContext, _ *sampleRecord) error {
 	sc.SetCookie(&http.Cookie{Name: "probe", Value: "set"})
 	return nil
 }
@@ -333,37 +333,37 @@ type refusingService struct {
 	service.Base[*sampleRecord, *sampleRecord, *sampleRecord]
 }
 
-func refusal() error { return types.NewError(http.StatusConflict, refusedMsg) }
+func refusal() error { return gst.NewError(http.StatusConflict, refusedMsg) }
 
-func (*refusingService) CreateBefore(*types.ServiceContext, *sampleRecord) error { return refusal() }
+func (*refusingService) CreateBefore(*gst.ServiceContext, *sampleRecord) error { return refusal() }
 
-func (*refusingService) DeleteBefore(*types.ServiceContext, *sampleRecord) error { return refusal() }
+func (*refusingService) DeleteBefore(*gst.ServiceContext, *sampleRecord) error { return refusal() }
 
-func (*refusingService) UpdateBefore(*types.ServiceContext, *sampleRecord) error { return refusal() }
+func (*refusingService) UpdateBefore(*gst.ServiceContext, *sampleRecord) error { return refusal() }
 
-func (*refusingService) PatchBefore(*types.ServiceContext, *sampleRecord) error { return refusal() }
+func (*refusingService) PatchBefore(*gst.ServiceContext, *sampleRecord) error { return refusal() }
 
-func (*refusingService) ListBefore(*types.ServiceContext, *[]*sampleRecord) error {
+func (*refusingService) ListBefore(*gst.ServiceContext, *[]*sampleRecord) error {
 	return refusal()
 }
 
-func (*refusingService) CreateManyBefore(*types.ServiceContext, ...*sampleRecord) error {
+func (*refusingService) CreateManyBefore(*gst.ServiceContext, ...*sampleRecord) error {
 	return refusal()
 }
 
-func (*refusingService) DeleteManyBefore(*types.ServiceContext, ...*sampleRecord) error {
+func (*refusingService) DeleteManyBefore(*gst.ServiceContext, ...*sampleRecord) error {
 	return refusal()
 }
 
-func (*refusingService) UpdateManyBefore(*types.ServiceContext, ...*sampleRecord) error {
+func (*refusingService) UpdateManyBefore(*gst.ServiceContext, ...*sampleRecord) error {
 	return refusal()
 }
 
-func (*refusingService) PatchManyBefore(*types.ServiceContext, ...*sampleRecord) error {
+func (*refusingService) PatchManyBefore(*gst.ServiceContext, ...*sampleRecord) error {
 	return refusal()
 }
 
-func (*refusingService) Import(*types.ServiceContext, io.Reader) ([]*sampleRecord, error) {
+func (*refusingService) Import(*gst.ServiceContext, io.Reader) ([]*sampleRecord, error) {
 	return nil, refusal()
 }
 
@@ -374,7 +374,7 @@ type filterRefusingService struct {
 	service.Base[*sampleRecord, *sampleRecord, *sampleRecord]
 }
 
-func (*filterRefusingService) Filter(_ *types.ServiceContext, m *sampleRecord, opts types.QueryOptions) (*sampleRecord, types.QueryOptions, error) {
+func (*filterRefusingService) Filter(_ *gst.ServiceContext, m *sampleRecord, opts gst.QueryOptions) (*sampleRecord, gst.QueryOptions, error) {
 	return m, opts, refusal()
 }
 
@@ -388,7 +388,7 @@ type pageObservingService struct {
 // handed its after hook.
 var observedPage atomic.Int64
 
-func (*pageObservingService) ListAfter(_ *types.ServiceContext, records *[]*feedSample) error {
+func (*pageObservingService) ListAfter(_ *gst.ServiceContext, records *[]*feedSample) error {
 	observedPage.Store(int64(len(*records)))
 	return nil
 }
@@ -399,10 +399,10 @@ type importingService struct {
 	service.Base[*sampleRecord, *sampleRecord, *sampleRecord]
 }
 
-func (*importingService) Import(_ *types.ServiceContext, r io.Reader) ([]*sampleRecord, error) {
+func (*importingService) Import(_ *gst.ServiceContext, r io.Reader) ([]*sampleRecord, error) {
 	var records []*sampleRecord
 	if err := json.NewDecoder(r).Decode(&records); err != nil {
-		return nil, types.NewError(http.StatusBadRequest, "malformed sample file")
+		return nil, gst.NewError(http.StatusBadRequest, "malformed sample file")
 	}
 	return records, nil
 }
@@ -413,7 +413,7 @@ type exportingService struct {
 	service.Base[*sampleRecord, *sampleRecord, *sampleRecord]
 }
 
-func (*exportingService) Export(_ *types.ServiceContext, records ...*sampleRecord) ([]byte, error) {
+func (*exportingService) Export(_ *gst.ServiceContext, records ...*sampleRecord) ([]byte, error) {
 	var lines strings.Builder
 	for _, record := range records {
 		lines.WriteString(record.Name + "\n")
@@ -435,7 +435,7 @@ type observedCall struct {
 }
 
 // observe reads what sc answers into an observedCall.
-func observe(sc *types.ServiceContext) observedCall {
+func observe(sc *gst.ServiceContext) observedCall {
 	return observedCall{
 		Box:          sc.Param("box"),
 		Username:     sc.Username(),
@@ -460,7 +460,7 @@ type observingService struct {
 	service.Base[*sampleRecord, *sampleRecord, *sampleRecord]
 }
 
-func (*observingService) CreateBefore(sc *types.ServiceContext, _ *sampleRecord) error {
+func (*observingService) CreateBefore(sc *gst.ServiceContext, _ *sampleRecord) error {
 	observedMu.Lock()
 	defer observedMu.Unlock()
 	lastObserved = observe(sc)
@@ -516,10 +516,10 @@ type actionService struct {
 	service.Base[*sampleRecord, *sampleActionReq, *sampleActionRsp]
 }
 
-func (*actionService) Create(sc *types.ServiceContext, req *sampleActionReq) (*sampleActionRsp, error) {
+func (*actionService) Create(sc *gst.ServiceContext, req *sampleActionReq) (*sampleActionRsp, error) {
 	switch req.Note {
 	case actionRefuse:
-		return nil, types.NewError(http.StatusForbidden, "not yours")
+		return nil, gst.NewError(http.StatusForbidden, "not yours")
 	case actionBreak:
 		return nil, errors.New("dial tcp: connection refused")
 	case actionWrite:
@@ -534,11 +534,11 @@ func (*actionService) Create(sc *types.ServiceContext, req *sampleActionReq) (*s
 	return &sampleActionRsp{Note: req.Note, observedCall: observe(sc)}, nil
 }
 
-func (*actionService) List(sc *types.ServiceContext, req *sampleActionReq) (*sampleActionRsp, error) {
+func (*actionService) List(sc *gst.ServiceContext, req *sampleActionReq) (*sampleActionRsp, error) {
 	return &sampleActionRsp{Note: req.Note, observedCall: observe(sc)}, nil
 }
 
-func (*actionService) Get(sc *types.ServiceContext, req *sampleActionReq) (*sampleActionRsp, error) {
+func (*actionService) Get(sc *gst.ServiceContext, req *sampleActionReq) (*sampleActionRsp, error) {
 	return &sampleActionRsp{Note: req.Note, observedCall: observe(sc)}, nil
 }
 
@@ -573,7 +573,7 @@ type hangingService struct {
 	service.Base[*sampleRecord, *sampleRecord, *sampleRecord]
 }
 
-func (*hangingService) ListBefore(sc *types.ServiceContext, _ *[]*sampleRecord) error {
+func (*hangingService) ListBefore(sc *gst.ServiceContext, _ *[]*sampleRecord) error {
 	fireHangCancel()
 	<-sc.Done()
 	return sc.Err()
@@ -582,8 +582,8 @@ func (*hangingService) ListBefore(sc *types.ServiceContext, _ *[]*sampleRecord) 
 // configFor is the controller config a handler is mounted with: the route
 // the service registry resolves the phase service by, and the id parameter
 // of the single-resource paths.
-func configFor[M types.Model](route string) *types.ControllerConfig[M] {
-	return &types.ControllerConfig[M]{ParamName: "id", Route: route}
+func configFor[M gst.Model](route string) *gst.ControllerConfig[M] {
+	return &gst.ControllerConfig[M]{ParamName: "id", Route: route}
 }
 
 // serve mounts handler on a fresh engine under method and pattern, sends it
@@ -705,7 +705,7 @@ func feedIDs(t *testing.T, name string) []string {
 	var records []*feedSample
 	require.NoError(t, database.Database[*feedSample](context.Background()).
 		WithQuery(&feedSample{Name: name}).
-		WithOrder(types.Asc("id")).
+		WithOrder(gst.Asc("id")).
 		List(&records))
 	found := make([]string, len(records))
 	for i, record := range records {
@@ -845,10 +845,10 @@ type watchService struct {
 	service.Base[*sampleRecord, *sampleActionReq, *sampleActionRsp]
 }
 
-func (*watchService) Stream(sc *types.ServiceContext, req *sampleActionReq, stream *types.ServerStream[*sampleActionRsp]) error {
+func (*watchService) Stream(sc *gst.ServiceContext, req *sampleActionReq, stream *gst.ServerStream[*sampleActionRsp]) error {
 	switch req.Note {
 	case actionRefuse:
-		return types.NewError(http.StatusForbidden, "not yours")
+		return gst.NewError(http.StatusForbidden, "not yours")
 	case actionBreak:
 		return errors.New("dial tcp: connection refused")
 	case actionAwait:
@@ -871,7 +871,7 @@ type uploadService struct {
 	service.Base[*sampleRecord, *sampleActionReq, *sampleActionRsp]
 }
 
-func (*uploadService) Stream(sc *types.ServiceContext, stream *types.ClientStream[*sampleActionReq]) (*sampleActionRsp, error) {
+func (*uploadService) Stream(sc *gst.ServiceContext, stream *gst.ClientStream[*sampleActionReq]) (*sampleActionRsp, error) {
 	var notes []string
 	for {
 		req, err := stream.Recv()
@@ -896,7 +896,7 @@ type chatService struct {
 	service.Base[*sampleRecord, *sampleActionReq, *sampleActionRsp]
 }
 
-func (*chatService) Stream(sc *types.ServiceContext, stream *types.BidiStream[*sampleActionReq, *sampleActionRsp]) error {
+func (*chatService) Stream(sc *gst.ServiceContext, stream *gst.BidiStream[*sampleActionReq, *sampleActionRsp]) error {
 	for {
 		req, err := stream.Recv()
 		if errors.Is(err, io.EOF) {
@@ -933,7 +933,7 @@ type forkingChatService struct {
 
 var forkingChat = &forkingChatService{read: make(chan error, 1)}
 
-func (s *forkingChatService) Stream(_ *types.ServiceContext, stream *types.BidiStream[*sampleActionReq, *sampleActionRsp]) error {
+func (s *forkingChatService) Stream(_ *gst.ServiceContext, stream *gst.BidiStream[*sampleActionReq, *sampleActionRsp]) error {
 	go func() {
 		_, err := stream.Recv()
 		s.read <- err

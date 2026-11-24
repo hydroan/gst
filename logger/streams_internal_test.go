@@ -10,8 +10,8 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/instance"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
@@ -28,7 +28,7 @@ func TestInitInstallsFallbackForOptionalProviderLoggers(t *testing.T) {
 	// stage starts and the lifecycle registry binds dedicated loggers for the
 	// providers actually compiled in; only that binding may create their log
 	// files.
-	optional := map[string]types.Logger{
+	optional := map[string]gst.Logger{
 		"cassandra": Cassandra,
 		"elastic":   Elastic,
 		"etcd":      Etcd,
@@ -205,8 +205,8 @@ func withLoggerInitConfig(t *testing.T, dir, file string) {
 func restoreGlobalLoggers(t *testing.T) {
 	t.Helper()
 
-	savedTyped := map[*types.Logger]types.Logger{}
-	for _, ref := range []*types.Logger{
+	savedTyped := map[*gst.Logger]gst.Logger{}
+	for _, ref := range []*gst.Logger{
 		&App,
 		&Controller, &Service, &Database,
 		&Cache, &Dcache, &Redis,

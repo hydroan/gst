@@ -11,11 +11,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/gst"
 	modelemail "github.com/hydroan/gst/internal/modulemodel/email"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/service"
 	"github.com/stretchr/testify/require"
@@ -34,22 +33,22 @@ func newTestCache[T any]() *testCache[T] {
 	return &testCache[T]{items: make(map[string]testCacheEntry[T])}
 }
 
-func newEmailServiceContext(userID string) *types.ServiceContext {
+func newEmailServiceContext(userID string) *gst.ServiceContext {
 	baseCtx := requestctx.WithMetadata(context.Background(), requestctx.New(requestctx.Fields{
 		UserID: userID,
 	}))
-	return types.NewServiceContext(nil, baseCtx, service.Create)
+	return gst.NewServiceContext(nil, baseCtx, service.Create)
 }
 
 func (c *testCache[T]) Get(_ context.Context, key string) (T, error) {
 	var zero T
 	entry, ok := c.items[key]
 	if !ok {
-		return zero, types.ErrEntryNotFound
+		return zero, gst.ErrEntryNotFound
 	}
 	if !entry.expiresAt.IsZero() && !entry.expiresAt.After(emailNow()) {
 		delete(c.items, key)
-		return zero, types.ErrEntryNotFound
+		return zero, gst.ErrEntryNotFound
 	}
 	return entry.value, nil
 }
@@ -74,7 +73,7 @@ func (c *testCache[T]) Exists(ctx context.Context, key string) bool {
 }
 
 // Len reports the number of stored entries. It is a test-only helper on the
-// concrete fake, not part of the types.Cache contract.
+// concrete fake, not part of the gst.Cache contract.
 func (c *testCache[T]) Len() int {
 	return len(c.items)
 }
@@ -91,58 +90,58 @@ func (s *testEmailSender) Send(_ context.Context, delivery emailDelivery) error 
 }
 
 type testAccountGateway struct {
-	findByEmail        func(*types.ServiceContext, string) (*AccountSnapshot, error)
-	getByID            func(*types.ServiceContext, string) (*AccountSnapshot, error)
-	verifyPassword     func(*types.ServiceContext, string, string) error
-	updatePassword     func(*types.ServiceContext, string, string) error
-	markEmailVerified  func(*types.ServiceContext, string, time.Time) error
-	applyEmailChange   func(*types.ServiceContext, string, string, time.Time) error
-	invalidateSessions func(*types.ServiceContext, string)
+	findByEmail        func(*gst.ServiceContext, string) (*AccountSnapshot, error)
+	getByID            func(*gst.ServiceContext, string) (*AccountSnapshot, error)
+	verifyPassword     func(*gst.ServiceContext, string, string) error
+	updatePassword     func(*gst.ServiceContext, string, string) error
+	markEmailVerified  func(*gst.ServiceContext, string, time.Time) error
+	applyEmailChange   func(*gst.ServiceContext, string, string, time.Time) error
+	invalidateSessions func(*gst.ServiceContext, string)
 }
 
-func (p testAccountGateway) FindByEmail(ctx *types.ServiceContext, email string) (*AccountSnapshot, error) {
+func (p testAccountGateway) FindByEmail(ctx *gst.ServiceContext, email string) (*AccountSnapshot, error) {
 	if p.findByEmail == nil {
 		return nil, ErrAccountNotFound
 	}
 	return p.findByEmail(ctx, email)
 }
 
-func (p testAccountGateway) GetByID(ctx *types.ServiceContext, userID string) (*AccountSnapshot, error) {
+func (p testAccountGateway) GetByID(ctx *gst.ServiceContext, userID string) (*AccountSnapshot, error) {
 	if p.getByID == nil {
 		return nil, ErrAccountNotFound
 	}
 	return p.getByID(ctx, userID)
 }
 
-func (p testAccountGateway) VerifyPassword(ctx *types.ServiceContext, userID, password string) error {
+func (p testAccountGateway) VerifyPassword(ctx *gst.ServiceContext, userID, password string) error {
 	if p.verifyPassword == nil {
 		return ErrAccountAuthenticationFailed
 	}
 	return p.verifyPassword(ctx, userID, password)
 }
 
-func (p testAccountGateway) UpdatePassword(ctx *types.ServiceContext, userID, newPassword string) error {
+func (p testAccountGateway) UpdatePassword(ctx *gst.ServiceContext, userID, newPassword string) error {
 	if p.updatePassword == nil {
 		return nil
 	}
 	return p.updatePassword(ctx, userID, newPassword)
 }
 
-func (p testAccountGateway) MarkEmailVerified(ctx *types.ServiceContext, userID string, verifiedAt time.Time) error {
+func (p testAccountGateway) MarkEmailVerified(ctx *gst.ServiceContext, userID string, verifiedAt time.Time) error {
 	if p.markEmailVerified == nil {
 		return nil
 	}
 	return p.markEmailVerified(ctx, userID, verifiedAt)
 }
 
-func (p testAccountGateway) ApplyEmailChange(ctx *types.ServiceContext, userID, newEmail string, changedAt time.Time) error {
+func (p testAccountGateway) ApplyEmailChange(ctx *gst.ServiceContext, userID, newEmail string, changedAt time.Time) error {
 	if p.applyEmailChange == nil {
 		return nil
 	}
 	return p.applyEmailChange(ctx, userID, newEmail, changedAt)
 }
 
-func (p testAccountGateway) InvalidateSessions(ctx *types.ServiceContext, userID string) {
+func (p testAccountGateway) InvalidateSessions(ctx *gst.ServiceContext, userID string) {
 	if p.invalidateSessions != nil {
 		p.invalidateSessions(ctx, userID)
 	}
@@ -267,10 +266,10 @@ func TestPublicAcceptedMessage(t *testing.T) {
 
 func TestEmailServiceContext(t *testing.T) {
 	require.NotNil(t, emailServiceContext(nil))
-	require.NotNil(t, emailServiceContext(&types.ServiceContext{}))
+	require.NotNil(t, emailServiceContext(&gst.ServiceContext{}))
 }
 
-func stubEmailGlobals(flowCache types.Cache[iamEmailFlowState], throttleCache types.Cache[emailThrottleRecord], now time.Time, reader *bytes.Reader) func() {
+func stubEmailGlobals(flowCache gst.Cache[iamEmailFlowState], throttleCache gst.Cache[emailThrottleRecord], now time.Time, reader *bytes.Reader) func() {
 	previousFlowCache := emailFlowCache
 	previousThrottleCache := emailThrottleCache
 	previousNow := emailNow
@@ -278,8 +277,8 @@ func stubEmailGlobals(flowCache types.Cache[iamEmailFlowState], throttleCache ty
 	previousSender := activeEmailSender
 	previousGateway := currentAccountGateway()
 
-	emailFlowCache = func() types.Cache[iamEmailFlowState] { return flowCache }
-	emailThrottleCache = func() types.Cache[emailThrottleRecord] { return throttleCache }
+	emailFlowCache = func() gst.Cache[iamEmailFlowState] { return flowCache }
+	emailThrottleCache = func() gst.Cache[emailThrottleRecord] { return throttleCache }
 	emailNow = func() time.Time { return now }
 	emailRandomReader = reader
 	activeEmailSender = noopEmailSender{}
@@ -341,7 +340,7 @@ func TestVerificationRequestCreateReturnsProviderConfigurationError(t *testing.T
 
 	svc := &VerificationRequestService{}
 	svc.Logger = log
-	ctx := types.NewServiceContext(nil, nil, service.Create)
+	ctx := gst.NewServiceContext(nil, nil, service.Create)
 
 	_, err := svc.Create(ctx, &modelemail.VerificationRequestReq{Email: "user@example.com"})
 
@@ -370,7 +369,7 @@ func TestVerificationRequestCreate(t *testing.T) {
 	activeEmailSender = sender
 
 	SetAccountGateway(testAccountGateway{
-		findByEmail: func(_ *types.ServiceContext, email string) (*AccountSnapshot, error) {
+		findByEmail: func(_ *gst.ServiceContext, email string) (*AccountSnapshot, error) {
 			require.Equal(t, "user@example.com", email)
 			return testEmailAccount("user-verify-1", "user@example.com", false), nil
 		},
@@ -378,7 +377,7 @@ func TestVerificationRequestCreate(t *testing.T) {
 
 	svc := &VerificationRequestService{}
 	svc.Logger = logger.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, service.Create)
+	ctx := gst.NewServiceContext(nil, nil, service.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationRequestReq{Email: " USER@example.com "})
 	require.NoError(t, err)
@@ -401,14 +400,14 @@ func TestVerificationRequestCreateVerifiedAccount(t *testing.T) {
 	activeEmailSender = sender
 
 	SetAccountGateway(testAccountGateway{
-		findByEmail: func(*types.ServiceContext, string) (*AccountSnapshot, error) {
+		findByEmail: func(*gst.ServiceContext, string) (*AccountSnapshot, error) {
 			return testEmailAccount("user-verify-2", "user@example.com", true), nil
 		},
 	})
 
 	svc := &VerificationRequestService{}
 	svc.Logger = logger.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, service.Create)
+	ctx := gst.NewServiceContext(nil, nil, service.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationRequestReq{Email: "user@example.com"})
 	require.NoError(t, err)
@@ -428,7 +427,7 @@ func TestVerificationRequestCreateUnknownAccount(t *testing.T) {
 	activeEmailSender = sender
 
 	SetAccountGateway(testAccountGateway{
-		findByEmail: func(_ *types.ServiceContext, email string) (*AccountSnapshot, error) {
+		findByEmail: func(_ *gst.ServiceContext, email string) (*AccountSnapshot, error) {
 			require.Equal(t, "user@example.com", email)
 			return nil, ErrAccountNotFound
 		},
@@ -436,7 +435,7 @@ func TestVerificationRequestCreateUnknownAccount(t *testing.T) {
 
 	svc := &VerificationRequestService{}
 	svc.Logger = logger.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, service.Create)
+	ctx := gst.NewServiceContext(nil, nil, service.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationRequestReq{Email: "user@example.com"})
 	require.NoError(t, err)
@@ -456,7 +455,7 @@ func TestVerificationResendCreate(t *testing.T) {
 	activeEmailSender = sender
 
 	SetAccountGateway(testAccountGateway{
-		findByEmail: func(_ *types.ServiceContext, email string) (*AccountSnapshot, error) {
+		findByEmail: func(_ *gst.ServiceContext, email string) (*AccountSnapshot, error) {
 			require.Equal(t, "user@example.com", email)
 			return testEmailAccount("user-verify-3", "user@example.com", false), nil
 		},
@@ -464,7 +463,7 @@ func TestVerificationResendCreate(t *testing.T) {
 
 	svc := &VerificationResendService{}
 	svc.Logger = logger.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, service.Create)
+	ctx := gst.NewServiceContext(nil, nil, service.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationResendReq{Email: " USER@example.com "})
 	require.NoError(t, err)
@@ -485,7 +484,7 @@ func TestVerificationResendCreateUnknownAccount(t *testing.T) {
 	activeEmailSender = sender
 
 	SetAccountGateway(testAccountGateway{
-		findByEmail: func(_ *types.ServiceContext, email string) (*AccountSnapshot, error) {
+		findByEmail: func(_ *gst.ServiceContext, email string) (*AccountSnapshot, error) {
 			require.Equal(t, "user@example.com", email)
 			return nil, ErrAccountNotFound
 		},
@@ -493,7 +492,7 @@ func TestVerificationResendCreateUnknownAccount(t *testing.T) {
 
 	svc := &VerificationResendService{}
 	svc.Logger = logger.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, service.Create)
+	ctx := gst.NewServiceContext(nil, nil, service.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationResendReq{Email: "user@example.com"})
 	require.NoError(t, err)
@@ -513,7 +512,7 @@ func TestVerificationResendCreateThrottled(t *testing.T) {
 	activeEmailSender = sender
 
 	SetAccountGateway(testAccountGateway{
-		findByEmail: func(*types.ServiceContext, string) (*AccountSnapshot, error) {
+		findByEmail: func(*gst.ServiceContext, string) (*AccountSnapshot, error) {
 			return testEmailAccount("user-verify-4", "user@example.com", false), nil
 		},
 	})
@@ -529,7 +528,7 @@ func TestVerificationResendCreateThrottled(t *testing.T) {
 
 	svc := &VerificationResendService{}
 	svc.Logger = logger.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, service.Create)
+	ctx := gst.NewServiceContext(nil, nil, service.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationResendReq{Email: "user@example.com"})
 	require.NoError(t, err)
@@ -559,11 +558,11 @@ func TestVerificationConfirmCreate(t *testing.T) {
 	var verifiedUserID string
 	var verifiedAt time.Time
 	SetAccountGateway(testAccountGateway{
-		getByID: func(_ *types.ServiceContext, userID string) (*AccountSnapshot, error) {
+		getByID: func(_ *gst.ServiceContext, userID string) (*AccountSnapshot, error) {
 			require.Equal(t, "user-verify-5", userID)
 			return testEmailAccount("user-verify-5", "user@example.com", false), nil
 		},
-		markEmailVerified: func(_ *types.ServiceContext, userID string, at time.Time) error {
+		markEmailVerified: func(_ *gst.ServiceContext, userID string, at time.Time) error {
 			verifiedUserID = userID
 			verifiedAt = at
 			return nil
@@ -572,7 +571,7 @@ func TestVerificationConfirmCreate(t *testing.T) {
 
 	svc := &VerificationConfirmService{}
 	svc.Logger = logger.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, service.Create)
+	ctx := gst.NewServiceContext(nil, nil, service.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationConfirmReq{Token: token})
 	require.NoError(t, err)
@@ -593,7 +592,7 @@ func TestVerificationConfirmCreateInvalidToken(t *testing.T) {
 
 	svc := &VerificationConfirmService{}
 	svc.Logger = logger.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, service.Create)
+	ctx := gst.NewServiceContext(nil, nil, service.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationConfirmReq{Token: "missing"})
 	require.NoError(t, err)
@@ -620,10 +619,10 @@ func TestVerificationConfirmCreateAlreadyVerified(t *testing.T) {
 	require.NoError(t, err)
 
 	SetAccountGateway(testAccountGateway{
-		getByID: func(*types.ServiceContext, string) (*AccountSnapshot, error) {
+		getByID: func(*gst.ServiceContext, string) (*AccountSnapshot, error) {
 			return testEmailAccount("user-verify-6", "user@example.com", true), nil
 		},
-		markEmailVerified: func(*types.ServiceContext, string, time.Time) error {
+		markEmailVerified: func(*gst.ServiceContext, string, time.Time) error {
 			t.Fatalf("MarkEmailVerified should not be called for already verified account")
 			return nil
 		},
@@ -631,7 +630,7 @@ func TestVerificationConfirmCreateAlreadyVerified(t *testing.T) {
 
 	svc := &VerificationConfirmService{}
 	svc.Logger = logger.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, service.Create)
+	ctx := gst.NewServiceContext(nil, nil, service.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.VerificationConfirmReq{Token: token})
 	require.NoError(t, err)
@@ -650,15 +649,15 @@ func TestChangeRequestCreate(t *testing.T) {
 	activeEmailSender = sender
 
 	SetAccountGateway(testAccountGateway{
-		getByID: func(_ *types.ServiceContext, userID string) (*AccountSnapshot, error) {
+		getByID: func(_ *gst.ServiceContext, userID string) (*AccountSnapshot, error) {
 			require.Equal(t, "user-change-1", userID)
 			return testEmailAccount("user-change-1", "old@example.com", false), nil
 		},
-		findByEmail: func(_ *types.ServiceContext, email string) (*AccountSnapshot, error) {
+		findByEmail: func(_ *gst.ServiceContext, email string) (*AccountSnapshot, error) {
 			require.Equal(t, "new@example.com", email)
 			return nil, ErrAccountNotFound
 		},
-		verifyPassword: func(_ *types.ServiceContext, userID, password string) error {
+		verifyPassword: func(_ *gst.ServiceContext, userID, password string) error {
 			require.Equal(t, "user-change-1", userID)
 			require.Equal(t, "current-password", password)
 			return nil
@@ -695,13 +694,13 @@ func TestChangeRequestCreateEmailAlreadyUsed(t *testing.T) {
 
 	var passwordVerified bool
 	SetAccountGateway(testAccountGateway{
-		getByID: func(*types.ServiceContext, string) (*AccountSnapshot, error) {
+		getByID: func(*gst.ServiceContext, string) (*AccountSnapshot, error) {
 			return testEmailAccount("user-change-2", "old@example.com", false), nil
 		},
-		findByEmail: func(*types.ServiceContext, string) (*AccountSnapshot, error) {
+		findByEmail: func(*gst.ServiceContext, string) (*AccountSnapshot, error) {
 			return testEmailAccount("user-change-other", "new@example.com", false), nil
 		},
-		verifyPassword: func(*types.ServiceContext, string, string) error {
+		verifyPassword: func(*gst.ServiceContext, string, string) error {
 			passwordVerified = true
 			return nil
 		},
@@ -732,11 +731,11 @@ func TestChangeResendCreate(t *testing.T) {
 	activeEmailSender = sender
 
 	SetAccountGateway(testAccountGateway{
-		getByID: func(_ *types.ServiceContext, userID string) (*AccountSnapshot, error) {
+		getByID: func(_ *gst.ServiceContext, userID string) (*AccountSnapshot, error) {
 			require.Equal(t, "user-change-3", userID)
 			return testEmailAccount("user-change-3", "old@example.com", false), nil
 		},
-		findByEmail: func(_ *types.ServiceContext, email string) (*AccountSnapshot, error) {
+		findByEmail: func(_ *gst.ServiceContext, email string) (*AccountSnapshot, error) {
 			require.Equal(t, "new@example.com", email)
 			return nil, ErrAccountNotFound
 		},
@@ -766,10 +765,10 @@ func TestChangeResendCreateThrottled(t *testing.T) {
 	activeEmailSender = sender
 
 	SetAccountGateway(testAccountGateway{
-		getByID: func(*types.ServiceContext, string) (*AccountSnapshot, error) {
+		getByID: func(*gst.ServiceContext, string) (*AccountSnapshot, error) {
 			return testEmailAccount("user-change-4", "old@example.com", false), nil
 		},
-		findByEmail: func(*types.ServiceContext, string) (*AccountSnapshot, error) {
+		findByEmail: func(*gst.ServiceContext, string) (*AccountSnapshot, error) {
 			return nil, ErrAccountNotFound
 		},
 	})
@@ -818,15 +817,15 @@ func TestChangeConfirmCreate(t *testing.T) {
 	var changedEmail string
 	var changedAt time.Time
 	SetAccountGateway(testAccountGateway{
-		getByID: func(_ *types.ServiceContext, userID string) (*AccountSnapshot, error) {
+		getByID: func(_ *gst.ServiceContext, userID string) (*AccountSnapshot, error) {
 			require.Equal(t, "user-change-5", userID)
 			return testEmailAccount("user-change-5", "old@example.com", false), nil
 		},
-		findByEmail: func(_ *types.ServiceContext, email string) (*AccountSnapshot, error) {
+		findByEmail: func(_ *gst.ServiceContext, email string) (*AccountSnapshot, error) {
 			require.Equal(t, "new@example.com", email)
 			return nil, ErrAccountNotFound
 		},
-		applyEmailChange: func(_ *types.ServiceContext, userID, newEmail string, at time.Time) error {
+		applyEmailChange: func(_ *gst.ServiceContext, userID, newEmail string, at time.Time) error {
 			changedUserID = userID
 			changedEmail = newEmail
 			changedAt = at
@@ -836,7 +835,7 @@ func TestChangeConfirmCreate(t *testing.T) {
 
 	svc := &ChangeConfirmService{}
 	svc.Logger = logger.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, service.Create)
+	ctx := gst.NewServiceContext(nil, nil, service.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.ChangeConfirmReq{Token: token})
 	require.NoError(t, err)
@@ -872,15 +871,15 @@ func TestChangeConfirmCreateCanceled(t *testing.T) {
 	require.NoError(t, markEmailChangeCanceled(context.Background(), flow))
 
 	SetAccountGateway(testAccountGateway{
-		getByID: func(*types.ServiceContext, string) (*AccountSnapshot, error) {
+		getByID: func(*gst.ServiceContext, string) (*AccountSnapshot, error) {
 			t.Fatalf("GetByID should not be called for canceled flow")
 			return nil, gst.NewError(http.StatusBadRequest, "unexpected GetByID call")
 		},
-		findByEmail: func(*types.ServiceContext, string) (*AccountSnapshot, error) {
+		findByEmail: func(*gst.ServiceContext, string) (*AccountSnapshot, error) {
 			t.Fatalf("FindByEmail should not be called for canceled flow")
 			return nil, gst.NewError(http.StatusBadRequest, "unexpected FindByEmail call")
 		},
-		applyEmailChange: func(*types.ServiceContext, string, string, time.Time) error {
+		applyEmailChange: func(*gst.ServiceContext, string, string, time.Time) error {
 			t.Fatalf("ApplyEmailChange should not be called for canceled flow")
 			return nil
 		},
@@ -888,7 +887,7 @@ func TestChangeConfirmCreateCanceled(t *testing.T) {
 
 	svc := &ChangeConfirmService{}
 	svc.Logger = logger.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, service.Create)
+	ctx := gst.NewServiceContext(nil, nil, service.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.ChangeConfirmReq{Token: token})
 	require.NoError(t, err)
@@ -918,7 +917,7 @@ func TestChangeCancelCreate(t *testing.T) {
 	require.NoError(t, err)
 
 	SetAccountGateway(testAccountGateway{
-		getByID: func(_ *types.ServiceContext, userID string) (*AccountSnapshot, error) {
+		getByID: func(_ *gst.ServiceContext, userID string) (*AccountSnapshot, error) {
 			require.Equal(t, "user-change-7", userID)
 			return testEmailAccount("user-change-7", "old@example.com", false), nil
 		},
@@ -926,7 +925,7 @@ func TestChangeCancelCreate(t *testing.T) {
 
 	svc := &ChangeCancelService{}
 	svc.Logger = logger.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, service.Create)
+	ctx := gst.NewServiceContext(nil, nil, service.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.ChangeCancelReq{Token: token})
 	require.NoError(t, err)
@@ -958,13 +957,13 @@ func TestChangeRequestCreateClearsCancellationMarker(t *testing.T) {
 	}))
 
 	SetAccountGateway(testAccountGateway{
-		getByID: func(*types.ServiceContext, string) (*AccountSnapshot, error) {
+		getByID: func(*gst.ServiceContext, string) (*AccountSnapshot, error) {
 			return testEmailAccount("user-change-8", oldEmail, false), nil
 		},
-		findByEmail: func(*types.ServiceContext, string) (*AccountSnapshot, error) {
+		findByEmail: func(*gst.ServiceContext, string) (*AccountSnapshot, error) {
 			return nil, ErrAccountNotFound
 		},
-		verifyPassword: func(*types.ServiceContext, string, string) error {
+		verifyPassword: func(*gst.ServiceContext, string, string) error {
 			return nil
 		},
 	})
@@ -1001,10 +1000,10 @@ func TestFlowsRefuseWhatIsNoEmailAddress(t *testing.T) {
 	activeEmailSender = sender
 
 	SetAccountGateway(testAccountGateway{
-		getByID: func(_ *types.ServiceContext, userID string) (*AccountSnapshot, error) {
+		getByID: func(_ *gst.ServiceContext, userID string) (*AccountSnapshot, error) {
 			return testEmailAccount(userID, "old@example.com", true), nil
 		},
-		findByEmail: func(_ *types.ServiceContext, email string) (*AccountSnapshot, error) {
+		findByEmail: func(_ *gst.ServiceContext, email string) (*AccountSnapshot, error) {
 			t.Errorf("an account was looked up by %q", email)
 			return nil, ErrAccountNotFound
 		},
@@ -1020,7 +1019,7 @@ func TestFlowsRefuseWhatIsNoEmailAddress(t *testing.T) {
 	changeRequest.Logger = logger.Fallback("service")
 	changeResend := &ChangeResendService{}
 	changeResend.Logger = logger.Fallback("service")
-	publicCtx := types.NewServiceContext(nil, nil, service.Create)
+	publicCtx := gst.NewServiceContext(nil, nil, service.Create)
 	accountCtx := newEmailServiceContext("user-refused-1")
 
 	for _, tt := range []struct {
@@ -1060,7 +1059,7 @@ func TestPasswordResetRequestCreate(t *testing.T) {
 	activeEmailSender = sender
 
 	SetAccountGateway(testAccountGateway{
-		findByEmail: func(_ *types.ServiceContext, email string) (*AccountSnapshot, error) {
+		findByEmail: func(_ *gst.ServiceContext, email string) (*AccountSnapshot, error) {
 			require.Equal(t, "user@example.com", email)
 			return testEmailAccount("user-1", "user@example.com", false), nil
 		},
@@ -1068,7 +1067,7 @@ func TestPasswordResetRequestCreate(t *testing.T) {
 
 	svc := &PasswordResetRequestService{}
 	svc.Logger = logger.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, service.Create)
+	ctx := gst.NewServiceContext(nil, nil, service.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.PasswordResetRequestReq{Email: " USER@example.com "})
 	require.NoError(t, err)
@@ -1091,14 +1090,14 @@ func TestPasswordResetRequestCreateUnknownAccount(t *testing.T) {
 	activeEmailSender = sender
 
 	SetAccountGateway(testAccountGateway{
-		findByEmail: func(*types.ServiceContext, string) (*AccountSnapshot, error) {
+		findByEmail: func(*gst.ServiceContext, string) (*AccountSnapshot, error) {
 			return nil, ErrAccountNotFound
 		},
 	})
 
 	svc := &PasswordResetRequestService{}
 	svc.Logger = logger.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, service.Create)
+	ctx := gst.NewServiceContext(nil, nil, service.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.PasswordResetRequestReq{Email: "user@example.com"})
 	require.NoError(t, err)
@@ -1129,26 +1128,26 @@ func TestPasswordResetConfirmCreate(t *testing.T) {
 	var updatePassword string
 	var (
 		invalidated    string
-		invalidatedCtx *types.ServiceContext
+		invalidatedCtx *gst.ServiceContext
 	)
 	SetAccountGateway(testAccountGateway{
-		getByID: func(_ *types.ServiceContext, userID string) (*AccountSnapshot, error) {
+		getByID: func(_ *gst.ServiceContext, userID string) (*AccountSnapshot, error) {
 			require.Equal(t, "user-2", userID)
 			return testEmailAccount("user-2", "user@example.com", false), nil
 		},
-		updatePassword: func(_ *types.ServiceContext, userID, newPassword string) error {
+		updatePassword: func(_ *gst.ServiceContext, userID, newPassword string) error {
 			resetUserID = userID
 			updatePassword = newPassword
 			return nil
 		},
-		invalidateSessions: func(ctx *types.ServiceContext, userID string) {
+		invalidateSessions: func(ctx *gst.ServiceContext, userID string) {
 			invalidated, invalidatedCtx = userID, ctx
 		},
 	})
 
 	svc := &PasswordResetConfirmService{}
 	svc.Logger = logger.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, service.Create)
+	ctx := gst.NewServiceContext(nil, nil, service.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.PasswordResetConfirmReq{
 		Token:       token,
@@ -1176,7 +1175,7 @@ func TestPasswordResetConfirmCreateInvalidToken(t *testing.T) {
 
 	svc := &PasswordResetConfirmService{}
 	svc.Logger = logger.Fallback("service")
-	ctx := types.NewServiceContext(nil, nil, service.Create)
+	ctx := gst.NewServiceContext(nil, nil, service.Create)
 
 	rsp, err := svc.Create(ctx, &modelemail.PasswordResetConfirmReq{
 		Token:       "missing",

@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/stretchr/testify/require"
 )
@@ -109,7 +109,7 @@ func TestListQueryTakesOneWayOfPagingPerModel(t *testing.T) {
 
 	for _, tt := range []struct {
 		name    string
-		model   types.Model
+		model   gst.Model
 		query   string
 		refusal string
 	}{

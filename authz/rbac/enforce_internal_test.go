@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/internal/execctx"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/logger"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -19,7 +19,7 @@ import (
 // stays nil, so reaching for any other one panics the test instead of
 // passing unnoticed.
 type enforceLogRecorder struct {
-	types.Logger
+	gst.Logger
 	entries [][]zap.Field
 }
 
@@ -73,7 +73,7 @@ func TestEnforceRefusesAnAnonymousSubject(t *testing.T) {
 
 	_, tenantID, err := Enforce(execctx.WithTraceID(context.Background(), "trace-1"), Subject{}, "/api/samples", http.MethodGet)
 
-	var serviceErr *types.Error
+	var serviceErr *gst.Error
 	require.ErrorAs(t, err, &serviceErr)
 	require.Equal(t, http.StatusForbidden, serviceErr.Status())
 	require.Equal(t, "permission denied", serviceErr.Msg())
@@ -93,7 +93,7 @@ func TestEnforceDeniesThroughAnUninitializedPolicySet(t *testing.T) {
 
 	_, tenantID, err := Enforce(context.Background(), Subject{UserID: "u-1", Username: "alice"}, "/api/samples", http.MethodGet)
 
-	var serviceErr *types.Error
+	var serviceErr *gst.Error
 	require.ErrorAs(t, err, &serviceErr)
 	require.Equal(t, http.StatusForbidden, serviceErr.Status())
 	require.Equal(t, "default", tenantID)

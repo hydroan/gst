@@ -210,7 +210,7 @@ func describeType(typ reflect.Type, modelPkg string) (expr string, imports map[s
 // path, which a business project cannot import, so the reference is
 // rewritten to the alias the model source actually wrote: model.Base and
 // its siblings for internal/model, model.Version for
-// internal/modelschema, the root gst package for internal/types, which
+// internal/modelschema, the root gst package for internal/gst, which
 // forwards under the same name every type of it a model can name and this
 // function writes back, the generic streams being instantiations it
 // declines, the datatypes package for internal/datatypes, datatypes.Date
@@ -233,7 +233,7 @@ func typeExpr(typ reflect.Type, modelPkg string, imports map[string]string) (str
 		case "github.com/hydroan/gst/internal/model", "github.com/hydroan/gst/internal/modelschema":
 			imports["github.com/hydroan/gst/model"] = "model"
 			return "model." + name, true
-		case "github.com/hydroan/gst/internal/types":
+		case "github.com/hydroan/gst/internal/gst":
 			imports["github.com/hydroan/gst"] = "gst"
 			return "gst." + name, true
 		case "github.com/hydroan/gst/internal/datatypes":

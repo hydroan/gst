@@ -5,11 +5,11 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
-	"github.com/hydroan/gst/internal/types"
 )
 
-func setCreate[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
+func setCreate[M gst.Model, REQ gst.Request, RSP gst.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeFor[M]()
 	custom := !model.AreTypesEqual[M, REQ, RSP]()
 	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, apiaction.Create)
@@ -27,7 +27,7 @@ func setCreate[M types.Model, REQ types.Request, RSP types.Response](path string
 	pathItem.Post = op
 }
 
-func setDelete[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
+func setDelete[M gst.Model, REQ gst.Request, RSP gst.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeFor[M]()
 	custom := !model.AreTypesEqual[M, REQ, RSP]()
 	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, apiaction.Delete)
@@ -45,7 +45,7 @@ func setDelete[M types.Model, REQ types.Request, RSP types.Response](path string
 	pathItem.Delete = op
 }
 
-func setUpdate[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
+func setUpdate[M gst.Model, REQ gst.Request, RSP gst.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeFor[M]()
 	custom := !model.AreTypesEqual[M, REQ, RSP]()
 	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, apiaction.Update)
@@ -63,7 +63,7 @@ func setUpdate[M types.Model, REQ types.Request, RSP types.Response](path string
 	pathItem.Put = op
 }
 
-func setPatch[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
+func setPatch[M gst.Model, REQ gst.Request, RSP gst.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeFor[M]()
 	custom := !model.AreTypesEqual[M, REQ, RSP]()
 	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, apiaction.Patch)
@@ -81,7 +81,7 @@ func setPatch[M types.Model, REQ types.Request, RSP types.Response](path string,
 	pathItem.Patch = op
 }
 
-func setList[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
+func setList[M gst.Model, REQ gst.Request, RSP gst.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeFor[M]()
 	custom := !model.AreTypesEqual[M, REQ, RSP]()
 	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, apiaction.List)
@@ -101,7 +101,7 @@ func setList[M types.Model, REQ types.Request, RSP types.Response](path string, 
 	addQueryParameters[M, REQ, RSP](pathItem.Get, true)
 }
 
-func setGet[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
+func setGet[M gst.Model, REQ gst.Request, RSP gst.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeFor[M]()
 	custom := !model.AreTypesEqual[M, REQ, RSP]()
 	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, apiaction.Get)
@@ -114,7 +114,7 @@ func setGet[M types.Model, REQ types.Request, RSP types.Response](path string, p
 	pathItem.Get = op
 }
 
-func setCreateMany[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
+func setCreateMany[M gst.Model, REQ gst.Request, RSP gst.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeFor[M]()
 	custom := !model.AreTypesEqual[M, REQ, RSP]()
 	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, apiaction.CreateMany)
@@ -139,7 +139,7 @@ func setCreateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 	pathItem.Post = op
 }
 
-func setDeleteMany[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
+func setDeleteMany[M gst.Model, REQ gst.Request, RSP gst.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeFor[M]()
 	custom := !model.AreTypesEqual[M, REQ, RSP]()
 	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, apiaction.DeleteMany)
@@ -191,7 +191,7 @@ func deleteManyIDsRequestSchema() *openapi3.SchemaRef {
 	}
 }
 
-func setUpdateMany[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
+func setUpdateMany[M gst.Model, REQ gst.Request, RSP gst.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeFor[M]()
 	custom := !model.AreTypesEqual[M, REQ, RSP]()
 	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, apiaction.UpdateMany)
@@ -216,7 +216,7 @@ func setUpdateMany[M types.Model, REQ types.Request, RSP types.Response](path st
 	pathItem.Put = op
 }
 
-func setPatchMany[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
+func setPatchMany[M gst.Model, REQ gst.Request, RSP gst.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeFor[M]()
 	custom := !model.AreTypesEqual[M, REQ, RSP]()
 	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, apiaction.PatchMany)

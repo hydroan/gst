@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/lifecycle"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 )
 
@@ -47,7 +47,7 @@ import (
 // log is the holder's own logger: a renewal that failed without losing the
 // lease is what explains a round or a tenure cut short, so the entry belongs
 // beside the holder's own rather than in the global stream.
-func Hold(parent context.Context, h *Handle, log types.Logger) (ctx context.Context, stop context.CancelFunc) {
+func Hold(parent context.Context, h *Handle, log gst.Logger) (ctx context.Context, stop context.CancelFunc) {
 	ctx, cancel := context.WithCancelCause(parent)
 	// The renewals run on a context of their own, so that parent ending does
 	// not end them; stop does.
@@ -155,7 +155,7 @@ var fail = lifecycle.FailNow
 // log is the holder's own logger: work that will not stop is the last thing
 // said about a round or a tenure, so the entry belongs beside the holder's
 // own rather than in the global stream.
-func Run(ctx context.Context, h *Handle, log types.Logger, work func(ctx context.Context) error) error {
+func Run(ctx context.Context, h *Handle, log gst.Logger, work func(ctx context.Context) error) error {
 	returned := make(chan error, 1)
 	go func() {
 		defer func() {

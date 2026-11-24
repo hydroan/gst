@@ -15,8 +15,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/lifecycle"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	"github.com/minio/minio-go/v7"
@@ -128,7 +128,7 @@ func init() {
 		Name:      "minio",
 		Stage:     lifecycle.StageProvider,
 		Enabled:   func() bool { return config.App.Minio.Enabled },
-		SetLogger: func(l types.Logger) { logger.Minio = l },
+		SetLogger: func(l gst.Logger) { logger.Minio = l },
 		Start:     start,
 	})
 }

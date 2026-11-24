@@ -1,0 +1,22 @@
+package gst_test
+
+import (
+	"testing"
+
+	"github.com/hydroan/gst/internal/gst"
+	"github.com/stretchr/testify/require"
+)
+
+func TestNewAssignment(t *testing.T) {
+	// The parts read back unchanged; an empty table names a column of the
+	// chain's own model.
+	named := gst.NewAssignment("samples", "status", "active")
+	require.Equal(t, "samples", named.Table())
+	require.Equal(t, "status", named.Column())
+	require.Equal(t, "active", named.Value())
+
+	own := gst.NewAssignment("", "age", 18)
+	require.Empty(t, own.Table())
+	require.Equal(t, "age", own.Column())
+	require.Equal(t, 18, own.Value())
+}

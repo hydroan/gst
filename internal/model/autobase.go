@@ -5,13 +5,13 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"gorm.io/gorm"
 )
 
-var _ types.Model = (*AutoBase)(nil)
+var _ gst.Model = (*AutoBase)(nil)
 
-// AutoBase implements types.Model for database-backed resources that use an
+// AutoBase implements gst.Model for database-backed resources that use an
 // auto-increment integer primary key instead of Base's UUIDv7 string key.
 // A narrow monotonic primary key keeps the clustered index append-only and
 // keeps every secondary index entry small, which suits high-growth tables.

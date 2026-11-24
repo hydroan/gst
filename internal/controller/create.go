@@ -6,8 +6,8 @@ import (
 
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	modellogmgmt "github.com/hydroan/gst/internal/modulemodel/logmgmt"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
@@ -24,7 +24,7 @@ func (a *action[M, REQ, RSP]) createFlow(ctx context.Context, newServiceContext 
 	a.clearServerFields(req)
 
 	// 1.Perform business logic processing before create resource.
-	if err := a.traceServiceHook(ctx, apiaction.CreateBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
+	if err := a.traceServiceHook(ctx, apiaction.CreateBefore, svc, newServiceContext, func(sc *gst.ServiceContext) error {
 		return svc.CreateBefore(sc, req)
 	}); err != nil {
 		return failService(ctx, log, err)
@@ -36,7 +36,7 @@ func (a *action[M, REQ, RSP]) createFlow(ctx context.Context, newServiceContext 
 		return failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after create resource
-	if err := a.traceServiceHook(ctx, apiaction.CreateAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
+	if err := a.traceServiceHook(ctx, apiaction.CreateAfter, svc, newServiceContext, func(sc *gst.ServiceContext) error {
 		return svc.CreateAfter(sc, req)
 	}); err != nil {
 		return failService(ctx, log, err)
@@ -45,7 +45,7 @@ func (a *action[M, REQ, RSP]) createFlow(ctx context.Context, newServiceContext 
 	// 4.record operation log to database.
 	// Record, Request, and Response carry the same serialized payload on
 	// this action, so one marshal feeds all three columns.
-	if err := audit.RecordOperation(ctx, req, types.OperationCreate,
+	if err := audit.RecordOperation(ctx, req, gst.OperationCreate,
 		func() *modellogmgmt.OperationLog {
 			record, _ := json.Marshal(req)
 			entry := operationLog(ctx, a.name)

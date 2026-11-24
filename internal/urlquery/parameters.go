@@ -4,9 +4,9 @@ import (
 	"reflect"
 	"slices"
 
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/types"
 )
 
 // Parameter is one URL query parameter the list of a model takes, as the
@@ -23,10 +23,10 @@ type Parameter struct {
 	// it does for the framework timestamps.
 	Bare bool
 	// Ops are the operators the URL takes in name[op]=value, in
-	// types.FilterOps order: those the column's type takes a filter with on
+	// gst.FilterOps order: those the column's type takes a filter with on
 	// a model embedding model.Query, none on another model or for a field no
 	// column holds.
-	Ops []types.FilterOp
+	Ops []gst.FilterOp
 }
 
 // Parameters returns the URL query parameters the list of the model type typ

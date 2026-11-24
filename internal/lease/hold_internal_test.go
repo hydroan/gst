@@ -11,7 +11,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/dbruntime"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -486,7 +486,7 @@ func awaitReturned(t *testing.T, returned <-chan error) error {
 // through any other runs into the embedded nil interface, so a call site
 // added later cannot go unnoticed.
 type holderLog struct {
-	types.Logger
+	gst.Logger
 
 	mu      sync.Mutex
 	entries []holderEntry

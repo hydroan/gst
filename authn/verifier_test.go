@@ -6,14 +6,14 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/authn"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/stretchr/testify/require"
 )
 
 func TestVerifyLoginSecondFactorWithoutVerifierPasses(t *testing.T) {
 	authn.SetLoginSecondFactorVerifier(nil)
 
-	require.NoError(t, authn.VerifyLoginSecondFactor(&types.ServiceContext{}, "user-1", authn.LoginSecondFactor{
+	require.NoError(t, authn.VerifyLoginSecondFactor(&gst.ServiceContext{}, "user-1", authn.LoginSecondFactor{
 		TOTPCode: "123456",
 	}))
 }
@@ -21,13 +21,13 @@ func TestVerifyLoginSecondFactorWithoutVerifierPasses(t *testing.T) {
 func TestSetLoginSecondFactorVerifierInstallsGate(t *testing.T) {
 	t.Cleanup(func() { authn.SetLoginSecondFactorVerifier(nil) })
 
-	ctx := &types.ServiceContext{}
-	gateErr := types.NewError(http.StatusUnauthorized, authn.SecondFactorRequiredMsg)
+	ctx := &gst.ServiceContext{}
+	gateErr := gst.NewError(http.StatusUnauthorized, authn.SecondFactorRequiredMsg)
 
-	var gotCtx *types.ServiceContext
+	var gotCtx *gst.ServiceContext
 	var gotUserID string
 	var gotFactor authn.LoginSecondFactor
-	authn.SetLoginSecondFactorVerifier(func(ctx *types.ServiceContext, userID string, factor authn.LoginSecondFactor) error {
+	authn.SetLoginSecondFactorVerifier(func(ctx *gst.ServiceContext, userID string, factor authn.LoginSecondFactor) error {
 		gotCtx = ctx
 		gotUserID = userID
 		gotFactor = factor
@@ -48,12 +48,12 @@ func TestSetLoginSecondFactorVerifierInstallsGate(t *testing.T) {
 func TestSetLoginSecondFactorVerifierRejectsSecondInstall(t *testing.T) {
 	t.Cleanup(func() { authn.SetLoginSecondFactorVerifier(nil) })
 
-	authn.SetLoginSecondFactorVerifier(func(*types.ServiceContext, string, authn.LoginSecondFactor) error {
+	authn.SetLoginSecondFactorVerifier(func(*gst.ServiceContext, string, authn.LoginSecondFactor) error {
 		return nil
 	})
 
 	require.Panics(t, func() {
-		authn.SetLoginSecondFactorVerifier(func(*types.ServiceContext, string, authn.LoginSecondFactor) error {
+		authn.SetLoginSecondFactorVerifier(func(*gst.ServiceContext, string, authn.LoginSecondFactor) error {
 			return nil
 		})
 	})
@@ -63,17 +63,17 @@ func TestSetLoginSecondFactorVerifierNilUninstalls(t *testing.T) {
 	t.Cleanup(func() { authn.SetLoginSecondFactorVerifier(nil) })
 
 	sentinel := errors.New("gate closed")
-	authn.SetLoginSecondFactorVerifier(func(*types.ServiceContext, string, authn.LoginSecondFactor) error {
+	authn.SetLoginSecondFactorVerifier(func(*gst.ServiceContext, string, authn.LoginSecondFactor) error {
 		return sentinel
 	})
-	require.ErrorIs(t, authn.VerifyLoginSecondFactor(&types.ServiceContext{}, "user-1", authn.LoginSecondFactor{}), sentinel)
+	require.ErrorIs(t, authn.VerifyLoginSecondFactor(&gst.ServiceContext{}, "user-1", authn.LoginSecondFactor{}), sentinel)
 
 	authn.SetLoginSecondFactorVerifier(nil)
-	require.NoError(t, authn.VerifyLoginSecondFactor(&types.ServiceContext{}, "user-1", authn.LoginSecondFactor{}))
+	require.NoError(t, authn.VerifyLoginSecondFactor(&gst.ServiceContext{}, "user-1", authn.LoginSecondFactor{}))
 
 	// Uninstalling frees the slot for a later install.
-	authn.SetLoginSecondFactorVerifier(func(*types.ServiceContext, string, authn.LoginSecondFactor) error {
+	authn.SetLoginSecondFactorVerifier(func(*gst.ServiceContext, string, authn.LoginSecondFactor) error {
 		return sentinel
 	})
-	require.ErrorIs(t, authn.VerifyLoginSecondFactor(&types.ServiceContext{}, "user-1", authn.LoginSecondFactor{}), sentinel)
+	require.ErrorIs(t, authn.VerifyLoginSecondFactor(&gst.ServiceContext{}, "user-1", authn.LoginSecondFactor{}), sentinel)
 }

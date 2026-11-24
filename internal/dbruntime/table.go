@@ -10,10 +10,10 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -28,7 +28,7 @@ var tablePreparationStarted atomic.Int32
 // database, and reports the model done only once the table is there. Wait
 // counts on that ordering: a model still counts as pending for the whole of
 // ensureTable, not just for the time it sits on the queue.
-func prepareTable(db *gorm.DB, m types.Model) {
+func prepareTable(db *gorm.DB, m gst.Model) {
 	defer model.TableDone()
 
 	// Touching the version metadata here makes a defective model.Version
@@ -114,7 +114,7 @@ func preparationFailed() error {
 // populated it and there is no shared schema to protect. Migrating it anyway
 // keeps the zero-config defaults (sqlite, in-memory, auto_migrate off) bootable
 // instead of failing the start on the first registered model.
-func ensureTable(handler *gorm.DB, m types.Model) error {
+func ensureTable(handler *gorm.DB, m gst.Model) error {
 	tableName, err := requireTableName(m)
 	if err != nil {
 		return err
@@ -161,7 +161,7 @@ func ensureTable(handler *gorm.DB, m types.Model) error {
 // without an explicit name would flow an empty table into every statement;
 // failing here turns the missing declaration into a clear startup error
 // naming the model instead.
-func requireTableName(m types.Model) (string, error) {
+func requireTableName(m gst.Model) (string, error) {
 	tableName := m.TableName()
 	if len(tableName) == 0 {
 		return "", errors.Newf("model %T must declare an explicit table name by overriding TableName", m)
@@ -182,7 +182,7 @@ func requireTableName(m types.Model) (string, error) {
 // model's own TableName method. Supplying it again through Table() would make
 // gorm re-parse the schema under a special table name, which renames the
 // constraints of associated models.
-func migrateTable(handler *gorm.DB, m types.Model, tableName string) error {
+func migrateTable(handler *gorm.DB, m gst.Model, tableName string) error {
 	return serialized(context.Background(), handler, "migrate", func() error {
 		migrate := func() error {
 			// The index declarations are validated before the table exists, so

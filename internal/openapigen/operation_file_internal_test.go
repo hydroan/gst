@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
-	"github.com/hydroan/gst/internal/types"
 )
 
 type openapiExportModel struct {
@@ -47,17 +47,17 @@ func TestSetExportDocumentsFileDownload(t *testing.T) {
 
 	// The file-format query parameter documents the supported formats.
 	params := queryParametersByName(t, op)
-	format := params[types.QueryFormat]
+	format := params[gst.QueryFormat]
 	if format == nil || format.Schema == nil || format.Schema.Value == nil {
-		t.Fatalf("export query parameters = %v, want %q", parameterNames(params), types.QueryFormat)
+		t.Fatalf("export query parameters = %v, want %q", parameterNames(params), gst.QueryFormat)
 	}
 	if got := format.Schema.Value.Enum; !reflect.DeepEqual(got, []any{"csv", "xlsx"}) {
-		t.Fatalf("export %q enum = %v, want [csv xlsx]", types.QueryFormat, got)
+		t.Fatalf("export %q enum = %v, want [csv xlsx]", gst.QueryFormat, got)
 	}
 	// The cap on the records exported takes an integer.
-	limit := params[types.QueryLimit]
+	limit := params[gst.QueryLimit]
 	if limit == nil || limit.Schema == nil || limit.Schema.Value == nil || !limit.Schema.Value.Type.Is(openapi3.TypeInteger) {
-		t.Fatalf("export query parameters = %v, want %q taking an integer", parameterNames(params), types.QueryLimit)
+		t.Fatalf("export query parameters = %v, want %q taking an integer", parameterNames(params), gst.QueryLimit)
 	}
 	// Export shares the list filters, so model field queries are documented too.
 	if params["name"] == nil {
@@ -70,7 +70,7 @@ func TestSetExportDocumentsFileDownload(t *testing.T) {
 // parameters a List of the same model takes, the _size a model paging by
 // cursor alone takes included, while the parameters it reads stay.
 func TestSetExportDocumentsNoPagingParameters(t *testing.T) {
-	paging := []string{types.QueryPage, types.QuerySize, types.QueryCursorValue, types.QueryCursorField, types.QueryCursorNext}
+	paging := []string{gst.QueryPage, gst.QuerySize, gst.QueryCursorValue, gst.QueryCursorField, gst.QueryCursorNext}
 	for name, set := range map[string]func(*openapi3.PathItem){
 		"model.Query": func(p *openapi3.PathItem) {
 			setExport[*openapiFilterQueryModel, *openapiFilterQueryModel, *openapiFilterQueryModel]("/api/query-exports/export", p)
@@ -87,8 +87,8 @@ func TestSetExportDocumentsNoPagingParameters(t *testing.T) {
 				t.Fatalf("%s export query parameters = %v, want no %q", name, parameterNames(params), key)
 			}
 		}
-		if name == "model.Query" && params[types.QuerySortBy] == nil {
-			t.Fatalf("%s export query parameters = %v, want %q, which the export reads", name, parameterNames(params), types.QuerySortBy)
+		if name == "model.Query" && params[gst.QuerySortBy] == nil {
+			t.Fatalf("%s export query parameters = %v, want %q, which the export reads", name, parameterNames(params), gst.QuerySortBy)
 		}
 	}
 }
@@ -106,11 +106,11 @@ func TestSetExportDocumentsTheCapOfATableBackedExportAlone(t *testing.T) {
 	setExport[*openapiVirtualExportModel, *openapiVirtualExportModel, *openapiVirtualExportModel]("/api/virtual-exports/export", pathItem)
 
 	params := queryParametersByName(t, pathItem.Get)
-	if params[types.QueryFormat] == nil {
-		t.Fatalf("virtual export query parameters = %v, want %q", parameterNames(params), types.QueryFormat)
+	if params[gst.QueryFormat] == nil {
+		t.Fatalf("virtual export query parameters = %v, want %q", parameterNames(params), gst.QueryFormat)
 	}
-	if params[types.QueryLimit] != nil {
-		t.Fatalf("virtual export query parameters = %v, want no %q: the controller reads no cap for a virtual resource", parameterNames(params), types.QueryLimit)
+	if params[gst.QueryLimit] != nil {
+		t.Fatalf("virtual export query parameters = %v, want no %q: the controller reads no cap for a virtual resource", parameterNames(params), gst.QueryLimit)
 	}
 }
 

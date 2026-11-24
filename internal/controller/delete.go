@@ -7,8 +7,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	modellogmgmt "github.com/hydroan/gst/internal/modulemodel/logmgmt"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
@@ -36,7 +36,7 @@ func (a *action[M, REQ, RSP]) deleteFlow(ctx context.Context, newServiceContext 
 	}
 
 	// 1.Perform business logic processing before delete resource.
-	if err := a.traceServiceHook(ctx, apiaction.DeleteBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
+	if err := a.traceServiceHook(ctx, apiaction.DeleteBefore, svc, newServiceContext, func(sc *gst.ServiceContext) error {
 		return svc.DeleteBefore(sc, m)
 	}); err != nil {
 		return failService(ctx, log, err)
@@ -47,7 +47,7 @@ func (a *action[M, REQ, RSP]) deleteFlow(ctx context.Context, newServiceContext 
 	// deletes, so a disabled audit costs no query; and from the primary the
 	// delete runs on, since a replica may not have caught up on the record.
 	var copied M
-	if audit.Enabled(types.OperationDelete) {
+	if audit.Enabled(gst.OperationDelete) {
 		copied = a.newModel()
 		copied.SetID(m.GetID())
 		if err := database.Database[M](ctx).WithReplica(false).WithExpand(copied.Expands()).Get(copied, m.GetID()); err != nil {
@@ -67,14 +67,14 @@ func (a *action[M, REQ, RSP]) deleteFlow(ctx context.Context, newServiceContext 
 		return failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after delete resource.
-	if err := a.traceServiceHook(ctx, apiaction.DeleteAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
+	if err := a.traceServiceHook(ctx, apiaction.DeleteAfter, svc, newServiceContext, func(sc *gst.ServiceContext) error {
 		return svc.DeleteAfter(sc, m)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}
 
 	// 4.record operation log to database.
-	if err := audit.RecordOperation(ctx, a.newModel(), types.OperationDelete,
+	if err := audit.RecordOperation(ctx, a.newModel(), gst.OperationDelete,
 		func() *modellogmgmt.OperationLog {
 			record, _ := json.Marshal(copied)
 			entry := operationLog(ctx, a.name)

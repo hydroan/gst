@@ -7,10 +7,10 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/streamctx"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -36,7 +36,7 @@ import (
 // written. A setup failure before the stream opened is answered as a regular
 // error envelope, while an error after streaming began can only be logged,
 // because the response is already on the wire.
-func SSEHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
+func SSEHandler[M gst.Model, REQ gst.Request, RSP gst.Response](cfg ...*gst.ControllerConfig[M]) gin.HandlerFunc {
 	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), apiaction.SSE)
 	return func(c *gin.Context) {
 		stream, stopStream := streamctx.New(c.Request.Context())
@@ -54,7 +54,7 @@ func SSEHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 		// ended keeps what the service returned when that was nothing but the
 		// stream's context ending, away from the service span and the log.
 		var ended error
-		err := a.traceServiceHook(ctrlSpanCtx, apiaction.SSE, svc, ginServiceContext(c), func(sc *types.ServiceContext) error {
+		err := a.traceServiceHook(ctrlSpanCtx, apiaction.SSE, svc, ginServiceContext(c), func(sc *gst.ServiceContext) error {
 			err := svc.SSE(sc)
 			if lifecycle.Interrupted(stream, err) {
 				ended = err
@@ -82,7 +82,7 @@ func SSEHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*ty
 			// request.
 			answer := endedAnswer(stream.Err(), ended)
 			if errors.Is(context.Cause(stream), streamctx.ErrServerShutdown) {
-				answer = types.NewErrorWithCause(http.StatusServiceUnavailable, streamctx.ShutdownMsg, ended)
+				answer = gst.NewErrorWithCause(http.StatusServiceUnavailable, streamctx.ShutdownMsg, ended)
 			}
 			response.Error(c, answer)
 		default:

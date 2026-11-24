@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/panjf2000/ants/v2"
 )
 
@@ -45,7 +45,7 @@ func TestAppName(t *testing.T) {
 	defer func() { config.App.Name = old }()
 
 	config.App.Name = ""
-	if got := appName(); got != types.FrameworkName {
+	if got := appName(); got != gst.FrameworkName {
 		t.Fatalf("want the framework name fallback, got %q", got)
 	}
 }

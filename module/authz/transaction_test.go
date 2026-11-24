@@ -8,9 +8,9 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/gst"
 	modelauthz "github.com/hydroan/gst/internal/modulemodel/authz"
 	"github.com/hydroan/gst/internal/tenant"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,7 +30,7 @@ func TestPolicyWritesRollBackWithTheTransaction(t *testing.T) {
 		object := "/api/rollback/" + role
 
 		err := database.Transaction(ctx, func(ctx context.Context) error {
-			if err := rbac.RBAC().SetRolePermissions(ctx, tenant, role, []types.Permission{{Object: object, Action: "GET"}}); err != nil {
+			if err := rbac.RBAC().SetRolePermissions(ctx, tenant, role, []gst.Permission{{Object: object, Action: "GET"}}); err != nil {
 				return err
 			}
 			return errRollback
@@ -68,12 +68,12 @@ func TestPolicyWritesRollBackWithTheTransaction(t *testing.T) {
 
 		// A committed set to roll back onto, so the test also shows the
 		// previous state survives rather than being cleared by the attempt.
-		require.NoError(t, rbac.RBAC().SetRolePermissions(ctx, tenant, role, []types.Permission{
+		require.NoError(t, rbac.RBAC().SetRolePermissions(ctx, tenant, role, []gst.Permission{
 			{Object: object, Action: "GET"},
 		}))
 
 		err := database.Transaction(ctx, func(ctx context.Context) error {
-			if err := rbac.RBAC().SetRolePermissions(ctx, tenant, role, []types.Permission{
+			if err := rbac.RBAC().SetRolePermissions(ctx, tenant, role, []gst.Permission{
 				{Object: object, Action: "DELETE"},
 			}); err != nil {
 				return err
@@ -97,7 +97,7 @@ func TestPolicyWritesCommitWithTheTransaction(t *testing.T) {
 	object := "/api/commit/" + role
 
 	require.NoError(t, database.Transaction(ctx, func(ctx context.Context) error {
-		if err := rbac.RBAC().SetRolePermissions(ctx, tenant, role, []types.Permission{{Object: object, Action: "GET"}}); err != nil {
+		if err := rbac.RBAC().SetRolePermissions(ctx, tenant, role, []gst.Permission{{Object: object, Action: "GET"}}); err != nil {
 			return err
 		}
 		return rbac.RBAC().AssignRole(ctx, tenant, subject, role)

@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // ListCall returns the list call of M on route, the counterpart of the
@@ -13,7 +13,7 @@ import (
 // the list flow (see listFlow) on the query rendered as the HTTP one (see
 // Query) and answers with the items, the total and whether records lie past
 // the page, or with the status the failure maps to (see call).
-func ListCall[M types.Model](route string) func(ctx context.Context, params map[string]string, query Query) ([]M, int, bool, error) {
+func ListCall[M gst.Model](route string) func(ctx context.Context, params map[string]string, query Query) ([]M, int, bool, error) {
 	a := newAction[M, M, M](route, apiaction.List, apiaction.ListBefore, apiaction.ListAfter)
 	return func(ctx context.Context, params map[string]string, query Query) ([]M, int, bool, error) {
 		c, err := a.beginQueryCall(ctx, params, query)

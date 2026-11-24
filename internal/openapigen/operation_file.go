@@ -6,8 +6,8 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
-	"github.com/hydroan/gst/internal/types"
 )
 
 // Import and export exchange whole record sets as files rather than as JSON
@@ -32,7 +32,7 @@ const (
 // reads a single uploaded file, so the request body is a multipart/form-data
 // upload with a required binary "file" field, and the response reuses the
 // standard success envelope returned by the controller.
-func setImport[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
+func setImport[M gst.Model, REQ gst.Request, RSP gst.Response](path string, pathItem *openapi3.PathItem) {
 	typ := reflect.TypeFor[M]()
 	custom := !model.AreTypesEqual[M, REQ, RSP]()
 	reqKey := actionComponentKey(reflect.TypeFor[REQ](), typ, path, apiaction.Import)
@@ -83,7 +83,7 @@ func importFileRequestBody() *openapi3.RequestBodyRef {
 // filters plus the file-format selector and a binary file response, and the
 // cap on the records listed where the controller lists them: a virtual
 // resource's export service lists its records itself.
-func setExport[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
+func setExport[M gst.Model, REQ gst.Request, RSP gst.Response](path string, pathItem *openapi3.PathItem) {
 	custom := !model.AreTypesEqual[M, REQ, RSP]()
 
 	op := newOperation(path, apiaction.Export, reflect.TypeFor[M](), custom)
@@ -101,7 +101,7 @@ func setExport[M types.Model, REQ types.Request, RSP types.Response](path string
 func exportFormatParameter() *openapi3.ParameterRef {
 	return &openapi3.ParameterRef{
 		Value: &openapi3.Parameter{
-			Name:        types.QueryFormat,
+			Name:        gst.QueryFormat,
 			In:          "query",
 			Required:    false,
 			Description: "The export file format.",
@@ -121,7 +121,7 @@ func exportFormatParameter() *openapi3.ParameterRef {
 func exportLimitParameter() *openapi3.ParameterRef {
 	return &openapi3.ParameterRef{
 		Value: &openapi3.Parameter{
-			Name:        types.QueryLimit,
+			Name:        gst.QueryLimit,
 			In:          "query",
 			Required:    false,
 			Description: "The most records to export; none, zero or less exports every record the query matches.",

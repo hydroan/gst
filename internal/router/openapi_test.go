@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/router"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,7 +29,7 @@ type pagedRecord struct {
 // router.Init, mirroring where generated route registration runs.
 func registerDocumentedRoute() {
 	router.Register[*pagedRecord, *pagedRecord, *pagedRecord](
-		router.Auth(), pagedRecordRoute, &types.ControllerConfig[*pagedRecord]{}, apiaction.List,
+		router.Auth(), pagedRecordRoute, &gst.ControllerConfig[*pagedRecord]{}, apiaction.List,
 	)
 }
 

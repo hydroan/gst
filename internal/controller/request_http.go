@@ -7,9 +7,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	"go.opentelemetry.io/otel/trace"
@@ -49,7 +49,7 @@ func (a *action[M, REQ, RSP]) beginRequest(c *gin.Context) (context.Context, tra
 
 // routeFromConfig returns the route carried by the controller config, or an
 // empty string when no config declares one.
-func routeFromConfig[M types.Model](cfg ...*types.ControllerConfig[M]) string {
+func routeFromConfig[M gst.Model](cfg ...*gst.ControllerConfig[M]) string {
 	if len(cfg) > 0 && cfg[0] != nil {
 		return cfg[0].Route
 	}
@@ -62,7 +62,7 @@ func routeFromConfig[M types.Model](cfg ...*types.ControllerConfig[M]) string {
 // or the config naming no parameter, is refused with 400 and
 // missingRouteParamMsg, the refusal reported like any the controller
 // answers (see reportFailure), and false is returned.
-func routeID[M types.Model](c *gin.Context, cfg []*types.ControllerConfig[M], log types.Logger, span trace.Span) (string, bool) {
+func routeID[M gst.Model](c *gin.Context, cfg []*gst.ControllerConfig[M], log gst.Logger, span trace.Span) (string, bool) {
 	var id string
 	if len(cfg) > 0 {
 		id = requestctx.FromGin(c).Param(util.Deref(cfg[0]).ParamName)
@@ -103,7 +103,7 @@ func requestContext(c *gin.Context) context.Context {
 // serving c: its service contexts carry the gin context, so the response
 // helpers of ServiceContext keep working inside the hooks.
 func ginServiceContext(c *gin.Context) serviceContextFunc {
-	return func(ctx context.Context, phase apiaction.Phase) *types.ServiceContext {
-		return types.NewServiceContext(c, ctx, phase)
+	return func(ctx context.Context, phase apiaction.Phase) *gst.ServiceContext {
+		return gst.NewServiceContext(c, ctx, phase)
 	}
 }

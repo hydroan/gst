@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/google/go-querystring/query"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
-	"github.com/hydroan/gst/internal/types"
 )
 
 // RequestOption populates per-request state such as query parameters. Options
@@ -50,10 +50,10 @@ func (c *requestConfig) encode() (string, error) {
 		return "", err
 	}
 	if c.page != 0 {
-		vals.Set(types.QueryPage, strconv.Itoa(c.page))
+		vals.Set(gst.QueryPage, strconv.Itoa(c.page))
 	}
 	if c.size != 0 {
-		vals.Set(types.QuerySize, strconv.Itoa(c.size))
+		vals.Set(gst.QuerySize, strconv.Itoa(c.size))
 	}
 	for key, list := range c.values {
 		for _, value := range list {

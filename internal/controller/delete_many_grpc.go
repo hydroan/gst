@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // DeleteManyCall returns the batch delete call of M on route, the
@@ -13,7 +13,7 @@ import (
 // request message carries, it validates the batch the way the handler
 // validates a bound body, runs the batch delete flow (see deleteManyFlow)
 // and answers nothing, or the status the failure maps to (see call).
-func DeleteManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, ids []string) error {
+func DeleteManyCall[M gst.Model](route string) func(ctx context.Context, params map[string]string, ids []string) error {
 	a := newAction[M, M, M](route, apiaction.DeleteMany, apiaction.DeleteManyBefore, apiaction.DeleteManyAfter)
 	return func(ctx context.Context, params map[string]string, ids []string) error {
 		c, err := a.beginCall(ctx, params, nil)

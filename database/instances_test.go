@@ -12,7 +12,7 @@ import (
 	gstmysql "github.com/hydroan/gst/database/mysql"
 	gstpostgres "github.com/hydroan/gst/database/postgres"
 	gstsqlite "github.com/hydroan/gst/database/sqlite"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
@@ -68,7 +68,7 @@ func TestDatabaseOnParsesTheRegisteredModelsBeforeTheFirstChain(t *testing.T) {
 	ctx := context.Background()
 
 	// The instance's first chain writes the held model alone.
-	first := make([]types.SQLStatement, 0)
+	first := make([]gst.SQLStatement, 0)
 	require.NoError(t, database.DatabaseOn[*TestHeldEntry](ctx, ins).WithDryRun(&first).Create(&TestHeldEntry{Name: "first"}))
 	stmt := &gorm.Statement{DB: ins}
 	require.NoError(t, stmt.Parse(&TestHeldEntry{}))
@@ -90,11 +90,11 @@ func TestDatabaseOnParsesTheRegisteredModelsBeforeTheFirstChain(t *testing.T) {
 				return
 			default:
 			}
-			beside := make([]types.SQLStatement, 0)
+			beside := make([]gst.SQLStatement, 0)
 			_ = database.DatabaseOn[*TestHeldEntry](ctx, ins).WithDryRun(&beside).Create(&TestHeldEntry{Name: "beside"})
 		}
 	}()
-	read := make([]types.SQLStatement, 0)
+	read := make([]gst.SQLStatement, 0)
 	rows := make([]*TestHolderRecord, 0)
 	require.NoError(t, database.DatabaseOn[*TestHolderRecord](ctx, ins).WithDryRun(&read).List(&rows))
 	time.Sleep(50 * time.Millisecond)
@@ -114,7 +114,7 @@ func TestSelectOn(t *testing.T) {
 	type row struct {
 		Total int64 `json:"total"`
 	}
-	age := types.NewNumericColumn[*TestUser, int64]("age")
+	age := gst.NewNumericColumn[*TestUser, int64]("age")
 	var out row
 	require.NoError(t, database.SelectOn[*TestUser, row](context.Background(), ins, age.Sum().As("total")).
 		ScanOne(&out))

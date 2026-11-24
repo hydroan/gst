@@ -9,7 +9,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/logger"
 	"github.com/stretchr/testify/require"
 )
@@ -89,12 +89,12 @@ func TestSetLoggerReceivesADedicatedLoggerBeforeStart(t *testing.T) {
 	resetRegistry(t)
 	dir := withLoggerConfig(t)
 
-	var sampleLogger, offLogger types.Logger
+	var sampleLogger, offLogger gst.Logger
 	boundBeforeStart := false
 	Register(Component{
 		Name:      "sample",
 		Stage:     StageProvider,
-		SetLogger: func(l types.Logger) { sampleLogger = l },
+		SetLogger: func(l gst.Logger) { sampleLogger = l },
 		Start: func(context.Context) error {
 			boundBeforeStart = sampleLogger != nil
 			return nil
@@ -104,7 +104,7 @@ func TestSetLoggerReceivesADedicatedLoggerBeforeStart(t *testing.T) {
 		Name:      "off",
 		Stage:     StageProvider,
 		Enabled:   func() bool { return false },
-		SetLogger: func(l types.Logger) { offLogger = l },
+		SetLogger: func(l gst.Logger) { offLogger = l },
 		Start:     func(context.Context) error { return errors.New("must not start") },
 	})
 

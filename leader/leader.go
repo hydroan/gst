@@ -47,9 +47,9 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/lease"
 	"github.com/hydroan/gst/internal/lifecycle"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 )
@@ -65,7 +65,7 @@ var (
 	// log is the elector's logger: the dedicated leader stream the lifecycle
 	// binds before the component starts, or, in a process that never ran the
 	// lifecycle, a logger that writes to the global log stream; see start.
-	log types.Logger
+	log gst.Logger
 	// current is the started elector, nil until start. A registration after
 	// that would never campaign, so it fails fast instead.
 	current *elector
@@ -86,7 +86,7 @@ func init() {
 }
 
 // setLogger binds the dedicated logger the lifecycle hands out.
-func setLogger(l types.Logger) {
+func setLogger(l gst.Logger) {
 	mu.Lock()
 	defer mu.Unlock()
 	log = l

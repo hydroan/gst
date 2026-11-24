@@ -4,7 +4,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // This file holds what the transports of a Stream action share, the gRPC
@@ -21,7 +21,7 @@ import (
 // service receives on, which grpc-go allows to be one beside the
 // service's own, and the call reads the refusal once the service returned,
 // without the service having waited for that goroutine: mu orders the two.
-type requests[REQ types.Request] struct {
+type requests[REQ gst.Request] struct {
 	recv func() (REQ, error)
 
 	mu      sync.Mutex

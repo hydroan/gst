@@ -8,8 +8,8 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/selector"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/logfield"
-	"github.com/hydroan/gst/internal/types"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/status"
@@ -143,14 +143,14 @@ func streamOf(ic Interceptor) grpc.StreamServerInterceptor {
 // included. The error goes to the framework's log first, where the
 // listener's own warnings go, with the call's trace id and the cause the
 // answer leaves out, at the level its answer calls for (see
-// types.FailureLevel), the way a failing service operation is logged before
+// gst.FailureLevel), the way a failing service operation is logged before
 // it is mapped; the access log keeps its one entry for the call.
 func refused(ctx context.Context, err error) error {
 	if _, ok := status.FromError(err); ok {
 		return err
 	}
 	log := zap.L().Info
-	switch level := types.FailureLevel(err); {
+	switch level := gst.FailureLevel(err); {
 	case level >= slog.LevelError:
 		log = zap.L().Error
 	case level >= slog.LevelWarn:

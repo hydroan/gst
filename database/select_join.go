@@ -10,9 +10,9 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/tenant"
-	"github.com/hydroan/gst/internal/types"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -20,7 +20,7 @@ import (
 // This file is the join side of the select builder: how a joined model or a
 // joined select is resolved and proved to match at most one row, how its ON
 // renders, and how the columns of several tables are told apart. See
-// types.JoinSource for the contract. The builder itself lives in select.go.
+// gst.JoinSource for the contract. The builder itself lives in select.go.
 
 // Errors reported while a join is built; see the select errors for why they
 // fail fast.
@@ -48,7 +48,7 @@ type joinedTable struct {
 	table string
 	alias string
 	left  bool
-	on    []types.Filter
+	on    []gst.Filter
 	// columns and queryClauses describe a joined model, the latter being the
 	// clauses its schema hides rows from every read by; sub and derived a
 	// joined select, whose own statement carries those clauses.
@@ -70,7 +70,7 @@ type joinedTable struct {
 type derivedInfo struct {
 	table    string
 	grouped  bool
-	keys     []types.Term
+	keys     []gst.Term
 	columns  map[string]modelschema.Column
 	aliases  map[string]struct{}
 	nullable map[string]string
@@ -95,9 +95,9 @@ func (a *selectBuilder[M]) resolveJoins(shape *projectionShape) error {
 			err  error
 		)
 		switch s := source.(type) {
-		case types.ModelJoin:
+		case gst.ModelJoin:
 			jt, keys, err = a.resolveModelJoin(s)
-		case types.SelectJoin:
+		case gst.SelectJoin:
 			jt, keys, err = a.resolveSelectJoin(s, "j"+strconv.Itoa(i))
 		default:
 			// Unreachable: JoinSource is sealed to the two types above.
@@ -159,7 +159,7 @@ func (a *selectBuilder[M]) resolveJoins(shape *projectionShape) error {
 
 // resolveModelJoin reads a joined model: its table, columns and query
 // clauses, and the keys it is unique on.
-func (a *selectBuilder[M]) resolveModelJoin(mj types.ModelJoin) (*joinedTable, [][]string, error) {
+func (a *selectBuilder[M]) resolveModelJoin(mj gst.ModelJoin) (*joinedTable, [][]string, error) {
 	// A joined select needs no constraint, its group keys make it unique;
 	// a joined model is proved on a constraint, which ClickHouse does not
 	// carry.
@@ -201,7 +201,7 @@ func (a *selectBuilder[M]) resolveModelJoin(mj types.ModelJoin) (*joinedTable, [
 // is the whole set of its group keys. The derived table is read under alias;
 // its columns, for the ON and the query's filters, are the model columns the
 // group keys read, each renamed to the alias the key projects under.
-func (a *selectBuilder[M]) resolveSelectJoin(sj types.SelectJoin, alias string) (*joinedTable, [][]string, error) {
+func (a *selectBuilder[M]) resolveSelectJoin(sj gst.SelectJoin, alias string) (*joinedTable, [][]string, error) {
 	sub, ok := nestedOf(sj.Select)
 	if !ok {
 		return nil, nil, errors.Wrapf(ErrJoinSource, "joined select is a %T, not a select this package built", sj.Select)
@@ -223,20 +223,20 @@ func (a *selectBuilder[M]) resolveSelectJoin(sj types.SelectJoin, alias string) 
 	for _, key := range info.keys {
 		// A bucket key projects a label such as '2024-01-10', which no column
 		// of the query equals; an ON pinning it would silently match nothing.
-		if types.TermBucketOf(key) != types.TimeBucketNone {
+		if gst.TermBucketOf(key) != gst.TimeBucketNone {
 			return nil, nil, errors.Wrapf(ErrJoinSelectBucketKey, "%q", termAlias(key))
 		}
 		// The query names the select's keys through its model's column
 		// references, so a key of a table the select joins has no spelling
 		// from outside, and two keys on one column would be one reference
 		// naming both.
-		if len(types.TermTableOf(key)) > 0 && types.TermTableOf(key) != info.table {
-			return nil, nil, errors.Wrapf(ErrJoinSelectKey, "%q groups by %q of %q", termAlias(key), types.TermColumnOf(key), types.TermTableOf(key))
+		if len(gst.TermTableOf(key)) > 0 && gst.TermTableOf(key) != info.table {
+			return nil, nil, errors.Wrapf(ErrJoinSelectKey, "%q groups by %q of %q", termAlias(key), gst.TermColumnOf(key), gst.TermTableOf(key))
 		}
-		if _, dup := seen[types.TermColumnOf(key)]; dup {
-			return nil, nil, errors.Wrapf(ErrJoinSelectKey, "%q groups by %q twice", termAlias(key), types.TermColumnOf(key))
+		if _, dup := seen[gst.TermColumnOf(key)]; dup {
+			return nil, nil, errors.Wrapf(ErrJoinSelectKey, "%q groups by %q twice", termAlias(key), gst.TermColumnOf(key))
 		}
-		seen[types.TermColumnOf(key)] = struct{}{}
+		seen[gst.TermColumnOf(key)] = struct{}{}
 	}
 	// The derived table's columns are the keys, each read under the alias it
 	// projects as and typed by the model column it reads, the way tableInfoOf
@@ -245,9 +245,9 @@ func (a *selectBuilder[M]) resolveSelectJoin(sj types.SelectJoin, alias string) 
 	typed := make([]modelschema.Column, 0, len(info.keys))
 	rename := make(map[string]string, len(info.keys))
 	for _, key := range info.keys {
-		keyColumns = append(keyColumns, types.TermColumnOf(key))
-		rename[types.TermColumnOf(key)] = termAlias(key)
-		if c, known := info.columns[types.TermColumnOf(key)]; known {
+		keyColumns = append(keyColumns, gst.TermColumnOf(key))
+		rename[gst.TermColumnOf(key)] = termAlias(key)
+		if c, known := info.columns[gst.TermColumnOf(key)]; known {
 			typed = append(typed, c)
 		}
 	}
@@ -287,19 +287,19 @@ func pinnedColumns(jt *joinedTable, before map[string]tableInfo) (map[string]str
 	pinned := make(map[string]struct{})
 	jt.joinColumns = make(map[string]map[string]struct{})
 	ties := joinTies{}
-	var walk func(filters []types.Filter)
-	walk = func(filters []types.Filter) {
+	var walk func(filters []gst.Filter)
+	walk = func(filters []gst.Filter) {
 		for _, f := range filters {
 			switch f.Op() {
-			case types.FilterOpAnd:
-				if children, ok := f.Value().([]types.Filter); ok {
+			case gst.FilterOpAnd:
+				if children, ok := f.Value().([]gst.Filter); ok {
 					walk(children)
 				}
-			case types.FilterOpEq:
+			case gst.FilterOpEq:
 				if ownsColumn(f, jt.table) {
 					pinned[f.Column()] = struct{}{}
 				}
-			case types.FilterOpEqCol:
+			case gst.FilterOpEqCol:
 				own, otherTable, otherColumn := eqColSides(f, jt.table)
 				if len(own) == 0 {
 					continue
@@ -327,7 +327,7 @@ func pinnedColumns(jt *joinedTable, before map[string]tableInfo) (map[string]str
 
 // ownsColumn reports whether a filter names a column of the table: a filter
 // without a table names the table it is applied to.
-func ownsColumn(f types.Filter, table string) bool {
+func ownsColumn(f gst.Filter, table string) bool {
 	return len(f.Table()) == 0 || f.Table() == table
 }
 
@@ -335,7 +335,7 @@ func ownsColumn(f types.Filter, table string) bool {
 // column it pins on that table, and the table and column on the other side.
 // A predicate naming the joined table on neither side, or on both, pins
 // nothing.
-func eqColSides(f types.Filter, table string) (own, otherTable, otherColumn string) {
+func eqColSides(f gst.Filter, table string) (own, otherTable, otherColumn string) {
 	parent, parentTable, ok := eqColParent(f.Value())
 	if !ok || len(parent) == 0 {
 		return "", "", ""
@@ -567,7 +567,7 @@ func (a *selectBuilder[M]) derivedTerms(shape projectionShape) (map[string]*join
 			// silently become the select's. An alias is written on purpose, and
 			// passing the select's aliased term is reading it through.
 			if a.ownTerm(t) && defaultAlias(t) {
-				if types.TermIsLiteral(t) {
+				if gst.TermIsLiteral(t) {
 					return nil, errors.Wrapf(ErrDuplicateAlias, "the constant %q is projected by the query and by the joined select over %q alike; a constant is the query's own, and whether a row matched the select is read from the select's key, NULL under LeftJoinSelect where none did", termAlias(t), jt.table)
 				}
 				return nil, errors.Wrapf(ErrDuplicateAlias, "%q is projected by the query and by the joined select over %q alike, under its default alias; give the query's own term an alias of its own, or alias the select's term and pass it to read it through", termAlias(t), jt.table)
@@ -586,12 +586,12 @@ func (a *selectBuilder[M]) derivedTerms(shape projectionShape) (map[string]*join
 // ownTerm reports whether the query could compute a term itself: it carries
 // no table, as a plain Count or a constant does, or the table of the queried
 // model or of a model the query joins.
-func (a *selectBuilder[M]) ownTerm(t types.Term) bool {
-	if len(types.TermTableOf(t)) == 0 || types.TermTableOf(t) == a.db.outerTableName() {
+func (a *selectBuilder[M]) ownTerm(t gst.Term) bool {
+	if len(gst.TermTableOf(t)) == 0 || gst.TermTableOf(t) == a.db.outerTableName() {
 		return true
 	}
 	for _, source := range a.joins {
-		if mj, ok := source.(types.ModelJoin); ok && mj.Model != nil && mj.Model.TableName() == types.TermTableOf(t) {
+		if mj, ok := source.(gst.ModelJoin); ok && mj.Model != nil && mj.Model.TableName() == gst.TermTableOf(t) {
 			return true
 		}
 	}
@@ -604,20 +604,20 @@ func (a *selectBuilder[M]) ownTerm(t types.Term) bool {
 // alike exactly then; an alias of the author's own tells the two apart. A
 // constant has no default and every author names it, so it counts as one
 // spelled alike: a constant is the query's own wherever it stands.
-func defaultAlias(t types.Term) bool {
-	if len(types.TermColumnOf(t)) > 0 {
-		return termAlias(t) == types.TermColumnOf(t)
+func defaultAlias(t gst.Term) bool {
+	if len(gst.TermColumnOf(t)) > 0 {
+		return termAlias(t) == gst.TermColumnOf(t)
 	}
-	switch types.TermFnOf(t) {
-	case types.FnCount:
-		return termAlias(t) == types.DefaultCountAlias
-	case types.FnRowNumber:
+	switch gst.TermFnOf(t) {
+	case gst.FnCount:
+		return termAlias(t) == gst.DefaultCountAlias
+	case gst.FnRowNumber:
 		return termAlias(t) == rowNumberAlias
-	case types.FnRank:
+	case gst.FnRank:
 		return termAlias(t) == rankAlias
-	case types.FnDenseRank:
+	case gst.FnDenseRank:
 		return termAlias(t) == denseRankAlias
-	case types.FnLiteral:
+	case gst.FnLiteral:
 		return true
 	default:
 		// No other function projects without a column today. One added later
@@ -630,16 +630,16 @@ func defaultAlias(t types.Term) bool {
 // The aliases the ranking constructors give their terms, read once from the
 // constructors so that the default stays defined in one place.
 var (
-	rowNumberAlias = types.TermAliasOf(types.RowNumber())
-	rankAlias      = types.TermAliasOf(types.Rank())
-	denseRankAlias = types.TermAliasOf(types.DenseRank())
+	rowNumberAlias = gst.TermAliasOf(gst.RowNumber())
+	rankAlias      = gst.TermAliasOf(gst.Rank())
+	denseRankAlias = gst.TermAliasOf(gst.DenseRank())
 )
 
 // derivedOf reports the joined select a term is a column of. The alias
 // finds the candidate and the whole term confirms it: another term of the
 // query may carry the same alias — the tie breaker a window is completed
 // with reads under the primary key's name — and it is not the select's.
-func (a *selectBuilder[M]) derivedOf(t types.Term, shape projectionShape) (*joinedTable, bool) {
+func (a *selectBuilder[M]) derivedOf(t gst.Term, shape projectionShape) (*joinedTable, bool) {
 	jt, ok := shape.derived[termAlias(t)]
 	if !ok || !jt.sub.isSelected(t) {
 		return nil, false
@@ -649,9 +649,9 @@ func (a *selectBuilder[M]) derivedOf(t types.Term, shape projectionShape) (*join
 
 // tableOf is the table a term names: its own, or the queried model's when
 // it carries none, which is what a plain name means everywhere.
-func (s projectionShape) tableOf(t types.Term) string {
-	if len(types.TermTableOf(t)) > 0 {
-		return types.TermTableOf(t)
+func (s projectionShape) tableOf(t gst.Term) string {
+	if len(gst.TermTableOf(t)) > 0 {
+		return gst.TermTableOf(t)
 	}
 	return s.main
 }
@@ -661,9 +661,9 @@ func (s projectionShape) tableOf(t types.Term) string {
 // needs to know to refuse a row-level read. A term under its default alias
 // that the query could compute itself is not read through; derivedTerms
 // refuses it.
-func (a *selectBuilder[M]) readsDerived(t types.Term) bool {
+func (a *selectBuilder[M]) readsDerived(t gst.Term) bool {
 	for _, source := range a.joins {
-		sj, ok := source.(types.SelectJoin)
+		sj, ok := source.(gst.SelectJoin)
 		if !ok {
 			continue
 		}
@@ -687,7 +687,7 @@ func (a *selectBuilder[M]) groupDerivedTerms(shape *projectionShape) error {
 	// Every derived term is a key before any is proved, so a select tied on
 	// another select's key column finds that key whatever order the terms
 	// were written in.
-	derived := make([]types.Term, 0, len(shape.derived))
+	derived := make([]gst.Term, 0, len(shape.derived))
 	for _, t := range a.terms {
 		if _, ok := a.derivedOf(t, *shape); ok {
 			derived = append(derived, t)
@@ -725,7 +725,7 @@ func (a *selectBuilder[M]) groupDerivedTerms(shape *projectionShape) error {
 // column is a key of the select at all.
 func keyAliasOf(jt *joinedTable, column string) (string, bool) {
 	for _, key := range jt.derived.keys {
-		if types.TermColumnOf(key) == column {
+		if gst.TermColumnOf(key) == column {
 			return termAlias(key), true
 		}
 	}
@@ -743,10 +743,10 @@ func (a *selectBuilder[M]) groupsBy(table, column string, shape projectionShape)
 		// A joined select's measure is a group key under its alias, not under
 		// the column it measured; only the select's own key term names that
 		// column.
-		if jt, derived := a.derivedOf(key, shape); derived && (types.TermFnOf(key) != types.FnNone || jt.table != table) {
+		if jt, derived := a.derivedOf(key, shape); derived && (gst.TermFnOf(key) != gst.FnNone || jt.table != table) {
 			continue
 		}
-		if types.TermColumnOf(key) == column && types.TermBucketOf(key) == types.TimeBucketNone && shape.tableOf(key) == table {
+		if gst.TermColumnOf(key) == column && gst.TermBucketOf(key) == gst.TimeBucketNone && shape.tableOf(key) == table {
 			return true
 		}
 	}
@@ -755,7 +755,7 @@ func (a *selectBuilder[M]) groupsBy(table, column string, shape projectionShape)
 
 // derivedExpr renders a term a joined select projects: the derived table's
 // column of the term's alias.
-func (a *selectBuilder[M]) derivedExpr(jt *joinedTable, t types.Term) string {
+func (a *selectBuilder[M]) derivedExpr(jt *joinedTable, t gst.Term) string {
 	return a.db.quoteTableColumn(jt.alias, termAlias(t))
 }
 
@@ -819,9 +819,9 @@ func (a *selectBuilder[M]) columnExpr(table, column string, shape projectionShap
 // joinedMeasureAllowed reports whether a measure may read a joined column in
 // a grouped projection: only the aggregates that answer the same however
 // many rows of a group share the joined row.
-func joinedMeasureAllowed(fn types.TermFn) bool {
+func joinedMeasureAllowed(fn gst.TermFn) bool {
 	switch fn {
-	case types.FnMin, types.FnMax, types.FnCountDistinct:
+	case gst.FnMin, gst.FnMax, gst.FnCountDistinct:
 		return true
 	default:
 		return false

@@ -9,9 +9,9 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/service"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -48,23 +48,23 @@ type (
 	}
 )
 
-func (*noteWatcher) Stream(*types.ServiceContext, *streamedNote, *types.ServerStream[*streamedEvent]) error {
+func (*noteWatcher) Stream(*gst.ServiceContext, *streamedNote, *gst.ServerStream[*streamedEvent]) error {
 	return nil
 }
 
-func (*eventTailer) Stream(*types.ServiceContext, *model.Empty, *types.ServerStream[*streamedEvent]) error {
+func (*eventTailer) Stream(*gst.ServiceContext, *model.Empty, *gst.ServerStream[*streamedEvent]) error {
 	return nil
 }
 
-func (*noteUploader) Stream(*types.ServiceContext, *types.ClientStream[*streamedNote]) (*streamedEvent, error) {
+func (*noteUploader) Stream(*gst.ServiceContext, *gst.ClientStream[*streamedNote]) (*streamedEvent, error) {
 	return &streamedEvent{}, nil
 }
 
-func (*noteIngester) Stream(*types.ServiceContext, *types.ClientStream[*streamedNote]) (*model.Empty, error) {
+func (*noteIngester) Stream(*gst.ServiceContext, *gst.ClientStream[*streamedNote]) (*model.Empty, error) {
 	return &model.Empty{}, nil
 }
 
-func (*noteChatter) Stream(*types.ServiceContext, *types.BidiStream[*streamedNote, *streamedEvent]) error {
+func (*noteChatter) Stream(*gst.ServiceContext, *gst.BidiStream[*streamedNote, *streamedEvent]) error {
 	return nil
 }
 

@@ -12,7 +12,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/datatypes"
 	"github.com/hydroan/gst/internal/grpcserver"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"google.golang.org/genproto/googleapis/type/date"
 	"google.golang.org/genproto/googleapis/type/timeofday"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -336,14 +336,14 @@ func Filters[F interface {
 // invalidValue is the InvalidArgument a generated FromProto refuses a
 // message field with when the value it carries is not one the model field
 // holds: the refusal HTTP answers with for a body value it cannot decode
-// into a field it can name (see types.NewInvalidValue), "invalid value for
+// into a field it can name (see gst.NewInvalidValue), "invalid value for
 // field 'rank'", as the status it maps to (see grpcserver.StatusError), a
 // google.rpc.BadRequest detail naming the field with description, the way
 // the fields a validator refused are detailed. HTTP names the field of a
 // number it cannot decode only when encoding/json reports it, which for a
 // json.Number field it does not, answering without the name there.
 func invalidValue(field, description string) error {
-	return grpcserver.StatusError(types.NewInvalidValue(field, description, nil))
+	return grpcserver.StatusError(gst.NewInvalidValue(field, description, nil))
 }
 
 // checkValidDetail is the account CheckValid gives of an invalid Timestamp

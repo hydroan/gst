@@ -10,8 +10,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/lifecycle"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
@@ -39,7 +39,7 @@ func init() {
 		Name:      "elastic",
 		Stage:     lifecycle.StageProvider,
 		Enabled:   func() bool { return config.App.Elasticsearch.Enabled },
-		SetLogger: func(l types.Logger) { logger.Elastic = l },
+		SetLogger: func(l gst.Logger) { logger.Elastic = l },
 		Start:     start,
 	})
 }

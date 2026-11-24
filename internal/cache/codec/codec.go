@@ -24,7 +24,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	jsoniter "github.com/json-iterator/go"
 	"go.uber.org/zap"
 )
@@ -51,7 +51,7 @@ func Unmarshal[T any](data []byte, value *T) error {
 // caller's type, the same way for every backend that stores bytes: the entry
 // is logged at Warn with its key and the decode error, removed through drop so
 // the next read does not trip over it again, and reported as a miss with
-// types.ErrEntryNotFound, so the caller falls back to its source of truth and
+// gst.ErrEntryNotFound, so the caller falls back to its source of truth and
 // rewrites the entry as it would for a key never stored. A drop that fails is
 // logged as well; the read is still a miss and the entry is retried on the
 // next read.
@@ -60,7 +60,7 @@ func DropUnreadable(key string, err error, drop func() error) error {
 	if dropErr := drop(); dropErr != nil {
 		zap.L().Warn("failed to drop the unreadable cache entry", zap.String("key", key), zap.Error(dropErr))
 	}
-	return types.ErrEntryNotFound
+	return gst.ErrEntryNotFound
 }
 
 // isInterface reports whether T is an interface type, in which case a value's

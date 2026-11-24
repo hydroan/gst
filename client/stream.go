@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/websocket"
 )
 
@@ -210,7 +210,7 @@ func (s *streamConn) close() error {
 // the *Error of the status and the message the server ended the stream with,
 // and any other failure as it is.
 func (s *streamConn) ending(err error) error {
-	var ended *types.Error
+	var ended *gst.Error
 	switch {
 	case err == nil, errors.Is(err, io.EOF):
 		return err

@@ -7,10 +7,10 @@ import (
 
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/gst"
 	modeliamuser "github.com/hydroan/gst/internal/modulemodel/iam/user"
 	serviceiamsession "github.com/hydroan/gst/internal/moduleservice/iam/session"
 	"github.com/hydroan/gst/internal/testutil"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/stretchr/testify/require"
 )
@@ -20,8 +20,8 @@ const adminUsersPath = "/api/iam/admin/users"
 // Column references for the user fixture writes in the user and session
 // tests; module test code carries no generated Cols vars.
 var (
-	colUsername   = types.NewColumn[*modeliamuser.User, string]("username")
-	colUserStatus = types.NewColumn[*modeliamuser.User, modeliamuser.UserStatus]("status")
+	colUsername   = gst.NewColumn[*modeliamuser.User, string]("username")
+	colUserStatus = gst.NewColumn[*modeliamuser.User, modeliamuser.UserStatus]("status")
 )
 
 func TestAdminUserList(t *testing.T) {

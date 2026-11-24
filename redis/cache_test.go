@@ -8,13 +8,13 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/cache/cachetest"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	gstredis "github.com/hydroan/gst/redis"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
 
-// TestCacheConformance runs the shared types.Cache conformance suite against
+// TestCacheConformance runs the shared gst.Cache conformance suite against
 // the Redis backend, tracing wrapper included, on the testcontainer Redis
 // this package's TestMain provisions.
 func TestCacheConformance(t *testing.T) {
@@ -143,7 +143,7 @@ func TestCacheDropsAnEntryItCannotDecode(t *testing.T) {
 	t.Cleanup(zap.ReplaceGlobals(zap.New(core)))
 
 	_, err := gstredis.Cache[int]().Get(ctx, "cache-test:unreadable")
-	if !errors.Is(err, types.ErrEntryNotFound) {
+	if !errors.Is(err, gst.ErrEntryNotFound) {
 		t.Fatalf("want ErrEntryNotFound for an entry that cannot be decoded, got %v", err)
 	}
 	if gstredis.Cache[string]().Exists(ctx, "cache-test:unreadable") {

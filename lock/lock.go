@@ -55,9 +55,9 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/lease"
 	"github.com/hydroan/gst/internal/lifecycle"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 )
@@ -90,7 +90,7 @@ var (
 	// log is the package's logger: the dedicated lock stream the lifecycle
 	// binds before the component starts, or the global log stream until
 	// then; see logger.
-	log types.Logger
+	log gst.Logger
 	// started is set by start. A declaration after that was never checked,
 	// so it fails fast instead.
 	started bool
@@ -109,7 +109,7 @@ func init() {
 }
 
 // setLogger binds the dedicated logger the lifecycle hands out.
-func setLogger(l types.Logger) {
+func setLogger(l gst.Logger) {
 	mu.Lock()
 	defer mu.Unlock()
 	log = l
@@ -120,7 +120,7 @@ func setLogger(l types.Logger) {
 // that writes to the global log stream. Opening lock.log here instead would
 // put a second rotation instance on the file once the lifecycle opens its
 // own.
-func packageLogger() types.Logger {
+func packageLogger() gst.Logger {
 	mu.Lock()
 	defer mu.Unlock()
 	if log == nil {

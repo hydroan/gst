@@ -7,8 +7,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/cache/tracing"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
-	"github.com/hydroan/gst/internal/types"
 	"go.opentelemetry.io/otel/codes"
 )
 
@@ -89,10 +89,10 @@ func TestWrapperForwardsWhenTracingDisabled(t *testing.T) {
 // TestWrapperForwardsErrors asserts errors pass through untouched so callers
 // can keep matching sentinels like ErrEntryNotFound.
 func TestWrapperForwardsErrors(t *testing.T) {
-	inner := &recordingCache{getErr: types.ErrEntryNotFound}
+	inner := &recordingCache{getErr: gst.ErrEntryNotFound}
 	wrapped := tracing.NewWrapper[string](inner, "sample")
 
-	if _, err := wrapped.Get(context.Background(), "missing"); !errors.Is(err, types.ErrEntryNotFound) {
+	if _, err := wrapped.Get(context.Background(), "missing"); !errors.Is(err, gst.ErrEntryNotFound) {
 		t.Fatalf("want ErrEntryNotFound, got %v", err)
 	}
 }
@@ -127,8 +127,8 @@ func TestWrapperLeavesTheStatusOfACompletedOperationUnset(t *testing.T) {
 	if _, err := wrapped.Get(ctx, "key-hit"); err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	inner.getErr = types.ErrEntryNotFound
-	if _, err := wrapped.Get(ctx, "key-miss"); !errors.Is(err, types.ErrEntryNotFound) {
+	inner.getErr = gst.ErrEntryNotFound
+	if _, err := wrapped.Get(ctx, "key-miss"); !errors.Is(err, gst.ErrEntryNotFound) {
 		t.Fatalf("want ErrEntryNotFound, got %v", err)
 	}
 	if err := wrapped.Set(ctx, "key-set", "value", time.Minute); err != nil {

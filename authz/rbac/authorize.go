@@ -4,7 +4,7 @@ import (
 	"context"
 	"slices"
 
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	prommetrics "github.com/hydroan/gst/metrics"
 )
 
@@ -23,7 +23,7 @@ const maxRoleHierarchy = 10
 // initialized, which is what a decision path can afford.
 func (r *rbac) Authorize(
 	ctx context.Context, tenant string, subject string, object string, action string,
-) (types.Decision, error) {
+) (gst.Decision, error) {
 	tenant = normalizeTenant(tenant)
 
 	// The span context goes nowhere on purpose: nothing below this opens a span
@@ -37,7 +37,7 @@ func (r *rbac) Authorize(
 	// The rule is copied out. What the index reports is the policy set's own
 	// storage, and handing that to a caller makes every consumer of a decision
 	// one edit away from rewriting the policy set it was decided from.
-	decision := types.Decision{Allowed: allowed, Source: source, MatchedRule: slices.Clone(matchedRule)}
+	decision := gst.Decision{Allowed: allowed, Source: source, MatchedRule: slices.Clone(matchedRule)}
 	if err == nil && !allowed {
 		decision.Reason = r.denyReason(tenant, subject)
 	}
@@ -215,7 +215,7 @@ func (r *rbac) hasRoleLink(ptype string, subject string, role string, domain ...
 // effect carries only the explanation that exists for it — a rule kind for an
 // allow, a missing step for a denial — and leaves the other label empty, so a
 // series always answers the question its effect can answer.
-func countDecision(decision types.Decision, err error) {
+func countDecision(decision gst.Decision, err error) {
 	// The counter is created by prommetrics.Init, which bootstrap runs long
 	// before the first request. A process that never ran bootstrap, which is
 	// what a test is, still has to be able to decide.

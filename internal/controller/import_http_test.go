@@ -10,7 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/controller"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/stretchr/testify/require"
 )
 
@@ -86,7 +86,7 @@ func TestImportAnswersAClientThatWentAwayAsCanceled(t *testing.T) {
 	rsp := uploadIn(ctx, t, controller.ImportHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](importRoute)),
 		[]byte(`[{"name":"`+name+`"}]`))
 
-	require.Equal(t, types.StatusClientClosedRequest, rsp.Code, rsp.Body.String())
+	require.Equal(t, gst.StatusClientClosedRequest, rsp.Code, rsp.Body.String())
 	require.Zero(t, countSamplesNamed(t, name))
 }
 

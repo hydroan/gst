@@ -3,10 +3,10 @@ package column
 import (
 	"strings"
 
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
-func (s *srv) Get(ctx *types.ServiceContext, req *empty) (rsp, error) {
+func (s *srv) Get(ctx *gst.ServiceContext, req *empty) (rsp, error) {
 	log := s.WithContext(ctx, ctx.Phase())
 
 	table := strings.ReplaceAll(ctx.Param("id"), "-", "_")

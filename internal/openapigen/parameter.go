@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
 )
 
@@ -57,14 +57,14 @@ func parseParametersFromPath(path string) []*openapi3.ParameterRef {
 // model.Cursor, by the cursor's parameters and _size, a feed taking no
 // _sort_by either; an export, which lists every record the query matches,
 // refuses the paging parameters and documents none.
-func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op *openapi3.Operation, paged bool) {
+func addQueryParameters[M gst.Model, REQ gst.Request, RSP gst.Response](op *openapi3.Operation, paged bool) {
 	// Model-field query filters are available only to the default CRUD path.
 	if !model.AreTypesEqual[M, REQ, RSP]() {
 		return
 	}
 
 	typ := reflect.TypeFor[M]()
-	m := reflect.New(typ.Elem()).Interface().(types.Model) //nolint:errcheck
+	m := reflect.New(typ.Elem()).Interface().(gst.Model) //nolint:errcheck
 	params, err := urlquery.Parameters(typ)
 	if err != nil {
 		// The parsers refuse every parameter of a model gorm cannot parse,
@@ -81,7 +81,7 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 		if !paged && owner == reflect.TypeFor[model.Cursor]() {
 			continue
 		}
-		if paged && param.Name == types.QuerySortBy && model.IsCursorable(m) {
+		if paged && param.Name == gst.QuerySortBy && model.IsCursorable(m) {
 			continue
 		}
 		description := openAPIDocComment(field.Name, modelFieldDocs(reflect.New(owner).Interface())[field.Name])
@@ -102,7 +102,7 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 		}
 		// The _expand parameter only accepts the model's expandable
 		// association names, so list them where the frontend reads them.
-		if param.Name == types.QueryExpand {
+		if param.Name == gst.QueryExpand {
 			description = expandableFieldsDescription(description, m.Expands())
 		}
 		queries = append(queries, queryParameter(param.Name, schemaRef, description))
@@ -116,10 +116,10 @@ func addQueryParameters[M types.Model, REQ types.Request, RSP types.Response](op
 			return &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{openapi3.TypeInteger}}}
 		}
 		if !model.IsCursorable(m) {
-			queries = append(queries, queryParameter(types.QueryPage, count(),
+			queries = append(queries, queryParameter(gst.QueryPage, count(),
 				"The one-based page number; zero is the first page, and a negative value is refused."))
 		}
-		queries = append(queries, queryParameter(types.QuerySize, count(), fmt.Sprintf(
+		queries = append(queries, queryParameter(gst.QuerySize, count(), fmt.Sprintf(
 			"The page size; zero is the default of %d, and a negative value or one past %d is refused.",
 			urlquery.DefaultPageSize, urlquery.MaxPageSize)))
 	}
@@ -181,11 +181,11 @@ func structFieldAt(typ reflect.Type, index []int) (field reflect.StructField, ow
 // and the comma-separated members of in and notin take text, and a
 // comparison takes the value the column holds, a time of day as text, an
 // instant in RFC 3339, a boolean, a number, or text.
-func operatorSchema(col modelschema.Column, filterOp types.FilterOp) *openapi3.SchemaRef {
+func operatorSchema(col modelschema.Column, filterOp gst.FilterOp) *openapi3.SchemaRef {
 	switch filterOp {
-	case types.FilterOpIsNull:
+	case gst.FilterOpIsNull:
 		return &openapi3.SchemaRef{Value: openapi3.NewBoolSchema()}
-	case types.FilterOpEq, types.FilterOpNe, types.FilterOpGt, types.FilterOpGte, types.FilterOpLt, types.FilterOpLte:
+	case gst.FilterOpEq, gst.FilterOpNe, gst.FilterOpGt, gst.FilterOpGte, gst.FilterOpLt, gst.FilterOpLte:
 		switch {
 		case modelschema.IsTimeOfDayColumn(col):
 			return &openapi3.SchemaRef{Value: openapi3.NewStringSchema()}
@@ -203,12 +203,12 @@ func operatorSchema(col modelschema.Column, filterOp types.FilterOp) *openapi3.S
 // operatorDescription is the description of an operator key: the field's
 // own, with how the value reads for in and notin, a comma-separated list, and
 // for isnull, a boolean.
-func operatorDescription(description string, filterOp types.FilterOp) string {
+func operatorDescription(description string, filterOp gst.FilterOp) string {
 	var note string
 	switch filterOp {
-	case types.FilterOpIn, types.FilterOpNotIn:
+	case gst.FilterOpIn, gst.FilterOpNotIn:
 		note = "Comma-separated values."
-	case types.FilterOpIsNull:
+	case gst.FilterOpIsNull:
 		note = "true matches a null field, false a field holding a value."
 	default:
 		return description
@@ -226,9 +226,9 @@ func operatorDescription(description string, filterOp types.FilterOp) string {
 // association expansion, which is meaningful only on models that declare
 // expandable associations.
 var frameworkQueryParameterOrder = []string{
-	types.QueryPage, types.QuerySize, types.QuerySortBy,
-	types.QueryCursorValue, types.QueryCursorField, types.QueryCursorNext,
-	types.QueryExpand, types.QueryDepth,
+	gst.QueryPage, gst.QuerySize, gst.QuerySortBy,
+	gst.QueryCursorValue, gst.QueryCursorField, gst.QueryCursorNext,
+	gst.QueryExpand, gst.QueryDepth,
 }
 
 // sortQueryParameters puts business filter parameters first, preserving their
@@ -271,7 +271,7 @@ func expandableFieldsDescription(description string, expands []string) string {
 // operatorFilterDescription appends the field operator filter note to a query
 // parameter description, listing ops, the operators the "field[op]=value"
 // syntax takes on the field's column.
-func operatorFilterDescription(description, queryTag string, ops []types.FilterOp) string {
+func operatorFilterDescription(description, queryTag string, ops []gst.FilterOp) string {
 	tokens := make([]string, 0, len(ops))
 	for _, op := range ops {
 		tokens = append(tokens, string(op))

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,9 +26,9 @@ type latestRow struct {
 // newest first and keep the first. Two beta rows share a time, and the row
 // number is stable across runs only because the framework completes the
 // window's order with the primary key.
-func latestPerCategory(ctx context.Context) (types.Term, types.Selector[*TestAggregateRecord, latestRow]) {
-	rn := types.RowNumber().
-		Over(types.PartitionBy(TestAggregateRecordCols.Category).OrderBy(TestAggregateRecordCols.OccurredAt.Desc())).
+func latestPerCategory(ctx context.Context) (gst.Term, gst.Selector[*TestAggregateRecord, latestRow]) {
+	rn := gst.RowNumber().
+		Over(gst.PartitionBy(TestAggregateRecordCols.Category).OrderBy(TestAggregateRecordCols.OccurredAt.Desc())).
 		As("rn")
 	return rn, database.Select[*TestAggregateRecord, latestRow](ctx,
 		TestAggregateRecordCols.ID, TestAggregateRecordCols.Category, TestAggregateRecordCols.Amount, rn).
@@ -56,7 +56,7 @@ func TestSelectWindowLatestPerGroup(t *testing.T) {
 
 	t.Run("RendersTheWindowAndWrapsTheQualify", func(t *testing.T) {
 		_, sel := latestPerCategory(ctx)
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		rows := make([]latestRow, 0)
 		require.NoError(t, sel.WithDryRun(&statements).Scan(&rows))
 		require.Len(t, statements, 1)
@@ -77,7 +77,7 @@ func TestSelectWindowLatestPerGroup(t *testing.T) {
 		require.NoError(t, sel.Count(&total))
 		require.Equal(t, 3, total)
 
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		require.NoError(t, sel.WithDryRun(&statements).Count(&total))
 		require.Len(t, statements, 1)
 		require.Contains(t, statements[0].Query, "SELECT count(*) FROM (SELECT * FROM (SELECT ")
@@ -86,14 +86,14 @@ func TestSelectWindowLatestPerGroup(t *testing.T) {
 	})
 
 	t.Run("CountsEveryRowWithoutQualify", func(t *testing.T) {
-		rn := types.RowNumber().Over(types.OrderBy(TestAggregateRecordCols.OccurredAt.Asc())).As("rn")
+		rn := gst.RowNumber().Over(gst.OrderBy(TestAggregateRecordCols.OccurredAt.Asc())).As("rn")
 		sel := database.Select[*TestAggregateRecord, latestRow](ctx,
 			TestAggregateRecordCols.ID, TestAggregateRecordCols.Category, TestAggregateRecordCols.Amount, rn)
 		total := 0
 		require.NoError(t, sel.Count(&total))
 		require.Equal(t, 6, total)
 
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		require.NoError(t, sel.WithDryRun(&statements).Count(&total))
 		require.Len(t, statements, 1)
 		require.Contains(t, statements[0].Query, "SELECT 1 AS "+quoteIdent("row_marker"),
@@ -111,9 +111,9 @@ func TestSelectWindowRunningTotal(t *testing.T) {
 		Running int64
 	}
 	running := TestAggregateRecordCols.Amount.Sum().
-		Over(types.PartitionBy(TestAggregateRecordCols.Category).OrderBy(TestAggregateRecordCols.OccurredAt.Asc())).
+		Over(gst.PartitionBy(TestAggregateRecordCols.Category).OrderBy(TestAggregateRecordCols.OccurredAt.Asc())).
 		As("running")
-	statements := make([]types.SQLStatement, 0)
+	statements := make([]gst.SQLStatement, 0)
 	rows := make([]row, 0)
 	require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(),
 		TestAggregateRecordCols.ID, TestAggregateRecordCols.Amount, running).
@@ -154,13 +154,13 @@ func TestSelectWindowPartitionAggregates(t *testing.T) {
 		Average float64
 		Largest int64
 	}
-	partition := types.PartitionBy(TestAggregateRecordCols.Category)
+	partition := gst.PartitionBy(TestAggregateRecordCols.Category)
 	rows := make([]row, 0)
-	statements := make([]types.SQLStatement, 0)
-	sel := func() types.Selector[*TestAggregateRecord, row] {
+	statements := make([]gst.SQLStatement, 0)
+	sel := func() gst.Selector[*TestAggregateRecord, row] {
 		return database.Select[*TestAggregateRecord, row](context.Background(),
 			TestAggregateRecordCols.ID,
-			types.Count().Over(partition).As("rows"),
+			gst.Count().Over(partition).As("rows"),
 			TestAggregateRecordCols.Amount.Sum().Over(partition).As("total"),
 			TestAggregateRecordCols.Amount.Avg().Over(partition).As("average"),
 			TestAggregateRecordCols.Amount.Max().Over(partition).As("largest"),
@@ -192,7 +192,7 @@ func TestSelectWindowLagLead(t *testing.T) {
 		Previous *int64
 		Next     *int64
 	}
-	window := types.PartitionBy(TestAggregateRecordCols.Category).OrderBy(TestAggregateRecordCols.OccurredAt.Asc())
+	window := gst.PartitionBy(TestAggregateRecordCols.Category).OrderBy(TestAggregateRecordCols.OccurredAt.Asc())
 	rows := make([]row, 0)
 	require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(),
 		TestAggregateRecordCols.ID, TestAggregateRecordCols.Amount,
@@ -225,16 +225,16 @@ func TestSelectWindowRanksGroups(t *testing.T) {
 		RowNumber int64
 	}
 	total := TestAggregateRecordCols.Amount.Sum().As("total")
-	byTotal := types.OrderBy(total.Desc())
+	byTotal := gst.OrderBy(total.Desc())
 	rows := make([]row, 0)
-	statements := make([]types.SQLStatement, 0)
-	sel := func() types.Selector[*TestAggregateRecord, row] {
+	statements := make([]gst.SQLStatement, 0)
+	sel := func() gst.Selector[*TestAggregateRecord, row] {
 		return database.Select[*TestAggregateRecord, row](context.Background(),
 			TestAggregateRecordCols.Category.Group(), total,
-			types.Rank().Over(byTotal),
-			types.DenseRank().Over(byTotal),
-			types.RowNumber().Over(byTotal),
-		).OrderBy(types.RowNumber().Over(byTotal).Asc())
+			gst.Rank().Over(byTotal),
+			gst.DenseRank().Over(byTotal),
+			gst.RowNumber().Over(byTotal),
+		).OrderBy(gst.RowNumber().Over(byTotal).Asc())
 	}
 	require.NoError(t, sel().Scan(&rows))
 	require.Equal(t, []row{
@@ -270,7 +270,7 @@ func TestSelectWindowPartitionsGroupsByKey(t *testing.T) {
 	require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(),
 		TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.Status.Group(),
 		TestAggregateRecordCols.Amount.Sum().As("total"),
-		TestAggregateRecordCols.Amount.Sum().Over(types.PartitionBy(TestAggregateRecordCols.Category)).As("category_total"),
+		TestAggregateRecordCols.Amount.Sum().Over(gst.PartitionBy(TestAggregateRecordCols.Category)).As("category_total"),
 	).OrderBy(TestAggregateRecordCols.Category.Asc(), TestAggregateRecordCols.Status.Asc()).Scan(&rows))
 	require.Equal(t, []row{
 		{Category: "alpha", Status: "done", Total: 300, CategoryTotal: 600},
@@ -280,11 +280,11 @@ func TestSelectWindowPartitionsGroupsByKey(t *testing.T) {
 		{Category: "gamma", Status: "done", Total: 600, CategoryTotal: 600},
 	}, rows)
 
-	statements := make([]types.SQLStatement, 0)
+	statements := make([]gst.SQLStatement, 0)
 	require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(),
 		TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.Status.Group(),
 		TestAggregateRecordCols.Amount.Sum().As("total"),
-		TestAggregateRecordCols.Amount.Sum().Over(types.PartitionBy(TestAggregateRecordCols.Category)).As("category_total"),
+		TestAggregateRecordCols.Amount.Sum().Over(gst.PartitionBy(TestAggregateRecordCols.Category)).As("category_total"),
 	).WithDryRun(&statements).Scan(&rows))
 	require.Len(t, statements, 1)
 	require.Contains(t, statements[0].Query,
@@ -309,7 +309,7 @@ func TestSelectWindowProjectsColumnsAsStored(t *testing.T) {
 	require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(),
 		TestAggregateRecordCols.ID, TestAggregateRecordCols.OccurredAt,
 		TestAggregateRecordCols.OccurredAt.ByDay().As("day"),
-		types.RowNumber().Over(types.PartitionBy(TestAggregateRecordCols.OccurredAt.ByDay()).OrderBy(TestAggregateRecordCols.ID.Asc())).As("rn"),
+		gst.RowNumber().Over(gst.PartitionBy(TestAggregateRecordCols.OccurredAt.ByDay()).OrderBy(TestAggregateRecordCols.ID.Asc())).As("rn"),
 	).OrderBy(TestAggregateRecordCols.ID.Asc()).Limit(2).Scan(&rows))
 	// The wall clock is compared in UTC: a driver may hand the instant back
 	// in its own zone value, which is the same instant and a different Go
@@ -331,20 +331,20 @@ func TestSelectWindowBuildErrors(t *testing.T) {
 		ID string
 		Rn int64
 	}
-	ordered := types.PartitionBy(TestAggregateRecordCols.Category).OrderBy(TestAggregateRecordCols.OccurredAt.Asc())
-	scan := func(sel types.Selector[*TestAggregateRecord, row]) error {
+	ordered := gst.PartitionBy(TestAggregateRecordCols.Category).OrderBy(TestAggregateRecordCols.OccurredAt.Asc())
+	scan := func(sel gst.Selector[*TestAggregateRecord, row]) error {
 		rows := make([]row, 0)
 		return sel.Scan(&rows)
 	}
 
 	t.Run("WindowFunctionNeedsAWindow", func(t *testing.T) {
-		require.ErrorIs(t, scan(database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.ID, types.RowNumber().As("rn"))),
+		require.ErrorIs(t, scan(database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.ID, gst.RowNumber().As("rn"))),
 			database.ErrWindowFnWithoutWindow)
 	})
 
 	t.Run("RankingNeedsAnOrderedWindow", func(t *testing.T) {
 		require.ErrorIs(t, scan(database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.ID,
-			types.RowNumber().Over(types.PartitionBy(TestAggregateRecordCols.Category)).As("rn"))),
+			gst.RowNumber().Over(gst.PartitionBy(TestAggregateRecordCols.Category)).As("rn"))),
 			database.ErrWindowWithoutOrder)
 	})
 
@@ -367,7 +367,7 @@ func TestSelectWindowBuildErrors(t *testing.T) {
 	})
 
 	t.Run("QualifyNeedsAWindowTerm", func(t *testing.T) {
-		rn := types.RowNumber().Over(ordered).As("rn")
+		rn := gst.RowNumber().Over(ordered).As("rn")
 		require.ErrorIs(t, scan(database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.ID, rn).
 			Qualify(TestAggregateRecordCols.Amount.Sum().As("rn").Gt(1))),
 			database.ErrQualifyTermNotWindow)
@@ -377,7 +377,7 @@ func TestSelectWindowBuildErrors(t *testing.T) {
 		// A key's conditions are never rendered, in a partition as in the
 		// projection, so they are refused rather than dropped.
 		require.ErrorIs(t, scan(database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.ID,
-			types.RowNumber().Over(types.PartitionBy(TestAggregateRecordCols.Category.Group().Where(TestAggregateRecordCols.Status.Eq("done"))).OrderBy(TestAggregateRecordCols.ID.Asc())).As("rn"))),
+			gst.RowNumber().Over(gst.PartitionBy(TestAggregateRecordCols.Category.Group().Where(TestAggregateRecordCols.Status.Eq("done"))).OrderBy(TestAggregateRecordCols.ID.Asc())).As("rn"))),
 			database.ErrConditionOnGroupKey)
 	})
 
@@ -388,8 +388,8 @@ func TestSelectWindowBuildErrors(t *testing.T) {
 			ID   string
 			Rank int64
 		}
-		short := types.Rank().Over(types.OrderBy(TestAggregateRecordCols.Amount.Desc())).As("rank")
-		long := types.Rank().Over(types.PartitionBy().OrderBy(TestAggregateRecordCols.Amount.Desc())).As("rank")
+		short := gst.Rank().Over(gst.OrderBy(TestAggregateRecordCols.Amount.Desc())).As("rank")
+		long := gst.Rank().Over(gst.PartitionBy().OrderBy(TestAggregateRecordCols.Amount.Desc())).As("rank")
 		rows := make([]ranked, 0)
 		require.NoError(t, database.Select[*TestAggregateRecord, ranked](ctx, TestAggregateRecordCols.ID, short).
 			Qualify(long.Lte(2)).
@@ -407,7 +407,7 @@ func TestSelectWindowBuildErrors(t *testing.T) {
 			Rn       int64
 		}
 		total := TestAggregateRecordCols.Amount.Sum().As("total")
-		running := total.Over(types.OrderBy(total.Desc())).As("rn")
+		running := total.Over(gst.OrderBy(total.Desc())).As("rn")
 		err := database.Select[*TestAggregateRecord, grouped](ctx, TestAggregateRecordCols.Category.Group(), total, running).
 			Having(running.Gt(100)).
 			Scan(&[]grouped{})
@@ -418,7 +418,7 @@ func TestSelectWindowBuildErrors(t *testing.T) {
 		// A row number is a number and a count is a number: text compared
 		// against either is a comparison SQLite answers with no rows rather
 		// than an error, so it is refused when the query is built.
-		rn := types.RowNumber().Over(ordered).As("rn")
+		rn := gst.RowNumber().Over(ordered).As("rn")
 		require.ErrorIs(t, scan(database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.ID, rn).
 			Qualify(rn.Eq("one"))),
 			database.ErrHavingValueType)
@@ -426,7 +426,7 @@ func TestSelectWindowBuildErrors(t *testing.T) {
 			Category string
 			Rn       int64
 		}
-		records := types.Count().As("rn")
+		records := gst.Count().As("rn")
 		require.ErrorIs(t, database.Select[*TestAggregateRecord, counted](ctx, TestAggregateRecordCols.Category.Group(), records).
 			Having(records.Gte("many")).
 			Scan(&[]counted{}),
@@ -447,7 +447,7 @@ func TestSelectWindowBuildErrors(t *testing.T) {
 	})
 
 	t.Run("HavingNeedsGroups", func(t *testing.T) {
-		rn := types.RowNumber().Over(ordered).As("rn")
+		rn := gst.RowNumber().Over(ordered).As("rn")
 		require.ErrorIs(t, scan(database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.ID, rn).
 			Having(rn.Gt(1))),
 			database.ErrHavingWithoutGroups)
@@ -455,11 +455,11 @@ func TestSelectWindowBuildErrors(t *testing.T) {
 
 	t.Run("PartitionByUnknownColumn", func(t *testing.T) {
 		require.ErrorIs(t, scan(database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.ID,
-			types.RowNumber().Over(types.PartitionBy(colStatus).OrderBy(TestAggregateRecordCols.ID.Asc())).As("rn"))),
+			gst.RowNumber().Over(gst.PartitionBy(colStatus).OrderBy(TestAggregateRecordCols.ID.Asc())).As("rn"))),
 			database.ErrColumnTable, "a key of another model is refused by its table")
-		missing := types.NewColumn[*TestAggregateRecord, string]("missing")
+		missing := gst.NewColumn[*TestAggregateRecord, string]("missing")
 		require.ErrorIs(t, scan(database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.ID,
-			types.RowNumber().Over(types.PartitionBy(missing).OrderBy(TestAggregateRecordCols.ID.Asc())).As("rn"))),
+			gst.RowNumber().Over(gst.PartitionBy(missing).OrderBy(TestAggregateRecordCols.ID.Asc())).As("rn"))),
 			database.ErrUnknownColumn)
 	})
 
@@ -471,7 +471,7 @@ func TestSelectWindowBuildErrors(t *testing.T) {
 		rows := make([]grouped, 0)
 		err := database.Select[*TestAggregateRecord, grouped](ctx,
 			TestAggregateRecordCols.Category.Group(),
-			types.Count().Over(types.PartitionBy(TestAggregateRecordCols.Status)).As("rn")).
+			gst.Count().Over(gst.PartitionBy(TestAggregateRecordCols.Status)).As("rn")).
 			Scan(&rows)
 		require.ErrorIs(t, err, database.ErrWindowTermNotSelected)
 		require.ErrorContains(t, err, "the projection groups by category")
@@ -487,7 +487,7 @@ func TestSelectWindowBuildErrors(t *testing.T) {
 		rows := make([]totals, 0)
 		err := database.Select[*TestAggregateRecord, totals](ctx,
 			TestAggregateRecordCols.Amount.Sum().As("total"),
-			types.Count().Over(types.PartitionBy(TestAggregateRecordCols.Category)).As("x")).
+			gst.Count().Over(gst.PartitionBy(TestAggregateRecordCols.Category)).As("x")).
 			Scan(&rows)
 		require.ErrorIs(t, err, database.ErrWindowTermNotSelected)
 		require.ErrorContains(t, err, "declares no group key")
@@ -496,7 +496,7 @@ func TestSelectWindowBuildErrors(t *testing.T) {
 	t.Run("PartitionByAConstant", func(t *testing.T) {
 		// A constant is the same on every row and partitions nothing.
 		err := scan(database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.ID,
-			types.RowNumber().Over(types.PartitionBy(types.Literal("x").As("k")).OrderBy(TestAggregateRecordCols.ID.Asc())).As("rn")))
+			gst.RowNumber().Over(gst.PartitionBy(gst.Literal("x").As("k")).OrderBy(TestAggregateRecordCols.ID.Asc())).As("rn")))
 		require.ErrorIs(t, err, database.ErrWindowTermNotSelected)
 		require.ErrorContains(t, err, "constant")
 	})
@@ -514,27 +514,27 @@ func TestSelectWindowBuildErrors(t *testing.T) {
 		total := TestAggregateRecordCols.Category.Count().As("total")
 		err := database.Select[*TestAggregateRecord, grouped](ctx,
 			TestAggregateRecordCols.Category.Group(), total,
-			TestAggregateRecordCols.Amount.Sum().Over(types.PartitionBy(total)).As("share")).
+			TestAggregateRecordCols.Amount.Sum().Over(gst.PartitionBy(total)).As("share")).
 			Scan(&rows)
 		require.ErrorIs(t, err, database.ErrWindowTermNotSelected)
 		require.ErrorContains(t, err, "partitions by a measure")
 		conditional := TestAggregateRecordCols.Category.Count().Where(TestAggregateRecordCols.Status.Eq("done")).As("total")
 		require.ErrorIs(t, database.Select[*TestAggregateRecord, grouped](ctx,
 			TestAggregateRecordCols.Category.Group(), conditional,
-			TestAggregateRecordCols.Amount.Sum().Over(types.PartitionBy(conditional)).As("share")).
+			TestAggregateRecordCols.Amount.Sum().Over(gst.PartitionBy(conditional)).As("share")).
 			Scan(&rows), database.ErrWindowTermNotSelected)
 	})
 
 	t.Run("PartitionKeyOutsideTheClosedSets", func(t *testing.T) {
 		// A key minted by hand with a bucket or a function the framework does
 		// not define is refused, as the same term is in the projection.
-		week := types.NewTerm("", "test_aggregate_records", "occurred_at", types.TimeBucket("week"), "")
+		week := gst.NewTerm("", "test_aggregate_records", "occurred_at", gst.TimeBucket("week"), "")
 		require.ErrorIs(t, scan(database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.ID,
-			types.RowNumber().Over(types.PartitionBy(week).OrderBy(TestAggregateRecordCols.ID.Asc())).As("rn"))),
+			gst.RowNumber().Over(gst.PartitionBy(week).OrderBy(TestAggregateRecordCols.ID.Asc())).As("rn"))),
 			database.ErrUnknownTimeBucket)
-		median := types.NewTerm(types.TermFn("median"), "test_aggregate_records", "amount", "", "")
+		median := gst.NewTerm(gst.TermFn("median"), "test_aggregate_records", "amount", "", "")
 		require.ErrorIs(t, scan(database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.ID,
-			types.RowNumber().Over(types.PartitionBy(median).OrderBy(TestAggregateRecordCols.ID.Asc())).As("rn"))),
+			gst.RowNumber().Over(gst.PartitionBy(median).OrderBy(TestAggregateRecordCols.ID.Asc())).As("rn"))),
 			database.ErrUnknownTermFn)
 	})
 
@@ -546,27 +546,27 @@ func TestSelectWindowBuildErrors(t *testing.T) {
 		rows := make([]grouped, 0)
 		require.ErrorIs(t, database.Select[*TestAggregateRecord, grouped](ctx,
 			TestAggregateRecordCols.Category.Group(),
-			TestAggregateRecordCols.Amount.Avg().Over(types.PartitionBy(TestAggregateRecordCols.Category)).As("rn")).
+			TestAggregateRecordCols.Amount.Avg().Over(gst.PartitionBy(TestAggregateRecordCols.Category)).As("rn")).
 			Scan(&rows), database.ErrWindowOverGroups)
 	})
 
 	t.Run("WindowCannotOrderByAWindow", func(t *testing.T) {
-		inner := types.RowNumber().Over(ordered).As("inner")
+		inner := gst.RowNumber().Over(ordered).As("inner")
 		require.ErrorIs(t, scan(database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.ID,
-			types.Rank().Over(types.OrderBy(inner.Asc())).As("rn"))),
+			gst.Rank().Over(gst.OrderBy(inner.Asc())).As("rn"))),
 			database.ErrWindowNested)
 	})
 
 	t.Run("ScanOneRejectsARowLevelSelect", func(t *testing.T) {
 		got := row{}
 		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.ID,
-			types.RowNumber().Over(ordered).As("rn")).ScanOne(&got),
+			gst.RowNumber().Over(ordered).As("rn")).ScanOne(&got),
 			database.ErrScanOneRowLevel)
 	})
 
 	t.Run("OrderByAnUnselectedColumn", func(t *testing.T) {
 		require.ErrorIs(t, scan(database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.ID,
-			types.RowNumber().Over(ordered).As("rn")).OrderBy(TestAggregateRecordCols.Amount.Asc())),
+			gst.RowNumber().Over(ordered).As("rn")).OrderBy(TestAggregateRecordCols.Amount.Asc())),
 			database.ErrOrderTermNotSelected)
 	})
 
@@ -589,7 +589,7 @@ func TestSelectWindowBuildErrors(t *testing.T) {
 		}
 		rows := make([]plain, 0)
 		require.ErrorIs(t, database.Select[*TestAggregateRecord, plain](ctx, TestAggregateRecordCols.ID,
-			TestAggregateRecordCols.ClosedAt, types.RowNumber().Over(ordered).As("rn")).Scan(&rows),
+			TestAggregateRecordCols.ClosedAt, gst.RowNumber().Over(ordered).As("rn")).Scan(&rows),
 			database.ErrNullableResultField)
 	})
 }

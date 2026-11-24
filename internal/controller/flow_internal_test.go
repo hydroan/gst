@@ -14,11 +14,11 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/auditmanager"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	modellogmgmt "github.com/hydroan/gst/internal/modulemodel/logmgmt"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/service"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -95,7 +95,7 @@ type sealedAfterHook struct {
 	seen string
 }
 
-func (h *sealedAfterHook) UpdateAfter(_ *types.ServiceContext, m *sealedFlowSample) error {
+func (h *sealedAfterHook) UpdateAfter(_ *gst.ServiceContext, m *sealedFlowSample) error {
 	h.seen = m.Code
 	return nil
 }
@@ -109,8 +109,8 @@ func init() {
 
 // plainServiceContext builds the service contexts of a flow run outside any
 // HTTP request, the way a call does (see call.serviceContext).
-func plainServiceContext(ctx context.Context, phase apiaction.Phase) *types.ServiceContext {
-	return types.NewServiceContext(nil, ctx, phase)
+func plainServiceContext(ctx context.Context, phase apiaction.Phase) *gst.ServiceContext {
+	return gst.NewServiceContext(nil, ctx, phase)
 }
 
 // TestCreateFlowRunsOnRequestMetadataAlone pins that a flow needs no HTTP
@@ -209,7 +209,7 @@ func TestWriteFieldsOfReadsWhatTheWriteFlowsGoBy(t *testing.T) {
 		}
 		return names
 	}
-	columnNames := func(columns []types.AnyColumnRef) []string {
+	columnNames := func(columns []gst.AnyColumnRef) []string {
 		names := make([]string, 0, len(columns))
 		for _, column := range columns {
 			names = append(names, column.Name())
@@ -247,7 +247,7 @@ func TestGetFlowAnswersNotFoundAsAServiceError(t *testing.T) {
 
 	_, err := a.getFlow(ctx, plainServiceContext, "missing")
 
-	var serviceErr *types.Error
+	var serviceErr *gst.Error
 	require.ErrorAs(t, err, &serviceErr)
 	require.Equal(t, http.StatusNotFound, serviceErr.Status())
 	require.Equal(t, notFoundMsg, serviceErr.Msg())
@@ -278,7 +278,7 @@ func TestFlowRecordsTheRequestMethodAndURIInTheOperationLog(t *testing.T) {
 
 	var entries []*modellogmgmt.OperationLog
 	require.NoError(t, database.Database[*modellogmgmt.OperationLog](ctx).
-		WithQuery(&modellogmgmt.OperationLog{Model: a.name, OP: types.OperationPatch}).List(&entries))
+		WithQuery(&modellogmgmt.OperationLog{Model: a.name, OP: gst.OperationPatch}).List(&entries))
 	entries = slices.DeleteFunc(entries, func(entry *modellogmgmt.OperationLog) bool { return !strings.Contains(entry.Request, name) })
 	require.Len(t, entries, 1)
 	require.Equal(t, http.MethodPatch, entries[0].Method)
@@ -307,7 +307,7 @@ func TestPatchFlowRecordsTheRecordIDInTheOperationLog(t *testing.T) {
 
 	var entries []*modellogmgmt.OperationLog
 	require.NoError(t, database.Database[*modellogmgmt.OperationLog](ctx).
-		WithQuery(&modellogmgmt.OperationLog{Model: a.name, OP: types.OperationPatch}).List(&entries))
+		WithQuery(&modellogmgmt.OperationLog{Model: a.name, OP: gst.OperationPatch}).List(&entries))
 	entries = slices.DeleteFunc(entries, func(entry *modellogmgmt.OperationLog) bool { return !strings.Contains(entry.Request, name) })
 	require.Len(t, entries, 1)
 	require.Equal(t, record.GetID(), entries[0].RecordID)

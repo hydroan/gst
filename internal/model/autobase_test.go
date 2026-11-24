@@ -3,8 +3,8 @@ package model_test
 import (
 	"testing"
 
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -15,7 +15,7 @@ type AutoRecord struct {
 }
 
 func TestAutoBaseImplementsModel(t *testing.T) {
-	require.Implements(t, (*types.Model)(nil), &model.AutoBase{})
+	require.Implements(t, (*gst.Model)(nil), &model.AutoBase{})
 	require.True(t, model.IsTableModel[*AutoRecord]())
 	require.False(t, model.IsEmpty[AutoRecord]())
 }

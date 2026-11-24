@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -34,14 +34,14 @@ import (
 // stateless: the caller context of each operation parents its span, and when
 // tracing is disabled every operation forwards to the wrapped cache directly.
 type Wrapper[T any] struct {
-	cache     types.Cache[T]
+	cache     gst.Cache[T]
 	cacheType string
 }
 
-var _ types.Cache[any] = (*Wrapper[any])(nil)
+var _ gst.Cache[any] = (*Wrapper[any])(nil)
 
 // NewWrapper creates a new tracing wrapper for the given cache.
-func NewWrapper[T any](cache types.Cache[T], cacheType string) *Wrapper[T] {
+func NewWrapper[T any](cache gst.Cache[T], cacheType string) *Wrapper[T] {
 	return &Wrapper[T]{cache: cache, cacheType: cacheType}
 }
 
@@ -67,7 +67,7 @@ func (tw *Wrapper[T]) Get(ctx context.Context, key string) (T, error) {
 	// A miss is a normal outcome: like a hit it leaves the status unset, the
 	// way instrumentation does, and only a failure of the backend marks the
 	// span failed.
-	if err != nil && !errors.Is(err, types.ErrEntryNotFound) {
+	if err != nil && !errors.Is(err, gst.ErrEntryNotFound) {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, fmt.Sprintf("Failed to get cache key: %v", err))
 	}

@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
@@ -184,7 +184,7 @@ func TestDatabaseWithDryRun(t *testing.T) {
 
 		// The statement names the caller the context carries as creator and
 		// updater, and the object keeps what it holds.
-		stmts := make([]types.SQLStatement, 0)
+		stmts := make([]gst.SQLStatement, 0)
 		audited := &TestUser{Name: "dry-run-audited", Email: "dry-run-audited@example.com"}
 		require.NoError(t, database.Database[*TestUser](asCaller(dryRunCaller)).WithDryRun(&stmts).Create(audited))
 		require.Len(t, stmts, 1)
@@ -239,7 +239,7 @@ func TestDatabaseWithDryRun(t *testing.T) {
 
 		// The statement names the caller the context carries as updater, and
 		// the object keeps what it holds.
-		stmts := make([]types.SQLStatement, 0)
+		stmts := make([]gst.SQLStatement, 0)
 		audited := &TestUser{Name: "dry-run-audited", Email: "dry-run-audited@example.com"}
 		audited.ID = "dry-run-audited"
 		require.NoError(t, database.Database[*TestUser](asCaller(dryRunCaller)).WithDryRun(&stmts).Update(audited))
@@ -254,7 +254,7 @@ func TestDatabaseWithDryRun(t *testing.T) {
 
 		// WithDryRun should not actually update records
 		originalName := u1.Name
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithDryRun().UpdateByID(u1.ID, types.NewAssignment("", "name", "updated_name")))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithDryRun().UpdateByID(u1.ID, gst.NewAssignment("", "name", "updated_name")))
 
 		// Verify record is not updated
 		uu := new(TestUser)
@@ -381,7 +381,7 @@ func TestDatabaseWithDryRunCollector(t *testing.T) {
 	})
 
 	t.Run("List", func(t *testing.T) {
-		var stmts []types.SQLStatement
+		var stmts []gst.SQLStatement
 		users := make([]*TestUser, 0)
 
 		// A request context annotates the built statement the same way it
@@ -389,7 +389,7 @@ func TestDatabaseWithDryRunCollector(t *testing.T) {
 		err := database.Database[*TestUser](requestContext("", "", "trace-dry")).
 			WithDryRun(&stmts).
 			WithQuery(&TestUser{Name: u1.Name}).
-			WithOrder(types.Desc("created_at")).
+			WithOrder(gst.Desc("created_at")).
 			List(&users)
 
 		require.NoError(t, err)
@@ -404,7 +404,7 @@ func TestDatabaseWithDryRunCollector(t *testing.T) {
 
 	t.Run("ListWithModelQuery", func(t *testing.T) {
 		t.Run("Query", func(t *testing.T) {
-			var stmts []types.SQLStatement
+			var stmts []gst.SQLStatement
 			users := make([]*queryableTestUser, 0)
 			expand := "Friends"
 			query := &queryableTestUser{
@@ -427,7 +427,7 @@ func TestDatabaseWithDryRunCollector(t *testing.T) {
 		})
 
 		t.Run("PaginationWithoutAnOrderReadsInPrimaryKeyOrder", func(t *testing.T) {
-			var stmts []types.SQLStatement
+			var stmts []gst.SQLStatement
 			users := make([]*TestUser, 0)
 			require.NoError(t, database.Database[*TestUser](context.Background()).
 				WithDryRun(&stmts).
@@ -439,11 +439,11 @@ func TestDatabaseWithDryRunCollector(t *testing.T) {
 		})
 
 		t.Run("PaginationCompletesASharedOrder", func(t *testing.T) {
-			var stmts []types.SQLStatement
+			var stmts []gst.SQLStatement
 			users := make([]*TestUser, 0)
 			require.NoError(t, database.Database[*TestUser](context.Background()).
 				WithDryRun(&stmts).
-				WithOrder(types.Desc("name")).
+				WithOrder(gst.Desc("name")).
 				WithPagination(2, 10).
 				List(&users))
 			require.Len(t, stmts, 1)
@@ -453,7 +453,7 @@ func TestDatabaseWithDryRunCollector(t *testing.T) {
 			stmts = stmts[:0]
 			require.NoError(t, database.Database[*TestUser](context.Background()).
 				WithDryRun(&stmts).
-				WithOrder(types.Asc("name")).
+				WithOrder(gst.Asc("name")).
 				WithPagination(2, 10).
 				List(&users))
 			require.Len(t, stmts, 1)
@@ -461,11 +461,11 @@ func TestDatabaseWithDryRunCollector(t *testing.T) {
 		})
 
 		t.Run("PaginationKeepsAnIdentifyingOrder", func(t *testing.T) {
-			var stmts []types.SQLStatement
+			var stmts []gst.SQLStatement
 			users := make([]*TestUser, 0)
 			require.NoError(t, database.Database[*TestUser](context.Background()).
 				WithDryRun(&stmts).
-				WithOrder(types.Desc("id")).
+				WithOrder(gst.Desc("id")).
 				WithPagination(2, 10).
 				List(&users))
 			require.Len(t, stmts, 1)
@@ -475,7 +475,7 @@ func TestDatabaseWithDryRunCollector(t *testing.T) {
 		})
 
 		t.Run("LimitAloneAddsNoOrder", func(t *testing.T) {
-			var stmts []types.SQLStatement
+			var stmts []gst.SQLStatement
 			users := make([]*TestUser, 0)
 			require.NoError(t, database.Database[*TestUser](context.Background()).
 				WithDryRun(&stmts).
@@ -486,7 +486,7 @@ func TestDatabaseWithDryRunCollector(t *testing.T) {
 		})
 
 		t.Run("Cursor", func(t *testing.T) {
-			var stmts []types.SQLStatement
+			var stmts []gst.SQLStatement
 			users := make([]*cursorableTestUser, 0)
 			cursorValue := "cursor-001"
 			query := &cursorableTestUser{
@@ -514,7 +514,7 @@ func TestDatabaseWithDryRunCollector(t *testing.T) {
 	t.Run("CreateDoesNotExecute", func(t *testing.T) {
 		defer cleanupTestData()
 
-		var stmts []types.SQLStatement
+		var stmts []gst.SQLStatement
 		user := &TestUser{Name: "build-sql-create", Email: "build-sql-create@example.com"}
 		err := database.Database[*TestUser](context.Background()).WithDryRun(&stmts).Create(user)
 
@@ -536,7 +536,7 @@ func TestDatabaseWithDryRunCollector(t *testing.T) {
 	})
 
 	t.Run("BatchCreate", func(t *testing.T) {
-		var stmts []types.SQLStatement
+		var stmts []gst.SQLStatement
 		users := []*TestUser{
 			{Name: "build-sql-batch-1", Email: "build-sql-batch-1@example.com"},
 			{Name: "build-sql-batch-2", Email: "build-sql-batch-2@example.com"},
@@ -563,7 +563,7 @@ func TestDatabaseWithDryRunCollector(t *testing.T) {
 		existingID := u1.ID
 		requestedID := u2.ID
 		dest := &TestUser{ID: existingID}
-		var stmts []types.SQLStatement
+		var stmts []gst.SQLStatement
 
 		err := database.Database[*TestUser](context.Background()).WithDryRun(&stmts).Get(dest, requestedID)
 
@@ -580,7 +580,7 @@ func TestDatabaseWithDryRunCollector(t *testing.T) {
 	t.Run("ResetsAfterAction", func(t *testing.T) {
 		defer cleanupTestData()
 
-		var stmts []types.SQLStatement
+		var stmts []gst.SQLStatement
 		user := &TestUser{Name: "build-sql-reset", Email: "build-sql-reset@example.com"}
 		require.NoError(t, database.Database[*TestUser](context.Background()).WithDryRun(&stmts).Create(user))
 		require.Len(t, stmts, 1)
@@ -595,7 +595,7 @@ func TestDatabaseWithDryRunCollector(t *testing.T) {
 	})
 }
 
-func requireSQLContains(t *testing.T, stmt types.SQLStatement, parts ...string) {
+func requireSQLContains(t *testing.T, stmt gst.SQLStatement, parts ...string) {
 	t.Helper()
 
 	sql := strings.ToUpper(stmt.Query)

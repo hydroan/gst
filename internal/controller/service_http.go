@@ -8,8 +8,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/response"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 )
 
@@ -66,7 +66,7 @@ func (a *action[M, REQ, RSP]) serviceHandler() gin.HandlerFunc {
 			}
 		}
 		rsp, err := a.traceServiceOperation(ctrlSpanCtx, a.phase, func(spanCtx context.Context) (RSP, error) {
-			return invoke(svc, types.NewServiceContext(c, spanCtx, a.phase), req)
+			return invoke(svc, gst.NewServiceContext(c, spanCtx, a.phase), req)
 		})
 		if err != nil {
 			response.Error(c, failService(ctrlSpanCtx, log, err))

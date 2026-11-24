@@ -2,21 +2,21 @@ package module
 
 import (
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/service"
-	"github.com/hydroan/gst/internal/types"
 )
 
-var _ types.Module[*model.Empty, *model.Empty, *model.Empty] = &Wrapper[*model.Empty, *model.Empty, *model.Empty]{}
+var _ gst.Module[*model.Empty, *model.Empty, *model.Empty] = &Wrapper[*model.Empty, *model.Empty, *model.Empty]{}
 
-type Wrapper[M types.Model, REQ types.Request, RSP types.Response] struct {
+type Wrapper[M gst.Model, REQ gst.Request, RSP gst.Response] struct {
 	route string
 	param string
 	pub   bool
-	svc   types.Service[M, REQ, RSP]
+	svc   gst.Service[M, REQ, RSP]
 }
 
-func (w *Wrapper[M, REQ, RSP]) Service() types.Service[M, REQ, RSP] {
+func (w *Wrapper[M, REQ, RSP]) Service() gst.Service[M, REQ, RSP] {
 	if w.svc != nil {
 		return w.svc
 	}
@@ -35,12 +35,12 @@ func (w *Wrapper[M, REQ, RSP]) Param() string {
 	return w.param
 }
 
-func NewWrapper[M types.Model, REQ types.Request, RSP types.Response](route string, param string, pub bool, svc ...types.Service[M, REQ, RSP]) types.Module[M, REQ, RSP] {
+func NewWrapper[M gst.Model, REQ gst.Request, RSP gst.Response](route string, param string, pub bool, svc ...gst.Service[M, REQ, RSP]) gst.Module[M, REQ, RSP] {
 	if len(param) == 0 {
 		param = apiaction.ParamID
 	}
 
-	var serviceImpl types.Service[M, REQ, RSP]
+	var serviceImpl gst.Service[M, REQ, RSP]
 	if len(svc) > 0 && svc[0] != nil {
 		serviceImpl = svc[0]
 	}

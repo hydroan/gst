@@ -9,7 +9,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	gormlogger "gorm.io/gorm/logger"
@@ -20,30 +20,30 @@ var (
 	// hooks, service methods, etc.) that wants WithContext-enriched logging
 	// without going through zap.S()/zap.L(). Unlike those globals, App never
 	// mirrors output to stdout.
-	App types.Logger
+	App gst.Logger
 
-	Controller types.Logger
-	Service    types.Logger
-	Database   types.Logger
-	Cache      types.Logger
-	Dcache     types.Logger
-	Redis      types.Logger
+	Controller gst.Logger
+	Service    gst.Logger
+	Database   gst.Logger
+	Cache      gst.Logger
+	Dcache     gst.Logger
+	Redis      gst.Logger
 
-	Authz     types.Logger
-	OTEL      types.Logger
-	Cassandra types.Logger
-	Elastic   types.Logger
-	Etcd      types.Logger
-	Influxdb  types.Logger
-	Kafka     types.Logger
-	Ldap      types.Logger
-	Minio     types.Logger
-	Mongo     types.Logger
-	Mqtt      types.Logger
-	Nats      types.Logger
-	RethinkDB types.Logger
-	RocketMQ  types.Logger
-	Scylla    types.Logger
+	Authz     gst.Logger
+	OTEL      gst.Logger
+	Cassandra gst.Logger
+	Elastic   gst.Logger
+	Etcd      gst.Logger
+	Influxdb  gst.Logger
+	Kafka     gst.Logger
+	Ldap      gst.Logger
+	Minio     gst.Logger
+	Mongo     gst.Logger
+	Mqtt      gst.Logger
+	Nats      gst.Logger
+	RethinkDB gst.Logger
+	RocketMQ  gst.Logger
+	Scylla    gst.Logger
 
 	// Gin is the access log of the HTTP listener and GRPC that of the gRPC
 	// listener, one entry per request or call; HTTPBody carries the request
@@ -140,7 +140,7 @@ func Clean() {
 	}
 	_ = zap.L().Sync()
 	// The component streams.
-	logs := []types.Logger{
+	logs := []gst.Logger{
 		App,
 
 		Controller,
@@ -201,6 +201,6 @@ func Clean() {
 // which matches how such processes behave for every other logger. The
 // caller-skip mirrors New so callers are attributed identically through
 // either logger.
-func Fallback(component string) types.Logger {
+func Fallback(component string) gst.Logger {
 	return (&Logger{zlog: zap.L().WithOptions(zap.AddCallerSkip(1))}).With("component", component)
 }

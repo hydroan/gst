@@ -3,8 +3,8 @@ package controller
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/response"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 )
 
@@ -19,7 +19,7 @@ import (
 // When REQ or RSP differs from M, the handler is the phase service's (see
 // serviceHandler): its Create method runs on the bound payload, a multipart
 // form left unbound for the service to read itself.
-func CreateHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
+func CreateHandler[M gst.Model, REQ gst.Request, RSP gst.Response](cfg ...*gst.ControllerConfig[M]) gin.HandlerFunc {
 	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), apiaction.Create, apiaction.CreateBefore, apiaction.CreateAfter)
 	if !a.typesEqual {
 		return a.serviceHandler()

@@ -6,14 +6,14 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/logfield"
-	"github.com/hydroan/gst/internal/types"
 	"go.uber.org/zap"
 )
 
 // elasticLogger is a simple logger adapter that uses the zap logger.
 type elasticLogger struct {
-	logger types.Logger
+	logger gst.Logger
 }
 
 func (l *elasticLogger) LogRoundTrip(

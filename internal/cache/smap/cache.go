@@ -7,7 +7,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/cache/registry"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 var store = registry.New()
@@ -18,8 +18,8 @@ type cache[T any] struct {
 
 // Cache returns the process-wide sync.Map cache of type T, creating it on
 // first use.
-func Cache[T any]() types.Cache[T] {
-	return registry.Load(store, func() types.Cache[T] {
+func Cache[T any]() gst.Cache[T] {
+	return registry.Load(store, func() gst.Cache[T] {
 		return new(cache[T])
 	})
 }
@@ -31,7 +31,7 @@ func (c *cache[T]) Set(_ context.Context, key string, value T, ttl time.Duration
 		return errors.New("negative ttl")
 	}
 	if ttl > 0 {
-		return types.ErrTTLNotSupported
+		return gst.ErrTTLNotSupported
 	}
 	c.m.Store(key, value)
 	return nil
@@ -41,11 +41,11 @@ func (c *cache[T]) Get(_ context.Context, key string) (T, error) {
 	var zero T
 	v, ok := c.m.Load(key)
 	if !ok {
-		return zero, types.ErrEntryNotFound
+		return zero, gst.ErrEntryNotFound
 	}
 	value, ok := v.(T)
 	if !ok {
-		return zero, types.ErrEntryNotFound
+		return zero, gst.ErrEntryNotFound
 	}
 	return value, nil
 }

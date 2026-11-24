@@ -9,7 +9,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/dcache"
 	"github.com/hydroan/gst/internal/cache/defaultcache"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 var ttl = 1 * time.Minute
@@ -36,7 +36,7 @@ func Benchmark(b *testing.B) {
 	})
 }
 
-func benchmark(b *testing.B, cm types.Cache[string]) {
+func benchmark(b *testing.B, cm gst.Cache[string]) {
 	b.Helper()
 	ctx := context.Background()
 	count := 10000
@@ -66,7 +66,7 @@ func benchmark(b *testing.B, cm types.Cache[string]) {
 
 		for i := range b.N {
 			idx := i % count
-			if _, err := cm.Get(ctx, keys[idx]); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
+			if _, err := cm.Get(ctx, keys[idx]); err != nil && !errors.Is(err, gst.ErrEntryNotFound) {
 				b.Fatal(err)
 			}
 		}
@@ -89,7 +89,7 @@ func benchmark(b *testing.B, cm types.Cache[string]) {
 				}
 			} else {
 				// the other two are gets
-				if _, err := cm.Get(ctx, keys[idx]); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
+				if _, err := cm.Get(ctx, keys[idx]); err != nil && !errors.Is(err, gst.ErrEntryNotFound) {
 					b.Fatal(err)
 				}
 			}
@@ -106,14 +106,14 @@ func benchmark(b *testing.B, cm types.Cache[string]) {
 
 		for i := range b.N {
 			idx := i % count
-			if err := cm.Delete(ctx, keys[idx]); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
+			if err := cm.Delete(ctx, keys[idx]); err != nil && !errors.Is(err, gst.ErrEntryNotFound) {
 				b.Fatal(err)
 			}
 		}
 	})
 }
 
-func benchmarkParallel(b *testing.B, cm types.Cache[string]) {
+func benchmarkParallel(b *testing.B, cm gst.Cache[string]) {
 	b.Helper()
 	ctx := context.Background()
 	count := 10000
@@ -153,7 +153,7 @@ func benchmarkParallel(b *testing.B, cm types.Cache[string]) {
 			counter := 0
 			for pb.Next() {
 				idx := counter % count
-				if _, err := cm.Get(ctx, keys[idx]); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
+				if _, err := cm.Get(ctx, keys[idx]); err != nil && !errors.Is(err, gst.ErrEntryNotFound) {
 					b.Error(err)
 					return
 				}
@@ -187,12 +187,12 @@ func benchmarkParallel(b *testing.B, cm types.Cache[string]) {
 						return
 					}
 				case opType < 9: // 60% reads
-					if _, err := cm.Get(ctx, keys[idx]); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
+					if _, err := cm.Get(ctx, keys[idx]); err != nil && !errors.Is(err, gst.ErrEntryNotFound) {
 						b.Error(err)
 						return
 					}
 				default: // 10% deletes
-					if err := cm.Delete(ctx, keys[idx]); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
+					if err := cm.Delete(ctx, keys[idx]); err != nil && !errors.Is(err, gst.ErrEntryNotFound) {
 						b.Error(err)
 						return
 					}

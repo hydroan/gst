@@ -6,9 +6,9 @@ import (
 
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	modellogmgmt "github.com/hydroan/gst/internal/modulemodel/logmgmt"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -40,7 +40,7 @@ func (a *action[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext ser
 	}
 
 	// 1.Perform business logic processing before get resource.
-	if err := a.traceServiceHook(ctx, apiaction.GetBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
+	if err := a.traceServiceHook(ctx, apiaction.GetBefore, svc, newServiceContext, func(sc *gst.ServiceContext) error {
 		return svc.GetBefore(sc, m)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
@@ -52,7 +52,7 @@ func (a *action[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext ser
 		return zero, failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after get resource.
-	if err := a.traceServiceHook(ctx, apiaction.GetAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
+	if err := a.traceServiceHook(ctx, apiaction.GetAfter, svc, newServiceContext, func(sc *gst.ServiceContext) error {
 		return svc.GetAfter(sc, m)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
@@ -65,7 +65,7 @@ func (a *action[M, REQ, RSP]) getFlow(ctx context.Context, newServiceContext ser
 	}
 
 	// 4.record operation log to database.
-	if err := audit.RecordOperation(ctx, m, types.OperationGet,
+	if err := audit.RecordOperation(ctx, m, gst.OperationGet,
 		func() *modellogmgmt.OperationLog {
 			return operationLog(ctx, a.name)
 		}); err != nil {

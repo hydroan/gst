@@ -25,10 +25,10 @@ import (
 
 	"github.com/cockroachdb/errors"
 	coderwebsocket "github.com/coder/websocket"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/sse"
 	"github.com/hydroan/gst/internal/streamctx"
-	"github.com/hydroan/gst/internal/types"
 )
 
 // maxMessageBytes is the largest message a connection reads. A larger one
@@ -323,13 +323,13 @@ func (c *Conn) beat(interval time.Duration) {
 // the ending err of its stream: StatusNormalClosure for none;
 // StatusGoingAway, with streamctx.ShutdownMsg, for the server shutting down;
 // errorStatusBase plus its status, with its message, for a service error, 4404
-// and "sample not found" for types.NewError(404, "sample not found"); and
-// errorStatusBase plus 500 with types.FailureMsg for any other error, whose
+// and "sample not found" for gst.NewError(404, "sample not found"); and
+// errorStatusBase plus 500 with gst.FailureMsg for any other error, whose
 // text stays out of the answer as it stays out of the HTTP one. The reason
 // is the sentence in the language the process answers in, the one the HTTP
 // envelope carries it in (see closeReason).
 func closeStatus(err error) (coderwebsocket.StatusCode, string) {
-	var serviceErr *types.Error
+	var serviceErr *gst.Error
 	switch {
 	case err == nil:
 		return coderwebsocket.StatusNormalClosure, ""
@@ -338,7 +338,7 @@ func closeStatus(err error) (coderwebsocket.StatusCode, string) {
 	case errors.As(err, &serviceErr):
 		return errorStatusBase + coderwebsocket.StatusCode(serviceErr.Status()), closeReason(serviceErr.Msg())
 	default:
-		return errorStatusBase + http.StatusInternalServerError, closeReason(types.FailureMsg)
+		return errorStatusBase + http.StatusInternalServerError, closeReason(gst.FailureMsg)
 	}
 }
 
@@ -378,9 +378,9 @@ func closeError(err error) error {
 	case closed.Code == coderwebsocket.StatusNormalClosure:
 		return io.EOF
 	case closed.Code == coderwebsocket.StatusGoingAway:
-		return types.NewError(http.StatusServiceUnavailable, closed.Reason)
+		return gst.NewError(http.StatusServiceUnavailable, closed.Reason)
 	case closed.Code >= errorStatusBase+http.StatusBadRequest && closed.Code <= errorStatusBase+599:
-		return types.NewError(int(closed.Code-errorStatusBase), closed.Reason)
+		return gst.NewError(int(closed.Code-errorStatusBase), closed.Reason)
 	default:
 		return errors.Wrap(err, "websocket: the server closed the connection")
 	}

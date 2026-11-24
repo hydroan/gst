@@ -8,7 +8,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 var (
@@ -33,7 +33,7 @@ var errNotFoundService = errors.New("no service instance matches the given route
 // RegisterInstance preserves any preconfigured fields on svc. If svc is a
 // non-pointer value, the registry stores a pointer copy so controller lookups
 // always work with pointer service instances.
-func RegisterInstance[M types.Model, REQ types.Request, RSP types.Response](phase apiaction.Phase, route string, svc types.Service[M, REQ, RSP]) {
+func RegisterInstance[M gst.Model, REQ gst.Request, RSP gst.Response](phase apiaction.Phase, route string, svc gst.Service[M, REQ, RSP]) {
 	if svc == nil {
 		return
 	}
@@ -74,12 +74,12 @@ func RegisterInstance[M types.Model, REQ types.Request, RSP types.Response](phas
 // service interface, so only an interface type argument fails, with a panic:
 // it names no service to dispatch to, and registering nothing in its place
 // would leave the route on the built-in handling without a word.
-func Register[S types.Service[M, REQ, RSP], M types.Model, REQ types.Request, RSP types.Response](phase apiaction.Phase, route string) {
+func Register[S gst.Service[M, REQ, RSP], M gst.Model, REQ gst.Request, RSP gst.Response](phase apiaction.Phase, route string) {
 	typ := reflect.TypeFor[S]()
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
-	svc, ok := reflect.TypeAssert[types.Service[M, REQ, RSP]](reflect.New(typ))
+	svc, ok := reflect.TypeAssert[gst.Service[M, REQ, RSP]](reflect.New(typ))
 	if !ok {
 		panic(fmt.Sprintf("service: register of route %q phase %q requires a concrete service type, not the interface %s", route, phase, typ))
 	}

@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/internal/controller"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,14 +23,14 @@ func TestExportAnswersAClientThatWentAwayAsCanceled(t *testing.T) {
 		controller.ExportHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](sampleRoute)),
 		"/controller-samples/export", "", "alice", nil)
 
-	require.Equal(t, types.StatusClientClosedRequest, rsp.Code, rsp.Body.String())
+	require.Equal(t, gst.StatusClientClosedRequest, rsp.Code, rsp.Body.String())
 }
 
 // TestExportRefusesThePagingParameters pins that an export, which lists every
 // record the query matches, refuses the paging and cursor parameters a List
 // of the same model takes rather than ignoring them.
 func TestExportRefusesThePagingParameters(t *testing.T) {
-	for _, key := range []string{types.QueryPage, types.QuerySize, types.QueryCursorValue, types.QueryCursorField, types.QueryCursorNext} {
+	for _, key := range []string{gst.QueryPage, gst.QuerySize, gst.QueryCursorValue, gst.QueryCursorField, gst.QueryCursorNext} {
 		rsp := serveAs(context.Background(), t, http.MethodGet, "/controller-exports/export",
 			controller.ExportHandler[*sampleRecord, *sampleRecord, *sampleRecord](configFor[*sampleRecord](exportRoute)),
 			"/controller-exports/export?"+key+"=1", "", "alice", nil)

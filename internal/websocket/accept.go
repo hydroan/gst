@@ -11,8 +11,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	coderwebsocket "github.com/coder/websocket"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/streamctx"
-	"github.com/hydroan/gst/internal/types"
 )
 
 // Accept upgrades the request to a WebSocket connection and returns its
@@ -38,7 +38,7 @@ func Accept(w http.ResponseWriter, r *http.Request, origins []string, writeTimeo
 				w.Header()[name] = values
 			}
 		}
-		return nil, types.NewErrorWithCause(held.status, strings.TrimSpace(held.text.String()), err)
+		return nil, gst.NewErrorWithCause(held.status, strings.TrimSpace(held.text.String()), err)
 	}
 	ws.SetReadLimit(maxMessageBytes)
 

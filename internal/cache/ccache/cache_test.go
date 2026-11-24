@@ -9,7 +9,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/cache/cachetest"
 	"github.com/hydroan/gst/internal/cache/ccache"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // writeVisibilityCapacity keeps the pressure test's fill and warm-up cheap
@@ -90,7 +90,7 @@ func TestCacheIsolatesTypes(t *testing.T) {
 	if err := ccache.Cache[int]().Set(ctx, "package-isolation-key", 7, 0); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	if _, err := ccache.Cache[string]().Get(ctx, "package-isolation-key"); !errors.Is(err, types.ErrEntryNotFound) {
+	if _, err := ccache.Cache[string]().Get(ctx, "package-isolation-key"); !errors.Is(err, gst.ErrEntryNotFound) {
 		t.Fatalf("want ErrEntryNotFound from the other type's cache, got %v", err)
 	}
 }

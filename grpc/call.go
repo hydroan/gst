@@ -5,7 +5,7 @@ import (
 
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/controller"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // This file holds the call functions the generated handlers of a model's
@@ -112,13 +112,13 @@ type Filter = controller.Filter
 
 // CreateCall returns the create call of M on route: given the route
 // parameters and the model to create, it answers with the model created.
-func CreateCall[M types.Model](route string) func(ctx context.Context, params map[string]string, m M) (M, error) {
+func CreateCall[M gst.Model](route string) func(ctx context.Context, params map[string]string, m M) (M, error) {
 	return controller.CreateCall[M](route)
 }
 
 // GetCall returns the get call of M on route: given the route parameters,
 // the id and the expansion query, it answers with the model found.
-func GetCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string, query Query) (M, error) {
+func GetCall[M gst.Model](route string) func(ctx context.Context, params map[string]string, id string, query Query) (M, error) {
 	return controller.GetCall[M](route)
 }
 
@@ -126,14 +126,14 @@ func GetCall[M types.Model](route string) func(ctx context.Context, params map[s
 // and the query, it answers with the items of the page, the total, 0 under
 // cursor pagination, and whether records lie past the page: before it when
 // the cursor is read backward, after it otherwise.
-func ListCall[M types.Model](route string) func(ctx context.Context, params map[string]string, query Query) ([]M, int, bool, error) {
+func ListCall[M gst.Model](route string) func(ctx context.Context, params map[string]string, query Query) ([]M, int, bool, error) {
 	return controller.ListCall[M](route)
 }
 
 // UpdateCall returns the update call of M on route: given the route
 // parameters, the id and the replacement, it answers with the replacement as
 // stored.
-func UpdateCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string, m M) (M, error) {
+func UpdateCall[M gst.Model](route string) func(ctx context.Context, params map[string]string, id string, m M) (M, error) {
 	return controller.UpdateCall[M](route)
 }
 
@@ -143,38 +143,38 @@ func UpdateCall[M types.Model](route string) func(ctx context.Context, params ma
 // whole, a path naming a field the framework manages passed over, and must
 // leave at least one to apply, it answers with the record patched; a
 // message carrying no record is refused.
-func PatchCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string, m M, paths []string) (M, error) {
+func PatchCall[M gst.Model](route string) func(ctx context.Context, params map[string]string, id string, m M, paths []string) (M, error) {
 	return controller.PatchCall[M](route)
 }
 
 // DeleteCall returns the delete call of M on route: given the route
 // parameters and the id, it answers nothing.
-func DeleteCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string) error {
+func DeleteCall[M gst.Model](route string) func(ctx context.Context, params map[string]string, id string) error {
 	return controller.DeleteCall[M](route)
 }
 
 // CreateManyCall returns the batch create call of M on route: given the
 // route parameters and the items, it answers with the items created.
-func CreateManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, items []M) ([]M, error) {
+func CreateManyCall[M gst.Model](route string) func(ctx context.Context, params map[string]string, items []M) ([]M, error) {
 	return controller.CreateManyCall[M](route)
 }
 
 // UpdateManyCall returns the batch update call of M on route: given the
 // route parameters and the items, it answers with the items as stored.
-func UpdateManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, items []M) ([]M, error) {
+func UpdateManyCall[M gst.Model](route string) func(ctx context.Context, params map[string]string, items []M) ([]M, error) {
 	return controller.UpdateManyCall[M](route)
 }
 
 // PatchManyCall returns the batch patch call of M on route: given the route
 // parameters, the items and the paths of each item's update mask, in order,
 // it answers with the records patched.
-func PatchManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, items []M, paths [][]string) ([]M, error) {
+func PatchManyCall[M gst.Model](route string) func(ctx context.Context, params map[string]string, items []M, paths [][]string) ([]M, error) {
 	return controller.PatchManyCall[M](route)
 }
 
 // DeleteManyCall returns the batch delete call of M on route: given the
 // route parameters and the ids, it answers nothing.
-func DeleteManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, ids []string) error {
+func DeleteManyCall[M gst.Model](route string) func(ctx context.Context, params map[string]string, ids []string) error {
 	return controller.DeleteManyCall[M](route)
 }
 
@@ -187,7 +187,7 @@ func DeleteManyCall[M types.Model](route string) func(ctx context.Context, param
 // and the caller, and answers with its result, or with the status its error
 // maps to. phase is one of the actions gRPC serves; the phase of an HTTP-only
 // action panics, as the route registers.
-func ServiceCall[M types.Model, REQ types.Request, RSP types.Response](phase apiaction.Phase, route string) func(ctx context.Context, params map[string]string, query Query, req REQ) (RSP, error) {
+func ServiceCall[M gst.Model, REQ gst.Request, RSP gst.Response](phase apiaction.Phase, route string) func(ctx context.Context, params map[string]string, query Query, req REQ) (RSP, error) {
 	return controller.ServiceCall[M, REQ, RSP](phase, route)
 }
 
@@ -200,7 +200,7 @@ func ServiceCall[M types.Model, REQ types.Request, RSP types.Response](phase api
 // the request's. An item naming no id, or naming a parameter otherwise than
 // the request does, is refused with InvalidArgument; an item carrying no
 // record is answered as it is, for PatchManyCall to refuse.
-func PatchItem[M types.Model](i int, params, itemParams map[string]string, id string, m M) (M, error) {
+func PatchItem[M gst.Model](i int, params, itemParams map[string]string, id string, m M) (M, error) {
 	return controller.PatchItem(i, params, itemParams, id, m)
 }
 

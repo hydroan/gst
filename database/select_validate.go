@@ -8,8 +8,8 @@ import (
 	"slices"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/types"
 )
 
 // The select builder: the specification a Select call assembles, its
@@ -93,20 +93,20 @@ func (a *selectBuilder[M]) validate(mode buildMode) (projectionShape, error) {
 			// windows the query.
 			continue
 		}
-		if isWindowFn(types.TermFnOf(t)) && !types.TermIsWindowed(t) {
+		if isWindowFn(gst.TermFnOf(t)) && !gst.TermIsWindowed(t) {
 			return shape, errors.Wrapf(ErrWindowFnWithoutWindow, "%q", termAlias(t))
 		}
 		switch {
-		case types.TermIsWindowed(t) && !types.TermIsMeasure(t):
+		case gst.TermIsWindowed(t) && !gst.TermIsMeasure(t):
 			return shape, errors.Wrapf(ErrWindowOnKey, "%q", termAlias(t))
-		case types.TermIsWindowed(t) && types.TermFnOf(t) == types.FnCountDistinct:
+		case gst.TermIsWindowed(t) && gst.TermFnOf(t) == gst.FnCountDistinct:
 			return shape, errors.Wrapf(ErrWindowCountDistinct, "%q", termAlias(t))
-		case types.TermIsWindowed(t):
+		case gst.TermIsWindowed(t):
 			windowed++
-		case types.TermIsMeasure(t):
+		case gst.TermIsMeasure(t):
 			measures++
 			shape.grouped = true
-		case types.TermIsGroupKey(t) && types.TermBucketOf(t) == types.TimeBucketNone:
+		case gst.TermIsGroupKey(t) && gst.TermBucketOf(t) == gst.TimeBucketNone:
 			shape.grouped = true
 		}
 	}
@@ -123,9 +123,9 @@ func (a *selectBuilder[M]) validate(mode buildMode) (projectionShape, error) {
 			continue
 		}
 		switch {
-		case shape.grouped && types.TermIsPlain(t):
+		case shape.grouped && gst.TermIsPlain(t):
 			return shape, errors.Wrapf(ErrPlainColumnInGroupedSelect, "%q", termAlias(t))
-		case shape.grouped && types.TermIsGroupKey(t):
+		case shape.grouped && gst.TermIsGroupKey(t):
 			shape.keys = append(shape.keys, t)
 		}
 	}
@@ -179,27 +179,27 @@ func (a *selectBuilder[M]) validate(mode buildMode) (projectionShape, error) {
 // than the term yields — text against a count, a number against a name — is
 // a comparison some dialects answer with no rows rather than an error, so it
 // is refused where both kinds are known.
-func validateConditionValue(c types.TermCondition, alias string, yields valueKind) error {
-	if !types.TermConditionOpOf(c).Valid() {
-		return errors.Wrapf(ErrUnknownCompareOp, "%q", types.TermConditionOpOf(c))
+func validateConditionValue(c gst.TermCondition, alias string, yields valueKind) error {
+	if !gst.TermConditionOpOf(c).Valid() {
+		return errors.Wrapf(ErrUnknownCompareOp, "%q", gst.TermConditionOpOf(c))
 	}
-	if types.TermConditionValueOf(c) == nil {
+	if gst.TermConditionValueOf(c) == nil {
 		return errors.Wrapf(ErrHavingValue, "%q compares against nil", alias)
 	}
-	if k := reflect.ValueOf(types.TermConditionValueOf(c)).Kind(); k == reflect.Slice || k == reflect.Array || k == reflect.Map {
+	if k := reflect.ValueOf(gst.TermConditionValueOf(c)).Kind(); k == reflect.Slice || k == reflect.Array || k == reflect.Map {
 		return errors.Wrapf(ErrHavingValue, "%q compares against a %s", alias, k)
 	}
 	// A typed nil pointer slips past the untyped nil check above but binds
 	// the same way: the driver dereferences non-nil pointers and turns a
 	// nil one at any depth into NULL, which quietly answers with no rows.
-	v := reflect.ValueOf(types.TermConditionValueOf(c))
+	v := reflect.ValueOf(gst.TermConditionValueOf(c))
 	for ; v.Kind() == reflect.Pointer; v = v.Elem() {
 		if v.IsNil() {
 			return errors.Wrapf(ErrHavingValue, "%q compares against a nil %s", alias, v.Type())
 		}
 	}
 	if given := valueKindOf(v); yields != kindUnknown && given != kindUnknown && given != yields {
-		return errors.Wrapf(ErrHavingValueType, "%q yields %s, the value %v is %s", alias, yields, types.TermConditionValueOf(c), given)
+		return errors.Wrapf(ErrHavingValueType, "%q yields %s, the value %v is %s", alias, yields, gst.TermConditionValueOf(c), given)
 	}
 	return nil
 }
@@ -253,18 +253,18 @@ func valueKindOf(v reflect.Value) valueKind {
 // columns they exist on, a time bucket and a literal are text, and every
 // other term yields what its column stores. A joined select's term is
 // classified by the select that projects it, which is out of reach here.
-func (a *selectBuilder[M]) termKind(t types.Term, shape projectionShape) valueKind {
+func (a *selectBuilder[M]) termKind(t gst.Term, shape projectionShape) valueKind {
 	if _, derived := a.derivedOf(t, shape); derived {
 		return kindUnknown
 	}
 	switch {
-	case types.TermIsLiteral(t), types.TermBucketOf(t) != types.TimeBucketNone:
+	case gst.TermIsLiteral(t), gst.TermBucketOf(t) != gst.TimeBucketNone:
 		return kindText
-	case types.TermFnOf(t) == types.FnCount, types.TermFnOf(t) == types.FnCountDistinct, types.TermFnOf(t) == types.FnRowNumber,
-		types.TermFnOf(t) == types.FnRank, types.TermFnOf(t) == types.FnDenseRank, types.TermFnOf(t) == types.FnSum, types.TermFnOf(t) == types.FnAvg:
+	case gst.TermFnOf(t) == gst.FnCount, gst.TermFnOf(t) == gst.FnCountDistinct, gst.TermFnOf(t) == gst.FnRowNumber,
+		gst.TermFnOf(t) == gst.FnRank, gst.TermFnOf(t) == gst.FnDenseRank, gst.TermFnOf(t) == gst.FnSum, gst.TermFnOf(t) == gst.FnAvg:
 		return kindNumeric
 	}
-	column, err := a.columnOf(types.TermTableOf(t), types.TermColumnOf(t), shape)
+	column, err := a.columnOf(gst.TermTableOf(t), gst.TermColumnOf(t), shape)
 	if err != nil {
 		return kindUnknown
 	}
@@ -287,18 +287,18 @@ func (a *selectBuilder[M]) termKind(t types.Term, shape projectionShape) valueKi
 // validateOrdering checks one ordering of the select: a term order must name a
 // projected term, a column order a projected column or group key, so the
 // output can never be sorted by something it does not carry.
-func (a *selectBuilder[M]) validateOrdering(o types.Ordering, shape projectionShape) error {
+func (a *selectBuilder[M]) validateOrdering(o gst.Ordering, shape projectionShape) error {
 	switch o := o.(type) {
-	case types.TermOrder:
-		if !types.TermOrderDirectionOf(o).Valid() {
-			return errors.Wrapf(ErrUnknownOrderDirection, "%q", types.TermOrderDirectionOf(o))
+	case gst.TermOrder:
+		if !gst.TermOrderDirectionOf(o).Valid() {
+			return errors.Wrapf(ErrUnknownOrderDirection, "%q", gst.TermOrderDirectionOf(o))
 		}
-		if !a.isSelected(types.TermOrderTermOf(o)) {
-			return errors.Wrapf(ErrOrderTermNotSelected, "%q", termAlias(types.TermOrderTermOf(o)))
+		if !a.isSelected(gst.TermOrderTermOf(o)) {
+			return errors.Wrapf(ErrOrderTermNotSelected, "%q", termAlias(gst.TermOrderTermOf(o)))
 		}
-	case types.Order:
-		if !types.OrderDirectionOf(o).Valid() {
-			return errors.Wrapf(ErrUnknownOrderDirection, "%q", types.OrderDirectionOf(o))
+	case gst.Order:
+		if !gst.OrderDirectionOf(o).Valid() {
+			return errors.Wrapf(ErrUnknownOrderDirection, "%q", gst.OrderDirectionOf(o))
 		}
 		if _, ok := a.selectedColumn(o.Table(), o.Column(), shape.main); !ok {
 			return errors.Wrapf(ErrOrderTermNotSelected, "column %q, which a plain name matches by column name rather than by alias; order by the term itself to sort by its alias", o.Column())
@@ -316,25 +316,25 @@ func (a *selectBuilder[M]) validateOrdering(o types.Ordering, shape projectionSh
 // carries none and names the queried model's column, as a plain name does
 // everywhere else, never whichever table's column happens to be projected
 // first.
-func (a *selectBuilder[M]) selectedColumn(table, column, main string) (types.Term, bool) {
+func (a *selectBuilder[M]) selectedColumn(table, column, main string) (gst.Term, bool) {
 	if len(table) == 0 {
 		table = main
 	}
 	for _, t := range a.terms {
-		if types.TermFnOf(t) != types.FnNone || types.TermBucketOf(t) != types.TimeBucketNone || types.TermColumnOf(t) != column {
+		if gst.TermFnOf(t) != gst.FnNone || gst.TermBucketOf(t) != gst.TimeBucketNone || gst.TermColumnOf(t) != column {
 			continue
 		}
-		if termTable := types.TermTableOf(t); len(termTable) > 0 && termTable != table || len(termTable) == 0 && table != main {
+		if termTable := gst.TermTableOf(t); len(termTable) > 0 && termTable != table || len(termTable) == 0 && table != main {
 			continue
 		}
 		return t, true
 	}
-	return types.Term{}, false
+	return gst.Term{}, false
 }
 
 // selectedColumnTerm is selectedColumn for a column validation has already
 // matched.
-func (a *selectBuilder[M]) selectedColumnTerm(table, column, main string) types.Term {
+func (a *selectBuilder[M]) selectedColumnTerm(table, column, main string) gst.Term {
 	term, _ := a.selectedColumn(table, column, main)
 	return term
 }
@@ -344,14 +344,14 @@ func (a *selectBuilder[M]) selectedColumnTerm(table, column, main string) types.
 // a term built from a generated column reference cannot reach a function its
 // type rejects, because the reference does not carry the method, while a
 // reference minted by hand names whatever type its author chose.
-func (a *selectBuilder[M]) validateTerm(t types.Term, shape projectionShape) error {
+func (a *selectBuilder[M]) validateTerm(t gst.Term, shape projectionShape) error {
 	// The renderer composes SQL from these constants, so a value from outside
 	// the closed set would reach the statement as text.
-	if !types.TermFnOf(t).Valid() {
-		return errors.Wrapf(ErrUnknownTermFn, "%q", types.TermFnOf(t))
+	if !gst.TermFnOf(t).Valid() {
+		return errors.Wrapf(ErrUnknownTermFn, "%q", gst.TermFnOf(t))
 	}
-	if !types.TermBucketOf(t).Valid() {
-		return errors.Wrapf(ErrUnknownTimeBucket, "%q", types.TermBucketOf(t))
+	if !gst.TermBucketOf(t).Valid() {
+		return errors.Wrapf(ErrUnknownTimeBucket, "%q", gst.TermBucketOf(t))
 	}
 	if _, derived := a.derivedOf(t, shape); derived {
 		// The joined select validated the term against its own model; here
@@ -361,39 +361,39 @@ func (a *selectBuilder[M]) validateTerm(t types.Term, shape projectionShape) err
 	if err := a.validateGrouping(t); err != nil {
 		return err
 	}
-	if len(types.TermConditionsOf(t)) > 0 {
+	if len(gst.TermConditionsOf(t)) > 0 {
 		// A measure's conditions render inside its CASE, which Count leaves
 		// out of its statement; they are rendered here once so a predicate
 		// the renderer cannot place fails whichever terminal runs first.
-		if _, err := a.db.renderFilters(types.TermConditionsOf(t), false, a.whereScope(shape)); err != nil {
+		if _, err := a.db.renderFilters(gst.TermConditionsOf(t), false, a.whereScope(shape)); err != nil {
 			return errors.Wrapf(err, "%q", termAlias(t))
 		}
 	}
 	if err := a.validateWindow(t, shape); err != nil {
 		return err
 	}
-	if types.TermIsLiteral(t) {
+	if gst.TermIsLiteral(t) {
 		// A constant names no column and reads no schema.
 		return validateLiteral(t)
 	}
-	if len(types.TermColumnOf(t)) == 0 {
+	if len(gst.TermColumnOf(t)) == 0 {
 		// COUNT(*) and the ranking functions are the terms without a column.
-		if types.TermIsMeasure(t) && (types.TermFnOf(t) == types.FnCount || types.TermFnOf(t) == types.FnRowNumber || types.TermFnOf(t) == types.FnRank || types.TermFnOf(t) == types.FnDenseRank) {
+		if gst.TermIsMeasure(t) && (gst.TermFnOf(t) == gst.FnCount || gst.TermFnOf(t) == gst.FnRowNumber || gst.TermFnOf(t) == gst.FnRank || gst.TermFnOf(t) == gst.FnDenseRank) {
 			return nil
 		}
-		return errors.Wrapf(ErrUnknownColumn, "term %q has no column", types.TermFnOf(t))
+		return errors.Wrapf(ErrUnknownColumn, "term %q has no column", gst.TermFnOf(t))
 	}
 	// A column reference carries the table it was built for, which columnOf
 	// checks before the name: the queried model's, or a joined model's.
-	column, err := a.columnOf(types.TermTableOf(t), types.TermColumnOf(t), shape)
+	column, err := a.columnOf(gst.TermTableOf(t), gst.TermColumnOf(t), shape)
 	if err != nil {
 		return err
 	}
 	// Under GROUP BY a joined row is shared by every row of the group that
 	// matched it, so only the aggregates that answer the same over repeats
 	// may read a joined column.
-	if _, joined := shape.joined[types.TermTableOf(t)]; joined && shape.grouped && types.TermIsMeasure(t) && !joinedMeasureAllowed(types.TermFnOf(t)) {
-		return errors.Wrapf(ErrJoinMeasure, "%s over %q of %q", types.TermFnOf(t), types.TermColumnOf(t), types.TermTableOf(t))
+	if _, joined := shape.joined[gst.TermTableOf(t)]; joined && shape.grouped && gst.TermIsMeasure(t) && !joinedMeasureAllowed(gst.TermFnOf(t)) {
+		return errors.Wrapf(ErrJoinMeasure, "%s over %q of %q", gst.TermFnOf(t), gst.TermColumnOf(t), gst.TermTableOf(t))
 	}
 	return a.validateColumnClass(t, column)
 }
@@ -470,7 +470,7 @@ func resultRowFields(row reflect.Type) (reflect.Type, []modelschema.Column, erro
 // filter by an expression the projection never selected. The alias is
 // compared as projected, so a term spelled without one is the term under
 // its default.
-func (a *selectBuilder[M]) isSelected(t types.Term) bool {
+func (a *selectBuilder[M]) isSelected(t gst.Term) bool {
 	t = t.As(termAlias(t))
 	for _, selected := range a.terms {
 		selected = selected.As(termAlias(selected))
@@ -518,29 +518,29 @@ func (a *selectBuilder[M]) nullableAliases(shape projectionShape) map[string]str
 		// A column of a LEFT JOIN table is NULL on every row the join left
 		// unmatched, whatever reads it, except the counts, which count no
 		// row as zero, and SUM, which the renderer coalesces to zero.
-		if jt, joined := shape.joined[types.TermTableOf(t)]; joined && jt.left && types.TermFnOf(t) != types.FnCount && types.TermFnOf(t) != types.FnCountDistinct && types.TermFnOf(t) != types.FnSum {
-			nullable[termAlias(t)] = fmt.Sprintf("column %q of %q, which is NULL when the LEFT JOIN matches no row", types.TermColumnOf(t), types.TermTableOf(t))
+		if jt, joined := shape.joined[gst.TermTableOf(t)]; joined && jt.left && gst.TermFnOf(t) != gst.FnCount && gst.TermFnOf(t) != gst.FnCountDistinct && gst.TermFnOf(t) != gst.FnSum {
+			nullable[termAlias(t)] = fmt.Sprintf("column %q of %q, which is NULL when the LEFT JOIN matches no row", gst.TermColumnOf(t), gst.TermTableOf(t))
 			continue
 		}
-		source, err := a.columnOf(types.TermTableOf(t), types.TermColumnOf(t), shape)
+		source, err := a.columnOf(gst.TermTableOf(t), gst.TermColumnOf(t), shape)
 		known := err == nil
 		switch {
-		case types.TermIsPlain(t):
-			if known && nullableColumn(source) && !proven[a.columnKey(types.TermTableOf(t), types.TermColumnOf(t))] {
-				nullable[termAlias(t)] = fmt.Sprintf("column %q, which is nullable unless a condition on it in Where keeps NULL out", types.TermColumnOf(t))
+		case gst.TermIsPlain(t):
+			if known && nullableColumn(source) && !proven[a.columnKey(gst.TermTableOf(t), gst.TermColumnOf(t))] {
+				nullable[termAlias(t)] = fmt.Sprintf("column %q, which is nullable unless a condition on it in Where keeps NULL out", gst.TermColumnOf(t))
 			}
 			continue
-		case types.TermIsGroupKey(t):
+		case gst.TermIsGroupKey(t):
 			// The rows without a value form a group of their own, keyed NULL;
 			// a bucket of NULL is NULL as well.
-			if known && nullableColumn(source) && !proven[a.columnKey(types.TermTableOf(t), types.TermColumnOf(t))] {
-				nullable[termAlias(t)] = fmt.Sprintf("group key %q over a nullable column, NULL for the rows without one unless a condition on it in Where keeps them out", types.TermColumnOf(t))
+			if known && nullableColumn(source) && !proven[a.columnKey(gst.TermTableOf(t), gst.TermColumnOf(t))] {
+				nullable[termAlias(t)] = fmt.Sprintf("group key %q over a nullable column, NULL for the rows without one unless a condition on it in Where keeps them out", gst.TermColumnOf(t))
 			}
 			continue
-		case types.TermFnOf(t) == types.FnLag || types.TermFnOf(t) == types.FnLead:
-			nullable[termAlias(t)] = fmt.Sprintf("%s, which is NULL on the edge rows of a partition", types.TermFnOf(t))
+		case gst.TermFnOf(t) == gst.FnLag || gst.TermFnOf(t) == gst.FnLead:
+			nullable[termAlias(t)] = fmt.Sprintf("%s, which is NULL on the edge rows of a partition", gst.TermFnOf(t))
 			continue
-		case types.TermFnOf(t) == types.FnAvg || types.TermFnOf(t) == types.FnMin || types.TermFnOf(t) == types.FnMax:
+		case gst.TermFnOf(t) == gst.FnAvg || gst.TermFnOf(t) == gst.FnMin || gst.TermFnOf(t) == gst.FnMax:
 		default:
 			continue
 		}
@@ -548,12 +548,12 @@ func (a *selectBuilder[M]) nullableAliases(shape projectionShape) map[string]str
 		// rejected the term — but if it ever is, requiring the pointer is the
 		// safe side of the guess.
 		switch {
-		case !grouped && !types.TermIsWindowed(t):
-			nullable[termAlias(t)] = fmt.Sprintf("%s, which is NULL when the filters match no rows", types.TermFnOf(t))
-		case len(types.TermConditionsOf(t)) > 0:
-			nullable[termAlias(t)] = fmt.Sprintf("a conditional %s, which is NULL for a group where no row passes its conditions", types.TermFnOf(t))
-		case !known || (nullableColumn(source) && !proven[a.columnKey(types.TermTableOf(t), types.TermColumnOf(t))]):
-			nullable[termAlias(t)] = fmt.Sprintf("%s over nullable column %q, NULL for a group holding only NULLs unless a condition on it in Where keeps them out", types.TermFnOf(t), types.TermColumnOf(t))
+		case !grouped && !gst.TermIsWindowed(t):
+			nullable[termAlias(t)] = fmt.Sprintf("%s, which is NULL when the filters match no rows", gst.TermFnOf(t))
+		case len(gst.TermConditionsOf(t)) > 0:
+			nullable[termAlias(t)] = fmt.Sprintf("a conditional %s, which is NULL for a group where no row passes its conditions", gst.TermFnOf(t))
+		case !known || (nullableColumn(source) && !proven[a.columnKey(gst.TermTableOf(t), gst.TermColumnOf(t))]):
+			nullable[termAlias(t)] = fmt.Sprintf("%s over nullable column %q, NULL for a group holding only NULLs unless a condition on it in Where keeps them out", gst.TermFnOf(t), gst.TermColumnOf(t))
 		}
 	}
 	return nullable
@@ -566,16 +566,16 @@ func (a *selectBuilder[M]) nullableAliases(shape projectionShape) map[string]str
 // group need not, and a subquery says nothing of the row's own columns.
 func (a *selectBuilder[M]) notNullColumns() map[string]bool {
 	proven := make(map[string]bool)
-	var walk func(filters []types.Filter)
-	walk = func(filters []types.Filter) {
+	var walk func(filters []gst.Filter)
+	walk = func(filters []gst.Filter) {
 		for _, f := range filters {
 			switch f.Op() {
-			case types.FilterOpAnd:
-				if members, ok := f.Value().([]types.Filter); ok {
+			case gst.FilterOpAnd:
+				if members, ok := f.Value().([]gst.Filter); ok {
 					walk(members)
 				}
-			case types.FilterOpOr, types.FilterOpExists, types.FilterOpFalse:
-			case types.FilterOpIsNull:
+			case gst.FilterOpOr, gst.FilterOpExists, gst.FilterOpFalse:
+			case gst.FilterOpIsNull:
 				if isNull, ok := f.Value().(bool); ok && !isNull {
 					proven[a.columnKey(f.Table(), f.Column())] = true
 				}

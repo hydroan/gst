@@ -17,7 +17,7 @@ import (
 	"github.com/elastic/go-freelru"
 	"github.com/hydroan/gst/internal/cache/capacity"
 	"github.com/hydroan/gst/internal/cache/registry"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 var (
@@ -34,8 +34,8 @@ type cache[T any] struct {
 
 // Cache returns the process-wide freelru cache of type T, creating it on
 // first use.
-func Cache[T any]() types.Cache[T] {
-	return registry.Load(store, func() types.Cache[T] {
+func Cache[T any]() gst.Cache[T] {
+	return registry.Load(store, func() gst.Cache[T] {
 		// NewSharded applies the backend's own sizing: one lock domain per
 		// core times sixteen, and a quarter more table space than entries so
 		// collisions do not evict early. Both matter — hand-picking a small
@@ -62,7 +62,7 @@ func (c *cache[T]) Set(_ context.Context, key string, value T, ttl time.Duration
 	// lifetime truncates to zero and would silently expire on arrival, which
 	// the contract forbids.
 	if ttl < time.Millisecond {
-		return types.ErrTTLNotSupported
+		return gst.ErrTTLNotSupported
 	}
 	// Round a mid-granularity lifetime up to the next millisecond: the
 	// backend truncates, and truncating shortens the promised lifetime.
@@ -77,7 +77,7 @@ func (c *cache[T]) Get(_ context.Context, key string) (T, error) {
 	value, ok := c.c.Get(key)
 	if !ok {
 		var zero T
-		return zero, types.ErrEntryNotFound
+		return zero, gst.ErrEntryNotFound
 	}
 	return value, nil
 }

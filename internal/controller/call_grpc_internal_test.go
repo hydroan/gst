@@ -9,7 +9,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
@@ -41,17 +41,17 @@ func TestQueryValuesRenderTheHTTPQuery(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, url.Values{
-		"name":                 {"alice"},
-		"age[gt]":              {"20"},
-		"status[in]":           {"active,archived"},
-		types.QuerySortBy:      {"name,created_at desc"},
-		types.QueryPage:        {"2"},
-		types.QuerySize:        {"50"},
-		types.QueryCursorField: {"id"},
-		types.QueryCursorValue: {"r-1"},
-		types.QueryCursorNext:  {"true"},
-		types.QueryExpand:      {"children,parent"},
-		types.QueryDepth:       {"3"},
+		"name":               {"alice"},
+		"age[gt]":            {"20"},
+		"status[in]":         {"active,archived"},
+		gst.QuerySortBy:      {"name,created_at desc"},
+		gst.QueryPage:        {"2"},
+		gst.QuerySize:        {"50"},
+		gst.QueryCursorField: {"id"},
+		gst.QueryCursorValue: {"r-1"},
+		gst.QueryCursorNext:  {"true"},
+		gst.QueryExpand:      {"children,parent"},
+		gst.QueryDepth:       {"3"},
 	}, values)
 
 	empty, err := Query{}.values()
@@ -205,7 +205,7 @@ func TestFailServiceTellsACancellationFromAPassedDeadline(t *testing.T) {
 	t.Run("a live call the service refused answers the refusal and logs below error", func(t *testing.T) {
 		rec := &levelRecorder{}
 		c := &call{ctx: context.Background(), span: span, log: rec}
-		require.Equal(t, codes.NotFound, status.Code(c.failService(types.NewError(http.StatusNotFound, "no such record"))))
+		require.Equal(t, codes.NotFound, status.Code(c.failService(gst.NewError(http.StatusNotFound, "no such record"))))
 		require.Equal(t, []string{"service operation failed"}, rec.infos)
 		require.Empty(t, rec.errors, "a refusal the client brought on itself is not a failure of the server")
 	})
@@ -213,7 +213,7 @@ func TestFailServiceTellsACancellationFromAPassedDeadline(t *testing.T) {
 	t.Run("a live call answering 408 logs a warning, not the error of a passed deadline", func(t *testing.T) {
 		rec := &levelRecorder{}
 		c := &call{ctx: context.Background(), span: span, log: rec}
-		require.Equal(t, codes.DeadlineExceeded, status.Code(c.failService(types.NewError(http.StatusRequestTimeout, requestTimeoutMsg))))
+		require.Equal(t, codes.DeadlineExceeded, status.Code(c.failService(gst.NewError(http.StatusRequestTimeout, requestTimeoutMsg))))
 		require.Equal(t, []string{"service operation failed"}, rec.warns)
 		require.Empty(t, rec.errors, "the client was slow to send: its doing, not the server's")
 	})

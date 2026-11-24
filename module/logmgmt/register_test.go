@@ -14,6 +14,7 @@ import (
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/gst"
 	internalmiddleware "github.com/hydroan/gst/internal/middleware"
 	modeliamaccount "github.com/hydroan/gst/internal/modulemodel/iam/account"
 	modeliamuser "github.com/hydroan/gst/internal/modulemodel/iam/user"
@@ -21,7 +22,6 @@ import (
 	serviceiamaccount "github.com/hydroan/gst/internal/moduleservice/iam/account"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/testutil"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/module/authz"
 	"github.com/hydroan/gst/module/iam"
@@ -194,7 +194,7 @@ func TestOperationLogList(t *testing.T) {
 		l := list.Items[0]
 		require.NotNil(t, l)
 		require.Equal(t, rootUsername, l.User)
-		require.Equal(t, types.OperationCreate, l.OP)
+		require.Equal(t, gst.OperationCreate, l.OP)
 		require.Equal(t, "roles", l.Table)
 		require.Equal(t, "Role", l.Model)
 		require.Equal(t, "/api/authz/roles", l.URI)
@@ -264,14 +264,14 @@ func grantLogmgmtTestPermissions(t *testing.T, userID string) {
 	perm := rbac.RBAC()
 	ctx := context.Background()
 	require.NoError(t, perm.AssignRole(ctx, tenant.Default, userID, logmgmtTestReaderRole))
-	require.NoError(t, perm.SetRolePermissions(ctx, tenant.Default, logmgmtTestReaderRole, []types.Permission{
+	require.NoError(t, perm.SetRolePermissions(ctx, tenant.Default, logmgmtTestReaderRole, []gst.Permission{
 		{Object: "/api/log/loginlog", Action: http.MethodGet},
 		{Object: "/api/log/operationlog", Action: http.MethodGet},
 		{Object: "/api/logout", Action: http.MethodPost},
 	}))
 
 	require.NoError(t, perm.AssignRole(ctx, tenant.Default, "root", logmgmtTestAdminRole))
-	require.NoError(t, perm.SetRolePermissions(ctx, tenant.Default, logmgmtTestAdminRole, []types.Permission{
+	require.NoError(t, perm.SetRolePermissions(ctx, tenant.Default, logmgmtTestAdminRole, []gst.Permission{
 		{Object: "/api/authz/roles", Action: http.MethodPost},
 	}))
 

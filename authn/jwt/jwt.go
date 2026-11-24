@@ -8,8 +8,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/logfield"
-	"github.com/hydroan/gst/internal/types"
 	"go.uber.org/zap"
 )
 
@@ -31,7 +31,7 @@ var (
 	ErrMissingSigningKey = errors.New("auth.jwt_secret is not configured")
 )
 
-var issuer = types.FrameworkName
+var issuer = gst.FrameworkName
 
 // signingKey returns the key this package signs every token it issues with, and
 // verifies every token it parses against. It is the package's one point of

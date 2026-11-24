@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/stretchr/testify/require"
 )
 
@@ -148,7 +148,7 @@ func BenchmarkDatabaseUpdateByID(b *testing.B) {
 
 	require.NoError(b, database.Database[*TestUser](context.Background()).Create(ul...))
 	for b.Loop() {
-		_ = database.Database[*TestUser](context.Background()).UpdateByID(u1.ID, types.NewAssignment("", "name", "user_modified"))
+		_ = database.Database[*TestUser](context.Background()).UpdateByID(u1.ID, gst.NewAssignment("", "name", "user_modified"))
 	}
 }
 
@@ -287,22 +287,22 @@ func benchmarkDatabaseUpdateBatch(b *testing.B, size int) {
 func BenchmarkDatabaseListDryRunWithQuery(b *testing.B) {
 	remark := "world"
 	query := &TestUser{Name: "user1", Age: 18, Remark: &remark}
-	opts := types.QueryOptions{
+	opts := gst.QueryOptions{
 		PresentFields: map[string]struct{}{"age": {}},
-		Filters: []types.Filter{
-			types.NewFilter("", "name", types.FilterOpNe, "abc"),
-			types.NewFilter("", "age", types.FilterOpGt, "0"),
-			types.NewFilter("", "age", types.FilterOpGte, "1"),
-			types.NewFilter("", "age", types.FilterOpLt, "100"),
-			types.NewFilter("", "age", types.FilterOpLte, "99"),
-			types.NewFilter("", "age", types.FilterOpIn, []string{"1", "2", "3"}),
-			types.NewFilter("", "age", types.FilterOpNotIn, []string{"8", "9"}),
-			types.NewFilter("", "remark", types.FilterOpLike, "wor"),
-			types.NewFilter("", "remark", types.FilterOpNotLike, "xyz"),
-			types.NewFilter("", "remark", types.FilterOpStartsWith, "wo"),
-			types.NewFilter("", "remark", types.FilterOpEndsWith, "ld"),
-			types.NewFilter("", "is_active", types.FilterOpIsNull, false),
-			types.NewFilter("", "created_at", types.FilterOpGte, "2020-01-01 00:00:00"),
+		Filters: []gst.Filter{
+			gst.NewFilter("", "name", gst.FilterOpNe, "abc"),
+			gst.NewFilter("", "age", gst.FilterOpGt, "0"),
+			gst.NewFilter("", "age", gst.FilterOpGte, "1"),
+			gst.NewFilter("", "age", gst.FilterOpLt, "100"),
+			gst.NewFilter("", "age", gst.FilterOpLte, "99"),
+			gst.NewFilter("", "age", gst.FilterOpIn, []string{"1", "2", "3"}),
+			gst.NewFilter("", "age", gst.FilterOpNotIn, []string{"8", "9"}),
+			gst.NewFilter("", "remark", gst.FilterOpLike, "wor"),
+			gst.NewFilter("", "remark", gst.FilterOpNotLike, "xyz"),
+			gst.NewFilter("", "remark", gst.FilterOpStartsWith, "wo"),
+			gst.NewFilter("", "remark", gst.FilterOpEndsWith, "ld"),
+			gst.NewFilter("", "is_active", gst.FilterOpIsNull, false),
+			gst.NewFilter("", "created_at", gst.FilterOpGte, "2020-01-01 00:00:00"),
 		},
 	}
 	users := make([]*TestUser, 0)

@@ -5,9 +5,9 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
 )
 
@@ -52,7 +52,7 @@ func strictQuery() gin.HandlerFunc {
 
 		query, err := requestctx.GinQueryStrict(c)
 		if err != nil {
-			response.Abort(c, types.NewError(http.StatusBadRequest, malformedQueryMsg))
+			response.Abort(c, gst.NewError(http.StatusBadRequest, malformedQueryMsg))
 			return
 		}
 
@@ -63,20 +63,20 @@ func strictQuery() gin.HandlerFunc {
 			}
 		}
 		if len(duplicated) > 0 {
-			response.Abort(c, types.NewError(http.StatusBadRequest, urlquery.DuplicateParameterError(duplicated).Error()))
+			response.Abort(c, gst.NewError(http.StatusBadRequest, urlquery.DuplicateParameterError(duplicated).Error()))
 			return
 		}
 
 		for _, count := range [...]struct {
 			key  string
 			most int
-		}{{types.QueryPage, math.MaxInt}, {types.QuerySize, urlquery.MaxPageSize}} {
+		}{{gst.QueryPage, math.MaxInt}, {gst.QuerySize, urlquery.MaxPageSize}} {
 			raw := query.Get(count.key)
 			if raw == "" {
 				continue
 			}
 			if _, err := urlquery.ParseCount(count.key, raw, count.most); err != nil {
-				response.Abort(c, types.NewError(http.StatusBadRequest, err.Error()))
+				response.Abort(c, gst.NewError(http.StatusBadRequest, err.Error()))
 				return
 			}
 		}

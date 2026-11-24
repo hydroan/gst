@@ -18,6 +18,7 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/interceptor"
 	"github.com/hydroan/gst/internal/grpcserver"
+	"github.com/hydroan/gst/internal/gst"
 	internalmiddleware "github.com/hydroan/gst/internal/middleware"
 	modelauthz "github.com/hydroan/gst/internal/modulemodel/authz"
 	modeliamaccount "github.com/hydroan/gst/internal/modulemodel/iam/account"
@@ -27,7 +28,6 @@ import (
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/testutil"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/module/authz"
 	"github.com/hydroan/gst/module/iam"
@@ -155,7 +155,7 @@ func TestAuthzRoutes(t *testing.T) {
 		userID, userSessionID := authzSignupAndLoginUserWithUserAgent(t, authzTestUsername("tenant_routes_user"), "12345678", tenantUserAgent)
 		roleID := authzCreateTenantRole(t, tenantA, authzTestUsername("tenant_routes_role"))
 		authzBindTenantRole(t, tenantA, userID, roleID)
-		authzGrantTenantPolicy(t, tenantA, roleID, types.Permission{Object: "/api/authz/routes", Action: http.MethodGet})
+		authzGrantTenantPolicy(t, tenantA, roleID, gst.Permission{Object: "/api/authz/routes", Action: http.MethodGet})
 
 		cli := authzTenantClient(t, userSessionID, tenantA)
 		rsp, err := cli.Get[authz.RoutesRsp](t.Context(), routesPath)
@@ -296,7 +296,7 @@ func TestAuthzMenu(t *testing.T) {
 			guardRoleID := authzCreateTenantRole(t, guardTenant, authzTestUsername("menu_guard_role"))
 			authzBindTenantRole(t, guardTenant, memberID, guardRoleID)
 			authzGrantTenantPolicy(t, guardTenant, guardRoleID,
-				types.Permission{Object: menuPath, Action: http.MethodPost})
+				gst.Permission{Object: menuPath, Action: http.MethodPost})
 
 			memberCli := authzTenantClient(t, memberSessionID, guardTenant)
 			_, err := memberCli.Post[authz.Menu](t.Context(), menuPath, &authz.Menu{
@@ -360,7 +360,7 @@ func TestAuthzMenu(t *testing.T) {
 			rbacPolicy := rbac.RBAC()
 			rbacCtx := context.Background()
 			require.NoError(t, rbacPolicy.AssignRole(rbacCtx, tenant.Default, userID, missingRoleID))
-			require.NoError(t, rbacPolicy.SetRolePermissions(rbacCtx, tenant.Default, missingRoleID, []types.Permission{
+			require.NoError(t, rbacPolicy.SetRolePermissions(rbacCtx, tenant.Default, missingRoleID, []gst.Permission{
 				{Object: "/api/authz/menus", Action: http.MethodGet},
 			}))
 
@@ -729,7 +729,7 @@ func TestIAMUserPatchTenantAuthorization(t *testing.T) {
 	adminRoleID := authzCreateTenantRole(t, tenantA, authzTestUsername("tenant_iam_admin_role"))
 	authzBindTenantRole(t, tenantA, adminUserID, adminRoleID)
 	authzGrantTenantPolicy(t, tenantA, adminRoleID,
-		types.Permission{Object: "/api/iam/admin/users/{id}", Action: http.MethodPatch})
+		gst.Permission{Object: "/api/iam/admin/users/{id}", Action: http.MethodPatch})
 	tenantAMemberRoleID := authzCreateTenantRole(t, tenantA, authzTestUsername("tenant_iam_member_a_role"))
 	authzBindTenantRole(t, tenantA, targetTenantAUserID, tenantAMemberRoleID)
 	tenantBMemberRoleID := authzCreateTenantRole(t, tenantB, authzTestUsername("tenant_iam_member_b_role"))
@@ -767,8 +767,8 @@ func TestIAMAdminUserTenantListGet(t *testing.T) {
 	adminRoleID := authzCreateTenantRole(t, tenantA, authzTestUsername("tenant_admin_users_admin_role"))
 	authzBindTenantRole(t, tenantA, adminUserID, adminRoleID)
 	authzGrantTenantPolicy(t, tenantA, adminRoleID,
-		types.Permission{Object: "/api/iam/admin/users", Action: http.MethodGet},
-		types.Permission{Object: "/api/iam/admin/users/{id}", Action: http.MethodGet})
+		gst.Permission{Object: "/api/iam/admin/users", Action: http.MethodGet},
+		gst.Permission{Object: "/api/iam/admin/users/{id}", Action: http.MethodGet})
 	tenantAMemberRoleID := authzCreateTenantRole(t, tenantA, authzTestUsername("tenant_admin_users_member_a_role"))
 	authzBindTenantRole(t, tenantA, targetTenantAUserID, tenantAMemberRoleID)
 	tenantBMemberRoleID := authzCreateTenantRole(t, tenantB, authzTestUsername("tenant_admin_users_member_b_role"))
@@ -893,7 +893,7 @@ func TestIAMPrincipalReportsSystemRoot(t *testing.T) {
 
 		roleID := authzCreateTenantRole(t, tenant.Default, authzTestUsername("system_root_toggle_role"))
 		authzBindTenantRole(t, tenant.Default, userID, roleID)
-		authzGrantTenantPolicy(t, tenant.Default, roleID, types.Permission{
+		authzGrantTenantPolicy(t, tenant.Default, roleID, gst.Permission{
 			Object: currentPath,
 			Action: http.MethodGet,
 		})
@@ -1070,7 +1070,7 @@ func authzBindTenantRole(t *testing.T, tenantID, subjectID, roleID string) {
 // authzGrantTenantPolicy sets the whole permission set of a role, because that
 // is what the API takes: the argument is the truth about the role, so calling
 // it twice replaces rather than accumulates.
-func authzGrantTenantPolicy(t *testing.T, tenantID, roleID string, permissions ...types.Permission) {
+func authzGrantTenantPolicy(t *testing.T, tenantID, roleID string, permissions ...gst.Permission) {
 	t.Helper()
 
 	require.NoError(t, rbac.RBAC().SetRolePermissions(context.Background(), tenantID, roleID, permissions))
@@ -1139,7 +1139,7 @@ func TestAuthzRoleBindingAppointsTheBuiltInAdministrator(t *testing.T) {
 	require.NoError(t, err, "the administrator reaches every route of the tenant")
 	decision, err := rbac.RBAC().Authorize(context.Background(), tenantID, userID, rolePath, http.MethodGet)
 	require.NoError(t, err)
-	require.Equal(t, types.GrantSourceTenantAdmin, decision.Source)
+	require.Equal(t, gst.GrantSourceTenantAdmin, decision.Source)
 
 	menus, err := userCli.Get[client.ListResult[*authz.Menu]](t.Context(), menuPath)
 	require.NoError(t, err)

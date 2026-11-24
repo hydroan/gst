@@ -1,0 +1,205 @@
+package gst
+
+// LockMode is the row lock a query asks for: FOR UPDATE, FOR SHARE, and
+// their NOWAIT and SKIP LOCKED forms.
+type LockMode string
+
+// The row lock modes.
+const (
+	// LockUpdate is FOR UPDATE.
+	LockUpdate LockMode = "UPDATE"
+	// LockShare is FOR SHARE.
+	LockShare LockMode = "SHARE"
+	// LockUpdateNoWait is FOR UPDATE NOWAIT.
+	LockUpdateNoWait LockMode = "UPDATE_NOWAIT"
+	// LockShareNoWait is FOR SHARE NOWAIT.
+	LockShareNoWait LockMode = "SHARE_NOWAIT"
+	// LockUpdateSkipLocked is FOR UPDATE SKIP LOCKED.
+	LockUpdateSkipLocked LockMode = "UPDATE_SKIP_LOCKED"
+	// LockShareSkipLocked is FOR SHARE SKIP LOCKED.
+	LockShareSkipLocked LockMode = "SHARE_SKIP_LOCKED"
+)
+
+// Database defines the model-scoped database operation contract.
+// It provides CRUD operations, query builders, and optional dry-run behavior
+// for a single Model type.
+//
+// Type Parameters:
+//   - M: Model type that implements Model interface
+//
+// The interface embeds DatabaseOption[M] to provide chainable query building.
+// A chain is expected to end with one terminal operation, such as Create, List,
+// Get, or Count.
+//
+// Implementations share an underlying GORM session. Call
+// database.Database[M](ctx) again for each independent operation chain. Keeping
+// the returned value in a variable and running another independent operation on
+// it (for example, List then Get or Update) is incorrect usage; see
+// database.Database.
+//
+// Transactions are started with the package-level database.Transaction
+// function; the context it passes to fn makes every chain started from that
+// context join the transaction automatically.
+type Database[M Model] interface {
+	// Create inserts one or more records (pure INSERT), setting framework IDs,
+	// forcing created_at/updated_at to now and created_by/updated_by to the id
+	// of the caller the context carries, when it carries one. A primary or
+	// unique key collision fails with database.ErrDuplicatedKey instead of
+	// updating the existing row. It writes the model's own table alone: the
+	// associations an object carries are zeroed, not written.
+	Create(objs ...M) error
+	// Delete removes one or more records using WithPurge, the model Purge
+	// setting, or soft delete by default. Every record named by id must
+	// exist: a missing or soft-deleted one fails with
+	// database.ErrRecordNotFound and the batch deletes nothing, unless
+	// WithAllowMissing is set; a versioned record carrying its version fails
+	// with database.ErrStaleObject instead, WithAllowMissing or not. Passed
+	// no record, it removes the rows the WithQuery conditions match, every
+	// row of the table when AllowEmpty declared it; records and conditions
+	// do not combine.
+	Delete(objs ...M) error
+	// Update saves one or more full model values by primary key (pure UPDATE,
+	// zero values included), the model's own table alone: the associations an
+	// object carries are zeroed, not written. Objects without an ID fail with
+	// database.ErrIDRequired; records without a live row fail with
+	// database.ErrRecordNotFound. created_at/created_by/deleted_at are never
+	// written; updated_at is always refreshed by the framework, and updated_by
+	// set to the id of the caller the context carries, when it carries one.
+	// Concurrent updates of one record resolve as last writer wins: each
+	// writes the whole value it holds, including columns another writer
+	// changed in between. A model declares model.Version to have the stale
+	// write refused instead.
+	Update(objs ...M) error
+	// Upsert inserts records or, on any unique-key collision, overwrites the
+	// conflicting row (INSERT ... ON DUPLICATE KEY UPDATE), keeping the row's
+	// creation facts and naming the caller the context carries as updater. It
+	// runs no model hooks and re-syncs caller objects with the persisted rows;
+	// reserve it for deliberate merge writes such as imports and sync jobs.
+	Upsert(objs ...M) error
+	// UpdateByID updates database columns of a record by its ID in one
+	// UPDATE statement, without running model hooks, refreshing updated_at and
+	// naming the caller the context carries as updater. Assignments come from
+	// column references, such as SampleCols.Status.Set(v); at least one is
+	// required, and empty columns, nil values and a column assigned twice are
+	// rejected.
+	UpdateByID(id string, assignments ...Assignment) error
+	// List retrieves multiple records matching the query conditions.
+	// dest must be a non-nil pointer to a slice; the slice value itself may be
+	// nil or preallocated with make. List fully replaces the slice contents with
+	// the query result: any pre-existing elements are discarded, never merged or
+	// appended to. After a successful call len(*dest) equals the number of rows
+	// returned, so a "dirty" dest does not leak stale rows into the result.
+	List(dest *[]M) error
+	// Get retrieves a single record by its ID.
+	// The destination must be a non-nil pointer matching M. When M is *T,
+	// both &value and new(T) are valid destinations; a nil *T returns ErrNilDest.
+	// Get returns database.ErrRecordNotFound when no matching record exists.
+	Get(dest M, id string) error
+	// First retrieves the first record matching the current query conditions.
+	// First returns database.ErrRecordNotFound when no matching record exists.
+	First(dest M) error
+	// Last retrieves the last record matching the current query conditions.
+	// Last returns database.ErrRecordNotFound when no matching record exists.
+	Last(dest M) error
+	// Take retrieves the first record in no specified order.
+	// Take returns database.ErrRecordNotFound when no matching record exists.
+	Take(dest M) error
+	// Count returns the total number of records matching the query conditions.
+	Count(*int) error
+
+	DatabaseOption[M]
+}
+
+// DatabaseOption provides chainable options for a single Database operation
+// chain. Options apply to the next terminal operation and are reset afterward.
+// Start a new chain with database.Database[M](ctx) for each independent
+// operation.
+type DatabaseOption[M Model] interface {
+	// WithQuery adds query conditions from the model's non-zero fields and
+	// the operator filters carried by opts.
+	WithQuery(query M, opts ...QueryOptions) Database[M]
+	// WithCursor enables cursor-based pagination for List operations.
+	WithCursor(cursor Cursor) Database[M]
+	// WithSelect specifies columns for SELECT and Update column selection
+	// where supported, through the generated column references.
+	WithSelect(columns ...AnyColumnRef) Database[M]
+	// WithLock adds row-level locking to SELECT queries (must be used within a
+	// transaction).
+	WithLock(mode ...LockMode) Database[M]
+	// WithBatchSize sets the batch size for Create, Update, and Delete.
+	WithBatchSize(size int) Database[M]
+	// WithPagination applies pagination parameters (page, size) to the query.
+	WithPagination(page, size int) Database[M]
+	// WithLimit restricts the number of returned records for read operations.
+	WithLimit(limit int) Database[M]
+	// WithOrder adds ORDER BY terms to sort query results.
+	WithOrder(orders ...Order) Database[M]
+	// WithExpand enables eager loading of specified associations.
+	WithExpand(expand []string, orders ...Order) Database[M]
+	// WithPurge controls whether Delete permanently removes records instead of
+	// soft deleting them.
+	WithPurge(...bool) Database[M]
+	// WithAllowMissing lets Delete skip the records that are already gone
+	// instead of failing with database.ErrRecordNotFound. A versioned record
+	// carrying its version still fails with database.ErrStaleObject for a
+	// gone row, which it cannot tell from a moved-on one; its version set to
+	// zero, it is skipped, the version no longer checked.
+	WithAllowMissing() Database[M]
+	// WithDeleted includes soft-deleted records in read operations (List, Get,
+	// First, Last, Take, Count). Only the soft-delete condition is lifted;
+	// combining it with a write operation or Cleanup fails the chain.
+	WithDeleted() Database[M]
+	// WithReplica routes this read to a configured read replica —
+	// WithReplica(false) forces the primary instead, overriding a model's
+	// PreferReplica default. Reads only; a write operation fails the chain.
+	WithReplica(prefer ...bool) Database[M]
+	// WithDryRun builds SQL without database I/O, framework hooks, cache
+	// mutation, or object field filling. An optional collector receives the
+	// generated Query, Args, and RenderedSQL of the next terminal operation.
+	WithDryRun(collector ...*[]SQLStatement) Database[M]
+	// WithoutHook disables model hooks for the operation.
+	WithoutHook() Database[M]
+}
+
+// QueryOptions tunes how WithQuery turns a model value into WHERE conditions.
+// Every condition it produces is AND-combined; the zero value means exact
+// matching with the empty-query safety check enabled. See the WithQuery method
+// for usage examples.
+type QueryOptions struct {
+	// AllowEmpty allows a query without any condition to match all records.
+	// By default a nil model, a zero-value model, or all-empty field values
+	// add the "1 = 0" safety condition instead, so a forgotten filter cannot
+	// return or delete the whole table. Filters count as real conditions
+	// and disable the safety check on their own. With it, a Delete passed no
+	// record removes every row of the model's table (see Database.Delete).
+	AllowEmpty bool
+
+	// PresentFields marks columns whose filter values were explicitly provided
+	// by the caller, keyed by the URL name of the field, the value of its query
+	// tag, as a list request spells it. Query construction treats zero values
+	// (false, 0) of these columns as real conditions instead of dropping them
+	// as unset, so a filter like "enabled=false" works. Columns not listed
+	// here, a field without a query tag among them, keep the default
+	// zero-value skip.
+	PresentFields map[string]struct{}
+
+	// Filters are field-level operator filters ("field[op]=value"). They
+	// apply in every WithQuery path, including nil/empty model queries, so
+	// List and Count stay consistent. A condition that cannot be applied is
+	// never dropped: one of a URL-exposed operator with an empty column or a
+	// mismatched value adds "1 = 0", one of a service-only operator fails
+	// the query (see FilterOp).
+	Filters []Filter
+}
+
+// SQLStatement contains a generated SQL statement in executable and rendered
+// forms.
+type SQLStatement struct {
+	// Query is the parameterized SQL with placeholders.
+	Query string
+	// Args contains the values bound to Query.
+	Args []any
+	// RenderedSQL is dialect-rendered SQL for logging, inspection, and manual
+	// debugging.
+	RenderedSQL string
+}

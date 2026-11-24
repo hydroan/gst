@@ -3,7 +3,7 @@ package database
 import (
 	"strings"
 
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"gorm.io/gorm"
 )
 
@@ -147,7 +147,7 @@ func (db *database[M]) escapeLikePattern(value string) string {
 // would be a new bucket constructor rather than a change to this one, because
 // the timezone argument differs per dialect and MySQL's CONVERT_TZ needs the
 // timezone tables loaded.
-func (db *database[M]) timeBucketExpr(quotedColumn string, bucket types.TimeBucket) string {
+func (db *database[M]) timeBucketExpr(quotedColumn string, bucket gst.TimeBucket) string {
 	switch db.dialect() {
 	case dialectPostgres:
 		return "to_char(" + quotedColumn + ", '" + postgresBucketFormat(bucket) + "')"
@@ -166,11 +166,11 @@ func (db *database[M]) timeBucketExpr(quotedColumn string, bucket types.TimeBuck
 // strftimeBucketFormat serves the dialects using strftime-style specifiers:
 // MySQL's DATE_FORMAT, SQLite's strftime and ClickHouse's formatDateTime all
 // read the same escapes for these fields.
-func strftimeBucketFormat(bucket types.TimeBucket) string {
+func strftimeBucketFormat(bucket gst.TimeBucket) string {
 	switch bucket {
-	case types.TimeBucketHour:
+	case gst.TimeBucketHour:
 		return "%Y-%m-%d %H:00:00"
-	case types.TimeBucketMonth:
+	case gst.TimeBucketMonth:
 		return "%Y-%m"
 	default:
 		return "%Y-%m-%d"
@@ -179,11 +179,11 @@ func strftimeBucketFormat(bucket types.TimeBucket) string {
 
 // postgresBucketFormat serves PostgreSQL's to_char, whose template patterns
 // spell the same labels.
-func postgresBucketFormat(bucket types.TimeBucket) string {
+func postgresBucketFormat(bucket gst.TimeBucket) string {
 	switch bucket {
-	case types.TimeBucketHour:
+	case gst.TimeBucketHour:
 		return "YYYY-MM-DD HH24:00:00"
-	case types.TimeBucketMonth:
+	case gst.TimeBucketMonth:
 		return "YYYY-MM"
 	default:
 		return "YYYY-MM-DD"

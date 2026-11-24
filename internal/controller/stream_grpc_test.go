@@ -8,8 +8,8 @@ import (
 
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/grpcserver"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/i18n"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -189,7 +189,7 @@ func TestServerStreamCallStreamsTheResponses(t *testing.T) {
 		stream := openStream(t, conn, "Watch", sampleCredential, serverStream)
 		sendPayload(t, stream, map[string]any{"note": actionBreak})
 		_, err := recvResponse(stream)
-		requireStatus(t, err, codes.Internal, types.FailureMsg)
+		requireStatus(t, err, codes.Internal, gst.FailureMsg)
 	})
 
 	t.Run("without credentials the stream is refused", func(t *testing.T) {

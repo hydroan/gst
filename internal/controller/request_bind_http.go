@@ -14,7 +14,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/datatypes"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // This file keeps every bound request body service-safe and every body
@@ -180,7 +180,7 @@ func ownTextAtPointer[T any, P interface {
 // were already wrapped at the decoding entry points.
 func requiredBodyError(err error) error {
 	if errors.Is(err, io.EOF) {
-		return types.NewErrorWithCause(http.StatusBadRequest, missingBodyMsg, err)
+		return gst.NewErrorWithCause(http.StatusBadRequest, missingBodyMsg, err)
 	}
 	return err
 }
@@ -192,7 +192,7 @@ func requiredBodyError(err error) error {
 // response envelope renders non-service errors verbatim, so wrapping at the
 // decoding entry points is what keeps that text out of every bind failure at
 // once. A value a field cannot hold is refused naming the field (see
-// types.NewInvalidValue) by the path the contract spells, items[1].rank
+// gst.NewInvalidValue) by the path the contract spells, items[1].rank
 // (see indexedJSONPath), the way a generated FromProto refuses the value
 // over gRPC. The original error stays wrapped as the cause: logs render the
 // full decoder text through Error, io.EOF sentinels never reach this
@@ -201,20 +201,20 @@ func requiredBodyError(err error) error {
 // from client input.
 func clientSafeBindError(err error) error {
 	if violations := fieldViolations(err, ""); len(violations) > 0 {
-		return types.NewInvalidFields(violations, err)
+		return gst.NewInvalidFields(violations, err)
 	}
 	var typeErr *json.UnmarshalTypeError
 	var syntaxErr *json.SyntaxError
 	switch {
 	case errors.As(err, &typeErr):
 		if typeErr.Field != "" {
-			return types.NewInvalidValue(indexedJSONPath(typeErr.Field), typeErr.Value+" does not fit the field", err)
+			return gst.NewInvalidValue(indexedJSONPath(typeErr.Field), typeErr.Value+" does not fit the field", err)
 		}
-		return types.NewErrorWithCause(http.StatusBadRequest, unexpectedJSONTypeMsg, err)
+		return gst.NewErrorWithCause(http.StatusBadRequest, unexpectedJSONTypeMsg, err)
 	case errors.As(err, &syntaxErr):
-		return types.NewErrorWithCause(http.StatusBadRequest, invalidJSONMsg, err)
+		return gst.NewErrorWithCause(http.StatusBadRequest, invalidJSONMsg, err)
 	default:
-		return types.NewErrorWithCause(http.StatusBadRequest, invalidBodyMsg, err)
+		return gst.NewErrorWithCause(http.StatusBadRequest, invalidBodyMsg, err)
 	}
 }
 
@@ -236,7 +236,7 @@ func indexedJSONPath(path string) string {
 // front, items[1].name.
 func clientSafeItemBindError(i int, err error) error {
 	if violations := fieldViolations(err, itemPrefix(i)); len(violations) > 0 {
-		return types.NewInvalidFields(violations, err)
+		return gst.NewInvalidFields(violations, err)
 	}
 	return clientSafeBindError(err)
 }

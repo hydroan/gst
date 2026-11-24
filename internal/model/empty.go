@@ -4,12 +4,12 @@ import (
 	"context"
 	"time"
 
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
-var _ types.Model = (*Empty)(nil)
+var _ gst.Model = (*Empty)(nil)
 
-// Empty is a no-op types.Model implementation for non-persistent actions.
+// Empty is a no-op gst.Model implementation for non-persistent actions.
 //
 // Key characteristics:
 //   - Structs with an anonymous model.Empty field are never migrated to the

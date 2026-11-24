@@ -11,7 +11,7 @@ import (
 
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen/jsonshape"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // This file holds the layout of the output: the file the declarations of each
@@ -170,7 +170,7 @@ var nonFileName = regexp.MustCompile(`[^A-Za-z0-9_-]`)
 // yields a file a frontend can copy and import: shop.ts for shop,
 // Sample_Shop___v2.ts for "Sample Shop / v2", and gst.ts for none.
 func preludeFileName(appName string) string {
-	return cmp.Or(strings.Trim(nonFileName.ReplaceAllString(appName, "_"), "_-"), types.FrameworkName) + ".ts"
+	return cmp.Or(strings.Trim(nonFileName.ReplaceAllString(appName, "_"), "_-"), gst.FrameworkName) + ".ts"
 }
 
 // prelude declares the JSON the framework wraps around the project's types:

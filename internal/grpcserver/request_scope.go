@@ -214,7 +214,7 @@ func (s *callScope) leave(err error) error {
 // error, which the handler mapped already, or a context error, which
 // grpc-go maps to Canceled or DeadlineExceeded itself. Any other error is
 // the server's own failure, a value a generated ToProto could not write
-// among them, answered Internal with types.FailureMsg (see StatusError) the
+// among them, answered Internal with gst.FailureMsg (see StatusError) the
 // way the HTTP listener answers a response it could not encode, the error
 // itself in the access log.
 func answeredAsIs(err error) bool {

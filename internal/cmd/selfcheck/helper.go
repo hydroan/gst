@@ -70,7 +70,7 @@ func derefNamed(t types.Type) (*types.Named, bool) {
 const (
 	// sentenceErrorsPkg declares the constructors of the error a request is
 	// answered with, which take its sentence.
-	sentenceErrorsPkg = "internal/types"
+	sentenceErrorsPkg = "internal/gst"
 	// sentenceTranslatorPkg registers the translations and translates a
 	// sentence at the moment a transport answers with it.
 	sentenceTranslatorPkg = "internal/i18n"

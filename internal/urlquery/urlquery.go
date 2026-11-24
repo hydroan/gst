@@ -26,8 +26,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/types"
 )
 
 // WithoutExportKeys returns a copy of q without the export action's own
@@ -36,8 +36,8 @@ import (
 // action. For name=a&_format=csv&_limit=10 it returns name=a, q left as it is.
 func WithoutExportKeys(q url.Values) url.Values {
 	kept := maps.Clone(q)
-	delete(kept, types.QueryFormat)
-	delete(kept, types.QueryLimit)
+	delete(kept, gst.QueryFormat)
+	delete(kept, gst.QueryLimit)
 	return kept
 }
 

@@ -8,15 +8,15 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/filetype"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/hydroan/gst/logger"
 )
 
-// Export format identifiers accepted via the types.QueryFormat parameter.
+// Export format identifiers accepted via the gst.QueryFormat parameter.
 const (
 	exportFormatXLSX = "xlsx"
 	exportFormatCSV  = "csv"
@@ -64,7 +64,7 @@ func exportAttachment(format string) (filename, contentType string) {
 // list hooks, queries the configured database handler with export-oriented
 // limit and query options, delegates byte generation to the phase service's
 // Export method, and writes the result as an attachment.
-func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
+func ExportHandler[M gst.Model, REQ gst.Request, RSP gst.Response](cfg ...*gst.ControllerConfig[M]) gin.HandlerFunc {
 	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), apiaction.Export, apiaction.ListBefore, apiaction.ListAfter)
 	return func(c *gin.Context) {
 		ctrlSpanCtx, span, ok := a.beginRequest(c)
@@ -98,21 +98,21 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		// query parameters itself.
 		data := make([]M, 0)
 		if !model.IsVirtual(m) {
-			// types.QueryLimit caps the records exported, none or a value of
+			// gst.QueryLimit caps the records exported, none or a value of
 			// zero or less exporting every record. A value that is no integer
 			// is refused rather than read as no cap.
 			var limit int
-			if raw := c.Query(types.QueryLimit); raw != "" {
+			if raw := c.Query(gst.QueryLimit); raw != "" {
 				var err error
 				if limit, err = strconv.Atoi(raw); err != nil {
-					err = urlquery.NotNumericError(types.QueryLimit, raw)
+					err = urlquery.NotNumericError(gst.QueryLimit, raw)
 					response.Error(c, reportFailure(log, span, "parse query parameter failed", err, invalidArgument(err)))
 					return
 				}
 			}
 			// The parsers below read the request's query without the export's
-			// own types.QueryFormat, resolved after the export bytes exist, and
-			// types.QueryLimit, read above: they refuse both from any other
+			// own gst.QueryFormat, resolved after the export bytes exist, and
+			// gst.QueryLimit, read above: they refuse both from any other
 			// action. A virtual resource's service parsing on its own gets them
 			// taken off the same way (see service.Base.QueryModel).
 			query = urlquery.WithoutExportKeys(query)
@@ -125,14 +125,14 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				response.Error(c, reportFailure(log, span, "parse query parameter failed", err, invalidArgument(err)))
 				return
 			}
-			var filters []types.Filter
+			var filters []gst.Filter
 			if filters, err = urlquery.Filters(query, m); err != nil {
 				response.Error(c, reportFailure(log, span, "parse query parameter failed", err, invalidArgument(err)))
 				return
 			}
 			present := urlquery.PresentFields(query)
 
-			var orders []types.Order
+			var orders []gst.Order
 			if orders, err = urlquery.Orders(query, m); err != nil {
 				response.Error(c, reportFailure(log, span, "parse query parameter failed", err, invalidArgument(err)))
 				return
@@ -143,14 +143,14 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				response.Error(c, reportFailure(log, span, "parse query parameter failed", err, invalidArgument(err)))
 				return
 			}
-			svcCtx := types.NewServiceContext(c, nil, apiaction.Export)
+			svcCtx := gst.NewServiceContext(c, nil, apiaction.Export)
 			// The list hooks of an export run on contexts of the Export phase,
 			// the phase of the action they serve.
-			exportServiceContext := func(ctx context.Context, _ apiaction.Phase) *types.ServiceContext {
-				return types.NewServiceContext(c, ctx, apiaction.Export)
+			exportServiceContext := func(ctx context.Context, _ apiaction.Phase) *gst.ServiceContext {
+				return gst.NewServiceContext(c, ctx, apiaction.Export)
 			}
 			// 1.Perform business logic processing before list resources.
-			if err = a.traceServiceHook(ctrlSpanCtx, apiaction.ListBefore, svc, exportServiceContext, func(sc *types.ServiceContext) error {
+			if err = a.traceServiceHook(ctrlSpanCtx, apiaction.ListBefore, svc, exportServiceContext, func(sc *gst.ServiceContext) error {
 				return svc.ListBefore(sc, &data)
 			}); err != nil {
 				response.Error(c, failService(ctrlSpanCtx, log, err))
@@ -159,7 +159,7 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 			// 2.Let the service rewrite the query condition and options; the
 			// typical use is row-level data scoping, sharing the exact List
 			// semantics so an export can never see rows the list hides.
-			queryOpts := types.QueryOptions{
+			queryOpts := gst.QueryOptions{
 				AllowEmpty:    true,
 				PresentFields: present,
 				Filters:       filters,
@@ -180,7 +180,7 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 				return
 			}
 			// 4.Perform business logic processing after list resources.
-			if err = a.traceServiceHook(ctrlSpanCtx, apiaction.ListAfter, svc, exportServiceContext, func(sc *types.ServiceContext) error {
+			if err = a.traceServiceHook(ctrlSpanCtx, apiaction.ListAfter, svc, exportServiceContext, func(sc *gst.ServiceContext) error {
 				return svc.ListAfter(sc, &data)
 			}); err != nil {
 				response.Error(c, failService(ctrlSpanCtx, log, err))
@@ -189,13 +189,13 @@ func ExportHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		}
 		// 5.Export
 		exported, err := traceServiceCall(ctrlSpanCtx, a.serviceSpan(apiaction.Export), a.name, func(spanCtx context.Context) ([]byte, error) {
-			return svc.Export(types.NewServiceContext(c, spanCtx, apiaction.Export), data...)
+			return svc.Export(gst.NewServiceContext(c, spanCtx, apiaction.Export), data...)
 		})
 		if err != nil {
 			response.Error(c, failService(ctrlSpanCtx, log, err))
 			return
 		}
-		format := resolveExportFormat(c.Query(types.QueryFormat), exported)
+		format := resolveExportFormat(c.Query(gst.QueryFormat), exported)
 		filename, contentType := exportAttachment(format)
 		response.Attachment(c, exported, filename, contentType)
 	}

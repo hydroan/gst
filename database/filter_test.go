@@ -11,7 +11,7 @@ import (
 
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/datatypes"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/stretchr/testify/require"
 )
@@ -24,12 +24,12 @@ func TestDatabaseFilterGroups(t *testing.T) {
 	defer cleanupTestData()
 	setupTestData(t)
 
-	list := func(t *testing.T, filters ...types.Filter) []string {
+	list := func(t *testing.T, filters ...gst.Filter) []string {
 		t.Helper()
 		users := make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: filters}).
-			WithOrder(types.Asc("id")).
+			WithQuery(nil, gst.QueryOptions{AllowEmpty: true, Filters: filters}).
+			WithOrder(gst.Asc("id")).
 			List(&users))
 		ids := make([]string, 0, len(users))
 		for _, u := range users {
@@ -37,17 +37,17 @@ func TestDatabaseFilterGroups(t *testing.T) {
 		}
 		return ids
 	}
-	listErr := func(filters ...types.Filter) error {
+	listErr := func(filters ...gst.Filter) error {
 		users := make([]*TestUser, 0)
 		return database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: filters}).
+			WithQuery(nil, gst.QueryOptions{AllowEmpty: true, Filters: filters}).
 			List(&users)
 	}
 
 	t.Run("OrGroupMatchesAnyChild", func(t *testing.T) {
-		require.Equal(t, []string{u1.ID, u2.ID}, list(t, types.FilterOr(
-			types.FilterEq("name", u1.Name),
-			types.FilterEq("age", u2.Age),
+		require.Equal(t, []string{u1.ID, u2.ID}, list(t, gst.FilterOr(
+			gst.FilterEq("name", u1.Name),
+			gst.FilterEq("age", u2.Age),
 		)))
 	})
 
@@ -57,10 +57,10 @@ func TestDatabaseFilterGroups(t *testing.T) {
 	t.Run("GroupStaysAndCombinedWithOtherFilters", func(t *testing.T) {
 		require.Empty(t, list(
 			t,
-			types.FilterEq("name", u1.Name),
-			types.FilterOr(
-				types.FilterEq("age", u2.Age),
-				types.FilterEq("age", u3.Age),
+			gst.FilterEq("name", u1.Name),
+			gst.FilterOr(
+				gst.FilterEq("age", u2.Age),
+				gst.FilterEq("age", u3.Age),
 			),
 		), "the mandatory condition must not be OR-ed away")
 	})
@@ -70,68 +70,68 @@ func TestDatabaseFilterGroups(t *testing.T) {
 	// the empty-query safety check like any filter, and next to a group it
 	// stays a mandatory AND term instead of being OR-ed away.
 	t.Run("FalseMatchesNothing", func(t *testing.T) {
-		require.Empty(t, list(t, types.FilterFalse()))
-		require.Empty(t, list(t, types.FilterFalse(), types.FilterOr(
-			types.FilterEq("age", u2.Age),
-			types.FilterEq("age", u3.Age),
+		require.Empty(t, list(t, gst.FilterFalse()))
+		require.Empty(t, list(t, gst.FilterFalse(), gst.FilterOr(
+			gst.FilterEq("age", u2.Age),
+			gst.FilterEq("age", u3.Age),
 		)), "the false predicate is a mandatory condition too")
 	})
 
 	// Inside an OR group the false predicate is one alternative that never
 	// holds, so the other alternatives decide alone.
 	t.Run("FalseInsideOrGroupIsInert", func(t *testing.T) {
-		require.Equal(t, []string{u2.ID}, list(t, types.FilterOr(
-			types.FilterEq("age", u2.Age),
-			types.FilterFalse(),
+		require.Equal(t, []string{u2.ID}, list(t, gst.FilterOr(
+			gst.FilterEq("age", u2.Age),
+			gst.FilterFalse(),
 		)))
 	})
 
 	t.Run("AndGroupsNestedInOrGroup", func(t *testing.T) {
-		require.Equal(t, []string{u1.ID, u3.ID}, list(t, types.FilterOr(
-			types.FilterAnd(
-				types.FilterEq("name", u1.Name),
-				types.FilterEq("age", u1.Age),
+		require.Equal(t, []string{u1.ID, u3.ID}, list(t, gst.FilterOr(
+			gst.FilterAnd(
+				gst.FilterEq("name", u1.Name),
+				gst.FilterEq("age", u1.Age),
 			),
-			types.FilterAnd(
-				types.FilterEq("name", u3.Name),
-				types.FilterEq("age", u3.Age),
+			gst.FilterAnd(
+				gst.FilterEq("name", u3.Name),
+				gst.FilterEq("age", u3.Age),
 			),
 		)), "(a AND b) OR (c AND d) must match only the fully matching rows")
 
-		require.Empty(t, list(t, types.FilterOr(
-			types.FilterAnd(
-				types.FilterEq("name", u1.Name),
-				types.FilterEq("age", u3.Age),
+		require.Empty(t, list(t, gst.FilterOr(
+			gst.FilterAnd(
+				gst.FilterEq("name", u1.Name),
+				gst.FilterEq("age", u3.Age),
 			),
-			types.FilterAnd(
-				types.FilterEq("name", u3.Name),
-				types.FilterEq("age", u1.Age),
+			gst.FilterAnd(
+				gst.FilterEq("name", u3.Name),
+				gst.FilterEq("age", u1.Age),
 			),
 		)), "a child group matches only when all of its own conditions hold")
 	})
 
 	t.Run("ThreeLevelNesting", func(t *testing.T) {
-		require.Equal(t, []string{u1.ID, u2.ID}, list(t, types.FilterOr(
-			types.FilterEq("name", u1.Name),
-			types.FilterAnd(
-				types.FilterEq("email", u2.Email),
-				types.FilterOr(
-					types.FilterEq("age", u2.Age),
-					types.FilterEq("age", u3.Age),
+		require.Equal(t, []string{u1.ID, u2.ID}, list(t, gst.FilterOr(
+			gst.FilterEq("name", u1.Name),
+			gst.FilterAnd(
+				gst.FilterEq("email", u2.Email),
+				gst.FilterOr(
+					gst.FilterEq("age", u2.Age),
+					gst.FilterEq("age", u3.Age),
 				),
 			),
 		)))
 	})
 
 	t.Run("TopLevelAndGroupEqualsFlatFilters", func(t *testing.T) {
-		grouped := list(t, types.FilterAnd(
-			types.FilterEq("name", u1.Name),
-			types.FilterEq("age", u1.Age),
+		grouped := list(t, gst.FilterAnd(
+			gst.FilterEq("name", u1.Name),
+			gst.FilterEq("age", u1.Age),
 		))
 		flat := list(
 			t,
-			types.FilterEq("name", u1.Name),
-			types.FilterEq("age", u1.Age),
+			gst.FilterEq("name", u1.Name),
+			gst.FilterEq("age", u1.Age),
 		)
 		require.Equal(t, flat, grouped)
 		require.Equal(t, []string{u1.ID}, grouped)
@@ -144,11 +144,11 @@ func TestDatabaseFilterGroups(t *testing.T) {
 	// operator that cannot be applied narrows the group instead, like any
 	// filter a client could have sent.
 	t.Run("MalformedGroupsFailTheChain", func(t *testing.T) {
-		require.ErrorIs(t, listErr(types.FilterOr()), database.ErrUnusableFilter, "empty OR group")
-		require.ErrorIs(t, listErr(types.FilterAnd()), database.ErrUnusableFilter, "empty AND group")
-		require.ErrorIs(t, listErr(types.NewFilter("", "", types.FilterOpOr, "oops")), database.ErrUnusableFilter,
+		require.ErrorIs(t, listErr(gst.FilterOr()), database.ErrUnusableFilter, "empty OR group")
+		require.ErrorIs(t, listErr(gst.FilterAnd()), database.ErrUnusableFilter, "empty AND group")
+		require.ErrorIs(t, listErr(gst.NewFilter("", "", gst.FilterOpOr, "oops")), database.ErrUnusableFilter,
 			"a group value that is not a filter list")
-		require.Empty(t, list(t, types.FilterOr(types.FilterEq("", "x"))),
+		require.Empty(t, list(t, gst.FilterOr(gst.FilterEq("", "x"))),
 			"a child with an empty column")
 	})
 }
@@ -162,9 +162,9 @@ func TestDatabaseFilters(t *testing.T) {
 	// (age=20). Conditions alone count as real conditions, so the nil query is
 	// not blocked by the empty-query safety check.
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{
-				types.NewFilter("", "age", types.FilterOpGt, "18"),
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{
+				gst.NewFilter("", "age", gst.FilterOpGt, "18"),
 			},
 		}).
 		List(&users))
@@ -185,9 +185,9 @@ func TestDatabaseFilters(t *testing.T) {
 	// Name="user1" AND age >= 18 should return u1.
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(&TestUser{Name: u1.Name}, types.QueryOptions{
-			Filters: []types.Filter{
-				types.NewFilter("", "age", types.FilterOpGte, "18"),
+		WithQuery(&TestUser{Name: u1.Name}, gst.QueryOptions{
+			Filters: []gst.Filter{
+				gst.NewFilter("", "age", gst.FilterOpGte, "18"),
 			},
 		}).
 		List(&users))
@@ -197,9 +197,9 @@ func TestDatabaseFilters(t *testing.T) {
 	// Name="user1" AND age > 18 should return 0 records (u1 has age=18).
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(&TestUser{Name: u1.Name}, types.QueryOptions{
-			Filters: []types.Filter{
-				types.NewFilter("", "age", types.FilterOpGt, "18"),
+		WithQuery(&TestUser{Name: u1.Name}, gst.QueryOptions{
+			Filters: []gst.Filter{
+				gst.NewFilter("", "age", gst.FilterOpGt, "18"),
 			},
 		}).
 		List(&users))
@@ -208,9 +208,9 @@ func TestDatabaseFilters(t *testing.T) {
 	// Test eq: age = 19 should return u2.
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{
-				types.NewFilter("", "age", types.FilterOpEq, "19"),
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{
+				gst.NewFilter("", "age", gst.FilterOpEq, "19"),
 			},
 		}).
 		List(&users))
@@ -220,9 +220,9 @@ func TestDatabaseFilters(t *testing.T) {
 	// Test ne: age <> 19 should return u1 and u3.
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{
-				types.NewFilter("", "age", types.FilterOpNe, "19"),
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{
+				gst.NewFilter("", "age", gst.FilterOpNe, "19"),
 			},
 		}).
 		List(&users))
@@ -244,9 +244,9 @@ func TestDatabaseFilters(t *testing.T) {
 	// and u2.
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{
-				types.NewFilter("", "age", types.FilterOpLt, "19"),
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{
+				gst.NewFilter("", "age", gst.FilterOpLt, "19"),
 			},
 		}).
 		List(&users))
@@ -255,9 +255,9 @@ func TestDatabaseFilters(t *testing.T) {
 
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{
-				types.NewFilter("", "age", types.FilterOpLte, "19"),
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{
+				gst.NewFilter("", "age", gst.FilterOpLte, "19"),
 			},
 		}).
 		List(&users))
@@ -267,9 +267,9 @@ func TestDatabaseFilters(t *testing.T) {
 	// matches every user by substring.
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{
-				types.NewFilter("", "email", types.FilterOpLike, "@example"),
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{
+				gst.NewFilter("", "email", gst.FilterOpLike, "@example"),
 			},
 		}).
 		List(&users))
@@ -278,9 +278,9 @@ func TestDatabaseFilters(t *testing.T) {
 	// Test notlike: name not like "1" should return u2 and u3.
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{
-				types.NewFilter("", "name", types.FilterOpNotLike, "1"),
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{
+				gst.NewFilter("", "name", gst.FilterOpNotLike, "1"),
 			},
 		}).
 		List(&users))
@@ -289,9 +289,9 @@ func TestDatabaseFilters(t *testing.T) {
 	// Test in and notin: comma-separated values split into a set.
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{
-				types.NewFilter("", "age", types.FilterOpIn, []string{"18", "20"}),
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{
+				gst.NewFilter("", "age", gst.FilterOpIn, []string{"18", "20"}),
 			},
 		}).
 		List(&users))
@@ -310,9 +310,9 @@ func TestDatabaseFilters(t *testing.T) {
 
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{
-				types.NewFilter("", "name", types.FilterOpNotIn, []string{"user1", "user2"}),
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{
+				gst.NewFilter("", "name", gst.FilterOpNotIn, []string{"user1", "user2"}),
 			},
 		}).
 		List(&users))
@@ -323,9 +323,9 @@ func TestDatabaseFilters(t *testing.T) {
 	// name, while "ser" only appears inside and must not match.
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{
-				types.NewFilter("", "name", types.FilterOpStartsWith, "user"),
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{
+				gst.NewFilter("", "name", gst.FilterOpStartsWith, "user"),
 			},
 		}).
 		List(&users))
@@ -333,9 +333,9 @@ func TestDatabaseFilters(t *testing.T) {
 
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{
-				types.NewFilter("", "name", types.FilterOpStartsWith, "ser"),
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{
+				gst.NewFilter("", "name", gst.FilterOpStartsWith, "ser"),
 			},
 		}).
 		List(&users))
@@ -344,9 +344,9 @@ func TestDatabaseFilters(t *testing.T) {
 	// Test endswith is anchored at the end.
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{
-				types.NewFilter("", "email", types.FilterOpEndsWith, "1@example.com"),
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{
+				gst.NewFilter("", "email", gst.FilterOpEndsWith, "1@example.com"),
 			},
 		}).
 		List(&users))
@@ -355,9 +355,9 @@ func TestDatabaseFilters(t *testing.T) {
 
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{
-				types.NewFilter("", "email", types.FilterOpEndsWith, "user"),
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{
+				gst.NewFilter("", "email", gst.FilterOpEndsWith, "user"),
 			},
 		}).
 		List(&users))
@@ -372,9 +372,9 @@ func TestDatabaseFilters(t *testing.T) {
 
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{
-				types.NewFilter("", "is_active", types.FilterOpIsNull, true),
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{
+				gst.NewFilter("", "is_active", gst.FilterOpIsNull, true),
 			},
 		}).
 		List(&users))
@@ -382,9 +382,9 @@ func TestDatabaseFilters(t *testing.T) {
 
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{
-				types.NewFilter("", "is_active", types.FilterOpIsNull, false),
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{
+				gst.NewFilter("", "is_active", gst.FilterOpIsNull, false),
 			},
 		}).
 		List(&users))
@@ -400,9 +400,9 @@ func TestDatabaseFilters(t *testing.T) {
 
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{
-				types.NewFilter("", "name", types.FilterOpLike, "user_"),
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{
+				gst.NewFilter("", "name", gst.FilterOpLike, "user_"),
 			},
 		}).
 		List(&users))
@@ -411,9 +411,9 @@ func TestDatabaseFilters(t *testing.T) {
 
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{
-				types.NewFilter("", "name", types.FilterOpStartsWith, "user_"),
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{
+				gst.NewFilter("", "name", gst.FilterOpStartsWith, "user_"),
 			},
 		}).
 		List(&users))
@@ -424,9 +424,9 @@ func TestDatabaseFilters(t *testing.T) {
 	// URL parsing but service code can pass them through Filters.
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{
-				types.NewFilter("", "name", types.FilterOpRegex, "^user[12]$"),
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{
+				gst.NewFilter("", "name", gst.FilterOpRegex, "^user[12]$"),
 			},
 		}).
 		List(&users))
@@ -445,9 +445,9 @@ func TestDatabaseFilters(t *testing.T) {
 
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{
-				types.NewFilter("", "name", types.FilterOpNotRegex, "^user[0-9]$"),
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{
+				gst.NewFilter("", "name", gst.FilterOpNotRegex, "^user[0-9]$"),
 			},
 		}).
 		List(&users))
@@ -459,9 +459,9 @@ func TestDatabaseFilters(t *testing.T) {
 	// Go implementation the framework registers, postgres in its own.
 	users = make([]*TestUser, 0)
 	require.Error(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{
-				types.NewFilter("", "name", types.FilterOpRegex, "(unclosed"),
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{
+				gst.NewFilter("", "name", gst.FilterOpRegex, "(unclosed"),
 			},
 		}).
 		List(&users))
@@ -472,9 +472,9 @@ func TestDatabaseFilters(t *testing.T) {
 
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{
-				types.NewFilter("", "addr", types.FilterOpJSONContains, "alpha"),
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{
+				gst.NewFilter("", "addr", gst.FilterOpJSONContains, "alpha"),
 			},
 		}).
 		List(&users))
@@ -483,9 +483,9 @@ func TestDatabaseFilters(t *testing.T) {
 
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{
-				types.NewFilter("", "addr", types.FilterOpJSONContains, "gamma"),
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{
+				gst.NewFilter("", "addr", gst.FilterOpJSONContains, "gamma"),
 			},
 		}).
 		List(&users))
@@ -497,8 +497,8 @@ func TestDatabaseFilters(t *testing.T) {
 	// the database as a SQL error.
 	users = make([]*TestUser, 0)
 	require.ErrorIs(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{types.NewFilter("", "name", types.FilterOpJSONContains, "user6")},
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{gst.NewFilter("", "name", gst.FilterOpJSONContains, "user6")},
 		}).
 		List(&users), database.ErrUnusableFilter, "jsoncontains on a column storing no JSON document must fail the chain")
 
@@ -506,9 +506,9 @@ func TestDatabaseFilters(t *testing.T) {
 	// the operators it knows, so the chain fails on it too.
 	users = make([]*TestUser, 0)
 	require.ErrorIs(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{
-				types.NewFilter("", "age", types.FilterOp("bogus"), "1"),
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{
+				gst.NewFilter("", "age", gst.FilterOp("bogus"), "1"),
 			},
 		}).
 		List(&users), database.ErrUnusableFilter, "unknown operator must fail the chain")
@@ -518,9 +518,9 @@ func TestDatabaseFilters(t *testing.T) {
 	// empty column adds "1 = 0" instead of failing the request.
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{
-				types.NewFilter("", "", types.FilterOpEq, "1"),
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{
+				gst.NewFilter("", "", gst.FilterOpEq, "1"),
 			},
 		}).
 		List(&users))
@@ -534,8 +534,8 @@ func TestDatabaseTypedFilterValues(t *testing.T) {
 	// A slice value binds IN directly, so members keep commas literal.
 	users := make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{types.NewFilter("", "name", types.FilterOpIn, []string{u1.Name, u3.Name})},
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{gst.NewFilter("", "name", gst.FilterOpIn, []string{u1.Name, u3.Name})},
 		}).
 		List(&users))
 	require.Len(t, users, 2, "slice values must bind IN directly")
@@ -545,8 +545,8 @@ func TestDatabaseTypedFilterValues(t *testing.T) {
 	type sampleStatus string
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{types.NewFilter("", "name", types.FilterOpIn, []sampleStatus{sampleStatus(u1.Name), sampleStatus(u3.Name)})},
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{gst.NewFilter("", "name", gst.FilterOpIn, []sampleStatus{sampleStatus(u1.Name), sampleStatus(u3.Name)})},
 		}).
 		List(&users))
 	require.Len(t, users, 2, "named string type slices must bind like []string")
@@ -555,8 +555,8 @@ func TestDatabaseTypedFilterValues(t *testing.T) {
 	// produces, must behave like an empty one.
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{types.NewFilter("", "name", types.FilterOpIn, []string(nil))},
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{gst.NewFilter("", "name", gst.FilterOpIn, []string(nil))},
 		}).
 		List(&users))
 	require.Empty(t, users, "a nil slice must match nothing")
@@ -564,8 +564,8 @@ func TestDatabaseTypedFilterValues(t *testing.T) {
 	// An empty slice matches nothing instead of widening the result set.
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{types.NewFilter("", "name", types.FilterOpIn, []string{})},
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{gst.NewFilter("", "name", gst.FilterOpIn, []string{})},
 		}).
 		List(&users))
 	require.Empty(t, users, "empty slice must match nothing")
@@ -573,8 +573,8 @@ func TestDatabaseTypedFilterValues(t *testing.T) {
 	// In does not split comma strings: a string value fails closed.
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{types.NewFilter("", "name", types.FilterOpIn, u1.Name+","+u2.Name)},
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{gst.NewFilter("", "name", gst.FilterOpIn, u1.Name+","+u2.Name)},
 		}).
 		List(&users))
 	require.Empty(t, users, "string value on In must fail closed")
@@ -582,8 +582,8 @@ func TestDatabaseTypedFilterValues(t *testing.T) {
 	// A scalar comparison rejects slice values and fails closed.
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{types.NewFilter("", "age", types.FilterOpGt, []int{18})},
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{gst.NewFilter("", "age", gst.FilterOpGt, []int{18})},
 		}).
 		List(&users))
 	require.Empty(t, users, "slice value on a scalar operator must fail closed")
@@ -591,8 +591,8 @@ func TestDatabaseTypedFilterValues(t *testing.T) {
 	// A nil value fails closed on every operator family.
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{types.NewFilter("", "age", types.FilterOpEq, nil)},
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{gst.NewFilter("", "age", gst.FilterOpEq, nil)},
 		}).
 		List(&users))
 	require.Empty(t, users, "nil value must fail closed")
@@ -601,15 +601,15 @@ func TestDatabaseTypedFilterValues(t *testing.T) {
 	// of a NOT NULL column, while a "1" string fails closed.
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{types.NewFilter("", "name", types.FilterOpIsNull, false)},
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{gst.NewFilter("", "name", gst.FilterOpIsNull, false)},
 		}).
 		List(&users))
 	require.Len(t, users, 3, "IsNull false must mean IS NOT NULL")
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{types.NewFilter("", "name", types.FilterOpIsNull, "1")},
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{gst.NewFilter("", "name", gst.FilterOpIsNull, "1")},
 		}).
 		List(&users))
 	require.Empty(t, users, "string value on IsNull must fail closed")
@@ -617,10 +617,10 @@ func TestDatabaseTypedFilterValues(t *testing.T) {
 	// Typed Go values bind directly on comparison operators.
 	users = make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{
-			Filters: []types.Filter{
-				types.NewFilter("", "age", types.FilterOpGt, 18),
-				types.NewFilter("", "created_at", types.FilterOpGte, time.Now().Add(-time.Hour)),
+		WithQuery(nil, gst.QueryOptions{
+			Filters: []gst.Filter{
+				gst.NewFilter("", "age", gst.FilterOpGt, 18),
+				gst.NewFilter("", "created_at", gst.FilterOpGte, time.Now().Add(-time.Hour)),
 			},
 		}).
 		List(&users))
@@ -639,10 +639,10 @@ func TestDatabaseScalarFiltersOnBytesAndValuers(t *testing.T) {
 		&TestScoredRecord{Name: "first", Digest: []byte{0x00, 0xff, 0x10}, Token: sampleToken{1}, Scores: datatypes.NewJSONSlice([]int{1, 2})},
 		&TestScoredRecord{Name: "second", Digest: []byte{0x01}, Token: sampleToken{2}, Scores: datatypes.NewJSONSlice([]int{3})},
 	))
-	names := func(filter types.Filter) []string {
+	names := func(filter gst.Filter) []string {
 		rows := make([]*TestScoredRecord, 0)
 		require.NoError(t, database.Database[*TestScoredRecord](ctx).
-			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{filter}}).
+			WithQuery(nil, gst.QueryOptions{Filters: []gst.Filter{filter}}).
 			WithOrder(TestScoredRecordCols.Name.Asc()).
 			List(&rows))
 		names := make([]string, 0, len(rows))
@@ -670,11 +670,11 @@ func TestDatabasePatternFiltersOnNumericColumns(t *testing.T) {
 	defer cleanupTestData()
 	setupTestData(t)
 
-	ages := func(filter types.Filter) []int {
+	ages := func(filter gst.Filter) []int {
 		users := make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{filter}}).
-			WithOrder(types.NewColumn[*TestUser, int]("age").Asc()).
+			WithQuery(nil, gst.QueryOptions{Filters: []gst.Filter{filter}}).
+			WithOrder(gst.NewColumn[*TestUser, int]("age").Asc()).
 			List(&users))
 		ages := make([]int, 0, len(users))
 		for _, u := range users {
@@ -683,20 +683,20 @@ func TestDatabasePatternFiltersOnNumericColumns(t *testing.T) {
 		return ages
 	}
 
-	require.Equal(t, []int{18, 19}, ages(types.NewFilter("", "age", types.FilterOpLike, "1")))
-	require.Equal(t, []int{20}, ages(types.NewFilter("", "age", types.FilterOpNotLike, "1")))
-	require.Equal(t, []int{18, 19}, ages(types.NewFilter("", "age", types.FilterOpILike, "1")))
-	require.Equal(t, []int{20}, ages(types.NewFilter("", "age", types.FilterOpStartsWith, "2")))
-	require.Equal(t, []int{19}, ages(types.NewFilter("", "age", types.FilterOpEndsWith, "9")))
-	require.Equal(t, []int{18, 19}, ages(types.NewFilter("", "age", types.FilterOpRegex, "^1")))
-	require.Equal(t, []int{20}, ages(types.NewFilter("", "age", types.FilterOpNotRegex, "^1")))
+	require.Equal(t, []int{18, 19}, ages(gst.NewFilter("", "age", gst.FilterOpLike, "1")))
+	require.Equal(t, []int{20}, ages(gst.NewFilter("", "age", gst.FilterOpNotLike, "1")))
+	require.Equal(t, []int{18, 19}, ages(gst.NewFilter("", "age", gst.FilterOpILike, "1")))
+	require.Equal(t, []int{20}, ages(gst.NewFilter("", "age", gst.FilterOpStartsWith, "2")))
+	require.Equal(t, []int{19}, ages(gst.NewFilter("", "age", gst.FilterOpEndsWith, "9")))
+	require.Equal(t, []int{18, 19}, ages(gst.NewFilter("", "age", gst.FilterOpRegex, "^1")))
+	require.Equal(t, []int{20}, ages(gst.NewFilter("", "age", gst.FilterOpNotRegex, "^1")))
 
 	// Inside a subquery the column belongs to the subquery's own table, read
 	// under its alias, and still matches by the number's text form.
-	inSubquery := func(filter types.Filter) types.Filter {
-		return types.FilterExists[*TestUser](types.FilterEqCol("id", "id"), filter)
+	inSubquery := func(filter gst.Filter) gst.Filter {
+		return gst.FilterExists[*TestUser](gst.FilterEqCol("id", "id"), filter)
 	}
-	require.Equal(t, []int{18, 19}, ages(inSubquery(types.NewFilter("", "age", types.FilterOpLike, "1"))))
+	require.Equal(t, []int{18, 19}, ages(inSubquery(gst.NewFilter("", "age", gst.FilterOpLike, "1"))))
 }
 
 // TestFilterOrSingleChild is the regression test for a group that collapses to
@@ -708,12 +708,12 @@ func TestFilterOrSingleChild(t *testing.T) {
 	defer cleanupTestData()
 	setupTestData(t)
 
-	list := func(t *testing.T, filters ...types.Filter) []string {
+	list := func(t *testing.T, filters ...gst.Filter) []string {
 		t.Helper()
 		users := make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: filters}).
-			WithOrder(types.Asc("id")).
+			WithQuery(nil, gst.QueryOptions{AllowEmpty: true, Filters: filters}).
+			WithOrder(gst.Asc("id")).
 			List(&users))
 		ids := make([]string, 0, len(users))
 		for _, u := range users {
@@ -728,33 +728,33 @@ func TestFilterOrSingleChild(t *testing.T) {
 	t.Run("MandatorySiblingSurvives", func(t *testing.T) {
 		require.Empty(t, list(
 			t,
-			types.FilterEq("age", u1.Age),
-			types.FilterOr(types.FilterEq("name", u2.Name)),
+			gst.FilterEq("age", u1.Age),
+			gst.FilterOr(gst.FilterEq("name", u2.Name)),
 		), "no row satisfies both, so a degraded group would show up as u1 and u2")
 	})
 
 	t.Run("EquivalentToTheBareCondition", func(t *testing.T) {
 		require.Equal(t,
-			list(t, types.FilterEq("name", u2.Name)),
-			list(t, types.FilterOr(types.FilterEq("name", u2.Name))),
+			list(t, gst.FilterEq("name", u2.Name)),
+			list(t, gst.FilterOr(gst.FilterEq("name", u2.Name))),
 			"OR over one alternative is that alternative")
 	})
 
 	t.Run("NestedSingleChildGroups", func(t *testing.T) {
 		require.Empty(t, list(
 			t,
-			types.FilterEq("age", u1.Age),
-			types.FilterOr(types.FilterAnd(types.FilterOr(types.FilterEq("name", u2.Name)))),
+			gst.FilterEq("age", u1.Age),
+			gst.FilterOr(gst.FilterAnd(gst.FilterOr(gst.FilterEq("name", u2.Name)))),
 		), "collapsing through several levels must still leave an AND")
 	})
 
 	t.Run("MultipleAlternativesStillGrouped", func(t *testing.T) {
 		require.Equal(t, []string{u1.ID}, list(
 			t,
-			types.FilterEq("age", u1.Age),
-			types.FilterOr(
-				types.FilterEq("name", u1.Name),
-				types.FilterEq("name", u2.Name),
+			gst.FilterEq("age", u1.Age),
+			gst.FilterOr(
+				gst.FilterEq("name", u1.Name),
+				gst.FilterEq("name", u2.Name),
 			),
 		), "u2 matches an alternative but fails the mandatory condition")
 	})
@@ -762,7 +762,7 @@ func TestFilterOrSingleChild(t *testing.T) {
 
 // TestDatabaseFiltersOnTimeColumns pins the runtime behavior of time
 // comparisons across dialects: a bound travels either as the UTC wall clock
-// in types.FilterTimeLayout (the URL parser's canonical form) or as a
+// in gst.FilterTimeLayout (the URL parser's canonical form) or as a
 // time.Time, and both must select the same rows however the dialect stores
 // time. This is the filter-side counterpart of the cursor paging test and
 // exercises the time normalization sqlite needs for its text storage.
@@ -770,12 +770,12 @@ func TestDatabaseFiltersOnTimeColumns(t *testing.T) {
 	defer cleanupAggregateData()
 	setupAggregateData(t)
 
-	listIDs := func(t *testing.T, f types.Filter) []string {
+	listIDs := func(t *testing.T, f gst.Filter) []string {
 		t.Helper()
 		records := make([]*TestAggregateRecord, 0)
 		require.NoError(t, database.Database[*TestAggregateRecord](context.Background()).
-			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{f}}).
-			WithOrder(types.Asc("id")).
+			WithQuery(nil, gst.QueryOptions{Filters: []gst.Filter{f}}).
+			WithOrder(gst.Asc("id")).
 			List(&records))
 		ids := make([]string, 0, len(records))
 		for _, r := range records {
@@ -788,23 +788,23 @@ func TestDatabaseFiltersOnTimeColumns(t *testing.T) {
 
 	t.Run("CanonicalStringBound", func(t *testing.T) {
 		require.Equal(t, []string{"a4", "a5", "a6"},
-			listIDs(t, types.FilterGte("occurred_at", boundary.Format(types.FilterTimeLayout))))
+			listIDs(t, gst.FilterGte("occurred_at", boundary.Format(gst.FilterTimeLayout))))
 	})
 
 	t.Run("TimeValueBound", func(t *testing.T) {
 		require.Equal(t, []string{"a1", "a2", "a3"},
-			listIDs(t, types.FilterLt("occurred_at", boundary)))
+			listIDs(t, gst.FilterLt("occurred_at", boundary)))
 	})
 
 	t.Run("EqualityOnAnExactInstant", func(t *testing.T) {
 		instant := time.Date(2024, 1, 11, 8, 0, 0, 0, time.UTC)
-		require.Equal(t, []string{"a3"}, listIDs(t, types.FilterEq("occurred_at", instant)))
+		require.Equal(t, []string{"a3"}, listIDs(t, gst.FilterEq("occurred_at", instant)))
 	})
 }
 
 // TestDatabaseFiltersOnDateColumns pins the runtime behavior of comparisons
 // on a date column across dialects, a required day and an optional one alike:
-// the URL parser binds a day as its midnight in types.FilterTimeLayout,
+// the URL parser binds a day as its midnight in gst.FilterTimeLayout,
 // service code binds a Date through the date reference gg gen writes for the
 // column, which compares by the day it names, and an instant given by the
 // column's name, the way the framework's own code builds a filter, compares
@@ -821,12 +821,12 @@ func TestDatabaseFiltersOnDateColumns(t *testing.T) {
 		&TestDatedRecord{Label: "d3", Day: datatypes.Date(day(3)), Due: due(3)},
 	))
 
-	labels := func(t *testing.T, f types.Filter) []string {
+	labels := func(t *testing.T, f gst.Filter) []string {
 		t.Helper()
 		records := make([]*TestDatedRecord, 0)
 		require.NoError(t, database.Database[*TestDatedRecord](context.Background()).
-			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{f}}).
-			WithOrder(types.Asc("label")).
+			WithQuery(nil, gst.QueryOptions{Filters: []gst.Filter{f}}).
+			WithOrder(gst.Asc("label")).
 			List(&records))
 		labels := make([]string, 0, len(records))
 		for _, r := range records {
@@ -836,15 +836,15 @@ func TestDatabaseFiltersOnDateColumns(t *testing.T) {
 	}
 
 	t.Run("CanonicalStringBound", func(t *testing.T) {
-		require.Equal(t, []string{"d2"}, labels(t, types.FilterEq("day", "2026-01-02 00:00:00")))
-		require.Equal(t, []string{"d2", "d3"}, labels(t, types.FilterGte("day", "2026-01-02 00:00:00")))
+		require.Equal(t, []string{"d2"}, labels(t, gst.FilterEq("day", "2026-01-02 00:00:00")))
+		require.Equal(t, []string{"d2", "d3"}, labels(t, gst.FilterGte("day", "2026-01-02 00:00:00")))
 	})
 
 	t.Run("DayValueBound", func(t *testing.T) {
 		// A Date names the day its time reads in its own location: 07:00 at
 		// +08:00 on the 2nd is the 2nd, though the 1st in UTC.
 		on := datatypes.Date(time.Date(2026, time.January, 2, 7, 0, 0, 0, time.FixedZone("", 8*3600)))
-		for _, column := range []types.DateColumn{TestDatedRecordCols.Day, TestDatedRecordCols.Due} {
+		for _, column := range []gst.DateColumn{TestDatedRecordCols.Day, TestDatedRecordCols.Due} {
 			require.Equal(t, []string{"d2"}, labels(t, column.Eq(on)), column.Name())
 			require.Equal(t, []string{"d1"}, labels(t, column.Lt(on)), column.Name())
 			require.Equal(t, []string{"d1", "d3"}, labels(t, column.NotIn(on)), column.Name())
@@ -855,15 +855,15 @@ func TestDatabaseFiltersOnDateColumns(t *testing.T) {
 		// The start of the 2nd at +08:00 is 16:00 on the 1st in UTC, so it
 		// names the 1st; 15:59 on the 2nd in UTC names the 2nd.
 		for _, column := range []string{"day", "due"} {
-			require.Equal(t, []string{"d1", "d2", "d3"}, labels(t, types.FilterGte(column, "2026-01-01 16:00:00")), column)
-			require.Equal(t, []string{"d2"}, labels(t, types.FilterEq(column, "2026-01-02 16:00:00")), column)
-			require.Equal(t, []string{"d1", "d2"}, labels(t, types.FilterLte(column, time.Date(2026, time.January, 2, 15, 59, 0, 0, time.UTC))), column)
+			require.Equal(t, []string{"d1", "d2", "d3"}, labels(t, gst.FilterGte(column, "2026-01-01 16:00:00")), column)
+			require.Equal(t, []string{"d2"}, labels(t, gst.FilterEq(column, "2026-01-02 16:00:00")), column)
+			require.Equal(t, []string{"d1", "d2"}, labels(t, gst.FilterLte(column, time.Date(2026, time.January, 2, 15, 59, 0, 0, time.UTC))), column)
 		}
-		require.Equal(t, []string{"d2", "d3"}, labels(t, types.FilterGt("due", time.Date(2026, time.January, 1, 23, 0, 0, 0, time.UTC))))
+		require.Equal(t, []string{"d2", "d3"}, labels(t, gst.FilterGt("due", time.Date(2026, time.January, 1, 23, 0, 0, 0, time.UTC))))
 		// The members of an in or a notin list name their days the same way.
 		members := []time.Time{time.Date(2026, time.January, 1, 16, 0, 0, 0, time.UTC), time.Date(2026, time.January, 3, 9, 0, 0, 0, time.UTC)}
-		require.Equal(t, []string{"d1", "d3"}, labels(t, types.FilterIn("due", members)))
-		require.Equal(t, []string{"d2"}, labels(t, types.FilterNotIn("day", members)))
+		require.Equal(t, []string{"d1", "d3"}, labels(t, gst.FilterIn("due", members)))
+		require.Equal(t, []string{"d2"}, labels(t, gst.FilterNotIn("day", members)))
 	})
 
 	t.Run("BucketsByDay", func(t *testing.T) {
@@ -874,7 +874,7 @@ func TestDatabaseFiltersOnDateColumns(t *testing.T) {
 		rows := make([]row, 0)
 		require.NoError(t, database.Select[*TestDatedRecord, row](context.Background(),
 			TestDatedRecordCols.Day.ByDay().As("bucket"),
-			types.Count().As("records"),
+			gst.Count().As("records"),
 		).
 			OrderBy(TestDatedRecordCols.Day.ByDay().As("bucket").Asc()).
 			Scan(&rows))
@@ -906,12 +906,12 @@ func TestDatabaseFiltersFollowTheStoredType(t *testing.T) {
 			Payload: `{"code":"beta"}`, Clock: datatypes.NewTimeOfDay(17, 30, 0, 0),
 		},
 	))
-	labels := func(t *testing.T, f types.Filter) []string {
+	labels := func(t *testing.T, f gst.Filter) []string {
 		t.Helper()
 		records := make([]*TestTypedRecord, 0)
 		require.NoError(t, database.Database[*TestTypedRecord](ctx).
-			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{f}}).
-			WithOrder(types.Asc("label")).
+			WithQuery(nil, gst.QueryOptions{Filters: []gst.Filter{f}}).
+			WithOrder(gst.Asc("label")).
 			List(&records))
 		labels := make([]string, 0, len(records))
 		for _, r := range records {
@@ -921,22 +921,22 @@ func TestDatabaseFiltersFollowTheStoredType(t *testing.T) {
 	}
 
 	t.Run("AWrappedTimeComparesAsATime", func(t *testing.T) {
-		bound := settled.Format(types.FilterTimeLayout)
-		require.Equal(t, []string{"first"}, labels(t, types.FilterEq("settled", bound)))
-		require.Equal(t, []string{"second"}, labels(t, types.FilterGt("settled", bound)))
+		bound := settled.Format(gst.FilterTimeLayout)
+		require.Equal(t, []string{"first"}, labels(t, gst.FilterEq("settled", bound)))
+		require.Equal(t, []string{"second"}, labels(t, gst.FilterGt("settled", bound)))
 	})
 
 	t.Run("AWrappedNumberMatchesAPatternByItsText", func(t *testing.T) {
-		require.Equal(t, []string{"first"}, labels(t, types.FilterLike("tally", "5")))
+		require.Equal(t, []string{"first"}, labels(t, gst.FilterLike("tally", "5")))
 	})
 
 	t.Run("ATypeTaggedJSONColumnMatchesAPatternByItsText", func(t *testing.T) {
-		require.Equal(t, []string{"second"}, labels(t, types.FilterLike("payload", "beta")))
+		require.Equal(t, []string{"second"}, labels(t, gst.FilterLike("payload", "beta")))
 	})
 
 	t.Run("ATimeOfDayComparesInItsStoredSpelling", func(t *testing.T) {
-		require.Equal(t, []string{"first"}, labels(t, types.FilterEq("clock", "09:00:00")))
-		require.Equal(t, []string{"second"}, labels(t, types.FilterGte("clock", "12:00:00")))
+		require.Equal(t, []string{"first"}, labels(t, gst.FilterEq("clock", "09:00:00")))
+		require.Equal(t, []string{"second"}, labels(t, gst.FilterGte("clock", "12:00:00")))
 	})
 }
 
@@ -962,8 +962,8 @@ func TestURLFiltersReachEmbeddedColumnsByPath(t *testing.T) {
 		require.NoError(t, err)
 		records := make([]*TestPairedRecord, 0)
 		require.NoError(t, database.Database[*TestPairedRecord](ctx).
-			WithQuery(nil, types.QueryOptions{Filters: filters}).
-			WithOrder(types.Asc("label")).
+			WithQuery(nil, gst.QueryOptions{Filters: filters}).
+			WithOrder(gst.Asc("label")).
 			List(&records))
 		labels := make([]string, 0, len(records))
 		for _, r := range records {
@@ -983,8 +983,8 @@ func TestURLFiltersReachEmbeddedColumnsByPath(t *testing.T) {
 		require.NoError(t, urlquery.Decode(q, query))
 		records := make([]*TestPairedRecord, 0)
 		require.NoError(t, database.Database[*TestPairedRecord](ctx).
-			WithQuery(query, types.QueryOptions{PresentFields: urlquery.PresentFields(q)}).
-			WithOrder(types.Asc("label")).
+			WithQuery(query, gst.QueryOptions{PresentFields: urlquery.PresentFields(q)}).
+			WithOrder(gst.Asc("label")).
 			List(&records))
 		labels := make([]string, 0, len(records))
 		for _, r := range records {
@@ -1010,36 +1010,36 @@ func TestFilterOfAnotherTableFailsTheChain(t *testing.T) {
 	// SQL.
 	users := make([]*TestUser, 0)
 	require.ErrorIs(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{TestAggregateRecordCols.Category.Eq("alpha")}}).
+		WithQuery(nil, gst.QueryOptions{AllowEmpty: true, Filters: []gst.Filter{TestAggregateRecordCols.Category.Eq("alpha")}}).
 		List(&users), database.ErrColumnTable)
 	// Inside a group as well: the groups are walked, a subquery's filters
 	// are the subquery's own.
 	require.ErrorIs(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{
-			types.FilterOr(colName.Eq("user1"), types.FilterAnd(TestAggregateRecordCols.Status.Eq("done"))),
+		WithQuery(nil, gst.QueryOptions{AllowEmpty: true, Filters: []gst.Filter{
+			gst.FilterOr(colName.Eq("user1"), gst.FilterAnd(TestAggregateRecordCols.Status.Eq("done"))),
 		}}).
 		List(&users), database.ErrColumnTable)
 	count := 0
 	require.ErrorIs(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{TestAggregateRecordCols.Category.Eq("alpha")}}).
+		WithQuery(nil, gst.QueryOptions{AllowEmpty: true, Filters: []gst.Filter{TestAggregateRecordCols.Category.Eq("alpha")}}).
 		Count(&count), database.ErrColumnTable)
 	// Inside a subquery a filter names the related model's table; a third
 	// table is as foreign there as at the top level, and only service code
 	// could have written it.
 	records := make([]*TestAggregateRecord, 0)
 	require.ErrorIs(t, database.Database[*TestAggregateRecord](context.Background()).
-		WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{
-			types.FilterExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), TestPaymentCols.Account.Eq("acme")),
+		WithQuery(nil, gst.QueryOptions{AllowEmpty: true, Filters: []gst.Filter{
+			gst.FilterExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), TestPaymentCols.Account.Eq("acme")),
 		}}).
 		List(&records), database.ErrColumnTable)
 	// A subquery over the chain's own table is a subquery still: the
 	// message names it, not the model around it.
-	self := types.FilterExists[*TestAggregateRecord](
-		types.NewColumn[*TestAggregateRecord, string]("category").EqCol(TestAggregateRecordCols.Category),
+	self := gst.FilterExists[*TestAggregateRecord](
+		gst.NewColumn[*TestAggregateRecord, string]("category").EqCol(TestAggregateRecordCols.Category),
 		TestRecordTagCols.Label.Eq("vip"),
 	)
 	err := database.Database[*TestAggregateRecord](context.Background()).
-		WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{self}}).
+		WithQuery(nil, gst.QueryOptions{AllowEmpty: true, Filters: []gst.Filter{self}}).
 		List(&records)
 	require.ErrorIs(t, err, database.ErrColumnTable)
 	require.ErrorContains(t, err, `the subquery over "test_aggregate_records"`)
@@ -1056,15 +1056,15 @@ func TestFilterExists(t *testing.T) {
 	setupTagData(t)
 
 	ctx := context.Background()
-	vip := types.FilterExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), TestRecordTagCols.Label.Eq("vip"))
+	vip := gst.FilterExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), TestRecordTagCols.Label.Eq("vip"))
 
 	// The same filter serves List and Select: it is a Filter operator, not
 	// a select feature.
 	t.Run("NarrowsList", func(t *testing.T) {
 		records := make([]*TestAggregateRecord, 0)
 		require.NoError(t, database.Database[*TestAggregateRecord](ctx).
-			WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{vip}}).
-			WithOrder(types.Asc("id")).
+			WithQuery(nil, gst.QueryOptions{AllowEmpty: true, Filters: []gst.Filter{vip}}).
+			WithOrder(gst.Asc("id")).
 			List(&records))
 		require.Len(t, records, 2)
 		require.Equal(t, "a1", records[0].ID)
@@ -1077,7 +1077,7 @@ func TestFilterExists(t *testing.T) {
 			Records int64
 		}
 		got := row{}
-		require.NoError(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Amount.Sum().As("total"), types.Count().As("records")).
+		require.NoError(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Amount.Sum().As("total"), gst.Count().As("records")).
 			Where(vip).
 			ScanOne(&got))
 		require.EqualValues(t, 2, got.Records)
@@ -1095,7 +1095,7 @@ func TestFilterExists(t *testing.T) {
 			Records int64
 		}
 		got := row{}
-		require.NoError(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Amount.Sum().As("total"), types.Count().As("records")).
+		require.NoError(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Amount.Sum().As("total"), gst.Count().As("records")).
 			Where(vip).
 			ScanOne(&got))
 		require.EqualValues(t, 2, got.Records, "a second tag must not duplicate the row")
@@ -1108,7 +1108,7 @@ func TestFilterExists(t *testing.T) {
 		))
 		records := make([]*TestAggregateRecord, 0)
 		require.NoError(t, database.Database[*TestAggregateRecord](ctx).
-			WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{vip}}).
+			WithQuery(nil, gst.QueryOptions{AllowEmpty: true, Filters: []gst.Filter{vip}}).
 			List(&records))
 		require.Len(t, records, 1, "a3 loses its only live vip tag")
 		require.Equal(t, "a1", records[0].ID)
@@ -1119,15 +1119,15 @@ func TestFilterExists(t *testing.T) {
 	// EXISTS matches every row, instead of both collapsing to nothing the way
 	// an unusable predicate does.
 	t.Run("FalseInsideSubquery", func(t *testing.T) {
-		none := types.FilterExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), types.FilterFalse())
-		all := types.FilterNotExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), types.FilterFalse())
+		none := gst.FilterExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), gst.FilterFalse())
+		all := gst.FilterNotExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), gst.FilterFalse())
 		records := make([]*TestAggregateRecord, 0)
 		require.NoError(t, database.Database[*TestAggregateRecord](ctx).
-			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{none}}).
+			WithQuery(nil, gst.QueryOptions{Filters: []gst.Filter{none}}).
 			List(&records))
 		require.Empty(t, records)
 		require.NoError(t, database.Database[*TestAggregateRecord](ctx).
-			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{all}}).
+			WithQuery(nil, gst.QueryOptions{Filters: []gst.Filter{all}}).
 			List(&records))
 		require.Len(t, records, 6)
 	})
@@ -1141,12 +1141,12 @@ func TestFilterNotExists(t *testing.T) {
 
 	ctx := context.Background()
 	// Rows with no vip tag at all, plus rows whose tags are not vip.
-	noVip := types.FilterNotExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), TestRecordTagCols.Label.Eq("vip"))
+	noVip := gst.FilterNotExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), TestRecordTagCols.Label.Eq("vip"))
 
 	records := make([]*TestAggregateRecord, 0)
 	require.NoError(t, database.Database[*TestAggregateRecord](ctx).
-		WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{noVip}}).
-		WithOrder(types.Asc("id")).
+		WithQuery(nil, gst.QueryOptions{AllowEmpty: true, Filters: []gst.Filter{noVip}}).
+		WithOrder(gst.Asc("id")).
 		List(&records))
 
 	ids := make([]string, 0, len(records))
@@ -1164,11 +1164,11 @@ func TestFilterExistsCombinesWithOtherFilters(t *testing.T) {
 	setupTagData(t)
 
 	ctx := context.Background()
-	vip := types.FilterExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), TestRecordTagCols.Label.Eq("vip"))
+	vip := gst.FilterExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), TestRecordTagCols.Label.Eq("vip"))
 
 	records := make([]*TestAggregateRecord, 0)
 	require.NoError(t, database.Database[*TestAggregateRecord](ctx).
-		WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{
+		WithQuery(nil, gst.QueryOptions{AllowEmpty: true, Filters: []gst.Filter{
 			vip,
 			TestAggregateRecordCols.Status.Eq("failed"),
 		}}).
@@ -1192,8 +1192,8 @@ func TestSelectConditionalOnSubquery(t *testing.T) {
 	setupTagData(t)
 
 	ctx := context.Background()
-	tagged := types.FilterExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), TestRecordTagCols.Label.Eq("vip"))
-	untagged := types.FilterNotExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), TestRecordTagCols.Label.Eq("vip"))
+	tagged := gst.FilterExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), TestRecordTagCols.Label.Eq("vip"))
+	untagged := gst.FilterNotExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), TestRecordTagCols.Label.Eq("vip"))
 
 	type row struct {
 		TaggedAmount   int64
@@ -1204,7 +1204,7 @@ func TestSelectConditionalOnSubquery(t *testing.T) {
 	require.NoError(t, database.Select[*TestAggregateRecord, row](ctx,
 		TestAggregateRecordCols.Amount.Sum().Where(tagged).As("tagged_amount"),
 		TestAggregateRecordCols.Amount.Sum().Where(untagged).As("untagged_amount"),
-		types.Count().Where(tagged).As("tagged_records"),
+		gst.Count().Where(tagged).As("tagged_records"),
 	).
 		ScanOne(&got))
 
@@ -1223,7 +1223,7 @@ func TestSelectConditionalOnSubquery(t *testing.T) {
 		require.NoError(t, database.Select[*TestAggregateRecord, row](ctx,
 			TestAggregateRecordCols.Amount.Sum().Where(tagged).As("tagged_amount"),
 			TestAggregateRecordCols.Amount.Sum().Where(untagged).As("untagged_amount"),
-			types.Count().Where(tagged).As("tagged_records"),
+			gst.Count().Where(tagged).As("tagged_records"),
 		).
 			ScanOne(&again))
 		require.EqualValues(t, 400, again.TaggedAmount, "a semi join matches a row once")
@@ -1245,12 +1245,12 @@ func TestFilterExistsTableResolution(t *testing.T) {
 	ctx := context.Background()
 	// TestTagAlias resolves to test_record_tags through TableName, while its
 	// struct name would make gorm derive test_tag_aliases.
-	vip := types.FilterExists[*TestTagAlias](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), TestRecordTagCols.Label.Eq("vip"))
+	vip := gst.FilterExists[*TestTagAlias](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), TestRecordTagCols.Label.Eq("vip"))
 
 	records := make([]*TestAggregateRecord, 0)
 	require.NoError(t, database.Database[*TestAggregateRecord](ctx).
-		WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{vip}}).
-		WithOrder(types.Asc("id")).
+		WithQuery(nil, gst.QueryOptions{AllowEmpty: true, Filters: []gst.Filter{vip}}).
+		WithOrder(gst.Asc("id")).
 		List(&records))
 	require.Len(t, records, 2)
 	require.Equal(t, "a1", records[0].ID)
@@ -1276,13 +1276,13 @@ func TestFilterExistsNested(t *testing.T) {
 	))
 
 	noteCols := struct {
-		TagID types.Column[string]
-		Body  types.Column[string]
+		TagID gst.Column[string]
+		Body  gst.Column[string]
 	}{
-		TagID: types.NewColumn[*TestTagNote, string]("tag_id"),
-		Body:  types.NewColumn[*TestTagNote, string]("body"),
+		TagID: gst.NewColumn[*TestTagNote, string]("tag_id"),
+		Body:  gst.NewColumn[*TestTagNote, string]("body"),
 	}
-	tagIDCol := types.NewColumn[*TestRecordTag, string]("id")
+	tagIDCol := gst.NewColumn[*TestRecordTag, string]("id")
 
 	// EXISTS(tag WHERE tag.record_id = record.id AND EXISTS(note WHERE
 	// note.tag_id = tag.id AND note.body = 'checked'))
@@ -1290,14 +1290,14 @@ func TestFilterExistsNested(t *testing.T) {
 	// The inner correlation must name the tag table. Naming the record table
 	// would compare note.tag_id against record.id, which happens to be a legal
 	// comparison of two id columns and silently matches nothing here.
-	hasCheckedNote := types.FilterExists[*TestRecordTag](
+	hasCheckedNote := gst.FilterExists[*TestRecordTag](
 		TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID),
-		types.FilterExists[*TestTagNote](noteCols.TagID.EqCol(tagIDCol), noteCols.Body.Eq("checked")),
+		gst.FilterExists[*TestTagNote](noteCols.TagID.EqCol(tagIDCol), noteCols.Body.Eq("checked")),
 	)
 
 	records := make([]*TestAggregateRecord, 0)
 	require.NoError(t, database.Database[*TestAggregateRecord](ctx).
-		WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{hasCheckedNote}}).
+		WithQuery(nil, gst.QueryOptions{AllowEmpty: true, Filters: []gst.Filter{hasCheckedNote}}).
 		List(&records))
 	require.Len(t, records, 1, "only a1 has a tag carrying a checked note")
 	require.Equal(t, "a1", records[0].ID)
@@ -1316,25 +1316,25 @@ func TestFilterExistsFailsTheChainOnAnUnusableSubquery(t *testing.T) {
 	setupTagData(t)
 
 	ctx := context.Background()
-	list := func(t *testing.T, f types.Filter) error {
+	list := func(t *testing.T, f gst.Filter) error {
 		t.Helper()
 		records := make([]*TestAggregateRecord, 0)
 		return database.Database[*TestAggregateRecord](ctx).
-			WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{f}}).
+			WithQuery(nil, gst.QueryOptions{AllowEmpty: true, Filters: []gst.Filter{f}}).
 			List(&records)
 	}
 
 	// An empty group cannot be rendered, so the subquery's filter is unusable.
-	broken := types.FilterOr()
+	broken := gst.FilterOr()
 
 	t.Run("Exists", func(t *testing.T) {
-		require.ErrorIs(t, list(t, types.FilterExists[*TestRecordTag](
+		require.ErrorIs(t, list(t, gst.FilterExists[*TestRecordTag](
 			TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), broken,
 		)), database.ErrUnusableFilter)
 	})
 
 	t.Run("NotExists", func(t *testing.T) {
-		require.ErrorIs(t, list(t, types.FilterNotExists[*TestRecordTag](
+		require.ErrorIs(t, list(t, gst.FilterNotExists[*TestRecordTag](
 			TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), broken,
 		)), database.ErrUnusableFilter, "negating an unusable subquery must not return the whole table")
 	})
@@ -1352,7 +1352,7 @@ func TestFilterExistsValidatesInnerColumns(t *testing.T) {
 
 	ctx := context.Background()
 	// "status" exists on the record table but not on the tag table.
-	outerOnly := types.FilterExists[*TestRecordTag](
+	outerOnly := gst.FilterExists[*TestRecordTag](
 		TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), TestAggregateRecordCols.Status.Eq("done"),
 	)
 
@@ -1362,7 +1362,7 @@ func TestFilterExistsValidatesInnerColumns(t *testing.T) {
 	// answering with an empty page.
 	records := make([]*TestAggregateRecord, 0)
 	err := database.Database[*TestAggregateRecord](ctx).
-		WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{outerOnly}}).
+		WithQuery(nil, gst.QueryOptions{AllowEmpty: true, Filters: []gst.Filter{outerOnly}}).
 		List(&records)
 	require.ErrorIs(t, err, database.ErrColumnTable)
 	require.ErrorContains(t, err, "the subquery over")
@@ -1387,15 +1387,15 @@ func TestFilterExistsQualifiesInnerColumns(t *testing.T) {
 	setupTagData(t)
 
 	// Both tables carry an "id"; the filter names the tag's own.
-	byTagID := types.FilterExists[*TestRecordTag](
+	byTagID := gst.FilterExists[*TestRecordTag](
 		TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID), TestRecordTagCols.ID.Eq("t1"),
 	)
 
-	statements := make([]types.SQLStatement, 0)
+	statements := make([]gst.SQLStatement, 0)
 	records := make([]*TestAggregateRecord, 0)
 	require.NoError(t, database.Database[*TestAggregateRecord](context.Background()).
 		WithDryRun(&statements).
-		WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{byTagID}}).
+		WithQuery(nil, gst.QueryOptions{AllowEmpty: true, Filters: []gst.Filter{byTagID}}).
 		List(&records))
 
 	require.Len(t, statements, 1)
@@ -1413,20 +1413,20 @@ func TestFilterExistsSelfJoin(t *testing.T) {
 
 	ctx := context.Background()
 	catCols := struct {
-		ID       types.Column[string]
-		ParentID types.Column[string]
+		ID       gst.Column[string]
+		ParentID gst.Column[string]
 	}{
-		ID:       types.NewColumn[*TestCategory, string]("id"),
-		ParentID: types.NewColumn[*TestCategory, string]("parent_id"),
+		ID:       gst.NewColumn[*TestCategory, string]("id"),
+		ParentID: gst.NewColumn[*TestCategory, string]("parent_id"),
 	}
 	require.NoError(t, database.Database[*TestCategory](ctx).Create(categoryRoot, categoryParent))
 
 	// Categories that are somebody's parent. root parents itself and parent,
 	// parent has no children, so only root matches.
-	hasChild := types.FilterExists[*TestCategory](catCols.ParentID.EqCol(catCols.ID))
+	hasChild := gst.FilterExists[*TestCategory](catCols.ParentID.EqCol(catCols.ID))
 	cats := make([]*TestCategory, 0)
 	require.NoError(t, database.Database[*TestCategory](ctx).
-		WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{hasChild}}).
+		WithQuery(nil, gst.QueryOptions{AllowEmpty: true, Filters: []gst.Filter{hasChild}}).
 		List(&cats))
 	require.Len(t, cats, 1)
 	require.Equal(t, categoryRootID, cats[0].ID)
@@ -1455,13 +1455,13 @@ func TestFilterExistsMultipleCorrelations(t *testing.T) {
 	byRecord := TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID)
 	byCategory := TestRecordTagCols.Category.EqCol(TestAggregateRecordCols.Category)
 	audit := TestRecordTagCols.Label.Eq("audit")
-	audited := types.FilterExists[*TestRecordTag](byRecord, byCategory, audit)
-	ids := func(filter types.Filter) []string {
+	audited := gst.FilterExists[*TestRecordTag](byRecord, byCategory, audit)
+	ids := func(filter gst.Filter) []string {
 		t.Helper()
 		records := make([]*TestAggregateRecord, 0)
 		require.NoError(t, database.Database[*TestAggregateRecord](ctx).
-			WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{filter}}).
-			WithOrder(types.Asc("id")).
+			WithQuery(nil, gst.QueryOptions{AllowEmpty: true, Filters: []gst.Filter{filter}}).
+			WithOrder(gst.Asc("id")).
 			List(&records))
 		got := make([]string, 0, len(records))
 		for _, r := range records {
@@ -1469,38 +1469,38 @@ func TestFilterExistsMultipleCorrelations(t *testing.T) {
 		}
 		return got
 	}
-	listErr := func(filter types.Filter) error {
+	listErr := func(filter gst.Filter) error {
 		t.Helper()
 		records := make([]*TestAggregateRecord, 0)
 		return database.Database[*TestAggregateRecord](ctx).
-			WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{filter}}).
+			WithQuery(nil, gst.QueryOptions{AllowEmpty: true, Filters: []gst.Filter{filter}}).
 			List(&records)
 	}
 
 	t.Run("RequiresEveryPair", func(t *testing.T) {
 		require.Equal(t, []string{"a3"}, ids(audited), "a2's tag fails the category pair")
-		require.Equal(t, []string{"a2", "a3"}, ids(types.FilterExists[*TestRecordTag](byRecord, audit)),
+		require.Equal(t, []string{"a2", "a3"}, ids(gst.FilterExists[*TestRecordTag](byRecord, audit)),
 			"a single pair still reaches the stale tag")
 	})
 
 	t.Run("NegatesAsAWhole", func(t *testing.T) {
-		unaudited := types.FilterNotExists[*TestRecordTag](byRecord, byCategory, audit)
+		unaudited := gst.FilterNotExists[*TestRecordTag](byRecord, byCategory, audit)
 		require.Equal(t, []string{"a1", "a2", "a4", "a5", "a6"}, ids(unaudited))
 	})
 
 	t.Run("MatchesAnyPairInsideOr", func(t *testing.T) {
 		// t5 reaches a2 by record and every beta record by category; t6
 		// reaches a3 by record and every alpha record by category.
-		anyPair := types.FilterExists[*TestRecordTag](types.FilterOr(byRecord, byCategory), audit)
+		anyPair := gst.FilterExists[*TestRecordTag](gst.FilterOr(byRecord, byCategory), audit)
 		require.Equal(t, []string{"a1", "a2", "a3", "a4", "a5"}, ids(anyPair))
 	})
 
 	t.Run("RendersPairsInOrder", func(t *testing.T) {
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		records := make([]*TestAggregateRecord, 0)
 		require.NoError(t, database.Database[*TestAggregateRecord](ctx).
 			WithDryRun(&statements).
-			WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{audited}}).
+			WithQuery(nil, gst.QueryOptions{AllowEmpty: true, Filters: []gst.Filter{audited}}).
 			List(&records))
 		require.Len(t, statements, 1)
 		sql := statements[0].Query
@@ -1516,22 +1516,22 @@ func TestFilterExistsMultipleCorrelations(t *testing.T) {
 		// A subquery tied to nothing is service code gone wrong, so the chain
 		// fails rather than answering an empty page; negated as well, where
 		// "match nothing" would otherwise widen into "match everything".
-		require.ErrorIs(t, listErr(types.FilterExists[*TestRecordTag](audit)), database.ErrUnusableFilter)
-		require.ErrorIs(t, listErr(types.FilterNotExists[*TestRecordTag](audit)), database.ErrUnusableFilter)
+		require.ErrorIs(t, listErr(gst.FilterExists[*TestRecordTag](audit)), database.ErrUnusableFilter)
+		require.ErrorIs(t, listErr(gst.FilterNotExists[*TestRecordTag](audit)), database.ErrUnusableFilter)
 	})
 
 	t.Run("StringTierMatchesTypedTier", func(t *testing.T) {
 		// FilterEqCol is what the column method delegates to, so naming the
 		// columns as strings selects the same rows.
-		byNames := types.FilterExists[*TestRecordTag](
-			types.FilterEqCol("record_id", "id"), types.FilterEqCol("category", "category"), audit,
+		byNames := gst.FilterExists[*TestRecordTag](
+			gst.FilterEqCol("record_id", "id"), gst.FilterEqCol("category", "category"), audit,
 		)
 		require.Equal(t, []string{"a3"}, ids(byNames))
 	})
 
 	t.Run("FailsOnUnknownChildColumn", func(t *testing.T) {
-		unknown := types.FilterExists[*TestRecordTag](
-			byRecord, types.NewColumn[*TestRecordTag, string]("missing").EqCol(TestAggregateRecordCols.Category), audit,
+		unknown := gst.FilterExists[*TestRecordTag](
+			byRecord, gst.NewColumn[*TestRecordTag, string]("missing").EqCol(TestAggregateRecordCols.Category), audit,
 		)
 		require.ErrorIs(t, listErr(unknown), database.ErrUnusableFilter)
 	})
@@ -1540,16 +1540,16 @@ func TestFilterExistsMultipleCorrelations(t *testing.T) {
 		// The users have an id too, so the name alone would tie the tags to
 		// the records as valid SQL; the table the reference carries refuses
 		// it, on the row path and on the select path alike.
-		userID := types.NewColumn[*TestUser, string]("id")
+		userID := gst.NewColumn[*TestUser, string]("id")
 		records := make([]*TestAggregateRecord, 0)
 		require.ErrorIs(t, database.Database[*TestAggregateRecord](ctx).
-			WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{
-				types.FilterExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(userID), audit),
+			WithQuery(nil, gst.QueryOptions{AllowEmpty: true, Filters: []gst.Filter{
+				gst.FilterExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(userID), audit),
 			}}).
 			List(&records), database.ErrColumnTable)
 		type total struct{ Total int64 }
 		err := database.Select[*TestAggregateRecord, total](ctx, TestAggregateRecordCols.Amount.Sum().As("total")).
-			Where(types.FilterExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(userID), audit)).
+			Where(gst.FilterExists[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(userID), audit)).
 			ScanOne(&total{})
 		require.ErrorIs(t, err, database.ErrColumnTable)
 		require.ErrorIs(t, err, database.ErrUnusableFilter)
@@ -1557,8 +1557,8 @@ func TestFilterExistsMultipleCorrelations(t *testing.T) {
 		// Both sides on the subquery's own table tie it to nothing enclosing;
 		// the message says which table was expected.
 		err = database.Database[*TestAggregateRecord](ctx).
-			WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{
-				types.FilterExists[*TestRecordTag](byRecord, TestRecordTagCols.Label.EqCol(TestRecordTagCols.Category)),
+			WithQuery(nil, gst.QueryOptions{AllowEmpty: true, Filters: []gst.Filter{
+				gst.FilterExists[*TestRecordTag](byRecord, TestRecordTagCols.Label.EqCol(TestRecordTagCols.Category)),
 			}}).
 			List(&records)
 		require.ErrorIs(t, err, database.ErrColumnTable)
@@ -1570,10 +1570,10 @@ func TestFilterExistsMultipleCorrelations(t *testing.T) {
 		// to and fails the chain; the typed one names the tag table, which
 		// the chain does not read, and fails it like any other reference of
 		// another model.
-		require.ErrorIs(t, listErr(types.FilterEqCol("record_id", "id")), database.ErrUnusableFilter)
+		require.ErrorIs(t, listErr(gst.FilterEqCol("record_id", "id")), database.ErrUnusableFilter)
 		records := make([]*TestAggregateRecord, 0)
 		require.ErrorIs(t, database.Database[*TestAggregateRecord](ctx).
-			WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{byRecord}}).
+			WithQuery(nil, gst.QueryOptions{AllowEmpty: true, Filters: []gst.Filter{byRecord}}).
 			List(&records), database.ErrColumnTable)
 	})
 
@@ -1581,8 +1581,8 @@ func TestFilterExistsMultipleCorrelations(t *testing.T) {
 		// The plain-name spelling cannot be checked at compile time, so the
 		// renderer checks the outer side against the enclosing model instead
 		// of letting the database answer with an unknown-column error.
-		unknown := types.FilterExists[*TestRecordTag](
-			byRecord, types.FilterEqCol("category", "missing"), audit,
+		unknown := gst.FilterExists[*TestRecordTag](
+			byRecord, gst.FilterEqCol("category", "missing"), audit,
 		)
 		require.ErrorIs(t, listErr(unknown), database.ErrUnusableFilter)
 	})
@@ -1607,10 +1607,10 @@ func TestLikeFiltersCompareCaseAndILikeIgnoresIt(t *testing.T) {
 	}
 	require.NoError(t, database.Database[*TestUser](ctx).Create(rows...))
 
-	names := func(filter types.Filter) []string {
+	names := func(filter gst.Filter) []string {
 		users := make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](ctx).
-			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{filter}}).
+			WithQuery(nil, gst.QueryOptions{Filters: []gst.Filter{filter}}).
 			List(&users))
 		got := make([]string, 0, len(users))
 		for _, u := range users {
@@ -1619,18 +1619,18 @@ func TestLikeFiltersCompareCaseAndILikeIgnoresIt(t *testing.T) {
 		slices.Sort(got)
 		return got
 	}
-	require.Equal(t, []string{"case-lower"}, names(types.NewFilter("", "name", types.FilterOpLike, "case")))
-	require.Equal(t, []string{"Case-Upper", "under_score", "Éclair"}, names(types.NewFilter("", "name", types.FilterOpNotLike, "case")))
-	require.Equal(t, []string{"Case-Upper"}, names(types.NewFilter("", "name", types.FilterOpStartsWith, "Case")))
-	require.Equal(t, []string{"case-lower"}, names(types.NewFilter("", "name", types.FilterOpEndsWith, "lower")))
+	require.Equal(t, []string{"case-lower"}, names(gst.NewFilter("", "name", gst.FilterOpLike, "case")))
+	require.Equal(t, []string{"Case-Upper", "under_score", "Éclair"}, names(gst.NewFilter("", "name", gst.FilterOpNotLike, "case")))
+	require.Equal(t, []string{"Case-Upper"}, names(gst.NewFilter("", "name", gst.FilterOpStartsWith, "Case")))
+	require.Equal(t, []string{"case-lower"}, names(gst.NewFilter("", "name", gst.FilterOpEndsWith, "lower")))
 
 	// The value may sit anywhere in the column, in any case.
-	require.Equal(t, []string{"Case-Upper", "case-lower"}, names(types.NewFilter("", "name", types.FilterOpILike, "CASE")))
-	require.Equal(t, []string{"Case-Upper"}, names(types.NewFilter("", "name", types.FilterOpILike, "e-u")))
-	require.Equal(t, []string{"case-lower"}, names(types.NewFilter("", "name", types.FilterOpILike, "LOWER")))
+	require.Equal(t, []string{"Case-Upper", "case-lower"}, names(gst.NewFilter("", "name", gst.FilterOpILike, "CASE")))
+	require.Equal(t, []string{"Case-Upper"}, names(gst.NewFilter("", "name", gst.FilterOpILike, "e-u")))
+	require.Equal(t, []string{"case-lower"}, names(gst.NewFilter("", "name", gst.FilterOpILike, "LOWER")))
 	// A LIKE metacharacter in the value stands for itself: the underscore
 	// matches the underscore of one row and no other character of another.
-	require.Equal(t, []string{"under_score"}, names(types.NewFilter("", "name", types.FilterOpILike, "UNDER_S")))
-	require.Empty(t, names(types.NewFilter("", "name", types.FilterOpILike, "CASE_")))
-	require.Equal(t, []string{"Éclair"}, names(types.NewFilter("", "name", types.FilterOpILike, "Éclair")))
+	require.Equal(t, []string{"under_score"}, names(gst.NewFilter("", "name", gst.FilterOpILike, "UNDER_S")))
+	require.Empty(t, names(gst.NewFilter("", "name", gst.FilterOpILike, "CASE_")))
+	require.Equal(t, []string{"Éclair"}, names(gst.NewFilter("", "name", gst.FilterOpILike, "Éclair")))
 }

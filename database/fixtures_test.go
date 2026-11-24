@@ -14,11 +14,11 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/datatypes"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/tenant"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -33,19 +33,19 @@ const (
 // Column references shared by the option and write tests; test models carry
 // no generated Cols vars.
 var (
-	colName      = types.NewColumn[*TestUser, string]("name")
-	colEmail     = types.NewColumn[*TestUser, string]("email")
-	colAge       = types.NewNumericColumn[*TestUser, int]("age")
-	colStatus    = types.NewColumn[*TestUser, string]("status")
-	colNotExists = types.NewColumn[*TestUser, string]("notexists")
+	colName      = gst.NewColumn[*TestUser, string]("name")
+	colEmail     = gst.NewColumn[*TestUser, string]("email")
+	colAge       = gst.NewNumericColumn[*TestUser, int]("age")
+	colStatus    = gst.NewColumn[*TestUser, string]("status")
+	colNotExists = gst.NewColumn[*TestUser, string]("notexists")
 )
 
 // colUniqueItemName and colUniqueItemCode are the name and the unique key
 // columns of the unique-key fixture; the upsert tests narrow a merge to them,
 // and a reference must name the model it writes.
 var (
-	colUniqueItemName = types.NewColumn[*TestUniqueItem, string]("name")
-	colUniqueItemCode = types.NewColumn[*TestUniqueItem, string]("unique_code")
+	colUniqueItemName = gst.NewColumn[*TestUniqueItem, string]("name")
+	colUniqueItemCode = gst.NewColumn[*TestUniqueItem, string]("unique_code")
 )
 
 var (
@@ -724,74 +724,74 @@ func cleanupDatedData() {
 // names them, and exercise the same API. Test and example code therefore
 // reads like project code.
 var TestAggregateRecordCols = struct {
-	ID         types.Column[string]
-	Category   types.Column[string]
-	Status     types.Column[string]
-	Amount     types.NumericColumn[int64]
-	Score      types.NumericColumn[float64]
-	OccurredAt types.TimeColumn
-	ClosedAt   types.TimeColumn
+	ID         gst.Column[string]
+	Category   gst.Column[string]
+	Status     gst.Column[string]
+	Amount     gst.NumericColumn[int64]
+	Score      gst.NumericColumn[float64]
+	OccurredAt gst.TimeColumn
+	ClosedAt   gst.TimeColumn
 }{
-	ID:         types.NewColumn[*TestAggregateRecord, string]("id"),
-	Category:   types.NewColumn[*TestAggregateRecord, string]("category"),
-	Status:     types.NewColumn[*TestAggregateRecord, string]("status"),
-	Amount:     types.NewNumericColumn[*TestAggregateRecord, int64]("amount"),
-	Score:      types.NewNumericColumn[*TestAggregateRecord, float64]("score"),
-	OccurredAt: types.NewTimeColumn[*TestAggregateRecord]("occurred_at"),
-	ClosedAt:   types.NewTimeColumn[*TestAggregateRecord]("closed_at"),
+	ID:         gst.NewColumn[*TestAggregateRecord, string]("id"),
+	Category:   gst.NewColumn[*TestAggregateRecord, string]("category"),
+	Status:     gst.NewColumn[*TestAggregateRecord, string]("status"),
+	Amount:     gst.NewNumericColumn[*TestAggregateRecord, int64]("amount"),
+	Score:      gst.NewNumericColumn[*TestAggregateRecord, float64]("score"),
+	OccurredAt: gst.NewTimeColumn[*TestAggregateRecord]("occurred_at"),
+	ClosedAt:   gst.NewTimeColumn[*TestAggregateRecord]("closed_at"),
 }
 
 // TestDatedRecordCols are the column references of the dated fixture, typed
 // the way gg gen types them: a date column gets the date reference.
 var TestDatedRecordCols = struct {
-	ID    types.Column[string]
-	Label types.Column[string]
-	Day   types.DateColumn
-	Due   types.DateColumn
+	ID    gst.Column[string]
+	Label gst.Column[string]
+	Day   gst.DateColumn
+	Due   gst.DateColumn
 }{
-	ID:    types.NewColumn[*TestDatedRecord, string]("id"),
-	Label: types.NewColumn[*TestDatedRecord, string]("label"),
-	Day:   types.NewDateColumn[*TestDatedRecord]("day"),
-	Due:   types.NewDateColumn[*TestDatedRecord]("due"),
+	ID:    gst.NewColumn[*TestDatedRecord, string]("id"),
+	Label: gst.NewColumn[*TestDatedRecord, string]("label"),
+	Day:   gst.NewDateColumn[*TestDatedRecord]("day"),
+	Due:   gst.NewDateColumn[*TestDatedRecord]("due"),
 }
 
 // TestRecordTagCols mirrors the generated column references of the related
 // model.
 var TestRecordTagCols = struct {
-	ID       types.Column[string]
-	RecordID types.Column[string]
-	Label    types.Column[string]
-	Category types.Column[string]
+	ID       gst.Column[string]
+	RecordID gst.Column[string]
+	Label    gst.Column[string]
+	Category gst.Column[string]
 }{
-	ID:       types.NewColumn[*TestRecordTag, string]("id"),
-	RecordID: types.NewColumn[*TestRecordTag, string]("record_id"),
-	Label:    types.NewColumn[*TestRecordTag, string]("label"),
-	Category: types.NewColumn[*TestRecordTag, string]("category"),
+	ID:       gst.NewColumn[*TestRecordTag, string]("id"),
+	RecordID: gst.NewColumn[*TestRecordTag, string]("record_id"),
+	Label:    gst.NewColumn[*TestRecordTag, string]("label"),
+	Category: gst.NewColumn[*TestRecordTag, string]("category"),
 }
 
 // TestScoredRecordCols are the column references of the scored fixture, typed
 // the way gg gen types them: a JSON document, a byte slice, a Valuer and a
 // nullable string each keep their Go type.
 var TestScoredRecordCols = struct {
-	ID      types.Column[string]
-	Name    types.Column[string]
-	Scores  types.Column[datatypes.JSONSlice[int]]
-	Weights types.Column[datatypes.JSONSlice[float64]]
-	Meta    types.Column[datatypes.JSONMap]
-	Extra   types.Column[datatypes.JSON[map[string]string]]
-	Digest  types.Column[[]byte]
-	Token   types.Column[sampleToken]
-	Grade   types.Column[sql.NullString]
+	ID      gst.Column[string]
+	Name    gst.Column[string]
+	Scores  gst.Column[datatypes.JSONSlice[int]]
+	Weights gst.Column[datatypes.JSONSlice[float64]]
+	Meta    gst.Column[datatypes.JSONMap]
+	Extra   gst.Column[datatypes.JSON[map[string]string]]
+	Digest  gst.Column[[]byte]
+	Token   gst.Column[sampleToken]
+	Grade   gst.Column[sql.NullString]
 }{
-	ID:      types.NewColumn[*TestScoredRecord, string]("id"),
-	Name:    types.NewColumn[*TestScoredRecord, string]("name"),
-	Scores:  types.NewColumn[*TestScoredRecord, datatypes.JSONSlice[int]]("scores"),
-	Weights: types.NewColumn[*TestScoredRecord, datatypes.JSONSlice[float64]]("weights"),
-	Meta:    types.NewColumn[*TestScoredRecord, datatypes.JSONMap]("meta"),
-	Extra:   types.NewColumn[*TestScoredRecord, datatypes.JSON[map[string]string]]("extra"),
-	Digest:  types.NewColumn[*TestScoredRecord, []byte]("digest"),
-	Token:   types.NewColumn[*TestScoredRecord, sampleToken]("token"),
-	Grade:   types.NewColumn[*TestScoredRecord, sql.NullString]("grade"),
+	ID:      gst.NewColumn[*TestScoredRecord, string]("id"),
+	Name:    gst.NewColumn[*TestScoredRecord, string]("name"),
+	Scores:  gst.NewColumn[*TestScoredRecord, datatypes.JSONSlice[int]]("scores"),
+	Weights: gst.NewColumn[*TestScoredRecord, datatypes.JSONSlice[float64]]("weights"),
+	Meta:    gst.NewColumn[*TestScoredRecord, datatypes.JSONMap]("meta"),
+	Extra:   gst.NewColumn[*TestScoredRecord, datatypes.JSON[map[string]string]]("extra"),
+	Digest:  gst.NewColumn[*TestScoredRecord, []byte]("digest"),
+	Token:   gst.NewColumn[*TestScoredRecord, sampleToken]("token"),
+	Grade:   gst.NewColumn[*TestScoredRecord, sql.NullString]("grade"),
 }
 
 // TestTypedRecordCols are the column references of the typed fixture, typed
@@ -799,19 +799,19 @@ var TestScoredRecordCols = struct {
 // gets the time reference, the number sql.NullInt64 holds the numeric one,
 // and a time of day the plain one.
 var TestTypedRecordCols = struct {
-	ID      types.Column[string]
-	Label   types.Column[string]
-	Settled types.TimeColumn
-	Tally   types.NumericColumn[sql.NullInt64]
-	Payload types.Column[string]
-	Clock   types.Column[datatypes.TimeOfDay]
+	ID      gst.Column[string]
+	Label   gst.Column[string]
+	Settled gst.TimeColumn
+	Tally   gst.NumericColumn[sql.NullInt64]
+	Payload gst.Column[string]
+	Clock   gst.Column[datatypes.TimeOfDay]
 }{
-	ID:      types.NewColumn[*TestTypedRecord, string]("id"),
-	Label:   types.NewColumn[*TestTypedRecord, string]("label"),
-	Settled: types.NewTimeColumn[*TestTypedRecord]("settled"),
-	Tally:   types.NewNumericColumn[*TestTypedRecord, sql.NullInt64]("tally"),
-	Payload: types.NewColumn[*TestTypedRecord, string]("payload"),
-	Clock:   types.NewColumn[*TestTypedRecord, datatypes.TimeOfDay]("clock"),
+	ID:      gst.NewColumn[*TestTypedRecord, string]("id"),
+	Label:   gst.NewColumn[*TestTypedRecord, string]("label"),
+	Settled: gst.NewTimeColumn[*TestTypedRecord]("settled"),
+	Tally:   gst.NewNumericColumn[*TestTypedRecord, sql.NullInt64]("tally"),
+	Payload: gst.NewColumn[*TestTypedRecord, string]("payload"),
+	Clock:   gst.NewColumn[*TestTypedRecord, datatypes.TimeOfDay]("clock"),
 }
 
 // tagSeed is the related-row fixture: two vip tags on alpha records and one
@@ -885,27 +885,27 @@ func (*TestRefund) TableName() string { return "test_refunds" }
 // TestPaymentCols and TestRefundCols mirror the generated column references
 // of the two flow models.
 var TestPaymentCols = struct {
-	ID      types.Column[string]
-	Account types.Column[string]
-	Amount  types.NumericColumn[int64]
-	PaidAt  types.TimeColumn
+	ID      gst.Column[string]
+	Account gst.Column[string]
+	Amount  gst.NumericColumn[int64]
+	PaidAt  gst.TimeColumn
 }{
-	ID:      types.NewColumn[*TestPayment, string]("id"),
-	Account: types.NewColumn[*TestPayment, string]("account"),
-	Amount:  types.NewNumericColumn[*TestPayment, int64]("amount"),
-	PaidAt:  types.NewTimeColumn[*TestPayment]("paid_at"),
+	ID:      gst.NewColumn[*TestPayment, string]("id"),
+	Account: gst.NewColumn[*TestPayment, string]("account"),
+	Amount:  gst.NewNumericColumn[*TestPayment, int64]("amount"),
+	PaidAt:  gst.NewTimeColumn[*TestPayment]("paid_at"),
 }
 
 var TestRefundCols = struct {
-	ID        types.Column[string]
-	Account   types.Column[string]
-	Amount    types.NumericColumn[int64]
-	SettledAt types.TimeColumn
+	ID        gst.Column[string]
+	Account   gst.Column[string]
+	Amount    gst.NumericColumn[int64]
+	SettledAt gst.TimeColumn
 }{
-	ID:        types.NewColumn[*TestRefund, string]("id"),
-	Account:   types.NewColumn[*TestRefund, string]("account"),
-	Amount:    types.NewNumericColumn[*TestRefund, int64]("amount"),
-	SettledAt: types.NewTimeColumn[*TestRefund]("settled_at"),
+	ID:        gst.NewColumn[*TestRefund, string]("id"),
+	Account:   gst.NewColumn[*TestRefund, string]("account"),
+	Amount:    gst.NewNumericColumn[*TestRefund, int64]("amount"),
+	SettledAt: gst.NewTimeColumn[*TestRefund]("settled_at"),
 }
 
 // The flow seed the union examples stack, hand-checkable like the aggregate
@@ -982,15 +982,15 @@ func (*TestAccount) Indexes() []modelschema.Index {
 // TestAccountCols mirrors the generated column references of the account
 // model.
 var TestAccountCols = struct {
-	ID   types.Column[string]
-	Code types.Column[string]
-	Name types.Column[string]
-	Tier types.Column[string]
+	ID   gst.Column[string]
+	Code gst.Column[string]
+	Name gst.Column[string]
+	Tier gst.Column[string]
 }{
-	ID:   types.NewColumn[*TestAccount, string]("id"),
-	Code: types.NewColumn[*TestAccount, string]("code"),
-	Name: types.NewColumn[*TestAccount, string]("name"),
-	Tier: types.NewColumn[*TestAccount, string]("tier"),
+	ID:   gst.NewColumn[*TestAccount, string]("id"),
+	Code: gst.NewColumn[*TestAccount, string]("code"),
+	Name: gst.NewColumn[*TestAccount, string]("name"),
+	Tier: gst.NewColumn[*TestAccount, string]("tier"),
 }
 
 // TestVisibility is a column type that hides the rows marked hidden from
@@ -1039,11 +1039,11 @@ func (*TestVisibleAccount) Indexes() []modelschema.Index {
 // TestVisibleAccountCols mirrors the generated column references of the
 // visible account model.
 var TestVisibleAccountCols = struct {
-	Code types.Column[string]
-	Name types.Column[string]
+	Code gst.Column[string]
+	Name gst.Column[string]
 }{
-	Code: types.NewColumn[*TestVisibleAccount, string]("code"),
-	Name: types.NewColumn[*TestVisibleAccount, string]("name"),
+	Code: gst.NewColumn[*TestVisibleAccount, string]("code"),
+	Name: gst.NewColumn[*TestVisibleAccount, string]("name"),
 }
 
 // TestMarkedRecord is a fixture whose mark is a pointer column the schema
@@ -1060,11 +1060,11 @@ func (*TestMarkedRecord) TableName() string { return "test_marked_records" }
 // TestMarkedRecordCols mirrors the generated column references of the
 // fixture.
 var TestMarkedRecordCols = struct {
-	Mark   types.Column[string]
-	Amount types.NumericColumn[int64]
+	Mark   gst.Column[string]
+	Amount gst.NumericColumn[int64]
 }{
-	Mark:   types.NewColumn[*TestMarkedRecord, string]("mark"),
-	Amount: types.NewNumericColumn[*TestMarkedRecord, int64]("amount"),
+	Mark:   gst.NewColumn[*TestMarkedRecord, string]("mark"),
+	Amount: gst.NewNumericColumn[*TestMarkedRecord, int64]("amount"),
 }
 
 // accountSeed is the one account the payments can join: acme, tier gold.
@@ -1114,7 +1114,7 @@ func (g *TestHookBox) CreateAfter(ctx context.Context) error {
 	if strings.TrimSpace(g.ConfigID) == "" {
 		return nil
 	}
-	if err := database.Database[*TestHookConfig](ctx).UpdateByID(g.ConfigID, types.NewAssignment("", "value", g.Value)); err != nil {
+	if err := database.Database[*TestHookConfig](ctx).UpdateByID(g.ConfigID, gst.NewAssignment("", "value", g.Value)); err != nil {
 		return err
 	}
 	return errTestHookBoxCreateAfter

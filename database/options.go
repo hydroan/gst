@@ -2,7 +2,7 @@ package database
 
 import (
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 )
@@ -60,7 +60,7 @@ import (
 //
 // NOTE: The batch size setting applies only to the current operation chain
 // and is reset afterward.
-func (db *database[M]) WithBatchSize(size int) types.Database[M] {
+func (db *database[M]) WithBatchSize(size int) gst.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	db.batchSize = size
@@ -73,7 +73,7 @@ func (db *database[M]) WithBatchSize(size int) types.Database[M] {
 // generated SQL will be built by GORM but not executed against the database.
 //
 // An optional collector receives the generated statements: pass a
-// *[]types.SQLStatement and the next terminal operation appends its Query,
+// *[]gst.SQLStatement and the next terminal operation appends its Query,
 // Args, and RenderedSQL to it instead of executing. Passing an explicitly nil
 // collector fails the chain with ErrNilSQLBuilder, because the caller asked
 // for statements it could never receive. Without a collector the SQL is only
@@ -95,7 +95,7 @@ func (db *database[M]) WithBatchSize(size int) types.Database[M] {
 //	WithDryRun().Create(&sample)            // Build INSERT SQL without creating record
 //	WithDryRun().UpdateByID(id, SampleCols.Name.Set(v))  // Build UPDATE SQL without updating record
 //
-//	var statements []types.SQLStatement
+//	var statements []gst.SQLStatement
 //	err := database.Database[*Sample](ctx).
 //	    WithDryRun(&statements).
 //	    WithQuery(&Sample{Name: "alpha"}).
@@ -104,7 +104,7 @@ func (db *database[M]) WithBatchSize(size int) types.Database[M] {
 // WithDryRun is build-only: it does not execute generated SQL, model hooks, or
 // object field filling. Transaction helpers are not supported because they
 // manage real transaction control flow.
-func (db *database[M]) WithDryRun(collector ...*[]types.SQLStatement) types.Database[M] {
+func (db *database[M]) WithDryRun(collector ...*[]gst.SQLStatement) gst.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	db.dryRun = true
@@ -157,7 +157,7 @@ func (db *database[M]) collectSQL(tx *gorm.DB) error {
 				renderedSQL = tx.Dialector.Explain(query, args...)
 			}
 			db.mu.Lock()
-			*db.sqlStatements = append(*db.sqlStatements, types.SQLStatement{
+			*db.sqlStatements = append(*db.sqlStatements, gst.SQLStatement{
 				Query:       query,
 				Args:        args,
 				RenderedSQL: renderedSQL,
@@ -179,7 +179,7 @@ func (db *database[M]) collectSQL(tx *gorm.DB) error {
 //	WithoutHook().Update(&sample)  // Update without validation hooks
 //
 // WithoutHook will disable all model hooks.
-func (db *database[M]) WithoutHook() types.Database[M] {
+func (db *database[M]) WithoutHook() gst.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	db.noHook = true

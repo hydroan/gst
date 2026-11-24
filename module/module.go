@@ -2,13 +2,13 @@
 // registers models, services, and HTTP routes for CRUD operations.
 //
 // A module consists of three components:
-//   - Model: Database entity implementing types.Model
-//   - Service: Business logic implementing types.Service
-//   - Module: Configuration implementing types.Module
+//   - Model: Database entity implementing gst.Model
+//   - Service: Business logic implementing gst.Service
+//   - Module: Configuration implementing gst.Module
 //
 // Usage:
 //  1. Define model (embedding model.Base), request/response types, and service (embedding service.Base)
-//  2. Implement module with types.Module interface
+//  2. Implement module with gst.Module interface
 //  3. Call module.Use() with desired route options
 //
 // Example:
@@ -35,10 +35,10 @@ import (
 	"sync/atomic"
 
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/router"
 	"github.com/hydroan/gst/internal/service"
-	"github.com/hydroan/gst/internal/types"
 )
 
 var (
@@ -130,19 +130,19 @@ func Wait() {
 // service, and HTTP route registration for the specified route options.
 //
 // Type Parameters:
-//   - M: Model type implementing types.Model
+//   - M: Model type implementing gst.Model
 //   - REQ: Request type for API operations
 //   - RSP: Response type for API operations
 //
 // Parameters:
-//   - mod: Module instance implementing types.Module[M, REQ, RSP]
+//   - mod: Module instance implementing gst.Module[M, REQ, RSP]
 //   - options: Route options created by CRUD or Exact.
 //
 // Routes are registered based on mod.Route() and mod.Param().
 // Authentication is determined by mod.Pub().
 //
 // Must be called during application initialization, typically in a Register() function.
-func Use[M types.Model, REQ types.Request, RSP types.Response](mod types.Module[M, REQ, RSP], options ...UseOption) {
+func Use[M gst.Model, REQ gst.Request, RSP gst.Response](mod gst.Module[M, REQ, RSP], options ...UseOption) {
 	startRegister(func() {
 		<-notify
 
@@ -224,17 +224,17 @@ func crudRoute(route, param string, phase apiaction.Phase) string {
 
 // registerCRUDRouter registers the route of phase under the CRUD layout; an
 // action on one row reads the row's id from the route's parameter.
-func registerCRUDRouter[M types.Model, REQ types.Request, RSP types.Response](mod types.Module[M, REQ, RSP], route, param string, phase apiaction.Phase) {
-	var cfg *types.ControllerConfig[M]
+func registerCRUDRouter[M gst.Model, REQ gst.Request, RSP gst.Response](mod gst.Module[M, REQ, RSP], route, param string, phase apiaction.Phase) {
+	var cfg *gst.ControllerConfig[M]
 	if item := ":" + param; apiaction.RouteSuffix(phase, item) == item {
-		cfg = &types.ControllerConfig[M]{ParamName: param}
+		cfg = &gst.ControllerConfig[M]{ParamName: param}
 	}
 	registerRouter(mod, crudRoute(route, param, phase), cfg, phase)
 }
 
 // registerRouter registers an HTTP route with the appropriate router based on mod.Pub().
 // If mod.Pub() returns true, registers with public router; otherwise with authenticated router.
-func registerRouter[M types.Model, REQ types.Request, RSP types.Response](mod types.Module[M, REQ, RSP], route string, cfg *types.ControllerConfig[M], phase apiaction.Phase) {
+func registerRouter[M gst.Model, REQ gst.Request, RSP gst.Response](mod gst.Module[M, REQ, RSP], route string, cfg *gst.ControllerConfig[M], phase apiaction.Phase) {
 	if mod.Pub() {
 		// Register with public router - no authentication required
 		router.Register[M, REQ, RSP](router.Pub(), route, cfg, phase)

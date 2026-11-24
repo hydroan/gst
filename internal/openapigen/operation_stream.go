@@ -7,9 +7,9 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/service"
-	"github.com/hydroan/gst/internal/types"
 )
 
 // The sentences opening and closing the paragraph a Stream action's
@@ -30,7 +30,7 @@ const (
 // of another action is wrapped in: the server's as the content of the 101,
 // the client's by name in the description, an OpenAPI document holding no
 // place for what the request of a GET goes on to send.
-func setStream[M types.Model, REQ types.Request, RSP types.Response](route, path string, pathItem *openapi3.PathItem) {
+func setStream[M gst.Model, REQ gst.Request, RSP gst.Response](route, path string, pathItem *openapi3.PathItem) {
 	custom := !model.AreTypesEqual[M, REQ, RSP]()
 	sent, _ := streamMessage[REQ]()
 	answered, answeredSchema := streamMessage[RSP]()
@@ -75,7 +75,7 @@ func streamMessage[T any]() (name string, schema *openapi3.SchemaRef) {
 // the client and the server send, and how it ends (streamClosing). Which
 // side sends one message and which a stream of them is the kind of stream
 // the Stream method of the action's service declares (see
-// types.ServerStreamer and its kind); sent and answered name the messages of
+// gst.ServerStreamer and its kind); sent and answered name the messages of
 // the two sides, "" one without a name. For a server stream taking a
 // SampleReq and answering SampleEvent messages the two sentences read
 //
@@ -91,11 +91,11 @@ func streamMessage[T any]() (name string, schema *openapi3.SchemaRef) {
 // other. A side declaring no message, *model.Empty, sends none, "The client
 // sends no message.", and an action whose service declares no Stream method
 // is described by its messages alone, "The client sends SampleReq messages."
-func streamExchange[M types.Model, REQ types.Request, RSP types.Response](route, sent, answered string) string {
+func streamExchange[M gst.Model, REQ gst.Request, RSP gst.Response](route, sent, answered string) string {
 	svc := service.Resolve[M, REQ, RSP](service.Key(apiaction.Stream, route))
-	_, serverStream := svc.(types.ServerStreamer[REQ, RSP])
-	_, clientStream := svc.(types.ClientStreamer[REQ, RSP])
-	_, bidiStream := svc.(types.BidiStreamer[REQ, RSP])
+	_, serverStream := svc.(gst.ServerStreamer[REQ, RSP])
+	_, clientStream := svc.(gst.ClientStreamer[REQ, RSP])
+	_, bidiStream := svc.(gst.BidiStreamer[REQ, RSP])
 	// messages names the messages of a side, in the plural, and message one
 	// of them.
 	message := func(name string) string { return strings.TrimSpace(name + " message") }

@@ -1,12 +1,12 @@
 package column
 
 import (
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/service"
-	"github.com/hydroan/gst/internal/types"
 )
 
-var _ types.Module[*empty, *empty, rsp] = (*mod)(nil)
+var _ gst.Module[*empty, *empty, rsp] = (*mod)(nil)
 
 type empty struct {
 	model.Empty
@@ -20,7 +20,7 @@ type srv struct {
 
 type mod struct{}
 
-func (*mod) Service() types.Service[*empty, *empty, rsp] {
+func (*mod) Service() gst.Service[*empty, *empty, rsp] {
 	return &srv{}
 }
 func (*mod) Pub() bool     { return false }

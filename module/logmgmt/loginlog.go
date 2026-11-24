@@ -1,12 +1,12 @@
 package logmgmt
 
 import (
+	"github.com/hydroan/gst/internal/gst"
 	modellogmgmt "github.com/hydroan/gst/internal/modulemodel/logmgmt"
 	servicelogmgmt "github.com/hydroan/gst/internal/moduleservice/logmgmt"
-	"github.com/hydroan/gst/internal/types"
 )
 
-var _ types.Module[*LoginLog, *LoginLog, *LoginLog] = (*LoginLogModule)(nil)
+var _ gst.Module[*LoginLog, *LoginLog, *LoginLog] = (*LoginLogModule)(nil)
 
 type (
 	LoginStatus = modellogmgmt.LoginStatus
@@ -21,7 +21,7 @@ const (
 	LoginStatusLogout  = modellogmgmt.LoginStatusLogout
 )
 
-func (*LoginLogModule) Service() types.Service[*LoginLog, *LoginLog, *LoginLog] {
+func (*LoginLogModule) Service() gst.Service[*LoginLog, *LoginLog, *LoginLog] {
 	return &servicelogmgmt.LoginLogService{}
 }
 func (*LoginLogModule) Route() string { return "/log/loginlog" }

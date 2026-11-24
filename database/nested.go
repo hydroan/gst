@@ -6,7 +6,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"go.opentelemetry.io/otel/trace"
 	"gorm.io/gorm"
 )
@@ -33,12 +33,12 @@ type nestedSelect interface {
 	// through.
 	chainFor(ctx context.Context, base *gorm.DB) operationChain
 	// isSelected reports whether the select projects exactly this term.
-	isSelected(t types.Term) bool
+	isSelected(t gst.Term) bool
 	// projectsAs reports whether the select projects this term's base, the
 	// term without its alias, window and conditions, and under which alias:
 	// the mistake a query reading the select makes when it re-aliases,
 	// windows or conditions the term instead of passing it as it is.
-	projectsAs(t types.Term) (string, bool)
+	projectsAs(t gst.Term) (string, bool)
 	// buildBranch renders the select as a member: read, ordered and capped
 	// as pushed down, or reduced to what decides its row count.
 	buildBranch(mode buildMode, orders []aliasOrder, limit int) (*gorm.DB, error)
@@ -58,7 +58,7 @@ type nestedSelect interface {
 type operationChain interface {
 	prepare() error
 	reset()
-	useDryRun(dryRun bool, collector *[]types.SQLStatement)
+	useDryRun(dryRun bool, collector *[]gst.SQLStatement)
 	traceAs(modelName string, phase apiaction.Phase, batch ...int) (func(error), trace.Span)
 	freshSession() *gorm.DB
 	annotate(tx *gorm.DB) *gorm.DB
@@ -68,7 +68,7 @@ type operationChain interface {
 
 // useDryRun sets the chain's dry-run mode and statement collector for the
 // operation about to run, the way a selector's build does on its own chain.
-func (db *database[M]) useDryRun(dryRun bool, collector *[]types.SQLStatement) {
+func (db *database[M]) useDryRun(dryRun bool, collector *[]gst.SQLStatement) {
 	db.dryRun = dryRun
 	db.sqlStatements = collector
 }
@@ -81,7 +81,7 @@ func (db *database[M]) freshSession() *gorm.DB {
 
 // nestedOf returns the nested side of a select this package built, false
 // for anything else: a select reaches the query reading it as the
-// types.Selector or types.SelectBranch value Select returned, the shell,
+// gst.Selector or gst.SelectBranch value Select returned, the shell,
 // which hands out its builder here.
 func nestedOf(v any) (nestedSelect, bool) {
 	shell, ok := v.(interface{ nested() nestedSelect })
@@ -107,10 +107,10 @@ func (a *selectBuilder[M]) chainFor(ctx context.Context, base *gorm.DB) operatio
 	return chain
 }
 
-func (a *selectBuilder[M]) projectsAs(t types.Term) (string, bool) {
-	t = types.TermBase(t)
+func (a *selectBuilder[M]) projectsAs(t gst.Term) (string, bool) {
+	t = gst.TermBase(t)
 	for _, selected := range a.terms {
-		if reflect.DeepEqual(types.TermBase(selected), t) {
+		if reflect.DeepEqual(gst.TermBase(selected), t) {
 			return termAlias(selected), true
 		}
 	}
@@ -133,12 +133,12 @@ func (a *selectBuilder[M]) buildBranch(mode buildMode, orders []aliasOrder, limi
 // termsInResultOrder returns the projection's terms in the order of the
 // result row's fields. validate has matched the aliases against the fields
 // in both directions, so every field has exactly one term here.
-func (a *selectBuilder[M]) termsInResultOrder(shape projectionShape) []types.Term {
-	byAlias := make(map[string]types.Term, len(a.terms))
+func (a *selectBuilder[M]) termsInResultOrder(shape projectionShape) []gst.Term {
+	byAlias := make(map[string]gst.Term, len(a.terms))
 	for _, t := range a.terms {
 		byAlias[termAlias(t)] = t
 	}
-	ordered := make([]types.Term, 0, len(shape.resultOrder))
+	ordered := make([]gst.Term, 0, len(shape.resultOrder))
 	for _, alias := range shape.resultOrder {
 		ordered = append(ordered, byAlias[alias])
 	}
@@ -168,7 +168,7 @@ func (a *selectBuilder[M]) describe() (derivedInfo, error) {
 	// reads from a select it joins itself is a column of that derived table,
 	// constant within the groups its own keys define, and no column of the
 	// query equals it.
-	keys := make([]types.Term, 0, len(shape.keys))
+	keys := make([]gst.Term, 0, len(shape.keys))
 	for _, key := range shape.keys {
 		if _, derived := a.derivedOf(key, shape); derived {
 			continue

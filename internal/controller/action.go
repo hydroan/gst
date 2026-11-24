@@ -10,10 +10,10 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/service"
-	"github.com/hydroan/gst/internal/types"
 	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -30,7 +30,7 @@ import (
 // requests can safely share one instance; request-scoped mutable state
 // (model and request instances) is still created per request via newModel
 // and newRequest.
-type action[M types.Model, REQ types.Request, RSP types.Response] struct {
+type action[M gst.Model, REQ gst.Request, RSP gst.Response] struct {
 	typ        reflect.Type    // struct type underlying M
 	name       string          // struct name of M, recorded in span attributes and logs
 	typesEqual bool            // whether M, REQ, and RSP are the same type
@@ -43,7 +43,7 @@ type action[M types.Model, REQ types.Request, RSP types.Response] struct {
 	controllerSpan phaseSpan                     // controller span of the action's primary phase
 	serviceSpans   map[apiaction.Phase]phaseSpan // service span names keyed by phase
 
-	idColumn types.Column[string] // the id column of M, the reference the batch flows read records by
+	idColumn gst.Column[string] // the id column of M, the reference the batch flows read records by
 
 	// What the framework's own write flows read off M (see writeFieldsOf);
 	// empty for an action a service of its own serves. readOnly are the index
@@ -56,7 +56,7 @@ type action[M types.Model, REQ types.Request, RSP types.Response] struct {
 	// writes the full row.
 	readOnly  [][]int
 	unwritten [][]int
-	writable  []types.AnyColumnRef
+	writable  []gst.AnyColumnRef
 
 	// itemParam is the route parameter carrying the id of a standard item
 	// action, a Get, Update, Patch or Delete of the model itself: the last
@@ -80,7 +80,7 @@ type action[M types.Model, REQ types.Request, RSP types.Response] struct {
 // body decodes into, and when the action is the framework's own update of a
 // model declaring every column of its own read-only, an update with nothing
 // to write.
-func newAction[M types.Model, REQ types.Request, RSP types.Response](route string, phase apiaction.Phase, hookPhases ...apiaction.Phase) *action[M, REQ, RSP] {
+func newAction[M gst.Model, REQ gst.Request, RSP gst.Response](route string, phase apiaction.Phase, hookPhases ...apiaction.Phase) *action[M, REQ, RSP] {
 	typ := reflect.TypeOf(*new(M)).Elem()
 	name := typ.Name()
 
@@ -108,7 +108,7 @@ func newAction[M types.Model, REQ types.Request, RSP types.Response](route strin
 		itemParam = apiaction.LastRouteParam(route)
 	}
 	var readOnly, unwritten [][]int
-	var writable []types.AnyColumnRef
+	var writable []gst.AnyColumnRef
 	if typesEqual {
 		readOnly, unwritten, writable = writeFieldsOf[M](typ)
 		// An update of a model declaring read-only columns writes the columns
@@ -130,7 +130,7 @@ func newAction[M types.Model, REQ types.Request, RSP types.Response](route strin
 		reqTyp:         reqTyp,
 		controllerSpan: newPhaseSpan("controller", name, phase),
 		serviceSpans:   serviceSpans,
-		idColumn:       types.NewColumn[M, string](modelschema.IDColumn),
+		idColumn:       gst.NewColumn[M, string](modelschema.IDColumn),
 		readOnly:       readOnly,
 		unwritten:      unwritten,
 		writable:       writable,
@@ -193,7 +193,7 @@ func (a *action[M, REQ, RSP]) newRequest() REQ {
 // service resolves the phase service from the registry using the precomputed
 // key. Resolution stays per request so services registered after route
 // registration are still picked up.
-func (a *action[M, REQ, RSP]) service() types.Service[M, REQ, RSP] {
+func (a *action[M, REQ, RSP]) service() gst.Service[M, REQ, RSP] {
 	return service.Resolve[M, REQ, RSP](a.serviceKey)
 }
 
@@ -203,28 +203,28 @@ func (a *action[M, REQ, RSP]) service() types.Service[M, REQ, RSP] {
 // handlers of their own, and the hook phases have no such method, so it
 // panics; only a gRPC ServiceCall can name one of them here, the HTTP
 // handler being built for actions with a payload or result alone.
-func serviceMethod[M types.Model, REQ types.Request, RSP types.Response](phase apiaction.Phase) func(svc types.Service[M, REQ, RSP], sc *types.ServiceContext, req REQ) (RSP, error) {
+func serviceMethod[M gst.Model, REQ gst.Request, RSP gst.Response](phase apiaction.Phase) func(svc gst.Service[M, REQ, RSP], sc *gst.ServiceContext, req REQ) (RSP, error) {
 	switch phase {
 	case apiaction.Create:
-		return types.Service[M, REQ, RSP].Create
+		return gst.Service[M, REQ, RSP].Create
 	case apiaction.Delete:
-		return types.Service[M, REQ, RSP].Delete
+		return gst.Service[M, REQ, RSP].Delete
 	case apiaction.Update:
-		return types.Service[M, REQ, RSP].Update
+		return gst.Service[M, REQ, RSP].Update
 	case apiaction.Patch:
-		return types.Service[M, REQ, RSP].Patch
+		return gst.Service[M, REQ, RSP].Patch
 	case apiaction.List:
-		return types.Service[M, REQ, RSP].List
+		return gst.Service[M, REQ, RSP].List
 	case apiaction.Get:
-		return types.Service[M, REQ, RSP].Get
+		return gst.Service[M, REQ, RSP].Get
 	case apiaction.CreateMany:
-		return types.Service[M, REQ, RSP].CreateMany
+		return gst.Service[M, REQ, RSP].CreateMany
 	case apiaction.DeleteMany:
-		return types.Service[M, REQ, RSP].DeleteMany
+		return gst.Service[M, REQ, RSP].DeleteMany
 	case apiaction.UpdateMany:
-		return types.Service[M, REQ, RSP].UpdateMany
+		return gst.Service[M, REQ, RSP].UpdateMany
 	case apiaction.PatchMany:
-		return types.Service[M, REQ, RSP].PatchMany
+		return gst.Service[M, REQ, RSP].PatchMany
 	}
 	panic(fmt.Sprintf("controller: phase %q has no rpc; ServiceCall serves the actions of a model's gRPC service", phase))
 }
@@ -291,7 +291,7 @@ func (a *action[M, REQ, RSP]) startSpan(ctx context.Context, method, path string
 // hook. A hook the service does not override is the framework base's no-op:
 // it still runs, so the hook sequence stays the same for every service, but
 // it has nothing worth timing and gets no span.
-func (a *action[M, REQ, RSP]) traceServiceHook(parentCtx context.Context, phase apiaction.Phase, svc types.Service[M, REQ, RSP], newServiceContext serviceContextFunc, fn func(*types.ServiceContext) error) error {
+func (a *action[M, REQ, RSP]) traceServiceHook(parentCtx context.Context, phase apiaction.Phase, svc gst.Service[M, REQ, RSP], newServiceContext serviceContextFunc, fn func(*gst.ServiceContext) error) error {
 	run := func(ctx context.Context) error {
 		sc := newServiceContext(ctx, phase)
 		if err := fn(sc); err != nil {
@@ -312,17 +312,17 @@ func (a *action[M, REQ, RSP]) traceServiceHook(parentCtx context.Context, phase 
 // httpOnlyMethodCalled returns the error of a service that called a method
 // of sc only an HTTP request can serve — wrote a body, a stream or a cookie
 // it believes answered, read a cookie, a form value or a file that was never
-// there — while sc carried no HTTP request (see types.HTTPOnlyMethodCalled),
+// there — while sc carried no HTTP request (see gst.HTTPOnlyMethodCalled),
 // naming the methods, and nil when it called none. A call answers Internal
 // for it, right after the hook that called it (see traceServiceHook) or
 // once its service method returned (see finish); gg check reports the call
 // at generation time, this is the transport's own refusal. A context of an
 // HTTP request carries the request, so its hooks never trip it.
-func httpOnlyMethodCalled(sc *types.ServiceContext) error {
-	if !types.HTTPOnlyMethodCalled(sc) {
+func httpOnlyMethodCalled(sc *gst.ServiceContext) error {
+	if !gst.HTTPOnlyMethodCalled(sc) {
 		return nil
 	}
-	return errors.Newf("the service called a method of its context only an HTTP request can serve: an action served over gRPC must not call %s", strings.Join(types.HTTPOnlyMethods, ", "))
+	return errors.Newf("the service called a method of its context only an HTTP request can serve: an action served over gRPC must not call %s", strings.Join(gst.HTTPOnlyMethods, ", "))
 }
 
 // traceServiceOperation traces a delegated service operation returning RSP.
@@ -332,7 +332,7 @@ func (a *action[M, REQ, RSP]) traceServiceOperation(parentCtx context.Context, p
 
 // traceServiceCall runs fn inside a service span and records its duration
 // and whether it succeeded, and, when it failed as the server's own failure
-// (see types.ServerFailure), the error: a refusal the client brought on
+// (see gst.ServerFailure), the error: a refusal the client brought on
 // itself leaves the span's status unset. It is the shared core of the
 // traceService* methods; the duration and success attribute keys carry the
 // "hook." prefix for every service call, the keys dashboards and queries
@@ -368,7 +368,7 @@ func traceServiceCall[T any](parentCtx context.Context, span phaseSpan, modelNam
 			)
 			// Marked failed for the server's failures alone, like the
 			// controller span the call runs in (see reportFailure).
-			if err != nil && types.ServerFailure(err) {
+			if err != nil && gst.ServerFailure(err) {
 				gstotel.RecordError(s, err)
 			}
 		}

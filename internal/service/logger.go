@@ -43,11 +43,11 @@ func setLogger(s any) {
 	}
 	for i := range typ.NumField() {
 		switch strings.ToLower(typ.Field(i).Name) {
-		case "logger": // service object has itself types.Logger
+		case "logger": // service object has itself gst.Logger
 			if val.Field(i).IsZero() {
 				val.Field(i).Set(reflect.ValueOf(logger.Service))
 			}
-		case "base": // service object's types.Logger extends from 'base' struct.
+		case "base": // service object's gst.Logger extends from 'base' struct.
 			fieldLogger := val.Field(i).FieldByName("Logger")
 			if fieldLogger.IsZero() {
 				fieldLogger.Set(reflect.ValueOf(logger.Service))

@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/types"
 )
 
 // Orders returns the ORDER BY terms of the request, ready to be passed to
@@ -20,11 +20,11 @@ import (
 // a client error, instead of reaching the database and failing the whole page
 // with a SQL error. The value carried in each Order is the database column
 // name, while the URL names the column by its query name.
-func Orders(q url.Values, m types.Model) ([]types.Order, error) {
+func Orders(q url.Values, m gst.Model) ([]gst.Order, error) {
 	if !model.IsQueryable(m) {
 		return nil, nil
 	}
-	expression := strings.TrimSpace(q.Get(types.QuerySortBy))
+	expression := strings.TrimSpace(q.Get(gst.QuerySortBy))
 	if len(expression) == 0 {
 		return nil, nil
 	}
@@ -33,7 +33,7 @@ func Orders(q url.Values, m types.Model) ([]types.Order, error) {
 		return nil, err
 	}
 
-	orders := make([]types.Order, 0)
+	orders := make([]gst.Order, 0)
 	for term := range strings.SplitSeq(expression, ",") {
 		fields := strings.Fields(term)
 		if len(fields) == 0 || len(fields) > 2 {
@@ -43,18 +43,18 @@ func Orders(q url.Values, m types.Model) ([]types.Order, error) {
 		if !ok {
 			return nil, errors.Newf("unknown sort column %q", fields[0])
 		}
-		direction := types.OrderAsc
+		direction := gst.OrderAsc
 		if len(fields) == 2 {
 			switch {
-			case strings.EqualFold(fields[1], string(types.OrderAsc)):
-				direction = types.OrderAsc
-			case strings.EqualFold(fields[1], string(types.OrderDesc)):
-				direction = types.OrderDesc
+			case strings.EqualFold(fields[1], string(gst.OrderAsc)):
+				direction = gst.OrderAsc
+			case strings.EqualFold(fields[1], string(gst.OrderDesc)):
+				direction = gst.OrderDesc
 			default:
 				return nil, errors.Newf("invalid sort direction %q for column %q: expected asc or desc", fields[1], fields[0])
 			}
 		}
-		orders = append(orders, types.NewOrder("", column.DBName, direction))
+		orders = append(orders, gst.NewOrder("", column.DBName, direction))
 	}
 	return orders, nil
 }

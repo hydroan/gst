@@ -11,8 +11,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/service"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -43,19 +43,19 @@ type requiredService struct {
 	service.Base[*handlerRouteModel, *requiredReq, *payloadRsp]
 }
 
-func (*requiredService) Create(_ *types.ServiceContext, req *requiredReq) (*payloadRsp, error) {
+func (*requiredService) Create(_ *gst.ServiceContext, req *requiredReq) (*payloadRsp, error) {
 	return &payloadRsp{Note: req.Note}, nil
 }
 
-func (*payloadService) Create(_ *types.ServiceContext, req *payloadReq) (*payloadRsp, error) {
+func (*payloadService) Create(_ *gst.ServiceContext, req *payloadReq) (*payloadRsp, error) {
 	return &payloadRsp{Note: req.Note}, nil
 }
 
-func (*payloadService) Get(_ *types.ServiceContext, req *payloadReq) (*payloadRsp, error) {
+func (*payloadService) Get(_ *gst.ServiceContext, req *payloadReq) (*payloadRsp, error) {
 	return &payloadRsp{Note: req.Note}, nil
 }
 
-func (*payloadService) List(_ *types.ServiceContext, req *payloadReq) (*payloadRsp, error) {
+func (*payloadService) List(_ *gst.ServiceContext, req *payloadReq) (*payloadRsp, error) {
 	return &payloadRsp{Note: req.Note}, nil
 }
 
@@ -69,7 +69,7 @@ func TestServiceHandlerValidatesTheZeroRequestOfAnAbsentBody(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	const route = "required-payloads"
 	registerTestService[*handlerRouteModel, *requiredReq, *payloadRsp](apiaction.Create, route, &requiredService{})
-	cfg := &types.ControllerConfig[*handlerRouteModel]{Route: route, ParamName: "id"}
+	cfg := &gst.ControllerConfig[*handlerRouteModel]{Route: route, ParamName: "id"}
 	engine := gin.New()
 	engine.POST("/required-payloads", CreateHandler[*handlerRouteModel, *requiredReq, *payloadRsp](cfg))
 
@@ -107,7 +107,7 @@ func TestServiceHandlerBindsWhatTheActionReads(t *testing.T) {
 	for _, phase := range []apiaction.Phase{apiaction.Create, apiaction.Get, apiaction.List} {
 		registerTestService[*handlerRouteModel, *payloadReq, *payloadRsp](phase, route, &payloadService{})
 	}
-	cfg := &types.ControllerConfig[*handlerRouteModel]{Route: route, ParamName: "id"}
+	cfg := &gst.ControllerConfig[*handlerRouteModel]{Route: route, ParamName: "id"}
 	engine := gin.New()
 	engine.POST("/payloads", CreateHandler[*handlerRouteModel, *payloadReq, *payloadRsp](cfg))
 	engine.GET("/payloads/:id", GetHandler[*handlerRouteModel, *payloadReq, *payloadRsp](cfg))

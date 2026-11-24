@@ -9,7 +9,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/cache/defaultcache"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/stretchr/testify/require"
 	"github.com/twmb/franz-go/pkg/kerr"
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -60,7 +60,7 @@ func TestPeerPropagation(t *testing.T) {
 	require.NoError(t, source.Delete(ctx, "propagated-key"))
 	require.Eventually(t, func() bool {
 		_, err := peer.Get(ctx, "propagated-key")
-		return errors.Is(err, types.ErrEntryNotFound)
+		return errors.Is(err, gst.ErrEntryNotFound)
 	}, 30*time.Second, 100*time.Millisecond, "the delete event must reach the peer's store")
 }
 
@@ -255,7 +255,7 @@ func (s *fakeStore[T]) Get(_ context.Context, key string) (entry[T], error) {
 	defer s.mu.Unlock()
 	value, ok := s.m[key]
 	if !ok {
-		return entry[T]{}, types.ErrEntryNotFound
+		return entry[T]{}, gst.ErrEntryNotFound
 	}
 	return value, nil
 }

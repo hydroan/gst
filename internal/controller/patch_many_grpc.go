@@ -7,7 +7,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // PatchManyCall returns the batch patch call of M on route, the counterpart
@@ -20,7 +20,7 @@ import (
 // version the way the handler does, runs the batch patch flow (see
 // patchManyFlow) and answers with the records patched, or with the status
 // the failure maps to (see call).
-func PatchManyCall[M types.Model](route string) func(ctx context.Context, params map[string]string, items []M, paths [][]string) ([]M, error) {
+func PatchManyCall[M gst.Model](route string) func(ctx context.Context, params map[string]string, items []M, paths [][]string) ([]M, error) {
 	a := newAction[M, M, M](route, apiaction.PatchMany, apiaction.PatchManyBefore, apiaction.PatchManyAfter)
 	return func(ctx context.Context, params map[string]string, items []M, paths [][]string) ([]M, error) {
 		c, err := a.beginCall(ctx, params, nil)

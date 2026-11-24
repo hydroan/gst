@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"github.com/stretchr/testify/require"
 )
@@ -60,7 +60,7 @@ func TestInitPanicsOnAPointerEmbeddedBaseRegisteredBeforeTheLogger(t *testing.T)
 }
 
 // setServiceLogger sets logger.Service for one test and restores it after.
-func setServiceLogger(t *testing.T, l types.Logger) {
+func setServiceLogger(t *testing.T, l gst.Logger) {
 	t.Helper()
 
 	previous := logger.Service

@@ -3,7 +3,7 @@ package config
 import (
 	"time"
 
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/spf13/viper"
 )
 
@@ -136,7 +136,7 @@ type OTEL struct {
 
 func (o *OTEL) setDefaults(v *viper.Viper) {
 	v.SetDefault("otel.enabled", false)
-	v.SetDefault("otel.service_name", types.FrameworkName)
+	v.SetDefault("otel.service_name", gst.FrameworkName)
 	v.SetDefault("otel.exporter_otlp_protocol", OTLPProtocolHTTPProtobuf)
 	v.SetDefault("otel.exporter_otlp_traces_endpoint", "http://localhost:4318/v1/traces")
 	v.SetDefault("otel.exporter_otlp_headers", map[string]string{})

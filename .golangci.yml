@@ -98,7 +98,7 @@ linters:
               desc: "Use github.com/cockroachdb/errors instead"
             - pkg: "github.com/pkg/errors"
               desc: "Use github.com/cockroachdb/errors instead"
-        # internal/types is the bottom of the framework, the vocabulary every
+        # internal/gst is the bottom of the framework, the vocabulary every
         # other package shares: it imports the standard library, the leaf
         # packages under it and the third-party types it names, and never a
         # functional package, so that every functional package can depend on
@@ -106,7 +106,7 @@ linters:
         types-leaf:
           list-mode: strict
           files:
-            - "**/internal/types/**"
+            - "**/internal/gst/**"
             - "!$test"
           allow:
             - "$gostd"
@@ -154,7 +154,7 @@ linters:
             - "!**/module/version/version.go"
           deny:
             - pkg: "github.com/hydroan/gst$"
-              desc: "framework code imports github.com/hydroan/gst/internal/types"
+              desc: "framework code imports github.com/hydroan/gst/internal/gst"
             - pkg: "github.com/hydroan/gst/dsl$"
               desc: "framework code imports github.com/hydroan/gst/internal/dsl; the public package holds the keywords model files call"
             - pkg: "github.com/hydroan/gst/model$"
@@ -315,7 +315,7 @@ linters:
             - "!**/internal/controller/*_grpc.go"
           deny:
             - pkg: "github.com/hydroan/gst/internal/grpcserver$"
-              desc: "code both lines share never imports the gRPC listener; what both lines follow lives in a package neither owns, internal/types for one"
+              desc: "code both lines share never imports the gRPC listener; what both lines follow lives in a package neither owns, internal/gst for one"
         # The router and its middleware are imported, beside their own line,
         # by bootstrap and by the file registering the routes of the modules.
         shared-not-http:
@@ -333,7 +333,7 @@ linters:
             - "!**/module/module.go"
           deny:
             - pkg: "github.com/hydroan/gst/internal/middleware$"
-              desc: "code both lines share never imports the HTTP middleware; what both lines follow lives in a package neither owns, internal/types for one"
+              desc: "code both lines share never imports the HTTP middleware; what both lines follow lives in a package neither owns, internal/gst for one"
             - pkg: "github.com/hydroan/gst/internal/router$"
               desc: "code both lines share never imports the router; what both lines follow lives in a package neither owns, internal/apiaction for one"
         # The envelope is imported, beside its own line, by the test support
@@ -354,7 +354,7 @@ linters:
             - "!**/internal/controller/*_http.go"
           deny:
             - pkg: "github.com/hydroan/gst/internal/response$"
-              desc: "code both lines share never imports the HTTP envelope; what both lines follow lives in a package neither owns, internal/types for one"
+              desc: "code both lines share never imports the HTTP envelope; what both lines follow lives in a package neither owns, internal/gst for one"
         # The controller holds both lines, and the name of a file says which it
         # is written for: one ending in _http serves HTTP, one ending in _grpc
         # serves gRPC, and any other holds what both run. So gin and the

@@ -8,13 +8,13 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/types"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
-// The select: the shell implementing types.Selector, and the builder behind
+// The select: the shell implementing gst.Selector, and the builder behind
 // it — the specification a Select call assembles, its terminals, and the
 // shape the renderer and the validator agree on. The grouped side —
 // measures, group keys, HAVING — lives in select_group.go, the window side
@@ -54,7 +54,7 @@ var (
 // identifier instead of being quoted and hoped for.
 var aliasPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
-// selector implements types.Selector: a thin shell over a selectBuilder,
+// selector implements gst.Selector: a thin shell over a selectBuilder,
 // which is everything a select is but its result row type R. The shell
 // keeps what the compiler copies per row type small — Go compiles the
 // methods of a generic type once per shape of its type arguments, and
@@ -63,7 +63,7 @@ var aliasPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 // compiled again, dozens of methods, for every row struct a project scans
 // into — and hands its builder to the queries reading the select (see
 // nestedOf).
-type selector[M types.Model, R any] struct {
+type selector[M gst.Model, R any] struct {
 	b *selectBuilder[M]
 }
 
@@ -74,7 +74,7 @@ type selector[M types.Model, R any] struct {
 // carried by the context, identifier quoting, the filter renderer, tracing
 // and SQL collection. Of the row type it keeps row, which is all the
 // validation and the scan need.
-type selectBuilder[M types.Model] struct {
+type selectBuilder[M gst.Model] struct {
 	db  *database[M]
 	err error        // set when the chain could not be attached; surfaced by the terminal
 	row reflect.Type // the result row type R of the Select
@@ -84,19 +84,19 @@ type selectBuilder[M types.Model] struct {
 	// the next terminal alone, which consumeDryRun clears them after: a
 	// builder read again runs for real, as it promises.
 	dryRun     bool
-	statements *[]types.SQLStatement
+	statements *[]gst.SQLStatement
 	// describing and consuming mark the selector as being read by a query
 	// that joins it, so a select joined into itself, directly or through
 	// the selects it joins, is refused instead of recursing without end.
 	describing bool
 	consuming  bool
 
-	terms     []types.Term
-	joins     []types.JoinSource
-	filters   []types.Filter
-	havings   []types.TermCondition
-	qualifies []types.TermCondition
-	orders    []types.Ordering
+	terms     []gst.Term
+	joins     []gst.JoinSource
+	filters   []gst.Filter
+	havings   []gst.TermCondition
+	qualifies []gst.TermCondition
+	orders    []gst.Ordering
 	limit     int
 	offset    int
 	hasLimit  bool
@@ -113,8 +113,8 @@ type selectBuilder[M types.Model] struct {
 // Select creates an analytical read over the table of M that projects exprs
 // and scans the result rows into R. The projection is declared here, at the
 // entry, so a selection has exactly one place that says what it reads; see
-// types.Selector for the contract and an example.
-func Select[M types.Model, R any](ctx context.Context, exprs ...types.Expr) types.Selector[M, R] {
+// gst.Selector for the contract and an example.
+func Select[M gst.Model, R any](ctx context.Context, exprs ...gst.Expr) gst.Selector[M, R] {
 	inner, ok := Database[M](ctx).(*database[M])
 	if !ok {
 		// Unreachable while Database returns the concrete chain, but swallowing
@@ -126,7 +126,7 @@ func Select[M types.Model, R any](ctx context.Context, exprs ...types.Expr) type
 
 // SelectOn is Select on an application-held database instance. See
 // DatabaseOn for the instance semantics, including the panic on nil.
-func SelectOn[M types.Model, R any](ctx context.Context, instance *gorm.DB, exprs ...types.Expr) types.Selector[M, R] {
+func SelectOn[M gst.Model, R any](ctx context.Context, instance *gorm.DB, exprs ...gst.Expr) gst.Selector[M, R] {
 	inner, ok := DatabaseOn[M](ctx, instance).(*database[M])
 	if !ok {
 		// Unreachable while DatabaseOn returns the concrete chain, but
@@ -139,53 +139,53 @@ func SelectOn[M types.Model, R any](ctx context.Context, instance *gorm.DB, expr
 
 // termsOf turns the projection expressions into terms: a column reference
 // selects as the plain projection of that column.
-func termsOf(exprs []types.Expr) []types.Term {
-	terms := make([]types.Term, 0, len(exprs))
+func termsOf(exprs []gst.Expr) []gst.Term {
+	terms := make([]gst.Term, 0, len(exprs))
 	for _, expr := range exprs {
-		terms = append(terms, types.TermOf(expr))
+		terms = append(terms, gst.TermOf(expr))
 	}
 	return terms
 }
 
-// The shell's methods: each is the types.Selector method of its name on
+// The shell's methods: each is the gst.Selector method of its name on
 // the builder, the chain ones returning the shell for the next call.
 
-func (a *selector[M, R]) Where(filters ...types.Filter) types.Selector[M, R] {
+func (a *selector[M, R]) Where(filters ...gst.Filter) gst.Selector[M, R] {
 	a.b.filters = append(a.b.filters, filters...)
 	return a
 }
 
-func (a *selector[M, R]) Join(sources ...types.JoinSource) types.Selector[M, R] {
+func (a *selector[M, R]) Join(sources ...gst.JoinSource) gst.Selector[M, R] {
 	a.b.joins = append(a.b.joins, sources...)
 	return a
 }
 
-func (a *selector[M, R]) Having(conditions ...types.TermCondition) types.Selector[M, R] {
+func (a *selector[M, R]) Having(conditions ...gst.TermCondition) gst.Selector[M, R] {
 	a.b.havings = append(a.b.havings, conditions...)
 	return a
 }
 
-func (a *selector[M, R]) Qualify(conditions ...types.TermCondition) types.Selector[M, R] {
+func (a *selector[M, R]) Qualify(conditions ...gst.TermCondition) gst.Selector[M, R] {
 	a.b.qualifies = append(a.b.qualifies, conditions...)
 	return a
 }
 
-func (a *selector[M, R]) OrderBy(orders ...types.Ordering) types.Selector[M, R] {
+func (a *selector[M, R]) OrderBy(orders ...gst.Ordering) gst.Selector[M, R] {
 	a.b.orders = append(a.b.orders, orders...)
 	return a
 }
 
-func (a *selector[M, R]) Limit(n int) types.Selector[M, R] {
+func (a *selector[M, R]) Limit(n int) gst.Selector[M, R] {
 	a.b.setLimit(n)
 	return a
 }
 
-func (a *selector[M, R]) Page(page, size int) types.Selector[M, R] {
+func (a *selector[M, R]) Page(page, size int) gst.Selector[M, R] {
 	a.b.setPage(page, size)
 	return a
 }
 
-func (a *selector[M, R]) WithDryRun(collector ...*[]types.SQLStatement) types.Selector[M, R] {
+func (a *selector[M, R]) WithDryRun(collector ...*[]gst.SQLStatement) gst.Selector[M, R] {
 	a.b.withDryRun(collector...)
 	return a
 }
@@ -237,7 +237,7 @@ func (a *selectBuilder[M]) setPage(page, size int) {
 // withDryRun marks the select a dry run and keeps the collector its statements
 // go to. An explicitly nil collector fails the select with ErrNilSQLBuilder,
 // unless an earlier defect has failed it already.
-func (a *selectBuilder[M]) withDryRun(collector ...*[]types.SQLStatement) {
+func (a *selectBuilder[M]) withDryRun(collector ...*[]gst.SQLStatement) {
 	a.dryRun = true
 	if len(collector) > 0 {
 		if collector[0] == nil {
@@ -310,10 +310,10 @@ func (a *selectBuilder[M]) scanOne(dest any) (err error) {
 		// function or joined select's term makes it row-level; either yields
 		// one row per group or per row, never the single row ScanOne
 		// promises.
-		if types.TermIsGroupKey(t) {
-			return errors.Wrapf(ErrGroupedScanOne, "group key %q", types.TermColumnOf(t))
+		if gst.TermIsGroupKey(t) {
+			return errors.Wrapf(ErrGroupedScanOne, "group key %q", gst.TermColumnOf(t))
 		}
-		if types.TermIsPlain(t) || types.TermIsWindowed(t) || a.readsDerived(t) {
+		if gst.TermIsPlain(t) || gst.TermIsWindowed(t) || a.readsDerived(t) {
 			return errors.Wrapf(ErrScanOneRowLevel, "term %q", termAlias(t))
 		}
 	}
@@ -419,7 +419,7 @@ type projectionShape struct {
 	// from keys, and a window reads the grouped rows. A row-level projection
 	// carries window functions over plain columns instead.
 	grouped bool
-	keys    []types.Term
+	keys    []gst.Term
 	columns map[string]modelschema.Column
 	// resultOrder is the result row's fields in declaration order, the
 	// order a member of a union renders its SELECT list in.
@@ -580,7 +580,7 @@ func (a *selectBuilder[M]) pageTieBreakers(shape projectionShape) []string {
 		return nil
 	}
 	ordered := make(map[string]struct{}, len(a.orders))
-	direction := types.OrderAsc
+	direction := gst.OrderAsc
 	for _, o := range a.orders {
 		term, d := a.orderedTerm(o, shape)
 		ordered[termAlias(term)] = struct{}{}
@@ -601,7 +601,7 @@ func (a *selectBuilder[M]) pageTieBreakers(shape projectionShape) []string {
 	}
 	for _, o := range a.orders {
 		term, _ := a.orderedTerm(o, shape)
-		if _, ok := identifying[types.TermColumnOf(term)]; ok && types.TermIsPlain(term) && (types.TermTableOf(term) == "" || types.TermTableOf(term) == shape.main) {
+		if _, ok := identifying[gst.TermColumnOf(term)]; ok && gst.TermIsPlain(term) && (gst.TermTableOf(term) == "" || gst.TermTableOf(term) == shape.main) {
 			return nil
 		}
 	}
@@ -611,52 +611,52 @@ func (a *selectBuilder[M]) pageTieBreakers(shape projectionShape) []string {
 	}
 	if len(a.qualifies) > 0 {
 		for _, t := range a.terms {
-			if types.TermIsPlain(t) && types.TermColumnOf(t) == key && (types.TermTableOf(t) == "" || types.TermTableOf(t) == shape.main) {
+			if gst.TermIsPlain(t) && gst.TermColumnOf(t) == key && (gst.TermTableOf(t) == "" || gst.TermTableOf(t) == shape.main) {
 				return []string{a.db.quoteIdent(termAlias(t)) + " " + string(direction)}
 			}
 		}
 		return nil
 	}
-	return []string{a.keyExpr(types.PlainTerm(shape.main, key), shape) + " " + string(direction)}
+	return []string{a.keyExpr(gst.PlainTerm(shape.main, key), shape) + " " + string(direction)}
 }
 
 // orderedTerm resolves one ordering of the select to the projected term it
 // sorts by and the direction it sorts in. validate has checked that the term
 // is selected, so the lookup cannot miss here.
-func (a *selectBuilder[M]) orderedTerm(o types.Ordering, shape projectionShape) (types.Term, types.OrderDirection) {
+func (a *selectBuilder[M]) orderedTerm(o gst.Ordering, shape projectionShape) (gst.Term, gst.OrderDirection) {
 	switch o := o.(type) {
-	case types.TermOrder:
-		return types.TermOrderTermOf(o), orderDirection(types.TermOrderDirectionOf(o))
-	case types.Order:
-		return a.selectedColumnTerm(o.Table(), o.Column(), shape.main), orderDirection(types.OrderDirectionOf(o))
+	case gst.TermOrder:
+		return gst.TermOrderTermOf(o), orderDirection(gst.TermOrderDirectionOf(o))
+	case gst.Order:
+		return a.selectedColumnTerm(o.Table(), o.Column(), shape.main), orderDirection(gst.OrderDirectionOf(o))
 	default:
 		// Unreachable: Ordering is sealed to the two types above.
-		return types.Term{}, types.OrderAsc
+		return gst.Term{}, gst.OrderAsc
 	}
 }
 
 // orderDirection normalizes a direction for rendering: the zero value reads
 // as ascending, matching SQL's own default for an ORDER BY term.
-func orderDirection(d types.OrderDirection) types.OrderDirection {
-	if d == types.OrderDesc {
-		return types.OrderDesc
+func orderDirection(d gst.OrderDirection) gst.OrderDirection {
+	if d == gst.OrderDesc {
+		return gst.OrderDesc
 	}
-	return types.OrderAsc
+	return gst.OrderAsc
 }
 
 // compareOperator maps a comparison of a having or qualify condition to its
 // SQL spelling.
-func compareOperator(op types.CompareOp) string {
+func compareOperator(op gst.CompareOp) string {
 	switch op {
-	case types.CompareNe:
+	case gst.CompareNe:
 		return "<>"
-	case types.CompareGt:
+	case gst.CompareGt:
 		return ">"
-	case types.CompareGte:
+	case gst.CompareGte:
 		return ">="
-	case types.CompareLt:
+	case gst.CompareLt:
 		return "<"
-	case types.CompareLte:
+	case gst.CompareLte:
 		return "<="
 	default:
 		// validate rejects an operator outside the closed set before the
@@ -681,7 +681,7 @@ func (a *selectBuilder[M]) consumeDryRun() {
 	a.consuming = true
 	defer func() { a.consuming = false }()
 	for _, source := range a.joins {
-		if sj, ok := source.(types.SelectJoin); ok {
+		if sj, ok := source.(gst.SelectJoin); ok {
 			if sub, ok := nestedOf(sj.Select); ok {
 				sub.consumeDryRun()
 			}
@@ -691,50 +691,50 @@ func (a *selectBuilder[M]) consumeDryRun() {
 
 // termLabel names a term for a message about it, the way its author wrote
 // it: the constant, the column, or the function over the column.
-func termLabel(t types.Term) string {
+func termLabel(t gst.Term) string {
 	switch {
-	case types.TermIsLiteral(t):
-		return fmt.Sprintf("constant %q", types.TermLiteralOf(t))
-	case types.TermFnOf(t) == types.FnNone:
-		return fmt.Sprintf("column %q", types.TermColumnOf(t))
-	case len(types.TermColumnOf(t)) == 0:
-		return string(types.TermFnOf(t))
+	case gst.TermIsLiteral(t):
+		return fmt.Sprintf("constant %q", gst.TermLiteralOf(t))
+	case gst.TermFnOf(t) == gst.FnNone:
+		return fmt.Sprintf("column %q", gst.TermColumnOf(t))
+	case len(gst.TermColumnOf(t)) == 0:
+		return string(gst.TermFnOf(t))
 	default:
-		return fmt.Sprintf("%s over %q", types.TermFnOf(t), types.TermColumnOf(t))
+		return fmt.Sprintf("%s over %q", gst.TermFnOf(t), gst.TermColumnOf(t))
 	}
 }
 
 // termAlias is the name a term is projected under: its alias, or its column
 // when it has none.
-func termAlias(t types.Term) string {
-	if len(types.TermAliasOf(t)) > 0 {
-		return types.TermAliasOf(t)
+func termAlias(t gst.Term) string {
+	if len(gst.TermAliasOf(t)) > 0 {
+		return gst.TermAliasOf(t)
 	}
-	return types.TermColumnOf(t)
+	return gst.TermColumnOf(t)
 }
 
 // termExpr renders one projection term, returning the SQL and the values its
 // placeholders bind. A conditional measure carries its predicate as a nested
 // expression, so the filter renderer stays the only place predicates are
 // built; a windowed term carries its window after the function.
-func (a *selectBuilder[M]) termExpr(t types.Term, shape projectionShape) (string, []any, error) {
+func (a *selectBuilder[M]) termExpr(t gst.Term, shape projectionShape) (string, []any, error) {
 	if jt, derived := a.derivedOf(t, shape); derived {
 		return a.derivedExpr(jt, t), nil, nil
 	}
-	if types.TermIsLiteral(t) {
+	if gst.TermIsLiteral(t) {
 		// A constant renders as a string literal: validateLiteral has held
 		// the value to a plain identifier, so the quotes cannot be closed
 		// from inside and the spelling is the same on every dialect.
-		return "'" + types.TermLiteralOf(t) + "'", nil, nil
+		return "'" + gst.TermLiteralOf(t) + "'", nil, nil
 	}
-	if !types.TermIsMeasure(t) {
+	if !gst.TermIsMeasure(t) {
 		return a.keyExpr(t, shape), nil, nil
 	}
 	sql, args, coalesce, err := a.functionExpr(t, shape)
 	if err != nil {
 		return "", nil, err
 	}
-	if types.TermIsWindowed(t) {
+	if gst.TermIsWindowed(t) {
 		if sql, args, err = a.windowExpr(t, sql, args, shape); err != nil {
 			return "", nil, err
 		}

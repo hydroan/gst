@@ -10,7 +10,7 @@ import (
 
 // Hook override detection for models.
 //
-// Every model carries the ten lifecycle hooks of types.Model through the
+// Every model carries the ten lifecycle hooks of gst.Model through the
 // embedded framework base, whose implementations are no-ops. Knowing which of
 // them a model overrides lets the database layer drop work that exists only
 // for the hooks' sake. A write wrapped in a transaction protects the atomicity
@@ -42,7 +42,7 @@ func isNoOpHookDeclarer(typ reflect.Type) bool {
 }
 
 // Positions of the lifecycle hooks in hookPhases, hookMethodNames and
-// hookOverrides, in the order types.Model declares them.
+// hookOverrides, in the order gst.Model declares them.
 const (
 	hookCreateBefore = iota
 	hookCreateAfter
@@ -57,7 +57,7 @@ const (
 	hookCount
 )
 
-// hookPhases lists the phases of the lifecycle hooks of types.Model by
+// hookPhases lists the phases of the lifecycle hooks of gst.Model by
 // position. It is the set the detection tracks; a phase outside it is not a
 // model hook, and OverridesHook fails closed on it.
 var hookPhases = [hookCount]apiaction.Phase{
@@ -83,7 +83,7 @@ var hookMethodNames = func() (names [hookCount]string) {
 }()
 
 // HookMethodNames returns the Go method names of the lifecycle hooks of
-// types.Model, CreateBefore to GetAfter in the order the interface declares
+// gst.Model, CreateBefore to GetAfter in the order the interface declares
 // them: the one list of what a hook is, read by gg check to tell a model's
 // hooks from its other methods. The slice is the caller's own.
 func HookMethodNames() []string {
@@ -133,7 +133,7 @@ func OverridesDeleteHooks(m any) bool {
 
 // OverridesHook reports whether the model overrides the hook that phase names
 // beyond the framework base's no-op implementation. Only the hook phases of
-// types.Model are tracked; any other phase reports true, so a caller gating
+// gst.Model are tracked; any other phase reports true, so a caller gating
 // work on the answer keeps that work rather than skipping it for a hook the
 // detection does not know.
 func OverridesHook(m any, phase apiaction.Phase) bool {

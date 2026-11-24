@@ -16,13 +16,13 @@ import (
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/i18n"
 	modeliamaccount "github.com/hydroan/gst/internal/modulemodel/iam/account"
 	modeliamuser "github.com/hydroan/gst/internal/modulemodel/iam/user"
 	serviceiamaccount "github.com/hydroan/gst/internal/moduleservice/iam/account"
 	serviceiamsession "github.com/hydroan/gst/internal/moduleservice/iam/session"
 	"github.com/hydroan/gst/internal/testutil"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/module/iam"
 	gstredis "github.com/hydroan/gst/redis"
@@ -34,8 +34,8 @@ import (
 // Column references for the credential fixture writes in the account tests;
 // module test code carries no generated Cols vars.
 var (
-	colCredentialUserID   = types.NewColumn[*modeliamaccount.PasswordCredential, string]("user_id")
-	colMustChangePassword = types.NewColumn[*modeliamaccount.PasswordCredential, bool]("must_change_password")
+	colCredentialUserID   = gst.NewColumn[*modeliamaccount.PasswordCredential, string]("user_id")
+	colMustChangePassword = gst.NewColumn[*modeliamaccount.PasswordCredential, bool]("must_change_password")
 )
 
 func TestAccountSignup(t *testing.T) {
@@ -288,7 +288,7 @@ func TestAccountLoginSecondFactorVerifier(t *testing.T) {
 	var allow bool
 	var gotUserID string
 	var gotFactor authn.LoginSecondFactor
-	authn.SetLoginSecondFactorVerifier(func(_ *types.ServiceContext, userID string, factor authn.LoginSecondFactor) error {
+	authn.SetLoginSecondFactorVerifier(func(_ *gst.ServiceContext, userID string, factor authn.LoginSecondFactor) error {
 		mu.Lock()
 		defer mu.Unlock()
 		gotUserID = userID
@@ -296,7 +296,7 @@ func TestAccountLoginSecondFactorVerifier(t *testing.T) {
 		if allow {
 			return nil
 		}
-		return types.NewError(http.StatusUnauthorized, authn.SecondFactorRequiredMsg)
+		return gst.NewError(http.StatusUnauthorized, authn.SecondFactorRequiredMsg)
 	})
 
 	t.Run("verifier_rejection_blocks_login", func(t *testing.T) {
@@ -345,7 +345,7 @@ func TestAccountLoginSecondFactorVerifier(t *testing.T) {
 func TestAccountLoginObservers(t *testing.T) {
 	var mu sync.Mutex
 	var events []authn.LoginEvent
-	remove := authn.AddLoginObserver(func(_ *types.ServiceContext, event authn.LoginEvent) {
+	remove := authn.AddLoginObserver(func(_ *gst.ServiceContext, event authn.LoginEvent) {
 		mu.Lock()
 		defer mu.Unlock()
 		events = append(events, event)
@@ -560,7 +560,7 @@ func TestAccountChangePassword(t *testing.T) {
 		})
 		require.Error(t, err)
 
-		var serviceErr *types.Error
+		var serviceErr *gst.Error
 		require.True(t, errors.As(err, &serviceErr))
 		require.Equal(t, http.StatusInternalServerError, serviceErr.Status())
 
@@ -887,7 +887,7 @@ func accountSessionClient(t *testing.T, sessionID string) *client.Client {
 	return cli
 }
 
-func accountNewServiceContext(baseCtx context.Context, method, path, sessionID string, phase apiaction.Phase) *types.ServiceContext {
+func accountNewServiceContext(baseCtx context.Context, method, path, sessionID string, phase apiaction.Phase) *gst.ServiceContext {
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
 	ginCtx, _ := gin.CreateTestContext(recorder)
@@ -898,14 +898,14 @@ func accountNewServiceContext(baseCtx context.Context, method, path, sessionID s
 		Value: sessionID,
 	})
 	ginCtx.Request = req
-	return types.NewServiceContext(ginCtx, nil, phase)
+	return gst.NewServiceContext(ginCtx, nil, phase)
 }
 
 func accountRequireSessionNotFound(t *testing.T, sessionID string) {
 	t.Helper()
 
 	_, err := serviceiamsession.Store.LoadSession(t.Context(), sessionID)
-	require.ErrorIs(t, err, types.ErrEntryNotFound)
+	require.ErrorIs(t, err, gst.ErrEntryNotFound)
 }
 
 func accountRequireUserSessionContains(t *testing.T, userID, sessionID string) {

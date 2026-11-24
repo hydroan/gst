@@ -8,7 +8,7 @@ import (
 
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/datatypes"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,7 +32,7 @@ func TestSelectScalar(t *testing.T) {
 	got := row{}
 	require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(),
 		TestAggregateRecordCols.Amount.Sum().As("total"),
-		types.Count().As("records"),
+		gst.Count().As("records"),
 		TestAggregateRecordCols.Amount.Min().As("smallest"),
 		TestAggregateRecordCols.Amount.Max().As("largest"),
 		TestAggregateRecordCols.Score.Avg().As("avg_score"),
@@ -62,7 +62,7 @@ func TestSelectGroupBy(t *testing.T) {
 	require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(),
 		TestAggregateRecordCols.Category.Group(),
 		TestAggregateRecordCols.Amount.Sum().As("total"),
-		types.Count().As("records"),
+		gst.Count().As("records"),
 	).
 		OrderBy(TestAggregateRecordCols.Category.Group().Asc()).
 		Scan(&rows))
@@ -94,8 +94,8 @@ func TestSelectConditional(t *testing.T) {
 		TestAggregateRecordCols.Category.Group(),
 		TestAggregateRecordCols.Amount.Sum().Where(TestAggregateRecordCols.Status.Eq("done")).As("done_amount"),
 		TestAggregateRecordCols.Amount.Sum().Where(TestAggregateRecordCols.Status.Eq("failed")).As("fail_amount"),
-		types.Count().Where(TestAggregateRecordCols.Status.Eq("done")).As("done_records"),
-		types.Count().Where(types.FilterFalse()).As("none"),
+		gst.Count().Where(TestAggregateRecordCols.Status.Eq("done")).As("done_records"),
+		gst.Count().Where(gst.FilterFalse()).As("none"),
 	).
 		OrderBy(TestAggregateRecordCols.Category.Group().Asc()).
 		Scan(&rows))
@@ -135,7 +135,7 @@ func TestSelectHavingAndTopN(t *testing.T) {
 			Category string
 			Done     int64
 		}
-		done := types.Count().Where(TestAggregateRecordCols.Status.Eq("done")).As("done")
+		done := gst.Count().Where(TestAggregateRecordCols.Status.Eq("done")).As("done")
 		rows := make([]condRow, 0)
 		require.NoError(t, database.Select[*TestAggregateRecord, condRow](context.Background(), TestAggregateRecordCols.Category.Group(), done).
 			Having(done.Gt(1)).
@@ -170,7 +170,7 @@ func TestSelectHavingAndTopN(t *testing.T) {
 	t.Run("HavingOperators", func(t *testing.T) {
 		cases := []struct {
 			name   string
-			having types.TermCondition
+			having gst.TermCondition
 			want   []row
 		}{
 			{"Eq", total.Eq(900), []row{{Category: "beta", Total: 900}}},
@@ -213,7 +213,7 @@ func TestSelectHavingAndTopN(t *testing.T) {
 		ranking := database.Select[*TestAggregateRecord, row](context.Background(), TestAggregateRecordCols.Category.Group(), total).
 			OrderBy(TestAggregateRecordCols.Category.Group().Asc())
 		rows := make([]row, 0)
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		require.NoError(t, ranking.Page(2, 2).WithDryRun(&statements).Scan(&rows))
 		require.Contains(t, statements[0].RenderedSQL, " LIMIT 2 OFFSET 2")
 		require.NoError(t, ranking.Page(2, 2).Scan(&rows))
@@ -256,7 +256,7 @@ func TestSelectTimeBucket(t *testing.T) {
 		require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(),
 			TestAggregateRecordCols.OccurredAt.ByDay().As("bucket"),
 			TestAggregateRecordCols.Amount.Sum().As("total"),
-			types.Count().As("records"),
+			gst.Count().As("records"),
 		).
 			OrderBy(TestAggregateRecordCols.OccurredAt.ByDay().As("bucket").Asc()).
 			Scan(&rows))
@@ -274,7 +274,7 @@ func TestSelectTimeBucket(t *testing.T) {
 		require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(),
 			TestAggregateRecordCols.OccurredAt.ByMonth().As("bucket"),
 			TestAggregateRecordCols.Amount.Sum().As("total"),
-			types.Count().As("records"),
+			gst.Count().As("records"),
 		).
 			OrderBy(TestAggregateRecordCols.OccurredAt.ByMonth().As("bucket").Asc()).
 			Scan(&rows))
@@ -290,7 +290,7 @@ func TestSelectTimeBucket(t *testing.T) {
 		require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(),
 			TestAggregateRecordCols.OccurredAt.ByHour().As("bucket"),
 			TestAggregateRecordCols.Amount.Sum().As("total"),
-			types.Count().As("records"),
+			gst.Count().As("records"),
 		).
 			Where(TestAggregateRecordCols.Category.Eq("alpha")).
 			OrderBy(TestAggregateRecordCols.OccurredAt.ByHour().As("bucket").Asc()).
@@ -314,10 +314,10 @@ func TestSumRejectsTextBackedValuer(t *testing.T) {
 	setupAggregateData(t)
 
 	rows := make([]struct{ Total int64 }, 0)
-	require.ErrorIs(t, database.Select[*TestAggregateRecord, struct{ Total int64 }](context.Background(), types.NewNumericColumn[*TestAggregateRecord, int64]("deleted_at").Sum().As("total")).
+	require.ErrorIs(t, database.Select[*TestAggregateRecord, struct{ Total int64 }](context.Background(), gst.NewNumericColumn[*TestAggregateRecord, int64]("deleted_at").Sum().As("total")).
 		Scan(&rows), database.ErrAggregateType)
 	for _, column := range []string{"grade", "token"} {
-		require.ErrorIs(t, database.Select[*TestScoredRecord, struct{ Total int64 }](context.Background(), types.NewNumericColumn[*TestScoredRecord, int64](column).Sum().As("total")).
+		require.ErrorIs(t, database.Select[*TestScoredRecord, struct{ Total int64 }](context.Background(), gst.NewNumericColumn[*TestScoredRecord, int64](column).Sum().As("total")).
 			Scan(&rows), database.ErrAggregateType, column)
 	}
 }
@@ -371,16 +371,16 @@ func TestAggregatesFollowTheStoredType(t *testing.T) {
 
 	t.Run("AWrappedTimeBucketsByDay", func(t *testing.T) {
 		rows := make([]perDay, 0)
-		require.NoError(t, database.Select[*TestTypedRecord, perDay](ctx, TestTypedRecordCols.Settled.ByDay().As("day"), types.Count().As("records")).Scan(&rows))
+		require.NoError(t, database.Select[*TestTypedRecord, perDay](ctx, TestTypedRecordCols.Settled.ByDay().As("day"), gst.Count().As("records")).Scan(&rows))
 		require.Equal(t, []perDay{{Day: new("2026-07-01"), Records: 2}}, rows)
 	})
 
 	t.Run("ATimeOfDayNeitherSumsNorBuckets", func(t *testing.T) {
 		got := total{}
-		require.ErrorIs(t, database.Select[*TestTypedRecord, total](ctx, types.NewNumericColumn[*TestTypedRecord, datatypes.TimeOfDay]("clock").Sum().As("total")).ScanOne(&got),
+		require.ErrorIs(t, database.Select[*TestTypedRecord, total](ctx, gst.NewNumericColumn[*TestTypedRecord, datatypes.TimeOfDay]("clock").Sum().As("total")).ScanOne(&got),
 			database.ErrAggregateType, "MySQL and SQLite would add the readings up as plain numbers")
 		rows := make([]perDay, 0)
-		require.ErrorIs(t, database.Select[*TestTypedRecord, perDay](ctx, types.NewTimeColumn[*TestTypedRecord]("clock").ByDay().As("day"), types.Count().As("records")).Scan(&rows),
+		require.ErrorIs(t, database.Select[*TestTypedRecord, perDay](ctx, gst.NewTimeColumn[*TestTypedRecord]("clock").ByDay().As("day"), gst.Count().As("records")).Scan(&rows),
 			database.ErrAggregateType)
 	})
 }
@@ -426,7 +426,7 @@ func TestSelectGroupByRendersRawExpression(t *testing.T) {
 		Category string
 		Total    int64
 	}
-	statements := make([]types.SQLStatement, 0)
+	statements := make([]gst.SQLStatement, 0)
 	rows := make([]row, 0)
 	require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(), TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.Amount.Sum().As("total")).
 		WithDryRun(&statements).

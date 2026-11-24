@@ -3,13 +3,13 @@ package model
 import (
 	"reflect"
 
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // AreTypesEqual reports whether M, REQ, and RSP are the same concrete type.
 //
 // Empty models always return false so custom controller operations are used.
-func AreTypesEqual[M types.Model, REQ types.Request, RSP types.Response]() bool {
+func AreTypesEqual[M gst.Model, REQ gst.Request, RSP gst.Response]() bool {
 	if IsEmpty[M]() {
 		return false
 	}

@@ -14,10 +14,10 @@ import (
 	"github.com/gin-gonic/gin"
 	ginjson "github.com/gin-gonic/gin/codec/json"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/testutil/swap"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -82,7 +82,7 @@ func TestJSONEncodesWithStandardLibrary(t *testing.T) {
 func TestErrorAnswersServiceErrorsAndHidesTheRest(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cause := errors.New("database password leaked")
-	serviceErr := types.NewErrorWithCause(http.StatusInternalServerError, "failed to load user", cause)
+	serviceErr := gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load user", cause)
 	internal := errors.New("dial tcp 10.0.0.1:3306: connection refused")
 
 	tests := []struct {
@@ -94,23 +94,23 @@ func TestErrorAnswersServiceErrorsAndHidesTheRest(t *testing.T) {
 	}{
 		{"service error", serviceErr, http.StatusInternalServerError, `{"data":null,"msg":"failed to load user","trace_id":""}`, cause.Error()},
 		{"wrapped service error", errors.Wrap(serviceErr, "load account"), http.StatusInternalServerError, `{"data":null,"msg":"failed to load user","trace_id":""}`, cause.Error()},
-		{"forbidden", types.NewError(http.StatusForbidden, "account disabled"), http.StatusForbidden, `{"data":null,"msg":"account disabled","trace_id":""}`, ""},
+		{"forbidden", gst.NewError(http.StatusForbidden, "account disabled"), http.StatusForbidden, `{"data":null,"msg":"account disabled","trace_id":""}`, ""},
 		{
 			"refused fields",
-			types.NewInvalidFields([]types.FieldViolation{{Field: "name", Description: "name is a required field"}, {Field: "items[1].rank", Description: "items[1].rank must be 1 or greater"}}, cause),
+			gst.NewInvalidFields([]gst.FieldViolation{{Field: "name", Description: "name is a required field"}, {Field: "items[1].rank", Description: "items[1].rank must be 1 or greater"}}, cause),
 			http.StatusBadRequest,
 			`{"data":null,"msg":"name is a required field; items[1].rank must be 1 or greater","trace_id":"","error":{"field_violations":[{"field":"name","description":"name is a required field"},{"field":"items[1].rank","description":"items[1].rank must be 1 or greater"}]}}`,
 			cause.Error(),
 		},
 		{
 			"wrapped value a field cannot hold",
-			errors.Wrap(types.NewInvalidValue("rank", "300 is out of range", cause), "bind the record"),
+			errors.Wrap(gst.NewInvalidValue("rank", "300 is out of range", cause), "bind the record"),
 			http.StatusBadRequest,
 			`{"data":null,"msg":"invalid value for field 'rank'","trace_id":"","error":{"field_violations":[{"field":"rank","description":"300 is out of range"}]}}`,
 			cause.Error(),
 		},
 		{"other error", internal, http.StatusInternalServerError, `{"data":null,"msg":"The server could not process the request.","trace_id":""}`, internal.Error()},
-		{"typed nil service error", (*types.Error)(nil), http.StatusInternalServerError, `{"data":null,"msg":"The server could not process the request.","trace_id":""}`, ""},
+		{"typed nil service error", (*gst.Error)(nil), http.StatusInternalServerError, `{"data":null,"msg":"The server could not process the request.","trace_id":""}`, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -140,7 +140,7 @@ func TestErrorAnswersInTheLanguageOfTheProcess(t *testing.T) {
 	i18n.Register(i18n.Chinese, map[string]string{"the sample is sealed": "样本已封存"})
 	require.NoError(t, i18n.SetLanguage(i18n.Chinese))
 	t.Cleanup(func() { require.NoError(t, i18n.SetLanguage(i18n.English)) })
-	sealed := types.NewError(http.StatusConflict, "the sample is sealed")
+	sealed := gst.NewError(http.StatusConflict, "the sample is sealed")
 
 	tests := []struct {
 		name       string
@@ -149,12 +149,12 @@ func TestErrorAnswersInTheLanguageOfTheProcess(t *testing.T) {
 		wantBody   string
 	}{
 		{"a sentence a translation is registered for", sealed, http.StatusConflict, `{"data":null,"msg":"样本已封存","trace_id":""}`},
-		{"a sentence none is registered for", types.NewError(http.StatusConflict, "the sample is open"), http.StatusConflict, `{"data":null,"msg":"the sample is open","trace_id":""}`},
-		{"a sentence written in the language", types.NewError(http.StatusConflict, "样本未封存"), http.StatusConflict, `{"data":null,"msg":"样本未封存","trace_id":""}`},
+		{"a sentence none is registered for", gst.NewError(http.StatusConflict, "the sample is open"), http.StatusConflict, `{"data":null,"msg":"the sample is open","trace_id":""}`},
+		{"a sentence written in the language", gst.NewError(http.StatusConflict, "样本未封存"), http.StatusConflict, `{"data":null,"msg":"样本未封存","trace_id":""}`},
 		{"the server's own failure", errors.New("dial tcp 10.0.0.1:3306: connection refused"), http.StatusInternalServerError, `{"data":null,"msg":"服务器无法处理该请求。","trace_id":""}`},
 		{
 			"refused fields",
-			types.NewInvalidFields([]types.FieldViolation{{Field: "name", Description: "name为必填字段"}}, nil),
+			gst.NewInvalidFields([]gst.FieldViolation{{Field: "name", Description: "name为必填字段"}}, nil),
 			http.StatusBadRequest,
 			`{"data":null,"msg":"name为必填字段","trace_id":"","error":{"field_violations":[{"field":"name","description":"name为必填字段"}]}}`,
 		},
@@ -195,8 +195,8 @@ func TestAbortAnswersTheErrorAndStopsTheChain(t *testing.T) {
 		status int
 		msg    string
 	}{
-		"a service error":          {types.NewError(http.StatusForbidden, "permission denied"), http.StatusForbidden, "permission denied"},
-		"the server's own failure": {errors.New("store down"), http.StatusInternalServerError, types.FailureMsg},
+		"a service error":          {gst.NewError(http.StatusForbidden, "permission denied"), http.StatusForbidden, "permission denied"},
+		"the server's own failure": {errors.New("store down"), http.StatusInternalServerError, gst.FailureMsg},
 	} {
 		t.Run(name, func(t *testing.T) {
 			w := httptest.NewRecorder()
@@ -240,7 +240,7 @@ func TestAbortNeverAnswersWithASuccessStatus(t *testing.T) {
 			c, _ := gin.CreateTestContext(w)
 			c.Set(execctx.KeyTraceID, "trace-sample")
 
-			response.Abort(c, types.NewError(status, "refused"))
+			response.Abort(c, gst.NewError(status, "refused"))
 
 			require.Equal(t, http.StatusInternalServerError, w.Code)
 			require.JSONEq(t, `{"data":null,"msg":"Internal Server Error","trace_id":"trace-sample"}`, w.Body.String())

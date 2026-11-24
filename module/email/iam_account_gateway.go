@@ -6,27 +6,27 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/gst"
 	modeliamaccount "github.com/hydroan/gst/internal/modulemodel/iam/account"
 	modeliamuser "github.com/hydroan/gst/internal/modulemodel/iam/user"
 	serviceemail "github.com/hydroan/gst/internal/moduleservice/email"
 	serviceiamaccount "github.com/hydroan/gst/internal/moduleservice/iam/account"
 	serviceiamsession "github.com/hydroan/gst/internal/moduleservice/iam/session"
-	"github.com/hydroan/gst/internal/types"
 )
 
 // Column references for the narrow credential and identity writes below;
 // module sources carry no generated Cols vars, so the references are declared
 // here.
 var (
-	colCredentialUserID   = types.NewColumn[*modeliamaccount.PasswordCredential, string]("user_id")
-	colPasswordHash       = types.NewColumn[*modeliamaccount.PasswordCredential, string]("password_hash")
-	colMustChangePassword = types.NewColumn[*modeliamaccount.PasswordCredential, bool]("must_change_password")
-	colPasswordChangedAt  = types.NewTimeColumn[*modeliamaccount.PasswordCredential]("password_changed_at")
-	colIdentityUserID     = types.NewColumn[*modeliamaccount.EmailIdentity, string]("user_id")
-	colEmail              = types.NewColumn[*modeliamaccount.EmailIdentity, string]("email")
-	colNormalizedEmail    = types.NewColumn[*modeliamaccount.EmailIdentity, string]("normalized_email")
-	colVerifiedAt         = types.NewTimeColumn[*modeliamaccount.EmailIdentity]("verified_at")
-	colLastChangedAt      = types.NewTimeColumn[*modeliamaccount.EmailIdentity]("last_changed_at")
+	colCredentialUserID   = gst.NewColumn[*modeliamaccount.PasswordCredential, string]("user_id")
+	colPasswordHash       = gst.NewColumn[*modeliamaccount.PasswordCredential, string]("password_hash")
+	colMustChangePassword = gst.NewColumn[*modeliamaccount.PasswordCredential, bool]("must_change_password")
+	colPasswordChangedAt  = gst.NewTimeColumn[*modeliamaccount.PasswordCredential]("password_changed_at")
+	colIdentityUserID     = gst.NewColumn[*modeliamaccount.EmailIdentity, string]("user_id")
+	colEmail              = gst.NewColumn[*modeliamaccount.EmailIdentity, string]("email")
+	colNormalizedEmail    = gst.NewColumn[*modeliamaccount.EmailIdentity, string]("normalized_email")
+	colVerifiedAt         = gst.NewTimeColumn[*modeliamaccount.EmailIdentity]("verified_at")
+	colLastChangedAt      = gst.NewTimeColumn[*modeliamaccount.EmailIdentity]("last_changed_at")
 )
 
 // iamAccountGateway adapts the framework IAM user model for the built-in email
@@ -34,7 +34,7 @@ var (
 // import the framework IAM user model, password hashing policy, or session store.
 type iamAccountGateway struct{}
 
-func (iamAccountGateway) FindByEmail(ctx *types.ServiceContext, email string) (*serviceemail.AccountSnapshot, error) {
+func (iamAccountGateway) FindByEmail(ctx *gst.ServiceContext, email string) (*serviceemail.AccountSnapshot, error) {
 	identity, err := serviceiamaccount.LoadEmailIdentityByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, database.ErrRecordNotFound) {
@@ -49,7 +49,7 @@ func (iamAccountGateway) FindByEmail(ctx *types.ServiceContext, email string) (*
 	return iamAccountSnapshot(user, identity), nil
 }
 
-func (iamAccountGateway) GetByID(ctx *types.ServiceContext, userID string) (*serviceemail.AccountSnapshot, error) {
+func (iamAccountGateway) GetByID(ctx *gst.ServiceContext, userID string) (*serviceemail.AccountSnapshot, error) {
 	user, err := loadIAMUserByID(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -64,7 +64,7 @@ func (iamAccountGateway) GetByID(ctx *types.ServiceContext, userID string) (*ser
 	return iamAccountSnapshot(user, identity), nil
 }
 
-func (iamAccountGateway) VerifyPassword(ctx *types.ServiceContext, userID, password string) error {
+func (iamAccountGateway) VerifyPassword(ctx *gst.ServiceContext, userID, password string) error {
 	user, err := loadIAMUserByID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, serviceemail.ErrAccountNotFound) {
@@ -85,7 +85,7 @@ func (iamAccountGateway) VerifyPassword(ctx *types.ServiceContext, userID, passw
 	return nil
 }
 
-func (iamAccountGateway) UpdatePassword(ctx *types.ServiceContext, userID, newPassword string) error {
+func (iamAccountGateway) UpdatePassword(ctx *gst.ServiceContext, userID, newPassword string) error {
 	if _, err := loadIAMUserByID(ctx, userID); err != nil {
 		return err
 	}
@@ -102,7 +102,7 @@ func (iamAccountGateway) UpdatePassword(ctx *types.ServiceContext, userID, newPa
 		Update(credential)
 }
 
-func (iamAccountGateway) MarkEmailVerified(ctx *types.ServiceContext, userID string, verifiedAt time.Time) error {
+func (iamAccountGateway) MarkEmailVerified(ctx *gst.ServiceContext, userID string, verifiedAt time.Time) error {
 	identity, err := serviceiamaccount.LoadEmailIdentity(ctx, userID)
 	if err != nil {
 		return err
@@ -116,7 +116,7 @@ func (iamAccountGateway) MarkEmailVerified(ctx *types.ServiceContext, userID str
 		Update(identity)
 }
 
-func (iamAccountGateway) ApplyEmailChange(ctx *types.ServiceContext, userID, newEmail string, changedAt time.Time) error {
+func (iamAccountGateway) ApplyEmailChange(ctx *gst.ServiceContext, userID, newEmail string, changedAt time.Time) error {
 	identity, err := serviceiamaccount.LoadEmailIdentity(ctx, userID)
 	if err != nil {
 		if !errors.Is(err, database.ErrRecordNotFound) {
@@ -136,14 +136,14 @@ func (iamAccountGateway) ApplyEmailChange(ctx *types.ServiceContext, userID, new
 		Update(identity)
 }
 
-func (iamAccountGateway) InvalidateSessions(ctx *types.ServiceContext, userID string) {
+func (iamAccountGateway) InvalidateSessions(ctx *gst.ServiceContext, userID string) {
 	// The gateway contract reports nothing back, and the caller has already
 	// applied the change this revokes for, so a storage failure is left to the
 	// user-state cache expiring on its own.
 	_ = serviceiamsession.Store.DeleteUserSessions(ctx, userID)
 }
 
-func loadIAMUserByID(ctx *types.ServiceContext, userID string) (*modeliamuser.User, error) {
+func loadIAMUserByID(ctx *gst.ServiceContext, userID string) (*modeliamuser.User, error) {
 	query := &modeliamuser.User{}
 	query.ID = userID
 

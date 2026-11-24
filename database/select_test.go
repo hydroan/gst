@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/stretchr/testify/require"
 )
 
@@ -249,7 +249,7 @@ func TestSelectWhereReusesFilters(t *testing.T) {
 	require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(), TestAggregateRecordCols.Amount.Sum().As("total")).
 		Where(
 			TestAggregateRecordCols.Category.Eq("alpha"),
-			types.FilterOr(TestAggregateRecordCols.Status.Eq("failed"), TestAggregateRecordCols.Amount.Gte(200)),
+			gst.FilterOr(TestAggregateRecordCols.Status.Eq("failed"), TestAggregateRecordCols.Amount.Gte(200)),
 		).
 		ScanOne(&got))
 	// alpha rows: 100/done excluded, 200/done kept by amount, 300/failed kept.
@@ -287,7 +287,7 @@ func TestSelectCount(t *testing.T) {
 		// and then thrown away. HAVING keeps working without the measure in
 		// the select list because it renders its own expression.
 		var groups int
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(), TestAggregateRecordCols.Category.Group(), total).
 			WithDryRun(&statements).
 			Having(total.Gt(600)).
@@ -333,7 +333,7 @@ func TestSelectHidesSoftDeletedRows(t *testing.T) {
 		Records int64
 	}
 	got := row{}
-	require.NoError(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Amount.Sum().As("total"), types.Count().As("records")).
+	require.NoError(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Amount.Sum().As("total"), gst.Count().As("records")).
 		ScanOne(&got))
 
 	require.EqualValues(t, 5, got.Records, "aggregate must not count soft-deleted rows")
@@ -397,7 +397,7 @@ func TestSelectBuildErrors(t *testing.T) {
 		// not have fails the build rather than the statement.
 		rows := make([]row, 0)
 		err := database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.Amount.Sum().As("total")).
-			Where(types.FilterEq("nosuch", "x")).
+			Where(gst.FilterEq("nosuch", "x")).
 			Scan(&rows)
 		require.ErrorIs(t, err, database.ErrUnusableFilter)
 		require.ErrorContains(t, err, `"test_aggregate_records" does not have`)
@@ -425,14 +425,14 @@ func TestSelectBuildErrors(t *testing.T) {
 	t.Run("TermWithoutAColumnOrAlias", func(t *testing.T) {
 		// A term built by hand with neither has no name to project under.
 		rows := make([]row, 0)
-		err := database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), types.NewTerm(types.FnCount, "", "", "", "")).Scan(&rows)
+		err := database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), gst.NewTerm(gst.FnCount, "", "", "", "")).Scan(&rows)
 		require.ErrorIs(t, err, database.ErrInvalidAlias)
 		require.ErrorContains(t, err, "named with As")
 	})
 
 	t.Run("UnknownColumn", func(t *testing.T) {
 		rows := make([]row, 0)
-		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), types.NewNumericColumn[*TestAggregateRecord, int64]("nonexistent").Sum().As("total")).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), gst.NewNumericColumn[*TestAggregateRecord, int64]("nonexistent").Sum().As("total")).
 			Scan(&rows), database.ErrUnknownColumn)
 	})
 
@@ -442,13 +442,13 @@ func TestSelectBuildErrors(t *testing.T) {
 		// build-time rule table has to stop it, otherwise MySQL answers with
 		// 0 and a warning.
 		rows := make([]row, 0)
-		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), types.NewNumericColumn[*TestAggregateRecord, string]("status").Sum().As("total")).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), gst.NewNumericColumn[*TestAggregateRecord, string]("status").Sum().As("total")).
 			Scan(&rows), database.ErrAggregateType)
 	})
 
 	t.Run("TimeBucketOverNonTimeColumn", func(t *testing.T) {
 		rows := make([]row, 0)
-		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, types.NewTimeColumn[*TestAggregateRecord]("amount").ByDay().As("category"), TestAggregateRecordCols.Amount.Sum().As("total")).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, gst.NewTimeColumn[*TestAggregateRecord]("amount").ByDay().As("category"), TestAggregateRecordCols.Amount.Sum().As("total")).
 			Scan(&rows), database.ErrAggregateType)
 	})
 
@@ -498,7 +498,7 @@ func TestSelectBuildErrors(t *testing.T) {
 		// The renderer composes SQL from the constant, so a value from outside
 		// the closed set would otherwise reach the statement as text.
 		rows := make([]row, 0)
-		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), types.NewTerm(
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), gst.NewTerm(
 			"TOTALLY_NOT_SQL", "",
 			"amount", "",
 			"total",
@@ -508,7 +508,7 @@ func TestSelectBuildErrors(t *testing.T) {
 
 	t.Run("UnknownTimeBucket", func(t *testing.T) {
 		rows := make([]row, 0)
-		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, types.NewTerm("", "", "occurred_at", "fortnight", "category"),
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, gst.NewTerm("", "", "occurred_at", "fortnight", "category"),
 			TestAggregateRecordCols.Amount.Sum().As("total")).
 			Scan(&rows), database.ErrUnknownTimeBucket)
 	})
@@ -524,9 +524,9 @@ func TestSelectBuildErrors(t *testing.T) {
 
 	t.Run("BucketOnMeasure", func(t *testing.T) {
 		rows := make([]row, 0)
-		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), types.NewTerm(
-			types.FnSum, "",
-			"amount", types.TimeBucketDay, "total",
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), gst.NewTerm(
+			gst.FnSum, "",
+			"amount", gst.TimeBucketDay, "total",
 		)).
 			Scan(&rows), database.ErrBucketOnMeasure)
 	})
@@ -540,8 +540,8 @@ func TestSelectBuildErrors(t *testing.T) {
 			Done     int64
 		}
 		rows := make([]condRow, 0)
-		require.ErrorIs(t, database.Select[*TestAggregateRecord, condRow](ctx, TestAggregateRecordCols.Category.Group(), types.Count().Where(TestAggregateRecordCols.Status.Eq("done")).As("done")).
-			Having(types.Count().As("done").Gt(1)).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, condRow](ctx, TestAggregateRecordCols.Category.Group(), gst.Count().Where(TestAggregateRecordCols.Status.Eq("done")).As("done")).
+			Having(gst.Count().As("done").Gt(1)).
 			Scan(&rows), database.ErrHavingTermNotSelected)
 	})
 
@@ -563,7 +563,7 @@ func TestSelectBuildErrors(t *testing.T) {
 		// same predicate would turn a report into a silent zero, so it errors.
 		got := struct{ Total int64 }{}
 		require.ErrorIs(t, database.Select[*TestAggregateRecord, struct{ Total int64 }](ctx, TestAggregateRecordCols.Amount.Sum().As("total")).
-			Where(types.FilterOr()).
+			Where(gst.FilterOr()).
 			ScanOne(&got), database.ErrUnusableFilter)
 	})
 
@@ -571,7 +571,7 @@ func TestSelectBuildErrors(t *testing.T) {
 		rows := make([]row, 0)
 		total := TestAggregateRecordCols.Amount.Sum().As("total")
 		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), total).
-			Having(types.NewTermCondition(total, "approximately", 1)).
+			Having(gst.NewTermCondition(total, "approximately", 1)).
 			Scan(&rows), database.ErrUnknownCompareOp)
 	})
 
@@ -579,7 +579,7 @@ func TestSelectBuildErrors(t *testing.T) {
 		rows := make([]row, 0)
 		total := TestAggregateRecordCols.Amount.Sum().As("total")
 		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category.Group(), total).
-			OrderBy(types.NewTermOrder(total, "sideways")).
+			OrderBy(gst.NewTermOrder(total, "sideways")).
 			Scan(&rows), database.ErrUnknownOrderDirection)
 	})
 
@@ -592,21 +592,21 @@ func TestSelectBuildErrors(t *testing.T) {
 			Done     int64
 		}
 		rows := make([]condRow, 0)
-		require.ErrorIs(t, database.Select[*TestAggregateRecord, condRow](ctx, TestAggregateRecordCols.Category.Group(), types.Count().Where(TestAggregateRecordCols.Status.Eq("done")).As("done")).
-			OrderBy(types.Count().As("done").Desc()).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, condRow](ctx, TestAggregateRecordCols.Category.Group(), gst.Count().Where(TestAggregateRecordCols.Status.Eq("done")).As("done")).
+			OrderBy(gst.Count().As("done").Desc()).
 			Scan(&rows), database.ErrOrderTermNotSelected)
 	})
 
 	// ScanOne rejects all three pagination inputs, not just the one that
 	// happened to be covered.
-	for name, build := range map[string]func(types.Selector[*TestAggregateRecord, struct{ Total int64 }]) types.Selector[*TestAggregateRecord, struct{ Total int64 }]{
-		"Limit": func(a types.Selector[*TestAggregateRecord, struct{ Total int64 }]) types.Selector[*TestAggregateRecord, struct{ Total int64 }] {
+	for name, build := range map[string]func(gst.Selector[*TestAggregateRecord, struct{ Total int64 }]) gst.Selector[*TestAggregateRecord, struct{ Total int64 }]{
+		"Limit": func(a gst.Selector[*TestAggregateRecord, struct{ Total int64 }]) gst.Selector[*TestAggregateRecord, struct{ Total int64 }] {
 			return a.Limit(1)
 		},
-		"Page": func(a types.Selector[*TestAggregateRecord, struct{ Total int64 }]) types.Selector[*TestAggregateRecord, struct{ Total int64 }] {
+		"Page": func(a gst.Selector[*TestAggregateRecord, struct{ Total int64 }]) gst.Selector[*TestAggregateRecord, struct{ Total int64 }] {
 			return a.Page(2, 1)
 		},
-		"Having": func(a types.Selector[*TestAggregateRecord, struct{ Total int64 }]) types.Selector[*TestAggregateRecord, struct{ Total int64 }] {
+		"Having": func(a gst.Selector[*TestAggregateRecord, struct{ Total int64 }]) gst.Selector[*TestAggregateRecord, struct{ Total int64 }] {
 			return a.Having(TestAggregateRecordCols.Amount.Sum().As("total").Gt(1))
 		},
 	} {
@@ -633,7 +633,7 @@ func TestSelectWithDryRunCollector(t *testing.T) {
 		Total    int64
 	}
 	rows := make([]row, 0)
-	statements := make([]types.SQLStatement, 0)
+	statements := make([]gst.SQLStatement, 0)
 	require.NoError(t, database.Select[*TestAggregateRecord, row](context.Background(), TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.Amount.Sum().As("total")).
 		WithDryRun(&statements).
 		Scan(&rows))
@@ -761,21 +761,21 @@ func TestSelectNullableResultFields(t *testing.T) {
 			Records  int64
 		}
 		rows := make([]keyed, 0)
-		require.ErrorIs(t, database.Select[*TestAggregateRecord, keyed](ctx, TestAggregateRecordCols.ClosedAt.Group(), types.Count().As("records")).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, keyed](ctx, TestAggregateRecordCols.ClosedAt.Group(), gst.Count().As("records")).
 			Scan(&rows), database.ErrNullableResultField)
 		type bucketed struct {
 			Day     string
 			Records int64
 		}
 		buckets := make([]bucketed, 0)
-		require.ErrorIs(t, database.Select[*TestAggregateRecord, bucketed](ctx, TestAggregateRecordCols.ClosedAt.ByDay().As("day"), types.Count().As("records")).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, bucketed](ctx, TestAggregateRecordCols.ClosedAt.ByDay().As("day"), gst.Count().As("records")).
 			Scan(&buckets), database.ErrNullableResultField)
 		type pointed struct {
 			ClosedAt *time.Time
 			Records  int64
 		}
 		groups := make([]pointed, 0)
-		require.NoError(t, database.Select[*TestAggregateRecord, pointed](ctx, TestAggregateRecordCols.ClosedAt.Group(), types.Count().As("records")).
+		require.NoError(t, database.Select[*TestAggregateRecord, pointed](ctx, TestAggregateRecordCols.ClosedAt.Group(), gst.Count().As("records")).
 			Where(TestAggregateRecordCols.Category.Eq("beta")).
 			Scan(&groups))
 		require.Len(t, groups, 1)
@@ -784,14 +784,14 @@ func TestSelectNullableResultFields(t *testing.T) {
 		// A condition on the column in Where keeps the rows without one out,
 		// and the plain field is accepted; inside an OR group it need not
 		// hold, and the field stays a pointer.
-		require.NoError(t, database.Select[*TestAggregateRecord, keyed](ctx, TestAggregateRecordCols.ClosedAt.Group(), types.Count().As("records")).
+		require.NoError(t, database.Select[*TestAggregateRecord, keyed](ctx, TestAggregateRecordCols.ClosedAt.Group(), gst.Count().As("records")).
 			Where(TestAggregateRecordCols.ClosedAt.IsNotNull()).
 			Scan(&rows))
-		require.NoError(t, database.Select[*TestAggregateRecord, bucketed](ctx, TestAggregateRecordCols.ClosedAt.ByDay().As("day"), types.Count().As("records")).
+		require.NoError(t, database.Select[*TestAggregateRecord, bucketed](ctx, TestAggregateRecordCols.ClosedAt.ByDay().As("day"), gst.Count().As("records")).
 			Where(TestAggregateRecordCols.ClosedAt.Gte(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))).
 			Scan(&buckets))
-		require.ErrorIs(t, database.Select[*TestAggregateRecord, keyed](ctx, TestAggregateRecordCols.ClosedAt.Group(), types.Count().As("records")).
-			Where(types.FilterOr(TestAggregateRecordCols.ClosedAt.IsNotNull(), TestAggregateRecordCols.Category.Eq("beta"))).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, keyed](ctx, TestAggregateRecordCols.ClosedAt.Group(), gst.Count().As("records")).
+			Where(gst.FilterOr(TestAggregateRecordCols.ClosedAt.IsNotNull(), TestAggregateRecordCols.Category.Eq("beta"))).
 			Scan(&rows), database.ErrNullableResultField)
 	})
 
@@ -955,17 +955,17 @@ func TestSelectPageCompletesTheOrder(t *testing.T) {
 		Amount   int64
 		Rn       int64
 	}
-	rn := types.RowNumber().Over(types.OrderBy(TestAggregateRecordCols.OccurredAt.Desc())).As("rn")
-	render := func(t *testing.T, scan func(statements *[]types.SQLStatement) error) string {
+	rn := gst.RowNumber().Over(gst.OrderBy(TestAggregateRecordCols.OccurredAt.Desc())).As("rn")
+	render := func(t *testing.T, scan func(statements *[]gst.SQLStatement) error) string {
 		t.Helper()
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		require.NoError(t, scan(&statements))
 		require.Len(t, statements, 1)
 		return statements[0].Query
 	}
 
 	t.Run("GroupedPageGainsItsKeys", func(t *testing.T) {
-		sql := render(t, func(statements *[]types.SQLStatement) error {
+		sql := render(t, func(statements *[]gst.SQLStatement) error {
 			rows := make([]group, 0)
 			return database.Select[*TestAggregateRecord, group](ctx, TestAggregateRecordCols.Category.Group(), total).
 				WithDryRun(statements).
@@ -978,7 +978,7 @@ func TestSelectPageCompletesTheOrder(t *testing.T) {
 	})
 
 	t.Run("GroupedPageOrderedByItsKeyGainsNothing", func(t *testing.T) {
-		sql := render(t, func(statements *[]types.SQLStatement) error {
+		sql := render(t, func(statements *[]gst.SQLStatement) error {
 			rows := make([]group, 0)
 			return database.Select[*TestAggregateRecord, group](ctx, TestAggregateRecordCols.Category.Group(), total).
 				WithDryRun(statements).
@@ -990,7 +990,7 @@ func TestSelectPageCompletesTheOrder(t *testing.T) {
 	})
 
 	t.Run("RowLevelPageGainsThePrimaryKey", func(t *testing.T) {
-		sql := render(t, func(statements *[]types.SQLStatement) error {
+		sql := render(t, func(statements *[]gst.SQLStatement) error {
 			rows := make([]row, 0)
 			return database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.Category, TestAggregateRecordCols.Amount, rn).
 				WithDryRun(statements).
@@ -1003,7 +1003,7 @@ func TestSelectPageCompletesTheOrder(t *testing.T) {
 	})
 
 	t.Run("LimitAloneGainsNothing", func(t *testing.T) {
-		sql := render(t, func(statements *[]types.SQLStatement) error {
+		sql := render(t, func(statements *[]gst.SQLStatement) error {
 			rows := make([]group, 0)
 			return database.Select[*TestAggregateRecord, group](ctx, TestAggregateRecordCols.Category.Group(), total).
 				WithDryRun(statements).
@@ -1015,7 +1015,7 @@ func TestSelectPageCompletesTheOrder(t *testing.T) {
 	})
 
 	t.Run("LimitAfterAPageGainsNothing", func(t *testing.T) {
-		sql := render(t, func(statements *[]types.SQLStatement) error {
+		sql := render(t, func(statements *[]gst.SQLStatement) error {
 			rows := make([]group, 0)
 			return database.Select[*TestAggregateRecord, group](ctx, TestAggregateRecordCols.Category.Group(), total).
 				WithDryRun(statements).

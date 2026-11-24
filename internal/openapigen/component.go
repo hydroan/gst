@@ -10,8 +10,8 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/ggconst"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
-	"github.com/hydroan/gst/internal/types"
 	"go.uber.org/zap"
 )
 
@@ -78,16 +78,16 @@ func schemaComponentNameFromPath(pkgPath, name string) string {
 // framework's modules.
 const moduleModelTree = ggconst.ImportPathGst + "/" + ggconst.DirModuleModel
 
-// internalTypesPkgPath is where the framework's contracts are defined;
+// internalGstPkgPath is where the framework's contracts are defined;
 // business code imports them from the root package, ggconst.ImportPathGst.
-const internalTypesPkgPath = ggconst.ImportPathGst + "/internal/types"
+const internalGstPkgPath = ggconst.ImportPathGst + "/internal/gst"
 
 // documentedPkgPath returns the package path a type is named after in the
 // document, which is the path business code imports it from. The framework's
-// contracts are defined in internal/types, but projects reach every exported
+// contracts are defined in internal/gst, but projects reach every exported
 // one of them through the root gst package under the same name.
 func documentedPkgPath(typ reflect.Type) string {
-	if pkgPath := typ.PkgPath(); pkgPath != internalTypesPkgPath {
+	if pkgPath := typ.PkgPath(); pkgPath != internalGstPkgPath {
 		return pkgPath
 	}
 	return ggconst.ImportPathGst
@@ -157,7 +157,7 @@ func componentDescriptionName(typ, modelTyp reflect.Type) string {
 
 // registerSchema registers Model, Model Payload and Model Result into the
 // openapi3 schema.
-func registerSchema[M types.Model, REQ types.Request, RSP types.Response](reqKey, rspKey string, reqSchemaRef *openapi3.SchemaRef, rspSchemaRef *openapi3.SchemaRef) {
+func registerSchema[M gst.Model, REQ gst.Request, RSP gst.Response](reqKey, rspKey string, reqSchemaRef *openapi3.SchemaRef, rspSchemaRef *openapi3.SchemaRef) {
 	if !model.IsEmpty[M]() {
 		typ := reflect.TypeFor[M]()
 		name := uniqueComponentName(typ)
@@ -215,7 +215,7 @@ func registerSchema[M types.Model, REQ types.Request, RSP types.Response](reqKey
 	}
 }
 
-func newRequestBody[REQ types.Request](reqKey string) *openapi3.RequestBodyRef {
+func newRequestBody[REQ gst.Request](reqKey string) *openapi3.RequestBodyRef {
 	if model.IsEmpty[REQ]() {
 		return nil
 	}

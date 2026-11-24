@@ -1,0 +1,259 @@
+package gst
+
+import (
+	"log/slog"
+	"net/http"
+	"runtime"
+	"strings"
+
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/errbase"
+)
+
+const defaultErrorStatus = http.StatusInternalServerError
+
+// StatusClientClosedRequest is the HTTP status a request is answered with
+// once its client went away before the answer: nginx's 499, which the gRPC
+// mapping answers Canceled (see grpcserver.StatusError), as google.rpc's
+// canonical mapping of its Canceled code does. The standard library names
+// no status for it.
+const StatusClientClosedRequest = 499
+
+var (
+	_ error                      = (*Error)(nil)
+	_ errbase.StackTraceProvider = (*Error)(nil)
+)
+
+// Error is the error a request is answered with: a status and a client-safe
+// message, with an internal cause for the logs. Service methods, model hooks,
+// middleware and interceptors build it; the root gst package re-exports it
+// and its constructors to application code. The message is kept as it is
+// written: a transport answers it in the language the process answers in
+// (see i18n.Translate).
+type Error struct {
+	status int
+	msg    string
+	cause  error
+	// violations are the fields the request was refused on, set by
+	// NewInvalidFields, one per field the validator refused, and by
+	// NewInvalidValue, the one field holding a value it cannot hold, and read
+	// through FieldViolations; both answers list them, the gRPC one as its
+	// details and the HTTP one in the error member of its envelope, beside
+	// the msg NewInvalidFields joins from their descriptions.
+	violations []FieldViolation
+	// stack holds the program counters captured at the construction site,
+	// exposed through StackTrace so error-stack consumers such as
+	// errors.GetReportableStackTrace can locate where the error was created.
+	stack []uintptr
+}
+
+// FieldViolation is one field a request was refused on: the field by its JSON
+// key path, address.city or items[1].name, and the client-safe description of
+// what it failed, the shape of google.rpc.BadRequest's FieldViolation. The
+// JSON keys are the ones the HTTP envelope lists a violation by.
+type FieldViolation struct {
+	Field       string `json:"field"`
+	Description string `json:"description"`
+}
+
+// NewInvalidFields creates the 400 of a request whose fields the validator
+// refused: the message joins the description of each violation with a
+// semicolon, the violations stay readable (see FieldViolations), and cause,
+// the validator's error, is reported by Error for logs and available
+// through Unwrap.
+func NewInvalidFields(violations []FieldViolation, cause error) *Error {
+	descriptions := make([]string, 0, len(violations))
+	for _, v := range violations {
+		descriptions = append(descriptions, v.Description)
+	}
+	err := newError(http.StatusBadRequest, strings.Join(descriptions, "; "), cause)
+	err.violations = violations
+	return err
+}
+
+// NewInvalidValue creates the 400 of a request whose field carries a value
+// the field cannot hold, an integer out of its range, a string where a
+// number is due: the message names the field by its JSON key path, "invalid
+// value for field 'items[1].rank'", the one violation carries field and
+// description for the details of the answer (see FieldViolations), and
+// cause, the decoder's error, is reported by Error for logs and available
+// through Unwrap.
+func NewInvalidValue(field, description string, cause error) *Error {
+	err := newError(http.StatusBadRequest, "invalid value for field '"+field+"'", cause)
+	err.violations = []FieldViolation{{Field: field, Description: description}}
+	return err
+}
+
+// NewError creates the error a request is answered with: status and a
+// client-safe message.
+//
+// The status must be a 4xx or 5xx HTTP status code. Invalid statuses, including
+// 2xx/3xx success or redirect statuses such as http.StatusOK, are normalized to
+// http.StatusInternalServerError and the provided message is discarded.
+func NewError(status int, msg string) *Error {
+	return newError(status, msg, nil)
+}
+
+// NewErrorWithCause creates the error a request is answered with, carrying
+// an internal cause.
+//
+// The status must be a 4xx or 5xx HTTP status code. Invalid statuses, including
+// 2xx/3xx success or redirect statuses such as http.StatusOK, are normalized to
+// http.StatusInternalServerError and the provided message is discarded.
+//
+// The cause is reported by Error for logs and available through Unwrap, but
+// is never exposed as the response message.
+func NewErrorWithCause(status int, msg string, cause error) *Error {
+	return newError(status, msg, cause)
+}
+
+func newError(status int, msg string, cause error) *Error {
+	normalizedStatus, validStatus := normalizeErrorStatus(status)
+	if !validStatus {
+		msg = ""
+	}
+
+	return &Error{
+		status: normalizedStatus,
+		msg:    normalizeErrorMessage(normalizedStatus, msg),
+		cause:  cause,
+		stack:  callers(),
+	}
+}
+
+// callers captures the current call stack, skipping runtime.Callers, callers
+// itself, newError and its exported constructor wrapper, so the innermost
+// recorded frame is the construction site in application code.
+func callers() []uintptr {
+	const maxDepth = 32
+	var pcs [maxDepth]uintptr
+	n := runtime.Callers(4, pcs[:])
+	return pcs[:n]
+}
+
+// StackTrace implements errbase.StackTraceProvider, exposing the stack
+// captured at the construction site in the github.com/pkg/errors format that
+// errors.GetReportableStackTrace recognizes. When the error also wraps a
+// cause carrying its own stack trace, consumers that pick the deepest stack
+// in the unwrap chain keep preferring the cause's origin.
+func (e *Error) StackTrace() errbase.StackTrace {
+	if e == nil || len(e.stack) == 0 {
+		return nil
+	}
+	frames := make(errbase.StackTrace, len(e.stack))
+	for i, pc := range e.stack {
+		frames[i] = errbase.StackFrame(pc)
+	}
+	return frames
+}
+
+// Error reports the client-safe message followed by the cause chain, so log
+// consumers rendering err.Error() (zap's error field, sugared positional
+// logging) capture the internal cause. The response envelope renders Msg
+// instead, keeping the cause out of API responses.
+func (e *Error) Error() string {
+	if e == nil || e.cause == nil {
+		return e.Msg()
+	}
+	return e.msg + ": " + e.cause.Error()
+}
+
+func (e *Error) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.cause
+}
+
+// FieldViolations returns the fields the request err answers for failed on,
+// which only an error NewInvalidFields or NewInvalidValue created carries; nil
+// for any other error, and for nil. It is a package function rather than a
+// method so it stays out of the public alias of Error: only the framework's
+// own answers read the fields, the gRPC one to list them as its details and
+// the HTTP one in the error member of its envelope, and the type they come
+// as is the framework's own.
+func FieldViolations(err *Error) []FieldViolation {
+	if err == nil {
+		return nil
+	}
+	return err.violations
+}
+
+// Status returns the HTTP status the error answers with; a nil receiver,
+// the typed nil a `var e *Error; return e` hands its caller, answers the
+// default, 500.
+func (e *Error) Status() int {
+	if e == nil {
+		return defaultErrorStatus
+	}
+	return e.status
+}
+
+// Msg returns the client-safe message the error answers with, as it is
+// written; a nil receiver answers FailureMsg, the message of every other
+// failure of the server's own, so the envelope and the gRPC status word the
+// two alike.
+func (e *Error) Msg() string {
+	if e == nil {
+		return FailureMsg
+	}
+	return e.msg
+}
+
+// ServerFailure reports whether err, what a request or an operation failed
+// with, is the server's own failure rather than one the client brought on
+// itself: it carries no Error, or one answering 500 or above. It is the line
+// the framework's own records of a failure turn on, the level a failure is
+// logged at and whether a span is marked failed for it, so that every layer
+// draws it the same way.
+func ServerFailure(err error) bool {
+	var serviceErr *Error
+	return !errors.As(err, &serviceErr) || serviceErr.Status() >= http.StatusInternalServerError
+}
+
+// FailureLevel returns the level a failure answered with err is logged at,
+// the same on either transport: error for the server's own failure (see
+// ServerFailure); warn for a failure the client brought on itself that is
+// worth a look, a permission refused (403), a request that did not arrive in
+// time (408), a precondition not met (412) or a rate exceeded (429); and
+// info for any other of the client's, a request that is malformed,
+// unauthenticated, canceled or in conflict, or that names a record that is
+// missing.
+//
+// The four statuses logged at warn are ones whose gRPC codes the logging
+// interceptors of go-grpc-middleware log at warn. Their table is not called
+// here: it is keyed by the code, which only the gRPC transport's mapping
+// gives a failure, and that mapping tells one conflict from another by the
+// database's errors, out of this package's reach. The status is what the
+// answer carries on both transports, so the level is read from it, and a
+// conflict is logged at info whatever caused it.
+func FailureLevel(err error) slog.Level {
+	var serviceErr *Error
+	if ServerFailure(err) || !errors.As(err, &serviceErr) {
+		return slog.LevelError
+	}
+	switch serviceErr.Status() {
+	case http.StatusForbidden, http.StatusRequestTimeout, http.StatusPreconditionFailed, http.StatusTooManyRequests:
+		return slog.LevelWarn
+	}
+	return slog.LevelInfo
+}
+
+func normalizeErrorStatus(status int) (int, bool) {
+	if status >= http.StatusBadRequest && status <= 599 {
+		return status, true
+	}
+	return defaultErrorStatus, false
+}
+
+func normalizeErrorMessage(status int, msg string) string {
+	msg = strings.TrimSpace(msg)
+	if msg != "" {
+		return msg
+	}
+
+	if text := http.StatusText(status); text != "" {
+		return text
+	}
+	return http.StatusText(defaultErrorStatus)
+}

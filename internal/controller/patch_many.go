@@ -8,8 +8,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	modellogmgmt "github.com/hydroan/gst/internal/modulemodel/logmgmt"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
@@ -80,7 +80,7 @@ func (a *action[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceConte
 	}
 
 	// 1.Perform business logic processing before batch patch resource.
-	if err := a.traceServiceHook(ctx, apiaction.PatchManyBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
+	if err := a.traceServiceHook(ctx, apiaction.PatchManyBefore, svc, newServiceContext, func(sc *gst.ServiceContext) error {
 		return svc.PatchManyBefore(sc, patched...)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
@@ -93,7 +93,7 @@ func (a *action[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceConte
 		return zero, failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after batch patch resource.
-	if err := a.traceServiceHook(ctx, apiaction.PatchManyAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
+	if err := a.traceServiceHook(ctx, apiaction.PatchManyAfter, svc, newServiceContext, func(sc *gst.ServiceContext) error {
 		return svc.PatchManyAfter(sc, patched...)
 	}); err != nil {
 		return zero, failService(ctx, log, err)
@@ -107,7 +107,7 @@ func (a *action[M, REQ, RSP]) patchManyFlow(ctx context.Context, newServiceConte
 	// 4.record operation log to database.
 	// Record and Request both carry the request payload, so one marshal
 	// feeds both columns; Response carries the patched records instead.
-	if err := audit.RecordOperation(ctx, a.newModel(), types.OperationPatchMany,
+	if err := audit.RecordOperation(ctx, a.newModel(), gst.OperationPatchMany,
 		func() *modellogmgmt.OperationLog {
 			record, _ := json.Marshal(req)
 			respData, _ := json.Marshal(rsp)

@@ -4,7 +4,7 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/spf13/viper"
 )
 
@@ -68,7 +68,7 @@ func (*Redis) setDefaults(v *viper.Viper) {
 	v.SetDefault("redis.db", 0)
 	v.SetDefault("redis.password", "")
 	v.SetDefault("redis.pool_size", runtime.NumCPU())
-	v.SetDefault("redis.namespace", types.FrameworkName)
+	v.SetDefault("redis.namespace", gst.FrameworkName)
 	v.SetDefault("redis.expiration", 0)
 	v.SetDefault("redis.cluster_mode", false)
 

@@ -4,7 +4,7 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // DefaultPageSize and MaxPageSize bound the _size parameter of every list:
@@ -37,13 +37,13 @@ const (
 func Pagination(q url.Values) (page, size int) {
 	// A parameter left out is not parsed: strconv allocates the error it
 	// refuses an empty string with.
-	if raw := q.Get(types.QueryPage); raw != "" {
+	if raw := q.Get(gst.QueryPage); raw != "" {
 		page, _ = strconv.Atoi(raw)
 	}
 	if page <= 0 {
 		page = 1
 	}
-	if raw := q.Get(types.QuerySize); raw != "" {
+	if raw := q.Get(gst.QuerySize); raw != "" {
 		size, _ = strconv.Atoi(raw)
 	}
 	if size <= 0 {

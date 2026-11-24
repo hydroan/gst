@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 type Option func(*Client)
@@ -46,7 +46,7 @@ func WithDebug() Option {
 
 // WithLogger sets the logger the output of WithDebug goes to; a nil logger
 // keeps the client's own.
-func WithLogger(logger types.Logger) Option {
+func WithLogger(logger gst.Logger) Option {
 	return func(c *Client) {
 		if logger != nil {
 			c.logger = logger

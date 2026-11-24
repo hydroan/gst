@@ -59,7 +59,7 @@ type Option struct {
 	Console       bool
 }
 
-// New builds a types.Logger backed by *zap.Logger.
+// New builds a gst.Logger backed by *zap.Logger.
 // filename: the stream's log file, whose name without ".log" names the
 // stream in stdout mode ("/dev/stdout" for console)
 // opts: optional encoder options

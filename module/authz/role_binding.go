@@ -1,19 +1,19 @@
 package authz
 
 import (
+	"github.com/hydroan/gst/internal/gst"
 	modelauthz "github.com/hydroan/gst/internal/modulemodel/authz"
 	"github.com/hydroan/gst/internal/service"
-	"github.com/hydroan/gst/internal/types"
 )
 
-var _ types.Module[*RoleBinding, *RoleBinding, *RoleBinding] = (*RoleBindingModule)(nil)
+var _ gst.Module[*RoleBinding, *RoleBinding, *RoleBinding] = (*RoleBindingModule)(nil)
 
 type (
 	RoleBinding       = modelauthz.RoleBinding
 	RoleBindingModule struct{}
 )
 
-func (*RoleBindingModule) Service() types.Service[*RoleBinding, *RoleBinding, *RoleBinding] {
+func (*RoleBindingModule) Service() gst.Service[*RoleBinding, *RoleBinding, *RoleBinding] {
 	return service.Base[*RoleBinding, *RoleBinding, *RoleBinding]{}
 }
 func (*RoleBindingModule) Route() string { return "authz/role-bindings" }

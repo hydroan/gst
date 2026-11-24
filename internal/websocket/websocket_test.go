@@ -14,9 +14,9 @@ import (
 
 	"github.com/cockroachdb/errors"
 	coderwebsocket "github.com/coder/websocket"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/streamctx"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/websocket"
 	"github.com/stretchr/testify/require"
 )
@@ -99,7 +99,7 @@ func TestAcceptHoldsBackTheRefusalOfAHandshake(t *testing.T) {
 		require.Equal(t, http.StatusTeapot, rsp.StatusCode, "the answer is the caller's to write")
 		require.Equal(t, "websocket", rsp.Header.Get("Upgrade"))
 
-		var refusal *types.Error
+		var refusal *gst.Error
 		require.ErrorAs(t, await(t, refused), &refusal)
 		require.Equal(t, http.StatusUpgradeRequired, refusal.Status())
 		require.Equal(t, `WebSocket protocol violation: Connection header "" does not contain Upgrade`, refusal.Msg())
@@ -112,7 +112,7 @@ func TestAcceptHoldsBackTheRefusalOfAHandshake(t *testing.T) {
 		require.Error(t, err)
 		require.Equal(t, http.StatusTeapot, rsp.StatusCode, "the answer is the caller's to write")
 
-		var refusal *types.Error
+		var refusal *gst.Error
 		require.ErrorAs(t, await(t, refused), &refusal)
 		require.Equal(t, http.StatusForbidden, refusal.Status())
 		require.Equal(t, `request Origin "app.other.example" is not authorized for Host "`+host+`"`, refusal.Msg())
@@ -198,7 +198,7 @@ func TestValidateOriginsReportsThePatternsTheLibraryCannotRead(t *testing.T) {
 			})
 			_, _, err := websocket.Dial(t.Context(), nil, url, http.Header{"Origin": {"https://app.other.example"}}, time.Second)
 			require.Error(t, err)
-			var refusal *types.Error
+			var refusal *gst.Error
 			require.ErrorAs(t, await(t, refused), &refusal)
 			require.Equal(t, malformed, refusal.Msg() == http.StatusText(http.StatusForbidden), "the library refused with %q", refusal.Msg())
 
@@ -304,9 +304,9 @@ func TestCloseAnswersWithTheStatusOfTheEnding(t *testing.T) {
 		reason string
 	}{
 		{name: "no error", ending: nil, status: coderwebsocket.StatusNormalClosure, reason: ""},
-		{name: "a service error", ending: types.NewError(http.StatusNotFound, "sample not found"), status: 4404, reason: "sample not found"},
-		{name: "a service error with a long message", ending: types.NewError(http.StatusBadRequest, strings.Repeat("é", 100)), status: 4400, reason: strings.Repeat("é", 61)},
-		{name: "another error", ending: errors.New("sample failure"), status: 4500, reason: types.FailureMsg},
+		{name: "a service error", ending: gst.NewError(http.StatusNotFound, "sample not found"), status: 4404, reason: "sample not found"},
+		{name: "a service error with a long message", ending: gst.NewError(http.StatusBadRequest, strings.Repeat("é", 100)), status: 4400, reason: strings.Repeat("é", 61)},
+		{name: "another error", ending: errors.New("sample failure"), status: 4500, reason: gst.FailureMsg},
 		{name: "the server shutting down", ending: errors.Wrap(streamctx.ErrServerShutdown, "sample stream"), status: coderwebsocket.StatusGoingAway, reason: "the server is shutting down"},
 	}
 	for _, tt := range tests {
@@ -344,8 +344,8 @@ func TestCloseAnswersInTheLanguageOfTheProcess(t *testing.T) {
 		status coderwebsocket.StatusCode
 		reason string
 	}{
-		{name: "a service error with a long translation", ending: types.NewError(http.StatusBadRequest, "the sample is far too long"), status: 4400, reason: strings.Repeat("样", 41)},
-		{name: "a service error without a translation", ending: types.NewError(http.StatusNotFound, "sample not found"), status: 4404, reason: "sample not found"},
+		{name: "a service error with a long translation", ending: gst.NewError(http.StatusBadRequest, "the sample is far too long"), status: 4400, reason: strings.Repeat("样", 41)},
+		{name: "a service error without a translation", ending: gst.NewError(http.StatusNotFound, "sample not found"), status: 4404, reason: "sample not found"},
 		{name: "another error", ending: errors.New("sample failure"), status: 4500, reason: "服务器无法处理该请求。"},
 		{name: "the server shutting down", ending: errors.Wrap(streamctx.ErrServerShutdown, "sample stream"), status: coderwebsocket.StatusGoingAway, reason: "服务器正在关闭"},
 	}
@@ -448,7 +448,7 @@ func TestCloseReturnsTheStatusTheConnectionClosedWith(t *testing.T) {
 		status int
 	}{
 		{name: "closed without an error", status: 1000},
-		{name: "closed with a service error", ending: types.NewError(http.StatusNotFound, "sample not found"), status: 4404},
+		{name: "closed with a service error", ending: gst.NewError(http.StatusNotFound, "sample not found"), status: 4404},
 		{
 			name: "closed before on what the client sent",
 			client: func(t *testing.T, client *coderwebsocket.Conn) {
@@ -463,7 +463,7 @@ func TestCloseReturnsTheStatusTheConnectionClosedWith(t *testing.T) {
 				t.Helper()
 				_ = client.Close(4001, "sample")
 			},
-			ending: types.NewError(http.StatusNotFound, "sample not found"),
+			ending: gst.NewError(http.StatusNotFound, "sample not found"),
 			status: 4001,
 		},
 		{
@@ -513,8 +513,8 @@ func TestRecvAnswersTheErrorTheServerClosedWith(t *testing.T) {
 		status int
 		msg    string
 	}{
-		{name: "a service error", ending: types.NewError(http.StatusNotFound, "sample not found"), status: http.StatusNotFound, msg: "sample not found"},
-		{name: "another error", ending: errors.New("sample failure"), status: http.StatusInternalServerError, msg: types.FailureMsg},
+		{name: "a service error", ending: gst.NewError(http.StatusNotFound, "sample not found"), status: http.StatusNotFound, msg: "sample not found"},
+		{name: "another error", ending: errors.New("sample failure"), status: http.StatusInternalServerError, msg: gst.FailureMsg},
 		{name: "the server shutting down", ending: streamctx.ErrServerShutdown, status: http.StatusServiceUnavailable, msg: "the server is shutting down"},
 	}
 	for _, tt := range tests {
@@ -528,7 +528,7 @@ func TestRecvAnswersTheErrorTheServerClosedWith(t *testing.T) {
 			})
 
 			_, err := recv(t, dial(t, url, nil))
-			var ending *types.Error
+			var ending *gst.Error
 			require.ErrorAs(t, err, &ending)
 			require.Equal(t, tt.status, ending.Status())
 			require.Equal(t, tt.msg, ending.Msg())

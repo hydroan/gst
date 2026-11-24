@@ -6,11 +6,11 @@ package defaultcache
 
 import (
 	"github.com/hydroan/gst/internal/cache/freelru"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // Cache returns the process-wide cache of T, the one instance the process
 // keeps for the type, backed by the default backend.
-func Cache[T any]() types.Cache[T] {
+func Cache[T any]() gst.Cache[T] {
 	return freelru.Cache[T]()
 }

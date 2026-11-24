@@ -10,9 +10,9 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/dcache"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
 	"github.com/hydroan/gst/internal/testutil/testlog"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"github.com/stretchr/testify/require"
 )
@@ -60,7 +60,7 @@ func runTests(m *testing.M) int {
 	return m.Run()
 }
 
-func setupTestCache[T any](t *testing.T) types.Cache[T] {
+func setupTestCache[T any](t *testing.T) gst.Cache[T] {
 	t.Helper()
 
 	replicated, err := dcache.Cache[T]()
@@ -94,7 +94,7 @@ func TestCacheBasicOperations(t *testing.T) {
 	// a key that does not exist
 	_, err = dc.Get(t.Context(), "non-existent")
 	require.Error(t, err)
-	require.True(t, errors.Is(err, types.ErrEntryNotFound))
+	require.True(t, errors.Is(err, gst.ErrEntryNotFound))
 }
 
 // TestCacheTTL tests the TTL handling.
@@ -115,7 +115,7 @@ func TestCacheTTL(t *testing.T) {
 
 	// now it must be gone
 	_, err = dc.Get(t.Context(), "ttl-key")
-	require.ErrorIs(t, err, types.ErrEntryNotFound)
+	require.ErrorIs(t, err, gst.ErrEntryNotFound)
 }
 
 // TestCacheConcurrency tests concurrent operations.
@@ -291,11 +291,11 @@ func TestCacheEdgeCases(t *testing.T) {
 	require.NoError(t, err)
 	time.Sleep(20 * time.Millisecond)
 	_, err = dc.Get(t.Context(), "tiny-ttl")
-	require.ErrorIs(t, err, types.ErrEntryNotFound) // it must have expired
+	require.ErrorIs(t, err, gst.ErrEntryNotFound) // it must have expired
 
 	// a sub-millisecond TTL cannot be honored and is rejected outright
 	err = dc.Set(t.Context(), "sub-ms-ttl", "rejected", time.Nanosecond)
-	require.ErrorIs(t, err, types.ErrTTLNotSupported)
+	require.ErrorIs(t, err, gst.ErrTTLNotSupported)
 
 	// a huge TTL
 	err = dc.Set(t.Context(), "huge-ttl", "longterm", 100*365*24*time.Hour) // ~100 years

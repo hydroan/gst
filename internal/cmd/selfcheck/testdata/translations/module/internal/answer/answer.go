@@ -7,7 +7,7 @@ import (
 	"example.com/module"
 	"example.com/module/internal/i18n"
 	"example.com/module/internal/shared"
-	"example.com/module/internal/types"
+	"example.com/module/internal/gst"
 )
 
 const (
@@ -27,17 +27,17 @@ const (
 // translation, one a line, the last for the package declaring it.
 func reported(cause error) []any {
 	return []any{
-		types.NewError(404, lostMsg),
-		types.NewErrorWithCause(500, "the sample broke", cause),
+		gst.NewError(404, lostMsg),
+		gst.NewErrorWithCause(500, "the sample broke", cause),
 		refuse(wrappedMsg),
 		module.NewError(403, "the sample is locked"),
 		i18n.Translate("the sample is asleep"),
-		types.NewError(503, shared.QuietMsg),
+		gst.NewError(503, shared.QuietMsg),
 	}
 }
 
 // refuse hands its parameter to a constructor as it stands.
-func refuse(msg string) *types.Error { return types.NewError(400, msg) }
+func refuse(msg string) *gst.Error { return gst.NewError(400, msg) }
 
 // accepted answers with what the check reports no sentence for: sentences
 // translated under their constant, handed over by it, written out at the
@@ -48,17 +48,17 @@ func refuse(msg string) *types.Error { return types.NewError(400, msg) }
 // registered.
 func accepted(name string, cause error) []any {
 	return []any{
-		types.NewError(409, foundMsg),
-		types.NewError(409, takenMsg),
-		types.NewError(409, "the sample is taken"),
+		gst.NewError(409, foundMsg),
+		gst.NewError(409, takenMsg),
+		gst.NewError(409, "the sample is taken"),
 		refuse(refusedMsg),
-		types.NewError(503, shared.DownMsg),
-		types.NewError(503, renamedMsg),
-		types.NewError(400, fmt.Sprintf("the sample %s is odd", name)),
-		types.NewErrorWithCause(500, cause.Error(), cause),
-		types.NewError(404, returned()),
-		types.NewError(410, strayMsg),
-		types.NewError(425, lateMsg),
+		gst.NewError(503, shared.DownMsg),
+		gst.NewError(503, renamedMsg),
+		gst.NewError(400, fmt.Sprintf("the sample %s is odd", name)),
+		gst.NewErrorWithCause(500, cause.Error(), cause),
+		gst.NewError(404, returned()),
+		gst.NewError(410, strayMsg),
+		gst.NewError(425, lateMsg),
 	}
 }
 

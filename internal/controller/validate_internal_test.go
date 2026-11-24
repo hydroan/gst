@@ -5,7 +5,7 @@ import (
 	"os/exec"
 	"testing"
 
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,7 +23,7 @@ func TestPatchNamesTheFieldInAFreshProcess(t *testing.T) {
 	if os.Getenv(freshPatchHelper) == "1" {
 		refused := validatePatchFields(&validatedProbe{}, patchFieldSet{"Name": {}})
 		require.Error(t, refused)
-		var serviceErr *types.Error
+		var serviceErr *gst.Error
 		require.ErrorAs(t, clientSafeBindError(refused), &serviceErr)
 		require.Equal(t, "name is a required field", serviceErr.Msg())
 		return

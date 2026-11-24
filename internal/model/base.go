@@ -5,13 +5,13 @@ import (
 	"time"
 	"uuid"
 
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"gorm.io/gorm"
 )
 
-var _ types.Model = (*Base)(nil)
+var _ gst.Model = (*Base)(nil)
 
-// Base implements types.Model for database-backed resources.
+// Base implements gst.Model for database-backed resources.
 // Custom models can override these default methods when needed.
 //
 // A model may declare an ID of its own, a wider key say, which shadows

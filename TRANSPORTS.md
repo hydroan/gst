@@ -50,7 +50,7 @@ gst · HTTP 与 gRPC 两条传输线
     <div class="arch-arrow">▼</div>
     <div class="arch-layer stage">
       <div class="arch-layer-title">⑥ 共用流程 · internal/controller</div>
-      <div class="arch-box lane shared"><b>十个 CRUD 流程（create.go … delete_many.go、flow.go）</b><ul><li>模型钩子（CreateBefore …）与 service 钩子（Filter、ListAfter …）按同一顺序跑，事务与审计在这一层。</li><li><code>types.ServiceContext</code> 与传输无关，元数据来自 <code>requestctx.Metadata</code>：ClientIP、UserAgent、Host、TLS、Route、Path、Method、RequiresAuth；gRPC 侧 Route、Method 取注册时描述的该动作的路由与 HTTP 方法（流式为 STREAM），Path、RequestURI 是 FullMethod，非 List/Get 动作的 Query 为空。</li><li>校验单点：binding tag 整体校验，自定义动作的空 body 按零值请求校验、和 gRPC 未设置的 payload 一致；Patch / PatchMany 只校验被点名的字段（HTTP 按 body 键，gRPC 按 update_mask），点名的字段整体替换，不论它是标量、时间还是结构体，掩码只认顶层键、不点进字段内部；id、created_at 这类框架管理的字段两线都不改、点了也跳过，tenant_id 在建行时按调用者的租户盖上、之后不再写，普通调用者传的值两线都不认（gRPC 生成的 FromProto 根本不读它），跨租户身份经 HTTP 创建时能在请求体里点名租户（见第 9 节），模型没有的字段 HTTP 忽略 body 里的键、gRPC 拒绝掩码里的路径，一个可改字段都没点到时 HTTP 整行按原样写回、gRPC 拒绝；批量逐条校验，UpdateMany / PatchMany 同一个 id 出现两次两线都拒绝。gin 的校验器在框架包初始化时配成按 json 名称呼字段、失败句子用英文翻译，项目自己用 gin 的 ShouldBind 时错误里的字段名也是 JSON 名。</li><li>数据库经 <code>database.Database[T](ctx)</code>，列名只来自 gorm schema。</li></ul></div>
+      <div class="arch-box lane shared"><b>十个 CRUD 流程（create.go … delete_many.go、flow.go）</b><ul><li>模型钩子（CreateBefore …）与 service 钩子（Filter、ListAfter …）按同一顺序跑，事务与审计在这一层。</li><li><code>gst.ServiceContext</code> 与传输无关，元数据来自 <code>requestctx.Metadata</code>：ClientIP、UserAgent、Host、TLS、Route、Path、Method、RequiresAuth；gRPC 侧 Route、Method 取注册时描述的该动作的路由与 HTTP 方法（流式为 STREAM），Path、RequestURI 是 FullMethod，非 List/Get 动作的 Query 为空。</li><li>校验单点：binding tag 整体校验，自定义动作的空 body 按零值请求校验、和 gRPC 未设置的 payload 一致；Patch / PatchMany 只校验被点名的字段（HTTP 按 body 键，gRPC 按 update_mask），点名的字段整体替换，不论它是标量、时间还是结构体，掩码只认顶层键、不点进字段内部；id、created_at 这类框架管理的字段两线都不改、点了也跳过，tenant_id 在建行时按调用者的租户盖上、之后不再写，普通调用者传的值两线都不认（gRPC 生成的 FromProto 根本不读它），跨租户身份经 HTTP 创建时能在请求体里点名租户（见第 9 节），模型没有的字段 HTTP 忽略 body 里的键、gRPC 拒绝掩码里的路径，一个可改字段都没点到时 HTTP 整行按原样写回、gRPC 拒绝；批量逐条校验，UpdateMany / PatchMany 同一个 id 出现两次两线都拒绝。gin 的校验器在框架包初始化时配成按 json 名称呼字段、失败句子用英文翻译，项目自己用 gin 的 ShouldBind 时错误里的字段名也是 JSON 名。</li><li>数据库经 <code>database.Database[T](ctx)</code>，列名只来自 gorm schema。</li></ul></div>
     </div>
     <div class="arch-arrow">▼</div>
     <div class="arch-layer stage">
@@ -253,7 +253,7 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 观测两边对齐：
 
 - 访问日志：HTTP 写 access.log，gRPC 由 requestScope 写 grpc.log，每次请求一条；两条线共用的键里，internal/logfield 声明过的经它的构造函数写出，ip、user_agent、error 写的是字面量，每个键只有一种类型由 selfcheck 守住；HTTP 的 status 是数字状态码，gRPC 的状态码名记在 grpc_code（两套码不共用一个键），失败再加 error 字段。拦截器以非 status 错误拒绝时，原因连同 trace_id 记在框架日志（全局 logger），级别按下一条的规则定，不进 grpc.log。
-- 失败日志：controller 对它作答的每一次失败记一条，级别两边同一条规则，按答复的 HTTP 状态定（`types.FailureLevel`）。服务端自己的故障（5xx，或没带状态的错误）记 Error，并记进 controller 与 service 的 span。客户端原因的失败不记进这两个 span：403、408、412、429 记 Warn，其余 4xx 记 Info，三种 409（重复键、乐观锁冲突、外键不满足）也在其中。408 与 504 在 gRPC 上同映射到 DeadlineExceeded，级别照状态分开：408 是客户端没按时送到，记 Warn；504 是服务端没按时答完，记 Error。
+- 失败日志：controller 对它作答的每一次失败记一条，级别两边同一条规则，按答复的 HTTP 状态定（`gst.FailureLevel`）。服务端自己的故障（5xx，或没带状态的错误）记 Error，并记进 controller 与 service 的 span。客户端原因的失败不记进这两个 span：403、408、412、429 记 Warn，其余 4xx 记 Info，三种 409（重复键、乐观锁冲突、外键不满足）也在其中。408 与 504 在 gRPC 上同映射到 DeadlineExceeded，级别照状态分开：408 是客户端没按时送到，记 Warn；504 是服务端没按时答完，记 Error。
 - 客户端地址：两边对同名的转发头部都把多行（gRPC 是多个元数据值）用逗号合起来读，再按 server.trusted_proxies 从右往左认。
 - 指标：HTTP 是 `gst_backend_*`，gRPC 保持库默认 `grpc_server_*`，方便现成看板。
 - 追踪：HTTP 的 tracing 中间件与 gRPC 的 otelgrpc 各起服务端 span，trace id 都盖进 ctx；没带 W3C 头时两边都认 X-Trace-ID，但只认 W3C trace id 形态的值、其他值另生成（`requestctx.TraceIDOf`，开关 OTel 都是这一条），并都把 trace id 回写给客户端（HTTP 的 `X-Trace-ID` 头、gRPC 的 `x-trace-id` 元数据）。服务端 span 的状态两边同口径（OTel HTTP 语义约定，otelgrpc 也照它）：成功和 4xx 留 Unset，5xx 或处理器在 ctx 上报了错设 Error，不设 Ok。
@@ -278,7 +278,7 @@ call --> client : OK，或映射后的 status；取消答 Canceled，停机答 U
 | `grpc` → `internal/grpcserver`（调用函数与流经 `internal/controller`；转换函数与 `Bearer` 实现在本包） | gRPC | 生成代码与项目用的入口：`Register`、`Method`、十个 `XxxCall`、`ServiceCall`、三种流的调用、转换函数、`Bearer / WithCaller / CallerOf / Route / StatusError` |
 | `interceptor` → `internal/grpcserver`（`Register / RegisterAuth`；项目挂的拦截器实现在本包） | gRPC | `Register / RegisterAuth` 与项目挂的拦截器，随 module copy 复制进项目的拦截器也以本包为源 |
 | `internal/grpcserver` | gRPC | 监听、拦截器链、requestScope、recovery、指标、health 与反射、状态映射、Drain / Stop |
-| `internal/requestctx`、`internal/types` | 共用 | 请求元数据与 `ServiceContext`、流对象接口，两种传输各自填充 |
+| `internal/requestctx`、`internal/gst` | 共用 | 请求元数据与 `ServiceContext`、流对象接口，两种传输各自填充 |
 | `authz/rbac` | 共用 | `Enforce`：授权判定的唯一实现 |
 | `testutil` | 共用 | 真容器、两个监听、`GRPCTarget()` |
 | `examples/demo`、`examples/cluster` | 共用 | demo 是入门示例（gRPC 示例在 model/board），cluster 是多副本、gRPC、WebSocket 与会话认证的实弹验证项目 |

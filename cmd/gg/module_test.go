@@ -461,8 +461,8 @@ func readProjectFile(t *testing.T, path string) string {
 // builds once module copy writes logmgmt into it: the copied operation log
 // types its op column by gst.Operation, which the column file the copy's
 // gen run writes for it references through the root gst package the model
-// source imports, not the internal types package reflection reports the
-// type under.
+// source imports, not the internal package reflection reports the type
+// under.
 func TestRunModuleCopyOfLogmgmtLeavesAProjectThatCompiles(t *testing.T) {
 	projectDir, ok := newGenProject(t)
 	if !ok {

@@ -6,9 +6,9 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	internalservice "github.com/hydroan/gst/internal/service"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/service"
 	"github.com/stretchr/testify/require"
@@ -55,7 +55,7 @@ func TestRegisterResolvesAPointerInstance(t *testing.T) {
 // an interface type argument names no service to dispatch to, so registering
 // it fails at startup instead of silently registering nothing.
 func TestRegisterPanicsOnAnInterfaceType(t *testing.T) {
-	type contract = types.Service[*testUser, *testUser, *testUser]
+	type contract = gst.Service[*testUser, *testUser, *testUser]
 
 	want := fmt.Sprintf("service: register of route %q phase %q requires a concrete service type, not the interface %s",
 		"samples/interface", service.Create, reflect.TypeFor[contract]())

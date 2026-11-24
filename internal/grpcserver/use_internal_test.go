@@ -10,7 +10,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/execctx"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -170,7 +170,7 @@ func TestUseAfterRunPanics(t *testing.T) {
 // the cause it wraps kept out of the answer; any other error as Internal with
 // the server failure message. Every error but a status error goes to the
 // framework's log first, cause included, at the level its answer calls for
-// (see types.FailureLevel) and carrying the call's trace id, where the
+// (see gst.FailureLevel) and carrying the call's trace id, where the
 // listener's own warnings go; the access log keeps its one entry a call.
 func TestARefusalFromAProjectInterceptorAnswersItsStatus(t *testing.T) {
 	reset(t)
@@ -182,9 +182,9 @@ func TestARefusalFromAProjectInterceptorAnswersItsStatus(t *testing.T) {
 		case "status":
 			return nil, status.Error(codes.Unauthenticated, "no credentials")
 		case "service":
-			return nil, types.NewError(http.StatusForbidden, "forbidden")
+			return nil, gst.NewError(http.StatusForbidden, "forbidden")
 		case "service with cause":
-			return nil, types.NewErrorWithCause(http.StatusUnauthorized, "no session", errors.New("session store unreachable"))
+			return nil, gst.NewErrorWithCause(http.StatusUnauthorized, "no session", errors.New("session store unreachable"))
 		default:
 			return nil, errors.New("boom")
 		}
@@ -202,7 +202,7 @@ func TestARefusalFromAProjectInterceptorAnswersItsStatus(t *testing.T) {
 		{"status", codes.Unauthenticated, "no credentials"},
 		{"service", codes.PermissionDenied, "forbidden"},
 		{"service with cause", codes.Unauthenticated, "no session"},
-		{"plain", codes.Internal, types.FailureMsg},
+		{"plain", codes.Internal, gst.FailureMsg},
 	} {
 		err := call(metadata.AppendToOutgoingContext(ctx, "refusal", tt.refusal), conn, "Ping")
 		st, ok := status.FromError(err)

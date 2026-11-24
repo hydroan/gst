@@ -3,8 +3,8 @@ package controller
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/response"
-	"github.com/hydroan/gst/internal/types"
 )
 
 // ListHandler returns a Gin handler that lists resources.
@@ -22,7 +22,7 @@ import (
 // When REQ or RSP differs from M, the handler is the phase service's (see
 // serviceHandler): its List method runs on a zero-value REQ, the GET request
 // carrying no body; the service reads ServiceContext.Query().
-func ListHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
+func ListHandler[M gst.Model, REQ gst.Request, RSP gst.Response](cfg ...*gst.ControllerConfig[M]) gin.HandlerFunc {
 	a := newAction[M, REQ, RSP](routeFromConfig(cfg...), apiaction.List, apiaction.ListBefore, apiaction.ListAfter)
 	if !a.typesEqual {
 		return a.serviceHandler()
@@ -49,7 +49,7 @@ func ListHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*t
 // and whether records lie past the page. A struct rather than a map: the
 // encoder walks its fields as declared, with no keys to sort and no value to
 // box.
-type listData[M types.Model] struct {
+type listData[M gst.Model] struct {
 	Items   []M  `json:"items"`
 	Total   int  `json:"total"`
 	HasMore bool `json:"has_more"`

@@ -9,10 +9,10 @@ import (
 
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/datatypes"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/tenant"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
@@ -54,7 +54,7 @@ func TestDatabaseWithCursor(t *testing.T) {
 		// WithSelect refuses a column of another model.
 		users := make([]*TestUser, 0)
 		require.ErrorIs(t,
-			database.Database[*TestUser](context.Background()).WithCursor(types.CursorForward(TestAggregateRecordCols.ID.Asc(), "a1")).List(&users),
+			database.Database[*TestUser](context.Background()).WithCursor(gst.CursorForward(TestAggregateRecordCols.ID.Asc(), "a1")).List(&users),
 			database.ErrColumnTable)
 	})
 
@@ -80,7 +80,7 @@ func TestDatabaseWithCursor(t *testing.T) {
 			users = make([]*TestUser, 0)
 			require.NoError(t, database.Database[*TestUser](context.Background()).
 				WithLimit(1).
-				WithCursor(types.CursorForward(types.Asc("id"), cursorValue)).
+				WithCursor(gst.CursorForward(gst.Asc("id"), cursorValue)).
 				List(&users))
 			require.Len(t, users, 1, "should return 1 record per page")
 			expectedID := fmt.Sprintf("user%05d", i+1)
@@ -111,7 +111,7 @@ func TestDatabaseWithCursor(t *testing.T) {
 			users = make([]*TestUser, 0)
 			require.NoError(t, database.Database[*TestUser](context.Background()).
 				WithLimit(1).
-				WithCursor(types.CursorBackward(types.Asc("id"), cursorValue)).
+				WithCursor(gst.CursorBackward(gst.Asc("id"), cursorValue)).
 				List(&users))
 			require.Len(t, users, 1, "should return 1 record per page")
 			expectedID := fmt.Sprintf("user%05d", count-2-i)
@@ -133,11 +133,11 @@ func TestDatabaseWithCursor(t *testing.T) {
 		// the same instant carry the same boundary value, so the ones a page
 		// has no room for fall between the pages and are never read. The
 		// chain refuses it instead of serving a feed with holes in it.
-		boundary := users[0].CreatedAt.UTC().Format(types.FilterTimeLayout)
+		boundary := users[0].CreatedAt.UTC().Format(gst.FilterTimeLayout)
 		nextUsers := make([]*TestUser, 0)
 		err := database.Database[*TestUser](context.Background()).
 			WithLimit(1).
-			WithCursor(types.CursorForward(types.Asc("created_at"), boundary)).
+			WithCursor(gst.CursorForward(gst.Asc("created_at"), boundary)).
 			List(&nextUsers)
 		require.ErrorIs(t, err, database.ErrSharedCursorColumn)
 		require.Empty(t, nextUsers, "a refused chain reads nothing")
@@ -169,7 +169,7 @@ func TestDatabaseWithCursor(t *testing.T) {
 			t.Helper()
 			page := make([]*TestCursorSnapshot, 0)
 			require.NoError(t, database.Database[*TestCursorSnapshot](ctx).
-				WithCursor(types.CursorForward(types.Asc("snapshot_at"), boundary.UTC().Format(types.FilterTimeLayout))).
+				WithCursor(gst.CursorForward(gst.Asc("snapshot_at"), boundary.UTC().Format(gst.FilterTimeLayout))).
 				WithLimit(1).
 				List(&page))
 			return page
@@ -203,7 +203,7 @@ func TestDatabaseWithCursor(t *testing.T) {
 
 		page := make([]*TestDatedCursor, 0)
 		require.NoError(t, database.Database[*TestDatedCursor](ctx).
-			WithCursor(types.CursorBackward(types.Asc("day"), "2026-01-02 16:00:00")).
+			WithCursor(gst.CursorBackward(gst.Asc("day"), "2026-01-02 16:00:00")).
 			List(&page))
 		labels := make([]string, 0, len(page))
 		for _, row := range page {
@@ -222,7 +222,7 @@ func TestDatabaseWithCursor(t *testing.T) {
 		}
 
 		visited := make([]string, 0, 5)
-		cursor := types.CursorForward(types.Asc("id"), "")
+		cursor := gst.CursorForward(gst.Asc("id"), "")
 		for range 4 {
 			page := make([]*TestUser, 0)
 			require.NoError(t, database.Database[*TestUser](context.Background()).WithLimit(2).WithCursor(cursor).List(&page))
@@ -232,7 +232,7 @@ func TestDatabaseWithCursor(t *testing.T) {
 			for _, u := range page {
 				visited = append(visited, u.ID)
 			}
-			cursor = types.CursorForward(types.Asc("id"), page[len(page)-1].ID)
+			cursor = gst.CursorForward(gst.Asc("id"), page[len(page)-1].ID)
 		}
 		require.Equal(t, []string{"user00001", "user00003", "user00005", "user00007", "user00009"}, visited,
 			"the first page is read in the feed's order, so paging on from its last row reaches every row once")
@@ -255,7 +255,7 @@ func TestDatabaseWithCursor(t *testing.T) {
 			users := make([]*TestUser, 0)
 			require.NoError(t, database.Database[*TestUser](context.Background()).
 				WithLimit(1).
-				WithCursor(types.CursorForward(types.Desc("id"), cursorValue)).
+				WithCursor(gst.CursorForward(gst.Desc("id"), cursorValue)).
 				List(&users))
 			require.Len(t, users, 1)
 			require.Equal(t, fmt.Sprintf("user%05d", count-2-i), users[0].ID, "a descending feed walks towards smaller ids")
@@ -276,7 +276,7 @@ func TestDatabaseWithCursor(t *testing.T) {
 
 		users := make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithCursor(types.CursorForward(types.Order{}, "user00001")).
+			WithCursor(gst.CursorForward(gst.Order{}, "user00001")).
 			List(&users))
 		require.Len(t, users, 3, "an order without a column falls back to the primary key")
 		require.Equal(t, []string{"user00002", "user00003", "user00004"},
@@ -286,7 +286,7 @@ func TestDatabaseWithCursor(t *testing.T) {
 		// from the boundary and comes back in the feed's own order.
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithCursor(types.CursorBackward(types.Order{}, "user00003")).
+			WithCursor(gst.CursorBackward(gst.Order{}, "user00003")).
 			List(&users))
 		require.Len(t, users, 3, "a backward read without a column also falls back to the primary key")
 		require.Equal(t, []string{"user00000", "user00001", "user00002"},
@@ -309,7 +309,7 @@ func TestDatabaseWithCursor(t *testing.T) {
 		require.NoError(t, database.Database[*TestUser](context.Background()).
 			WithQuery(&TestUser{Name: u1.Name}).
 			WithLimit(1).
-			WithCursor(types.CursorForward(types.Asc("id"), cursorValue)).
+			WithCursor(gst.CursorForward(gst.Asc("id"), cursorValue)).
 			List(&nextUsers))
 		require.Empty(t, nextUsers, "no more records after cursor with query condition")
 	})
@@ -335,7 +335,7 @@ func TestDatabaseWithCursor(t *testing.T) {
 		for range 5 {
 			users := make([]*TestUser, 0)
 			db := database.Database[*TestUser](context.Background()).WithLimit(pageSize).
-				WithCursor(types.CursorForward(types.Asc("id"), cursorValue))
+				WithCursor(gst.CursorForward(gst.Asc("id"), cursorValue))
 			require.NoError(t, db.List(&users))
 			require.LessOrEqual(t, len(users), pageSize, "should not exceed page size")
 
@@ -361,13 +361,13 @@ func TestDatabaseWithCursor(t *testing.T) {
 	t.Run("CursorWithOrderFails", func(t *testing.T) {
 		users := make([]*TestUser, 0)
 		require.ErrorIs(t, database.Database[*TestUser](context.Background()).
-			WithCursor(types.CursorForward(types.Asc("id"), "a1")).
-			WithOrder(types.Desc("name")).
+			WithCursor(gst.CursorForward(gst.Asc("id"), "a1")).
+			WithOrder(gst.Desc("name")).
 			List(&users),
 			database.ErrCursorWithOrder, "the cursor orders the feed; a second order would break its boundary")
 		require.ErrorIs(t, database.Database[*TestUser](context.Background()).
-			WithOrder(types.Desc("name")).
-			WithCursor(types.CursorForward(types.Asc("id"), "a1")).
+			WithOrder(gst.Desc("name")).
+			WithCursor(gst.CursorForward(gst.Asc("id"), "a1")).
 			List(&users),
 			database.ErrCursorWithOrder, "whichever of the two comes first on the chain")
 	})
@@ -375,7 +375,7 @@ func TestDatabaseWithCursor(t *testing.T) {
 	t.Run("NullableUniqueColumnFails", func(t *testing.T) {
 		users := make([]*cursorNullableTestUser, 0)
 		require.ErrorIs(t, database.Database[*cursorNullableTestUser](context.Background()).
-			WithCursor(types.CursorForward(types.Asc("code"), "")).
+			WithCursor(gst.CursorForward(gst.Asc("code"), "")).
 			List(&users),
 			database.ErrSharedCursorColumn, "rows without a value share NULL, so the column splits them between pages")
 	})
@@ -395,7 +395,7 @@ func TestDatabaseWithSelect(t *testing.T) {
 		defer cleanupTestData()
 		setupTestData(t)
 		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect(types.NewColumn[*virtualUser, string]("name")).List(&users))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithSelect(gst.NewColumn[*virtualUser, string]("name")).List(&users))
 		require.NotEmpty(t, users)
 		require.NotEmpty(t, users[0].Name)
 		require.Empty(t, users[0].Email, "the select is narrowed to the named column")
@@ -600,7 +600,7 @@ func TestDatabaseWithSelect(t *testing.T) {
 		t.Run("only framework columns fails", func(t *testing.T) {
 			defer cleanupTestData()
 			setupTestData(t)
-			colOnlyID := types.NewColumn[*TestUser, string]("id")
+			colOnlyID := gst.NewColumn[*TestUser, string]("id")
 			require.ErrorIs(t,
 				database.Database[*TestUser](context.Background()).WithSelect(colOnlyID).Update(ul...),
 				database.ErrNoModelColumnSelected,
@@ -772,16 +772,16 @@ func TestDatabaseWithOrder(t *testing.T) {
 		setupTestData(t)
 
 		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder(types.Asc("name")).List(&users))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder(gst.Asc("name")).List(&users))
 		assertNameOrder(t, users, []string{u1.Name, u2.Name, u3.Name})
 
 		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder(types.Desc("name")).List(&users))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder(gst.Desc("name")).List(&users))
 		assertNameOrder(t, users, []string{u3.Name, u2.Name, u1.Name})
 
 		// WithOrder should also affect First/Last style queries.
 		user := new(TestUser)
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder(types.Desc("name")).First(user))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder(gst.Desc("name")).First(user))
 		require.Equal(t, u3.ID, user.ID)
 	})
 
@@ -790,7 +790,7 @@ func TestDatabaseWithOrder(t *testing.T) {
 		setupTestData(t)
 
 		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder(types.NewOrder("", "name", "")).List(&users))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder(gst.NewOrder("", "name", "")).List(&users))
 		assertNameOrder(t, users, []string{u1.Name, u2.Name, u3.Name})
 	})
 
@@ -803,7 +803,7 @@ func TestDatabaseWithOrder(t *testing.T) {
 		require.Len(t, users, 3)
 
 		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder(types.Order{}).List(&users))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder(gst.Order{}).List(&users))
 		require.Len(t, users, 3, "an order term without a column is skipped")
 	})
 
@@ -820,7 +820,7 @@ func TestDatabaseWithOrder(t *testing.T) {
 
 			users := make([]*TestUser, 0)
 			require.NoError(t, database.Database[*TestUser](context.Background()).
-				WithOrder(types.Desc("age"), types.Asc("name")).List(&users))
+				WithOrder(gst.Desc("age"), gst.Asc("name")).List(&users))
 			assertNameOrder(t, users, []string{u1.Name, u2.Name, u3.Name})
 		})
 
@@ -839,7 +839,7 @@ func TestDatabaseWithOrder(t *testing.T) {
 
 			users := make([]*TestUser, 0)
 			require.NoError(t, database.Database[*TestUser](context.Background()).
-				WithOrder(types.Desc("age"), types.Asc("name"), types.Desc("email")).List(&users))
+				WithOrder(gst.Desc("age"), gst.Asc("name"), gst.Desc("email")).List(&users))
 			assertIDOrder(t, users, []string{u2.ID, u1.ID, u3.ID})
 		})
 	})
@@ -874,7 +874,7 @@ func TestDatabaseWithPagination(t *testing.T) {
 		t.Helper()
 		users := make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithOrder(types.Asc("id")).
+			WithOrder(gst.Asc("id")).
 			WithPagination(page, size).
 			List(&users))
 		return users
@@ -904,7 +904,7 @@ func TestDatabaseWithPagination(t *testing.T) {
 		for page := 1; page <= 10; page++ {
 			users := make([]*TestUser, 0)
 			require.NoError(t, database.Database[*TestUser](context.Background()).
-				WithOrder(types.Asc("name")).
+				WithOrder(gst.Asc("name")).
 				WithPagination(page, 20).
 				List(&users))
 			for _, u := range users {
@@ -971,21 +971,21 @@ func TestDatabaseWithPagination(t *testing.T) {
 		records, ids := newSeqUsers("pg_mixed", 10)
 		require.NoError(t, database.Database[*TestUser](context.Background()).Create(records...))
 
-		listMixed := func(apply func(types.Database[*TestUser]) types.Database[*TestUser]) []*TestUser {
+		listMixed := func(apply func(gst.Database[*TestUser]) gst.Database[*TestUser]) []*TestUser {
 			users := make([]*TestUser, 0)
 			require.NoError(t, apply(database.Database[*TestUser](context.Background()).
-				WithOrder(types.Asc("id"))).
+				WithOrder(gst.Asc("id"))).
 				List(&users))
 			return users
 		}
 
 		// WithPagination last: it sets both LIMIT and OFFSET.
-		assertIDs(t, listMixed(func(db types.Database[*TestUser]) types.Database[*TestUser] {
+		assertIDs(t, listMixed(func(db gst.Database[*TestUser]) gst.Database[*TestUser] {
 			return db.WithLimit(5).WithPagination(2, 3)
 		}), ids[3:6])
 
 		// WithLimit last: it replaces the LIMIT and leaves the page OFFSET.
-		assertIDs(t, listMixed(func(db types.Database[*TestUser]) types.Database[*TestUser] {
+		assertIDs(t, listMixed(func(db gst.Database[*TestUser]) gst.Database[*TestUser] {
 			return db.WithPagination(2, 3).WithLimit(5)
 		}), ids[3:8])
 	})
@@ -1023,7 +1023,7 @@ func TestDatabaseWithLimit(t *testing.T) {
 		require.NoError(t, database.Database[*TestUser](context.Background()).Create(testUsers...))
 
 		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder(types.Asc("id")).WithLimit(3).List(&users))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder(gst.Asc("id")).WithLimit(3).List(&users))
 		require.Len(t, users, 3)
 		assertIDs(t, users, testIDs[0:3])
 	})
@@ -1034,7 +1034,7 @@ func TestDatabaseWithLimit(t *testing.T) {
 		require.NoError(t, database.Database[*TestUser](context.Background()).Create(testUsers...))
 
 		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder(types.Asc("id")).WithLimit(5).List(&users))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder(gst.Asc("id")).WithLimit(5).List(&users))
 		require.Len(t, users, 5)
 		assertIDs(t, users, testIDs[0:5])
 	})
@@ -1045,7 +1045,7 @@ func TestDatabaseWithLimit(t *testing.T) {
 		require.NoError(t, database.Database[*TestUser](context.Background()).Create(testUsers...))
 
 		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder(types.Desc("id")).WithLimit(5).List(&users))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder(gst.Desc("id")).WithLimit(5).List(&users))
 		require.Len(t, users, 5)
 		// Reverse expected IDs for desc order
 		expected := make([]string, 5)
@@ -1061,7 +1061,7 @@ func TestDatabaseWithLimit(t *testing.T) {
 		require.NoError(t, database.Database[*TestUser](context.Background()).Create(testUsers...))
 
 		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder(types.Asc("id")).WithLimit(10).List(&users))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder(gst.Asc("id")).WithLimit(10).List(&users))
 		require.Len(t, users, 5)
 		assertIDs(t, users, testIDs)
 	})
@@ -1073,17 +1073,17 @@ func TestDatabaseWithLimit(t *testing.T) {
 
 		users := make([]*TestUser, 0)
 		// limit <= 0 should use defaultLimit (-1, unlimited)
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder(types.Asc("id")).WithLimit(0).List(&users))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder(gst.Asc("id")).WithLimit(0).List(&users))
 		require.Len(t, users, 10)
 		assertIDs(t, users, testIDs)
 
 		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder(types.Asc("id")).WithLimit(-1).List(&users))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder(gst.Asc("id")).WithLimit(-1).List(&users))
 		require.Len(t, users, 10)
 		assertIDs(t, users, testIDs)
 
 		users = make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder(types.Asc("id")).WithLimit(-99).List(&users))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder(gst.Asc("id")).WithLimit(-99).List(&users))
 		require.Len(t, users, 10)
 		assertIDs(t, users, testIDs)
 	})
@@ -1094,7 +1094,7 @@ func TestDatabaseWithLimit(t *testing.T) {
 		require.NoError(t, database.Database[*TestUser](context.Background()).Create(testUsers...))
 
 		users := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder(types.Asc("id")).WithLimit(1).List(&users))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder(gst.Asc("id")).WithLimit(1).List(&users))
 		require.Len(t, users, 1)
 		assertIDs(t, users, testIDs[0:1])
 	})
@@ -1106,10 +1106,10 @@ func TestDatabaseWithLimit(t *testing.T) {
 
 		// Test that WithOrder can be chained before or after WithLimit
 		users1 := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder(types.Desc("id")).WithLimit(3).List(&users1))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithOrder(gst.Desc("id")).WithLimit(3).List(&users1))
 
 		users2 := make([]*TestUser, 0)
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithLimit(3).WithOrder(types.Desc("id")).List(&users2))
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithLimit(3).WithOrder(gst.Desc("id")).List(&users2))
 
 		// Both should produce the same result
 		require.Len(t, users2, len(users1))
@@ -1149,7 +1149,7 @@ func TestDatabaseWithExpand(t *testing.T) {
 		categories := make([]*TestCategory, 0)
 		// Expand parent with single depth
 		require.NoError(t, database.Database[*TestCategory](context.Background()).
-			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{types.FilterLike("name", "child")}}).
+			WithQuery(nil, gst.QueryOptions{Filters: []gst.Filter{gst.FilterLike("name", "child")}}).
 			WithExpand([]string{"Parent"}).
 			List(&categories))
 
@@ -1173,7 +1173,7 @@ func TestDatabaseWithExpand(t *testing.T) {
 		categories := make([]*TestCategory, 0)
 		// Expand parent with two depth (Parent.Parent)
 		require.NoError(t, database.Database[*TestCategory](context.Background()).
-			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{types.FilterLike("name", "child")}}).
+			WithQuery(nil, gst.QueryOptions{Filters: []gst.Filter{gst.FilterLike("name", "child")}}).
 			WithExpand([]string{"Parent.Parent"}).
 			List(&categories))
 
@@ -1200,7 +1200,7 @@ func TestDatabaseWithExpand(t *testing.T) {
 		// Expand with more depth than available (should only expand available
 		// depth)
 		require.NoError(t, database.Database[*TestCategory](context.Background()).
-			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{types.FilterLike("name", "child")}}).
+			WithQuery(nil, gst.QueryOptions{Filters: []gst.Filter{gst.FilterLike("name", "child")}}).
 			WithExpand([]string{"Parent.Parent.Parent.Parent"}).
 			List(&categories))
 
@@ -1226,7 +1226,7 @@ func TestDatabaseWithExpand(t *testing.T) {
 		categories := make([]*TestCategory, 0)
 		// Association names are case sensitive
 		require.Error(t, database.Database[*TestCategory](context.Background()).
-			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{types.FilterLike("name", "child")}}).
+			WithQuery(nil, gst.QueryOptions{Filters: []gst.Filter{gst.FilterLike("name", "child")}}).
 			WithExpand([]string{"parent"}).
 			List(&categories))
 	})
@@ -1661,7 +1661,7 @@ func TestDatabaseWithDeleted(t *testing.T) {
 		require.ErrorIs(t, database.Database[*TestSoftDeleteItem](ctx).WithDeleted().Create(&TestSoftDeleteItem{Code: "with-deleted-refused"}), database.ErrWithDeletedOnWrite)
 		alive.Name = "renamed"
 		require.ErrorIs(t, database.Database[*TestSoftDeleteItem](ctx).WithDeleted().Update(alive), database.ErrWithDeletedOnWrite)
-		require.ErrorIs(t, database.Database[*TestSoftDeleteItem](ctx).WithDeleted().UpdateByID(alive.ID, types.NewColumn[*TestSoftDeleteItem, string]("name").Set("renamed")), database.ErrWithDeletedOnWrite)
+		require.ErrorIs(t, database.Database[*TestSoftDeleteItem](ctx).WithDeleted().UpdateByID(alive.ID, gst.NewColumn[*TestSoftDeleteItem, string]("name").Set("renamed")), database.ErrWithDeletedOnWrite)
 		require.ErrorIs(t, database.Database[*TestSoftDeleteItem](ctx).WithDeleted().Upsert(alive), database.ErrWithDeletedOnWrite)
 		require.ErrorIs(t, database.Database[*TestSoftDeleteItem](ctx).WithDeleted().Delete(alive), database.ErrWithDeletedOnWrite)
 
@@ -1710,13 +1710,13 @@ func TestDatabaseWithDeleted(t *testing.T) {
 	t.Run("BuildSQLDropsSoftDeleteCondition", func(t *testing.T) {
 		seed(t)
 
-		var defaultStmts []types.SQLStatement
+		var defaultStmts []gst.SQLStatement
 		items := make([]*TestSoftDeleteItem, 0)
 		require.NoError(t, database.Database[*TestSoftDeleteItem](context.Background()).WithDryRun(&defaultStmts).List(&items))
 		require.Len(t, defaultStmts, 1)
 		require.Contains(t, defaultStmts[0].RenderedSQL, "deleted_at", "a default read keeps the soft-delete condition")
 
-		var withDeletedStmts []types.SQLStatement
+		var withDeletedStmts []gst.SQLStatement
 		require.NoError(t, database.Database[*TestSoftDeleteItem](context.Background()).WithDeleted().WithDryRun(&withDeletedStmts).List(&items))
 		require.Len(t, withDeletedStmts, 1)
 		require.NotContains(t, withDeletedStmts[0].RenderedSQL, "deleted_at", "WithDeleted lifts the soft-delete condition from the built SQL")
@@ -1742,8 +1742,8 @@ func TestOrderByATimeColumnFollowsTheInstantWhateverOffsetWasWritten(t *testing.
 
 	rows := make([]*TestCursorSnapshot, 0)
 	require.NoError(t, database.Database[*TestCursorSnapshot](ctx).
-		WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: []types.Filter{types.FilterStartsWith("label", "offset-")}}).
-		WithOrder(types.Asc("snapshot_at")).
+		WithQuery(nil, gst.QueryOptions{AllowEmpty: true, Filters: []gst.Filter{gst.FilterStartsWith("label", "offset-")}}).
+		WithOrder(gst.Asc("snapshot_at")).
 		List(&rows))
 	require.Len(t, rows, 2)
 	require.Equal(t, []string{"offset-earlier", "offset-later"}, []string{rows[0].Label, rows[1].Label}, "rows sort by instant, not by the clock their writer kept")

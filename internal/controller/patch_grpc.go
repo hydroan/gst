@@ -7,7 +7,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // PatchCall returns the patch call of M on route, the counterpart of the
@@ -21,7 +21,7 @@ import (
 // refuses a versioned model patched without its version the way the
 // handler does, runs the patch flow (see patchFlow) and answers with the
 // record patched, or with the status the failure maps to (see call).
-func PatchCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string, m M, paths []string) (M, error) {
+func PatchCall[M gst.Model](route string) func(ctx context.Context, params map[string]string, id string, m M, paths []string) (M, error) {
 	a := newAction[M, M, M](route, apiaction.Patch, apiaction.PatchBefore, apiaction.PatchAfter)
 	return func(ctx context.Context, params map[string]string, id string, m M, paths []string) (M, error) {
 		var zero M

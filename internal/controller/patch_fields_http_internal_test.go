@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/stretchr/testify/require"
 )
 
@@ -51,7 +51,7 @@ func TestPatchFieldSetFromJSONBodyWrapsDecodeError(t *testing.T) {
 
 	_, err := patchFieldSetFromJSONBody(typ, []byte(`{"enabled":`))
 
-	var serviceErr *types.Error
+	var serviceErr *gst.Error
 	require.ErrorAs(t, err, &serviceErr)
 	require.Equal(t, "request body is not valid JSON", serviceErr.Msg())
 }
@@ -77,7 +77,7 @@ func TestPatchManyFieldSetsFromJSONBodyWrapsDecodeError(t *testing.T) {
 
 	_, err := patchManyFieldSetsFromJSONBody(typ, []byte(`{"items":3}`))
 
-	var serviceErr *types.Error
+	var serviceErr *gst.Error
 	require.ErrorAs(t, err, &serviceErr)
 	require.Equal(t, "invalid value for field 'items'", serviceErr.Msg())
 }

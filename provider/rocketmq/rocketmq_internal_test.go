@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,7 +37,7 @@ func TestStartReportsAnUnreachableNameServer(t *testing.T) {
 // provider's logger is unset, in a process that never ran the logging setup,
 // instead of failing on it.
 func TestLibraryLinesWithoutTheLoggingSetupAreDropped(t *testing.T) {
-	adapter := &customLogger{l: new(types.Logger)}
+	adapter := &customLogger{l: new(gst.Logger)}
 
 	require.NotPanics(t, func() {
 		adapter.Debug("sample", nil)

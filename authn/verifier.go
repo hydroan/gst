@@ -19,7 +19,7 @@ package authn
 import (
 	"sync"
 
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // LoginSecondFactor carries the second-factor proof fields submitted with an
@@ -36,7 +36,7 @@ type LoginSecondFactor struct {
 // challenge every verifier shares, a second factor the account has not
 // submitted, report SecondFactorRequiredMsg with 401 instead of wording it
 // again.
-type LoginSecondFactorVerifier func(ctx *types.ServiceContext, userID string, factor LoginSecondFactor) error
+type LoginSecondFactorVerifier func(ctx *gst.ServiceContext, userID string, factor LoginSecondFactor) error
 
 var (
 	verifierMu                sync.Mutex
@@ -62,7 +62,7 @@ func SetLoginSecondFactorVerifier(verifier LoginSecondFactorVerifier) {
 // VerifyLoginSecondFactor runs the installed second-factor gate for one login
 // attempt. Without an installed verifier there is no second-factor
 // requirement and the attempt passes.
-func VerifyLoginSecondFactor(ctx *types.ServiceContext, userID string, factor LoginSecondFactor) error {
+func VerifyLoginSecondFactor(ctx *gst.ServiceContext, userID string, factor LoginSecondFactor) error {
 	verifierMu.Lock()
 	verifier := loginSecondFactorVerifier
 	verifierMu.Unlock()

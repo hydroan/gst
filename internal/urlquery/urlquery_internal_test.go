@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/internal/datatypes"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -128,10 +128,10 @@ func TestFilters(t *testing.T) {
 	t.Run("MatchesAJSONColumnByItsTextAndRefusesComparingIt", func(t *testing.T) {
 		conds, err := Filters(url.Values{"meta[like]": {"alice"}, "meta[ilike]": {"Alice"}, "meta[isnull]": {"true"}}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{
-			types.NewFilter("", "meta", types.FilterOpILike, "Alice"),
-			types.NewFilter("", "meta", types.FilterOpIsNull, true),
-			types.NewFilter("", "meta", types.FilterOpLike, "alice"),
+		require.Equal(t, []gst.Filter{
+			gst.NewFilter("", "meta", gst.FilterOpILike, "Alice"),
+			gst.NewFilter("", "meta", gst.FilterOpIsNull, true),
+			gst.NewFilter("", "meta", gst.FilterOpLike, "alice"),
 		}, conds)
 		for _, op := range []string{"eq", "ne", "gt", "in"} {
 			_, err := Filters(url.Values{"meta[" + op + "]": {"alice"}}, &filterTestModel{})
@@ -149,10 +149,10 @@ func TestFilters(t *testing.T) {
 			"_sort_by":      {"created_at desc"},
 		}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{
-			types.NewFilter("", "age", types.FilterOpGt, "20"),
-			types.NewFilter("", "remark", types.FilterOpILike, "Hello"),
-			types.NewFilter("", "remark", types.FilterOpLike, "hello"),
+		require.Equal(t, []gst.Filter{
+			gst.NewFilter("", "age", gst.FilterOpGt, "20"),
+			gst.NewFilter("", "remark", gst.FilterOpILike, "Hello"),
+			gst.NewFilter("", "remark", gst.FilterOpLike, "hello"),
 		}, conds)
 	})
 
@@ -162,7 +162,7 @@ func TestFilters(t *testing.T) {
 			"age[gt]": {"20"},
 		}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{types.NewFilter("", "age", types.FilterOpGt, "20")}, conds,
+		require.Equal(t, []gst.Filter{gst.NewFilter("", "age", gst.FilterOpGt, "20")}, conds,
 			"the bare key stays with the exact business filter and only the operator key becomes a filter")
 	})
 
@@ -171,7 +171,7 @@ func TestFilters(t *testing.T) {
 			"item_count[notlike]": {"sample"},
 		}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{types.NewFilter("", "item_count", types.FilterOpNotLike, "sample")}, conds)
+		require.Equal(t, []gst.Filter{gst.NewFilter("", "item_count", gst.FilterOpNotLike, "sample")}, conds)
 
 		_, err = Filters(url.Values{
 			"itemCount[notlike]": {"sample"},
@@ -185,7 +185,7 @@ func TestFilters(t *testing.T) {
 			"id[notin]": {"a,b"},
 		}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{types.NewFilter("", "id", types.FilterOpNotIn, []string{"a", "b"})}, conds)
+		require.Equal(t, []gst.Filter{gst.NewFilter("", "id", gst.FilterOpNotIn, []string{"a", "b"})}, conds)
 	})
 
 	t.Run("UsesGormColumnNames", func(t *testing.T) {
@@ -193,16 +193,16 @@ func TestFilters(t *testing.T) {
 			"box_ids[in]": {"a,b"},
 		}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{
-			types.NewFilter("", "box_ids", types.FilterOpIn, []string{"a", "b"}),
+		require.Equal(t, []gst.Filter{
+			gst.NewFilter("", "box_ids", gst.FilterOpIn, []string{"a", "b"}),
 		}, conds, "gorm renders BoxIDs as box_ids, not box_i_ds")
 
 		conds, err = Filters(url.Values{
 			"renamed[eq]": {"x"},
 		}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{
-			types.NewFilter("", "custom_column", types.FilterOpEq, "x"),
+		require.Equal(t, []gst.Filter{
+			gst.NewFilter("", "custom_column", gst.FilterOpEq, "x"),
 		}, conds, "the URL keeps the query name while SQL uses the column tag")
 	})
 
@@ -272,7 +272,7 @@ func TestFilters(t *testing.T) {
 		require.Len(t, conds, 1)
 		require.Equal(t, "expired_at", conds[0].Column())
 		require.Equal(t,
-			time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC).Format(types.FilterTimeLayout),
+			time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC).Format(gst.FilterTimeLayout),
 			conds[0].Value(), "the bound travels as the UTC wall clock")
 
 		conds, err = Filters(url.Values{
@@ -281,7 +281,7 @@ func TestFilters(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, conds, 1)
 		require.Equal(t,
-			time.Date(2026, 7, 1, 8, 30, 15, 0, time.FixedZone("", 8*3600)).UTC().Format(types.FilterTimeLayout),
+			time.Date(2026, 7, 1, 8, 30, 15, 0, time.FixedZone("", 8*3600)).UTC().Format(gst.FilterTimeLayout),
 			conds[0].Value(), "an explicit offset must be converted to UTC")
 
 		// A value without an explicit offset names a different instant per
@@ -312,7 +312,7 @@ func TestFilters(t *testing.T) {
 		// the zone it is read in, and is refused.
 		conds, err := Filters(url.Values{"day[eq]": {"2026-01-02"}}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{types.NewFilter("", "day", types.FilterOpEq, "2026-01-02 00:00:00")}, conds)
+		require.Equal(t, []gst.Filter{gst.NewFilter("", "day", gst.FilterOpEq, "2026-01-02 00:00:00")}, conds)
 
 		conds, err = Filters(url.Values{"day[gte]": {"2026-12-31"}}, &filterTestModel{})
 		require.NoError(t, err)
@@ -350,9 +350,9 @@ func TestFilters(t *testing.T) {
 			"remark[startswith]": {"prefix"},
 		}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{
-			types.NewFilter("", "remark", types.FilterOpEndsWith, "suffix"),
-			types.NewFilter("", "remark", types.FilterOpStartsWith, "prefix"),
+		require.Equal(t, []gst.Filter{
+			gst.NewFilter("", "remark", gst.FilterOpEndsWith, "suffix"),
+			gst.NewFilter("", "remark", gst.FilterOpStartsWith, "prefix"),
 		}, conds)
 
 		_, err = Filters(url.Values{
@@ -367,9 +367,9 @@ func TestFilters(t *testing.T) {
 			"remark[isnull]":     {"true"},
 		}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{
-			types.NewFilter("", "expired_at", types.FilterOpIsNull, false),
-			types.NewFilter("", "remark", types.FilterOpIsNull, true),
+		require.Equal(t, []gst.Filter{
+			gst.NewFilter("", "expired_at", gst.FilterOpIsNull, false),
+			gst.NewFilter("", "remark", gst.FilterOpIsNull, true),
 		}, conds)
 
 		_, err = Filters(url.Values{
@@ -383,8 +383,8 @@ func TestFilters(t *testing.T) {
 			"created_at": {"2026-07-01T08:00:00Z"},
 		}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{
-			types.NewFilter("", "created_at", types.FilterOpEq, time.Date(2026, 7, 1, 8, 0, 0, 0, time.UTC).Format(types.FilterTimeLayout)),
+		require.Equal(t, []gst.Filter{
+			gst.NewFilter("", "created_at", gst.FilterOpEq, time.Date(2026, 7, 1, 8, 0, 0, 0, time.UTC).Format(gst.FilterTimeLayout)),
 		}, conds, "the bare framework timestamp key is an exact-match filter, consistent with every other documented parameter")
 
 		conds, err = Filters(url.Values{
@@ -405,9 +405,9 @@ func TestFilters(t *testing.T) {
 			"updated_at[lt]":  {"2026-07-15T00:00:00Z"},
 		}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{
-			types.NewFilter("", "created_at", types.FilterOpGte, time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC).Format(types.FilterTimeLayout)),
-			types.NewFilter("", "updated_at", types.FilterOpLt, time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC).Format(types.FilterTimeLayout)),
+		require.Equal(t, []gst.Filter{
+			gst.NewFilter("", "created_at", gst.FilterOpGte, time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC).Format(gst.FilterTimeLayout)),
+			gst.NewFilter("", "updated_at", gst.FilterOpLt, time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC).Format(gst.FilterTimeLayout)),
 		}, conds)
 	})
 
@@ -426,7 +426,7 @@ func TestFilters(t *testing.T) {
 			"age[in]": {"1,2"},
 		}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{types.NewFilter("", "age", types.FilterOpIn, []string{"1", "2"})}, conds)
+		require.Equal(t, []gst.Filter{gst.NewFilter("", "age", gst.FilterOpIn, []string{"1", "2"})}, conds)
 
 		// A substring of the number's text form is no number itself.
 		conds, err = Filters(url.Values{
@@ -434,9 +434,9 @@ func TestFilters(t *testing.T) {
 			"age[ilike]": {"1A"},
 		}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{
-			types.NewFilter("", "age", types.FilterOpILike, "1A"),
-			types.NewFilter("", "age", types.FilterOpLike, "1a"),
+		require.Equal(t, []gst.Filter{
+			gst.NewFilter("", "age", gst.FilterOpILike, "1A"),
+			gst.NewFilter("", "age", gst.FilterOpLike, "1a"),
 		}, conds)
 	})
 
@@ -445,13 +445,13 @@ func TestFilters(t *testing.T) {
 			"enabled[eq]": {"true"},
 		}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{types.NewFilter("", "enabled", types.FilterOpEq, true)}, conds)
+		require.Equal(t, []gst.Filter{gst.NewFilter("", "enabled", gst.FilterOpEq, true)}, conds)
 
 		conds, err = Filters(url.Values{
 			"enabled[ne]": {"0"},
 		}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{types.NewFilter("", "enabled", types.FilterOpNe, false)}, conds)
+		require.Equal(t, []gst.Filter{gst.NewFilter("", "enabled", gst.FilterOpNe, false)}, conds)
 
 		_, err = Filters(url.Values{
 			"enabled[gt]": {"true"},
@@ -467,17 +467,17 @@ func TestFilters(t *testing.T) {
 	t.Run("ReachesEmbeddedColumnsByPath", func(t *testing.T) {
 		conds, err := Filters(url.Values{"label[eq]": {"l"}, "first.label[eq]": {"f"}, "second.label[like]": {"s"}}, &namedEmbeddingTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{
-			types.NewFilter("", "first_label", types.FilterOpEq, "f"),
-			types.NewFilter("", "label", types.FilterOpEq, "l"),
-			types.NewFilter("", "second_label", types.FilterOpLike, "s"),
+		require.Equal(t, []gst.Filter{
+			gst.NewFilter("", "first_label", gst.FilterOpEq, "f"),
+			gst.NewFilter("", "label", gst.FilterOpEq, "l"),
+			gst.NewFilter("", "second_label", gst.FilterOpLike, "s"),
 		}, conds, "label is the model's own column, first.label and second.label the embedded ones")
 	})
 
 	t.Run("WrappedTimeFieldAcceptsOnlyRFC3339", func(t *testing.T) {
 		conds, err := Filters(url.Values{"settled[lt]": {"2026-07-01T08:00:00+08:00"}}, &gormTypedTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{types.NewFilter("", "settled", types.FilterOpLt, "2026-07-01 00:00:00")}, conds,
+		require.Equal(t, []gst.Filter{gst.NewFilter("", "settled", gst.FilterOpLt, "2026-07-01 00:00:00")}, conds,
 			"the time sql.NullTime holds travels as the UTC wall clock like any time")
 
 		for key, value := range map[string]string{"settled[gt]": "1767225600", "settled[like]": "2026"} {
@@ -489,9 +489,9 @@ func TestFilters(t *testing.T) {
 	t.Run("WrappedNumericFieldValidatesValues", func(t *testing.T) {
 		conds, err := Filters(url.Values{"tally[gt]": {"5"}, "ratio[lte]": {"0.5"}}, &gormTypedTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{
-			types.NewFilter("", "ratio", types.FilterOpLte, "0.5"),
-			types.NewFilter("", "tally", types.FilterOpGt, "5"),
+		require.Equal(t, []gst.Filter{
+			gst.NewFilter("", "ratio", gst.FilterOpLte, "0.5"),
+			gst.NewFilter("", "tally", gst.FilterOpGt, "5"),
 		}, conds)
 
 		for key, value := range map[string]string{"tally[gt]": "abc", "tally[in]": "1,x", "ratio[lt]": "half"} {
@@ -514,7 +514,7 @@ func TestFilters(t *testing.T) {
 	t.Run("WrappedBoolFieldNormalizesAndGatesOps", func(t *testing.T) {
 		conds, err := Filters(url.Values{"active[eq]": {"true"}}, &gormTypedTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{types.NewFilter("", "active", types.FilterOpEq, true)}, conds)
+		require.Equal(t, []gst.Filter{gst.NewFilter("", "active", gst.FilterOpEq, true)}, conds)
 
 		for key, value := range map[string]string{"active[eq]": "maybe", "active[gt]": "true"} {
 			_, err := Filters(url.Values{key: {value}}, &gormTypedTestModel{})
@@ -525,7 +525,7 @@ func TestFilters(t *testing.T) {
 	t.Run("TypeTaggedJSONFieldMatchesByItsTextAndRefusesComparingIt", func(t *testing.T) {
 		conds, err := Filters(url.Values{"payload[like]": {"alice"}}, &gormTypedTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{types.NewFilter("", "payload", types.FilterOpLike, "alice")}, conds)
+		require.Equal(t, []gst.Filter{gst.NewFilter("", "payload", gst.FilterOpLike, "alice")}, conds)
 
 		_, err = Filters(url.Values{"payload[eq]": {"alice"}}, &gormTypedTestModel{})
 		require.EqualError(t, err, `invalid field filter "payload[eq]": operator "eq" is not supported on a JSON field`)
@@ -534,9 +534,9 @@ func TestFilters(t *testing.T) {
 	t.Run("TimeOfDayFieldAcceptsOnlyATimeOfDay", func(t *testing.T) {
 		conds, err := Filters(url.Values{"clock[gte]": {"09:00:00"}, "clock[lt]": {"17:30:00.5"}}, &gormTypedTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{
-			types.NewFilter("", "clock", types.FilterOpGte, "09:00:00"),
-			types.NewFilter("", "clock", types.FilterOpLt, "17:30:00.500000000"),
+		require.Equal(t, []gst.Filter{
+			gst.NewFilter("", "clock", gst.FilterOpGte, "09:00:00"),
+			gst.NewFilter("", "clock", gst.FilterOpLt, "17:30:00.500000000"),
 		}, conds, "the bound is the spelling datatypes.TimeOfDay stores")
 
 		for key, value := range map[string]string{
@@ -620,12 +620,12 @@ func TestFieldNamesAreTakenAsTheContractSpellsThem(t *testing.T) {
 func TestFieldsClientsCannotNameAreNoParameters(t *testing.T) {
 	tests := []struct {
 		name  string
-		model func() types.Model
+		model func() gst.Model
 	}{
-		{name: "note", model: func() types.Model { return &filterTestModel{} }},
-		{name: "Note", model: func() types.Model { return &filterTestModel{} }},
-		{name: "secret", model: func() types.Model { return &filterTestModel{} }},
-		{name: "hidden.label", model: func() types.Model { return &hiddenNamedEmbeddingTestModel{} }},
+		{name: "note", model: func() gst.Model { return &filterTestModel{} }},
+		{name: "Note", model: func() gst.Model { return &filterTestModel{} }},
+		{name: "secret", model: func() gst.Model { return &filterTestModel{} }},
+		{name: "hidden.label", model: func() gst.Model { return &hiddenNamedEmbeddingTestModel{} }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -859,44 +859,44 @@ func TestOrders(t *testing.T) {
 	t.Run("SingleColumnDefaultsToAscending", func(t *testing.T) {
 		orders, err := Orders(url.Values{"_sort_by": {"name"}}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Order{types.NewOrder("", "name", types.OrderAsc)}, orders)
+		require.Equal(t, []gst.Order{gst.NewOrder("", "name", gst.OrderAsc)}, orders)
 	})
 
 	t.Run("DirectionIsCaseInsensitive", func(t *testing.T) {
 		orders, err := Orders(url.Values{"_sort_by": {"name DESC"}}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Order{types.NewOrder("", "name", types.OrderDesc)}, orders)
+		require.Equal(t, []gst.Order{gst.NewOrder("", "name", gst.OrderDesc)}, orders)
 	})
 
 	t.Run("MultipleTermsKeepTheirOrder", func(t *testing.T) {
 		orders, err := Orders(url.Values{"_sort_by": {"age desc, name asc"}}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Order{
-			types.NewOrder("", "age", types.OrderDesc),
-			types.NewOrder("", "name", types.OrderAsc),
+		require.Equal(t, []gst.Order{
+			gst.NewOrder("", "age", gst.OrderDesc),
+			gst.NewOrder("", "name", gst.OrderAsc),
 		}, orders)
 	})
 
 	t.Run("ColumnCarriesTheDatabaseName", func(t *testing.T) {
 		orders, err := Orders(url.Values{"_sort_by": {"renamed desc"}}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Order{types.NewOrder("", "custom_column", types.OrderDesc)}, orders,
+		require.Equal(t, []gst.Order{gst.NewOrder("", "custom_column", gst.OrderDesc)}, orders,
 			"the URL names a column by its query name, but ORDER BY needs the database name")
 	})
 
 	t.Run("EmbeddedColumnSortsByPath", func(t *testing.T) {
 		orders, err := Orders(url.Values{"_sort_by": {"first.label desc,label"}}, &namedEmbeddingTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Order{
-			types.NewOrder("", "first_label", types.OrderDesc),
-			types.NewOrder("", "label", types.OrderAsc),
+		require.Equal(t, []gst.Order{
+			gst.NewOrder("", "first_label", gst.OrderDesc),
+			gst.NewOrder("", "label", gst.OrderAsc),
 		}, orders)
 	})
 
 	t.Run("BaseTimestampIsSortable", func(t *testing.T) {
 		orders, err := Orders(url.Values{"_sort_by": {"created_at desc"}}, &filterTestModel{})
 		require.NoError(t, err)
-		require.Equal(t, []types.Order{types.NewOrder("", "created_at", types.OrderDesc)}, orders,
+		require.Equal(t, []gst.Order{gst.NewOrder("", "created_at", gst.OrderDesc)}, orders,
 			"the framework timestamps carry their query tags, so a list sorts by them")
 	})
 
@@ -953,20 +953,20 @@ func TestParsedConditionsReadThroughColumnReferences(t *testing.T) {
 	orders, err := Orders(query, &filterTestModel{})
 	require.NoError(t, err)
 
-	age := types.NewNumericColumn[*filterTestModel, int]("age")
-	enabled := types.NewColumn[*filterTestModel, bool]("enabled")
-	expiredAt := types.NewTimeColumn[*filterTestModel]("expired_at")
-	itemCount := types.NewNumericColumn[*filterTestModel, int]("item_count")
-	remark := types.NewColumn[*filterTestModel, string]("remark")
+	age := gst.NewNumericColumn[*filterTestModel, int]("age")
+	enabled := gst.NewColumn[*filterTestModel, bool]("enabled")
+	expiredAt := gst.NewTimeColumn[*filterTestModel]("expired_at")
+	itemCount := gst.NewNumericColumn[*filterTestModel, int]("item_count")
+	remark := gst.NewColumn[*filterTestModel, string]("remark")
 
 	own, rest := expiredAt.Split(filters)
 	require.Len(t, own, 2)
 	require.Len(t, rest, 4)
 	lower, upper, err := expiredAt.Bounds(own)
 	require.NoError(t, err)
-	require.Equal(t, types.Bound[time.Time]{Value: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), Inclusive: true, Present: true}, lower,
+	require.Equal(t, gst.Bound[time.Time]{Value: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), Inclusive: true, Present: true}, lower,
 		"the parser normalized the bound to the UTC wall clock, which reads back as that instant")
-	require.Equal(t, types.Bound[time.Time]{Value: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), Present: true}, upper)
+	require.Equal(t, gst.Bound[time.Time]{Value: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), Present: true}, upper)
 
 	ages, err := age.Values(rest)
 	require.NoError(t, err)
@@ -1093,8 +1093,8 @@ func TestCursor(t *testing.T) {
 		require.NoError(t, err)
 		// A time boundary is normalized like a time filter bound: the RFC 3339
 		// input travels as the UTC wall clock.
-		boundary := time.Date(2026, 7, 1, 8, 30, 15, 0, time.FixedZone("", 8*3600)).UTC().Format(types.FilterTimeLayout)
-		require.Equal(t, types.CursorForward(types.Asc("snapshot_at"), boundary), cursor)
+		boundary := time.Date(2026, 7, 1, 8, 30, 15, 0, time.FixedZone("", 8*3600)).UTC().Format(gst.FilterTimeLayout)
+		require.Equal(t, gst.CursorForward(gst.Asc("snapshot_at"), boundary), cursor)
 	})
 
 	t.Run("SharedColumnFails", func(t *testing.T) {
@@ -1128,17 +1128,17 @@ func TestCursor(t *testing.T) {
 	})
 
 	t.Run("BoundaryFollowsTheTypeGormStores", func(t *testing.T) {
-		cursor := func(field, value string) (types.Cursor, error) {
+		cursor := func(field, value string) (gst.Cursor, error) {
 			return Cursor(url.Values{"_cursor_value": {value}, "_cursor_next": {"true"}, "_cursor_field": {field}}, &cursorTypedTestModel{})
 		}
 		got, err := cursor("settled", "2026-07-01T08:00:00+08:00")
 		require.NoError(t, err)
-		require.Equal(t, types.CursorForward(types.Asc("settled"), "2026-07-01 00:00:00"), got,
+		require.Equal(t, gst.CursorForward(gst.Asc("settled"), "2026-07-01 00:00:00"), got,
 			"the time sql.NullTime holds is normalized like any time boundary")
 
 		got, err = cursor("clock", "17:30:00.5")
 		require.NoError(t, err)
-		require.Equal(t, types.CursorForward(types.Asc("clock"), "17:30:00.500000000"), got,
+		require.Equal(t, gst.CursorForward(gst.Asc("clock"), "17:30:00.500000000"), got,
 			"a time of day travels in the spelling datatypes.TimeOfDay stores")
 
 		for field, value := range map[string]string{"settled": "1767225600", "tally": "abc", "clock": "123000"} {

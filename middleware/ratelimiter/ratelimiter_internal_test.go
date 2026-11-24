@@ -9,7 +9,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
 )
@@ -169,11 +169,11 @@ func constantKey(key string) func(*gin.Context) string {
 }
 
 // useLimiterCache puts cache behind every limiter for the rest of the test.
-func useLimiterCache(t *testing.T, cache types.Cache[*rate.Limiter]) {
+func useLimiterCache(t *testing.T, cache gst.Cache[*rate.Limiter]) {
 	t.Helper()
 
 	original := limiterCache
-	limiterCache = func() types.Cache[*rate.Limiter] { return cache }
+	limiterCache = func() gst.Cache[*rate.Limiter] { return cache }
 	t.Cleanup(func() { limiterCache = original })
 }
 
@@ -209,7 +209,7 @@ type recordingLimiterCache struct {
 func (c *recordingLimiterCache) Get(_ context.Context, key string) (*rate.Limiter, error) {
 	limiter, ok := c.limiters[key]
 	if !ok {
-		return nil, types.ErrEntryNotFound
+		return nil, gst.ErrEntryNotFound
 	}
 	return limiter, nil
 }

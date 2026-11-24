@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
@@ -407,8 +407,8 @@ func BenchmarkApplyPatch(b *testing.B) {
 // logs every field it copies.
 type nopControllerLogger struct{}
 
-func (nopControllerLogger) With(fields ...string) types.Logger { return nopControllerLogger{} }
-func (nopControllerLogger) WithContext(context.Context, apiaction.Phase) types.Logger {
+func (nopControllerLogger) With(fields ...string) gst.Logger { return nopControllerLogger{} }
+func (nopControllerLogger) WithContext(context.Context, apiaction.Phase) gst.Logger {
 	return nopControllerLogger{}
 }
 func (nopControllerLogger) Debug(args ...any)                       {}

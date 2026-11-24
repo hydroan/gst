@@ -7,9 +7,9 @@ import (
 
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/database/clickhouse"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -58,12 +58,12 @@ func TestClickhouse(t *testing.T) {
 
 	ctx := context.Background()
 
-	listIDs := func(t *testing.T, filters ...types.Filter) []string {
+	listIDs := func(t *testing.T, filters ...gst.Filter) []string {
 		t.Helper()
 		records := make([]*TestAggregateRecord, 0)
 		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).
-			WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: filters}).
-			WithOrder(types.Asc("id")).
+			WithQuery(nil, gst.QueryOptions{AllowEmpty: true, Filters: filters}).
+			WithOrder(gst.Asc("id")).
 			List(&records))
 		ids := make([]string, 0, len(records))
 		for _, r := range records {
@@ -71,24 +71,24 @@ func TestClickhouse(t *testing.T) {
 		}
 		return ids
 	}
-	listErr := func(filters ...types.Filter) error {
+	listErr := func(filters ...gst.Filter) error {
 		records := make([]*TestAggregateRecord, 0)
 		return database.DatabaseOn[*TestAggregateRecord](ctx, ins).
-			WithQuery(nil, types.QueryOptions{AllowEmpty: true, Filters: filters}).
+			WithQuery(nil, gst.QueryOptions{AllowEmpty: true, Filters: filters}).
 			List(&records)
 	}
 
 	t.Run("ListWithFiltersOrderAndPaging", func(t *testing.T) {
-		require.Equal(t, []string{"a4", "a5", "a6"}, listIDs(t, types.FilterGte("amount", 400)))
-		require.Equal(t, []string{"a1", "a2", "a3"}, listIDs(t, types.FilterIn("category", []string{"alpha"})))
-		require.Equal(t, []string{"a1", "a2"}, listIDs(t, types.FilterLike("category", "alph"), types.FilterEq("status", "done")))
-		require.Empty(t, listIDs(t, types.FilterLike("category", "ALPH")), "like compares case")
-		require.Equal(t, []string{"a1", "a2"}, listIDs(t, types.FilterILike("category", "ALPH"), types.FilterEq("status", "done")))
+		require.Equal(t, []string{"a4", "a5", "a6"}, listIDs(t, gst.FilterGte("amount", 400)))
+		require.Equal(t, []string{"a1", "a2", "a3"}, listIDs(t, gst.FilterIn("category", []string{"alpha"})))
+		require.Equal(t, []string{"a1", "a2"}, listIDs(t, gst.FilterLike("category", "alph"), gst.FilterEq("status", "done")))
+		require.Empty(t, listIDs(t, gst.FilterLike("category", "ALPH")), "like compares case")
+		require.Equal(t, []string{"a1", "a2"}, listIDs(t, gst.FilterILike("category", "ALPH"), gst.FilterEq("status", "done")))
 
 		page := make([]*TestAggregateRecord, 0)
 		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).
-			WithQuery(nil, types.QueryOptions{AllowEmpty: true}).
-			WithOrder(types.Desc("amount")).
+			WithQuery(nil, gst.QueryOptions{AllowEmpty: true}).
+			WithOrder(gst.Desc("amount")).
 			WithLimit(2).
 			List(&page))
 		require.Len(t, page, 2)
@@ -99,8 +99,8 @@ func TestClickhouse(t *testing.T) {
 	t.Run("TimeFilterWithBothValueShapes", func(t *testing.T) {
 		boundary := time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC)
 		require.Equal(t, []string{"a4", "a5", "a6"},
-			listIDs(t, types.FilterGte("occurred_at", boundary.Format(types.FilterTimeLayout))))
-		require.Equal(t, []string{"a1", "a2", "a3"}, listIDs(t, types.FilterLt("occurred_at", boundary)))
+			listIDs(t, gst.FilterGte("occurred_at", boundary.Format(gst.FilterTimeLayout))))
+		require.Equal(t, []string{"a1", "a2", "a3"}, listIDs(t, gst.FilterLt("occurred_at", boundary)))
 	})
 
 	t.Run("CountRows", func(t *testing.T) {
@@ -112,7 +112,7 @@ func TestClickhouse(t *testing.T) {
 	t.Run("CursorPagesByAnIdentifyingColumn", func(t *testing.T) {
 		page := make([]*TestAggregateRecord, 0)
 		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).
-			WithCursor(types.CursorForward(types.Asc("id"), "a1")).
+			WithCursor(gst.CursorForward(gst.Asc("id"), "a1")).
 			WithLimit(1).
 			List(&page))
 		require.Len(t, page, 1)
@@ -125,7 +125,7 @@ func TestClickhouse(t *testing.T) {
 		// enforces uniqueness.
 		boundary := time.Date(2024, 2, 10, 8, 0, 0, 0, time.UTC)
 		err := database.DatabaseOn[*TestAggregateRecord](ctx, ins).
-			WithCursor(types.CursorForward(types.Asc("occurred_at"), boundary.Format(types.FilterTimeLayout))).
+			WithCursor(gst.CursorForward(gst.Asc("occurred_at"), boundary.Format(gst.FilterTimeLayout))).
 			WithLimit(1).
 			List(&page)
 		require.ErrorIs(t, err, database.ErrSharedCursorColumn)
@@ -141,7 +141,7 @@ func TestClickhouse(t *testing.T) {
 		require.NoError(t, database.SelectOn[*TestAggregateRecord, row](ctx, ins,
 			TestAggregateRecordCols.Category.Group(),
 			TestAggregateRecordCols.Amount.Sum().As("total"),
-			types.Count().Where(TestAggregateRecordCols.Status.Eq("done")).As("done"),
+			gst.Count().Where(TestAggregateRecordCols.Status.Eq("done")).As("done"),
 		).
 			Having(TestAggregateRecordCols.Amount.Sum().As("total").Gte(600)).
 			OrderBy(TestAggregateRecordCols.Category.Group().Asc()).
@@ -159,7 +159,7 @@ func TestClickhouse(t *testing.T) {
 			Records int64
 		}
 		rows := make([]row, 0)
-		require.NoError(t, database.SelectOn[*TestAggregateRecord, row](ctx, ins, TestAggregateRecordCols.OccurredAt.ByDay().As("bucket"), types.Count().As("records")).
+		require.NoError(t, database.SelectOn[*TestAggregateRecord, row](ctx, ins, TestAggregateRecordCols.OccurredAt.ByDay().As("bucket"), gst.Count().As("records")).
 			OrderBy(TestAggregateRecordCols.OccurredAt.ByDay().As("bucket").Asc()).
 			Scan(&rows))
 		require.Equal(t, []row{
@@ -189,8 +189,8 @@ func TestClickhouse(t *testing.T) {
 			Category string
 			Rn       int64
 		}
-		rn := types.RowNumber().
-			Over(types.PartitionBy(TestAggregateRecordCols.Category).OrderBy(TestAggregateRecordCols.OccurredAt.Desc())).
+		rn := gst.RowNumber().
+			Over(gst.PartitionBy(TestAggregateRecordCols.Category).OrderBy(TestAggregateRecordCols.OccurredAt.Desc())).
 			As("rn")
 		rows := make([]row, 0)
 		require.NoError(t, database.SelectOn[*TestAggregateRecord, row](ctx, ins,
@@ -217,12 +217,12 @@ func TestClickhouse(t *testing.T) {
 		require.NotEmpty(t, rows[0].ID, "Create must fill generated ids")
 		require.False(t, rows[0].CreatedAt.IsZero(), "Create must fill timestamps")
 
-		require.Len(t, listIDs(t, types.FilterEq("category", "write")), 2)
+		require.Len(t, listIDs(t, gst.FilterEq("category", "write")), 2)
 
 		// Lightweight DELETE is synchronous by default: the rows are gone from
 		// SELECT right away, physically, with no soft-delete detour.
 		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).Delete(rows...))
-		require.Empty(t, listIDs(t, types.FilterEq("category", "write")))
+		require.Empty(t, listIDs(t, gst.FilterEq("category", "write")))
 
 		require.ErrorIs(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).Delete(&TestAggregateRecord{}), database.ErrIDRequired,
 			"a delete without a primary key must fail fast")
@@ -253,7 +253,7 @@ func TestClickhouse(t *testing.T) {
 		count := func(ctx context.Context) int {
 			rows := make([]*TestTenantSoftDeleteItem, 0)
 			require.NoError(t, database.DatabaseOn[*TestTenantSoftDeleteItem](ctx, ins).
-				WithQuery(nil, types.QueryOptions{AllowEmpty: true}).List(&rows))
+				WithQuery(nil, gst.QueryOptions{AllowEmpty: true}).List(&rows))
 			return len(rows)
 		}
 		require.Equal(t, 1, count(a))
@@ -265,7 +265,7 @@ func TestClickhouse(t *testing.T) {
 
 		// The statement of clickhouseDeleteStatement's example: the delete
 		// carries the tenant predicate like every other write.
-		stmts := make([]types.SQLStatement, 0)
+		stmts := make([]gst.SQLStatement, 0)
 		require.NoError(t, database.DatabaseOn[*TestTenantSoftDeleteItem](a, ins).WithDryRun(&stmts).Delete(shared()))
 		require.Len(t, stmts, 1)
 		require.Equal(t, "DELETE FROM `test_tenant_soft_delete_items` WHERE `id` = 'shared-id' AND `tenant_id` = 'tenant-a'", stmts[0].RenderedSQL)
@@ -291,7 +291,7 @@ func TestClickhouse(t *testing.T) {
 			return got.Status == "after"
 		}, 5*time.Second, 50*time.Millisecond, "the accepted mutation must eventually rewrite the row")
 
-		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).UpdateByID(row.ID, types.NewAssignment("", "status", "byid")))
+		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).UpdateByID(row.ID, gst.NewAssignment("", "status", "byid")))
 		require.Eventually(t, func() bool {
 			got := new(TestAggregateRecord)
 			if err := database.DatabaseOn[*TestAggregateRecord](ctx, ins).Get(got, row.ID); err != nil {
@@ -372,7 +372,7 @@ func TestClickhouse(t *testing.T) {
 		// update narrows to the column it corrects.
 		owner.Entries = []*TestOwnedEntry{{Name: "entry"}}
 		require.NoError(t, database.DatabaseOn[*TestOwnerRecord](ctx, ins).
-			WithSelect(types.NewColumn[*TestOwnerRecord, string]("name")).Update(owner))
+			WithSelect(gst.NewColumn[*TestOwnerRecord, string]("name")).Update(owner))
 		require.Nil(t, owner.Entries, "an update hands back no entry either")
 		require.Zero(t, storedEntries(), "an update inserts no entry")
 	})
@@ -381,11 +381,11 @@ func TestClickhouse(t *testing.T) {
 		// Create refuses dry-run on clickhouse: the dialect driver executes
 		// the INSERT it builds without consulting DryRun, so a "dry" run
 		// would write real rows.
-		stmts := make([]types.SQLStatement, 0)
+		stmts := make([]gst.SQLStatement, 0)
 		row := &TestAggregateRecord{Category: "dry", Status: "x", OccurredAt: time.Date(2024, 3, 3, 0, 0, 0, 0, time.UTC)}
 		require.ErrorIs(t, database.DatabaseOn[*TestAggregateRecord](asCaller(dryRunCaller), ins).WithDryRun(&stmts).Create(row),
 			database.ErrUnsupportedOnDialect)
-		require.Empty(t, listIDs(t, types.FilterEq("category", "dry")), "the refused dry run must not persist rows")
+		require.Empty(t, listIDs(t, gst.FilterEq("category", "dry")), "the refused dry run must not persist rows")
 		require.Empty(t, row.CreatedBy, "the refused dry run must leave the object as it is")
 
 		require.NoError(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithDryRun(&stmts).
@@ -428,7 +428,7 @@ func TestClickhouse(t *testing.T) {
 		// conditions names no record: it is refused before any statement.
 		require.ErrorIs(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithQuery(&TestAggregateRecord{Category: "alpha"}).Delete(),
 			database.ErrUnsupportedOnDialect)
-		require.ErrorIs(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithQuery(nil, types.QueryOptions{AllowEmpty: true}).Delete(),
+		require.ErrorIs(t, database.DatabaseOn[*TestAggregateRecord](ctx, ins).WithQuery(nil, gst.QueryOptions{AllowEmpty: true}).Delete(),
 			database.ErrUnsupportedOnDialect)
 		require.Len(t, listIDs(t), 6, "the refused deletes leave the seed")
 		rows := make([]*TestAggregateRecord, 0)
@@ -480,7 +480,7 @@ func TestClickhouse(t *testing.T) {
 		require.Equal(t, "kept", got.Title, "the refused writes leave the row as it was")
 		require.EqualValues(t, 1, got.Version)
 		notes := make([]*versionedNote, 0)
-		require.NoError(t, database.DatabaseOn[*versionedNote](ctx, ins).WithQuery(nil, types.QueryOptions{AllowEmpty: true}).List(&notes))
+		require.NoError(t, database.DatabaseOn[*versionedNote](ctx, ins).WithQuery(nil, gst.QueryOptions{AllowEmpty: true}).List(&notes))
 		require.Len(t, notes, 1, "the refused create adds no row")
 	})
 
@@ -489,26 +489,26 @@ func TestClickhouse(t *testing.T) {
 		// every capability the dialect lacks is, rather than rendering an
 		// empty condition that would silently widen the result or answering
 		// an empty one.
-		require.ErrorIs(t, listErr(types.NewFilter("", "category", types.FilterOpJSONContains, "alpha")), database.ErrUnsupportedOnDialect)
+		require.ErrorIs(t, listErr(gst.NewFilter("", "category", gst.FilterOpJSONContains, "alpha")), database.ErrUnsupportedOnDialect)
 	})
 
 	t.Run("RegexFilter", func(t *testing.T) {
 		// ClickHouse parses the REGEXP operator natively, so the regex filters
 		// need no special arm.
-		require.Equal(t, []string{"a1", "a2", "a3"}, listIDs(t, types.FilterRegex("category", "^al.*")))
+		require.Equal(t, []string{"a1", "a2", "a3"}, listIDs(t, gst.FilterRegex("category", "^al.*")))
 	})
 
 	t.Run("PatternFiltersOnNumericColumns", func(t *testing.T) {
 		// A number matches by its text form here as on every other dialect
 		// (see TestDatabasePatternFiltersOnNumericColumns), though LIKE and
 		// match take a string alone on ClickHouse.
-		require.Equal(t, []string{"a1"}, listIDs(t, types.NewFilter("", "amount", types.FilterOpLike, "1")))
-		require.Equal(t, []string{"a2", "a3", "a4", "a5", "a6"}, listIDs(t, types.NewFilter("", "amount", types.FilterOpNotLike, "1")))
-		require.Equal(t, []string{"a1"}, listIDs(t, types.NewFilter("", "amount", types.FilterOpILike, "1")))
-		require.Equal(t, []string{"a2"}, listIDs(t, types.NewFilter("", "amount", types.FilterOpStartsWith, "2")))
-		require.Equal(t, []string{"a4"}, listIDs(t, types.NewFilter("", "score", types.FilterOpEndsWith, "4.5")))
-		require.Equal(t, []string{"a1", "a2"}, listIDs(t, types.NewFilter("", "amount", types.FilterOpRegex, "^[12]")))
-		require.Equal(t, []string{"a3", "a4", "a5", "a6"}, listIDs(t, types.NewFilter("", "amount", types.FilterOpNotRegex, "^[12]")))
+		require.Equal(t, []string{"a1"}, listIDs(t, gst.NewFilter("", "amount", gst.FilterOpLike, "1")))
+		require.Equal(t, []string{"a2", "a3", "a4", "a5", "a6"}, listIDs(t, gst.NewFilter("", "amount", gst.FilterOpNotLike, "1")))
+		require.Equal(t, []string{"a1"}, listIDs(t, gst.NewFilter("", "amount", gst.FilterOpILike, "1")))
+		require.Equal(t, []string{"a2"}, listIDs(t, gst.NewFilter("", "amount", gst.FilterOpStartsWith, "2")))
+		require.Equal(t, []string{"a4"}, listIDs(t, gst.NewFilter("", "score", gst.FilterOpEndsWith, "4.5")))
+		require.Equal(t, []string{"a1", "a2"}, listIDs(t, gst.NewFilter("", "amount", gst.FilterOpRegex, "^[12]")))
+		require.Equal(t, []string{"a3", "a4", "a5", "a6"}, listIDs(t, gst.NewFilter("", "amount", gst.FilterOpNotRegex, "^[12]")))
 
 		// An optional number lands in a Nullable column. A row holding NULL
 		// matches neither LIKE nor NOT LIKE, as on every other dialect,
@@ -526,12 +526,12 @@ func TestClickhouse(t *testing.T) {
 			('r1', 10,   '2024-01-01 00:00:00', '2024-01-01 00:00:00'),
 			('r2', NULL, '2024-01-01 00:00:00', '2024-01-01 00:00:00'),
 			('r3', 20,   '2024-01-01 00:00:00', '2024-01-01 00:00:00')`).Error)
-		readings := func(op types.FilterOp, value string) []string {
+		readings := func(op gst.FilterOp, value string) []string {
 			t.Helper()
 			records := make([]*TestReadingRecord, 0)
 			require.NoError(t, database.DatabaseOn[*TestReadingRecord](ctx, ins).
-				WithQuery(nil, types.QueryOptions{Filters: []types.Filter{types.NewFilter("", "reading", op, value)}}).
-				WithOrder(types.Asc("id")).
+				WithQuery(nil, gst.QueryOptions{Filters: []gst.Filter{gst.NewFilter("", "reading", op, value)}}).
+				WithOrder(gst.Asc("id")).
 				List(&records))
 			ids := make([]string, 0, len(records))
 			for _, r := range records {
@@ -539,8 +539,8 @@ func TestClickhouse(t *testing.T) {
 			}
 			return ids
 		}
-		require.Equal(t, []string{"r1"}, readings(types.FilterOpLike, "1"))
-		require.Equal(t, []string{"r3"}, readings(types.FilterOpNotLike, "1"))
+		require.Equal(t, []string{"r1"}, readings(gst.FilterOpLike, "1"))
+		require.Equal(t, []string{"r3"}, readings(gst.FilterOpNotLike, "1"))
 	})
 
 	t.Run("ExistsSubqueryIsRefused", func(t *testing.T) {
@@ -561,7 +561,7 @@ func TestClickhouse(t *testing.T) {
 		require.NoError(t, ins.Exec(`INSERT INTO test_record_tags (id, record_id, label, created_at, updated_at) VALUES
 			('t1','a1','vip','2024-01-01 00:00:00','2024-01-01 00:00:00')`).Error)
 
-		require.ErrorIs(t, listErr(types.FilterExists[*TestRecordTag](
+		require.ErrorIs(t, listErr(gst.FilterExists[*TestRecordTag](
 			TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID),
 		)), database.ErrUnsupportedOnDialect)
 	})
@@ -578,9 +578,9 @@ func TestClickhouse(t *testing.T) {
 			Category string
 		}
 		records := database.SelectOn[*TestAggregateRecord, feed](ctx, ins,
-			types.Literal("record").As("kind"), TestAggregateRecordCols.ID, TestAggregateRecordCols.Category)
+			gst.Literal("record").As("kind"), TestAggregateRecordCols.ID, TestAggregateRecordCols.Category)
 		tags := database.SelectOn[*TestRecordTag, feed](ctx, ins,
-			types.Literal("tag").As("kind"), TestRecordTagCols.ID, TestRecordTagCols.Category)
+			gst.Literal("tag").As("kind"), TestRecordTagCols.ID, TestRecordTagCols.Category)
 
 		rows := make([]feed, 0)
 		require.NoError(t, database.UnionAllOn[feed](ctx, ins, records, tags).
@@ -601,7 +601,7 @@ func TestClickhouse(t *testing.T) {
 		// runs its statement on one connection, and every member must be
 		// rendered for it.
 		other := database.Select[*TestAggregateRecord, feed](ctx,
-			types.Literal("record").As("kind"), TestAggregateRecordCols.ID, TestAggregateRecordCols.Category)
+			gst.Literal("record").As("kind"), TestAggregateRecordCols.ID, TestAggregateRecordCols.Category)
 		require.ErrorIs(t, database.UnionAllOn[feed](ctx, ins, records, other).Scan(&rows), database.ErrUnionBranchInstance)
 		require.ErrorIs(t, database.UnionAll[feed](ctx, records).Scan(&rows), database.ErrUnionBranchInstance)
 	})
@@ -616,7 +616,7 @@ func TestClickhouse(t *testing.T) {
 		}
 		rows := make([]tagged, 0)
 		err := database.SelectOn[*TestRecordTag, tagged](ctx, ins, TestRecordTagCols.ID, TestAggregateRecordCols.Category).
-			Join(types.Join[*TestAggregateRecord](TestAggregateRecordCols.ID.EqCol(TestRecordTagCols.RecordID))).
+			Join(gst.Join[*TestAggregateRecord](TestAggregateRecordCols.ID.EqCol(TestRecordTagCols.RecordID))).
 			Scan(&rows)
 		require.ErrorIs(t, err, database.ErrUnsupportedOnDialect)
 	})
@@ -639,7 +639,7 @@ func TestClickhouse(t *testing.T) {
 		}
 		rows := make([]recordTags, 0)
 		require.NoError(t, database.SelectOn[*TestAggregateRecord, recordTags](ctx, ins, TestAggregateRecordCols.ID, tags).
-			Join(types.LeftJoinSelect(counts, TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID))).
+			Join(gst.LeftJoinSelect(counts, TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID))).
 			OrderBy(TestAggregateRecordCols.ID.Asc()).
 			Scan(&rows))
 		require.Len(t, rows, 6)
@@ -648,7 +648,7 @@ func TestClickhouse(t *testing.T) {
 
 		other := database.Select[*TestRecordTag, tagsPerRecord](ctx, TestRecordTagCols.RecordID.Group(), tags)
 		require.ErrorIs(t, database.SelectOn[*TestAggregateRecord, recordTags](ctx, ins, TestAggregateRecordCols.ID, tags).
-			Join(types.LeftJoinSelect(other, TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID))).
+			Join(gst.LeftJoinSelect(other, TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID))).
 			Scan(&rows), database.ErrJoinSelectInstance)
 	})
 }

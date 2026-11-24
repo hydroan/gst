@@ -14,8 +14,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/router"
-	"github.com/hydroan/gst/internal/types"
 )
 
 // APIPath returns the path a route is served at, the route under the API
@@ -53,7 +53,7 @@ func APIPath(route string) string {
 // phases, or a phase no HTTP route serves, a hook phase such as
 // CreateBefore, panics: the mistake stops the start instead of leaving an
 // endpoint that answers 404 or registering nothing in silence.
-func Register[M types.Model, REQ types.Request, RSP types.Response](group *gin.RouterGroup, route string, cfg *types.ControllerConfig[M], phases ...apiaction.Phase) {
+func Register[M gst.Model, REQ gst.Request, RSP gst.Response](group *gin.RouterGroup, route string, cfg *gst.ControllerConfig[M], phases ...apiaction.Phase) {
 	router.Register[M, REQ, RSP](group, route, cfg, phases...)
 }
 

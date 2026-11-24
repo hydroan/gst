@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/hydroan/gst/internal/controller"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // This file holds the calls the generated handlers of streaming rpcs run a
@@ -41,7 +41,7 @@ func SameParams(i int, params, msgParams map[string]string) error {
 // service's Stream method with a ServerStream sending through the function,
 // and answers with nil once the stream is over, or with the status a failure
 // maps to, the way ServiceCall does.
-func ServerStreamCall[M types.Model, REQ types.Request, RSP types.Response](route string) func(ctx context.Context, params map[string]string, req REQ, send func(RSP) error) error {
+func ServerStreamCall[M gst.Model, REQ gst.Request, RSP gst.Response](route string) func(ctx context.Context, params map[string]string, req REQ, send func(RSP) error) error {
 	return controller.ServerStreamCall[M, REQ, RSP](route)
 }
 
@@ -50,7 +50,7 @@ func ServerStreamCall[M types.Model, REQ types.Request, RSP types.Response](rout
 // receiving the next request, io.EOF once the client finished, it runs the
 // service's Stream method with a ClientStream reading through the function,
 // and answers with the response, or with the status a failure maps to.
-func ClientStreamCall[M types.Model, REQ types.Request, RSP types.Response](route string) func(ctx context.Context, params map[string]string, recv func() (REQ, error)) (RSP, error) {
+func ClientStreamCall[M gst.Model, REQ gst.Request, RSP gst.Response](route string) func(ctx context.Context, params map[string]string, recv func() (REQ, error)) (RSP, error) {
 	return controller.ClientStreamCall[M, REQ, RSP](route)
 }
 
@@ -59,6 +59,6 @@ func ClientStreamCall[M types.Model, REQ types.Request, RSP types.Response](rout
 // request and the function sending one response, it runs the service's
 // Stream method with a BidiStream on the two, and answers with nil once the
 // stream is over, or with the status a failure maps to.
-func BidiStreamCall[M types.Model, REQ types.Request, RSP types.Response](route string) func(ctx context.Context, params map[string]string, recv func() (REQ, error), send func(RSP) error) error {
+func BidiStreamCall[M gst.Model, REQ gst.Request, RSP gst.Response](route string) func(ctx context.Context, params map[string]string, recv func() (REQ, error), send func(RSP) error) error {
 	return controller.BidiStreamCall[M, REQ, RSP](route)
 }

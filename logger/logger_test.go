@@ -11,8 +11,8 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 )
@@ -38,7 +38,7 @@ func init() {
 	}
 }
 
-func createLogger(b *testing.B, filename string) types.Logger {
+func createLogger(b *testing.B, filename string) gst.Logger {
 	b.Helper()
 	b.Setenv(config.LOGGER_OUTPUT, string(config.LoggerOutputFile))
 	b.Setenv(config.LOGGER_FILE, filename)

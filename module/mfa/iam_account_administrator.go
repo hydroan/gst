@@ -1,7 +1,7 @@
 package mfa
 
 import (
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/module/iam"
 )
 
@@ -11,6 +11,6 @@ import (
 // install their own AccountAdministrator from project-owned code.
 type iamAccountAdministrator struct{}
 
-func (iamAccountAdministrator) EnsureCanAdminister(ctx *types.ServiceContext, targetUserID string) error {
+func (iamAccountAdministrator) EnsureCanAdminister(ctx *gst.ServiceContext, targetUserID string) error {
 	return iam.EnsureAdminOnUser(ctx, targetUserID)
 }

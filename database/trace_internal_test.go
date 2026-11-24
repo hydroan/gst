@@ -8,9 +8,9 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/stretchr/testify/require"
@@ -88,7 +88,7 @@ func TestOperationLogFieldsReadTheOutcome(t *testing.T) {
 	canceled := keys(errors.Wrap(context.Canceled, "sample"))
 	require.True(t, canceled["canceled"])
 	require.False(t, canceled["error"], "a canceled operation carries no error")
-	refused := keys(types.NewError(http.StatusForbidden, "not yours"))
+	refused := keys(gst.NewError(http.StatusForbidden, "not yours"))
 	require.True(t, refused["refused"])
 	require.False(t, refused["error"], "an operation a hook refused carries no error")
 	require.True(t, keys(errors.New("sample failure"))["error"])
@@ -103,11 +103,11 @@ type loggedOutcome struct {
 // outcomeLogger stands in for the database stream's logger and records the
 // level and message of each entry an operation logs through it.
 type outcomeLogger struct {
-	types.Logger
+	gst.Logger
 	logged *[]loggedOutcome
 }
 
-func (l outcomeLogger) WithContext(context.Context, apiaction.Phase) types.Logger { return l }
+func (l outcomeLogger) WithContext(context.Context, apiaction.Phase) gst.Logger { return l }
 
 func (l outcomeLogger) Debugz(msg string, _ ...zap.Field) {
 	*l.logged = append(*l.logged, loggedOutcome{zapcore.DebugLevel, msg})
@@ -134,8 +134,8 @@ func TestOperationLogLevelFollowsTheOutcome(t *testing.T) {
 		errors.Wrap(ErrRecordNotFound, "get sample"),
 		errors.Wrap(ErrStaleObject, "update sample"),
 		errors.Wrap(context.Canceled, "list samples"),
-		types.NewError(http.StatusForbidden, "not yours"),
-		types.NewError(http.StatusInternalServerError, "broken"),
+		gst.NewError(http.StatusForbidden, "not yours"),
+		gst.NewError(http.StatusInternalServerError, "broken"),
 		errors.New("sample failure"),
 	} {
 		db := &database[*traceSample]{ins: DB(), ctx: context.Background()}
@@ -184,7 +184,7 @@ func TestAnOperationAHookRefusedIsNoFailureOfTheDatabase(t *testing.T) {
 	}
 
 	t.Run("a refusal leaves both spans unset", func(t *testing.T) {
-		operation, hook := run(t, types.NewError(http.StatusForbidden, "not yours"))
+		operation, hook := run(t, gst.NewError(http.StatusForbidden, "not yours"))
 
 		require.Equal(t, codes.Unset, operation.Status().Code)
 		require.Empty(t, operation.Events(), "a refusal must not be recorded as an exception")

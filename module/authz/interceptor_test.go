@@ -15,11 +15,11 @@ import (
 	gstgrpc "github.com/hydroan/gst/grpc"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/grpcserver"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/model"
 	modeliamuser "github.com/hydroan/gst/internal/modulemodel/iam/user"
 	"github.com/hydroan/gst/internal/tenant"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -71,7 +71,7 @@ func TestAuthzInterceptor(t *testing.T) {
 
 	t.Run("holding a role with the permission", func(t *testing.T) {
 		roleID := newAuthorizationRole(t, subject, "grpc_authorization")
-		authzGrantTenantPolicy(t, tenant.Default, roleID, types.Permission{Object: grantedRoute, Action: http.MethodGet})
+		authzGrantTenantPolicy(t, tenant.Default, roleID, gst.Permission{Object: grantedRoute, Action: http.MethodGet})
 
 		require.NoError(t, authzProbeCall(t, conn, "Look", subject.sessionID))
 		require.Equal(t, subject.userID, authzProbeLastCaller(t).UserID)
@@ -99,7 +99,7 @@ func TestAuthzInterceptor(t *testing.T) {
 				peeker := authorizationSubject{}
 				peeker.userID, peeker.sessionID = authzSignupAndLoginUserWithUserAgent(t, authzTestUsername(tt.user), "12345678", grpcUserAgent)
 				roleID := newAuthorizationRole(t, peeker, tt.user)
-				authzGrantTenantPolicy(t, tenant.Default, roleID, types.Permission{Object: tt.object, Action: http.MethodGet})
+				authzGrantTenantPolicy(t, tenant.Default, roleID, gst.Permission{Object: tt.object, Action: http.MethodGet})
 
 				require.Equal(t, tt.code, status.Code(authzProbeCall(t, conn, "Peek", peeker.sessionID)))
 			})
@@ -120,7 +120,7 @@ func TestAuthzInterceptor(t *testing.T) {
 				tailer := authorizationSubject{}
 				tailer.userID, tailer.sessionID = authzSignupAndLoginUserWithUserAgent(t, authzTestUsername(tt.user), "12345678", grpcUserAgent)
 				roleID := newAuthorizationRole(t, tailer, tt.user)
-				authzGrantTenantPolicy(t, tenant.Default, roleID, types.Permission{Object: "/api/probe-things/{thing}/tail", Action: tt.action})
+				authzGrantTenantPolicy(t, tenant.Default, roleID, gst.Permission{Object: "/api/probe-things/{thing}/tail", Action: tt.action})
 
 				require.Equal(t, tt.code, status.Code(authzProbeStream(t, conn, tailer.sessionID)))
 			})
@@ -138,7 +138,7 @@ func TestTenantAdminManagesUsersOverGRPC(t *testing.T) {
 	admin := authorizationSubject{}
 	admin.userID, admin.sessionID = authzSignupAndLoginUserWithUserAgent(t, authzTestUsername("grpc_tenant_admin"), "12345678", grpcUserAgent)
 	roleID := newAuthorizationRole(t, admin, "grpc_tenant_admin")
-	authzGrantTenantPolicy(t, tenant.Default, roleID, types.Permission{Object: userAdminPath, Action: http.MethodGet})
+	authzGrantTenantPolicy(t, tenant.Default, roleID, gst.Permission{Object: userAdminPath, Action: http.MethodGet})
 
 	require.Equal(t, codes.OK, status.Code(authzProbeCall(t, conn, "ListUsers", admin.sessionID)))
 

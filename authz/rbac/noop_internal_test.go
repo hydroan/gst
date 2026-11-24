@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,7 +20,7 @@ import (
 func TestRBACWithoutAPolicySetRefusesWrites(t *testing.T) {
 	r := rbacWithoutPolicies(t)
 	ctx := context.Background()
-	permissions := []types.Permission{{Object: "/api/things", Action: "GET"}}
+	permissions := []gst.Permission{{Object: "/api/things", Action: "GET"}}
 
 	writes := map[string]func() error{
 		"RemoveRole": func() error { return r.RemoveRole(ctx, "tenant_a", "role_a") },
@@ -85,7 +85,7 @@ func TestRBACWithoutAPolicySetAnswersReads(t *testing.T) {
 // rbacWithoutPolicies returns what RBAC answers with before Init has installed
 // a policy set, and guards that the package is in that state at all: the policy
 // set is a package variable, so a test installing one leaves it behind.
-func rbacWithoutPolicies(t *testing.T) types.RBAC {
+func rbacWithoutPolicies(t *testing.T) gst.RBAC {
 	t.Helper()
 
 	r := RBAC()

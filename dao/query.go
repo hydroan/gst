@@ -5,7 +5,7 @@ import (
 	"context"
 
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // QueryModelsMap lists the records of M matching the model queryFunc returns
@@ -13,14 +13,14 @@ import (
 // nil queryFunc filters by the zero model. The query runs with AllowEmpty, so
 // a model naming no condition lists every record of the table. Records
 // sharing a key keep the one listed last.
-func QueryModelsMap[M types.Model](ctx context.Context, keyFunc func(M) string, queryFunc func() M) (map[string]M, error) {
-	return QueryModelsMapWithOptions[M](ctx, keyFunc, queryFunc, types.QueryOptions{AllowEmpty: true})
+func QueryModelsMap[M gst.Model](ctx context.Context, keyFunc func(M) string, queryFunc func() M) (map[string]M, error) {
+	return QueryModelsMapWithOptions[M](ctx, keyFunc, queryFunc, gst.QueryOptions{AllowEmpty: true})
 }
 
 // QueryModelsMapWithOptions is QueryModelsMap under the query options the
 // caller gives in place of AllowEmpty: under the zero options a model naming
 // no condition matches no record.
-func QueryModelsMapWithOptions[M types.Model](ctx context.Context, keyFunc func(M) string, queryFunc func() M, opts types.QueryOptions) (map[string]M, error) {
+func QueryModelsMapWithOptions[M gst.Model](ctx context.Context, keyFunc func(M) string, queryFunc func() M, opts gst.QueryOptions) (map[string]M, error) {
 	if keyFunc == nil {
 		keyFunc = func(m M) string {
 			return m.GetID()

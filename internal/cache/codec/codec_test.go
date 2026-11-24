@@ -5,7 +5,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/cache/codec"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -105,7 +105,7 @@ func TestConcreteValuesRoundtrip(t *testing.T) {
 // TestDropUnreadableAnswersAMissAfterDroppingTheEntry pins the one answer
 // every byte-addressed backend gives an entry whose bytes do not decode as the
 // caller's type: a Warn naming the key and the decode error, the drop, and
-// types.ErrEntryNotFound so the caller treats it like a plain miss. A drop
+// gst.ErrEntryNotFound so the caller treats it like a plain miss. A drop
 // that fails is logged as well and the answer is still a miss.
 func TestDropUnreadableAnswersAMissAfterDroppingTheEntry(t *testing.T) {
 	core, logs := observer.New(zap.WarnLevel)
@@ -118,7 +118,7 @@ func TestDropUnreadableAnswersAMissAfterDroppingTheEntry(t *testing.T) {
 			dropped++
 			return nil
 		})
-		if !errors.Is(err, types.ErrEntryNotFound) {
+		if !errors.Is(err, gst.ErrEntryNotFound) {
 			t.Fatalf("want ErrEntryNotFound, got %v", err)
 		}
 		if dropped != 1 {
@@ -140,7 +140,7 @@ func TestDropUnreadableAnswersAMissAfterDroppingTheEntry(t *testing.T) {
 		err := codec.DropUnreadable("sample-key", errors.New("unexpected value type"), func() error {
 			return errors.New("connection reset")
 		})
-		if !errors.Is(err, types.ErrEntryNotFound) {
+		if !errors.Is(err, gst.ErrEntryNotFound) {
 			t.Fatalf("want ErrEntryNotFound even when the drop fails, got %v", err)
 		}
 		entries := logs.TakeAll()

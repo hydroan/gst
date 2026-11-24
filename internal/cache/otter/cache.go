@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/cache/capacity"
 	"github.com/hydroan/gst/internal/cache/registry"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/maypok86/otter/v2"
 )
 
@@ -62,8 +62,8 @@ type cache[T any] struct {
 
 // Cache returns the process-wide otter cache of type T, creating it on first
 // use.
-func Cache[T any]() types.Cache[T] {
-	return registry.Load(store, func() types.Cache[T] {
+func Cache[T any]() gst.Cache[T] {
+	return registry.Load(store, func() gst.Cache[T] {
 		// Must cannot panic here: the only bound set is a positive maximum
 		// size, and the backend only rejects a size paired with a weigher.
 		return &cache[T]{c: otter.Must(&otter.Options[string, entry[T]]{
@@ -96,7 +96,7 @@ func (c *cache[T]) Get(_ context.Context, key string) (T, error) {
 	e, ok := c.c.GetIfPresent(key)
 	if !ok {
 		var zero T
-		return zero, types.ErrEntryNotFound
+		return zero, gst.ErrEntryNotFound
 	}
 	return e.value, nil
 }

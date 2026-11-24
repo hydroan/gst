@@ -9,7 +9,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/cache/cachetest"
 	"github.com/hydroan/gst/internal/cache/freelru"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // writeVisibilityCapacity keeps the pressure tests' fill and warm-up cheap
@@ -32,7 +32,7 @@ func TestCacheIsolatesTypes(t *testing.T) {
 	if err := freelru.Cache[int]().Set(ctx, "package-isolation-key", 7, 0); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	if _, err := freelru.Cache[string]().Get(ctx, "package-isolation-key"); !errors.Is(err, types.ErrEntryNotFound) {
+	if _, err := freelru.Cache[string]().Get(ctx, "package-isolation-key"); !errors.Is(err, gst.ErrEntryNotFound) {
 		t.Fatalf("want ErrEntryNotFound from the other type's cache, got %v", err)
 	}
 }
@@ -42,7 +42,7 @@ func TestCacheIsolatesTypes(t *testing.T) {
 // arrival, so it must be rejected instead of silently mis-honored.
 func TestSetRejectsSubMillisecondTTL(t *testing.T) {
 	ctx := context.Background()
-	if err := freelru.Cache[int]().Set(ctx, "sub-ms-key", 7, 500*time.Microsecond); !errors.Is(err, types.ErrTTLNotSupported) {
+	if err := freelru.Cache[int]().Set(ctx, "sub-ms-key", 7, 500*time.Microsecond); !errors.Is(err, gst.ErrTTLNotSupported) {
 		t.Fatalf("want ErrTTLNotSupported for a sub-millisecond ttl, got %v", err)
 	}
 	if err := freelru.Cache[int]().Set(ctx, "ms-key", 7, time.Millisecond); err != nil {

@@ -14,9 +14,9 @@ import (
 	gstmysql "github.com/hydroan/gst/database/mysql"
 	gstpostgres "github.com/hydroan/gst/database/postgres"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -250,7 +250,7 @@ func TestSQLCommentAnnotatesAQualifiedSelectOnce(t *testing.T) {
 		ID string
 		Rn int64
 	}
-	rn := types.RowNumber().Over(types.PartitionBy(TestAggregateRecordCols.Category).OrderBy(TestAggregateRecordCols.OccurredAt.Desc())).As("rn")
+	rn := gst.RowNumber().Over(gst.PartitionBy(TestAggregateRecordCols.Category).OrderBy(TestAggregateRecordCols.OccurredAt.Desc())).As("rn")
 	latest := database.SelectOn[*TestAggregateRecord, numbered](ctx, session, TestAggregateRecordCols.ID, rn).Qualify(rn.Eq(1))
 	rows := make([]numbered, 0)
 	require.NoError(t, latest.Scan(&rows))

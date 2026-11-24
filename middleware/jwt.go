@@ -6,9 +6,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/apidoc"
 	"github.com/hydroan/gst/authn/jwt"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
-	"github.com/hydroan/gst/internal/types"
 )
 
 // JwtAuth authenticates a request from the bearer token in its Authorization
@@ -31,7 +31,7 @@ func JwtAuth() gin.HandlerFunc {
 			err = jwt.Verify(claims)
 		}
 		if err != nil {
-			response.Abort(c, types.NewError(http.StatusUnauthorized, jwt.LogRefusal(err, c.Request.URL.Path, c.Request.Method)))
+			response.Abort(c, gst.NewError(http.StatusUnauthorized, jwt.LogRefusal(err, c.Request.URL.Path, c.Request.Method)))
 			return
 		}
 

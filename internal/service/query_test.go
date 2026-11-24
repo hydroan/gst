@@ -8,10 +8,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/service"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -48,12 +48,12 @@ type queryPlainSample struct {
 	model.Base
 }
 
-// The fixtures must satisfy types.Model for a Base to accept them, which is
+// The fixtures must satisfy gst.Model for a Base to accept them, which is
 // what makes them usable as the service model below.
 var (
-	_ types.Model = (*querySample)(nil)
-	_ types.Model = (*querySnapshot)(nil)
-	_ types.Model = (*queryPlainSample)(nil)
+	_ gst.Model = (*querySample)(nil)
+	_ gst.Model = (*querySnapshot)(nil)
+	_ gst.Model = (*queryPlainSample)(nil)
 )
 
 // querySampleService stands for an application service that implements a list
@@ -118,7 +118,7 @@ func TestBaseQueryFilters(t *testing.T) {
 	t.Run("ParsesAgainstTheServiceModel", func(t *testing.T) {
 		filters, err := svc.QueryFilters(newQueryContext(t, apiaction.List, "/samples?age[gt]=20&name=alice"))
 		require.NoError(t, err)
-		require.Equal(t, []types.Filter{types.NewFilter("", "age", types.FilterOpGt, "20")}, filters)
+		require.Equal(t, []gst.Filter{gst.NewFilter("", "age", gst.FilterOpGt, "20")}, filters)
 	})
 
 	t.Run("RejectsUnknownField", func(t *testing.T) {
@@ -169,7 +169,7 @@ func TestBaseQueryOrders(t *testing.T) {
 	t.Run("ReadsRequestValues", func(t *testing.T) {
 		orders, err := svc.QueryOrders(newQueryContext(t, apiaction.List, "/samples?_sort_by=created_at%20desc"))
 		require.NoError(t, err)
-		require.Equal(t, []types.Order{types.NewOrder("", "created_at", types.OrderDesc)}, orders)
+		require.Equal(t, []gst.Order{gst.NewOrder("", "created_at", gst.OrderDesc)}, orders)
 	})
 
 	t.Run("UnknownColumnIsAClientError", func(t *testing.T) {
@@ -193,8 +193,8 @@ func TestBaseQueryCursor(t *testing.T) {
 		require.NoError(t, err)
 		// A time boundary is accepted in RFC 3339 only, like a time filter
 		// bound, and travels as the UTC wall clock.
-		boundary := time.Date(2026, 7, 1, 8, 30, 15, 0, time.FixedZone("UTC+8", 8*3600)).UTC().Format(types.FilterTimeLayout)
-		require.Equal(t, types.CursorForward(types.Asc("snapshot_at"), boundary), cursor)
+		boundary := time.Date(2026, 7, 1, 8, 30, 15, 0, time.FixedZone("UTC+8", 8*3600)).UTC().Format(gst.FilterTimeLayout)
+		require.Equal(t, gst.CursorForward(gst.Asc("snapshot_at"), boundary), cursor)
 	})
 
 	t.Run("SharedColumnIsAClientError", func(t *testing.T) {
@@ -261,9 +261,9 @@ func TestBaseQueryCursor(t *testing.T) {
 
 // newQueryContext builds a service context of the phase carrying a GET
 // request with the given target URL, for exercising the query parsing methods.
-func newQueryContext(t *testing.T, phase apiaction.Phase, target string) *types.ServiceContext {
+func newQueryContext(t *testing.T, phase apiaction.Phase, target string) *gst.ServiceContext {
 	t.Helper()
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodGet, target, nil)
-	return types.NewServiceContext(c, nil, phase)
+	return gst.NewServiceContext(c, nil, phase)
 }

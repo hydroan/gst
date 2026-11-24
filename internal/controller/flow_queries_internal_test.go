@@ -18,9 +18,9 @@ import (
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/auditmanager"
 	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/hydroan/gst/internal/gst"
 	modellogmgmt "github.com/hydroan/gst/internal/modulemodel/logmgmt"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
@@ -127,7 +127,7 @@ func uniqueFlowName(prefix string) string {
 
 // operationLogEntries returns the entries of op on model whose Record
 // mentions text.
-func operationLogEntries(ctx context.Context, t *testing.T, model string, op types.Operation, text string) []*modellogmgmt.OperationLog {
+func operationLogEntries(ctx context.Context, t *testing.T, model string, op gst.Operation, text string) []*modellogmgmt.OperationLog {
 	t.Helper()
 	var entries []*modellogmgmt.OperationLog
 	require.NoError(t, database.Database[*modellogmgmt.OperationLog](ctx).
@@ -189,7 +189,7 @@ func TestPatchManyFlowRefusesAnItemWithoutAnIDBeforeReading(t *testing.T) {
 	selects := captureSelects(t, flowSample{}.TableName())
 	_, err := a.patchManyFlow(ctx, plainServiceContext, &req, []patchFieldSet{{"Name": {}}, {"Name": {}}})
 
-	var serviceErr *types.Error
+	var serviceErr *gst.Error
 	require.ErrorAs(t, err, &serviceErr)
 	require.Equal(t, http.StatusBadRequest, serviceErr.Status())
 	require.Empty(t, selects(), "a defective batch is refused before any record is read")
@@ -217,7 +217,7 @@ func TestDeleteFlowReadsTheRecordOnlyForTheOperationLog(t *testing.T) {
 		require.NoError(t, a.deleteFlow(ctx, plainServiceContext, record.GetID()))
 
 		require.Len(t, selects(), 1)
-		entries := operationLogEntries(ctx, t, a.name, types.OperationDelete, record.Name)
+		entries := operationLogEntries(ctx, t, a.name, gst.OperationDelete, record.Name)
 		require.Len(t, entries, 1)
 		require.Equal(t, record.GetID(), entries[0].RecordID)
 	})
@@ -231,7 +231,7 @@ func TestDeleteFlowReadsTheRecordOnlyForTheOperationLog(t *testing.T) {
 		require.NoError(t, ra.deleteFlow(ctx, plainServiceContext, record.GetID()), "a record the replica has not caught up on is the primary's to delete")
 
 		require.ErrorIs(t, database.Database[*replicaFlowSample](ctx).WithReplica(false).Get(&replicaFlowSample{}, record.GetID()), database.ErrRecordNotFound)
-		entries := operationLogEntries(ctx, t, ra.name, types.OperationDelete, record.Name)
+		entries := operationLogEntries(ctx, t, ra.name, gst.OperationDelete, record.Name)
 		require.Len(t, entries, 1, "the log carries the record as the primary holds it")
 	})
 }
@@ -260,7 +260,7 @@ func TestDeleteManyFlowRecordsTheDeletedRecordsWhenAudited(t *testing.T) {
 		require.NoError(t, a.deleteManyFlow(ctx, plainServiceContext, &req))
 
 		require.Len(t, selects(), 1, "the batch reads the records it deletes in one statement")
-		entries := operationLogEntries(ctx, t, a.name, types.OperationDeleteMany, name)
+		entries := operationLogEntries(ctx, t, a.name, gst.OperationDeleteMany, name)
 		require.Len(t, entries, 1)
 		for _, record := range stored {
 			require.Contains(t, entries[0].Record, record.GetID())
@@ -278,7 +278,7 @@ func TestDeleteManyFlowRecordsTheDeletedRecordsWhenAudited(t *testing.T) {
 
 		require.NoError(t, ra.deleteManyFlow(ctx, plainServiceContext, &req))
 
-		entries := operationLogEntries(ctx, t, ra.name, types.OperationDeleteMany, name)
+		entries := operationLogEntries(ctx, t, ra.name, gst.OperationDeleteMany, name)
 		require.Len(t, entries, 1, "the log carries the records as the primary holds them")
 		for _, record := range stored {
 			require.Contains(t, entries[0].Record, record.Name)
@@ -302,7 +302,7 @@ func TestBatchFlowsRecordTheirItemsWhenAudited(t *testing.T) {
 
 		require.NoError(t, a.createManyFlow(ctx, plainServiceContext, &req))
 
-		entries := operationLogEntries(ctx, t, a.name, types.OperationCreateMany, name)
+		entries := operationLogEntries(ctx, t, a.name, gst.OperationCreateMany, name)
 		require.Len(t, entries, 1)
 		requireLoggedAs(t, req, entries[0].Record)
 		require.Equal(t, entries[0].Record, entries[0].Request)
@@ -318,7 +318,7 @@ func TestBatchFlowsRecordTheirItemsWhenAudited(t *testing.T) {
 
 		require.NoError(t, a.updateManyFlow(ctx, plainServiceContext, &req))
 
-		entries := operationLogEntries(ctx, t, a.name, types.OperationUpdateMany, name)
+		entries := operationLogEntries(ctx, t, a.name, gst.OperationUpdateMany, name)
 		require.Len(t, entries, 1)
 		requireLoggedAs(t, req, entries[0].Record)
 		require.Equal(t, entries[0].Record, entries[0].Request)
@@ -337,7 +337,7 @@ func TestBatchFlowsRecordTheirItemsWhenAudited(t *testing.T) {
 		patched, err := a.patchManyFlow(ctx, plainServiceContext, &req, fieldSets)
 		require.NoError(t, err)
 
-		entries := operationLogEntries(ctx, t, a.name, types.OperationPatchMany, name)
+		entries := operationLogEntries(ctx, t, a.name, gst.OperationPatchMany, name)
 		require.Len(t, entries, 1)
 		requireLoggedAs(t, req, entries[0].Record)
 		require.Equal(t, entries[0].Record, entries[0].Request)

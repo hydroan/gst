@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 )
@@ -46,7 +46,7 @@ type LoginEvent struct {
 // cannot block or fail the login: a panicking observer is recovered and the
 // remaining observers still run. Slow work belongs on the observer's own
 // goroutine.
-type LoginObserver func(ctx *types.ServiceContext, event LoginEvent)
+type LoginObserver func(ctx *gst.ServiceContext, event LoginEvent)
 
 // loginObserverEntry gives each registration its own identity so the same
 // observer function can be added and removed independently.
@@ -89,7 +89,7 @@ func AddLoginObserver(observer LoginObserver) (remove func()) {
 // NotifyLogin delivers one login lifecycle event to every login observer.
 // IAM login and logout call it after the outcome is settled; the delivery
 // runs synchronously on the calling goroutine and never changes the outcome.
-func NotifyLogin(ctx *types.ServiceContext, event LoginEvent) {
+func NotifyLogin(ctx *gst.ServiceContext, event LoginEvent) {
 	observerMu.Lock()
 	observers := make([]*loginObserverEntry, len(loginObservers))
 	copy(observers, loginObservers)
@@ -102,7 +102,7 @@ func NotifyLogin(ctx *types.ServiceContext, event LoginEvent) {
 
 // notifyLoginObserver isolates one observer call so a panicking observer
 // cannot take down the login request or the remaining observers.
-func notifyLoginObserver(ctx *types.ServiceContext, observer LoginObserver, event LoginEvent) {
+func notifyLoginObserver(ctx *gst.ServiceContext, observer LoginObserver, event LoginEvent) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			// logger.App stays nil until logger initialization; hook machinery

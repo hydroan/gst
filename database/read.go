@@ -7,12 +7,12 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // nilModel reports whether a read destination is unusable: a nil or invalid
 // model pointer cannot be filled by the query.
-func nilModel[M types.Model](dest M) bool {
+func nilModel[M gst.Model](dest M) bool {
 	val := reflect.ValueOf(dest)
 	return !val.IsValid() || val.IsNil()
 }

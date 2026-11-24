@@ -6,7 +6,7 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // pending holds one closure per registered route, each capturing that route's
@@ -21,7 +21,7 @@ var (
 
 // Set records one registered route for the OpenAPI document. It is the only
 // entry point route registration uses.
-func Set[M types.Model, REQ types.Request, RSP types.Response](path string, authRequired bool, phase apiaction.Phase) {
+func Set[M gst.Model, REQ gst.Request, RSP gst.Response](path string, authRequired bool, phase apiaction.Phase) {
 	pendingMu.Lock()
 	defer pendingMu.Unlock()
 
@@ -59,7 +59,7 @@ func build() {
 // Route registration goes through Set, which queues this call until the first
 // request asks for the document; this package's own tests call set directly to
 // exercise the generation.
-func set[M types.Model, REQ types.Request, RSP types.Response](path string, authRequired bool, phases ...apiaction.Phase) {
+func set[M gst.Model, REQ gst.Request, RSP gst.Response](path string, authRequired bool, phases ...apiaction.Phase) {
 	route := path
 	path = convertColonParamsToBraces(path)
 

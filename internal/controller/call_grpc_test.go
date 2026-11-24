@@ -21,9 +21,9 @@ import (
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/datatypes"
 	"github.com/hydroan/gst/internal/grpcserver"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/stretchr/testify/require"
@@ -213,7 +213,7 @@ func TestPatchItemReadiesTheRecordOfABatchItem(t *testing.T) {
 // description kept; a status naming no field and an error that is no status
 // are answered as they are.
 func TestItemErrorNamesTheItemOfARefusedRecord(t *testing.T) {
-	refused := grpcserver.StatusError(types.NewInvalidValue("rank", "300 is out of range", nil))
+	refused := grpcserver.StatusError(gst.NewInvalidValue("rank", "300 is out of range", nil))
 
 	err := controller.ItemError(1, refused)
 
@@ -240,7 +240,7 @@ func TestItemErrorNamesTheItemOfARefusedRecord(t *testing.T) {
 // digits alone in brackets like an index, by_rank[7], and the prefixes
 // compose from the inside out, items[1].meta.score.
 func TestPathErrorNamesTheFieldBehindThePath(t *testing.T) {
-	refused := grpcserver.StatusError(types.NewInvalidValue("score", "NaN is not finite", nil))
+	refused := grpcserver.StatusError(gst.NewInvalidValue("score", "NaN is not finite", nil))
 
 	requireStatus(t, controller.PathError("meta", refused), codes.InvalidArgument, "invalid value for field 'meta.score'")
 	require.Equal(t, "points[1]", controller.Element("points", 1))
@@ -302,7 +302,7 @@ func TestServiceCallDelegatesToThePhaseService(t *testing.T) {
 
 	t.Run("any other error answers Internal", func(t *testing.T) {
 		_, err := invoke(t, conn, "Action", map[string]any{"payload": map[string]any{"note": actionBreak}})
-		requireStatus(t, err, codes.Internal, types.FailureMsg)
+		requireStatus(t, err, codes.Internal, gst.FailureMsg)
 	})
 
 	t.Run("a canceled call is answered as canceled", func(t *testing.T) {
@@ -325,12 +325,12 @@ func TestServiceCallDelegatesToThePhaseService(t *testing.T) {
 
 	t.Run("a response the service tried to write answers Internal", func(t *testing.T) {
 		_, err := invoke(t, conn, "Action", map[string]any{"payload": map[string]any{"note": actionWrite}})
-		requireStatus(t, err, codes.Internal, types.FailureMsg)
+		requireStatus(t, err, codes.Internal, gst.FailureMsg)
 	})
 
 	t.Run("a form value the service tried to read answers Internal", func(t *testing.T) {
 		_, err := invoke(t, conn, "Action", map[string]any{"payload": map[string]any{"note": actionRead}})
-		requireStatus(t, err, codes.Internal, types.FailureMsg)
+		requireStatus(t, err, codes.Internal, gst.FailureMsg)
 	})
 }
 
@@ -551,7 +551,7 @@ func sampleHandlers() map[string]rpcHandler {
 // decoded as a FromProto decodes them (see fromProto), the update mask, the
 // query and the ids; an item of a PatchMany carries its id, its record and
 // its mask, and is readied through PatchItem.
-func standardRPCs[M types.Model](handlers map[string]rpcHandler, route, prefix string) {
+func standardRPCs[M gst.Model](handlers map[string]rpcHandler, route, prefix string) {
 	create := controller.CreateCall[M](route)
 	get := controller.GetCall[M](route)
 	list := controller.ListCall[M](route)
@@ -681,7 +681,7 @@ func field[T any](in map[string]any, key string) T {
 // through its JSON shape, the way a generated FromProto converts a message
 // into its model (see messageDecoding), refusing a value a field cannot hold
 // the way one does (see grpc.Narrow, grpc.Time and grpc.Number): with the
-// status of types.NewInvalidValue naming the field as encoding/json names
+// status of gst.NewInvalidValue naming the field as encoding/json names
 // it. A message carrying none, nil, is the nil model. It leaves tenant_id
 // out, as a generated FromProto does: the field is output-only on gRPC (see
 // TRANSPORTS.md, section 9).
@@ -702,7 +702,7 @@ func fromProto[T any](raw any) (T, error) {
 	if err = jsonv2.Unmarshal(encoded, &value, json.DefaultOptionsV1(), messageDecoding); err != nil {
 		var typeErr *json.UnmarshalTypeError
 		if errors.As(err, &typeErr) {
-			return value, grpcserver.StatusError(types.NewInvalidValue(typeErr.Field, typeErr.Value+" does not fit the field", err))
+			return value, grpcserver.StatusError(gst.NewInvalidValue(typeErr.Field, typeErr.Value+" does not fit the field", err))
 		}
 		panic(err)
 	}
@@ -789,7 +789,7 @@ var dayAsDate = jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, day *dataty
 // way the generated handler of a CreateMany or UpdateMany rpc does: each
 // through fromProto, the refusal of one naming the item (see
 // controller.ItemError); a message carrying no items is nil items.
-func itemsFromProto[M types.Model](in map[string]any) ([]M, error) {
+func itemsFromProto[M gst.Model](in map[string]any) ([]M, error) {
 	raw := field[[]any](in, "items")
 	if raw == nil {
 		return nil, nil

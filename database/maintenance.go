@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/logfield"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -28,7 +28,7 @@ import (
 //
 // On a ClickHouse instance it answers ErrUnsupportedOnDialect: the
 // soft-delete regime does not exist there.
-func Cleanup[M types.Model](ctx context.Context) error {
+func Cleanup[M gst.Model](ctx context.Context) error {
 	if DB() == nil {
 		panic("database is not initialized")
 	}
@@ -37,7 +37,7 @@ func Cleanup[M types.Model](ctx context.Context) error {
 
 // CleanupOn is Cleanup on an application-held database instance. See
 // DatabaseOn for the instance semantics, including the panic on nil.
-func CleanupOn[M types.Model](ctx context.Context, instance *gorm.DB) error {
+func CleanupOn[M gst.Model](ctx context.Context, instance *gorm.DB) error {
 	if instance == nil {
 		panic("database instance cannot be nil")
 	}
@@ -45,7 +45,7 @@ func CleanupOn[M types.Model](ctx context.Context, instance *gorm.DB) error {
 }
 
 // cleanupOn is the shared body of Cleanup and CleanupOn.
-func cleanupOn[M types.Model](ctx context.Context, base *gorm.DB) (err error) {
+func cleanupOn[M gst.Model](ctx context.Context, base *gorm.DB) (err error) {
 	db, ok := databaseFor[M](ctx, base).(*database[M])
 	if !ok {
 		// Unreachable while databaseFor returns the concrete chain, but

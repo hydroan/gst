@@ -12,8 +12,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/client"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/streamctx"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/websocket"
 	"github.com/stretchr/testify/require"
 )
@@ -193,8 +193,8 @@ func TestStreamSurfacesTheErrorTheServerEndedItWith(t *testing.T) {
 		status int
 		msg    string
 	}{
-		{name: "a service error", ending: types.NewError(http.StatusNotFound, "sample not found"), status: http.StatusNotFound, msg: "sample not found"},
-		{name: "another error", ending: errors.New("sample failure"), status: http.StatusInternalServerError, msg: types.FailureMsg},
+		{name: "a service error", ending: gst.NewError(http.StatusNotFound, "sample not found"), status: http.StatusNotFound, msg: "sample not found"},
+		{name: "another error", ending: errors.New("sample failure"), status: http.StatusInternalServerError, msg: gst.FailureMsg},
 		{name: "the server shutting down", ending: streamctx.ErrServerShutdown, status: http.StatusServiceUnavailable, msg: streamctx.ShutdownMsg},
 	}
 	for _, tt := range tests {

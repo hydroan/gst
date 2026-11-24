@@ -4,9 +4,9 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/service"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,7 +26,7 @@ type listBeforeService struct {
 	hookSampleBase
 }
 
-func (*listBeforeService) ListBefore(*types.ServiceContext, *[]*hookSampleModel) error { return nil }
+func (*listBeforeService) ListBefore(*gst.ServiceContext, *[]*hookSampleModel) error { return nil }
 
 // listAfterValueService overrides one hook with a value receiver, the shape
 // the base itself uses.
@@ -34,14 +34,14 @@ type listAfterValueService struct {
 	hookSampleBase
 }
 
-func (listAfterValueService) ListAfter(*types.ServiceContext, *[]*hookSampleModel) error { return nil }
+func (listAfterValueService) ListAfter(*gst.ServiceContext, *[]*hookSampleModel) error { return nil }
 
 // hookedIntermediate overrides a hook on a type services then embed.
 type hookedIntermediate struct {
 	hookSampleBase
 }
 
-func (*hookedIntermediate) CreateBefore(*types.ServiceContext, *hookSampleModel) error { return nil }
+func (*hookedIntermediate) CreateBefore(*gst.ServiceContext, *hookSampleModel) error { return nil }
 
 // promotedHookService promotes the override of hookedIntermediate.
 type promotedHookService struct {
@@ -54,7 +54,7 @@ type promotedHookService struct {
 // out.
 func baseMethodNames() []string {
 	typ := reflect.TypeFor[*hookSampleBase]()
-	logger := reflect.TypeFor[types.Logger]()
+	logger := reflect.TypeFor[gst.Logger]()
 	names := make([]string, 0, typ.NumMethod())
 	for method := range typ.Methods() {
 		if _, promoted := logger.MethodByName(method.Name); promoted {

@@ -16,7 +16,7 @@ import (
 // declared, and the check reads it as a chain method or lets an unterminated
 // chain pass.
 func TestDatabaseChainMethodSetsMatchDatabaseInterfaces(t *testing.T) {
-	file, err := parser.ParseFile(token.NewFileSet(), filepath.Join("..", "..", "internal", "types", "database.go"), nil, 0)
+	file, err := parser.ParseFile(token.NewFileSet(), filepath.Join("..", "..", "internal", "gst", "database.go"), nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

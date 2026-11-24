@@ -8,10 +8,10 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -21,7 +21,7 @@ import (
 // accept variadic models, so an empty call and explicitly zero elements both
 // mean "nothing to write" rather than an error; every write entry point runs
 // its input through here before touching the database.
-func compactModels[M types.Model](objs []M) []M {
+func compactModels[M gst.Model](objs []M) []M {
 	if len(objs) == 0 {
 		return nil
 	}
@@ -758,7 +758,7 @@ func (db *database[M]) updateRowStatement(session *gorm.DB, obj M) *gorm.DB {
 // precision) and dbruntime.NowUTC takes the current time on it, so the
 // timestamps handed back equal what a later read returns. It returns the
 // time it forced, for a statement whose own clock has to agree with it.
-func fillForInsert[M types.Model](objs []M) (time.Time, error) {
+func fillForInsert[M gst.Model](objs []M) (time.Time, error) {
 	for i := range objs {
 		objs[i].SetID() // set id when id is empty.
 	}
@@ -782,7 +782,7 @@ func fillForInsert[M types.Model](objs []M) (time.Time, error) {
 // were. gorm would otherwise write it along, inserting it or, on a conflict,
 // leaving it as it is, outside the hooks and the validation the model's own
 // rows go through.
-func clearAssociations[M types.Model](objs []M) {
+func clearAssociations[M gst.Model](objs []M) {
 	paths := modelschema.AssociationFields(reflect.TypeOf(*new(M)))
 	if len(paths) == 0 {
 		return
@@ -805,7 +805,7 @@ func clearAssociations[M types.Model](objs []M) {
 // column of another time type, a Date or sql.NullTime, keeps its own
 // value. The columns are the ones modelschema resolves, so a field gorm
 // ignores is left as it is.
-func normalizeTimes[M types.Model](objs []M) error {
+func normalizeTimes[M gst.Model](objs []M) error {
 	columns, err := modelschema.Columns(reflect.TypeOf(*new(M)).Elem())
 	if err != nil {
 		return err
@@ -872,7 +872,7 @@ func normalizeTimes[M types.Model](objs []M) error {
 //
 //	UpdateByID(id, SampleCols.Status.Set("active"))
 //	UpdateByID("record456", RecordCols.Score.Set(99.99), RecordCols.Kind.Set("exam"))
-func (db *database[M]) UpdateByID(id string, assignments ...types.Assignment) (err error) {
+func (db *database[M]) UpdateByID(id string, assignments ...gst.Assignment) (err error) {
 	defer db.reset()
 
 	if db.includeDeleted {
@@ -970,7 +970,7 @@ func (db *database[M]) UpdateByID(id string, assignments ...types.Assignment) (e
 // the fields the framework writes first and GORM's dry-run callbacks alike —
 // without mutating caller-owned model fields such as ID, timestamps, creator
 // and updater, or soft-delete markers.
-func cloneDryRunModels[M types.Model](objs []M) []M {
+func cloneDryRunModels[M gst.Model](objs []M) []M {
 	cloned := make([]M, 0, len(objs))
 	for _, obj := range objs {
 		cloned = append(cloned, cloneDryRunModel(obj))
@@ -980,7 +980,7 @@ func cloneDryRunModels[M types.Model](objs []M) []M {
 
 // cloneDryRunModel copies the struct obj points to into a new one; an obj that
 // is not a non-nil pointer to a struct comes back as it is.
-func cloneDryRunModel[M types.Model](obj M) M {
+func cloneDryRunModel[M gst.Model](obj M) M {
 	value := reflect.ValueOf(obj)
 	if !value.IsValid() || value.Kind() != reflect.Pointer || value.IsNil() {
 		return obj

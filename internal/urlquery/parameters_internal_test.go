@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -56,11 +56,11 @@ type queriedStampedParameterTestModel struct {
 // bare key too. A column clients may not name takes none, and a model
 // without model.Query takes no operator and no framework timestamp.
 func TestParameters(t *testing.T) {
-	all := types.FilterOps()
-	times := []types.FilterOp{
-		types.FilterOpEq, types.FilterOpNe,
-		types.FilterOpGt, types.FilterOpGte, types.FilterOpLt, types.FilterOpLte,
-		types.FilterOpIsNull,
+	all := gst.FilterOps()
+	times := []gst.FilterOp{
+		gst.FilterOpEq, gst.FilterOpNe,
+		gst.FilterOpGt, gst.FilterOpGte, gst.FilterOpLt, gst.FilterOpLte,
+		gst.FilterOpIsNull,
 	}
 
 	t.Run("Queryable", func(t *testing.T) {
@@ -109,11 +109,11 @@ func TestParameters(t *testing.T) {
 		for _, param := range params {
 			byName[param.Name] = param
 		}
-		require.Equal(t, []types.FilterOp{types.FilterOpEq, types.FilterOpNe, types.FilterOpIsNull}, byName["enabled"].Ops)
+		require.Equal(t, []gst.FilterOp{gst.FilterOpEq, gst.FilterOpNe, gst.FilterOpIsNull}, byName["enabled"].Ops)
 		require.True(t, byName["enabled"].Bare)
-		require.Equal(t, []types.FilterOp{
-			types.FilterOpLike, types.FilterOpNotLike, types.FilterOpILike, types.FilterOpStartsWith, types.FilterOpEndsWith,
-			types.FilterOpIsNull,
+		require.Equal(t, []gst.FilterOp{
+			gst.FilterOpLike, gst.FilterOpNotLike, gst.FilterOpILike, gst.FilterOpStartsWith, gst.FilterOpEndsWith,
+			gst.FilterOpIsNull,
 		}, byName["meta"].Ops)
 		require.False(t, byName["meta"].Bare, "a JSON document decodes into no field")
 		require.Equal(t, all, byName["age"].Ops)

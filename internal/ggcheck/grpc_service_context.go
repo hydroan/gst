@@ -14,20 +14,20 @@ import (
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gghelper"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/modelsource"
-	"github.com/hydroan/gst/internal/types"
 )
 
 // GRPCServiceContext keeps the services of the models served over gRPC to
 // what both transports provide.
 var GRPCServiceContext = Check{
 	Name: "gRPC service context",
-	Rule: "the services of models declaring GRPC() must not call the ServiceContext methods only HTTP serves: " + strings.Join(types.HTTPOnlyMethods, ", ") + "; the services of their Import, Export and SSE actions, served over HTTP alone, may",
+	Rule: "the services of models declaring GRPC() must not call the ServiceContext methods only HTTP serves: " + strings.Join(gst.HTTPOnlyMethods, ", ") + "; the services of their Import, Export and SSE actions, served over HTTP alone, may",
 	run:  checkGRPCServiceContext,
 }
 
 // checkGRPCServiceContext reports, for every model declaring GRPC(), each
-// call of a method types.HTTPOnlyMethods names on a parameter declared
+// call of a method gst.HTTPOnlyMethods names on a parameter declared
 // *gst.ServiceContext that a gRPC call of the model reaches: over gRPC the
 // call has no request to read or response to write, so a service serving
 // both transports must do without it. A gRPC call enters the service type
@@ -171,7 +171,7 @@ func httpOnlyCalls(scope *errDiscFuncScope, model string, reported map[string]bo
 			return true
 		}
 		ident, ok := sel.X.(*ast.Ident)
-		if !ok || !scope.ctxParams[declObj(ident)] || !slices.Contains(types.HTTPOnlyMethods, sel.Sel.Name) {
+		if !ok || !scope.ctxParams[declObj(ident)] || !slices.Contains(gst.HTTPOnlyMethods, sel.Sel.Name) {
 			return true
 		}
 		pos := scope.file.analysis.fset.Position(call.Pos())

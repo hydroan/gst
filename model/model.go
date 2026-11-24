@@ -1,16 +1,16 @@
 package model
 
 import (
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/types"
 	"gorm.io/gorm"
 )
 
 var (
-	_ types.Model = (*Base)(nil)
-	_ types.Model = (*AutoBase)(nil)
-	_ types.Model = (*Empty)(nil)
+	_ gst.Model = (*Base)(nil)
+	_ gst.Model = (*AutoBase)(nil)
+	_ gst.Model = (*Empty)(nil)
 )
 
 type (
@@ -101,6 +101,6 @@ func ValidateIndexes(db *gorm.DB, model any) error {
 //  1. Register is usually called from the generated model/model.gen.go file.
 //  2. Ensure the model package is imported by the application entrypoint.
 //  3. The function is safe for concurrent use.
-func Register[M types.Model]() {
+func Register[M gst.Model]() {
 	model.Register[M]()
 }

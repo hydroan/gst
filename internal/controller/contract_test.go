@@ -17,11 +17,11 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/controller"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/middleware"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/tenant"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
@@ -78,7 +78,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 	refused := contractWant{status: http.StatusConflict, msg: refusedMsg}
 	notFound := contractWant{status: http.StatusNotFound, msg: notFoundMsg}
 	invalid := contractWant{status: http.StatusBadRequest, msg: invalidArgumentMsg}
-	nameRequired := contractWant{status: http.StatusBadRequest, msg: "name is a required field", fields: []types.FieldViolation{{Field: "name", Description: "name is a required field"}}}
+	nameRequired := contractWant{status: http.StatusBadRequest, msg: "name is a required field", fields: []gst.FieldViolation{{Field: "name", Description: "name is a required field"}}}
 	// Each transport words the refusal by what its request lacks: a body,
 	// a record.
 	noRecord := contractWant{status: http.StatusBadRequest, msg: "request body is required", grpc: &grpcAnswer{code: codes.InvalidArgument, msg: "record is required"}}
@@ -94,7 +94,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 	noField := &grpcAnswer{code: codes.InvalidArgument, msg: "update_mask must name at least one field a patch applies"}
 	// A service calling a method of its context only an HTTP request can
 	// serve: served over HTTP, refused over gRPC.
-	httpOnly := &grpcAnswer{code: codes.Internal, msg: types.FailureMsg}
+	httpOnly := &grpcAnswer{code: codes.Internal, msg: gst.FailureMsg}
 	// twice is the input of a batch naming one stored record in two items,
 	// the second carrying change: the batch is refused before any record is
 	// read, so both transports are sent the same input, and namedTwice
@@ -340,7 +340,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			// through JSON in its place.
 			want: contractWant{
 				status: http.StatusBadRequest, msg: "invalid value for field 'rank'",
-				fields: []types.FieldViolation{{Field: "rank", Description: "number 300 does not fit the field"}},
+				fields: []gst.FieldViolation{{Field: "rank", Description: "number 300 does not fit the field"}},
 				grpc:   &grpcAnswer{code: codes.InvalidArgument, msg: "invalid value for field 'rank'"},
 			},
 			check: func(t *testing.T, in contractInput, _ contractAnswer) {
@@ -802,7 +802,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				armHangCancel(cancel)
 				return contractInput{ctx: ctx}
 			},
-			want: contractWant{status: types.StatusClientClosedRequest, msg: "context canceled"},
+			want: contractWant{status: gst.StatusClientClosedRequest, msg: "context canceled"},
 		},
 		{
 			name: "List reads under the parent its route names", fixture: parentFixture, phase: apiaction.List,
@@ -1300,7 +1300,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				t.Helper()
 				return contractInput{items: []map[string]any{{"name": uniqueName("contract-create-many-valid")}, {}}}
 			},
-			want: contractWant{status: http.StatusBadRequest, msg: "items[1].name is a required field", fields: []types.FieldViolation{{Field: "items[1].name", Description: "items[1].name is a required field"}}},
+			want: contractWant{status: http.StatusBadRequest, msg: "items[1].name is a required field", fields: []gst.FieldViolation{{Field: "items[1].name", Description: "items[1].name is a required field"}}},
 			check: func(t *testing.T, in contractInput, _ contractAnswer) {
 				t.Helper()
 				require.Zero(t, countValidatedNamed(t, stringOf(in.items[0]["name"])))
@@ -1541,7 +1541,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				t.Helper()
 				return contractInput{items: []map[string]any{{"id": createValidated(t, "contract-patch-many-validated").GetID(), "name": ""}}}
 			},
-			want: contractWant{status: http.StatusBadRequest, msg: "items[0].name is a required field", fields: []types.FieldViolation{{Field: "items[0].name", Description: "items[0].name is a required field"}}},
+			want: contractWant{status: http.StatusBadRequest, msg: "items[0].name is a required field", fields: []gst.FieldViolation{{Field: "items[0].name", Description: "items[0].name is a required field"}}},
 		},
 		{
 			name: "PatchMany refuses an item carrying a value its field cannot hold and writes nothing", fixture: shaped, phase: apiaction.PatchMany,
@@ -1667,7 +1667,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 		{
 			name: "A custom action refuses a payload failing validation", fixture: actionFixture, phase: apiaction.Create,
 			input: contractInput{payload: map[string]any{}},
-			want:  contractWant{status: http.StatusBadRequest, msg: "note is a required field", fields: []types.FieldViolation{{Field: "note", Description: "note is a required field"}}},
+			want:  contractWant{status: http.StatusBadRequest, msg: "note is a required field", fields: []gst.FieldViolation{{Field: "note", Description: "note is a required field"}}},
 		},
 		{
 			name: "A custom action answers the service's error with its status", fixture: actionFixture, phase: apiaction.Create,
@@ -1677,7 +1677,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 		{
 			name: "A custom action answers any other error as the server's own failure", fixture: actionFixture, phase: apiaction.Create,
 			input: contractInput{payload: map[string]any{"note": actionBreak}},
-			want:  contractWant{status: http.StatusInternalServerError, msg: types.FailureMsg},
+			want:  contractWant{status: http.StatusInternalServerError, msg: gst.FailureMsg},
 		},
 		{
 			name: "A custom action answers a client that went away as canceled, not as a failure of the server", fixture: actionFixture, phase: apiaction.Create,
@@ -1694,7 +1694,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				}()
 				return contractInput{ctx: ctx, payload: map[string]any{"note": actionHang}}
 			},
-			want: contractWant{status: types.StatusClientClosedRequest, msg: "context canceled"},
+			want: contractWant{status: gst.StatusClientClosedRequest, msg: "context canceled"},
 		},
 		{
 			name: "A custom List reads the query", fixture: actionFixture, phase: apiaction.List,
@@ -1799,7 +1799,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 		{
 			name: "Create refuses a record failing validation in the language of the process", fixture: validated, phase: apiaction.Create, language: i18n.Chinese,
 			input: contractInput{record: map[string]any{}},
-			want:  contractWant{status: http.StatusBadRequest, msg: "name为必填字段", fields: []types.FieldViolation{{Field: "name", Description: "name为必填字段"}}},
+			want:  contractWant{status: http.StatusBadRequest, msg: "name为必填字段", fields: []gst.FieldViolation{{Field: "name", Description: "name为必填字段"}}},
 		},
 		{
 			name: "Create refuses a request carrying no record in the language of the process", fixture: samples, phase: apiaction.Create, language: i18n.Chinese,
@@ -1813,7 +1813,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 		{
 			name: "Create refuses a record failing validation in the traditional script of a process answering in it", fixture: validated, phase: apiaction.Create, language: i18n.TraditionalChinese,
 			input: contractInput{record: map[string]any{}},
-			want:  contractWant{status: http.StatusBadRequest, msg: "name為必填欄位", fields: []types.FieldViolation{{Field: "name", Description: "name為必填欄位"}}},
+			want:  contractWant{status: http.StatusBadRequest, msg: "name為必填欄位", fields: []gst.FieldViolation{{Field: "name", Description: "name為必填欄位"}}},
 		},
 	}
 
@@ -1906,7 +1906,7 @@ type contractAnswer struct {
 	code       codes.Code
 	msg        string
 	data       any
-	violations []types.FieldViolation
+	violations []gst.FieldViolation
 }
 
 // contractWant is what a scenario must be answered: the HTTP status, the
@@ -1920,7 +1920,7 @@ type contractWant struct {
 	status int
 	code   codes.Code
 	msg    string
-	fields []types.FieldViolation
+	fields []gst.FieldViolation
 	grpc   *grpcAnswer
 }
 
@@ -1949,7 +1949,7 @@ type contractFixture struct {
 // standardFixture is the fixture of the standard actions of M on route,
 // whose rpcs are named prefix followed by the action's name (see
 // standardRPCs).
-func standardFixture[M types.Model](route, prefix string) contractFixture {
+func standardFixture[M gst.Model](route, prefix string) contractFixture {
 	cfg := configFor[M](route)
 	return contractFixture{
 		route: route,
@@ -2083,7 +2083,7 @@ func overHTTP(t *testing.T, f contractFixture, phase apiaction.Phase, in contrac
 		// envelope; one carrying no such member names none.
 		var refusal struct {
 			Error struct {
-				FieldViolations []types.FieldViolation `json:"field_violations"`
+				FieldViolations []gst.FieldViolation `json:"field_violations"`
 			} `json:"error"`
 		}
 		if err := json.Unmarshal(rsp.Body.Bytes(), &refusal); err == nil {
@@ -2168,7 +2168,7 @@ func overGRPC(t *testing.T, f contractFixture, phase apiaction.Phase, in contrac
 				continue
 			}
 			for _, violation := range bad.GetFieldViolations() {
-				answer.violations = append(answer.violations, types.FieldViolation{Field: violation.GetField(), Description: violation.GetDescription()})
+				answer.violations = append(answer.violations, gst.FieldViolation{Field: violation.GetField(), Description: violation.GetDescription()})
 			}
 		}
 		return answer
@@ -2242,7 +2242,7 @@ func requireGRPCAnswer(t *testing.T, got contractAnswer, want contractWant) {
 
 // violatedFields returns the paths of the fields violations names, in the
 // order they are named.
-func violatedFields(violations []types.FieldViolation) []string {
+func violatedFields(violations []gst.FieldViolation) []string {
 	fields := make([]string, 0, len(violations))
 	for _, violation := range violations {
 		fields = append(fields, violation.Field)
@@ -2268,7 +2268,7 @@ func grpcCodeOf(httpStatus int) codes.Code {
 		return codes.Internal
 	case http.StatusNotImplemented:
 		return codes.Unimplemented
-	case types.StatusClientClosedRequest:
+	case gst.StatusClientClosedRequest:
 		return codes.Canceled
 	}
 	panic("no gRPC code of " + strconv.Itoa(httpStatus))
@@ -2306,28 +2306,28 @@ func queryString(q controller.Query) string {
 		values.Add(key, strings.Join(f.Values, ","))
 	}
 	if len(q.SortBy) > 0 {
-		values.Set(types.QuerySortBy, strings.Join(q.SortBy, ","))
+		values.Set(gst.QuerySortBy, strings.Join(q.SortBy, ","))
 	}
 	if q.Page != 0 {
-		values.Set(types.QueryPage, strconv.FormatUint(uint64(q.Page), 10))
+		values.Set(gst.QueryPage, strconv.FormatUint(uint64(q.Page), 10))
 	}
 	if q.Size != 0 {
-		values.Set(types.QuerySize, strconv.FormatUint(uint64(q.Size), 10))
+		values.Set(gst.QuerySize, strconv.FormatUint(uint64(q.Size), 10))
 	}
 	if q.CursorField != "" {
-		values.Set(types.QueryCursorField, q.CursorField)
+		values.Set(gst.QueryCursorField, q.CursorField)
 	}
 	if q.CursorValue != "" {
-		values.Set(types.QueryCursorValue, q.CursorValue)
+		values.Set(gst.QueryCursorValue, q.CursorValue)
 	}
 	if q.CursorNext {
-		values.Set(types.QueryCursorNext, "true")
+		values.Set(gst.QueryCursorNext, "true")
 	}
 	if len(q.Expand) > 0 {
-		values.Set(types.QueryExpand, strings.Join(q.Expand, ","))
+		values.Set(gst.QueryExpand, strings.Join(q.Expand, ","))
 	}
 	if q.Depth != 0 {
-		values.Set(types.QueryDepth, strconv.FormatUint(uint64(q.Depth), 10))
+		values.Set(gst.QueryDepth, strconv.FormatUint(uint64(q.Depth), 10))
 	}
 	return values.Encode()
 }

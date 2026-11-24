@@ -7,9 +7,9 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/model"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -200,7 +200,7 @@ func (db *database[M]) traceAs(modelName string, phase apiaction.Phase, batch ..
 				// Left unset: the operation did not complete, and did not fail
 				// either — whoever canceled its context ended it.
 				attrs = append(attrs, attribute.Bool("database.canceled", true))
-			case !types.ServerFailure(err):
+			case !gst.ServerFailure(err):
 				// Left unset as well: a model hook refused the operation with
 				// a status of its choosing, which is the client's doing and no
 				// failure of the database.
@@ -221,7 +221,7 @@ func (db *database[M]) traceAs(modelName string, phase apiaction.Phase, batch ..
 		// found, is no failure of the database. An operation its context
 		// canceled stays at debug level too, since whoever canceled it ended
 		// it, and so does one a model hook refused with a status of its
-		// choosing (see types.ServerFailure): the hook answered the client,
+		// choosing (see gst.ServerFailure): the hook answered the client,
 		// and whoever reports that answer logs it. Real failures log at
 		// error level.
 		fields := operationLogFields(modelName, _batch, duration, db.dryRun, err)
@@ -230,7 +230,7 @@ func (db *database[M]) traceAs(modelName string, phase apiaction.Phase, batch ..
 			logger.Database.WithContext(db.ctx, phase).Debugz("database operation completed", fields...)
 		case errors.Is(err, context.Canceled):
 			logger.Database.WithContext(db.ctx, phase).Debugz("database operation canceled", fields...)
-		case !types.ServerFailure(err):
+		case !gst.ServerFailure(err):
 			logger.Database.WithContext(db.ctx, phase).Debugz("database operation refused", fields...)
 		default:
 			logger.Database.WithContext(db.ctx, phase).Errorz("database operation failed", fields...)
@@ -262,7 +262,7 @@ func operationLogFields(modelName string, batch int, duration time.Duration, dry
 		fields = append(fields, zap.Bool("stale_object", true))
 	case errors.Is(err, context.Canceled):
 		fields = append(fields, zap.Bool("canceled", true))
-	case !types.ServerFailure(err):
+	case !gst.ServerFailure(err):
 		fields = append(fields, zap.Bool("refused", true))
 	default:
 		fields = append(fields, zap.Error(err))
@@ -273,7 +273,7 @@ func operationLogFields(modelName string, batch int, duration time.Duration, dry
 // traceModelHook runs one model hook under a span of its own, nested under
 // the database operation span, and records its timing and outcome on it: the
 // span is marked failed, the error recorded on it, for a failure of the
-// server's own alone (see types.ServerFailure), a hook refusing the
+// server's own alone (see gst.ServerFailure), a hook refusing the
 // operation with a status of its choosing leaving it unset.
 //
 // The span is skipped and fn runs directly when tracing is disabled, when
@@ -291,7 +291,7 @@ func operationLogFields(modelName string, batch int, duration time.Duration, dry
 //   - fn: Hook invocation, receiving the context that carries the hook span
 //
 // Returns the hook's error, with the span completed either way.
-func traceModelHook[M types.Model](ctx context.Context, phase apiaction.Phase, parentSpan trace.Span, fn func(ctx context.Context) error) error {
+func traceModelHook[M gst.Model](ctx context.Context, phase apiaction.Phase, parentSpan trace.Span, fn func(ctx context.Context) error) error {
 	hookCtx := context.Background()
 	if ctx != nil {
 		hookCtx = ctx
@@ -345,7 +345,7 @@ func traceModelHook[M types.Model](ctx context.Context, phase apiaction.Phase, p
 		// Marked failed for the server's failures alone: a hook refusing
 		// the operation with a status of its choosing answered the client,
 		// which is no failure of the hook.
-		if err != nil && types.ServerFailure(err) {
+		if err != nil && gst.ServerFailure(err) {
 			span.SetStatus(codes.Error, err.Error())
 			gstotel.RecordError(span, err)
 			attrs = append(attrs, attribute.Bool("error", true))

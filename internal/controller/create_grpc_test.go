@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
@@ -105,14 +105,14 @@ func TestCreateCallRefusesAnHTTPOnlyMethodBeforeWriting(t *testing.T) {
 	t.Run("called in a before hook, nothing is written", func(t *testing.T) {
 		name := uniqueName("call-cookie-before")
 		_, err := invoke(t, conn, "CookieBeforeCreate", map[string]any{"record": map[string]any{"name": name}})
-		requireStatus(t, err, codes.Internal, types.FailureMsg)
+		requireStatus(t, err, codes.Internal, gst.FailureMsg)
 		require.Zero(t, countSamplesNamed(t, name))
 	})
 
 	t.Run("called in an after hook, the record written stays", func(t *testing.T) {
 		name := uniqueName("call-cookie-after")
 		_, err := invoke(t, conn, "CookieAfterCreate", map[string]any{"record": map[string]any{"name": name}})
-		requireStatus(t, err, codes.Internal, types.FailureMsg)
+		requireStatus(t, err, codes.Internal, gst.FailureMsg)
 		require.Equal(t, 1, countSamplesNamed(t, name))
 	})
 }

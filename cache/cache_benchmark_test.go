@@ -17,9 +17,9 @@ import (
 	"github.com/hydroan/gst/internal/cache/otter"
 	"github.com/hydroan/gst/internal/cache/ristretto"
 	"github.com/hydroan/gst/internal/cache/smap"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/testutil"
-	"github.com/hydroan/gst/internal/types"
 	gstredis "github.com/hydroan/gst/redis"
 )
 
@@ -360,21 +360,21 @@ func benchUserValues() []User {
 // "never expires", so a backend reaching this skip stores nothing at all —
 // measuring its Get would only time misses. Only the global-expiration
 // backends, whose Set rejects every lifetime by design, land here.
-func skipWhenSetUnsupported[T any](b *testing.B, cache types.Cache[T], probe T) {
+func skipWhenSetUnsupported[T any](b *testing.B, cache gst.Cache[T], probe T) {
 	b.Helper()
-	if err := cache.Set(context.Background(), "bench-probe", probe, 0); errors.Is(err, types.ErrTTLNotSupported) {
+	if err := cache.Set(context.Background(), "bench-probe", probe, 0); errors.Is(err, gst.ErrTTLNotSupported) {
 		b.Skip("backend cannot store entries under the ttl contract")
 	}
 }
 
 // fill primes the working set so read benchmarks measure the hit path.
-func fill[T any](ctx context.Context, cache types.Cache[T], keys []string, values []T) {
+func fill[T any](ctx context.Context, cache gst.Cache[T], keys []string, values []T) {
 	for i := range benchKeyCount {
 		_ = cache.Set(ctx, keys[i], values[i], 0)
 	}
 }
 
-func benchCache[T any](b *testing.B, cache types.Cache[T], values []T) {
+func benchCache[T any](b *testing.B, cache gst.Cache[T], values []T) {
 	b.Helper()
 	ctx := context.Background()
 	keys := benchKeys()
@@ -424,7 +424,7 @@ func benchCache[T any](b *testing.B, cache types.Cache[T], values []T) {
 	})
 }
 
-func benchCacheParallel[T any](b *testing.B, cache types.Cache[T], values []T) {
+func benchCacheParallel[T any](b *testing.B, cache gst.Cache[T], values []T) {
 	b.Helper()
 	ctx := context.Background()
 	keys := benchKeys()
@@ -472,32 +472,32 @@ func benchCacheParallel[T any](b *testing.B, cache types.Cache[T], values []T) {
 	})
 }
 
-func benchInt(b *testing.B, cache types.Cache[int]) {
+func benchInt(b *testing.B, cache gst.Cache[int]) {
 	b.Helper()
 	benchCache(b, cache, benchIntValues())
 }
 
-func benchIntParallel(b *testing.B, cache types.Cache[int]) {
+func benchIntParallel(b *testing.B, cache gst.Cache[int]) {
 	b.Helper()
 	benchCacheParallel(b, cache, benchIntValues())
 }
 
-func benchString(b *testing.B, cache types.Cache[string]) {
+func benchString(b *testing.B, cache gst.Cache[string]) {
 	b.Helper()
 	benchCache(b, cache, benchStringValues())
 }
 
-func benchStringParallel(b *testing.B, cache types.Cache[string]) {
+func benchStringParallel(b *testing.B, cache gst.Cache[string]) {
 	b.Helper()
 	benchCacheParallel(b, cache, benchStringValues())
 }
 
-func benchUser(b *testing.B, cache types.Cache[User]) {
+func benchUser(b *testing.B, cache gst.Cache[User]) {
 	b.Helper()
 	benchCache(b, cache, benchUserValues())
 }
 
-func benchUserParallel(b *testing.B, cache types.Cache[User]) {
+func benchUserParallel(b *testing.B, cache gst.Cache[User]) {
 	b.Helper()
 	benchCacheParallel(b, cache, benchUserValues())
 }

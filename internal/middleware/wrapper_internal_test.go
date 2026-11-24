@@ -9,9 +9,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/middleware/ratelimiter"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
@@ -159,12 +159,12 @@ func TestMiddlewareWrapperLeavesARefusalUnset(t *testing.T) {
 	router.Use(tracing())
 	router.Use(middlewareWrapper("refusing", func(c *gin.Context) {
 		if c.Request.URL.Path == "/api/refused" {
-			response.Abort(c, types.NewError(http.StatusForbidden, "sample refusal"))
+			response.Abort(c, gst.NewError(http.StatusForbidden, "sample refusal"))
 		}
 	}))
 	router.Use(middlewareWrapper("failing", func(c *gin.Context) {
 		if c.Request.URL.Path == "/api/failed" {
-			response.Abort(c, types.NewError(http.StatusInternalServerError, "sample failure"))
+			response.Abort(c, gst.NewError(http.StatusInternalServerError, "sample failure"))
 		}
 	}))
 	router.GET("/api/refused", func(c *gin.Context) { c.Status(http.StatusNoContent) })
@@ -202,7 +202,7 @@ func TestMiddlewareWrapperSpanAttributesFitTheCapacityInTheWorstCase(t *testing.
 	router := gin.New()
 	router.Use(tracing())
 	router.Use(middlewareWrapper("sample", func(c *gin.Context) {
-		response.Abort(c, types.NewError(http.StatusForbidden, "sample refusal"))
+		response.Abort(c, gst.NewError(http.StatusForbidden, "sample refusal"))
 	}))
 	router.GET("/api/ping", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 

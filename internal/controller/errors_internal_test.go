@@ -8,9 +8,9 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
-	"github.com/hydroan/gst/internal/types"
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
@@ -25,7 +25,7 @@ import (
 // and the tenants a write may not name among them, and everything else is
 // answered as it is, the server's own failure carrying no service error.
 func TestDatabaseErrorMapsEachDatabaseErrorToItsAnswer(t *testing.T) {
-	serviceErr := types.NewError(http.StatusForbidden, "operation refused")
+	serviceErr := gst.NewError(http.StatusForbidden, "operation refused")
 
 	tests := []struct {
 		name       string
@@ -50,7 +50,7 @@ func TestDatabaseErrorMapsEachDatabaseErrorToItsAnswer(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			answer := databaseError(tt.err)
 
-			var answered *types.Error
+			var answered *gst.Error
 			require.ErrorAs(t, answer, &answered)
 			require.Equal(t, tt.wantStatus, answered.Status())
 			require.Equal(t, tt.wantMsg, answered.Msg())
@@ -63,7 +63,7 @@ func TestDatabaseErrorMapsEachDatabaseErrorToItsAnswer(t *testing.T) {
 
 		answer := databaseError(internal)
 
-		var answered *types.Error
+		var answered *gst.Error
 		require.False(t, errors.As(answer, &answered), "no status and message were chosen: %v", answer)
 		require.Equal(t, internal, answer)
 	})
@@ -71,11 +71,11 @@ func TestDatabaseErrorMapsEachDatabaseErrorToItsAnswer(t *testing.T) {
 
 // TestInvalidArgumentAnswersA400AsItIs pins that a refusal that answers 400
 // already, wrapped or not, is the answer whole: the fields it names (see
-// types.FieldViolations) reach the transport, where a new refusal built from
+// gst.FieldViolations) reach the transport, where a new refusal built from
 // its message would leave them behind.
 func TestInvalidArgumentAnswersA400AsItIs(t *testing.T) {
-	violations := []types.FieldViolation{{Field: "name", Description: "name is a required field"}}
-	refused := types.NewInvalidFields(violations, errors.New("validator said so"))
+	violations := []gst.FieldViolation{{Field: "name", Description: "name is a required field"}}
+	refused := gst.NewInvalidFields(violations, errors.New("validator said so"))
 
 	for name, err := range map[string]error{"refusal": refused, "wrapped refusal": errors.Wrap(refused, "bind the record")} {
 		t.Run(name, func(t *testing.T) {
@@ -84,7 +84,7 @@ func TestInvalidArgumentAnswersA400AsItIs(t *testing.T) {
 			require.Same(t, refused, answer)
 			require.Equal(t, http.StatusBadRequest, answer.Status())
 			require.Equal(t, "name is a required field", answer.Msg())
-			require.Equal(t, violations, types.FieldViolations(answer))
+			require.Equal(t, violations, gst.FieldViolations(answer))
 		})
 	}
 }
@@ -95,7 +95,7 @@ func TestInvalidArgumentAnswersA400AsItIs(t *testing.T) {
 // the error's own text otherwise, the error behind as the cause either way.
 func TestInvalidArgumentCarriesTheClientSafeText(t *testing.T) {
 	cause := errors.New("database password leaked")
-	serviceErr := types.NewErrorWithCause(http.StatusInternalServerError, "failed to load user", cause)
+	serviceErr := gst.NewErrorWithCause(http.StatusInternalServerError, "failed to load user", cause)
 
 	for name, tt := range map[string]struct {
 		err     error
@@ -151,9 +151,9 @@ func TestFailWithTellsACancellationFromAPassedDeadline(t *testing.T) {
 		cancel()
 		rec := &levelRecorder{}
 		got := failWith(ctx, rec, "database operation failed", cause, answer)
-		var serviceErr *types.Error
+		var serviceErr *gst.Error
 		require.ErrorAs(t, got, &serviceErr)
-		require.Equal(t, types.StatusClientClosedRequest, serviceErr.Status())
+		require.Equal(t, gst.StatusClientClosedRequest, serviceErr.Status())
 		require.Equal(t, "context canceled", serviceErr.Msg())
 		require.ErrorIs(t, got, cause)
 		require.Equal(t, []string{"database operation failed"}, rec.infos)
@@ -165,7 +165,7 @@ func TestFailWithTellsACancellationFromAPassedDeadline(t *testing.T) {
 		defer cancel()
 		rec := &levelRecorder{}
 		got := failWith(ctx, rec, "database operation failed", cause, answer)
-		var serviceErr *types.Error
+		var serviceErr *gst.Error
 		require.ErrorAs(t, got, &serviceErr)
 		require.Equal(t, http.StatusGatewayTimeout, serviceErr.Status())
 		require.Equal(t, "context deadline exceeded", serviceErr.Msg())
@@ -205,7 +205,7 @@ func (r *entryRecorder) Errorz(msg string, fields ...zap.Field) {
 // failure by the answer it is given. The server's own failure, an answer
 // carrying no service error or one of 500 or above, is logged at error and
 // recorded on the span; a failure the client brought on itself is logged at
-// the level its answer calls for (see types.FailureLevel), warn or info,
+// the level its answer calls for (see gst.FailureLevel), warn or info,
 // and leaves the span as it was. Either way the entry carries the fields it
 // was given and the error after them, a failure reported without an error
 // the fields alone, and the answer is returned.
@@ -220,17 +220,17 @@ func TestReportFailureFollowsTheAnswer(t *testing.T) {
 		want   zapcore.Level
 	}{
 		{"an error carrying no status", errors.New("dial tcp: connection refused"), zapcore.ErrorLevel},
-		{"a 500", types.NewError(http.StatusInternalServerError, "broken"), zapcore.ErrorLevel},
-		{"a 504", types.NewError(http.StatusGatewayTimeout, "context deadline exceeded"), zapcore.ErrorLevel},
+		{"a 500", gst.NewError(http.StatusInternalServerError, "broken"), zapcore.ErrorLevel},
+		{"a 504", gst.NewError(http.StatusGatewayTimeout, "context deadline exceeded"), zapcore.ErrorLevel},
 		{"a 400", badRequest("the request is malformed"), zapcore.InfoLevel},
 		{"a 404", notFound(nil), zapcore.InfoLevel},
 		{"a 409 of a duplicate", databaseError(errors.Wrap(database.ErrDuplicatedKey, "create sample")), zapcore.InfoLevel},
 		{"a 409 of a stale object", databaseError(errors.Wrap(database.ErrStaleObject, "update sample")), zapcore.InfoLevel},
 		{"a 409 of a foreign key", databaseError(errors.Wrap(database.ErrForeignKeyViolated, "create sample")), zapcore.InfoLevel},
-		{"a 403", types.NewError(http.StatusForbidden, "not yours"), zapcore.WarnLevel},
-		{"a 408", types.NewError(http.StatusRequestTimeout, requestTimeoutMsg), zapcore.WarnLevel},
-		{"a 429", types.NewError(http.StatusTooManyRequests, "slow down"), zapcore.WarnLevel},
-		{"a 499", types.NewError(types.StatusClientClosedRequest, "context canceled"), zapcore.InfoLevel},
+		{"a 403", gst.NewError(http.StatusForbidden, "not yours"), zapcore.WarnLevel},
+		{"a 408", gst.NewError(http.StatusRequestTimeout, requestTimeoutMsg), zapcore.WarnLevel},
+		{"a 429", gst.NewError(http.StatusTooManyRequests, "slow down"), zapcore.WarnLevel},
+		{"a 499", gst.NewError(gst.StatusClientClosedRequest, "context canceled"), zapcore.InfoLevel},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			rec := &entryRecorder{}

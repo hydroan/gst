@@ -5,19 +5,19 @@ import (
 
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/types"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
-// Logger implements types.Logger interface.
+// Logger implements gst.Logger interface.
 type Logger struct {
 	zlog *zap.Logger
 }
 
-var _ types.Logger = (*Logger)(nil)
+var _ gst.Logger = (*Logger)(nil)
 
 func (l *Logger) Debug(args ...any) { l.zlog.Sugar().Debug(args...) }
 func (l *Logger) Info(args ...any)  { l.zlog.Sugar().Info(args...) }
@@ -70,7 +70,7 @@ func (l *Logger) ZapLogger() *zap.Logger { return l.zlog }
 //
 // Returns the original logger if no fields are provided or if only an empty key
 // is provided.
-func (l *Logger) With(fields ...string) types.Logger {
+func (l *Logger) With(fields ...string) gst.Logger {
 	if len(fields) == 0 {
 		return l
 	}
@@ -121,7 +121,7 @@ const contextFieldCap = 10
 // Metadata.Params hands out, so an entry written later reads the values the
 // context held. Chaining several calls here would cost a core copy per
 // link, so when adding metadata fields, extend appendContextFields instead.
-func (l *Logger) withContextFields(meta requestctx.Metadata, id execctx.Identity, phase apiaction.Phase) types.Logger {
+func (l *Logger) withContextFields(meta requestctx.Metadata, id execctx.Identity, phase apiaction.Phase) gst.Logger {
 	fields := make([]zap.Field, 0, contextFieldCap)
 	fields = append(fields, zap.String(keyPhase, string(phase)))
 	return &Logger{zlog: l.zlog.WithLazy(appendContextFields(fields, meta, id)...)}
@@ -162,7 +162,7 @@ func appendContextFields(fields []zap.Field, meta requestctx.Metadata, id execct
 
 // WithContext creates a new logger carrying the request metadata and the
 // execution identity found on ctx.
-func (l *Logger) WithContext(ctx context.Context, phase apiaction.Phase) types.Logger {
+func (l *Logger) WithContext(ctx context.Context, phase apiaction.Phase) gst.Logger {
 	if ctx == nil {
 		return l.With(keyPhase, string(phase))
 	}

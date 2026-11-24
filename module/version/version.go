@@ -6,18 +6,18 @@ import (
 
 	"github.com/hydroan/gst/config"
 	. "github.com/hydroan/gst/dsl"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/service"
-	"github.com/hydroan/gst/internal/types"
 )
 
 var startTime = time.Now()
 
-var _ types.Module[*Version, *Version, *VersionRsp] = (*VersionModule)(nil)
+var _ gst.Module[*Version, *Version, *VersionRsp] = (*VersionModule)(nil)
 
 type VersionModule struct{}
 
-func (*VersionModule) Service() types.Service[*Version, *Version, *VersionRsp] {
+func (*VersionModule) Service() gst.Service[*Version, *Version, *VersionRsp] {
 	return &VersionService{}
 }
 
@@ -58,7 +58,7 @@ type VersionService struct {
 }
 
 // List returns version information including build details and runtime info
-func (l *VersionService) List(ctx *types.ServiceContext, req *Version) (rsp *VersionRsp, err error) {
+func (l *VersionService) List(ctx *gst.ServiceContext, req *Version) (rsp *VersionRsp, err error) {
 	appInfo := config.App.AppInfo
 
 	// Calculate uptime in seconds

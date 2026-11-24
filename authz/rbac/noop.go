@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // ErrRBACDisabled reports a policy write made in a process that holds no policy
@@ -34,8 +34,8 @@ type noop struct{}
 // instead of a permission somebody forgot to grant.
 func (noop) Authorize(
 	ctx context.Context, tenant string, subject string, object string, action string,
-) (types.Decision, error) {
-	return types.Decision{Reason: DenyReasonNotInitialized}, nil
+) (gst.Decision, error) {
+	return gst.Decision{Reason: DenyReasonNotInitialized}, nil
 }
 
 func (noop) RemoveRole(ctx context.Context, tenant string, role string) error {
@@ -43,12 +43,12 @@ func (noop) RemoveRole(ctx context.Context, tenant string, role string) error {
 }
 
 func (noop) SetRolePermissions(
-	ctx context.Context, tenant string, role string, permissions []types.Permission,
+	ctx context.Context, tenant string, role string, permissions []gst.Permission,
 ) error {
 	return ErrRBACDisabled
 }
 
-func (noop) SetPermissionsForAuthenticated(ctx context.Context, permissions []types.Permission) error {
+func (noop) SetPermissionsForAuthenticated(ctx context.Context, permissions []gst.Permission) error {
 	return ErrRBACDisabled
 }
 

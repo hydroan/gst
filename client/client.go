@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/logger"
 )
 
@@ -28,7 +28,7 @@ type Client struct {
 	header http.Header
 	debug  bool
 
-	logger types.Logger
+	logger gst.Logger
 }
 
 // New creates a new client instance with given service base address and options.
@@ -50,7 +50,7 @@ func New(addr string, opts ...Option) (*Client, error) {
 		addr:       addr,
 		logger:     logger.New(""),
 	}
-	client.header.Set("User-Agent", types.FrameworkName)
+	client.header.Set("User-Agent", gst.FrameworkName)
 	client.header.Set("Content-Type", "application/json")
 
 	for _, opt := range opts {

@@ -7,7 +7,7 @@ import (
 
 	"example.com/module/api"
 	"example.com/module/database"
-	"example.com/module/internal/types"
+	"example.com/module/internal/gst"
 	"github.com/cockroachdb/errors"
 )
 
@@ -21,32 +21,32 @@ var errGone = errors.New("gone")
 // it, so what it returns is what a client is answered with.
 func Serve(id string) error {
 	if err := wrapped(id); err != nil {
-		return types.NewErrorWithCause(500, failedMsg, err)
+		return gst.NewErrorWithCause(500, failedMsg, err)
 	}
 	err := assigned(id)
 	if err != nil {
 		if err == errGone || errors.Is(err, errGone) {
-			return types.NewError(404, failedMsg)
+			return gst.NewError(404, failedMsg)
 		}
-		return types.NewErrorWithCause(500, failedMsg, err)
+		return gst.NewErrorWithCause(500, failedMsg, err)
 	}
 	if err := relayed(id); err != nil {
-		return types.NewErrorWithCause(500, failedMsg, err)
+		return gst.NewErrorWithCause(500, failedMsg, err)
 	}
 	if err := Shared(id); err != nil {
 		return api.NewErrorWithCause(500, failedMsg, err)
 	}
 	if err := saved(id); err != nil {
-		return types.NewErrorWithCause(500, failedMsg, err)
+		return gst.NewErrorWithCause(500, failedMsg, err)
 	}
 	if err := api.Check(id); err != nil {
-		return types.NewErrorWithCause(500, failedMsg, err)
+		return gst.NewErrorWithCause(500, failedMsg, err)
 	}
 	if err := handed(id); err != nil {
 		return err
 	}
 	if err := either(id); err != nil {
-		return types.NewErrorWithCause(500, failedMsg, err)
+		return gst.NewErrorWithCause(500, failedMsg, err)
 	}
 	if err := prefixed(id); err != nil {
 		return fmt.Errorf("serve: %w", err)
@@ -55,24 +55,24 @@ func Serve(id string) error {
 		if id == "known" {
 			return err
 		}
-		return types.NewErrorWithCause(500, failedMsg, err)
+		return gst.NewErrorWithCause(500, failedMsg, err)
 	}
 	if err := rebuilt(id); err != nil {
-		var inner *types.Error
+		var inner *gst.Error
 		if errors.As(err, &inner) {
-			return types.NewErrorWithCause(inner.Status(), inner.Msg(), err)
+			return gst.NewErrorWithCause(inner.Status(), inner.Msg(), err)
 		}
-		return types.NewErrorWithCause(500, failedMsg, err)
+		return gst.NewErrorWithCause(500, failedMsg, err)
 	}
 	if err := logged(id); err != nil {
 		note(err)
-		return types.NewErrorWithCause(500, failedMsg, err)
+		return gst.NewErrorWithCause(500, failedMsg, err)
 	}
 	if err := matched(id); err != nil {
 		if api.Is(err, 404) {
-			return types.NewError(404, failedMsg)
+			return gst.NewError(404, failedMsg)
 		}
-		return types.NewErrorWithCause(500, failedMsg, err)
+		return gst.NewErrorWithCause(500, failedMsg, err)
 	}
 	if err := helped(id); err != nil {
 		return refuse(failedMsg, err)
@@ -82,19 +82,19 @@ func Serve(id string) error {
 	}
 	if err := stored(id); err != nil {
 		last = err
-		return types.NewErrorWithCause(500, failedMsg, err)
+		return gst.NewErrorWithCause(500, failedMsg, err)
 	}
 	last = beyond(id)
 	if last != nil {
-		return types.NewErrorWithCause(500, failedMsg, last)
+		return gst.NewErrorWithCause(500, failedMsg, last)
 	}
 	collected := []error{kept(id)}
 	run(called)
 	if err := called(id); err != nil {
-		return types.NewErrorWithCause(500, failedMsg, err)
+		return gst.NewErrorWithCause(500, failedMsg, err)
 	}
 	if err := closed(id, collected); err != nil {
-		return types.NewErrorWithCause(500, failedMsg, err)
+		return gst.NewErrorWithCause(500, failedMsg, err)
 	}
 	if err := crossed(id); err != nil {
 		return err
@@ -130,7 +130,7 @@ type service struct{}
 
 // Create builds a service error nothing of the module calls for.
 func (service) Create(id string) error {
-	return types.NewError(409, "the sample exists")
+	return gst.NewError(409, "the sample exists")
 }
 
 // last is a variable of the package: Serve stores an error in it before
@@ -149,7 +149,7 @@ var initial = early("")
 // wrapped is called by the if statement that wraps its error.
 func wrapped(id string) error {
 	if id == "" {
-		return types.NewError(400, "the sample is wrapped")
+		return gst.NewError(400, "the sample is wrapped")
 	}
 	return nil
 }
@@ -159,7 +159,7 @@ func wrapped(id string) error {
 // without it.
 func assigned(id string) error {
 	if id == "" {
-		return types.NewError(400, "the sample is assigned")
+		return gst.NewError(400, "the sample is assigned")
 	}
 	return nil
 }
@@ -172,7 +172,7 @@ func relayed(id string) error {
 
 func inner(id string) error {
 	if id == "" {
-		return types.NewError(400, "the sample is inner")
+		return gst.NewError(400, "the sample is inner")
 	}
 	return nil
 }
@@ -193,14 +193,14 @@ func Shared(id string) error {
 func saved(id string) error {
 	return database.Transaction(id, func() error {
 		if id == "" {
-			return types.NewError(400, "the sample is saved")
+			return gst.NewError(400, "the sample is saved")
 		}
 		return deep(id)
 	})
 }
 
 func deep(id string) error {
-	return types.NewError(400, "the sample "+id+" is deep")
+	return gst.NewError(400, "the sample "+id+" is deep")
 }
 
 // wrote wraps the error of its transaction itself: the service error the
@@ -208,9 +208,9 @@ func deep(id string) error {
 // Serve, which returns it as it stands.
 func wrote(id string) error {
 	if err := database.Transaction(id, func() error {
-		return types.NewError(400, "the sample is written")
+		return gst.NewError(400, "the sample is written")
 	}); err != nil {
-		return types.NewErrorWithCause(500, failedMsg, err)
+		return gst.NewErrorWithCause(500, failedMsg, err)
 	}
 	return nil
 }
@@ -234,7 +234,7 @@ func each(id string) error {
 }
 
 func skipped(id string) error {
-	return types.NewError(400, "the sample is skipped")
+	return gst.NewError(400, "the sample is skipped")
 }
 
 // tallied wraps the error of counted, held by its named result, which the
@@ -247,13 +247,13 @@ func tallied(id string) (err error) {
 	}()
 	err = counted(id)
 	if err != nil {
-		return types.NewErrorWithCause(500, failedMsg, err)
+		return gst.NewErrorWithCause(500, failedMsg, err)
 	}
 	return nil
 }
 
 func counted(id string) error {
-	return types.NewError(400, "the sample is counted")
+	return gst.NewError(400, "the sample is counted")
 }
 
 // The functions below build service errors the check reports nothing for:
@@ -262,57 +262,57 @@ func counted(id string) error {
 
 // handed is called by a caller returning its error as it stands.
 func handed(id string) error {
-	return types.NewError(400, "the sample is handed")
+	return gst.NewError(400, "the sample is handed")
 }
 
 // either is wrapped by Serve and handed on by Other.
 func either(id string) error {
-	return types.NewError(400, "the sample is either")
+	return gst.NewError(400, "the sample is either")
 }
 
 // prefixed is wrapped in an error that is no service error, which leaves
 // its own the outermost.
 func prefixed(id string) error {
-	return types.NewError(400, "the sample is prefixed")
+	return gst.NewError(400, "the sample is prefixed")
 }
 
 // sorted is returned as it stands for one input and wrapped for the rest.
 func sorted(id string) error {
-	return types.NewError(400, "the sample is sorted")
+	return gst.NewError(400, "the sample is sorted")
 }
 
 // rebuilt is called by a caller that takes the service error out of what it
 // returns with errors.As and answers with its status and its sentence.
 func rebuilt(id string) error {
-	return types.NewError(400, "the sample is rebuilt")
+	return gst.NewError(400, "the sample is rebuilt")
 }
 
 // logged is wrapped by a caller that hands its error to another call first,
 // one the check knows nothing of.
 func logged(id string) error {
-	return types.NewError(400, "the sample is logged")
+	return gst.NewError(400, "the sample is logged")
 }
 
 // matched is wrapped by a caller that hands its error first to a function
 // of another package than errors, named as the test of an error against
 // another is, which reads its status.
 func matched(id string) error {
-	return types.NewError(404, "the sample is matched")
+	return gst.NewError(404, "the sample is matched")
 }
 
 // helped is wrapped by refuse, a function handing a sentence on to a
 // constructor: what it does with the cause is its own business, and it
 // answers with the service error it finds there.
 func helped(id string) error {
-	return types.NewError(400, "the sample is helped")
+	return gst.NewError(400, "the sample is helped")
 }
 
 func refuse(msg string, cause error) error {
-	var inner *types.Error
+	var inner *gst.Error
 	if errors.As(cause, &inner) {
 		return inner
 	}
-	return types.NewErrorWithCause(500, msg, cause)
+	return gst.NewErrorWithCause(500, msg, cause)
 }
 
 // named returns the error of bare by its named result, with a return
@@ -326,29 +326,29 @@ func named(id string) (err error) {
 }
 
 func bare(id string) error {
-	return types.NewError(400, "the sample is bare")
+	return gst.NewError(400, "the sample is bare")
 }
 
 // lingering is called by an if statement that does not leave, so the error
 // is not seen to stop there.
 func lingering(id string) error {
-	return types.NewError(400, "the sample is lingering")
+	return gst.NewError(400, "the sample is lingering")
 }
 
 // stored is wrapped by a statement that keeps the error elsewhere first.
 func stored(id string) error {
-	return types.NewError(400, "the sample is stored")
+	return gst.NewError(400, "the sample is stored")
 }
 
 // beyond is wrapped by a caller holding its error in a variable of the
 // package, which anything may read.
 func beyond(id string) error {
-	return types.NewError(400, "the sample is beyond")
+	return gst.NewError(400, "the sample is beyond")
 }
 
 // kept is called where its error goes into a list.
 func kept(id string) error {
-	return types.NewError(400, "the sample is kept")
+	return gst.NewError(400, "the sample is kept")
 }
 
 // crossed tests another error than the one it was just handed, which it
@@ -357,18 +357,18 @@ func crossed(id string) error {
 	first := handed(id)
 	err := mismatched(id)
 	if first != nil {
-		return types.NewErrorWithCause(500, failedMsg, first)
+		return gst.NewErrorWithCause(500, failedMsg, first)
 	}
 	return err
 }
 
 func mismatched(id string) error {
-	return types.NewError(400, "the sample is mismatched")
+	return gst.NewError(400, "the sample is mismatched")
 }
 
 // looped is called by each, whose loop a break leaves with its error.
 func looped(id string) error {
-	return types.NewError(400, "the sample is looped")
+	return gst.NewError(400, "the sample is looped")
 }
 
 // jumped leaves the test of the error of landed by a goto, and returns the
@@ -384,7 +384,7 @@ out:
 }
 
 func landed(id string) error {
-	return types.NewError(400, "the sample is landed")
+	return gst.NewError(400, "the sample is landed")
 }
 
 // shown names the variable holding the error of captured in a function
@@ -400,18 +400,18 @@ func shown(id string) error {
 }
 
 func captured(id string) error {
-	return types.NewError(400, "the sample is captured")
+	return gst.NewError(400, "the sample is captured")
 }
 
 // called is handed to run as a value, and called by a caller wrapping its
 // error as well.
 func called(id string) error {
-	return types.NewError(400, "the sample is called")
+	return gst.NewError(400, "the sample is called")
 }
 
 // early is called as the package initializes.
 func early(id string) error {
-	return types.NewError(400, "the sample is early")
+	return gst.NewError(400, "the sample is early")
 }
 
 // closed is wrapped by its one caller; the service error it builds is
@@ -420,19 +420,19 @@ func early(id string) error {
 func closed(id string, collected []error) error {
 	check := func() error {
 		if len(collected) > 9 {
-			return types.NewError(400, "the sample is closed")
+			return gst.NewError(400, "the sample is closed")
 		}
 		return nested(id)
 	}
 	if id == "held" {
-		held := types.NewError(400, "the sample is held")
+		held := gst.NewError(400, "the sample is held")
 		return held
 	}
 	return check()
 }
 
 func nested(id string) error {
-	return types.NewError(400, "the sample is nested")
+	return gst.NewError(400, "the sample is nested")
 }
 
 // note stands for a call whose result is dropped, a log line.

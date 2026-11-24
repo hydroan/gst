@@ -10,7 +10,7 @@ import (
 
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/datatypes"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
@@ -23,7 +23,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		var first string
 		var args []any
 		for range 20 {
-			statements := make([]types.SQLStatement, 0)
+			statements := make([]gst.SQLStatement, 0)
 			users := make([]*TestUser, 0)
 			require.NoError(t, database.Database[*TestUser](context.Background()).
 				WithDryRun(&statements).
@@ -68,7 +68,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		}
 
 		// A delete by conditions names the same column.
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		require.NoError(t, database.Database[*TestPairedRecord](ctx).
 			WithDryRun(&statements).
 			WithQuery(&TestPairedRecord{First: TestPart{Label: "f1"}}).
@@ -96,7 +96,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 
 		rows = make([]*TestPairedRecord, 0)
 		require.NoError(t, database.Database[*TestPairedRecord](ctx).
-			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{types.FilterEq("code", TestTaggedCode("abc"))}}).
+			WithQuery(nil, gst.QueryOptions{Filters: []gst.Filter{gst.FilterEq("code", TestTaggedCode("abc"))}}).
 			List(&rows))
 		require.Len(t, rows, 1)
 		require.Equal(t, row.ID, rows[0].ID)
@@ -266,7 +266,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		require.Equal(t, commaUser.ID, users[0].ID)
 
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{types.FilterIn("id", []string{u1.ID, u2.ID})}}).
+			WithQuery(nil, gst.QueryOptions{Filters: []gst.Filter{gst.FilterIn("id", []string{u1.ID, u2.ID})}}).
 			List(&users))
 		require.Len(t, users, 2, "an explicit list of values is the in filter's job")
 	})
@@ -421,7 +421,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Test nil query with AllowEmpty=true (should return all records)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryOptions{AllowEmpty: true}).
+			WithQuery(nil, gst.QueryOptions{AllowEmpty: true}).
 			List(&users))
 		require.Len(t, users, 3)
 		var foundU1, foundU2, foundU3 bool
@@ -463,7 +463,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Test empty struct with AllowEmpty=true (should return all records)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{}, types.QueryOptions{AllowEmpty: true}).
+			WithQuery(&TestUser{}, gst.QueryOptions{AllowEmpty: true}).
 			List(&users))
 		require.Len(t, users, 3)
 		foundU1, foundU2, foundU3 = false, false, false
@@ -486,7 +486,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// the same empty-query check as for the empty struct.
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: "", Email: ""}, types.QueryOptions{AllowEmpty: true}).
+			WithQuery(&TestUser{Name: "", Email: ""}, gst.QueryOptions{AllowEmpty: true}).
 			List(&users))
 		require.Len(t, users, 3, "query with all empty string fields should return all records when AllowEmpty=true")
 		foundU1, foundU2, foundU3 = false, false, false
@@ -518,7 +518,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Test AllowEmpty=false explicitly (should be same as default)
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryOptions{AllowEmpty: false}).
+			WithQuery(nil, gst.QueryOptions{AllowEmpty: false}).
 			List(&users))
 		require.Empty(t, users, "AllowEmpty=false should block empty queries")
 	})
@@ -540,7 +540,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// With presence the zero value becomes a regular condition.
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Age: 0}, types.QueryOptions{PresentFields: map[string]struct{}{"age": {}}}).
+			WithQuery(&TestUser{Age: 0}, gst.QueryOptions{PresentFields: map[string]struct{}{"age": {}}}).
 			List(&users))
 		require.Len(t, users, 1, "an explicitly provided zero value should filter records")
 		require.Equal(t, zeroAgeUser.ID, users[0].ID)
@@ -549,7 +549,7 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// combine with AND logic as usual.
 		users = make([]*TestUser, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithQuery(&TestUser{Name: zeroAgeUser.Name, Age: 0}, types.QueryOptions{PresentFields: map[string]struct{}{"age": {}}}).
+			WithQuery(&TestUser{Name: zeroAgeUser.Name, Age: 0}, gst.QueryOptions{PresentFields: map[string]struct{}{"age": {}}}).
 			List(&users))
 		require.Len(t, users, 1)
 		require.Equal(t, zeroAgeUser.ID, users[0].ID)
@@ -558,10 +558,10 @@ func TestDatabaseWithQuery(t *testing.T) {
 	t.Run("Filters", func(t *testing.T) {
 		defer cleanupTestData()
 		setupTestData(t)
-		ids := func(query *TestUser, filters ...types.Filter) []string {
+		ids := func(query *TestUser, filters ...gst.Filter) []string {
 			users := make([]*TestUser, 0)
 			require.NoError(t, database.Database[*TestUser](context.Background()).
-				WithQuery(query, types.QueryOptions{Filters: filters}).
+				WithQuery(query, gst.QueryOptions{Filters: filters}).
 				List(&users))
 			out := make([]string, 0, len(users))
 			for _, u := range users {
@@ -574,27 +574,27 @@ func TestDatabaseWithQuery(t *testing.T) {
 		// Filters are real conditions on their own: a nil model and an empty
 		// model both skip the empty-query safety condition once a filter is
 		// present, and the filter alone decides the rows.
-		require.Equal(t, []string{u2.ID, u3.ID}, ids(nil, types.FilterGt("age", 18)))
-		require.Equal(t, []string{u2.ID, u3.ID}, ids(&TestUser{}, types.FilterGte("age", 19)))
+		require.Equal(t, []string{u2.ID, u3.ID}, ids(nil, gst.FilterGt("age", 18)))
+		require.Equal(t, []string{u2.ID, u3.ID}, ids(&TestUser{}, gst.FilterGte("age", 19)))
 
 		// A range is two bounds, a set is an explicit list and a disjunction
 		// is an OR group, so no condition needs a SQL fragment.
-		require.Equal(t, []string{u2.ID}, ids(nil, types.FilterGte("age", 19), types.FilterLte("age", 19)))
-		require.Equal(t, []string{u1.ID, u3.ID}, ids(nil, types.FilterIn("age", []int{18, 20})))
-		require.Equal(t, []string{u1.ID, u2.ID}, ids(nil, types.FilterOr(types.FilterEq("name", u1.Name), types.FilterEq("age", u2.Age))))
+		require.Equal(t, []string{u2.ID}, ids(nil, gst.FilterGte("age", 19), gst.FilterLte("age", 19)))
+		require.Equal(t, []string{u1.ID, u3.ID}, ids(nil, gst.FilterIn("age", []int{18, 20})))
+		require.Equal(t, []string{u1.ID, u2.ID}, ids(nil, gst.FilterOr(gst.FilterEq("name", u1.Name), gst.FilterEq("age", u2.Age))))
 		require.Equal(t, []string{u2.ID}, ids(nil,
-			types.FilterOr(types.FilterEq("name", u2.Name), types.FilterEq("email", u2.Email)),
-			types.FilterGte("age", 19),
+			gst.FilterOr(gst.FilterEq("name", u2.Name), gst.FilterEq("email", u2.Email)),
+			gst.FilterGte("age", 19),
 		))
 
 		// Filters and model fields combine with AND: the model narrows what
 		// the filters admit, in both directions.
-		require.Empty(t, ids(&TestUser{Name: u1.Name}, types.FilterGt("age", 18)))
-		require.Equal(t, []string{u1.ID}, ids(&TestUser{Name: u1.Name}, types.FilterGte("age", 18)))
-		require.Equal(t, []string{u2.ID}, ids(&TestUser{Name: u2.Name, Email: u2.Email}, types.FilterGt("age", 18)))
+		require.Empty(t, ids(&TestUser{Name: u1.Name}, gst.FilterGt("age", 18)))
+		require.Equal(t, []string{u1.ID}, ids(&TestUser{Name: u1.Name}, gst.FilterGte("age", 18)))
+		require.Equal(t, []string{u2.ID}, ids(&TestUser{Name: u2.Name, Email: u2.Email}, gst.FilterGt("age", 18)))
 
 		// A filter that matches nothing answers with no rows, not an error.
-		require.Empty(t, ids(nil, types.FilterGt("age", 100)))
+		require.Empty(t, ids(nil, gst.FilterGt("age", 100)))
 	})
 
 	t.Run("AutoBase", func(t *testing.T) {

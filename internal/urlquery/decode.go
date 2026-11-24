@@ -11,8 +11,8 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/types"
 )
 
 // Decode fills the model's own query fields from the URL query, producing the
@@ -43,7 +43,7 @@ import (
 // offending key is reported at once. As for values, the last value of a
 // repeated key wins, an empty value means "not filtering" and is skipped, and
 // pointer fields are allocated on demand.
-func Decode(q url.Values, m types.Model) error {
+func Decode(q url.Values, m gst.Model) error {
 	plan, err := decodePlanOf(reflect.TypeOf(m))
 	if err != nil {
 		return err
@@ -57,7 +57,7 @@ func Decode(q url.Values, m types.Model) error {
 		}
 		field, ok := plan[key]
 		if !ok {
-			if key == types.QueryPage || key == types.QuerySize {
+			if key == gst.QueryPage || key == gst.QuerySize {
 				continue
 			}
 			unsupported = append(unsupported, key)

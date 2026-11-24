@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // RemoveRole removes all policies and subject assignments for role in tenant.
@@ -56,7 +56,7 @@ const authenticatedPolicyTenant = "*"
 
 // SetRolePermissions replaces the entire permission set held by role in tenant.
 func (r *rbac) SetRolePermissions(
-	ctx context.Context, tenant string, role string, permissions []types.Permission,
+	ctx context.Context, tenant string, role string, permissions []gst.Permission,
 ) (err error) {
 	if err = errIfReservedRole(role); err != nil {
 		return err
@@ -79,7 +79,7 @@ func (r *rbac) SetRolePermissions(
 // from a real one only in the tenant and role the policies are stored under, and
 // keeping one implementation means the atomicity both depend on cannot hold for
 // one of them and not the other.
-func (r *rbac) SetPermissionsForAuthenticated(ctx context.Context, permissions []types.Permission) (err error) {
+func (r *rbac) SetPermissionsForAuthenticated(ctx context.Context, permissions []gst.Permission) (err error) {
 	ctx, finishSpan := traceRBAC(ctx, "set_permissions_for_authenticated",
 		rbacTraceFields(authenticatedPolicyTenant, RoleAuthenticated))
 	defer func() {
@@ -98,7 +98,7 @@ func (r *rbac) SetPermissionsForAuthenticated(ctx context.Context, permissions [
 // it is written. The order also keeps the storage insert clean — its conflict
 // clause makes re-adding a surviving rule a no-op rather than an error.
 func (r *rbac) replacePermissions(
-	ctx context.Context, tenant string, role string, permissions []types.Permission,
+	ctx context.Context, tenant string, role string, permissions []gst.Permission,
 ) error {
 	mutations := []policyMutation{removeFiltered("p", 0, tenant, role)}
 	if rules := permissionPolicies(tenant, role, permissions); len(rules) > 0 {
@@ -124,9 +124,9 @@ func (r *rbac) replacePermissions(
 // or not a new one follows. Leaving the refusal to mutate is also what keeps
 // one implementation of it — the same ErrEmptyPolicyValue every other rule kind
 // is checked against.
-func permissionPolicies(tenant string, role string, permissions []types.Permission) [][]string {
-	unique := make([]types.Permission, 0, len(permissions))
-	seen := make(map[types.Permission]struct{}, len(permissions))
+func permissionPolicies(tenant string, role string, permissions []gst.Permission) [][]string {
+	unique := make([]gst.Permission, 0, len(permissions))
+	seen := make(map[gst.Permission]struct{}, len(permissions))
 	for _, permission := range permissions {
 		if _, ok := seen[permission]; ok {
 			continue
@@ -134,7 +134,7 @@ func permissionPolicies(tenant string, role string, permissions []types.Permissi
 		seen[permission] = struct{}{}
 		unique = append(unique, permission)
 	}
-	slices.SortFunc(unique, func(a, b types.Permission) int {
+	slices.SortFunc(unique, func(a, b gst.Permission) int {
 		if c := strings.Compare(a.Object, b.Object); c != 0 {
 			return c
 		}

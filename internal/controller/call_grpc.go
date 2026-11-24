@@ -13,8 +13,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/grpcserver"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/hydroan/gst/logger"
 	"go.opentelemetry.io/otel/trace"
@@ -68,7 +68,7 @@ type Query struct {
 }
 
 // Filter is one filter of a Query: Field names a column by its query name,
-// Op is an operator of types.FilterOp and Values its value, several for in
+// Op is an operator of gst.FilterOp and Values its value, several for in
 // and notin, which take a list where the HTTP query takes a comma-separated
 // one. With an operator it is the field[op]=value of the HTTP query,
 // {Field: "age", Op: "gt", Values: []string{"20"}} being age[gt]=20; with
@@ -156,35 +156,35 @@ func (q Query) values() (url.Values, error) {
 		}
 	}
 	if len(q.SortBy) > 0 {
-		values.Set(types.QuerySortBy, strings.Join(q.SortBy, ","))
+		values.Set(gst.QuerySortBy, strings.Join(q.SortBy, ","))
 	}
 	if q.Page != 0 {
-		values.Set(types.QueryPage, strconv.FormatUint(uint64(q.Page), 10))
+		values.Set(gst.QueryPage, strconv.FormatUint(uint64(q.Page), 10))
 	}
 	if q.Size != 0 {
 		// The size is held to its cap here, the door of the call, as the
 		// HTTP listener holds _size at its own (see the strictQuery
 		// middleware).
 		size := strconv.FormatUint(uint64(q.Size), 10)
-		if _, err := urlquery.ParseCount(types.QuerySize, size, urlquery.MaxPageSize); err != nil {
+		if _, err := urlquery.ParseCount(gst.QuerySize, size, urlquery.MaxPageSize); err != nil {
 			return nil, err
 		}
-		values.Set(types.QuerySize, size)
+		values.Set(gst.QuerySize, size)
 	}
 	if q.CursorField != "" {
-		values.Set(types.QueryCursorField, q.CursorField)
+		values.Set(gst.QueryCursorField, q.CursorField)
 	}
 	if q.CursorValue != "" {
-		values.Set(types.QueryCursorValue, q.CursorValue)
+		values.Set(gst.QueryCursorValue, q.CursorValue)
 	}
 	if q.CursorNext {
-		values.Set(types.QueryCursorNext, strconv.FormatBool(true))
+		values.Set(gst.QueryCursorNext, strconv.FormatBool(true))
 	}
 	if len(q.Expand) > 0 {
-		values.Set(types.QueryExpand, strings.Join(q.Expand, ","))
+		values.Set(gst.QueryExpand, strings.Join(q.Expand, ","))
 	}
 	if q.Depth != 0 {
-		values.Set(types.QueryDepth, strconv.FormatUint(uint64(q.Depth), 10))
+		values.Set(gst.QueryDepth, strconv.FormatUint(uint64(q.Depth), 10))
 	}
 	return values, nil
 }
@@ -217,7 +217,7 @@ func (f Filter) value(key string) (string, error) {
 	if slices.Contains(f.Values, "") {
 		return "", errors.Newf("filter %q has an empty value", key)
 	}
-	if f.Op == string(types.FilterOpIn) || f.Op == string(types.FilterOpNotIn) {
+	if f.Op == string(gst.FilterOpIn) || f.Op == string(gst.FilterOpNotIn) {
 		for _, v := range f.Values {
 			if strings.Contains(v, ",") {
 				return "", errors.Newf("filter %q: a value cannot hold a comma, the members are joined by it", key)
@@ -238,8 +238,8 @@ func (f Filter) value(key string) (string, error) {
 type call struct {
 	ctx   context.Context
 	span  trace.Span
-	log   types.Logger
-	built []*types.ServiceContext
+	log   gst.Logger
+	built []*gst.ServiceContext
 }
 
 // beginCall attaches params and query to ctx as the parameters of the call
@@ -279,8 +279,8 @@ func (a *action[M, REQ, RSP]) beginQueryCall(ctx context.Context, params map[str
 // serviceContext is the serviceContextFunc of the call: its service
 // contexts carry no HTTP request, and are kept for finish to check what
 // the hooks' own checks did not, a service method's calls.
-func (c *call) serviceContext(ctx context.Context, phase apiaction.Phase) *types.ServiceContext {
-	sc := types.NewServiceContext(nil, ctx, phase)
+func (c *call) serviceContext(ctx context.Context, phase apiaction.Phase) *gst.ServiceContext {
+	sc := gst.NewServiceContext(nil, ctx, phase)
 	c.built = append(c.built, sc)
 	return sc
 }
@@ -309,7 +309,7 @@ func (c *call) invalid(err error) error {
 // names none.
 func (c *call) invalidMessage(err error) error {
 	if violations := fieldViolations(err, ""); len(violations) > 0 {
-		return c.refuse(types.NewInvalidFields(violations, err), err)
+		return c.refuse(gst.NewInvalidFields(violations, err), err)
 	}
 	return c.refuse(badRequest(invalidMessageMsg), err)
 }
@@ -319,7 +319,7 @@ func (c *call) invalidMessage(err error) error {
 // clientSafeItemBindError).
 func (c *call) invalidItemMessage(i int, err error) error {
 	if violations := fieldViolations(err, itemPrefix(i)); len(violations) > 0 {
-		return c.refuse(types.NewInvalidFields(violations, err), err)
+		return c.refuse(gst.NewInvalidFields(violations, err), err)
 	}
 	return c.invalidMessage(err)
 }
@@ -423,7 +423,7 @@ func answer[T any](c *call, result T) (T, error) {
 // result, or with the status its error maps to (see grpcserver.StatusError).
 // phase must be one gRPC serves: the HTTP-only actions have no rpc, so their
 // phase panics here, as the route registers.
-func ServiceCall[M types.Model, REQ types.Request, RSP types.Response](phase apiaction.Phase, route string) func(ctx context.Context, params map[string]string, query Query, req REQ) (RSP, error) {
+func ServiceCall[M gst.Model, REQ gst.Request, RSP gst.Response](phase apiaction.Phase, route string) func(ctx context.Context, params map[string]string, query Query, req REQ) (RSP, error) {
 	invoke := serviceMethod[M, REQ, RSP](phase)
 	a := newAction[M, REQ, RSP](route, phase)
 	binds := phase != apiaction.List && phase != apiaction.Get
@@ -465,7 +465,7 @@ func ServiceCall[M types.Model, REQ types.Request, RSP types.Response](phase api
 // refusal does (see grpcserver.StatusError); an item carrying no record is
 // answered as it is, for the call to refuse (see PatchManyCall). The public
 // grpc.PatchItem forwards to it.
-func PatchItem[M types.Model](i int, params, itemParams map[string]string, id string, m M) (M, error) {
+func PatchItem[M gst.Model](i int, params, itemParams map[string]string, id string, m M) (M, error) {
 	if name, value, differs := disagreeingParam(params, itemParams); differs {
 		return m, grpcserver.StatusError(badRequest(fmt.Sprintf("items[%d] names the %s parameter %q, the request names %q", i, name, value, params[name])))
 	}
@@ -483,7 +483,7 @@ func PatchItem[M types.Model](i int, params, itemParams map[string]string, id st
 }
 
 // PathError names the field err, the refusal a generated FromProto answered
-// a value with (see types.NewInvalidValue), refers to behind path, the way
+// a value with (see gst.NewInvalidValue), refers to behind path, the way
 // the contract spells a nested field: the refusal of score inside the
 // message of the field meta names meta.score, in the message and in the
 // google.rpc.BadRequest detail alike, so that both transports name a refused
@@ -505,7 +505,7 @@ func PathError(path string, err error) error {
 			continue
 		}
 		violation := bad.GetFieldViolations()[0]
-		return grpcserver.StatusError(types.NewInvalidValue(pathStep(path, violation.GetField()), violation.GetDescription(), err))
+		return grpcserver.StatusError(gst.NewInvalidValue(pathStep(path, violation.GetField()), violation.GetDescription(), err))
 	}
 	return err
 }

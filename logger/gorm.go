@@ -8,15 +8,15 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/dbruntime/dbnode"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/types"
 	"go.uber.org/zap"
 	gormlogger "gorm.io/gorm/logger"
 )
 
 // GormLogger implements gorm logger.Interface
-type GormLogger struct{ l types.Logger }
+type GormLogger struct{ l gst.Logger }
 
 var _ gormlogger.Interface = (*GormLogger)(nil)
 

@@ -8,8 +8,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	modellogmgmt "github.com/hydroan/gst/internal/modulemodel/logmgmt"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
@@ -54,7 +54,7 @@ func (a *action[M, REQ, RSP]) deleteManyFlow(ctx context.Context, newServiceCont
 		}
 		req.Items = append(req.Items, m)
 	}
-	if err := a.traceServiceHook(ctx, apiaction.DeleteManyBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
+	if err := a.traceServiceHook(ctx, apiaction.DeleteManyBefore, svc, newServiceContext, func(sc *gst.ServiceContext) error {
 		return svc.DeleteManyBefore(sc, req.Items...)
 	}); err != nil {
 		return failService(ctx, log, err)
@@ -65,7 +65,7 @@ func (a *action[M, REQ, RSP]) deleteManyFlow(ctx context.Context, newServiceCont
 	// audit costs no query; and from the primary the delete runs on, since
 	// a replica may not have caught up on the records.
 	var deleted []M
-	if audit.Enabled(types.OperationDeleteMany) {
+	if audit.Enabled(gst.OperationDeleteMany) {
 		stored, err := a.recordsByID(database.Database[M](ctx).WithReplica(false).WithExpand(a.newModel().Expands()), req.itemIDs())
 		if err != nil {
 			log.Errorz("database operation failed", zap.Error(err))
@@ -84,14 +84,14 @@ func (a *action[M, REQ, RSP]) deleteManyFlow(ctx context.Context, newServiceCont
 		return failDatabase(ctx, log, err)
 	}
 	// 3.Perform business logic processing after batch delete resources.
-	if err := a.traceServiceHook(ctx, apiaction.DeleteManyAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
+	if err := a.traceServiceHook(ctx, apiaction.DeleteManyAfter, svc, newServiceContext, func(sc *gst.ServiceContext) error {
 		return svc.DeleteManyAfter(sc, req.Items...)
 	}); err != nil {
 		return failService(ctx, log, err)
 	}
 
 	// 4.record operation log to database.
-	if err := audit.RecordOperation(ctx, a.newModel(), types.OperationDeleteMany,
+	if err := audit.RecordOperation(ctx, a.newModel(), gst.OperationDeleteMany,
 		func() *modellogmgmt.OperationLog {
 			record, _ := json.Marshal(batch[M]{IDs: req.IDs, Items: deleted})
 			entry := operationLog(ctx, a.name)

@@ -5,7 +5,7 @@ import (
 	"reflect"
 
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // UpdateCall returns the update call of M on route, the counterpart of the
@@ -15,7 +15,7 @@ import (
 // way the handler validates a bound body, runs the update flow (see
 // updateFlow) and answers with the replacement as stored, or with the
 // status the failure maps to (see call).
-func UpdateCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string, m M) (M, error) {
+func UpdateCall[M gst.Model](route string) func(ctx context.Context, params map[string]string, id string, m M) (M, error) {
 	a := newAction[M, M, M](route, apiaction.Update, apiaction.UpdateBefore, apiaction.UpdateAfter)
 	return func(ctx context.Context, params map[string]string, id string, m M) (M, error) {
 		var zero M

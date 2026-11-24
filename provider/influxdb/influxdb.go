@@ -9,8 +9,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/lifecycle"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
@@ -33,7 +33,7 @@ func init() {
 		Name:      "influxdb",
 		Stage:     lifecycle.StageProvider,
 		Enabled:   func() bool { return config.App.Influxdb.Enabled },
-		SetLogger: func(l types.Logger) { logger.Influxdb = l },
+		SetLogger: func(l gst.Logger) { logger.Influxdb = l },
 		Start:     start,
 		Stop:      stop,
 	})

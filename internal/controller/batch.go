@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // batch is the body of a batch request: the items to create, update or
@@ -18,7 +18,7 @@ import (
 //
 // TODO: decide whether a batch delete may accept an empty id instead of
 // refusing the request, switched on by a member of this body beside ids.
-type batch[M types.Model] struct {
+type batch[M gst.Model] struct {
 	// IDs are the ids of the records a batch delete deletes.
 	IDs []string `json:"ids,omitempty"`
 	// Items are the records a batch create, update or patch writes. Each item
@@ -65,7 +65,7 @@ func (req *batch[M]) repeatedID() error {
 // any record is read, by PatchItem for the generated handler of a PatchMany
 // rpc and by patchManyFlow for the HTTP handler, the same sentence on both
 // transports.
-func itemWithoutID(i int) *types.Error {
+func itemWithoutID(i int) *gst.Error {
 	return badRequest(fmt.Sprintf("items[%d] names no id", i))
 }
 
@@ -73,13 +73,13 @@ func itemWithoutID(i int) *types.Error {
 // through db, the chain prepared the way the caller reads (the primary, the
 // expands), and returns them by id; an id naming no live record is absent.
 // No ids read nothing.
-func (a *action[M, REQ, RSP]) recordsByID(db types.Database[M], ids []string) (map[string]M, error) {
+func (a *action[M, REQ, RSP]) recordsByID(db gst.Database[M], ids []string) (map[string]M, error) {
 	byID := make(map[string]M, len(ids))
 	if len(ids) == 0 {
 		return byID, nil
 	}
 	var records []M
-	if err := db.WithQuery(a.newModel(), types.QueryOptions{Filters: []types.Filter{a.idColumn.In(ids...)}}).List(&records); err != nil {
+	if err := db.WithQuery(a.newModel(), gst.QueryOptions{Filters: []gst.Filter{a.idColumn.In(ids...)}}).List(&records); err != nil {
 		return nil, err
 	}
 	for _, record := range records {

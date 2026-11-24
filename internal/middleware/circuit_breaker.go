@@ -5,9 +5,9 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/response"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/sony/gobreaker"
 	"go.uber.org/zap"
 )
@@ -67,6 +67,6 @@ func CircuitBreaker() gin.HandlerFunc {
 
 		// The caller is told the one thing it can act on, which is to try again
 		// later.
-		response.Abort(c, types.NewError(http.StatusServiceUnavailable, unavailableMsg))
+		response.Abort(c, gst.NewError(http.StatusServiceUnavailable, unavailableMsg))
 	}
 }

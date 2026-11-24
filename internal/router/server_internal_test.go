@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/sse"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/websocket"
 	"github.com/stretchr/testify/require"
 )
@@ -149,7 +149,7 @@ func TestStopWaitsForTheWebSocketConnections(t *testing.T) {
 		t.Fatal("Stop must return once the stream has closed the connection")
 	}
 	_, err = conn.Recv()
-	var ending *types.Error
+	var ending *gst.Error
 	require.ErrorAs(t, err, &ending)
 	require.Equal(t, http.StatusServiceUnavailable, ending.Status())
 	require.Equal(t, "the server is shutting down", ending.Msg())

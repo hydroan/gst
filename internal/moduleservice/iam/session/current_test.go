@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/internal/gst"
 	modeliamsession "github.com/hydroan/gst/internal/modulemodel/iam/session"
 	serviceiamsession "github.com/hydroan/gst/internal/moduleservice/iam/session"
-	"github.com/hydroan/gst/internal/types"
 	gstredis "github.com/hydroan/gst/redis"
 	"github.com/hydroan/gst/service"
 	"github.com/stretchr/testify/require"
@@ -49,14 +49,14 @@ func TestCurrentSessionReadsTheContextWithoutACookie(t *testing.T) {
 	}
 	ctx := serviceiamsession.WithCurrentSession(t.Context(), sessionID, session)
 
-	serviceCtx := types.NewServiceContext(nil, ctx, service.Get)
+	serviceCtx := gst.NewServiceContext(nil, ctx, service.Get)
 	gotSessionID, gotSession, err := serviceiamsession.CurrentSession(serviceCtx)
 	require.NoError(t, err)
 	require.Equal(t, sessionID, gotSessionID)
 	require.Equal(t, session, gotSession)
-	require.False(t, types.HTTPOnlyMethodCalled(serviceCtx), "the session on the context is read with no cookie asked for, which the call would be refused for")
+	require.False(t, gst.HTTPOnlyMethodCalled(serviceCtx), "the session on the context is read with no cookie asked for, which the call would be refused for")
 
-	_, _, err = serviceiamsession.CurrentSession(types.NewServiceContext(nil, t.Context(), service.Get))
+	_, _, err = serviceiamsession.CurrentSession(gst.NewServiceContext(nil, t.Context(), service.Get))
 	require.Error(t, err, "a call carrying no session at all is refused")
 }
 
@@ -93,7 +93,7 @@ func TestCurrentSessionPrefersTheSessionOnTheContext(t *testing.T) {
 	require.Equal(t, cachedSession, gotSession)
 }
 
-func newSessionServiceContext(baseCtx context.Context, t *testing.T, sessionID string) *types.ServiceContext {
+func newSessionServiceContext(baseCtx context.Context, t *testing.T, sessionID string) *gst.ServiceContext {
 	t.Helper()
 
 	gin.SetMode(gin.TestMode)
@@ -105,5 +105,5 @@ func newSessionServiceContext(baseCtx context.Context, t *testing.T, sessionID s
 		Value: sessionID,
 	})
 
-	return types.NewServiceContext(ginCtx, nil, service.Get)
+	return gst.NewServiceContext(ginCtx, nil, service.Get)
 }

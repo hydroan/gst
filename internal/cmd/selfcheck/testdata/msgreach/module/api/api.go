@@ -2,19 +2,19 @@
 // project calls.
 package api
 
-import "example.com/module/internal/types"
+import "example.com/module/internal/gst"
 
 // The constructors, forwarded as a public package forwards them to a
 // project.
 var (
-	NewError          = types.NewError
-	NewErrorWithCause = types.NewErrorWithCause
+	NewError          = gst.NewError
+	NewErrorWithCause = gst.NewErrorWithCause
 )
 
 // Is reports whether err is answered with status: named as the test of an
 // error against another is, it reads what the error carries.
 func Is(err error, status int) bool {
-	inner, ok := err.(*types.Error)
+	inner, ok := err.(*gst.Error)
 	return ok && inner.Status() == status
 }
 
@@ -22,7 +22,7 @@ func Is(err error, status int) bool {
 // one call the module makes of it wraps what it returns.
 func Check(id string) error {
 	if id == "" {
-		return types.NewError(400, "the sample is nameless")
+		return gst.NewError(400, "the sample is nameless")
 	}
 	return nil
 }

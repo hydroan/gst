@@ -20,9 +20,9 @@ import (
 	"github.com/hydroan/gst/internal/cache/capacity"
 	"github.com/hydroan/gst/internal/cache/defaultcache"
 	"github.com/hydroan/gst/internal/cache/registry"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/instance"
 	"github.com/hydroan/gst/internal/logfield"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	"github.com/panjf2000/ants/v2"
@@ -76,7 +76,7 @@ var (
 	// package for the lookup and double-checked creation semantics.
 	caches = registry.New()
 
-	_ types.Cache[any] = (*replicatedCache[any])(nil)
+	_ gst.Cache[any] = (*replicatedCache[any])(nil)
 )
 
 type op int
@@ -164,8 +164,8 @@ func (v eventLogView) MarshalJSON() ([]byte, error) {
 //	kafka consumers on one node: number of service processes * number of
 //	dcache instances, and normally only one service process runs.
 //	total kafka listeners: consumers per node * number of nodes
-func Cache[T any]() (types.Cache[T], error) {
-	return registry.LoadE(caches, func() (types.Cache[T], error) {
+func Cache[T any]() (gst.Cache[T], error) {
+	return registry.LoadE(caches, func() (gst.Cache[T], error) {
 		// Fail fast on an environment where the cache could never replicate,
 		// instead of handing out an instance that silently degrades to a
 		// process-local cache. Both conditions are re-checked on the next
@@ -199,7 +199,7 @@ func typeName[T any]() string {
 // facade forwards to (see defaultcache).
 type entry[T any] struct{ Value T }
 
-// replicatedCache implements types.Cache by replication. Every instance owns
+// replicatedCache implements gst.Cache by replication. Every instance owns
 // a process-local tier and mirrors its set and delete operations to the
 // local tier of every other instance through kafka events:
 //   - Local memory cache for high-speed access.
@@ -211,7 +211,7 @@ type entry[T any] struct{ Value T }
 type replicatedCache[T any] struct {
 	// store is the process-local tier the instance reads from and applies
 	// peer events to.
-	store types.Cache[entry[T]]
+	store gst.Cache[entry[T]]
 
 	// typ is the type of the replicated cache. When an instance receives a peer
 	// event it compares event.Typ with its own type and ignores the event when
@@ -265,7 +265,7 @@ type replicatedCache[T any] struct {
 	sub *kgo.Client
 
 	// logger is the cache internal logger.
-	logger types.Logger
+	logger gst.Logger
 
 	// pubPool bounds the goroutines publishing events.
 	pubPool *ants.Pool
@@ -275,7 +275,7 @@ type replicatedCache[T any] struct {
 // around the given store and a kafka producer/consumer pair. The store is a
 // parameter so tests can watch propagation between two instances holding
 // separate stores.
-func newReplicatedCache[T any](store types.Cache[entry[T]]) (*replicatedCache[T], error) {
+func newReplicatedCache[T any](store gst.Cache[entry[T]]) (*replicatedCache[T], error) {
 	cacheID := uuid.NewV7()
 
 	dc := &replicatedCache[T]{
@@ -438,9 +438,9 @@ func (dc *replicatedCache[T]) Get(ctx context.Context, key string) (value T, err
 		return stored.Value, nil
 	}
 	var zero T
-	if errors.Is(err, types.ErrEntryNotFound) {
+	if errors.Is(err, gst.ErrEntryNotFound) {
 		dc.misses.Add(1)
-		return zero, types.ErrEntryNotFound
+		return zero, gst.ErrEntryNotFound
 	}
 
 	dc.logger.Warnz("failed to get from the store", zap.Error(err))
@@ -458,7 +458,7 @@ func (dc *replicatedCache[T]) Delete(ctx context.Context, key string) (err error
 	// so a stale peer set cannot resurrect the key this instance removed.
 	dc.watermarkMu.Lock()
 	ts := dc.stampLocked(key)
-	if err = dc.store.Delete(ctx, key); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
+	if err = dc.store.Delete(ctx, key); err != nil && !errors.Is(err, gst.ErrEntryNotFound) {
 		dc.watermarkMu.Unlock()
 		return err
 	}
@@ -666,7 +666,7 @@ func (dc *replicatedCache[T]) applyPeerDelete(evt *event) (stale bool, err error
 	if last, ok := dc.appliedTS.Get(evt.Key); ok && evt.TS <= last {
 		return true, nil
 	}
-	if err := dc.store.Delete(context.Background(), evt.Key); err != nil && !errors.Is(err, types.ErrEntryNotFound) {
+	if err := dc.store.Delete(context.Background(), evt.Key); err != nil && !errors.Is(err, gst.ErrEntryNotFound) {
 		return false, err
 	}
 	dc.appliedTS.Add(evt.Key, evt.TS)
@@ -764,7 +764,7 @@ func (dc *replicatedCache[T]) startMonitor() {
 }
 
 // metrics snapshots the instance counters for the monitor. It is unexported:
-// the exported surface is types.Cache[T], which has no metrics channel.
+// the exported surface is gst.Cache[T], which has no metrics channel.
 func (dc *replicatedCache[T]) metrics() *replicatedMetrics {
 	return &replicatedMetrics{
 		Hits:    dc.hits.Load(),

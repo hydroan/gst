@@ -7,7 +7,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/cache/freecache"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 type sample struct {
@@ -26,7 +26,7 @@ func TestCacheIsolatesTypes(t *testing.T) {
 	if err := freecache.Cache[int]().Set(ctx, "package-isolation-key", 7, 0); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	if _, err := freecache.Cache[string]().Get(ctx, "package-isolation-key"); !errors.Is(err, types.ErrEntryNotFound) {
+	if _, err := freecache.Cache[string]().Get(ctx, "package-isolation-key"); !errors.Is(err, gst.ErrEntryNotFound) {
 		t.Fatalf("want ErrEntryNotFound from the other type's cache, got %v", err)
 	}
 }
@@ -58,7 +58,7 @@ func TestSetRejectsEntryAboveBackendLimit(t *testing.T) {
 	if err := c.Set(ctx, "oversized-entry", oversized, 0); err == nil {
 		t.Fatal("want error for entry above the backend per-entry limit")
 	}
-	if _, err := c.Get(ctx, "oversized-entry"); !errors.Is(err, types.ErrEntryNotFound) {
+	if _, err := c.Get(ctx, "oversized-entry"); !errors.Is(err, gst.ErrEntryNotFound) {
 		t.Fatalf("want ErrEntryNotFound after rejected set, got %v", err)
 	}
 }

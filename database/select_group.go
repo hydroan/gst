@@ -2,8 +2,8 @@ package database
 
 import (
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/types"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -59,13 +59,13 @@ func (a *selectBuilder[M]) groupClauses(tx *gorm.DB, shape projectionShape) (*go
 		})
 	}
 	for _, h := range a.havings {
-		sql, args, termErr := a.termExpr(types.TermConditionTermOf(h), shape)
+		sql, args, termErr := a.termExpr(gst.TermConditionTermOf(h), shape)
 		if termErr != nil {
 			return nil, termErr
 		}
 		tx = tx.Having(clause.Expr{
-			SQL:  sql + " " + compareOperator(types.TermConditionOpOf(h)) + " ?",
-			Vars: append(append([]any(nil), args...), types.TermConditionValueOf(h)),
+			SQL:  sql + " " + compareOperator(gst.TermConditionOpOf(h)) + " ?",
+			Vars: append(append([]any(nil), args...), gst.TermConditionValueOf(h)),
 		})
 	}
 	return tx, nil
@@ -73,77 +73,77 @@ func (a *selectBuilder[M]) groupClauses(tx *gorm.DB, shape projectionShape) (*go
 
 // keyExpr renders a group key or plain column: the column itself, or its time
 // bucket.
-func (a *selectBuilder[M]) keyExpr(t types.Term, shape projectionShape) string {
+func (a *selectBuilder[M]) keyExpr(t gst.Term, shape projectionShape) string {
 	if jt, derived := a.derivedOf(t, shape); derived {
 		return a.derivedExpr(jt, t)
 	}
-	column := a.columnExpr(types.TermTableOf(t), types.TermColumnOf(t), shape)
-	if types.TermBucketOf(t) == types.TimeBucketNone {
+	column := a.columnExpr(gst.TermTableOf(t), gst.TermColumnOf(t), shape)
+	if gst.TermBucketOf(t) == gst.TimeBucketNone {
 		return column
 	}
-	return a.db.timeBucketExpr(column, types.TermBucketOf(t))
+	return a.db.timeBucketExpr(column, gst.TermBucketOf(t))
 }
 
 // functionExpr renders the function call of a measure or window function
 // without its window and without the COALESCE a SUM takes, which the caller
 // adds around the complete expression; coalesce reports whether it must.
-func (a *selectBuilder[M]) functionExpr(t types.Term, shape projectionShape) (sql string, args []any, coalesce bool, err error) {
-	column := a.columnExpr(types.TermTableOf(t), types.TermColumnOf(t), shape)
-	cond, condErr := a.db.renderFilters(types.TermConditionsOf(t), false, a.whereScope(shape))
+func (a *selectBuilder[M]) functionExpr(t gst.Term, shape projectionShape) (sql string, args []any, coalesce bool, err error) {
+	column := a.columnExpr(gst.TermTableOf(t), gst.TermColumnOf(t), shape)
+	cond, condErr := a.db.renderFilters(gst.TermConditionsOf(t), false, a.whereScope(shape))
 	if condErr != nil {
 		return "", nil, false, condErr
 	}
-	switch types.TermFnOf(t) {
-	case types.FnCount:
+	switch gst.TermFnOf(t) {
+	case gst.FnCount:
 		if cond != nil {
 			// COUNT(*) and COUNT(column) both become a conditional count:
 			// CASE yields NULL outside the predicate, and COUNT skips NULLs.
-			if len(types.TermColumnOf(t)) == 0 {
+			if len(gst.TermColumnOf(t)) == 0 {
 				return "COUNT(CASE WHEN ? THEN 1 END)", []any{cond}, false, nil
 			}
 			return "COUNT(CASE WHEN ? THEN " + column + " END)", []any{cond}, false, nil
 		}
-		if len(types.TermColumnOf(t)) == 0 {
+		if len(gst.TermColumnOf(t)) == 0 {
 			return "COUNT(*)", nil, false, nil
 		}
 		return "COUNT(" + column + ")", nil, false, nil
-	case types.FnCountDistinct:
+	case gst.FnCountDistinct:
 		if cond != nil {
 			return "COUNT(DISTINCT CASE WHEN ? THEN " + column + " END)", []any{cond}, false, nil
 		}
 		return "COUNT(DISTINCT " + column + ")", nil, false, nil
-	case types.FnSum:
+	case gst.FnSum:
 		if cond != nil {
 			return "SUM(CASE WHEN ? THEN " + column + " ELSE 0 END)", []any{cond}, true, nil
 		}
 		return "SUM(" + column + ")", nil, true, nil
-	case types.FnAvg, types.FnMin, types.FnMax:
-		fn := string(types.TermFnOf(t))
+	case gst.FnAvg, gst.FnMin, gst.FnMax:
+		fn := string(gst.TermFnOf(t))
 		if cond != nil {
 			return fn + "(CASE WHEN ? THEN " + column + " END)", []any{cond}, false, nil
 		}
 		return fn + "(" + column + ")", nil, false, nil
-	case types.FnRowNumber, types.FnRank, types.FnDenseRank:
-		return string(types.TermFnOf(t)) + "()", nil, false, nil
-	case types.FnLag, types.FnLead:
-		return string(types.TermFnOf(t)) + "(" + column + ")", nil, false, nil
+	case gst.FnRowNumber, gst.FnRank, gst.FnDenseRank:
+		return string(gst.TermFnOf(t)) + "()", nil, false, nil
+	case gst.FnLag, gst.FnLead:
+		return string(gst.TermFnOf(t)) + "(" + column + ")", nil, false, nil
 	default:
 		// validate rejects any function outside the closed set before the
 		// renderer runs, so reaching this arm means the two drifted apart.
 		// Composing SQL from the value would put caller text into the
 		// statement, so it errors instead.
-		return "", nil, false, errors.Wrapf(ErrUnknownTermFn, "%q", types.TermFnOf(t))
+		return "", nil, false, errors.Wrapf(ErrUnknownTermFn, "%q", gst.TermFnOf(t))
 	}
 }
 
 // validateGrouping checks the group-side rules of one term: a condition only
 // restricts a measure, a bucket only truncates a group key. Dropping either
 // without a word is how a report ends up silently counting the wrong rows.
-func (a *selectBuilder[M]) validateGrouping(t types.Term) error {
-	if !types.TermIsMeasure(t) && len(types.TermConditionsOf(t)) > 0 {
+func (a *selectBuilder[M]) validateGrouping(t gst.Term) error {
+	if !gst.TermIsMeasure(t) && len(gst.TermConditionsOf(t)) > 0 {
 		return errors.Wrapf(ErrConditionOnGroupKey, "%q", termAlias(t))
 	}
-	if types.TermIsMeasure(t) && types.TermBucketOf(t) != types.TimeBucketNone {
+	if gst.TermIsMeasure(t) && gst.TermBucketOf(t) != gst.TimeBucketNone {
 		return errors.Wrapf(ErrBucketOnMeasure, "%q", termAlias(t))
 	}
 	return nil
@@ -152,10 +152,10 @@ func (a *selectBuilder[M]) validateGrouping(t types.Term) error {
 // validateColumnClass checks that the column's type accepts what the term
 // applies to it: SUM and AVG need a numeric column, a time bucket a time
 // column.
-func (a *selectBuilder[M]) validateColumnClass(t types.Term, column modelschema.Column) error {
+func (a *selectBuilder[M]) validateColumnClass(t gst.Term, column modelschema.Column) error {
 	class := modelschema.ClassifyColumn(column)
 	switch {
-	case types.TermFnOf(t) == types.FnSum || types.TermFnOf(t) == types.FnAvg:
+	case gst.TermFnOf(t) == gst.FnSum || gst.TermFnOf(t) == gst.FnAvg:
 		// The generated reference already blocks this at compile time, gg gen
 		// classifying by the same rule, so the check only bites on minted
 		// references. It asks ClassifyColumn rather than keeping a rule of
@@ -165,11 +165,11 @@ func (a *selectBuilder[M]) validateColumnClass(t types.Term, column modelschema.
 		// ClassifyColumn reads the value such a struct holds. Two rules
 		// disagreeing about the same type is worse than one rule being strict.
 		if class != modelschema.ColumnClassNumeric {
-			return errors.Wrapf(ErrAggregateType, "%s over non-numeric column %q", types.TermFnOf(t), types.TermColumnOf(t))
+			return errors.Wrapf(ErrAggregateType, "%s over non-numeric column %q", gst.TermFnOf(t), gst.TermColumnOf(t))
 		}
-	case !types.TermIsMeasure(t) && types.TermBucketOf(t) != types.TimeBucketNone:
+	case !gst.TermIsMeasure(t) && gst.TermBucketOf(t) != gst.TimeBucketNone:
 		if class != modelschema.ColumnClassTime {
-			return errors.Wrapf(ErrAggregateType, "time bucket over non-time column %q", types.TermColumnOf(t))
+			return errors.Wrapf(ErrAggregateType, "time bucket over non-time column %q", gst.TermColumnOf(t))
 		}
 	}
 	return nil
@@ -184,13 +184,13 @@ func (a *selectBuilder[M]) validateHaving(shape projectionShape) error {
 		return ErrHavingWithoutGroups
 	}
 	for _, h := range a.havings {
-		if !a.isSelected(types.TermConditionTermOf(h)) {
-			return errors.Wrapf(ErrHavingTermNotSelected, "%q", termAlias(types.TermConditionTermOf(h)))
+		if !a.isSelected(gst.TermConditionTermOf(h)) {
+			return errors.Wrapf(ErrHavingTermNotSelected, "%q", termAlias(gst.TermConditionTermOf(h)))
 		}
-		if types.TermIsWindowed(types.TermConditionTermOf(h)) {
-			return errors.Wrapf(ErrHavingWindowTerm, "%q", termAlias(types.TermConditionTermOf(h)))
+		if gst.TermIsWindowed(gst.TermConditionTermOf(h)) {
+			return errors.Wrapf(ErrHavingWindowTerm, "%q", termAlias(gst.TermConditionTermOf(h)))
 		}
-		if err := validateConditionValue(h, termAlias(types.TermConditionTermOf(h)), a.termKind(types.TermConditionTermOf(h), shape)); err != nil {
+		if err := validateConditionValue(h, termAlias(gst.TermConditionTermOf(h)), a.termKind(gst.TermConditionTermOf(h), shape)); err != nil {
 			return err
 		}
 	}

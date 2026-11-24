@@ -7,8 +7,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/lifecycle"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -27,7 +27,7 @@ func init() {
 		Name:      "etcd",
 		Stage:     lifecycle.StageProvider,
 		Enabled:   func() bool { return config.App.Etcd.Enabled },
-		SetLogger: func(l types.Logger) { logger.Etcd = l },
+		SetLogger: func(l gst.Logger) { logger.Etcd = l },
 		Start:     start,
 		Stop:      stop,
 	})

@@ -7,11 +7,11 @@ import (
 
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	modellogmgmt "github.com/hydroan/gst/internal/modulemodel/logmgmt"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/types"
 )
 
 // This file holds what the CRUD flows share. A flow is the half of a handler
@@ -29,7 +29,7 @@ import (
 // from the context of that call and its phase. Only the transport knows what
 // else the service context should carry — the HTTP handler's gin context,
 // nothing at all for a transport without one — so the transport supplies it.
-type serviceContextFunc func(ctx context.Context, phase apiaction.Phase) *types.ServiceContext
+type serviceContextFunc func(ctx context.Context, phase apiaction.Phase) *gst.ServiceContext
 
 // writeFieldsOf reads off typ, the struct type of M, what the framework's
 // own write flows go by: readOnly, the index paths of the fields M declares
@@ -49,7 +49,7 @@ type serviceContextFunc func(ctx context.Context, phase apiaction.Phase) *types.
 // binding:"readonly"`, readOnly is the paths of Stage and Tally, unwritten
 // the paths of the columns created_at, created_by, stage, seen and passed,
 // and writable the column name.
-func writeFieldsOf[M types.Model](typ reflect.Type) (readOnly, unwritten [][]int, writable []types.AnyColumnRef) {
+func writeFieldsOf[M gst.Model](typ reflect.Type) (readOnly, unwritten [][]int, writable []gst.AnyColumnRef) {
 	readOnly = patchFieldsOf(typ).readOnly
 	columns, err := modelschema.Columns(typ)
 	if err != nil {
@@ -70,7 +70,7 @@ func writeFieldsOf[M types.Model](typ reflect.Type) (readOnly, unwritten [][]int
 		return false
 	}
 	narrowed := false
-	own := make([]types.AnyColumnRef, 0, len(columns))
+	own := make([]gst.AnyColumnRef, 0, len(columns))
 	for _, col := range columns {
 		// The path of a read-only field is the one its column is read by,
 		// or, stored in several columns, the one each of them begins with.
@@ -82,7 +82,7 @@ func writeFieldsOf[M types.Model](typ reflect.Type) (readOnly, unwritten [][]int
 		case declared || !col.Updatable:
 			unwritten = append(unwritten, col.Index)
 		case !ofFrameworkBase(col.Index):
-			own = append(own, types.NewColumn[M, any](col.DBName))
+			own = append(own, gst.NewColumn[M, any](col.DBName))
 		}
 	}
 	if narrowed {
@@ -148,7 +148,7 @@ func operationLog(ctx context.Context, modelName string) *modellogmgmt.Operation
 //
 // The caller must pass a non-empty id: UUID-keyed models generate a fresh id
 // when given an empty value.
-func setID(m types.Model, id string) bool {
+func setID(m gst.Model, id string) bool {
 	m.SetID(id)
 	return len(m.GetID()) > 0
 }

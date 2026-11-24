@@ -10,9 +10,9 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/service"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -124,7 +124,7 @@ type exportVirtualSampleService struct {
 // test registers, whatever the number of its runs.
 var exportVirtualSampleSvc = &exportVirtualSampleService{}
 
-func (s *exportVirtualSampleService) Export(_ *types.ServiceContext, ms ...*exportVirtualSample) ([]byte, error) {
+func (s *exportVirtualSampleService) Export(_ *gst.ServiceContext, ms ...*exportVirtualSample) ([]byte, error) {
 	s.gotModels = len(ms)
 	return []byte("name\nsample\n"), nil
 }
@@ -149,7 +149,7 @@ func TestExportHandlerVirtualModelSkipsListing(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodGet, "/api/"+route+"?name=sample&_limit=abc", nil)
 
 	handler := ExportHandler[*exportVirtualSample, *exportVirtualSample, *exportVirtualSample](
-		&types.ControllerConfig[*exportVirtualSample]{Route: route},
+		&gst.ControllerConfig[*exportVirtualSample]{Route: route},
 	)
 	handler(c)
 
@@ -167,7 +167,7 @@ func TestExportHandlerVirtualModelSkipsListing(t *testing.T) {
 }
 
 // exportFormatSample is a plain table-backed resource for pinning that the
-// export controller keeps its own types.QueryFormat parameter away from the
+// export controller keeps its own gst.QueryFormat parameter away from the
 // model bind, which rejects unknown keys.
 type exportFormatSample struct {
 	Name string `json:"name,omitempty" query:"name"`
@@ -189,9 +189,9 @@ type exportFormatSampleService struct {
 // registers, whatever the number of its runs.
 var exportFormatSampleSvc = &exportFormatSampleService{}
 
-func (s *exportFormatSampleService) Filter(_ *types.ServiceContext, m *exportFormatSample,
-	opts types.QueryOptions,
-) (*exportFormatSample, types.QueryOptions, error) {
+func (s *exportFormatSampleService) Filter(_ *gst.ServiceContext, m *exportFormatSample,
+	opts gst.QueryOptions,
+) (*exportFormatSample, gst.QueryOptions, error) {
 	s.filterReached = true
 	return m, opts, errors.New("stop before the database stage")
 }
@@ -212,7 +212,7 @@ func TestExportHandlerKeepsItsOwnParamsFromModelBind(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodGet, "/api/"+route+"?name=sample&_format=csv&_limit=10", nil)
 
 	handler := ExportHandler[*exportFormatSample, *exportFormatSample, *exportFormatSample](
-		&types.ControllerConfig[*exportFormatSample]{Route: route},
+		&gst.ControllerConfig[*exportFormatSample]{Route: route},
 	)
 	handler(c)
 

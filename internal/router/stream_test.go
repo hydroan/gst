@@ -11,11 +11,11 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/middleware"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/router"
 	"github.com/hydroan/gst/internal/service"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -50,9 +50,9 @@ type feedWatcher struct {
 	service.Base[*model.Empty, *feedNote, *feedNote]
 }
 
-func (s *feedWatcher) Stream(ctx *types.ServiceContext, req *feedNote, stream *types.ServerStream[*feedNote]) error {
+func (s *feedWatcher) Stream(ctx *gst.ServiceContext, req *feedNote, stream *gst.ServerStream[*feedNote]) error {
 	if req.Note == refusedNote {
-		return types.NewError(http.StatusConflict, "the feed takes no such note")
+		return gst.NewError(http.StatusConflict, "the feed takes no such note")
 	}
 	if err := stream.Send(&feedNote{Note: ctx.Param("feed")}); err != nil {
 		return err
@@ -66,7 +66,7 @@ type feedUploader struct {
 	service.Base[*model.Empty, *feedNote, *feedNote]
 }
 
-func (s *feedUploader) Stream(_ *types.ServiceContext, stream *types.ClientStream[*feedNote]) (*feedNote, error) {
+func (s *feedUploader) Stream(_ *gst.ServiceContext, stream *gst.ClientStream[*feedNote]) (*feedNote, error) {
 	var notes []string
 	for {
 		req, err := stream.Recv()
@@ -86,7 +86,7 @@ type feedChatter struct {
 	service.Base[*model.Empty, *feedNote, *feedNote]
 }
 
-func (s *feedChatter) Stream(_ *types.ServiceContext, stream *types.BidiStream[*feedNote, *feedNote]) error {
+func (s *feedChatter) Stream(_ *gst.ServiceContext, stream *gst.BidiStream[*feedNote, *feedNote]) error {
 	for {
 		req, err := stream.Recv()
 		if errors.Is(err, io.EOF) {
@@ -114,7 +114,7 @@ func init() {
 func registerStreamRoutes() {
 	for _, route := range []string{streamWatchRoute, streamUploadRoute, streamChatRoute} {
 		router.Register[*model.Empty, *feedNote, *feedNote](
-			router.Auth(), route, &types.ControllerConfig[*model.Empty]{}, apiaction.Stream,
+			router.Auth(), route, &gst.ControllerConfig[*model.Empty]{}, apiaction.Stream,
 		)
 	}
 }

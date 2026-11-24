@@ -10,8 +10,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/i18n"
-	"github.com/hydroan/gst/internal/types"
 )
 
 // SuccessMsg is the msg of the success envelope, the one JSON writes.
@@ -23,7 +23,7 @@ const SuccessMsg = "success"
 // stays out of the envelope.
 const (
 	failureStatus = http.StatusInternalServerError
-	failureMsg    = types.FailureMsg
+	failureMsg    = gst.FailureMsg
 )
 
 // JSON writes data in the success envelope: status 200, SuccessMsg, data
@@ -39,7 +39,7 @@ func JSON(c *gin.Context, data ...any) {
 // Error writes err in the failure envelope: a service error, anywhere in the
 // wrap chain, answers with the status and client-safe message it was
 // constructed with and, when it names the fields the request was refused on
-// (see types.FieldViolations), with those fields in the error member of the
+// (see gst.FieldViolations), with those fields in the error member of the
 // envelope, the list a gRPC status carries as its google.rpc.BadRequest
 // detail:
 //
@@ -53,10 +53,10 @@ func JSON(c *gin.Context, data ...any) {
 // third-party client output — never reaches the envelope; callers log the
 // full error themselves before answering it here.
 func Error(c *gin.Context, err error) {
-	var serviceErr *types.Error
+	var serviceErr *gst.Error
 	if errors.As(err, &serviceErr) {
 		var details *errorDetails
-		if violations := types.FieldViolations(serviceErr); len(violations) > 0 {
+		if violations := gst.FieldViolations(serviceErr); len(violations) > 0 {
 			details = &errorDetails{FieldViolations: violations}
 		}
 		envelope(c, serviceErr.Status(), i18n.Translate(serviceErr.Msg()), nil, details)
@@ -68,7 +68,7 @@ func Error(c *gin.Context, err error) {
 // Abort refuses the request with err, written in the failure envelope the
 // way Error writes it, and stops the handler chain: what code outside the
 // controller path refuses a request through, and nowhere else. A refusal with a
-// status and message of its own is a service error, types.NewError(status,
+// status and message of its own is a service error, gst.NewError(status,
 // msg), so the one rule NewError holds for statuses and messages holds for
 // every refusal: what the envelope looks like on the wire is the framework's to
 // decide and to change, and a caller here states only the refusal it is making.
@@ -153,7 +153,7 @@ type detailedEnvelope struct {
 // errorDetails is the error member of a failure envelope: what the failure
 // carries beyond its msg, the fields the request was refused on.
 type errorDetails struct {
-	FieldViolations []types.FieldViolation `json:"field_violations,omitempty"`
+	FieldViolations []gst.FieldViolation `json:"field_violations,omitempty"`
 }
 
 // jsonContentType is the Content-Type of a JSON response, the value gin's own

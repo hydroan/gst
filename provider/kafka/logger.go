@@ -1,7 +1,7 @@
 package kafka
 
 import (
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
@@ -12,7 +12,7 @@ import (
 // dereferenced on every line, so a logger installed after the client was
 // built still receives the logs, and a nil entry (a process that never ran
 // the logging setup, e.g. unit tests) drops the line.
-func Logger(l *types.Logger) kgo.Opt {
+func Logger(l *gst.Logger) kgo.Opt {
 	return kgo.WithLogger(kgoLogger{l: l})
 }
 
@@ -20,7 +20,7 @@ func Logger(l *types.Logger) kgo.Opt {
 // interface, routing franz-go internal logs into the standard logging
 // pipeline.
 type kgoLogger struct {
-	l *types.Logger
+	l *gst.Logger
 }
 
 // Level reports the maximum level franz-go should emit. Info keeps connection

@@ -3,7 +3,7 @@ package service
 import (
 	"fmt"
 
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 )
@@ -20,7 +20,7 @@ import (
 // route and service registrations disagree about the service types — a wiring
 // bug. It is reported at error level and degrades to the no-op Base instead
 // of panicking mid-request.
-func Resolve[M types.Model, REQ types.Request, RSP types.Response](key string) types.Service[M, REQ, RSP] {
+func Resolve[M gst.Model, REQ gst.Request, RSP gst.Response](key string) gst.Service[M, REQ, RSP] {
 	mu.RLock()
 	svc, ok := services[key]
 	mu.RUnlock()
@@ -30,7 +30,7 @@ func Resolve[M types.Model, REQ types.Request, RSP types.Response](key string) t
 		}
 		return new(Base[M, REQ, RSP])
 	}
-	typed, ok := svc.(types.Service[M, REQ, RSP])
+	typed, ok := svc.(gst.Service[M, REQ, RSP])
 	if !ok {
 		if logger.Service != nil {
 			logger.Service.Errorz("service registered under key does not match the resolved service types; route and service registrations disagree",

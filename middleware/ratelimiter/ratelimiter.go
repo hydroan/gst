@@ -10,9 +10,9 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/cache/freelru"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
-	"github.com/hydroan/gst/internal/types"
 	"golang.org/x/time/rate"
 )
 
@@ -38,7 +38,7 @@ const (
 // Resolution is deferred to the first request because the backend reads the
 // cache configuration when it builds an instance, and at package init that
 // configuration is not loaded yet.
-var limiterCache = sync.OnceValue(func() types.Cache[*rate.Limiter] {
+var limiterCache = sync.OnceValue(func() gst.Cache[*rate.Limiter] {
 	return freelru.Cache[*rate.Limiter]()
 })
 
@@ -113,12 +113,12 @@ func RateLimiter(opts ...Option) gin.HandlerFunc {
 
 		key := keyPrefix + conf.keyFunc(c)
 		limiter, err := limiterCache().Get(c.Request.Context(), key)
-		if errors.Is(err, types.ErrEntryNotFound) {
+		if errors.Is(err, gst.ErrEntryNotFound) {
 			limiter = rate.NewLimiter(limit, conf.capacity)
 		} else if err != nil {
 			// The limiter is security state: a cache that cannot answer refuses
 			// the request rather than switching the limit off.
-			response.Abort(c, types.NewError(http.StatusInternalServerError, unavailableMsg))
+			response.Abort(c, gst.NewError(http.StatusInternalServerError, unavailableMsg))
 			return
 		}
 		// Every request restarts the bucket's lifetime, the refused ones too: a
@@ -127,7 +127,7 @@ func RateLimiter(opts ...Option) gin.HandlerFunc {
 		// lifetime under a millisecond, and this one never is.
 		_ = limiterCache().Set(c.Request.Context(), key, limiter, idleLifetime)
 		if !limiter.Allow() {
-			response.Abort(c, types.NewError(http.StatusTooManyRequests, tooManyRequestsMsg))
+			response.Abort(c, gst.NewError(http.StatusTooManyRequests, tooManyRequestsMsg))
 			return
 		}
 	}

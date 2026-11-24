@@ -13,8 +13,8 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/datatypes"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/tenant"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
@@ -393,13 +393,13 @@ func TestDatabaseDelete(t *testing.T) {
 		// The table comes from the model type alone, and a condition can only
 		// name the model's own columns: one built from another model's column
 		// reference fails the chain before any statement is rendered.
-		stmts := make([]types.SQLStatement, 0)
+		stmts := make([]gst.SQLStatement, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
 			WithDryRun(&stmts).WithQuery(&TestUser{Name: "anyone"}).Delete())
 		require.Len(t, stmts, 1)
 		require.Contains(t, stmts[0].RenderedSQL, "DELETE FROM "+quoteIdent("test_users")+" WHERE ")
 		require.ErrorIs(t, database.Database[*TestUser](context.Background()).
-			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{TestAggregateRecordCols.Category.Eq("alpha")}}).Delete(),
+			WithQuery(nil, gst.QueryOptions{Filters: []gst.Filter{TestAggregateRecordCols.Category.Eq("alpha")}}).Delete(),
 			database.ErrColumnTable)
 	})
 
@@ -413,20 +413,20 @@ func TestDatabaseDelete(t *testing.T) {
 		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 		require.Equal(t, 3, *count)
 
-		stmts := make([]types.SQLStatement, 0)
+		stmts := make([]gst.SQLStatement, 0)
 		require.NoError(t, database.Database[*TestUser](context.Background()).
-			WithDryRun(&stmts).WithQuery(nil, types.QueryOptions{AllowEmpty: true}).Delete())
+			WithDryRun(&stmts).WithQuery(nil, gst.QueryOptions{AllowEmpty: true}).Delete())
 		require.Len(t, stmts, 1)
 		// MySQL renders a trailing space where the WHERE clause would start.
 		require.True(t, strings.HasSuffix(strings.TrimRight(stmts[0].RenderedSQL, " "), "DELETE FROM "+quoteIdent("test_users")), stmts[0].RenderedSQL)
 
-		require.NoError(t, database.Database[*TestUser](context.Background()).WithQuery(nil, types.QueryOptions{AllowEmpty: true}).Delete())
+		require.NoError(t, database.Database[*TestUser](context.Background()).WithQuery(nil, gst.QueryOptions{AllowEmpty: true}).Delete())
 		require.NoError(t, database.Database[*TestUser](context.Background()).Count(count))
 		require.Zero(t, *count)
 
 		// Records do not combine with the whole table either.
 		setupTestData(t)
-		require.ErrorIs(t, database.Database[*TestUser](context.Background()).WithQuery(&TestUser{}, types.QueryOptions{AllowEmpty: true}).Delete(u1),
+		require.ErrorIs(t, database.Database[*TestUser](context.Background()).WithQuery(&TestUser{}, gst.QueryOptions{AllowEmpty: true}).Delete(u1),
 			database.ErrConditionsWithRecords)
 	})
 
@@ -441,7 +441,7 @@ func TestDatabaseDelete(t *testing.T) {
 		require.NoError(t, database.Database[*TestTenantSoftDeleteItem](ctxA).Create(&TestTenantSoftDeleteItem{Name: "mine"}, &TestTenantSoftDeleteItem{Name: "mine too"}))
 		require.NoError(t, database.Database[*TestTenantSoftDeleteItem](ctxB).Create(&TestTenantSoftDeleteItem{Name: "theirs"}))
 
-		require.NoError(t, database.Database[*TestTenantSoftDeleteItem](ctxA).WithQuery(nil, types.QueryOptions{AllowEmpty: true}).Delete())
+		require.NoError(t, database.Database[*TestTenantSoftDeleteItem](ctxA).WithQuery(nil, gst.QueryOptions{AllowEmpty: true}).Delete())
 
 		rows := make([]*TestTenantSoftDeleteItem, 0)
 		require.NoError(t, database.Database[*TestTenantSoftDeleteItem](ctxA).List(&rows))
@@ -495,9 +495,9 @@ func TestDatabaseDelete(t *testing.T) {
 		hookedSampleSeen.Store(-1)
 		require.ErrorIs(t, database.Database[*TestHookedSample](ctx).WithQuery(&TestHookedSample{Value: "x"}).Delete(),
 			database.ErrConditionsWithDeleteHooks)
-		require.ErrorIs(t, database.Database[*TestHookedSample](ctx).WithQuery(nil, types.QueryOptions{AllowEmpty: true}).Delete(),
+		require.ErrorIs(t, database.Database[*TestHookedSample](ctx).WithQuery(nil, gst.QueryOptions{AllowEmpty: true}).Delete(),
 			database.ErrConditionsWithDeleteHooks)
-		stmts := make([]types.SQLStatement, 0)
+		stmts := make([]gst.SQLStatement, 0)
 		require.ErrorIs(t, database.Database[*TestHookedSample](ctx).WithDryRun(&stmts).WithQuery(&TestHookedSample{Value: "x"}).Delete(),
 			database.ErrConditionsWithDeleteHooks)
 		require.Empty(t, stmts)
@@ -836,7 +836,7 @@ func TestDatabaseUpsert(t *testing.T) {
 	})
 
 	t.Run("builds SQL without executing under WithDryRun", func(t *testing.T) {
-		stmts := make([]types.SQLStatement, 0)
+		stmts := make([]gst.SQLStatement, 0)
 		item := &TestUniqueItem{UniqueCode: "upsert-dry", Name: "dry"}
 		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).WithDryRun(&stmts).Upsert(item))
 		require.Len(t, stmts, 1)
@@ -1280,7 +1280,7 @@ func TestDatabaseUpsert(t *testing.T) {
 func TestDatabaseUpdateByIDWritesAJSONStringsColumnAsADocument(t *testing.T) {
 	defer cleanupTestData()
 	setupTestData(t)
-	addr := types.NewJSONStringsColumn[*TestUser]("addr")
+	addr := gst.NewJSONStringsColumn[*TestUser]("addr")
 	require.NoError(t, database.Database[*TestUser](context.Background()).UpdateByID(u1.ID, addr.Set(datatypes.NewJSONSlice([]string{"home", "office"}))))
 
 	u := new(TestUser)
@@ -1289,7 +1289,7 @@ func TestDatabaseUpdateByIDWritesAJSONStringsColumnAsADocument(t *testing.T) {
 
 	users := make([]*TestUser, 0)
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{Filters: []types.Filter{addr.JSONContains("office")}}).
+		WithQuery(nil, gst.QueryOptions{Filters: []gst.Filter{addr.JSONContains("office")}}).
 		List(&users))
 	require.Len(t, users, 1)
 	require.Equal(t, u1.ID, users[0].ID)
@@ -1314,7 +1314,7 @@ func TestDatabaseWritesLeaveAssociationsAlone(t *testing.T) {
 	stored := func() int {
 		var total int
 		require.NoError(t, database.Database[*TestCategory](ctx).
-			WithQuery(nil, types.QueryOptions{Filters: []types.Filter{types.NewFilter("", "name", types.FilterOpStartsWith, prefix)}}).
+			WithQuery(nil, gst.QueryOptions{Filters: []gst.Filter{gst.NewFilter("", "name", gst.FilterOpStartsWith, prefix)}}).
 			Count(&total))
 		return total
 	}
@@ -1465,11 +1465,11 @@ func TestDatabaseUpdateByID(t *testing.T) {
 	require.Error(t, err, "should return error when id is empty")
 	require.ErrorIs(t, err, database.ErrIDRequired, "error should be ErrIDRequired")
 
-	err = database.Database[*TestUser](context.Background()).UpdateByID("id", types.NewAssignment("", "", "value"))
+	err = database.Database[*TestUser](context.Background()).UpdateByID("id", gst.NewAssignment("", "", "value"))
 	require.Error(t, err, "should return error when name is empty")
 	require.ErrorIs(t, err, database.ErrEmptyFieldName, "error should be ErrEmptyFieldName")
 
-	err = database.Database[*TestUser](context.Background()).UpdateByID("id", types.NewAssignment("", "name", nil))
+	err = database.Database[*TestUser](context.Background()).UpdateByID("id", gst.NewAssignment("", "name", nil))
 	require.Error(t, err, "should return error when value is nil")
 	require.ErrorIs(t, err, database.ErrNilValue, "error should be ErrNilValue")
 
@@ -1503,7 +1503,7 @@ func TestDatabaseUpdateByIDNormalizesID(t *testing.T) {
 
 	item := &TestAutoItem{Code: "update-by-id-a1", Name: "first"}
 	require.NoError(t, database.Database[*TestAutoItem](context.Background()).Create(item))
-	autoItemName := types.NewColumn[*TestAutoItem, string]("name")
+	autoItemName := gst.NewColumn[*TestAutoItem, string]("name")
 
 	err := database.Database[*TestAutoItem](context.Background()).UpdateByID(item.GetID()+"abc", autoItemName.Set("hijacked"))
 	require.ErrorIs(t, err, database.ErrRecordNotFound)
@@ -1657,7 +1657,7 @@ func TestDatabaseSingleStatementWriteSkipsTransaction(t *testing.T) {
 		require.NoError(t, database.Database[*TestItem](context.Background()).Create(item))
 		probe.take()
 
-		require.NoError(t, database.Database[*TestItem](context.Background()).UpdateByID(item.ID, types.NewColumn[*TestItem, string]("name").Set("tx-updatebyid-b")))
+		require.NoError(t, database.Database[*TestItem](context.Background()).UpdateByID(item.ID, gst.NewColumn[*TestItem, string]("name").Set("tx-updatebyid-b")))
 		require.Equal(t, []bool{false}, probe.take())
 
 		got := new(TestItem)

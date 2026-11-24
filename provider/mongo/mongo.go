@@ -10,8 +10,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/lifecycle"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -34,7 +34,7 @@ func init() {
 		Name:      "mongo",
 		Stage:     lifecycle.StageProvider,
 		Enabled:   func() bool { return config.App.Mongo.Enabled },
-		SetLogger: func(l types.Logger) { logger.Mongo = l },
+		SetLogger: func(l gst.Logger) { logger.Mongo = l },
 		Start:     start,
 		Stop:      stop,
 	})

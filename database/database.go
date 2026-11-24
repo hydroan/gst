@@ -8,8 +8,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
-	"github.com/hydroan/gst/internal/types"
 	"gorm.io/gorm"
 	"gorm.io/plugin/dbresolver"
 )
@@ -273,8 +273,8 @@ func DB() *gorm.DB {
 	return dbruntime.DB
 }
 
-// database implements types.Database[M].
-type database[M types.Model] struct {
+// database implements gst.Database[M].
+type database[M gst.Model] struct {
 	ins *gorm.DB
 	m   M
 	typ reflect.Type
@@ -301,12 +301,12 @@ type database[M types.Model] struct {
 	dryRun         bool  // build SQL without database I/O, hooks, or object field filling.
 
 	// sql
-	sqlStatements *[]types.SQLStatement // collector supplied to WithDryRun, nil when the dry run only builds.
+	sqlStatements *[]gst.SQLStatement // collector supplied to WithDryRun, nil when the dry run only builds.
 
 	// ordering and pagination
-	cursor    types.Cursor  // feed ordering, boundary value, and travel direction; the zero Cursor pages nothing.
-	orders    []types.Order // WithOrder's terms as given; WithCursor refuses to join them (see ErrCursorWithOrder), and a page's order is completed from them (see completeOrder).
-	paginated bool          // WithPagination set a page, whose order List completes to a total one (see completeOrder).
+	cursor    gst.Cursor  // feed ordering, boundary value, and travel direction; the zero Cursor pages nothing.
+	orders    []gst.Order // WithOrder's terms as given; WithCursor refuses to join them (see ErrCursorWithOrder), and a page's order is completed from them (see completeOrder).
+	paginated bool        // WithPagination set a page, whose order List completes to a total one (see completeOrder).
 
 	// select
 	selectColumns []string
@@ -362,7 +362,7 @@ func (db *database[M]) reset() {
 	db.sqlStatements = nil
 
 	// reset ordering and pagination
-	db.cursor = types.Cursor{}
+	db.cursor = gst.Cursor{}
 	db.orders = nil
 	db.paginated = false
 
@@ -395,13 +395,13 @@ func (db *database[M]) prepare() error {
 }
 
 // Database returns the operation chain of model M on the default database,
-// implementing types.Database: the writes, the reads and the model hooks
+// implementing gst.Database: the writes, the reads and the model hooks
 // around them. The chain runs in GORM's debug mode, logging its statements,
 // when the logger level is debug. The tables it touches must exist before it
 // runs.
 //
 // Type Parameters:
-//   - M: Model type that implements types.Model interface
+//   - M: Model type that implements gst.Model interface
 //
 // Parameters:
 //   - ctx: Required context for cancellation, tracing, and request metadata.
@@ -447,7 +447,7 @@ func (db *database[M]) prepare() error {
 //	_ = Database[*Sample](ctx).WithQuery(&Sample{Name: "alpha"}).List(&samples)
 //	s := new(Sample)
 //	_ = Database[*Sample](ctx).Get(s, id)
-func Database[M types.Model](ctx context.Context) types.Database[M] {
+func Database[M gst.Model](ctx context.Context) gst.Database[M] {
 	if DB() == nil {
 		panic("database is not initialized")
 	}
@@ -459,7 +459,7 @@ func Database[M types.Model](ctx context.Context) types.Database[M] {
 // the application. The chain only joins transactions opened on the same
 // instance by TransactionOn. Panics on a nil instance, consistent with
 // Database on an uninitialized default database.
-func DatabaseOn[M types.Model](ctx context.Context, instance *gorm.DB) types.Database[M] {
+func DatabaseOn[M gst.Model](ctx context.Context, instance *gorm.DB) gst.Database[M] {
 	if instance == nil {
 		panic("database instance cannot be nil")
 	}
@@ -499,7 +499,7 @@ func parseRegisteredModels(handle *gorm.DB) {
 // databaseFor builds the operation chain for one entry-point call: it joins
 // the context-carried transaction keyed by the given connection handle when
 // present, and stamps the chain with that handle as its identity.
-func databaseFor[M types.Model](ctx context.Context, base *gorm.DB) types.Database[M] {
+func databaseFor[M gst.Model](ctx context.Context, base *gorm.DB) gst.Database[M] {
 	parseRegisteredModels(base)
 
 	// A nil context is a defect of the chain, reported by its first terminal
@@ -549,7 +549,7 @@ func databaseFor[M types.Model](ctx context.Context, base *gorm.DB) types.Databa
 // primary keys (MySQL matches id=7 for '7abc'). Base accepts any non-empty
 // string and passes through unchanged; AutoBase only accepts decimal digits.
 // The probe is a clone so probeSource stays untouched.
-func normalizeModelID[M types.Model](probeSource M, id string) (string, bool) {
+func normalizeModelID[M gst.Model](probeSource M, id string) (string, bool) {
 	probe := cloneDryRunModel(probeSource)
 	probe.ClearID()
 	probe.SetID(id)

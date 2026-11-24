@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/i18n"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -36,7 +36,7 @@ func TestAPanicAnswersInternalAndIsLoggedWithItsStack(t *testing.T) {
 	err := call(ctx, conn, "Boom", grpc.Header(&header))
 
 	require.Equal(t, codes.Internal, status.Code(err))
-	require.Equal(t, types.FailureMsg, status.Convert(err).Message())
+	require.Equal(t, gst.FailureMsg, status.Convert(err).Message())
 	require.Equal(t, []string{traceID}, header.Get("x-trace-id"), "the caller quotes the trace id back from the header of the failed call")
 	require.NoError(t, call(ctx, conn, "Ping"), "the server must outlive the panic")
 	entries := recoveryLog.All()

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	prommetrics "github.com/hydroan/gst/metrics"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
@@ -78,7 +78,7 @@ func TestReloadKeepsDeciding(t *testing.T) {
 	r, _ := storedRBAC(t, "policy_reload_invariants")
 	ctx := context.Background()
 
-	require.NoError(t, r.SetRolePermissions(ctx, "tenant_a", "role_a", []types.Permission{
+	require.NoError(t, r.SetRolePermissions(ctx, "tenant_a", "role_a", []gst.Permission{
 		{Object: "/api/things/{id}", Action: "GET"},
 	}))
 	require.NoError(t, r.AssignRole(ctx, "tenant_a", "u1", "role_a"))

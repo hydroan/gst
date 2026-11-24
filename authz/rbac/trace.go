@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -85,14 +85,14 @@ var authorizeSpanName = gstotel.OperationSpanName("rbac", "authorize")
 // request, and a span that will not be recorded must cost no allocation at all;
 // assembling the attributes first and discarding them would put that cost on
 // every request in a deployment that samples, or traces not at all.
-func traceAuthorize(ctx context.Context, tenant string) func(types.Decision, error) {
+func traceAuthorize(ctx context.Context, tenant string) func(gst.Decision, error) {
 	if !gstotel.IsEnabled() {
-		return func(types.Decision, error) {}
+		return func(gst.Decision, error) {}
 	}
 
 	_, span := gstotel.StartSpan(contextOrBackground(ctx), authorizeSpanName)
 	if !gstotel.IsSpanRecording(span) {
-		return func(types.Decision, error) { span.End() }
+		return func(gst.Decision, error) { span.End() }
 	}
 	span.SetAttributes(
 		attribute.String("component", "rbac"),
@@ -100,7 +100,7 @@ func traceAuthorize(ctx context.Context, tenant string) func(types.Decision, err
 		attribute.String("rbac.tenant", tenant),
 	)
 
-	return func(decision types.Decision, err error) {
+	return func(decision gst.Decision, err error) {
 		defer span.End()
 
 		attrs := make([]attribute.KeyValue, 0, authorizeOutcomeAttrCap)

@@ -7,9 +7,9 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/types"
 	"go.uber.org/zap"
 )
 
@@ -298,7 +298,7 @@ func jsonKey(field reflect.StructField) string {
 // made. The fields no patch applies never reach here (see patchFieldsOf),
 // so the primary key names the record patched and the framework's base
 // fields and the read-only ones stay as stored.
-func applyPatch(log types.Logger, typ reflect.Type, oldVal reflect.Value, newVal reflect.Value, fieldSets ...patchFieldSet) {
+func applyPatch(log gst.Logger, typ reflect.Type, oldVal reflect.Value, newVal reflect.Value, fieldSets ...patchFieldSet) {
 	var fields patchFieldSet
 	if len(fieldSets) > 0 {
 		fields = fieldSets[0]

@@ -10,10 +10,10 @@ import (
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/router"
 	"github.com/hydroan/gst/internal/testutil"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -43,11 +43,11 @@ func TestMain(m *testing.M) {
 		Register: func() { model.Register[*TestRecord]() },
 		Routes: func() error {
 			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record", nil, apiaction.Create)
-			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/:id", &types.ControllerConfig[*TestRecord]{ParamName: "id"}, apiaction.Delete)
-			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/:id", &types.ControllerConfig[*TestRecord]{ParamName: "id"}, apiaction.Update)
-			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/:id", &types.ControllerConfig[*TestRecord]{ParamName: "id"}, apiaction.Patch)
+			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/:id", &gst.ControllerConfig[*TestRecord]{ParamName: "id"}, apiaction.Delete)
+			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/:id", &gst.ControllerConfig[*TestRecord]{ParamName: "id"}, apiaction.Update)
+			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/:id", &gst.ControllerConfig[*TestRecord]{ParamName: "id"}, apiaction.Patch)
 			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record", nil, apiaction.List)
-			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/:id", &types.ControllerConfig[*TestRecord]{ParamName: "id"}, apiaction.Get)
+			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/:id", &gst.ControllerConfig[*TestRecord]{ParamName: "id"}, apiaction.Get)
 			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/batch", nil, apiaction.CreateMany)
 			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/batch", nil, apiaction.DeleteMany)
 			router.Register[*TestRecord, *TestRecord, *TestRecord](router.Auth(), "test-record/batch", nil, apiaction.UpdateMany)

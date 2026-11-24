@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/tenant"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -27,7 +27,7 @@ func TestMutateRejectsEmptyValues(t *testing.T) {
 
 	require.NoError(t, r.AssignRole(ctx, "tenant_a", "u1", "role_a"))
 	require.NoError(t, r.AssignSystemRole(ctx, "u2", "system_root"))
-	require.NoError(t, r.SetRolePermissions(ctx, "tenant_a", "role_a", []types.Permission{
+	require.NoError(t, r.SetRolePermissions(ctx, "tenant_a", "role_a", []gst.Permission{
 		{Object: "/api/things", Action: "GET"},
 	}))
 	before := storedRules(t, store)
@@ -53,7 +53,7 @@ func TestMutateRejectsEmptyValues(t *testing.T) {
 	})
 
 	t.Run("set role permissions with an empty entry", func(t *testing.T) {
-		for name, permissions := range map[string][]types.Permission{
+		for name, permissions := range map[string][]gst.Permission{
 			"no object":                {{Action: "GET"}},
 			"no action":                {{Object: "/api/other"}},
 			"beside a populated entry": {{Object: "/api/other", Action: "POST"}, {Action: "GET"}},
@@ -98,7 +98,7 @@ func TestMutateNormalizesEmptyTenant(t *testing.T) {
 	ctx := context.Background()
 
 	require.NoError(t, r.AssignRole(ctx, "", "u1", "role_a"))
-	require.NoError(t, r.SetRolePermissions(ctx, "", "role_a", []types.Permission{
+	require.NoError(t, r.SetRolePermissions(ctx, "", "role_a", []gst.Permission{
 		{Object: "/api/things", Action: "GET"},
 	}))
 
@@ -169,14 +169,14 @@ func TestMutateIsAtomicWithoutACallerTransaction(t *testing.T) {
 	r, store := storedRBAC(t, "policy_atomic_write")
 	ctx := context.Background()
 
-	granted := []types.Permission{{Object: "/api/things", Action: "GET"}}
+	granted := []gst.Permission{{Object: "/api/things", Action: "GET"}}
 	require.NoError(t, r.SetRolePermissions(ctx, "tenant_a", "role_a", granted))
 	before := storedRules(t, store)
 	require.Len(t, before, 1)
 
 	// The replacement deletes first and inserts second; the insert fails.
 	r.adapter = &failAfterAdapter{adapter: store, failOn: 2}
-	err := r.SetRolePermissions(ctx, "tenant_a", "role_a", []types.Permission{
+	err := r.SetRolePermissions(ctx, "tenant_a", "role_a", []gst.Permission{
 		{Object: "/api/things", Action: "POST"},
 	})
 
@@ -255,7 +255,7 @@ func TestApplyToModelRebuildsWhenOvertaken(t *testing.T) {
 	olderSequence := policySequence.Add(1)
 
 	// The newer write lands in storage and in memory while the older one waits.
-	require.NoError(t, r.SetRolePermissions(ctx, "tenant_a", "role_a", []types.Permission{
+	require.NoError(t, r.SetRolePermissions(ctx, "tenant_a", "role_a", []gst.Permission{
 		{Object: "/api/new", Action: "GET"},
 	}))
 	require.Equal(t, []string{"p:tenant_a,role_a,/api/new,GET,allow"}, storedRules(t, store))

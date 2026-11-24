@@ -4,14 +4,14 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/tenant"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
 // RequireGet asserts that the row with the given id exists and returns it.
 func RequireGet[T any, M interface {
-	types.Model
+	gst.Model
 	*T
 }](t *testing.T, id string) M {
 	t.Helper()
@@ -26,7 +26,7 @@ func RequireGet[T any, M interface {
 // the framework's empty-query safety check, so a deliberate full-table read
 // stays on the database chain.
 func RequireFirst[T any, M interface {
-	types.Model
+	gst.Model
 	*T
 }](t *testing.T, query M) M {
 	t.Helper()
@@ -42,9 +42,9 @@ func RequireFirst[T any, M interface {
 // matches no rows: WithQuery keeps the framework's empty-query safety check,
 // so a deliberate full-table read stays on the database chain.
 func RequireList[T any, M interface {
-	types.Model
+	gst.Model
 	*T
-}](t *testing.T, query M, orders ...types.Order) []M {
+}](t *testing.T, query M, orders ...gst.Order) []M {
 	t.Helper()
 
 	chain := database.Database[M](t.Context()).WithQuery(query)
@@ -61,7 +61,7 @@ func RequireList[T any, M interface {
 // keeps the framework's empty-query safety check, so a deliberate full-table
 // count stays on the database chain.
 func RequireCount[T any, M interface {
-	types.Model
+	gst.Model
 	*T
 }](t *testing.T, query M) int {
 	t.Helper()
@@ -75,7 +75,7 @@ func RequireCount[T any, M interface {
 // regular query path. A hard-deleted and a soft-deleted row both satisfy it;
 // RequireSoftDeleted additionally pins that a soft-deleted row is kept.
 func RequireNoRow[T any, M interface {
-	types.Model
+	gst.Model
 	*T
 }](t *testing.T, id string) {
 	t.Helper()
@@ -90,7 +90,7 @@ func RequireNoRow[T any, M interface {
 // own soft-delete scope decides what counts as deleted, whatever column and
 // zero value the model declares for it.
 func RequireSoftDeleted[T any, M interface {
-	types.Model
+	gst.Model
 	*T
 }](t *testing.T, id string) {
 	t.Helper()

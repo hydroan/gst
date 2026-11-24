@@ -11,12 +11,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/streamctx"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/websocket"
 	"github.com/hydroan/gst/logger"
 	"go.opentelemetry.io/otel/attribute"
@@ -44,7 +44,7 @@ var errServicePanicked = errors.New("controller: the service of the stream panic
 // The request is the handshake, and until the connection is taken over it is
 // answered like any request, with a regular error envelope: a route parameter
 // the action may not carry is refused with 400, a service declaring no Stream
-// method of the action's kind (see types.ServerStreamer and its kind) with
+// method of the action's kind (see gst.ServerStreamer and its kind) with
 // 501 and unimplementedMsg, and a handshake the protocol or the origins
 // admitted (config.Server.WebSocketOrigins) refuse with the status and the
 // text of the refusal (see websocket.Accept).
@@ -69,7 +69,7 @@ var errServicePanicked = errors.New("controller: the service of the stream panic
 // the connection closed as the server's own failure, before the recovery up
 // the chain takes the panic. The status the connection closed with is left
 // on the gin context under requestctx.KeyCloseCode, for the access log.
-func StreamHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...*types.ControllerConfig[M]) gin.HandlerFunc {
+func StreamHandler[M gst.Model, REQ gst.Request, RSP gst.Response](cfg ...*gst.ControllerConfig[M]) gin.HandlerFunc {
 	route := routeFromConfig(cfg...)
 	a := newAction[M, REQ, RSP](route, apiaction.Stream)
 	noRequest, noResponse := model.IsEmpty[REQ](), model.IsEmpty[RSP]()
@@ -82,12 +82,12 @@ func StreamHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		log := logger.Controller.WithContext(c.Request.Context(), apiaction.Stream)
 
 		svc := a.service()
-		server, isServer := svc.(types.ServerStreamer[REQ, RSP])
-		client, isClient := svc.(types.ClientStreamer[REQ, RSP])
-		bidi, isBidi := svc.(types.BidiStreamer[REQ, RSP])
+		server, isServer := svc.(gst.ServerStreamer[REQ, RSP])
+		client, isClient := svc.(gst.ClientStreamer[REQ, RSP])
+		bidi, isBidi := svc.(gst.BidiStreamer[REQ, RSP])
 		if !isServer && !isClient && !isBidi {
 			err := a.unserved(route)
-			response.Error(c, reportFailure(log, span, "service operation failed", err, types.NewErrorWithCause(http.StatusNotImplemented, unimplementedMsg, err)))
+			response.Error(c, reportFailure(log, span, "service operation failed", err, gst.NewErrorWithCause(http.StatusNotImplemented, unimplementedMsg, err)))
 			return
 		}
 
@@ -139,14 +139,14 @@ func StreamHandler[M types.Model, REQ types.Request, RSP types.Response](cfg ...
 		if err == nil {
 			rsp, err = a.traceServiceOperation(stream, apiaction.Stream, func(spanCtx context.Context) (RSP, error) {
 				var zero RSP
-				sc := types.NewServiceContext(c, spanCtx, apiaction.Stream)
+				sc := gst.NewServiceContext(c, spanCtx, apiaction.Stream)
 				switch {
 				case isServer:
-					return zero, server.Stream(sc, req, types.NewServerStream(send))
+					return zero, server.Stream(sc, req, gst.NewServerStream(send))
 				case isClient:
-					return client.Stream(sc, types.NewClientStream(in.recv))
+					return client.Stream(sc, gst.NewClientStream(in.recv))
 				default:
-					return zero, bidi.Stream(sc, types.NewBidiStream(in.recv, send))
+					return zero, bidi.Stream(sc, gst.NewBidiStream(in.recv, send))
 				}
 			})
 		}
@@ -241,7 +241,7 @@ func (a *action[M, REQ, RSP]) awaitRequest(conn *websocket.Conn, noRequest bool,
 			raw = got.message
 		case <-expired:
 			var zero REQ
-			return zero, types.NewError(http.StatusRequestTimeout, requestTimeoutMsg)
+			return zero, gst.NewError(http.StatusRequestTimeout, requestTimeoutMsg)
 		}
 	}
 	conn.CloseRecv()

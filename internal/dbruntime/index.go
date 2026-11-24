@@ -9,8 +9,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/types"
 	"gorm.io/gorm"
 )
 
@@ -31,7 +31,7 @@ var (
 // checkCrossModelIndexPlans records m's resolved plans and validates them
 // against every other model already ensured on handler. Repeated arrivals of
 // one model type are no conflict: the recorded plans are replaced.
-func checkCrossModelIndexPlans(handler *gorm.DB, m types.Model, plans []modelschema.IndexPlan) error {
+func checkCrossModelIndexPlans(handler *gorm.DB, m gst.Model, plans []modelschema.IndexPlan) error {
 	crossModelIndexPlansMu.Lock()
 	defer crossModelIndexPlansMu.Unlock()
 
@@ -52,7 +52,7 @@ func checkCrossModelIndexPlans(handler *gorm.DB, m types.Model, plans []modelsch
 }
 
 // modelDisplayName renders the model's type name without pointer markers.
-func modelDisplayName(m types.Model) string {
+func modelDisplayName(m gst.Model) string {
 	typ := reflect.TypeOf(m)
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
@@ -75,7 +75,7 @@ func modelDisplayName(m types.Model) string {
 // to create an index; the loser's failure is checked against the table, and
 // the winner's index, under the plan's name and definition, is the outcome
 // it wanted.
-func ensureCustomIndexes(handler *gorm.DB, m types.Model) error {
+func ensureCustomIndexes(handler *gorm.DB, m gst.Model) error {
 	tableName, err := requireTableName(m)
 	if err != nil {
 		return err

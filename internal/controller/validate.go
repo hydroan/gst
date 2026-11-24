@@ -16,9 +16,9 @@ import (
 	entranslations "github.com/go-playground/validator/v10/translations/en"
 	zhtranslations "github.com/go-playground/validator/v10/translations/zh"
 	"github.com/go-playground/validator/v10/translations/zh_tw"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/types"
 )
 
 // This file holds the validation both transports run on what they decoded:
@@ -147,14 +147,14 @@ func init() {
 // and is not the client's. nil for any other error, and for the errors of a
 // validator other than the one init configured, whose sentences and field
 // names are its own.
-func fieldViolations(err error, prefix string) []types.FieldViolation {
+func fieldViolations(err error, prefix string) []gst.FieldViolation {
 	var request *refusedRequestError
 	var fieldErrors validator.ValidationErrors
 	if validatorEngine == nil || binding.Validator == nil || binding.Validator.Engine() != validatorEngine || !errors.As(err, &request) || !errors.As(request.err, &fieldErrors) {
 		return nil
 	}
 	translator := validatorTranslators[i18n.Language()]
-	violations := make([]types.FieldViolation, 0, len(fieldErrors))
+	violations := make([]gst.FieldViolation, 0, len(fieldErrors))
 	for _, fe := range fieldErrors {
 		path := prefix + jsonFieldPath(request.typ, fe)
 		description := fe.Translate(translator)
@@ -167,7 +167,7 @@ func fieldViolations(err error, prefix string) []types.FieldViolation {
 		} else {
 			description = path + strings.TrimPrefix(description, fe.Field())
 		}
-		violations = append(violations, types.FieldViolation{Field: path, Description: description})
+		violations = append(violations, gst.FieldViolation{Field: path, Description: description})
 	}
 	return violations
 }

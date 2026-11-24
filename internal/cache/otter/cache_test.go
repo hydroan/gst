@@ -9,7 +9,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/cache/cachetest"
 	"github.com/hydroan/gst/internal/cache/otter"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // writeVisibilityCapacity keeps the pressure test's fill and warm-up cheap
@@ -31,7 +31,7 @@ func TestCacheIsolatesTypes(t *testing.T) {
 	if err := otter.Cache[int]().Set(ctx, "package-isolation-key", 7, 0); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	if _, err := otter.Cache[string]().Get(ctx, "package-isolation-key"); !errors.Is(err, types.ErrEntryNotFound) {
+	if _, err := otter.Cache[string]().Get(ctx, "package-isolation-key"); !errors.Is(err, gst.ErrEntryNotFound) {
 		t.Fatalf("want ErrEntryNotFound from the other type's cache, got %v", err)
 	}
 }
@@ -62,7 +62,7 @@ func TestOverwriteReappliesTTL(t *testing.T) {
 		t.Fatalf("set: %v", err)
 	}
 	time.Sleep(500 * time.Millisecond)
-	if _, err := c.Get(ctx, "shortened"); !errors.Is(err, types.ErrEntryNotFound) {
+	if _, err := c.Get(ctx, "shortened"); !errors.Is(err, gst.ErrEntryNotFound) {
 		t.Fatalf("want the shortened ttl to win, got %v", err)
 	}
 
@@ -93,7 +93,7 @@ func TestReadDoesNotExtendTTL(t *testing.T) {
 		_, _ = c.Get(ctx, "read-probe")
 	}
 	time.Sleep(200 * time.Millisecond)
-	if _, err := c.Get(ctx, "read-probe"); !errors.Is(err, types.ErrEntryNotFound) {
+	if _, err := c.Get(ctx, "read-probe"); !errors.Is(err, gst.ErrEntryNotFound) {
 		t.Fatalf("want the entry to expire despite the reads, got %v", err)
 	}
 }

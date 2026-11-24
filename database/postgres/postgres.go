@@ -138,7 +138,7 @@ func readTimesInUTC(types *pgtype.Map) {
 // across dialects, the way the MySQL DSN pins loc=UTC. PostgreSQL stores a
 // timestamptz as an instant but reads the session zone wherever text meets
 // time: a timestamp string without an offset — the form URL time filters and
-// time cursors bind, see types.FilterTimeLayout — is taken as time in that
+// time cursors bind, see gst.FilterTimeLayout — is taken as time in that
 // zone, and to_char renders time buckets in it. Under any other zone, filters
 // and cursors would shift by the offset and buckets would split days at that
 // zone's midnight, so the zone is not configurable. The zone a time read

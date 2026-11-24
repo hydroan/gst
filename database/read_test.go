@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/stretchr/testify/require"
 )
 
@@ -160,13 +160,13 @@ func TestDatabaseListWithJSONString(t *testing.T) {
 	// filter, which matches the document's text form and casts the column
 	// where the dialect requires it.
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{Filters: []types.Filter{types.FilterLike("addr", "shanghai")}}).
+		WithQuery(nil, gst.QueryOptions{Filters: []gst.Filter{gst.FilterLike("addr", "shanghai")}}).
 		List(&res))
 	require.Len(t, res, 1)
 	require.Equal(t, "shanghai", res[0].Name)
 
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithQuery(nil, types.QueryOptions{Filters: []types.Filter{types.FilterLike("addr", "1")}}).
+		WithQuery(nil, gst.QueryOptions{Filters: []gst.Filter{gst.FilterLike("addr", "1")}}).
 		List(&res))
 	require.Len(t, res, 2)
 	var found1, found2 bool
@@ -436,7 +436,7 @@ func TestDatabaseCount(t *testing.T) {
 	// Test count with a cursor left on the chain - a cursor narrows List only,
 	// so the count still covers every matching record
 	require.NoError(t, database.Database[*TestUser](context.Background()).
-		WithCursor(types.CursorForward(types.Asc("id"), u1.ID)).Count(count))
+		WithCursor(gst.CursorForward(gst.Asc("id"), u1.ID)).Count(count))
 	require.Equal(t, 3, *count, "cursor should not affect count")
 
 	// Test count with query conditions

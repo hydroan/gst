@@ -2,7 +2,7 @@
 // of the error a request is answered with.
 package module
 
-import "example.com/module/internal/types"
+import "example.com/module/internal/gst"
 
 // NewError forwards the constructor as a variable.
-var NewError = types.NewError
+var NewError = gst.NewError

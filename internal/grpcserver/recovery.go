@@ -6,9 +6,9 @@ import (
 	"runtime/debug"
 
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/logfield"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -38,5 +38,5 @@ func recovered(ctx context.Context, p any) error {
 			logfield.TraceID(execctx.FromContext(ctx).TraceID),
 		)
 	}
-	return status.Error(codes.Internal, i18n.Translate(types.FailureMsg))
+	return status.Error(codes.Internal, i18n.Translate(gst.FailureMsg))
 }

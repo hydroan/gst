@@ -9,8 +9,8 @@ import (
 	"github.com/gocql/gocql"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/cqlpolicy"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/lifecycle"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
@@ -28,7 +28,7 @@ func init() {
 		Name:      "cassandra",
 		Stage:     lifecycle.StageProvider,
 		Enabled:   func() bool { return config.App.Cassandra.Enabled },
-		SetLogger: func(l types.Logger) { logger.Cassandra = l },
+		SetLogger: func(l gst.Logger) { logger.Cassandra = l },
 		Start:     start,
 		Stop:      stop,
 	})

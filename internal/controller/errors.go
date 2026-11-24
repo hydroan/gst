@@ -7,8 +7,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/tenant"
-	"github.com/hydroan/gst/internal/types"
 	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -23,36 +23,36 @@ import (
 
 // invalidArgument returns the refusal of a request the controller could not
 // carry, err: the service error err wraps when that one answers 400
-// already, whole, so the fields it names (see types.FieldViolations) reach
+// already, whole, so the fields it names (see gst.FieldViolations) reach
 // the answer; otherwise 400 with the client-safe text of err — the message
 // of the service error err wraps, when it does, err's own text otherwise —
 // and err as the cause.
-func invalidArgument(err error) *types.Error {
+func invalidArgument(err error) *gst.Error {
 	msg := err.Error()
-	var serviceErr *types.Error
+	var serviceErr *gst.Error
 	if errors.As(err, &serviceErr) {
 		if serviceErr.Status() == http.StatusBadRequest {
 			return serviceErr
 		}
 		msg = serviceErr.Msg()
 	}
-	return types.NewErrorWithCause(http.StatusBadRequest, msg, err)
+	return gst.NewErrorWithCause(http.StatusBadRequest, msg, err)
 }
 
 // badRequest returns the 400 refusal carrying msg.
-func badRequest(msg string) *types.Error {
-	return types.NewError(http.StatusBadRequest, msg)
+func badRequest(msg string) *gst.Error {
+	return gst.NewError(http.StatusBadRequest, msg)
 }
 
 // notFound returns the 404 refusal of a record the flow could not find, with
 // cause, when there is one, behind it.
-func notFound(cause error) *types.Error {
-	return types.NewErrorWithCause(http.StatusNotFound, notFoundMsg, cause)
+func notFound(cause error) *gst.Error {
+	return gst.NewErrorWithCause(http.StatusNotFound, notFoundMsg, cause)
 }
 
 // reportFailure reports a failure the controller answers, by the answer it
 // is given: it logs it under msg, with fields and, when there is one, err as
-// the error, at the level answer calls for (see types.FailureLevel), and
+// the error, at the level answer calls for (see gst.FailureLevel), and
 // returns answer, the error the failure is answered with. The server's own
 // failure is logged at error and err recorded on span, the controller span
 // of the request or of the call; a failure the client brought on itself is
@@ -61,11 +61,11 @@ func notFound(cause error) *types.Error {
 // middleware). A handler, a flow and a call report through it alike, so that
 // a failure reads the same in the log and on the span whichever transport
 // carried the request.
-func reportFailure(log types.Logger, span trace.Span, msg string, err, answer error, fields ...zap.Field) error {
+func reportFailure(log gst.Logger, span trace.Span, msg string, err, answer error, fields ...zap.Field) error {
 	if err != nil {
 		fields = append(fields, zap.Error(err))
 	}
-	switch level := types.FailureLevel(answer); {
+	switch level := gst.FailureLevel(answer); {
 	case level >= slog.LevelError:
 		log.Errorz(msg, fields...)
 		gstotel.RecordError(span, err)
@@ -84,14 +84,14 @@ func reportFailure(log types.Logger, span trace.Span, msg string, err, answer er
 //
 // A ctx the client canceled — it went away before the answer — makes the
 // failure the client's doing, not the server's: answered as the
-// cancellation, types.StatusClientClosedRequest with the context's own
+// cancellation, gst.StatusClientClosedRequest with the context's own
 // message, which gRPC answers Canceled (see call.ended), it is logged at
 // info and kept off the span. A ctx whose deadline passed is the server
 // failing to answer within the request's time budget, whoever set it, which
 // the tracing conventions count as the server's error: answered 504 with
 // the context's message, what gRPC answers DeadlineExceeded, it is logged at
 // error and recorded like any failure of the server's.
-func failWith(ctx context.Context, log types.Logger, msg string, err, answer error) error {
+func failWith(ctx context.Context, log gst.Logger, msg string, err, answer error) error {
 	if ended := ctx.Err(); ended != nil {
 		answer = endedAnswer(ended, err)
 	}
@@ -100,14 +100,14 @@ func failWith(ctx context.Context, log types.Logger, msg string, err, answer err
 
 // endedAnswer returns the answer of a request whose context ended, ended
 // being how, with err behind it: a request the client canceled as
-// types.StatusClientClosedRequest with the context's message, what gRPC
+// gst.StatusClientClosedRequest with the context's message, what gRPC
 // answers Canceled, and one whose deadline passed as 504 with the context's
 // message, what gRPC answers DeadlineExceeded.
 func endedAnswer(ended, err error) error {
 	if errors.Is(ended, context.Canceled) {
-		return types.NewErrorWithCause(types.StatusClientClosedRequest, ended.Error(), err)
+		return gst.NewErrorWithCause(gst.StatusClientClosedRequest, ended.Error(), err)
 	}
-	return types.NewErrorWithCause(http.StatusGatewayTimeout, ended.Error(), err)
+	return gst.NewErrorWithCause(http.StatusGatewayTimeout, ended.Error(), err)
 }
 
 // failService reports a service hook or operation that refused or failed,
@@ -116,13 +116,13 @@ func endedAnswer(ended, err error) error {
 // is the server's own failure. Internal error text — database drivers
 // naming tables and columns, third-party client output — never reaches the
 // envelope; the transports render only a service error's message.
-func failService(ctx context.Context, log types.Logger, err error) error {
+func failService(ctx context.Context, log gst.Logger, err error) error {
 	return failWith(ctx, log, "service operation failed", err, err)
 }
 
 // failDatabase reports a failure of the flow's own database access, answered
 // through databaseError.
-func failDatabase(ctx context.Context, log types.Logger, err error) error {
+func failDatabase(ctx context.Context, log gst.Logger, err error) error {
 	return failWith(ctx, log, "database operation failed", err, databaseError(err))
 }
 
@@ -144,43 +144,43 @@ func failDatabase(ctx context.Context, log types.Logger, err error) error {
 // answering 403 — and flattening that to the server's own failure would
 // misreport a permission boundary as a server fault.
 func databaseError(err error) error {
-	var serviceErr *types.Error
+	var serviceErr *gst.Error
 	switch {
 	case errors.As(err, &serviceErr):
 		return err
 	case errors.Is(err, database.ErrRecordNotFound):
 		return notFound(err)
 	case errors.Is(err, database.ErrDuplicatedKey):
-		return types.NewErrorWithCause(http.StatusConflict, alreadyExistsMsg, err)
+		return gst.NewErrorWithCause(http.StatusConflict, alreadyExistsMsg, err)
 	case errors.Is(err, database.ErrStaleObject):
 		// The optimistic-lock miss of a versioned model: modified or deleted
 		// by someone else after this caller read it. 409, reload and retry.
-		return types.NewErrorWithCause(http.StatusConflict, staleObjectMsg, err)
+		return gst.NewErrorWithCause(http.StatusConflict, staleObjectMsg, err)
 	case errors.Is(err, database.ErrVersionRequired):
 		// A versioned record arrived without the version it was read with —
 		// a request defect, not a conflict.
-		return types.NewErrorWithCause(http.StatusBadRequest, invalidArgumentMsg, err)
+		return gst.NewErrorWithCause(http.StatusBadRequest, invalidArgumentMsg, err)
 	case errors.Is(err, database.ErrIDRequired):
 		// An id of a batch delete is empty and names no record — a request
 		// defect as well; a batch update or patch refuses an item without
 		// an id before it writes, naming the item (see itemWithoutID).
-		return types.NewErrorWithCause(http.StatusBadRequest, invalidArgumentMsg, err)
+		return gst.NewErrorWithCause(http.StatusBadRequest, invalidArgumentMsg, err)
 	case errors.Is(err, database.ErrForeignKeyViolated):
 		// The request names a record that is not there, or would leave one
 		// other records still refer to: a conflict with the records as they
 		// are, to retry once they are in place, FailedPrecondition over gRPC
 		// (see grpcserver.StatusError).
-		return types.NewErrorWithCause(http.StatusConflict, foreignKeyMsg, err)
+		return gst.NewErrorWithCause(http.StatusConflict, foreignKeyMsg, err)
 	case errors.Is(err, database.ErrCheckConstraintViolated), errors.Is(err, database.ErrValueTooLong), errors.Is(err, database.ErrNotNullViolated):
 		// A value the table refuses, by a check, by the length of the
 		// column or by a column that requires one: the request's own defect.
-		return types.NewErrorWithCause(http.StatusBadRequest, invalidArgumentMsg, err)
+		return gst.NewErrorWithCause(http.StatusBadRequest, invalidArgumentMsg, err)
 	case errors.Is(err, tenant.ErrTenantImmutable), errors.Is(err, tenant.ErrTenantRequired):
 		// A tenant the record cannot have: another one than the caller acts
 		// in, which the write-once column never takes, or none from a caller
 		// acting in every tenant, which leaves nothing to file the record
 		// under. Either is the request's own defect.
-		return types.NewErrorWithCause(http.StatusBadRequest, invalidArgumentMsg, err)
+		return gst.NewErrorWithCause(http.StatusBadRequest, invalidArgumentMsg, err)
 	default:
 		// Any other database error is the server's own failure.
 		return err

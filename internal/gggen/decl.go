@@ -683,7 +683,7 @@ func serviceMethod8(recvName, modelName, modelQualifier, roleName string, body .
 // serviceMethod9 builds the declaration of the Stream method of a Stream
 // action, with the given body: the request and the response stream the
 // action declares, of the gst package, with streamingPayload and
-// streamingResult telling which side streams (see types.ServerStreamer and
+// streamingResult telling which side streams (see gst.ServerStreamer and
 // its kind); the model package is referred to by modelQualifier and the gst
 // model package, for a dsl.PayloadEmpty side, by gstModelPkg (see types).
 // For the package model, a Payload FeedWatchReq streaming a Result FeedEvent

@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // DeleteCall returns the delete call of M on route, the counterpart of the
@@ -12,7 +12,7 @@ import (
 // given the route parameters and the id the request message names the
 // record by, it runs the delete flow (see deleteFlow) and answers nothing,
 // or the status the failure maps to (see call).
-func DeleteCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string) error {
+func DeleteCall[M gst.Model](route string) func(ctx context.Context, params map[string]string, id string) error {
 	a := newAction[M, M, M](route, apiaction.Delete, apiaction.DeleteBefore, apiaction.DeleteAfter)
 	return func(ctx context.Context, params map[string]string, id string) error {
 		c, err := a.beginCall(ctx, params, nil)

@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/stoewer/go-strcase"
 )
@@ -20,25 +20,25 @@ const expandAll = "all"
 // listQueryKeys are the List parameters model.Query opts a model in to,
 // beside the operator filters.
 var listQueryKeys = map[string]struct{}{
-	types.QueryExpand: {},
-	types.QueryDepth:  {},
-	types.QuerySortBy: {},
+	gst.QueryExpand: {},
+	gst.QueryDepth:  {},
+	gst.QuerySortBy: {},
 }
 
 // listPagingQueryKeys are the List parameters a list pages by: the size of
 // every list, and the page of one that is no feed. An export, which lists
 // every record the query matches, refuses them beside the cursor's.
 var listPagingQueryKeys = map[string]struct{}{
-	types.QueryPage: {},
-	types.QuerySize: {},
+	gst.QueryPage: {},
+	gst.QuerySize: {},
 }
 
 // listCursorQueryKeys are the List parameters a feed alone takes, the list of
 // a model embedding model.Cursor.
 var listCursorQueryKeys = map[string]struct{}{
-	types.QueryCursorValue: {},
-	types.QueryCursorField: {},
-	types.QueryCursorNext:  {},
+	gst.QueryCursorValue: {},
+	gst.QueryCursorField: {},
+	gst.QueryCursorNext:  {},
 }
 
 // decodeListQuery rejects the framework query keys the model has not opted
@@ -47,7 +47,7 @@ var listCursorQueryKeys = map[string]struct{}{
 // explicit gate reports every such key in one error. _page and _size are
 // every list's but a feed's page, which urlquery.Cursor refuses beside
 // _sort_by when the flow reads the cursor.
-func decodeListQuery[M types.Model](m M, query map[string][]string) error {
+func decodeListQuery[M gst.Model](m M, query map[string][]string) error {
 	rejected := make([]string, 0)
 	if !model.IsQueryable(m) {
 		rejected = append(rejected, matchQueryKeys(query, listQueryKeys)...)
@@ -89,10 +89,10 @@ func matchQueryKeys(query map[string][]string, keys map[string]struct{}) []strin
 // urlquery.MaxExpandDepth with "invalid query parameter "_depth": expect a
 // value from 1 to 10, got "11"", whether or not the request expands
 // anything.
-func parseExpandQuery(query url.Values, m types.Model) ([]string, error) {
+func parseExpandQuery(query url.Values, m gst.Model) ([]string, error) {
 	depth := 1
-	if raw := query.Get(types.QueryDepth); raw != "" {
-		asked, err := urlquery.ParseCount(types.QueryDepth, raw, urlquery.MaxExpandDepth)
+	if raw := query.Get(gst.QueryDepth); raw != "" {
+		asked, err := urlquery.ParseCount(gst.QueryDepth, raw, urlquery.MaxExpandDepth)
 		if err != nil {
 			return nil, err
 		}
@@ -100,7 +100,7 @@ func parseExpandQuery(query url.Values, m types.Model) ([]string, error) {
 			depth = asked
 		}
 	}
-	raw := query.Get(types.QueryExpand)
+	raw := query.Get(gst.QueryExpand)
 	if raw == "" {
 		return nil, nil
 	}
@@ -119,7 +119,7 @@ func parseExpandQuery(query url.Values, m types.Model) ([]string, error) {
 			}
 		}
 		if !known {
-			return nil, errors.Newf("invalid query parameter %q: unknown association %q", types.QueryExpand, item)
+			return nil, errors.Newf("invalid query parameter %q: unknown association %q", gst.QueryExpand, item)
 		}
 	}
 

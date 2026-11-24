@@ -1,6 +1,6 @@
-// Package cachetest provides the conformance suite every types.Cache backend
+// Package cachetest provides the conformance suite every gst.Cache backend
 // must pass. Each backend declares its capabilities and the suite asserts the
-// contract documented on types.Cache: miss errors, idempotent deletes, ttl
+// contract documented on gst.Cache: miss errors, idempotent deletes, ttl
 // semantics and concurrency safety.
 package cachetest
 
@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 const (
@@ -39,7 +39,7 @@ const (
 // newcomers once the resident entries have accumulated hits; merely filling
 // the cache to capacity leaves the defect invisible, which is why the rest of
 // this suite passes even on a backend that drops most of its writes.
-func RunWriteVisibility[T ~string](t *testing.T, cache types.Cache[T], capacity int) {
+func RunWriteVisibility[T ~string](t *testing.T, cache gst.Cache[T], capacity int) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -86,7 +86,7 @@ func RunWriteVisibility[T ~string](t *testing.T, cache types.Cache[T], capacity 
 // same mechanism that makes a cache resist scans — but it is incompatible
 // with the ordinary write-now-read-later use of a cache, so the forwarded
 // default has to pass this.
-func RunWriteRetention[T ~string](t *testing.T, cache types.Cache[T], capacity int) {
+func RunWriteRetention[T ~string](t *testing.T, cache gst.Cache[T], capacity int) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -148,15 +148,15 @@ type Capabilities struct {
 	Unbounded bool
 }
 
-// Run asserts the types.Cache contract against cache. Backends that honor
+// Run asserts the gst.Cache contract against cache. Backends that honor
 // neither ttl form must reject every Set with ErrTTLNotSupported and are only
 // checked for that plus the read-path contract.
-func Run(t *testing.T, cache types.Cache[string], caps Capabilities) {
+func Run(t *testing.T, cache gst.Cache[string], caps Capabilities) {
 	t.Helper()
 	ctx := context.Background()
 
 	t.Run("GetMissingReturnsErrEntryNotFound", func(t *testing.T) {
-		if _, err := cache.Get(ctx, "conformance-missing"); !errors.Is(err, types.ErrEntryNotFound) {
+		if _, err := cache.Get(ctx, "conformance-missing"); !errors.Is(err, gst.ErrEntryNotFound) {
 			t.Fatalf("want ErrEntryNotFound, got %v", err)
 		}
 	})
@@ -171,7 +171,7 @@ func Run(t *testing.T, cache types.Cache[string], caps Capabilities) {
 		// The contract promises a nil ctx behaves as context.Background(); a
 		// typed nil variable dodges the linter that rejects literal nils.
 		var nilCtx context.Context
-		if _, err := cache.Get(nilCtx, "conformance-nil-ctx"); !errors.Is(err, types.ErrEntryNotFound) {
+		if _, err := cache.Get(nilCtx, "conformance-nil-ctx"); !errors.Is(err, gst.ErrEntryNotFound) {
 			t.Fatalf("want ErrEntryNotFound, got %v", err)
 		}
 		if cache.Exists(nilCtx, "conformance-nil-ctx") {
@@ -190,10 +190,10 @@ func Run(t *testing.T, cache types.Cache[string], caps Capabilities) {
 
 	if !caps.PerEntryTTL && !caps.NoExpiry {
 		t.Run("SetAlwaysReturnsErrTTLNotSupported", func(t *testing.T) {
-			if err := cache.Set(ctx, "conformance-unsupported", "value", 0); !errors.Is(err, types.ErrTTLNotSupported) {
+			if err := cache.Set(ctx, "conformance-unsupported", "value", 0); !errors.Is(err, gst.ErrTTLNotSupported) {
 				t.Fatalf("want ErrTTLNotSupported for ttl=0, got %v", err)
 			}
-			if err := cache.Set(ctx, "conformance-unsupported", "value", time.Minute); !errors.Is(err, types.ErrTTLNotSupported) {
+			if err := cache.Set(ctx, "conformance-unsupported", "value", time.Minute); !errors.Is(err, gst.ErrTTLNotSupported) {
 				t.Fatalf("want ErrTTLNotSupported for ttl>0, got %v", err)
 			}
 		})
@@ -240,7 +240,7 @@ func Run(t *testing.T, cache types.Cache[string], caps Capabilities) {
 		if err := cache.Delete(ctx, "conformance-delete"); err != nil {
 			t.Fatalf("delete: %v", err)
 		}
-		if _, err := cache.Get(ctx, "conformance-delete"); !errors.Is(err, types.ErrEntryNotFound) {
+		if _, err := cache.Get(ctx, "conformance-delete"); !errors.Is(err, gst.ErrEntryNotFound) {
 			t.Fatalf("want ErrEntryNotFound after delete, got %v", err)
 		}
 		if err := cache.Delete(ctx, "conformance-delete"); err != nil {
@@ -258,21 +258,21 @@ func Run(t *testing.T, cache types.Cache[string], caps Capabilities) {
 				t.Fatalf("get before expiry: %v", err)
 			}
 			time.Sleep(ttl + caps.TTLGranularity + 300*time.Millisecond)
-			if _, err := cache.Get(ctx, "conformance-expiry"); !errors.Is(err, types.ErrEntryNotFound) {
+			if _, err := cache.Get(ctx, "conformance-expiry"); !errors.Is(err, gst.ErrEntryNotFound) {
 				t.Fatalf("want ErrEntryNotFound after expiry, got %v", err)
 			}
 		})
 
 		if caps.TTLGranularity > 0 {
 			t.Run("SubGranularityTTLReturnsErrTTLNotSupported", func(t *testing.T) {
-				if err := cache.Set(ctx, "conformance-sub-granularity", "value", caps.TTLGranularity/2); !errors.Is(err, types.ErrTTLNotSupported) {
+				if err := cache.Set(ctx, "conformance-sub-granularity", "value", caps.TTLGranularity/2); !errors.Is(err, gst.ErrTTLNotSupported) {
 					t.Fatalf("want ErrTTLNotSupported for a ttl below the granularity, got %v", err)
 				}
 			})
 		}
 	} else {
 		t.Run("PositiveTTLReturnsErrTTLNotSupported", func(t *testing.T) {
-			if err := cache.Set(ctx, "conformance-expiry", "value", time.Minute); !errors.Is(err, types.ErrTTLNotSupported) {
+			if err := cache.Set(ctx, "conformance-expiry", "value", time.Minute); !errors.Is(err, gst.ErrTTLNotSupported) {
 				t.Fatalf("want ErrTTLNotSupported, got %v", err)
 			}
 		})
@@ -290,7 +290,7 @@ func Run(t *testing.T, cache types.Cache[string], caps Capabilities) {
 		})
 	} else {
 		t.Run("ZeroTTLReturnsErrTTLNotSupported", func(t *testing.T) {
-			if err := cache.Set(ctx, "conformance-forever", "value", 0); !errors.Is(err, types.ErrTTLNotSupported) {
+			if err := cache.Set(ctx, "conformance-forever", "value", 0); !errors.Is(err, gst.ErrTTLNotSupported) {
 				t.Fatalf("want ErrTTLNotSupported, got %v", err)
 			}
 		})

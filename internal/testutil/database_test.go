@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/testutil"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,7 +34,7 @@ func TestRequireListReturnsMatchesInOrder(t *testing.T) {
 	createSampleRecord(t, "list-a", "list")
 	createSampleRecord(t, "list-c", "list")
 
-	rows := testutil.RequireList(t, &SampleRecord{Tag: "list"}, types.Asc("name"))
+	rows := testutil.RequireList(t, &SampleRecord{Tag: "list"}, gst.Asc("name"))
 	require.Len(t, rows, 3)
 	require.Equal(t, "list-a", rows[0].Name)
 	require.Equal(t, "list-b", rows[1].Name)

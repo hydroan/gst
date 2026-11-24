@@ -14,11 +14,11 @@ import (
 	gstgrpc "github.com/hydroan/gst/grpc"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/grpcserver"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	modeliamaccount "github.com/hydroan/gst/internal/modulemodel/iam/account"
 	serviceiamsession "github.com/hydroan/gst/internal/moduleservice/iam/session"
 	"github.com/hydroan/gst/internal/service"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/testutil/iamtest"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -169,7 +169,7 @@ type probeSessionService struct {
 	service.Base[*model.Empty, *model.Empty, *probeSessionRsp]
 }
 
-func (*probeSessionService) Get(sc *types.ServiceContext, _ *model.Empty) (*probeSessionRsp, error) {
+func (*probeSessionService) Get(sc *gst.ServiceContext, _ *model.Empty) (*probeSessionRsp, error) {
 	sessionID, _, err := serviceiamsession.CurrentSession(sc)
 	if err != nil {
 		return nil, err

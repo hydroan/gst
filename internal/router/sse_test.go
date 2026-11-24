@@ -8,12 +8,12 @@ import (
 
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/middleware"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/router"
 	"github.com/hydroan/gst/internal/service"
 	"github.com/hydroan/gst/internal/sse"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,7 +30,7 @@ type noticeStreamer struct {
 	service.Base[*model.Empty, *model.Empty, *model.Empty]
 }
 
-func (s *noticeStreamer) SSE(ctx *types.ServiceContext) error {
+func (s *noticeStreamer) SSE(ctx *gst.ServiceContext) error {
 	return ctx.SSE(func(conn *sse.Conn) error {
 		for i := 1; i <= 3; i++ {
 			if err := conn.Send(sse.Event{Event: "notice", Data: i}); err != nil {
@@ -47,7 +47,7 @@ type endlessStreamer struct {
 	service.Base[*model.Empty, *model.Empty, *model.Empty]
 }
 
-func (s *endlessStreamer) SSE(ctx *types.ServiceContext) error {
+func (s *endlessStreamer) SSE(ctx *gst.ServiceContext) error {
 	return ctx.SSE(func(conn *sse.Conn) error {
 		for i := 1; ; i++ {
 			select {
@@ -74,10 +74,10 @@ func init() {
 // router.Init, mirroring where generated route registration runs.
 func registerSSERoutes() {
 	router.Register[*model.Empty, *model.Empty, *model.Empty](
-		router.Auth(), sseStreamRoute, &types.ControllerConfig[*model.Empty]{}, apiaction.SSE,
+		router.Auth(), sseStreamRoute, &gst.ControllerConfig[*model.Empty]{}, apiaction.SSE,
 	)
 	router.Register[*model.Empty, *model.Empty, *model.Empty](
-		router.Auth(), sseEndlessRoute, &types.ControllerConfig[*model.Empty]{}, apiaction.SSE,
+		router.Auth(), sseEndlessRoute, &gst.ControllerConfig[*model.Empty]{}, apiaction.SSE,
 	)
 }
 

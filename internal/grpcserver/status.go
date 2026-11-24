@@ -5,8 +5,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/i18n"
-	"github.com/hydroan/gst/internal/types"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -16,9 +16,9 @@ import (
 // error, anywhere in the wrap chain, answers with the gRPC code its HTTP
 // status maps to (see codeOf) and the client-safe message it was constructed
 // with, the answer the HTTP envelope would carry, and, for the fields the
-// request was refused on (see types.FieldViolations), a google.rpc.BadRequest
+// request was refused on (see gst.FieldViolations), a google.rpc.BadRequest
 // detail listing each field and its description; any other error answers
-// Internal with types.FailureMsg, the message the HTTP envelope answers the
+// Internal with gst.FailureMsg, the message the HTTP envelope answers the
 // server's own failure with, its text kept out of the answer for the caller to
 // log before mapping; nil stays nil. The message is answered in the language
 // the process answers in (see i18n.Translate), the one the HTTP envelope
@@ -27,12 +27,12 @@ func StatusError(err error) error {
 	if err == nil {
 		return nil
 	}
-	var serviceErr *types.Error
+	var serviceErr *gst.Error
 	if !errors.As(err, &serviceErr) {
-		return status.Error(codes.Internal, i18n.Translate(types.FailureMsg))
+		return status.Error(codes.Internal, i18n.Translate(gst.FailureMsg))
 	}
 	st := status.New(codeOf(serviceErr.Status(), err), i18n.Translate(serviceErr.Msg()))
-	if violations := types.FieldViolations(serviceErr); len(violations) > 0 {
+	if violations := gst.FieldViolations(serviceErr); len(violations) > 0 {
 		bad := &errdetails.BadRequest{FieldViolations: make([]*errdetails.BadRequest_FieldViolation, 0, len(violations))}
 		for _, v := range violations {
 			bad.FieldViolations = append(bad.FieldViolations, &errdetails.BadRequest_FieldViolation{Field: v.Field, Description: v.Description})
@@ -46,7 +46,7 @@ func StatusError(err error) error {
 
 // codeOf maps the HTTP status a failure answers with to its gRPC code: the
 // standard correspondence for the statuses that have one, the client-closed
-// status of a client that went away (see types.StatusClientClosedRequest)
+// status of a client that went away (see gst.StatusClientClosedRequest)
 // as Canceled among them; and, for the rest, InvalidArgument for a client
 // error and Internal for a server error.
 //
@@ -72,7 +72,7 @@ func codeOf(httpStatus int, err error) codes.Code {
 		return codes.NotFound
 	case http.StatusRequestTimeout, http.StatusGatewayTimeout:
 		return codes.DeadlineExceeded
-	case types.StatusClientClosedRequest:
+	case gst.StatusClientClosedRequest:
 		return codes.Canceled
 	case http.StatusConflict:
 		switch {

@@ -10,9 +10,9 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/datatypes"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/types"
 )
 
 // Filters extracts field-level operator filters from URL query keys of the
@@ -20,12 +20,12 @@ import (
 // bare framework timestamp keys ("created_at", "updated_at"), which act as
 // exact-match (eq) filters. The field token must be the URL name of a
 // queryable column of the model, spelled as the contract spells it (see
-// modelschema.QueryColumnName), and op must be a known types.FilterOp;
+// modelschema.QueryColumnName), and op must be a known gst.FilterOp;
 // anything else is rejected so a mistyped filter can never silently widen
 // the result set. Empty values mean "not filtering" and are skipped. Filters
 // require the model to embed model.Query, and the returned conditions are
 // sorted by key for deterministic SQL.
-func Filters(q url.Values, m types.Model) ([]types.Filter, error) {
+func Filters(q url.Values, m gst.Model) ([]gst.Filter, error) {
 	keys := make([]string, 0, len(q))
 	for key := range q {
 		if isFilterQueryKey(key) {
@@ -44,13 +44,13 @@ func Filters(q url.Values, m types.Model) ([]types.Filter, error) {
 	if err != nil {
 		return nil, err
 	}
-	conds := make([]types.Filter, 0, len(keys))
+	conds := make([]gst.Filter, 0, len(keys))
 	for _, key := range keys {
 		var field string
-		var op types.FilterOp
+		var op gst.FilterOp
 		if _, bare := bareTimeFilterColumns[key]; bare && !isFilterKey(key) {
 			// The bare framework timestamp key is an exact-match filter.
-			field, op = key, types.FilterOpEq
+			field, op = key, gst.FilterOpEq
 		} else {
 			var opToken string
 			var ok bool
@@ -58,7 +58,7 @@ func Filters(q url.Values, m types.Model) ([]types.Filter, error) {
 			if !ok {
 				return nil, errors.Newf("invalid field filter %q: expect \"field[op]=value\"", key)
 			}
-			if op, ok = types.ParseFilterOp(opToken); !ok {
+			if op, ok = gst.ParseFilterOp(opToken); !ok {
 				return nil, errors.Newf("invalid field filter %q: unknown operator %q", key, opToken)
 			}
 		}
@@ -74,7 +74,7 @@ func Filters(q url.Values, m types.Model) ([]types.Filter, error) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "invalid field filter %q", key)
 		}
-		conds = append(conds, types.NewFilter("", col.DBName, op, value))
+		conds = append(conds, gst.NewFilter("", col.DBName, op, value))
 	}
 	if len(conds) == 0 {
 		return nil, nil
@@ -128,20 +128,20 @@ func splitFilterKey(key string) (field, op string, ok bool) {
 // only read it. Parameters hands a copy out, the one slice a reader outside
 // this package sees.
 var (
-	timeFilterOps = []types.FilterOp{
-		types.FilterOpEq, types.FilterOpNe,
-		types.FilterOpGt, types.FilterOpGte, types.FilterOpLt, types.FilterOpLte,
-		types.FilterOpIsNull,
+	timeFilterOps = []gst.FilterOp{
+		gst.FilterOpEq, gst.FilterOpNe,
+		gst.FilterOpGt, gst.FilterOpGte, gst.FilterOpLt, gst.FilterOpLte,
+		gst.FilterOpIsNull,
 	}
-	boolFilterOps = []types.FilterOp{types.FilterOpEq, types.FilterOpNe, types.FilterOpIsNull}
-	jsonFilterOps = []types.FilterOp{
-		types.FilterOpLike, types.FilterOpNotLike, types.FilterOpILike, types.FilterOpStartsWith, types.FilterOpEndsWith,
-		types.FilterOpIsNull,
+	boolFilterOps = []gst.FilterOp{gst.FilterOpEq, gst.FilterOpNe, gst.FilterOpIsNull}
+	jsonFilterOps = []gst.FilterOp{
+		gst.FilterOpLike, gst.FilterOpNotLike, gst.FilterOpILike, gst.FilterOpStartsWith, gst.FilterOpEndsWith,
+		gst.FilterOpIsNull,
 	}
-	allFilterOps = types.FilterOps()
+	allFilterOps = gst.FilterOps()
 )
 
-// filterOps returns the operators a filter on col takes, in types.FilterOps
+// filterOps returns the operators a filter on col takes, in gst.FilterOps
 // order, read from the data types gorm resolved for the column (see
 // modelschema.Column), and the kind of field the others are refused on.
 // isnull takes any column; besides it, a time or a time of day (see
@@ -151,7 +151,7 @@ var (
 // field: whether two documents compare equal or order is the dialect's own
 // affair. A number (see modelschema.IsNumericColumn), a string or any other
 // column takes every operator. The slice is shared and read-only.
-func filterOps(col modelschema.Column) (ops []types.FilterOp, kind string) {
+func filterOps(col modelschema.Column) (ops []gst.FilterOp, kind string) {
 	switch {
 	case modelschema.IsTimeColumn(col), modelschema.IsTimeOfDayColumn(col):
 		return timeFilterOps, "time"
@@ -186,13 +186,13 @@ func filterOps(col modelschema.Column) (ops []types.FilterOp, kind string) {
 //   - in/notin values split on commas here, so the members travel as a real
 //     slice: the URL list encoding never reaches the database layer.
 //   - string and other scalar values pass through unchanged.
-func normalizeFilterValue(col modelschema.Column, op types.FilterOp, value string) (any, error) {
+func normalizeFilterValue(col modelschema.Column, op gst.FilterOp, value string) (any, error) {
 	if ops, kind := filterOps(col); !slices.Contains(ops, op) {
 		return nil, errors.Newf("operator %q is not supported on a %s field", op, kind)
 	}
 	// isnull is the only operator whose value type is independent of the
 	// column type: it always carries a boolean.
-	if op == types.FilterOpIsNull {
+	if op == gst.FilterOpIsNull {
 		b, err := modelschema.ParseBool(value)
 		if err != nil {
 			return nil, errors.Newf("isnull expects a boolean value, got %q", value)
@@ -210,7 +210,7 @@ func normalizeFilterValue(col modelschema.Column, op types.FilterOp, value strin
 		return b, nil
 	case modelschema.IsNumericColumn(col):
 		switch op {
-		case types.FilterOpIn, types.FilterOpNotIn:
+		case gst.FilterOpIn, gst.FilterOpNotIn:
 			items := strings.Split(value, ",")
 			for _, item := range items {
 				if err := modelschema.ValidateNumericValue(col, item); err != nil {
@@ -218,7 +218,7 @@ func normalizeFilterValue(col modelschema.Column, op types.FilterOp, value strin
 				}
 			}
 			return items, nil
-		case types.FilterOpLike, types.FilterOpNotLike, types.FilterOpILike, types.FilterOpStartsWith, types.FilterOpEndsWith:
+		case gst.FilterOpLike, gst.FilterOpNotLike, gst.FilterOpILike, gst.FilterOpStartsWith, gst.FilterOpEndsWith:
 			// Substring matching relies on the database's string rendering of
 			// the number; the pattern itself is not numeric.
 			return value, nil
@@ -232,7 +232,7 @@ func normalizeFilterValue(col modelschema.Column, op types.FilterOp, value strin
 		return value, nil
 	default:
 		switch op {
-		case types.FilterOpIn, types.FilterOpNotIn:
+		case gst.FilterOpIn, gst.FilterOpNotIn:
 			// The comma split moves the URL list encoding out of the database
 			// layer: from here on the members travel as a real slice.
 			return strings.Split(value, ","), nil
@@ -270,11 +270,11 @@ func timeBound(col modelschema.Column, value string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return time.Time(day).Format(types.FilterTimeLayout), nil
+		return time.Time(day).Format(gst.FilterTimeLayout), nil
 	}
 	t, err := modelschema.ParseTime(value)
 	if err != nil {
 		return "", err
 	}
-	return t.UTC().Format(types.FilterTimeLayout), nil
+	return t.UTC().Format(gst.FilterTimeLayout), nil
 }

@@ -5,9 +5,9 @@ import (
 
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	modellogmgmt "github.com/hydroan/gst/internal/modulemodel/logmgmt"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
@@ -61,7 +61,7 @@ func (a *action[M, REQ, RSP]) listFlow(ctx context.Context, newServiceContext se
 	data := make([]M, 0)
 
 	// 1.Perform business logic processing before list resources.
-	if err = a.traceServiceHook(ctx, apiaction.ListBefore, svc, newServiceContext, func(sc *types.ServiceContext) error {
+	if err = a.traceServiceHook(ctx, apiaction.ListBefore, svc, newServiceContext, func(sc *gst.ServiceContext) error {
 		return svc.ListBefore(sc, &data)
 	}); err != nil {
 		return nil, 0, false, failService(ctx, log, err)
@@ -69,7 +69,7 @@ func (a *action[M, REQ, RSP]) listFlow(ctx context.Context, newServiceContext se
 	// 2.Let the service rewrite the query condition and options; the typical
 	// use is row-level data scoping. Filter runs once and the result is
 	// shared by List and Count below, so both see the same condition set.
-	queryOpts := types.QueryOptions{
+	queryOpts := gst.QueryOptions{
 		AllowEmpty:    true,
 		PresentFields: present,
 		Filters:       filters,
@@ -111,7 +111,7 @@ func (a *action[M, REQ, RSP]) listFlow(ctx context.Context, newServiceContext se
 		}
 	}
 	// 4.Perform business logic processing after list resources.
-	if err = a.traceServiceHook(ctx, apiaction.ListAfter, svc, newServiceContext, func(sc *types.ServiceContext) error {
+	if err = a.traceServiceHook(ctx, apiaction.ListAfter, svc, newServiceContext, func(sc *gst.ServiceContext) error {
 		return svc.ListAfter(sc, &data)
 	}); err != nil {
 		return nil, 0, false, failService(ctx, log, err)
@@ -133,7 +133,7 @@ func (a *action[M, REQ, RSP]) listFlow(ctx context.Context, newServiceContext se
 	}
 
 	// 5.record operation log to database.
-	if err = audit.RecordOperation(ctx, m, types.OperationList,
+	if err = audit.RecordOperation(ctx, m, gst.OperationList,
 		func() *modellogmgmt.OperationLog {
 			return operationLog(ctx, a.name)
 		}); err != nil {

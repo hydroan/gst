@@ -31,8 +31,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/logfield"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 )
@@ -97,7 +97,7 @@ type Component struct {
 	// stream. Components without a dedicated stream leave it nil; until the
 	// binding the package's logger keeps the fallback the logging package
 	// installed, which routes entries to the global sink.
-	SetLogger func(types.Logger)
+	SetLogger func(gst.Logger)
 
 	// Start brings the component up and returns once it is running. It runs
 	// only when Enabled reports true, so it needs no disabled guard of its

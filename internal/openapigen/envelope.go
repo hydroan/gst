@@ -1,6 +1,6 @@
 package openapigen
 
-import "github.com/hydroan/gst/internal/types"
+import "github.com/hydroan/gst/internal/gst"
 
 // The Go shapes the documented request and response bodies are generated from:
 // the payload wrapper of a batch request, whose items the flow requires, the
@@ -48,5 +48,5 @@ type apiFailureResponse struct {
 }
 
 type errorDetails struct {
-	FieldViolations []types.FieldViolation `json:"field_violations,omitempty"`
+	FieldViolations []gst.FieldViolation `json:"field_violations,omitempty"`
 }

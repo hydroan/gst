@@ -8,7 +8,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,18 +25,18 @@ type feedRow struct {
 }
 
 // recordsBranch projects every record as a feed row tagged "record".
-func recordsBranch(ctx context.Context) types.Selector[*TestAggregateRecord, feedRow] {
+func recordsBranch(ctx context.Context) gst.Selector[*TestAggregateRecord, feedRow] {
 	return database.Select[*TestAggregateRecord, feedRow](ctx,
-		types.Literal("record").As("kind"), TestAggregateRecordCols.ID, TestAggregateRecordCols.Category)
+		gst.Literal("record").As("kind"), TestAggregateRecordCols.ID, TestAggregateRecordCols.Category)
 }
 
 // tagsBranch projects every tag as a feed row tagged "tag". It declares its
 // terms in another order than feedRow on purpose: the framework renders every
 // member's SELECT list in the result row's order, so the declaration order
 // never decides how the columns line up.
-func tagsBranch(ctx context.Context) types.Selector[*TestRecordTag, feedRow] {
+func tagsBranch(ctx context.Context) gst.Selector[*TestRecordTag, feedRow] {
 	return database.Select[*TestRecordTag, feedRow](ctx,
-		TestRecordTagCols.Category, TestRecordTagCols.ID, types.Literal("tag").As("kind"))
+		TestRecordTagCols.Category, TestRecordTagCols.ID, gst.Literal("tag").As("kind"))
 }
 
 func setupUnionData(t *testing.T) {
@@ -64,7 +64,7 @@ func TestUnionAllDryRunAppliesToTheNextTerminalOnly(t *testing.T) {
 	ctx := context.Background()
 
 	feed := database.UnionAll[feedRow](ctx, recordsBranch(ctx), tagsBranch(ctx))
-	statements := make([]types.SQLStatement, 0)
+	statements := make([]gst.SQLStatement, 0)
 	rows := make([]feedRow, 0)
 	require.NoError(t, feed.WithDryRun(&statements).Scan(&rows))
 	require.Len(t, statements, 1)
@@ -85,8 +85,8 @@ func TestUnionAllDryRunAppliesToTheNextTerminalOnly(t *testing.T) {
 		Category string
 		N        int64
 	}
-	perCategory := database.Select[*TestAggregateRecord, categoryCount](ctx, TestAggregateRecordCols.Category.Group(), types.Count().As("n"))
-	perLabel := database.Select[*TestRecordTag, categoryCount](ctx, TestRecordTagCols.Label.Group().As("category"), types.Count().As("n"))
+	perCategory := database.Select[*TestAggregateRecord, categoryCount](ctx, TestAggregateRecordCols.Category.Group(), gst.Count().As("n"))
+	perLabel := database.Select[*TestRecordTag, categoryCount](ctx, TestRecordTagCols.Label.Group().As("category"), gst.Count().As("n"))
 	statements = statements[:0]
 	counts := make([]categoryCount, 0)
 	require.NoError(t, database.UnionAll[categoryCount](ctx, perCategory.WithDryRun(&statements), perLabel).Scan(&counts))
@@ -106,7 +106,7 @@ func TestUnionAllDryRunAppliesToTheNextTerminalOnly(t *testing.T) {
 	// And when the union never assembled, a branch of another instance
 	// among its members: every branch this package built is consumed.
 	perCategory.WithDryRun(&statements)
-	elsewhere := database.SelectOn[*TestAggregateRecord, categoryCount](ctx, newInstance(t, "union_branch.db"), TestAggregateRecordCols.Category.Group(), types.Count().As("n"))
+	elsewhere := database.SelectOn[*TestAggregateRecord, categoryCount](ctx, newInstance(t, "union_branch.db"), TestAggregateRecordCols.Category.Group(), gst.Count().As("n"))
 	require.ErrorIs(t, database.UnionAll[categoryCount](ctx, elsewhere, perCategory).Scan(&counts), database.ErrUnionBranchInstance)
 	require.NoError(t, perCategory.Scan(&counts))
 	require.Len(t, counts, 3)
@@ -139,7 +139,7 @@ func TestUnionAllStacksBranches(t *testing.T) {
 	})
 
 	t.Run("RendersEveryMemberInTheResultRowOrder", func(t *testing.T) {
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		rows := make([]feedRow, 0)
 		require.NoError(t, database.UnionAll[feedRow](ctx, recordsBranch(ctx), tagsBranch(ctx)).
 			OrderBy(TestAggregateRecordCols.Category.Asc(), TestAggregateRecordCols.ID.Asc()).
@@ -166,7 +166,7 @@ func TestUnionAllPushesOrderAndLimitIntoBranches(t *testing.T) {
 	defer cleanupUnionData()
 	setupUnionData(t)
 	ctx := context.Background()
-	feed := func() types.Union[feedRow] {
+	feed := func() gst.Union[feedRow] {
 		return database.UnionAll[feedRow](ctx, recordsBranch(ctx), tagsBranch(ctx)).
 			OrderBy(TestAggregateRecordCols.Category.Asc(), TestAggregateRecordCols.ID.Asc())
 	}
@@ -193,7 +193,7 @@ func TestUnionAllPushesOrderAndLimitIntoBranches(t *testing.T) {
 	})
 
 	t.Run("RendersTheOrderAndTheCapInEveryMember", func(t *testing.T) {
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		rows := make([]feedRow, 0)
 		require.NoError(t, feed().Page(2, 3).WithDryRun(&statements).Scan(&rows))
 		require.Len(t, statements, 1)
@@ -211,7 +211,7 @@ func TestUnionAllPushesOrderAndLimitIntoBranches(t *testing.T) {
 	})
 
 	t.Run("PushesTheCapAloneWithoutAnOrder", func(t *testing.T) {
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		rows := make([]feedRow, 0)
 		require.NoError(t, database.UnionAll[feedRow](ctx, recordsBranch(ctx), tagsBranch(ctx)).
 			Limit(4).WithDryRun(&statements).Scan(&rows))
@@ -221,7 +221,7 @@ func TestUnionAllPushesOrderAndLimitIntoBranches(t *testing.T) {
 	})
 
 	t.Run("PushesNothingWithoutALimit", func(t *testing.T) {
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		rows := make([]feedRow, 0)
 		require.NoError(t, feed().WithDryRun(&statements).Scan(&rows))
 		require.Len(t, statements, 1)
@@ -244,11 +244,11 @@ func TestUnionAllStacksProjectionShapes(t *testing.T) {
 		}
 		// kind is shared with the totals branch so the union can order by it:
 		// a term ordering names the term a branch projects.
-		kind := types.Literal("total").As("kind")
+		kind := gst.Literal("total").As("kind")
 		totals := database.Select[*TestAggregateRecord, row](ctx,
 			kind, TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.Amount.Sum())
 		each := database.Select[*TestAggregateRecord, row](ctx,
-			types.Literal("row").As("kind"), TestAggregateRecordCols.Category, TestAggregateRecordCols.Amount)
+			gst.Literal("row").As("kind"), TestAggregateRecordCols.Category, TestAggregateRecordCols.Amount)
 
 		rows := make([]row, 0)
 		require.NoError(t, database.UnionAll[row](ctx, totals, each).
@@ -266,7 +266,7 @@ func TestUnionAllStacksProjectionShapes(t *testing.T) {
 			{Kind: "row", Category: "gamma", Amount: 600},
 		}, rows)
 
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		require.NoError(t, database.UnionAll[row](ctx, totals, each).WithDryRun(&statements).Scan(&rows))
 		require.Len(t, statements, 1)
 		require.Contains(t, statements[0].Query,
@@ -282,15 +282,15 @@ func TestUnionAllStacksProjectionShapes(t *testing.T) {
 			Category string
 			Rn       int64
 		}
-		latestRn := types.RowNumber().
-			Over(types.PartitionBy(TestAggregateRecordCols.Category).OrderBy(TestAggregateRecordCols.OccurredAt.Desc())).
+		latestRn := gst.RowNumber().
+			Over(gst.PartitionBy(TestAggregateRecordCols.Category).OrderBy(TestAggregateRecordCols.OccurredAt.Desc())).
 			As("rn")
 		latest := database.Select[*TestAggregateRecord, row](ctx,
-			types.Literal("latest").As("kind"), TestAggregateRecordCols.ID, TestAggregateRecordCols.Category, latestRn).
+			gst.Literal("latest").As("kind"), TestAggregateRecordCols.ID, TestAggregateRecordCols.Category, latestRn).
 			Qualify(latestRn.Eq(1))
-		tagRn := types.RowNumber().Over(types.OrderBy(TestRecordTagCols.ID.Asc())).As("rn")
+		tagRn := gst.RowNumber().Over(gst.OrderBy(TestRecordTagCols.ID.Asc())).As("rn")
 		tags := database.Select[*TestRecordTag, row](ctx,
-			types.Literal("tag").As("kind"), TestRecordTagCols.ID, TestRecordTagCols.Category, tagRn)
+			gst.Literal("tag").As("kind"), TestRecordTagCols.ID, TestRecordTagCols.Category, tagRn)
 
 		// Under (category, id): a3 t1 t2 a4 t3 a6; the page takes four.
 		rows := make([]row, 0)
@@ -305,7 +305,7 @@ func TestUnionAllStacksProjectionShapes(t *testing.T) {
 			{Kind: "latest", ID: "a4", Category: "beta", Rn: 1},
 		}, rows)
 
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		require.NoError(t, feed.WithDryRun(&statements).Scan(&rows))
 		require.Len(t, statements, 1)
 		sql := statements[0].Query
@@ -350,7 +350,7 @@ func TestUnionAllCount(t *testing.T) {
 	})
 
 	t.Run("RendersTheCountsAdded", func(t *testing.T) {
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		total := 0
 		require.NoError(t, database.UnionAll[feedRow](ctx, recordsBranch(ctx), tagsBranch(ctx)).
 			OrderBy(TestAggregateRecordCols.ID.Desc()).Limit(2).
@@ -374,14 +374,14 @@ func TestUnionAllCount(t *testing.T) {
 			Amount   int64
 		}
 		totals := database.Select[*TestAggregateRecord, row](ctx,
-			types.Literal("total").As("kind"), TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.Amount.Sum())
+			gst.Literal("total").As("kind"), TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.Amount.Sum())
 		each := database.Select[*TestAggregateRecord, row](ctx,
-			types.Literal("row").As("kind"), TestAggregateRecordCols.Category, TestAggregateRecordCols.Amount)
+			gst.Literal("row").As("kind"), TestAggregateRecordCols.Category, TestAggregateRecordCols.Amount)
 		total := 0
 		require.NoError(t, database.UnionAll[row](ctx, totals, each).Count(&total))
 		require.Equal(t, 9, total, "three groups and six rows")
 
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		require.NoError(t, database.UnionAll[row](ctx, totals, each).WithDryRun(&statements).Count(&total))
 		require.Len(t, statements, 1)
 		require.Contains(t, statements[0].Query,
@@ -432,7 +432,7 @@ func TestUnionAllBuildErrors(t *testing.T) {
 	})
 
 	t.Run("BranchCarryingOrderingOrPaging", func(t *testing.T) {
-		for name, branch := range map[string]types.Selector[*TestAggregateRecord, feedRow]{
+		for name, branch := range map[string]gst.Selector[*TestAggregateRecord, feedRow]{
 			"OrderBy": recordsBranch(ctx).OrderBy(TestAggregateRecordCols.ID.Asc()),
 			"Limit":   recordsBranch(ctx).Limit(1),
 			"Page":    recordsBranch(ctx).Page(2, 1),
@@ -453,7 +453,7 @@ func TestUnionAllBuildErrors(t *testing.T) {
 	t.Run("PageWithoutAnOrder", func(t *testing.T) {
 		// Rows in no order have no pages: each run could slice them
 		// differently, repeating and skipping rows from page to page.
-		unordered := func() types.Union[feedRow] {
+		unordered := func() gst.Union[feedRow] {
 			return database.UnionAll[feedRow](ctx, recordsBranch(ctx), tagsBranch(ctx))
 		}
 		require.ErrorIs(t, unordered().Page(2, 3).Scan(&rows), database.ErrUnionPageWithoutOrder)
@@ -461,7 +461,7 @@ func TestUnionAllBuildErrors(t *testing.T) {
 
 		// A cap is no page, and neither is a Page a Limit replaced or one of
 		// no size.
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		require.NoError(t, unordered().Limit(3).WithDryRun(&statements).Scan(&rows))
 		require.NoError(t, unordered().Page(2, 3).Limit(3).WithDryRun(&statements).Scan(&rows))
 		require.NoError(t, unordered().Page(2, 0).WithDryRun(&statements).Scan(&rows))
@@ -483,7 +483,7 @@ func TestUnionAllBuildErrors(t *testing.T) {
 
 	t.Run("BranchFailingItsOwnValidation", func(t *testing.T) {
 		foreign := database.Select[*TestAggregateRecord, feedRow](ctx,
-			types.Literal("record").As("kind"), TestRecordTagCols.ID, TestAggregateRecordCols.Category)
+			gst.Literal("record").As("kind"), TestRecordTagCols.ID, TestAggregateRecordCols.Category)
 		err := database.UnionAll[feedRow](ctx, tagsBranch(ctx), foreign).Scan(&rows)
 		require.ErrorIs(t, err, database.ErrColumnTable)
 		require.ErrorContains(t, err, "union branch 1")

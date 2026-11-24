@@ -1,9 +1,9 @@
 package iam
 
 import (
+	"github.com/hydroan/gst/internal/gst"
 	serviceiamaccount "github.com/hydroan/gst/internal/moduleservice/iam/account"
 	"github.com/hydroan/gst/internal/moduleservice/iam/adminauth"
-	"github.com/hydroan/gst/internal/types"
 )
 
 // EnsureAdminOnUser reports whether the acting user may administer the target
@@ -17,7 +17,7 @@ import (
 // Resolving the two users and evaluating the rules are IAM's own steps, so a
 // caller states what it wants to know rather than reproducing the procedure —
 // and IAM stays free to change the procedure without touching those modules.
-func EnsureAdminOnUser(ctx *types.ServiceContext, targetUserID string) error {
+func EnsureAdminOnUser(ctx *gst.ServiceContext, targetUserID string) error {
 	actor, target, err := serviceiamaccount.LoadActorAndTarget(ctx, targetUserID)
 	if err != nil {
 		return err

@@ -25,6 +25,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/controller"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/middleware"
@@ -32,7 +33,6 @@ import (
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/streamctx"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/websocket"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	swaggerFiles "github.com/swaggo/files"
@@ -89,7 +89,7 @@ func Init() error {
 	// and none of the envelope's fields, so a client parsing the documented
 	// shape cannot tell it from a malformed response.
 	root.NoRoute(func(c *gin.Context) {
-		response.Abort(c, types.NewError(http.StatusNotFound, notFoundMsg))
+		response.Abort(c, gst.NewError(http.StatusNotFound, notFoundMsg))
 	})
 
 	// A path this server does serve, asked for with a method it does not, is
@@ -108,7 +108,7 @@ func Init() error {
 	// that matched nothing, never on a request that reached a handler.
 	root.HandleMethodNotAllowed = true
 	root.NoMethod(func(c *gin.Context) {
-		response.Abort(c, types.NewError(http.StatusMethodNotAllowed, methodNotAllowedMsg))
+		response.Abort(c, gst.NewError(http.StatusMethodNotAllowed, methodNotAllowedMsg))
 	})
 
 	// A request is matched against its path exactly as sent. gin can loosen
@@ -245,7 +245,7 @@ func Pub() *gin.RouterGroup { return pub }
 // path makes; the corresponding service.Register call names the same route.
 // The config is shallow-copied first, keeping a caller-shared config safe
 // for reuse across routes.
-func Register[M types.Model, REQ types.Request, RSP types.Response](router *gin.RouterGroup, route string, cfg *types.ControllerConfig[M], phases ...apiaction.Phase) {
+func Register[M gst.Model, REQ gst.Request, RSP gst.Response](router *gin.RouterGroup, route string, cfg *gst.ControllerConfig[M], phases ...apiaction.Phase) {
 	// A registration that can register nothing is a mistake in the
 	// declaration: it panics as the process starts, the way the service
 	// registry does for a blank route, instead of leaving an endpoint that
@@ -256,7 +256,7 @@ func Register[M types.Model, REQ types.Request, RSP types.Response](router *gin.
 	if len(phases) == 0 {
 		panic(fmt.Sprintf("router: register of route %q requires at least one phase", route))
 	}
-	routed := types.ControllerConfig[M]{}
+	routed := gst.ControllerConfig[M]{}
 	if cfg != nil {
 		routed = *cfg
 	}
@@ -285,7 +285,7 @@ func Register[M types.Model, REQ types.Request, RSP types.Response](router *gin.
 // phase's HTTP method and through its controller handler, and records the route
 // for Routes, the route manager and the OpenAPI document. Registrations run one
 // at a time under registerMu.
-func register[M types.Model, REQ types.Request, RSP types.Response](router *gin.RouterGroup, relativePath string, phases map[apiaction.Phase]bool, cfg ...*types.ControllerConfig[M]) {
+func register[M gst.Model, REQ gst.Request, RSP gst.Response](router *gin.RouterGroup, relativePath string, phases map[apiaction.Phase]bool, cfg ...*gst.ControllerConfig[M]) {
 	registerMu.Lock()
 	defer registerMu.Unlock()
 

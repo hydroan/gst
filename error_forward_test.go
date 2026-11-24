@@ -16,7 +16,7 @@ func TestNewErrorStackTraceStartsAtPublicConstructionSite(t *testing.T) {
 	stackTrace := errorstack.Origin(err)
 	require.NotEmpty(t, stackTrace)
 
-	// The root package forwards to internal/types without adding a stack
+	// The root package forwards to internal/gst without adding a stack
 	// frame, so the innermost frame must be the application construction
 	// site, not a framework wrapper.
 	lines := strings.Split(stackTrace, "\n")

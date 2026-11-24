@@ -5,7 +5,7 @@ import (
 	"reflect"
 
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // CreateCall returns the create call of M on route, the counterpart of the
@@ -14,7 +14,7 @@ import (
 // into, it validates the model the way the handler validates a bound body,
 // runs the create flow (see createFlow) and answers with the model created,
 // or with the status the failure maps to (see call).
-func CreateCall[M types.Model](route string) func(ctx context.Context, params map[string]string, m M) (M, error) {
+func CreateCall[M gst.Model](route string) func(ctx context.Context, params map[string]string, m M) (M, error) {
 	a := newAction[M, M, M](route, apiaction.Create, apiaction.CreateBefore, apiaction.CreateAfter)
 	return func(ctx context.Context, params map[string]string, m M) (M, error) {
 		var zero M

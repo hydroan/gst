@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // TestGetDropsAnEntryItCannotDecode stores bytes the int codec cannot read
@@ -19,7 +19,7 @@ func TestGetDropsAnEntryItCannotDecode(t *testing.T) {
 		t.Fatalf("want the backend's own handle, got %T", Cache[int]())
 	}
 	c.c.Set([]byte("unreadable-entry"), []byte("not a number"))
-	if _, err := c.Get(ctx, "unreadable-entry"); !errors.Is(err, types.ErrEntryNotFound) {
+	if _, err := c.Get(ctx, "unreadable-entry"); !errors.Is(err, gst.ErrEntryNotFound) {
 		t.Fatalf("want ErrEntryNotFound for an entry that cannot be decoded, got %v", err)
 	}
 	if c.Exists(ctx, "unreadable-entry") {

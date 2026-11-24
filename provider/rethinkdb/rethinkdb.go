@@ -7,8 +7,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/lifecycle"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
@@ -27,7 +27,7 @@ func init() {
 		Name:      "rethinkdb",
 		Stage:     lifecycle.StageProvider,
 		Enabled:   func() bool { return config.App.RethinkDB.Enabled },
-		SetLogger: func(l types.Logger) { logger.RethinkDB = l },
+		SetLogger: func(l gst.Logger) { logger.RethinkDB = l },
 		Start:     start,
 		Stop:      stop,
 	})

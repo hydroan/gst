@@ -7,15 +7,15 @@ import (
 
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
 var (
-	colVersionedNoteTitle   = types.NewColumn[*versionedNote, string]("title")
-	colVersionedNoteVersion = types.NewColumn[*versionedNote, int64]("version")
+	colVersionedNoteTitle   = gst.NewColumn[*versionedNote, string]("title")
+	colVersionedNoteVersion = gst.NewColumn[*versionedNote, int64]("version")
 )
 
 // versionedNote is the optimistic-locking fixture: a model that declares

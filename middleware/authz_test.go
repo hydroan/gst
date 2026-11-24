@@ -7,9 +7,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"github.com/hydroan/gst/middleware"
 	"github.com/stretchr/testify/require"
@@ -38,8 +38,8 @@ func TestAuthzLogsDecisionDuration(t *testing.T) {
 		require.Equal(t, http.StatusForbidden, w.Code)
 		require.Len(t, recorder.entries, 1)
 		fields := authzLogFieldMap(t, recorder.entries[0])
-		require.Equal(t, string(types.EffectDeny), fields["eft"])
-		require.Equal(t, string(types.DenyReasonNotInitialized), fields["denied_by"])
+		require.Equal(t, string(gst.EffectDeny), fields["eft"])
+		require.Equal(t, string(gst.DenyReasonNotInitialized), fields["denied_by"])
 		requireAuthzLogDuration(t, fields)
 	})
 
@@ -59,8 +59,8 @@ func TestAuthzLogsDecisionDuration(t *testing.T) {
 		require.Equal(t, http.StatusForbidden, w.Code)
 		require.Len(t, recorder.entries, 1)
 		fields := authzLogFieldMap(t, recorder.entries[0])
-		require.Equal(t, string(types.EffectDeny), fields["eft"])
-		require.Equal(t, string(types.DenyReasonUnauthenticated), fields["denied_by"])
+		require.Equal(t, string(gst.EffectDeny), fields["eft"])
+		require.Equal(t, string(gst.DenyReasonUnauthenticated), fields["denied_by"])
 		requireAuthzLogDuration(t, fields)
 	})
 }
@@ -121,7 +121,7 @@ func performAuthzRequest(router *gin.Engine, path string) *httptest.ResponseReco
 // nil, so reaching for any other one panics the test instead of passing
 // unnoticed.
 type authzLogRecorder struct {
-	types.Logger
+	gst.Logger
 	entries [][]zap.Field
 }
 

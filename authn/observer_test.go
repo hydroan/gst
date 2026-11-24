@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/authn"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,18 +28,18 @@ func sampleLoginEvent() authn.LoginEvent {
 }
 
 func TestAddLoginObserverMulticasts(t *testing.T) {
-	ctx := &types.ServiceContext{}
+	ctx := &gst.ServiceContext{}
 	event := sampleLoginEvent()
 
 	var first []authn.LoginEvent
-	removeFirst := authn.AddLoginObserver(func(gotCtx *types.ServiceContext, got authn.LoginEvent) {
+	removeFirst := authn.AddLoginObserver(func(gotCtx *gst.ServiceContext, got authn.LoginEvent) {
 		require.Same(t, ctx, gotCtx)
 		first = append(first, got)
 	})
 	t.Cleanup(removeFirst)
 
 	var second []authn.LoginEvent
-	removeSecond := authn.AddLoginObserver(func(_ *types.ServiceContext, got authn.LoginEvent) {
+	removeSecond := authn.AddLoginObserver(func(_ *gst.ServiceContext, got authn.LoginEvent) {
 		second = append(second, got)
 	})
 	t.Cleanup(removeSecond)
@@ -52,37 +52,37 @@ func TestAddLoginObserverMulticasts(t *testing.T) {
 
 func TestAddLoginObserverRemoveStopsDelivery(t *testing.T) {
 	var events []authn.LoginEvent
-	remove := authn.AddLoginObserver(func(_ *types.ServiceContext, got authn.LoginEvent) {
+	remove := authn.AddLoginObserver(func(_ *gst.ServiceContext, got authn.LoginEvent) {
 		events = append(events, got)
 	})
 
-	authn.NotifyLogin(&types.ServiceContext{}, sampleLoginEvent())
+	authn.NotifyLogin(&gst.ServiceContext{}, sampleLoginEvent())
 	require.Len(t, events, 1)
 
 	remove()
-	authn.NotifyLogin(&types.ServiceContext{}, sampleLoginEvent())
+	authn.NotifyLogin(&gst.ServiceContext{}, sampleLoginEvent())
 	require.Len(t, events, 1)
 
 	// Removal is idempotent.
 	remove()
-	authn.NotifyLogin(&types.ServiceContext{}, sampleLoginEvent())
+	authn.NotifyLogin(&gst.ServiceContext{}, sampleLoginEvent())
 	require.Len(t, events, 1)
 }
 
 func TestNotifyLoginRecoversPanickingObserver(t *testing.T) {
-	removePanicking := authn.AddLoginObserver(func(*types.ServiceContext, authn.LoginEvent) {
+	removePanicking := authn.AddLoginObserver(func(*gst.ServiceContext, authn.LoginEvent) {
 		panic("sample observer failure")
 	})
 	t.Cleanup(removePanicking)
 
 	var events []authn.LoginEvent
-	removeHealthy := authn.AddLoginObserver(func(_ *types.ServiceContext, got authn.LoginEvent) {
+	removeHealthy := authn.AddLoginObserver(func(_ *gst.ServiceContext, got authn.LoginEvent) {
 		events = append(events, got)
 	})
 	t.Cleanup(removeHealthy)
 
 	require.NotPanics(t, func() {
-		authn.NotifyLogin(&types.ServiceContext{}, sampleLoginEvent())
+		authn.NotifyLogin(&gst.ServiceContext{}, sampleLoginEvent())
 	})
 	require.Len(t, events, 1)
 }
@@ -91,6 +91,6 @@ func TestAddLoginObserverNilIsNoop(t *testing.T) {
 	remove := authn.AddLoginObserver(nil)
 	require.NotPanics(t, func() {
 		remove()
-		authn.NotifyLogin(&types.ServiceContext{}, sampleLoginEvent())
+		authn.NotifyLogin(&gst.ServiceContext{}, sampleLoginEvent())
 	})
 }

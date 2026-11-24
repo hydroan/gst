@@ -1,6 +1,6 @@
 package rbac
 
-import "github.com/hydroan/gst/internal/types"
+import "github.com/hydroan/gst/internal/gst"
 
 // The subjects and roles the authorization knows by name.
 const (
@@ -34,35 +34,35 @@ const (
 // authenticated role, or a policy granted to a role the subject holds in
 // the request tenant. An allowed request has exactly one source, the
 // strongest of the rules it satisfies.
-type GrantSource = types.GrantSource
+type GrantSource = gst.GrantSource
 
 // The kinds of rule that allow a request.
 const (
-	GrantSourceSystemRoot    = types.GrantSourceSystemRoot
-	GrantSourceTenantAdmin   = types.GrantSourceTenantAdmin
-	GrantSourceAuthenticated = types.GrantSourceAuthenticated
-	GrantSourceRole          = types.GrantSourceRole
+	GrantSourceSystemRoot    = gst.GrantSourceSystemRoot
+	GrantSourceTenantAdmin   = gst.GrantSourceTenantAdmin
+	GrantSourceAuthenticated = gst.GrantSourceAuthenticated
+	GrantSourceRole          = gst.GrantSourceRole
 )
 
 // DenyReason names why a request was not allowed: no authenticated subject,
 // a subject holding no role in the request tenant, a subject whose roles
 // carry no permission covering the object and action, or a process holding
 // no policy set at all.
-type DenyReason = types.DenyReason
+type DenyReason = gst.DenyReason
 
 // The reasons a request is not allowed.
 const (
-	DenyReasonUnauthenticated = types.DenyReasonUnauthenticated
-	DenyReasonNoRole          = types.DenyReasonNoRole
-	DenyReasonNoPolicy        = types.DenyReasonNoPolicy
-	DenyReasonNotInitialized  = types.DenyReasonNotInitialized
+	DenyReasonUnauthenticated = gst.DenyReasonUnauthenticated
+	DenyReasonNoRole          = gst.DenyReasonNoRole
+	DenyReasonNoPolicy        = gst.DenyReasonNoPolicy
+	DenyReasonNotInitialized  = gst.DenyReasonNotInitialized
 )
 
 // Effect is the effect of an authorization policy, allow or deny.
-type Effect = types.Effect
+type Effect = gst.Effect
 
 // The effects of an authorization policy.
 const (
-	EffectAllow = types.EffectAllow
-	EffectDeny  = types.EffectDeny
+	EffectAllow = gst.EffectAllow
+	EffectDeny  = gst.EffectDeny
 )

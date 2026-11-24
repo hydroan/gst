@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/hydroan/gst/internal/apiaction"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // GetCall returns the get call of M on route, the counterpart of the handler
@@ -14,7 +14,7 @@ import (
 // model, or with the status the failure maps to (see call); a message
 // naming no record is refused the way a request missing its route parameter
 // is.
-func GetCall[M types.Model](route string) func(ctx context.Context, params map[string]string, id string, query Query) (M, error) {
+func GetCall[M gst.Model](route string) func(ctx context.Context, params map[string]string, id string, query Query) (M, error) {
 	a := newAction[M, M, M](route, apiaction.Get, apiaction.GetBefore, apiaction.GetAfter)
 	return func(ctx context.Context, params map[string]string, id string, query Query) (M, error) {
 		var zero M

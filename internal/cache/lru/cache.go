@@ -8,7 +8,7 @@ import (
 	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/hydroan/gst/internal/cache/capacity"
 	"github.com/hydroan/gst/internal/cache/registry"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 var store = registry.New()
@@ -19,8 +19,8 @@ type cache[T any] struct {
 
 // Cache returns the process-wide lru cache of type T, creating it on first
 // use.
-func Cache[T any]() types.Cache[T] {
-	return registry.Load(store, func() types.Cache[T] {
+func Cache[T any]() gst.Cache[T] {
+	return registry.Load(store, func() gst.Cache[T] {
 		c, err := lru.New[string, T](capacity.Entries())
 		if err != nil {
 			panic(err) // unreachable: the default capacity is a positive constant
@@ -36,7 +36,7 @@ func (c *cache[T]) Set(_ context.Context, key string, value T, ttl time.Duration
 		return errors.New("negative ttl")
 	}
 	if ttl > 0 {
-		return types.ErrTTLNotSupported
+		return gst.ErrTTLNotSupported
 	}
 	c.c.Add(key, value)
 	return nil
@@ -46,7 +46,7 @@ func (c *cache[T]) Get(_ context.Context, key string) (T, error) {
 	value, ok := c.c.Get(key)
 	if !ok {
 		var zero T
-		return zero, types.ErrEntryNotFound
+		return zero, gst.ErrEntryNotFound
 	}
 	return value, nil
 }

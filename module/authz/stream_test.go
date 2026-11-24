@@ -11,12 +11,12 @@ import (
 
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/router"
 	"github.com/hydroan/gst/internal/service"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/testutil"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/module/authz"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/stretchr/testify/require"
@@ -90,7 +90,7 @@ type probeTailer struct {
 	service.Base[*model.Empty, *model.Empty, *probeTail]
 }
 
-func (s *probeTailer) Stream(ctx *types.ServiceContext, _ *model.Empty, stream *types.ServerStream[*probeTail]) error {
+func (s *probeTailer) Stream(ctx *gst.ServiceContext, _ *model.Empty, stream *gst.ServerStream[*probeTail]) error {
 	return stream.Send(&probeTail{Thing: ctx.Param("thing")})
 }
 
@@ -105,7 +105,7 @@ func init() {
 // probeTailRoute, behind the session check and the authorization.
 func registerProbeStream() error {
 	router.Register[*model.Empty, *model.Empty, *probeTail](
-		router.Auth(), "probe-things/:thing/tail", &types.ControllerConfig[*model.Empty]{}, apiaction.Stream,
+		router.Auth(), "probe-things/:thing/tail", &gst.ControllerConfig[*model.Empty]{}, apiaction.Stream,
 	)
 	return nil
 }
@@ -127,7 +127,7 @@ func newStreamTailer(t *testing.T, name, action string) streamTailer {
 	username := authzTestUsername(name)
 	userID, sessionID := authzSignupAndLoginUserWithUserAgent(t, username, "12345678", streamUserAgent)
 	roleID := newAuthorizationRole(t, authorizationSubject{userID: userID}, name)
-	authzGrantTenantPolicy(t, tenant.Default, roleID, types.Permission{Object: "/api/probe-things/{thing}/tail", Action: action})
+	authzGrantTenantPolicy(t, tenant.Default, roleID, gst.Permission{Object: "/api/probe-things/{thing}/tail", Action: action})
 
 	cli, err := client.New(baseURL, client.WithUserAgent(streamUserAgent), client.WithCookie(&http.Cookie{Name: "session_id", Value: sessionID}))
 	require.NoError(t, err)

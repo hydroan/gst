@@ -4,8 +4,8 @@ import (
 	"reflect"
 
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
 )
 
@@ -50,7 +50,7 @@ import (
 //	if err != nil {
 //	    return nil, gst.NewError(http.StatusBadRequest, err.Error())
 //	}
-//	opts := types.QueryOptions{
+//	opts := gst.QueryOptions{
 //	    AllowEmpty:    true,
 //	    PresentFields: s.QueryPresentFields(ctx),
 //	    Filters:       filters,
@@ -83,7 +83,7 @@ import (
 // mistyped filter name is reported instead of silently widening the result
 // set. The model is returned even when decoding fails, so a caller that
 // tolerates partial input can still use it.
-func (Base[M, REQ, RSP]) QueryModel(ctx *types.ServiceContext) (M, error) {
+func (Base[M, REQ, RSP]) QueryModel(ctx *gst.ServiceContext) (M, error) {
 	m := reflect.New(reflect.TypeFor[M]().Elem()).Interface().(M) //nolint:errcheck
 	query := requestctx.QueryValues(ctx)
 	if ctx.Phase() == apiaction.Export {
@@ -98,14 +98,14 @@ func (Base[M, REQ, RSP]) QueryModel(ctx *types.ServiceContext) (M, error) {
 // filterable column of the model and the operator must be known; anything else
 // is rejected so a mistyped filter can never silently widen the result set.
 // Filters require the model to embed model.Query.
-func (Base[M, REQ, RSP]) QueryFilters(ctx *types.ServiceContext) ([]types.Filter, error) {
+func (Base[M, REQ, RSP]) QueryFilters(ctx *gst.ServiceContext) ([]gst.Filter, error) {
 	return urlquery.Filters(requestctx.QueryValues(ctx), zeroModel[M]())
 }
 
 // QueryPresentFields returns the model filter keys the request provided
 // explicitly, so the database layer keeps their zero values (false, 0) as real
 // conditions instead of dropping them as unset.
-func (Base[M, REQ, RSP]) QueryPresentFields(ctx *types.ServiceContext) map[string]struct{} {
+func (Base[M, REQ, RSP]) QueryPresentFields(ctx *gst.ServiceContext) map[string]struct{} {
 	return urlquery.PresentFields(requestctx.QueryValues(ctx))
 }
 
@@ -113,7 +113,7 @@ func (Base[M, REQ, RSP]) QueryPresentFields(ctx *types.ServiceContext) map[strin
 // Database.WithOrder. Models embedding model.Query take them from _sort_by;
 // any other model yields no order. An unknown column or direction is a client
 // error and is reported as such.
-func (Base[M, REQ, RSP]) QueryOrders(ctx *types.ServiceContext) ([]types.Order, error) {
+func (Base[M, REQ, RSP]) QueryOrders(ctx *gst.ServiceContext) ([]gst.Order, error) {
 	return urlquery.Orders(requestctx.QueryValues(ctx), zeroModel[M]())
 }
 
@@ -123,7 +123,7 @@ func (Base[M, REQ, RSP]) QueryOrders(ctx *types.ServiceContext) ([]types.Order, 
 // _page. The returned page is always at least 1, so a service slicing
 // in-memory pages or computing offsets itself can use it without normalizing
 // again.
-func (Base[M, REQ, RSP]) QueryPagination(ctx *types.ServiceContext) (page, size int) {
+func (Base[M, REQ, RSP]) QueryPagination(ctx *gst.ServiceContext) (page, size int) {
 	return urlquery.Pagination(requestctx.QueryValues(ctx))
 }
 
@@ -134,14 +134,14 @@ func (Base[M, REQ, RSP]) QueryPagination(ctx *types.ServiceContext) (page, size 
 // column, a cursor value the column's Go type cannot represent, and a _page
 // or a _sort_by beside the cursor, a feed being read from its cursor on in
 // the cursor's order, are client errors and are reported as such.
-func (Base[M, REQ, RSP]) QueryCursor(ctx *types.ServiceContext) (types.Cursor, error) {
+func (Base[M, REQ, RSP]) QueryCursor(ctx *gst.ServiceContext) (gst.Cursor, error) {
 	return urlquery.Cursor(requestctx.QueryValues(ctx), zeroModel[M]())
 }
 
 // zeroModel returns the typed nil of M. The parsers only read the model's type
 // to assert its query capabilities and resolve its columns, so allocating one
 // would be wasted work.
-func zeroModel[M types.Model]() M {
+func zeroModel[M gst.Model]() M {
 	var m M
 	return m
 }

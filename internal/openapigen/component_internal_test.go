@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 func TestSchemaComponentName(t *testing.T) {
@@ -34,11 +34,11 @@ func TestSchemaComponentName(t *testing.T) {
 func TestSchemaComponentNameNamesFrameworkTypesByTheRootPackage(t *testing.T) {
 	// Business code reaches the framework's query contracts through the public
 	// root gst package, so the document names them after that package.
-	if got := schemaComponentName(reflect.TypeFor[types.CompareOp]()); got != "gst.CompareOp" {
-		t.Fatalf("schemaComponentName(types.CompareOp) = %q, want %q", got, "gst.CompareOp")
+	if got := schemaComponentName(reflect.TypeFor[gst.CompareOp]()); got != "gst.CompareOp" {
+		t.Fatalf("schemaComponentName(gst.CompareOp) = %q, want %q", got, "gst.CompareOp")
 	}
-	if got := uniqueComponentName(reflect.TypeFor[types.CompareOp]()); got != "gst.CompareOp" {
-		t.Fatalf("uniqueComponentName(types.CompareOp) = %q, want %q", got, "gst.CompareOp")
+	if got := uniqueComponentName(reflect.TypeFor[gst.CompareOp]()); got != "gst.CompareOp" {
+		t.Fatalf("uniqueComponentName(gst.CompareOp) = %q, want %q", got, "gst.CompareOp")
 	}
 }
 

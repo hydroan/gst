@@ -17,11 +17,11 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/datatypes"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/service"
 	"github.com/hydroan/gst/internal/testutil/swap"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -50,7 +50,7 @@ type normalizeProbeService struct {
 	service.Base[*normalizeProbeModel, *normalizeProbeReq, *normalizeProbeRsp]
 }
 
-func (s *normalizeProbeService) Create(_ *types.ServiceContext, req *normalizeProbeReq) (*normalizeProbeRsp, error) {
+func (s *normalizeProbeService) Create(_ *gst.ServiceContext, req *normalizeProbeReq) (*normalizeProbeRsp, error) {
 	if req == nil {
 		return &normalizeProbeRsp{GotNilRequest: true}, nil
 	}
@@ -196,7 +196,7 @@ func TestUpdateHandlerRequiresBody(t *testing.T) {
 	engine := gin.New()
 	engine.PUT("/required-body-probes/:id",
 		UpdateHandler[*normalizeProbeModel, *normalizeProbeModel, *normalizeProbeModel](
-			&types.ControllerConfig[*normalizeProbeModel]{Route: "required-body-probes", ParamName: "id"},
+			&gst.ControllerConfig[*normalizeProbeModel]{Route: "required-body-probes", ParamName: "id"},
 		))
 
 	recorder := httptest.NewRecorder()
@@ -335,14 +335,14 @@ func TestClientSafeBindErrorNamesTheFieldsTheValidatorRefused(t *testing.T) {
 	require.Error(t, refused)
 
 	wrapped := clientSafeBindError(refused)
-	var serviceErr *types.Error
+	var serviceErr *gst.Error
 	require.ErrorAs(t, wrapped, &serviceErr)
 	require.Equal(t, http.StatusBadRequest, serviceErr.Status())
 	require.Equal(t, "name is a required field; address.city is a required field", serviceErr.Msg())
-	require.Equal(t, []types.FieldViolation{
+	require.Equal(t, []gst.FieldViolation{
 		{Field: "name", Description: "name is a required field"},
 		{Field: "address.city", Description: "address.city is a required field"},
-	}, types.FieldViolations(serviceErr))
+	}, gst.FieldViolations(serviceErr))
 	var cause, direct validator.ValidationErrors
 	require.ErrorAs(t, wrapped, &cause, "the validator's error travels as the cause")
 	require.ErrorAs(t, refused, &direct)
@@ -350,7 +350,7 @@ func TestClientSafeBindErrorNamesTheFieldsTheValidatorRefused(t *testing.T) {
 
 	require.ErrorAs(t, clientSafeItemBindError(1, refused), &serviceErr)
 	require.Equal(t, "items[1].name is a required field; items[1].address.city is a required field", serviceErr.Msg())
-	require.Equal(t, "items[1].name", types.FieldViolations(serviceErr)[0].Field)
+	require.Equal(t, "items[1].name", gst.FieldViolations(serviceErr)[0].Field)
 }
 
 // untranslatedProbe carries rules the validator has no English sentence for:
@@ -375,14 +375,14 @@ func TestClientSafeBindErrorSpeaksOfTheRuleWithoutATranslation(t *testing.T) {
 	refused := validateRequest(&untranslatedProbe{})
 	require.Error(t, refused)
 
-	var serviceErr *types.Error
+	var serviceErr *gst.Error
 	require.ErrorAs(t, clientSafeBindError(refused), &serviceErr)
-	require.Equal(t, []types.FieldViolation{
+	require.Equal(t, []gst.FieldViolation{
 		{Field: "host", Description: "host failed the hostname check"},
 		{Field: "address.zip", Description: "address.zip failed the hostname check"},
 		{Field: "tag", Description: "tag failed the oneofci=ab check"},
 		{Field: "own", Description: "own failed the gstprobe check"},
-	}, types.FieldViolations(serviceErr))
+	}, gst.FieldViolations(serviceErr))
 	require.NotContains(t, serviceErr.Msg(), "Key:")
 	require.NotContains(t, serviceErr.Msg(), "untranslatedProbe")
 }
@@ -415,47 +415,47 @@ func TestClientSafeBindErrorSpeaksTheLanguageOfTheProcess(t *testing.T) {
 	refused := validateRequest(&partlyTranslatedProbe{Site: "no host", Host: "no host"})
 	require.Error(t, refused)
 
-	var serviceErr *types.Error
+	var serviceErr *gst.Error
 	require.ErrorAs(t, clientSafeBindError(refused), &serviceErr)
-	require.Equal(t, []types.FieldViolation{
+	require.Equal(t, []gst.FieldViolation{
 		{Field: "rank", Description: "rank must be 1 or greater"},
 		{Field: "tags", Description: "tags must contain at least 1 item"},
 		{Field: "site", Description: "site must be a valid FQDN"},
 		{Field: "host", Description: "host failed the hostname check"},
 		{Field: "code", Description: "code must start with 'ab'"},
-	}, types.FieldViolations(serviceErr))
+	}, gst.FieldViolations(serviceErr))
 
 	require.NoError(t, i18n.SetLanguage(i18n.Chinese))
 	t.Cleanup(func() { require.NoError(t, i18n.SetLanguage(i18n.English)) })
 
 	require.ErrorAs(t, clientSafeBindError(refused), &serviceErr)
 	require.Equal(t, "rank必须大于或等于1; tags必须至少包含1项; site未通过fqdn校验; host未通过hostname校验; code必须以文本'ab'开头", serviceErr.Msg())
-	require.Equal(t, []types.FieldViolation{
+	require.Equal(t, []gst.FieldViolation{
 		{Field: "rank", Description: "rank必须大于或等于1"},
 		{Field: "tags", Description: "tags必须至少包含1项"},
 		{Field: "site", Description: "site未通过fqdn校验"},
 		{Field: "host", Description: "host未通过hostname校验"},
 		{Field: "code", Description: "code必须以文本'ab'开头"},
-	}, types.FieldViolations(serviceErr))
+	}, gst.FieldViolations(serviceErr))
 
 	require.ErrorAs(t, clientSafeItemBindError(1, validateRequest(&validatedProbe{})), &serviceErr)
 	require.Equal(t, "items[1].name为必填字段; items[1].address.city为必填字段", serviceErr.Msg())
-	require.Equal(t, []types.FieldViolation{
+	require.Equal(t, []gst.FieldViolation{
 		{Field: "items[1].name", Description: "items[1].name为必填字段"},
 		{Field: "items[1].address.city", Description: "items[1].address.city为必填字段"},
-	}, types.FieldViolations(serviceErr))
+	}, gst.FieldViolations(serviceErr))
 
 	require.NoError(t, i18n.SetLanguage(i18n.TraditionalChinese))
 
 	require.ErrorAs(t, clientSafeBindError(refused), &serviceErr)
 	require.Equal(t, "rank必須大於或等於1; tags必須至少包含1項; site未通過fqdn驗證; host未通過hostname驗證; code未通過startswith=ab驗證", serviceErr.Msg())
-	require.Equal(t, []types.FieldViolation{
+	require.Equal(t, []gst.FieldViolation{
 		{Field: "rank", Description: "rank必須大於或等於1"},
 		{Field: "tags", Description: "tags必須至少包含1項"},
 		{Field: "site", Description: "site未通過fqdn驗證"},
 		{Field: "host", Description: "host未通過hostname驗證"},
 		{Field: "code", Description: "code未通過startswith=ab驗證"},
-	}, types.FieldViolations(serviceErr))
+	}, gst.FieldViolations(serviceErr))
 }
 
 // probeAudit, probeTaggedAudit and probeNamedAudit are the structs
@@ -500,15 +500,15 @@ func TestClientSafeBindErrorNamesTheFieldsByTheirJSONPath(t *testing.T) {
 	refused := validateRequest(&jsonPathProbe{Items: []probeAudit{{}, {}}})
 	require.Error(t, refused)
 
-	var serviceErr *types.Error
+	var serviceErr *gst.Error
 	require.ErrorAs(t, clientSafeBindError(refused), &serviceErr)
-	fields := make([]string, 0, len(types.FieldViolations(serviceErr)))
-	for _, v := range types.FieldViolations(serviceErr) {
+	fields := make([]string, 0, len(gst.FieldViolations(serviceErr)))
+	for _, v := range gst.FieldViolations(serviceErr) {
 		fields = append(fields, v.Field)
 	}
 	require.Equal(t, []string{"reviewer", "audit.signer", "ProbeCode", "named.approver", "Plain.approver", "items[0].reviewer", "items[1].reviewer", "name"}, fields)
-	require.Equal(t, "reviewer is a required field", types.FieldViolations(serviceErr)[0].Description)
-	require.Equal(t, "ProbeCode is a required field", types.FieldViolations(serviceErr)[2].Description)
+	require.Equal(t, "reviewer is a required field", gst.FieldViolations(serviceErr)[0].Description)
+	require.Equal(t, "ProbeCode is a required field", gst.FieldViolations(serviceErr)[2].Description)
 }
 
 // TestBindJSONRequestHonorsDisabledValidator pins gin's validator-disable
@@ -553,7 +553,7 @@ func TestBindJSONRequestDecodesWithStandardLibrary(t *testing.T) {
 	require.Len(t, target.Items, 1)
 
 	_, err = bind(`{"items":3}`)
-	var serviceErr *types.Error
+	var serviceErr *gst.Error
 	require.ErrorAs(t, err, &serviceErr)
 	require.Equal(t, "invalid value for field 'items'", serviceErr.Msg())
 }
@@ -630,7 +630,7 @@ func TestDecodeJSONRequestReadsEveryTimeOfDayStrictly(t *testing.T) {
 		`{"closes":true}`:                "closes",
 	} {
 		_, err := decode(body)
-		var refused *types.Error
+		var refused *gst.Error
 		require.ErrorAs(t, err, &refused, body)
 		require.Equal(t, "invalid value for field '"+field+"'", refused.Msg(), body)
 	}
@@ -692,7 +692,7 @@ func TestDecodeJSONRequestNamesTheTimeOrNumberItRefuses(t *testing.T) {
 		`{"costs":{"a":"abc"}}`:                   "costs.a",
 	} {
 		_, err := decode(body)
-		var refused *types.Error
+		var refused *gst.Error
 		require.ErrorAs(t, err, &refused, body)
 		require.Equal(t, "invalid value for field '"+field+"'", refused.Msg(), body)
 	}
@@ -737,7 +737,7 @@ func TestClientSafeBindErrorAnswersEachDecoderErrorStably(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			wrapped := clientSafeBindError(tt.err)
 
-			var serviceErr *types.Error
+			var serviceErr *gst.Error
 			require.ErrorAs(t, wrapped, &serviceErr)
 			require.Equal(t, tt.wantMsg, serviceErr.Msg())
 			require.Equal(t, http.StatusBadRequest, serviceErr.Status())
@@ -760,7 +760,7 @@ func TestDecodeJSONRequestRefusesAnUnreadableBodyClientSafely(t *testing.T) {
 
 	err := decodeJSONRequest(c, &normalizeProbeReq{})
 
-	var serviceErr *types.Error
+	var serviceErr *gst.Error
 	require.ErrorAs(t, err, &serviceErr)
 	require.Equal(t, "invalid request body", serviceErr.Msg())
 	require.Equal(t, http.StatusBadRequest, serviceErr.Status())
@@ -775,6 +775,6 @@ func newNormalizeProbeEngine(t *testing.T, route string) *gin.Engine {
 
 	registerTestService[*normalizeProbeModel, *normalizeProbeReq, *normalizeProbeRsp](apiaction.Create, route, &normalizeProbeService{})
 	engine := gin.New()
-	engine.POST("/"+route, CreateHandler[*normalizeProbeModel, *normalizeProbeReq, *normalizeProbeRsp](&types.ControllerConfig[*normalizeProbeModel]{Route: route}))
+	engine.POST("/"+route, CreateHandler[*normalizeProbeModel, *normalizeProbeReq, *normalizeProbeRsp](&gst.ControllerConfig[*normalizeProbeModel]{Route: route}))
 	return engine
 }

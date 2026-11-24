@@ -91,9 +91,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/lease"
 	"github.com/hydroan/gst/internal/lifecycle"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 )
@@ -109,7 +109,7 @@ var (
 	// log is the scheduler's logger: the dedicated cronjob stream the lifecycle
 	// binds before the component starts, or one writing to the global stream
 	// in a process that never ran the lifecycle.
-	log types.Logger
+	log gst.Logger
 	// clk is the time the scheduler goes by. Tests swap in one they drive
 	// by hand, so a schedule of hours plays out in microseconds.
 	clk clock = systemClock{}
@@ -135,7 +135,7 @@ func init() {
 }
 
 // setLogger binds the dedicated logger the lifecycle hands out.
-func setLogger(l types.Logger) {
+func setLogger(l gst.Logger) {
 	mu.Lock()
 	defer mu.Unlock()
 	log = l

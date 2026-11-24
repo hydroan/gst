@@ -18,13 +18,13 @@ import (
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/gst"
 	internalmiddleware "github.com/hydroan/gst/internal/middleware"
 	modeliamaccount "github.com/hydroan/gst/internal/modulemodel/iam/account"
 	modeliamuser "github.com/hydroan/gst/internal/modulemodel/iam/user"
 	modelmfa "github.com/hydroan/gst/internal/modulemodel/mfa"
 	serviceiamaccount "github.com/hydroan/gst/internal/moduleservice/iam/account"
 	"github.com/hydroan/gst/internal/testutil"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/middleware"
 	"github.com/hydroan/gst/module/iam"
 	"github.com/hydroan/gst/module/mfa"
@@ -148,7 +148,7 @@ func TestTOTPBind(t *testing.T) {
 	require.NotEmpty(t, rsp.ChallengeID)
 	require.NotEmpty(t, rsp.OtpauthURL)
 	require.NotEmpty(t, rsp.QRCodeImageDataURL)
-	require.Equal(t, types.FrameworkName, rsp.Issuer)
+	require.Equal(t, gst.FrameworkName, rsp.Issuer)
 	require.Equal(t, account.Username, rsp.AccountName)
 	require.NotEmpty(t, extractSecretFromOtpauthURL(t, rsp.OtpauthURL))
 	testutil.RequireDataFields(t, resp, "qr_code_image_data_url")

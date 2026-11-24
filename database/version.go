@@ -4,8 +4,8 @@ import (
 	"slices"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/types"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -34,7 +34,7 @@ import (
 // UPDATE statement is built, returning the previous value — the one the
 // statement must match — and a restore function that undoes the bump.
 // The caller has already rejected zero versions, so prev is always >= 1.
-func bumpVersionForUpdate[M types.Model](obj M) (prev int64, restore func()) {
+func bumpVersionForUpdate[M gst.Model](obj M) (prev int64, restore func()) {
 	prev, _ = modelschema.VersionValue(obj)
 	modelschema.SetVersionValue(obj, prev+1)
 	return prev, func() { modelschema.SetVersionValue(obj, prev) }
@@ -45,7 +45,7 @@ func bumpVersionForUpdate[M types.Model](obj M) (prev int64, restore func()) {
 // that never was in the database (see model.Version). A non-zero value is
 // kept, so imports and sync jobs can carry existing history. Create and
 // Upsert both run this over their insert candidates.
-func initializeVersions[M types.Model](objs []M) {
+func initializeVersions[M gst.Model](objs []M) {
 	if len(objs) == 0 || !modelschema.IsVersioned(objs[0]) {
 		return
 	}

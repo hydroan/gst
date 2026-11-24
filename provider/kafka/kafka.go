@@ -7,8 +7,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/lifecycle"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	"github.com/twmb/franz-go/pkg/kadm"
@@ -33,7 +33,7 @@ func init() {
 		Name:      "kafka",
 		Stage:     lifecycle.StageProvider,
 		Enabled:   func() bool { return config.App.Kafka.Enabled },
-		SetLogger: func(l types.Logger) { logger.Kafka = l },
+		SetLogger: func(l gst.Logger) { logger.Kafka = l },
 		Start:     start,
 		Stop:      stop,
 	})

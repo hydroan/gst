@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/database"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,13 +26,13 @@ func TestSelectLiteral(t *testing.T) {
 	t.Run("ProjectsAConstantColumn", func(t *testing.T) {
 		one := row{}
 		require.NoError(t, database.Select[*TestAggregateRecord, row](ctx,
-			types.Literal("records").As("source"), TestAggregateRecordCols.Amount.Sum().As("total")).
+			gst.Literal("records").As("source"), TestAggregateRecordCols.Amount.Sum().As("total")).
 			ScanOne(&one))
 		require.Equal(t, row{Source: "records", Total: 2100}, one)
 
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		require.NoError(t, database.Select[*TestAggregateRecord, row](ctx,
-			types.Literal("records").As("source"), TestAggregateRecordCols.Amount.Sum().As("total")).
+			gst.Literal("records").As("source"), TestAggregateRecordCols.Amount.Sum().As("total")).
 			WithDryRun(&statements).ScanOne(&one))
 		require.Len(t, statements, 1)
 		require.Contains(t, statements[0].Query, "SELECT 'records' AS "+quoteIdent("source")+", COALESCE(SUM(",
@@ -46,10 +46,10 @@ func TestSelectLiteral(t *testing.T) {
 			Category string
 			Total    int64
 		}
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		rows := make([]grouped, 0)
 		require.NoError(t, database.Select[*TestAggregateRecord, grouped](ctx,
-			types.Literal("records").As("source"), TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.Amount.Sum().As("total")).
+			gst.Literal("records").As("source"), TestAggregateRecordCols.Category.Group(), TestAggregateRecordCols.Amount.Sum().As("total")).
 			WithDryRun(&statements).Scan(&rows))
 		require.Len(t, statements, 1)
 		require.True(t, strings.HasSuffix(statements[0].Query, "GROUP BY "+quoteIdent("category")),
@@ -60,7 +60,7 @@ func TestSelectLiteral(t *testing.T) {
 		one := row{}
 		for _, value := range []string{"", "it's", "two words", "1st", "a-b"} {
 			require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx,
-				types.Literal(value).As("source"), TestAggregateRecordCols.Amount.Sum().As("total")).
+				gst.Literal(value).As("source"), TestAggregateRecordCols.Amount.Sum().As("total")).
 				ScanOne(&one), database.ErrInvalidLiteral, "value %q", value)
 		}
 	})
@@ -68,14 +68,14 @@ func TestSelectLiteral(t *testing.T) {
 	t.Run("RejectsALiteralWithoutAlias", func(t *testing.T) {
 		one := row{}
 		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx,
-			types.Literal("records"), TestAggregateRecordCols.Amount.Sum().As("total")).
+			gst.Literal("records"), TestAggregateRecordCols.Amount.Sum().As("total")).
 			ScanOne(&one), database.ErrLiteralWithoutAlias)
 	})
 
 	t.Run("RejectsAWindowedLiteral", func(t *testing.T) {
 		rows := make([]row, 0)
 		require.ErrorIs(t, database.Select[*TestAggregateRecord, row](ctx,
-			types.Literal("records").As("source").Over(types.OrderBy(TestAggregateRecordCols.ID.Asc())),
+			gst.Literal("records").As("source").Over(gst.OrderBy(TestAggregateRecordCols.ID.Asc())),
 			TestAggregateRecordCols.Amount.Sum().As("total")).
 			Scan(&rows), database.ErrWindowOnKey)
 	})
@@ -85,7 +85,7 @@ func TestSelectLiteral(t *testing.T) {
 			Source string
 		}
 		rows := make([]only, 0)
-		require.ErrorIs(t, database.Select[*TestAggregateRecord, only](ctx, types.Literal("records").As("source")).
+		require.ErrorIs(t, database.Select[*TestAggregateRecord, only](ctx, gst.Literal("records").As("source")).
 			Scan(&rows), database.ErrPlainSelect)
 	})
 }

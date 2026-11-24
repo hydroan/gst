@@ -11,8 +11,8 @@ import (
 	"github.com/cockroachdb/errors"
 
 	"github.com/hydroan/gst/internal/datatypes"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 	gormdatatypes "gorm.io/datatypes"
@@ -21,7 +21,7 @@ import (
 )
 
 // This file holds the predicate engine: the single implementation that turns a
-// types.Filter tree into SQL. It is deliberately separate from the chainable
+// gst.Filter tree into SQL. It is deliberately separate from the chainable
 // options in query_options.go, because a rendered predicate is no longer tied
 // to the WHERE clause of a list query. The same rules serve three call sites --
 // the WHERE clause, the CASE guard of a conditional aggregate, and HAVING --
@@ -176,7 +176,7 @@ func (db *database[M]) outerScope() filterScope {
 // does not recognize included.
 //
 // The caller must hold db.mu.
-func (db *database[M]) applyFilters(filters []types.Filter) {
+func (db *database[M]) applyFilters(filters []gst.Filter) {
 	// A filter of another model's column is not client input: only a column
 	// reference carries a table, and service code wrote it, so it fails the
 	// chain the way WithSelect refuses the same reference.
@@ -202,7 +202,7 @@ func (db *database[M]) applyFilters(filters []types.Filter) {
 // is the renderer's to refuse. The reason names the reader that refused the
 // column: the chain's model at the top level, the subquery below it, which
 // may well read the same table.
-func (db *database[M]) foreignTableFilter(filters []types.Filter, own, enclosing string) (found types.Filter, reason string, foreign bool) {
+func (db *database[M]) foreignTableFilter(filters []gst.Filter, own, enclosing string) (found gst.Filter, reason string, foreign bool) {
 	// The reader is named only in a reason: a chain without a foreign filter,
 	// the usual one, spends nothing on it.
 	reader := func() string {
@@ -213,19 +213,19 @@ func (db *database[M]) foreignTableFilter(filters []types.Filter, own, enclosing
 	}
 	for _, f := range filters {
 		switch f.Op() {
-		case types.FilterOpOr, types.FilterOpAnd:
-			if children, ok := f.Value().([]types.Filter); ok {
+		case gst.FilterOpOr, gst.FilterOpAnd:
+			if children, ok := f.Value().([]gst.Filter); ok {
 				if found, reason, foreign = db.foreignTableFilter(children, own, enclosing); foreign {
 					return found, reason, true
 				}
 			}
-		case types.FilterOpExists:
-			if sq, ok := f.Value().(types.Subquery); ok && sq.Model != nil {
+		case gst.FilterOpExists:
+			if sq, ok := f.Value().(gst.Subquery); ok && sq.Model != nil {
 				if found, reason, foreign = db.foreignTableFilter(sq.Filters, sq.Model.TableName(), own); foreign {
 					return found, reason, true
 				}
 			}
-		case types.FilterOpEqCol:
+		case gst.FilterOpEqCol:
 			if len(f.Table()) > 0 && f.Table() != own {
 				return f, fmt.Sprintf("names table %q, which %s does not read", f.Table(), reader()), true
 			}
@@ -238,7 +238,7 @@ func (db *database[M]) foreignTableFilter(filters []types.Filter, own, enclosing
 			}
 		}
 	}
-	return types.Filter{}, "", false
+	return gst.Filter{}, "", false
 }
 
 // renderFilters turns a filter list into one composable predicate rather than
@@ -256,7 +256,7 @@ func (db *database[M]) foreignTableFilter(filters []types.Filter, own, enclosing
 // group is unusable instead; see groupCondition.
 //
 // The caller must hold db.mu.
-func (db *database[M]) renderFilters(filters []types.Filter, or bool, scope filterScope) (clause.Expression, error) {
+func (db *database[M]) renderFilters(filters []gst.Filter, or bool, scope filterScope) (clause.Expression, error) {
 	if len(filters) == 0 {
 		// No filters is not a failure: callers read a nil expression as "add no
 		// condition". A sentinel here would make every call site branch on an
@@ -298,22 +298,22 @@ func (db *database[M]) renderFilters(filters []types.Filter, or bool, scope filt
 // renderFilter turns one filter into a predicate.
 //
 // The caller must hold db.mu.
-func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.Expression, error) {
+func (db *database[M]) renderFilter(f gst.Filter, scope filterScope) (clause.Expression, error) {
 	// Groups carry their children in Value and subqueries carry their columns
 	// inside it, so neither names a column of its own and both are dispatched
 	// before the empty-column check below.
 	switch f.Op() {
-	case types.FilterOpOr:
+	case gst.FilterOpOr:
 		return db.groupCondition(f, true, scope)
-	case types.FilterOpAnd:
+	case gst.FilterOpAnd:
 		return db.groupCondition(f, false, scope)
-	case types.FilterOpExists:
-		sq, ok := f.Value().(types.Subquery)
+	case gst.FilterOpExists:
+		sq, ok := f.Value().(gst.Subquery)
 		if !ok {
 			return db.failClosedFilter(f, "expects a subquery value")
 		}
 		return db.existsCondition(f, sq, scope)
-	case types.FilterOpFalse:
+	case gst.FilterOpFalse:
 		// The caller asked for the predicate that matches nothing, so it
 		// renders without the warning a filter that cannot be applied logs.
 		return falseExpr(), nil
@@ -326,37 +326,37 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 		return falseExpr(), err
 	}
 	switch f.Op() {
-	case types.FilterOpEq:
+	case gst.FilterOpEq:
 		return db.scalarFilter(f, info, db.comparisonSQL(info, f.Column(), column, " = "))
-	case types.FilterOpNe:
+	case gst.FilterOpNe:
 		return db.scalarFilter(f, info, db.comparisonSQL(info, f.Column(), column, " <> "))
-	case types.FilterOpGt:
+	case gst.FilterOpGt:
 		return db.scalarFilter(f, info, db.comparisonSQL(info, f.Column(), column, " > "))
-	case types.FilterOpGte:
+	case gst.FilterOpGte:
 		return db.scalarFilter(f, info, db.comparisonSQL(info, f.Column(), column, " >= "))
-	case types.FilterOpLt:
+	case gst.FilterOpLt:
 		return db.scalarFilter(f, info, db.comparisonSQL(info, f.Column(), column, " < "))
-	case types.FilterOpLte:
+	case gst.FilterOpLte:
 		return db.scalarFilter(f, info, db.comparisonSQL(info, f.Column(), column, " <= "))
-	case types.FilterOpIn:
+	case gst.FilterOpIn:
 		return db.listFilter(f, info, column+" IN ?")
-	case types.FilterOpNotIn:
+	case gst.FilterOpNotIn:
 		return db.listFilter(f, info, column+" NOT IN ?")
-	case types.FilterOpLike:
+	case gst.FilterOpLike:
 		return db.patternFilter(f, db.patternColumn(info, f.Column(), column)+" LIKE ?"+db.likeEscapeSuffix(), "%", "%")
-	case types.FilterOpNotLike:
+	case gst.FilterOpNotLike:
 		return db.patternFilter(f, db.patternColumn(info, f.Column(), column)+" NOT LIKE ?"+db.likeEscapeSuffix(), "%", "%")
-	case types.FilterOpILike:
+	case gst.FilterOpILike:
 		// Both sides go through the dialect's own LOWER, so a value always
 		// matches the same value: lowering the pattern here instead would fold
 		// letters a dialect's LOWER leaves alone, the ASCII-only one of SQLite
 		// and ClickHouse, and miss a row spelled exactly as the pattern.
 		return db.patternFilter(f, "LOWER("+db.patternColumn(info, f.Column(), column)+") LIKE LOWER(?)"+db.likeEscapeSuffix(), "%", "%")
-	case types.FilterOpStartsWith:
+	case gst.FilterOpStartsWith:
 		return db.patternFilter(f, db.patternColumn(info, f.Column(), column)+" LIKE ?"+db.likeEscapeSuffix(), "", "%")
-	case types.FilterOpEndsWith:
+	case gst.FilterOpEndsWith:
 		return db.patternFilter(f, db.patternColumn(info, f.Column(), column)+" LIKE ?"+db.likeEscapeSuffix(), "%", "")
-	case types.FilterOpIsNull:
+	case gst.FilterOpIsNull:
 		b, ok := f.Value().(bool)
 		if !ok {
 			return db.failClosedFilter(f, "expects a bool value")
@@ -365,11 +365,11 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 			return clause.Expr{SQL: column + " IS NULL"}, nil
 		}
 		return clause.Expr{SQL: column + " IS NOT NULL"}, nil
-	case types.FilterOpRegex:
+	case gst.FilterOpRegex:
 		return db.stringFilter(f, db.patternColumn(info, f.Column(), column)+" "+db.regexpOperator()+" ?")
-	case types.FilterOpNotRegex:
+	case gst.FilterOpNotRegex:
 		return db.stringFilter(f, "NOT ("+db.patternColumn(info, f.Column(), column)+" "+db.regexpOperator()+" ?)")
-	case types.FilterOpJSONContains:
+	case gst.FilterOpJSONContains:
 		// datatypes handles the dialect split: JSON_CONTAINS on MySQL, a
 		// jsonb operator on Postgres, a json_each EXISTS subquery on SQLite.
 		// It covers only those three — on any other dialect its expression
@@ -393,7 +393,7 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 			return db.failClosedFilter(f, "expects a string value")
 		}
 		return gormdatatypes.JSONArrayQuery(db.placedName(f, scope, info)).Contains(s), nil
-	case types.FilterOpEqCol:
+	case gst.FilterOpEqCol:
 		return db.eqColCondition(f, column, scope)
 	default:
 		return db.failClosedFilter(f, "is unknown")
@@ -411,7 +411,7 @@ func (db *database[M]) renderFilter(f types.Filter, scope filterScope) (clause.E
 // the condition into a correlated reference, which is valid SQL over the
 // wrong rows. The scope's own columns are therefore checked wherever the
 // scope lists them.
-func (db *database[M]) placeFilter(f types.Filter, scope filterScope) (string, tableInfo, error) {
+func (db *database[M]) placeFilter(f gst.Filter, scope filterScope) (string, tableInfo, error) {
 	if len(f.Table()) > 0 && len(scope.table) > 0 && f.Table() != scope.table {
 		info, ok := scope.tables[f.Table()]
 		if !ok {
@@ -448,7 +448,7 @@ func (db *database[M]) placeFilter(f types.Filter, scope filterScope) (string, t
 // terms, its keys being the columns a condition on it may name, and a
 // condition on the select's rows narrows the select itself; the mistake is
 // marked with the sentinel the projection reports it under.
-func (db *database[M]) derivedKeyFilter(f types.Filter, column, table string, info tableInfo) (clause.Expression, error) {
+func (db *database[M]) derivedKeyFilter(f gst.Filter, column, table string, info tableInfo) (clause.Expression, error) {
 	expr, err := db.failClosedFilter(f, fmt.Sprintf("names %q, which is not a key of the joined select over %q. A condition here may name the select's keys, %s. A condition on the select's rows belongs to its own Where or Having", column, table, strings.Join(sortedColumns(info.columns), ", ")))
 	return expr, errors.Join(err, ErrJoinSelectColumn)
 }
@@ -457,7 +457,7 @@ func (db *database[M]) derivedKeyFilter(f types.Filter, column, table string, in
 // placed it in, for an expression that quotes its operand itself: bare at
 // the top level of a single-table read, table.column wherever the renderer
 // qualifies.
-func (db *database[M]) placedName(f types.Filter, scope filterScope, info tableInfo) string {
+func (db *database[M]) placedName(f gst.Filter, scope filterScope, info tableInfo) string {
 	qualify := info.qualify
 	if len(qualify) == 0 && len(f.Table()) > 0 && len(scope.table) > 0 && f.Table() != scope.table {
 		qualify = f.Table()
@@ -481,7 +481,7 @@ func (db *database[M]) placedName(f types.Filter, scope filterScope, info tableI
 // gets.
 //
 // The caller must hold db.mu.
-func (db *database[M]) eqColCondition(f types.Filter, column string, scope filterScope) (clause.Expression, error) {
+func (db *database[M]) eqColCondition(f gst.Filter, column string, scope filterScope) (clause.Expression, error) {
 	parent, parentTable, ok := eqColParent(f.Value())
 	if !ok {
 		return db.failClosedFilter(f, "expects a column name or a column reference value")
@@ -518,7 +518,7 @@ func (db *database[M]) eqColCondition(f types.Filter, column string, scope filte
 // either table.
 //
 // The caller must hold db.mu.
-func (db *database[M]) joinEqCol(f types.Filter, column, parent, parentTable string, scope filterScope) (clause.Expression, error) {
+func (db *database[M]) joinEqCol(f gst.Filter, column, parent, parentTable string, scope filterScope) (clause.Expression, error) {
 	if len(parentTable) == 0 {
 		return db.failClosedFilter(f, "ties to a column without a table, name it through a column reference")
 	}
@@ -561,7 +561,7 @@ func eqColParent(value any) (name, table string, ok bool) {
 	switch v := value.(type) {
 	case string:
 		return v, "", true
-	case types.AnyColumnRef:
+	case gst.AnyColumnRef:
 		return v.Name(), v.Table(), true
 	default:
 		return "", "", false
@@ -572,13 +572,13 @@ func eqColParent(value any) (name, table string, ok bool) {
 // around it: an EqCol predicate directly in the list or inside a group, at
 // this level only. A nested subquery correlates against this level, not on
 // its behalf, so its own predicates do not count.
-func hasCorrelation(filters []types.Filter) bool {
+func hasCorrelation(filters []gst.Filter) bool {
 	for _, f := range filters {
 		switch f.Op() {
-		case types.FilterOpEqCol:
+		case gst.FilterOpEqCol:
 			return true
-		case types.FilterOpOr, types.FilterOpAnd:
-			if children, ok := f.Value().([]types.Filter); ok && hasCorrelation(children) {
+		case gst.FilterOpOr, gst.FilterOpAnd:
+			if children, ok := f.Value().([]gst.Filter); ok && hasCorrelation(children) {
 				return true
 			}
 		}
@@ -595,8 +595,8 @@ func hasCorrelation(filters []types.Filter) bool {
 // all, is unusable: an empty group is a caller bug, and answering it with
 // the logical identity (TRUE for AND) would widen the result set. Groups are
 // service code, so the chain fails on it (see narrows).
-func (db *database[M]) groupCondition(f types.Filter, or bool, scope filterScope) (clause.Expression, error) {
-	children, ok := f.Value().([]types.Filter)
+func (db *database[M]) groupCondition(f gst.Filter, or bool, scope filterScope) (clause.Expression, error) {
+	children, ok := f.Value().([]gst.Filter)
 	if !ok {
 		return db.failClosedFilter(f, "expects a filter list value")
 	}
@@ -615,7 +615,7 @@ func falseExpr() clause.Expression { return clause.Expr{SQL: "1 = 0"} }
 // predicate that matches nothing with the reason, an unusableFilterError:
 // whether the query narrows to that or fails is its caller's to decide (see
 // narrows), the predicate never widening it either way.
-func (db *database[M]) failClosedFilter(f types.Filter, msg string) (clause.Expression, error) {
+func (db *database[M]) failClosedFilter(f gst.Filter, msg string) (clause.Expression, error) {
 	logger.Database.WithContext(db.ctx, phaseWithQuery).Warnz(
 		"filter cannot be applied",
 		zap.String("op", string(f.Op())),
@@ -633,14 +633,14 @@ func (db *database[M]) failClosedFilter(f types.Filter, msg string) (clause.Expr
 // filter, which narrows reads.
 type unusableFilterError struct {
 	error
-	op types.FilterOp
+	op gst.FilterOp
 }
 
 func (e *unusableFilterError) Unwrap() error { return e.error }
 
 // narrows reports whether a failure of the renderer narrows the query to an
 // empty result instead of failing it: that of a filter whose operator a
-// client can spell in a URL query (see types.ParseFilterOp), which the row
+// client can spell in a URL query (see gst.ParseFilterOp), which the row
 // path answers with an empty page rather than a failed request. Any other
 // failure fails the query, because only service code can have written the
 // filter, and an empty result would pass its mistake off as "no data": a
@@ -652,7 +652,7 @@ func narrows(err error) bool {
 	if errors.Is(err, ErrColumnTable) || !errors.As(err, &unusable) {
 		return false
 	}
-	_, clientSpelled := types.ParseFilterOp(string(unusable.op))
+	_, clientSpelled := gst.ParseFilterOp(string(unusable.op))
 	return clientSpelled
 }
 
@@ -683,7 +683,7 @@ func (db *database[M]) patternColumn(info tableInfo, dbName, quotedColumn string
 // gorm's own parameter binding hands the driver as one value too. A JSON
 // column's documents are slices and maps by kind and compare by rules of
 // the dialect's own, so the exception is not made for them.
-func (db *database[M]) scalarFilter(f types.Filter, info tableInfo, sql string) (clause.Expression, error) {
+func (db *database[M]) scalarFilter(f gst.Filter, info tableInfo, sql string) (clause.Expression, error) {
 	if f.Value() == nil {
 		return db.failClosedFilter(f, "expects a scalar value")
 	}
@@ -706,7 +706,7 @@ func (db *database[M]) scalarFilter(f types.Filter, info tableInfo, sql string) 
 // against one, binds for v. A day, a datatypes.Date, binds the midnight in
 // UTC of the day it names. A time binds the UTC day it falls on (see
 // modelschema.UTCDay), in the form it came in: a string in
-// types.FilterTimeLayout, the way the URL parser binds a day, a time.Time,
+// gst.FilterTimeLayout, the way the URL parser binds a day, a time.Time,
 // or a value over one read as the time it holds. Any other value binds as
 // it is. The day is bound rather than the instant because the dialects
 // compare a day with an instant differently: MySQL and SQLite take the day
@@ -717,11 +717,11 @@ func dayValue(v any) any {
 		year, month, day := time.Time(value).Date()
 		return time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
 	case string:
-		t, err := time.ParseInLocation(types.FilterTimeLayout, value, time.UTC)
+		t, err := time.ParseInLocation(gst.FilterTimeLayout, value, time.UTC)
 		if err != nil {
 			return v
 		}
-		return modelschema.UTCDay(t).Format(types.FilterTimeLayout)
+		return modelschema.UTCDay(t).Format(gst.FilterTimeLayout)
 	case time.Time:
 		return modelschema.UTCDay(value)
 	}
@@ -738,7 +738,7 @@ func dayValue(v any) any {
 // empty slice keeps the SQL list semantics: IN matches nothing, and the result
 // never widens. On a date column every member binds the day it names (see
 // dayValue), the way a compared value does.
-func (db *database[M]) listFilter(f types.Filter, info tableInfo, sql string) (clause.Expression, error) {
+func (db *database[M]) listFilter(f gst.Filter, info tableInfo, sql string) (clause.Expression, error) {
 	if f.Value() == nil {
 		return db.failClosedFilter(f, "expects a slice value")
 	}
@@ -759,7 +759,7 @@ func (db *database[M]) listFilter(f types.Filter, info tableInfo, sql string) (c
 
 // patternFilter binds a LIKE-family filter; the value must be a string and is
 // escaped so the stored value matches literally.
-func (db *database[M]) patternFilter(f types.Filter, sql, prefix, suffix string) (clause.Expression, error) {
+func (db *database[M]) patternFilter(f gst.Filter, sql, prefix, suffix string) (clause.Expression, error) {
 	s, ok := f.Value().(string)
 	if !ok {
 		return db.failClosedFilter(f, "expects a string value")
@@ -769,7 +769,7 @@ func (db *database[M]) patternFilter(f types.Filter, sql, prefix, suffix string)
 
 // stringFilter binds a filter whose value must be a plain string bound as-is
 // (the regex operators).
-func (db *database[M]) stringFilter(f types.Filter, sql string) (clause.Expression, error) {
+func (db *database[M]) stringFilter(f gst.Filter, sql string) (clause.Expression, error) {
 	s, ok := f.Value().(string)
 	if !ok {
 		return db.failClosedFilter(f, "expects a string value")
@@ -807,7 +807,7 @@ func (db *database[M]) scopedColumn(column string, scope filterScope) string {
 // table, which returns a wrong row set rather than an error.
 //
 // The caller must hold db.mu.
-func (db *database[M]) existsCondition(f types.Filter, sq types.Subquery, scope filterScope) (clause.Expression, error) {
+func (db *database[M]) existsCondition(f gst.Filter, sq gst.Subquery, scope filterScope) (clause.Expression, error) {
 	// ClickHouse cannot resolve a correlated column from the enclosing query
 	// (only constants and CTEs cross that scope boundary), so the semi join
 	// is refused there, per the capability-miss rule.

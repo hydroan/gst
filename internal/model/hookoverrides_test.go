@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stoewer/go-strcase"
 	"github.com/stretchr/testify/require"
 )
@@ -85,7 +85,7 @@ type autoBaseSample struct {
 // a second copy of the phase list.
 func modelHookPhases(t *testing.T) []apiaction.Phase {
 	t.Helper()
-	contract := reflect.TypeFor[types.Model]()
+	contract := reflect.TypeFor[gst.Model]()
 	phases := make([]apiaction.Phase, 0, contract.NumMethod())
 	for method := range contract.Methods() {
 		if !strings.HasSuffix(method.Name, "Before") && !strings.HasSuffix(method.Name, "After") {

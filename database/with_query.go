@@ -6,8 +6,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -41,7 +41,7 @@ import (
 //	- Multiple fields combine with AND logic (WHERE name = 'alpha' AND age = 18)
 //	- The value is a literal: a comma is data, never a list separator. A
 //	  query for several values uses the in operator filter instead
-//	  (types.Column.In, URL form "field[in]=a,b"), where the list is explicit.
+//	  (gst.Column.In, URL form "field[in]=a,b"), where the list is explicit.
 //
 //	JSON columns (fields whose type declares a JSON gorm data type, such as
 //	the JSON, JSONSlice and JSONMap of the datatypes package): a
@@ -68,7 +68,7 @@ import (
 //	WithQuery(&Sample{Name: "alpha", Age: 18})  // WHERE name = 'alpha' AND age = 18
 //
 //	// Several values for one field - the list is explicit, never comma-parsed
-//	WithQuery(nil, types.QueryOptions{Filters: []types.Filter{SampleCols.ID.In(ids...)}})
+//	WithQuery(nil, gst.QueryOptions{Filters: []gst.Filter{SampleCols.ID.In(ids...)}})
 //
 //	// Empty query (blocked by default for safety)
 //	WithQuery(nil)  // WHERE 1 = 0 (returns no records)
@@ -76,8 +76,8 @@ import (
 //	WithQuery(&Sample{Name: "", Code: ""})  // WHERE 1 = 0 (all values are empty)
 //
 //	// Empty query with AllowEmpty=true (returns all records)
-//	WithQuery(nil, types.QueryOptions{AllowEmpty: true})  // Returns all records
-//	WithQuery(&Sample{}, types.QueryOptions{AllowEmpty: true})  // Returns all records
+//	WithQuery(nil, gst.QueryOptions{AllowEmpty: true})  // Returns all records
+//	WithQuery(&Sample{}, gst.QueryOptions{AllowEmpty: true})  // Returns all records
 //
 //	// Query with some empty and some non-empty fields (works normally)
 //	WithQuery(&Sample{Name: "alpha", Code: ""})  // WHERE name = 'alpha' (Code is ignored)
@@ -88,12 +88,12 @@ import (
 // NOTE: Empty query conditions (nil or zero value) are blocked by default for
 // safety, to prevent catastrophic data loss (e.g., deleting all records). Use
 // QueryOptions{AllowEmpty: true} to override.
-func (db *database[M]) WithQuery(query M, opts ...types.QueryOptions) types.Database[M] {
+func (db *database[M]) WithQuery(query M, opts ...gst.QueryOptions) gst.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
 	// Parse query options
-	var opt types.QueryOptions
+	var opt gst.QueryOptions
 	if len(opts) > 0 {
 		opt = opts[0]
 	}

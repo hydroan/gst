@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/gorilla/schema"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // The gorilla/schema pipeline below is the reference implementation the
@@ -20,7 +20,7 @@ var gorillaDecoder = func() *schema.Decoder {
 
 // decodeGorilla runs the reference pipeline: copy the query without the keys
 // Filters owns, drop _format, _page and _size, and stream-decode the rest.
-func decodeGorilla(q url.Values, m types.Model) error {
+func decodeGorilla(q url.Values, m gst.Model) error {
 	values := make(url.Values, len(q))
 	for key, entry := range q {
 		if isFilterQueryKey(key) {
@@ -28,9 +28,9 @@ func decodeGorilla(q url.Values, m types.Model) error {
 		}
 		values[key] = entry
 	}
-	delete(values, types.QueryFormat)
-	delete(values, types.QueryPage)
-	delete(values, types.QuerySize)
+	delete(values, gst.QueryFormat)
+	delete(values, gst.QueryPage)
+	delete(values, gst.QuerySize)
 	return gorillaDecoder.Decode(m, values)
 }
 

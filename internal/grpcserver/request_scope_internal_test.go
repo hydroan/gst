@@ -10,9 +10,9 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -213,7 +213,7 @@ func TestCallsAreLoggedLikeHTTPRequests(t *testing.T) {
 	// error of a response the listener could not encode.
 	broken := call(ctx, conn, "Broken")
 	require.Equal(t, codes.Internal, status.Code(broken))
-	require.Equal(t, types.FailureMsg, status.Convert(broken).Message())
+	require.Equal(t, gst.FailureMsg, status.Convert(broken).Message())
 
 	entries := accessLog.All()
 	require.Len(t, entries, 3)

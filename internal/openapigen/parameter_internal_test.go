@@ -9,8 +9,8 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/hydroan/gst/internal/datatypes"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/urlquery"
 	"github.com/stretchr/testify/require"
 )
@@ -391,7 +391,7 @@ func TestAddQueryParametersSetsEnumValues(t *testing.T) {
 // A key is taken when one of the values its field could hold passes both;
 // the keys tried are the documented ones and every spelling a client could
 // try for a field of M, bare and under each operator.
-func requireDocumentedAsTaken[M types.Model](t *testing.T) {
+func requireDocumentedAsTaken[M gst.Model](t *testing.T) {
 	t.Helper()
 	op := &openapi3.Operation{}
 	addQueryParameters[M, M, M](op, true)
@@ -419,7 +419,7 @@ func requireDocumentedAsTaken[M types.Model](t *testing.T) {
 
 	taken := func(key string) bool {
 		for _, value := range []string{"x", "1", "true", "2026-01-02T15:04:05Z"} {
-			m := reflect.New(reflect.TypeFor[M]().Elem()).Interface().(types.Model) //nolint:errcheck
+			m := reflect.New(reflect.TypeFor[M]().Elem()).Interface().(gst.Model) //nolint:errcheck
 			query := url.Values{key: {value}}
 			if urlquery.Decode(query, m) != nil {
 				continue
@@ -441,7 +441,7 @@ func requireDocumentedAsTaken[M types.Model](t *testing.T) {
 		"first", "label", "first.label", "code", "id", "created_at", "deleted_at",
 	} {
 		keys[name] = true
-		for _, filterOp := range types.FilterOps() {
+		for _, filterOp := range gst.FilterOps() {
 			keys[name+"["+string(filterOp)+"]"] = true
 		}
 	}

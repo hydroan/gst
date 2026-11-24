@@ -8,8 +8,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
@@ -47,7 +47,7 @@ func TestRecoveryWithTracingAnswersInTheEnvelope(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope),
 		"response body: %s", recorder.Body.String())
-	require.Equal(t, types.FailureMsg, envelope.Msg)
+	require.Equal(t, gst.FailureMsg, envelope.Msg)
 	require.NotNil(t, envelope.TraceID, "a refusal has to carry the trace that explains it")
 }
 

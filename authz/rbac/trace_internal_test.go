@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -48,7 +48,7 @@ func TestTraceAuthorizeAttributesFitTheCapacityInTheWorstCase(t *testing.T) {
 	recorder := oteltest.Record(t)
 
 	finish := traceAuthorize(context.Background(), "sample-tenant")
-	finish(types.Decision{
+	finish(gst.Decision{
 		Allowed:     true,
 		Source:      GrantSourceRole,
 		Reason:      DenyReason("sample-denial"),

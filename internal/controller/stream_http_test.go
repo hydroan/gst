@@ -20,10 +20,10 @@ import (
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/controller"
 	"github.com/hydroan/gst/internal/grpcserver"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/middleware"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/streamctx"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/websocket"
 	"github.com/hydroan/gst/logger"
 	"github.com/stretchr/testify/require"
@@ -77,7 +77,7 @@ func TestStreamHandlerStreamsTheResponsesOfARequest(t *testing.T) {
 		{name: "a request failing validation closes the stream as the refusal", request: `{}`, status: http.StatusBadRequest, msg: "note is a required field", logged: loggedFailure{zapcore.InfoLevel, "request rejected"}},
 		{name: "a request that is no JSON closes the stream as the refusal", request: `{"note":`, status: http.StatusBadRequest, msg: "request body is not valid JSON", logged: loggedFailure{zapcore.InfoLevel, "request rejected"}},
 		{name: "the service's error closes the stream with its status", request: `{"note":"` + actionRefuse + `"}`, status: http.StatusForbidden, msg: "not yours", logged: loggedFailure{zapcore.WarnLevel, "service operation failed"}},
-		{name: "any other error closes the stream as the server's failure", request: `{"note":"` + actionBreak + `"}`, status: http.StatusInternalServerError, msg: types.FailureMsg, logged: loggedFailure{zapcore.ErrorLevel, "service operation failed"}},
+		{name: "any other error closes the stream as the server's failure", request: `{"note":"` + actionBreak + `"}`, status: http.StatusInternalServerError, msg: gst.FailureMsg, logged: loggedFailure{zapcore.ErrorLevel, "service operation failed"}},
 	}
 	for _, tt := range refusals {
 		t.Run(tt.name, func(t *testing.T) {
@@ -171,7 +171,7 @@ func TestStreamHandlerStreamsTheResponsesOfARequest(t *testing.T) {
 		conn := dialStream(t, target)
 		require.NoError(t, conn.Send([]byte(`{"note":"`+actionPanic+`"}`)))
 		_, err := nextMessage(t, conn)
-		requireEnding(t, err, http.StatusInternalServerError, types.FailureMsg)
+		requireEnding(t, err, http.StatusInternalServerError, gst.FailureMsg)
 		require.Equal(t, 4500, awaitCloseCode(t, closeCodes))
 	})
 }
@@ -327,7 +327,7 @@ func TestTransportsCarryAStreamAlike(t *testing.T) {
 		{name: "a server stream streams its responses", route: watchRoute, rpc: "Watch", desc: serverStream, requests: note("2"), notes: []string{"0", "1"}, status: http.StatusOK},
 		{name: "a server stream refuses a request failing validation", route: watchRoute, rpc: "Watch", desc: serverStream, requests: []map[string]any{{}}, status: http.StatusBadRequest, msg: required},
 		{name: "a server stream ends with its service's error", route: watchRoute, rpc: "Watch", desc: serverStream, requests: note(actionRefuse), status: http.StatusForbidden, msg: "not yours"},
-		{name: "a server stream ends with the server's failure", route: watchRoute, rpc: "Watch", desc: serverStream, requests: note(actionBreak), status: http.StatusInternalServerError, msg: types.FailureMsg},
+		{name: "a server stream ends with the server's failure", route: watchRoute, rpc: "Watch", desc: serverStream, requests: note(actionBreak), status: http.StatusInternalServerError, msg: gst.FailureMsg},
 		{name: "a client stream answers its requests", route: uploadRoute, rpc: "Upload", desc: clientStream, requests: note("a", "b"), notes: []string{"a,b"}, status: http.StatusOK},
 		{name: "a client stream refuses a request failing validation", route: uploadRoute, rpc: "Upload", desc: clientStream, requests: []map[string]any{{"note": "a"}, {}}, status: http.StatusBadRequest, msg: required},
 		{name: "a bidirectional stream answers each request", route: chatRoute, rpc: "Chat", desc: bidiStream, requests: note("a", "b"), notes: []string{"echo a", "echo b"}, status: http.StatusOK},
@@ -433,7 +433,7 @@ func streamServer(t *testing.T, route string, chain ...gin.HandlerFunc) (string,
 		// Deferred, so that it is read after a handler that panicked too.
 		defer func() { closeCodes <- c.GetInt(requestctx.KeyCloseCode) }()
 		c.Next()
-	}, controller.StreamHandler[*sampleRecord, *sampleActionReq, *sampleActionRsp](&types.ControllerConfig[*sampleRecord]{Route: route}))
+	}, controller.StreamHandler[*sampleRecord, *sampleActionReq, *sampleActionRsp](&gst.ControllerConfig[*sampleRecord]{Route: route}))
 	srv := httptest.NewServer(engine)
 	t.Cleanup(srv.Close)
 	return srv.URL + "/api/boxes/b-3/" + route, closeCodes
@@ -484,7 +484,7 @@ func nextMessage(t *testing.T, conn *websocket.Conn) (map[string]any, error) {
 func requireEnding(t *testing.T, err error, status int, msg string) {
 	t.Helper()
 
-	var ending *types.Error
+	var ending *gst.Error
 	require.ErrorAs(t, err, &ending)
 	require.Equal(t, status, ending.Status())
 	require.Equal(t, msg, ending.Msg())
@@ -525,12 +525,12 @@ type loggedFailure struct {
 // failureLog stands in for the controller's logger and records the level and
 // message of each entry logged through it at info, warn or error.
 type failureLog struct {
-	types.Logger
+	gst.Logger
 	mu      *sync.Mutex
 	entries *[]loggedFailure
 }
 
-func (l failureLog) WithContext(context.Context, apiaction.Phase) types.Logger { return l }
+func (l failureLog) WithContext(context.Context, apiaction.Phase) gst.Logger { return l }
 
 func (l failureLog) Infoz(msg string, _ ...zap.Field) { l.record(zapcore.InfoLevel, msg) }
 

@@ -3,13 +3,13 @@ package answer
 import (
 	"testing"
 
-	"example.com/module/internal/types"
+	"example.com/module/internal/gst"
 )
 
 // TestSentence answers with a sentence written in a test file, which the
 // check leaves alone.
 func TestSentence(t *testing.T) {
-	if types.NewError(418, "the sample is a test") == nil {
+	if gst.NewError(418, "the sample is a test") == nil {
 		t.Fatal("no error")
 	}
 }

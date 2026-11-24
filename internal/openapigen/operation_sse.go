@@ -6,8 +6,8 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
-	"github.com/hydroan/gst/internal/types"
 )
 
 // sseMediaType is the media type of a Server-Sent Events response.
@@ -18,7 +18,7 @@ const sseMediaType = "text/event-stream"
 // a custom service that reads its own query parameters, so only the path
 // parameters are documented; the response is the raw event stream, not the
 // JSON envelope.
-func setSSE[M types.Model, REQ types.Request, RSP types.Response](path string, pathItem *openapi3.PathItem) {
+func setSSE[M gst.Model, REQ gst.Request, RSP gst.Response](path string, pathItem *openapi3.PathItem) {
 	custom := !model.AreTypesEqual[M, REQ, RSP]()
 
 	op := newOperation(path, apiaction.SSE, reflect.TypeFor[M](), custom)

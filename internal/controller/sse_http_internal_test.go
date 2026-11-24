@@ -11,10 +11,10 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/service"
 	"github.com/hydroan/gst/internal/streamctx"
 	"github.com/hydroan/gst/internal/testutil/oteltest"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/sdk/trace"
@@ -26,7 +26,7 @@ type sseSampleService struct {
 	service.Base[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel]
 }
 
-func (*sseSampleService) SSE(ctx *types.ServiceContext) error {
+func (*sseSampleService) SSE(ctx *gst.ServiceContext) error {
 	<-ctx.Done()
 	return errors.Wrap(ctx.Err(), "sample stream")
 }
@@ -43,7 +43,7 @@ func TestSSEHandlerRecordsAStreamEndedByShutdownAsInterrupted(t *testing.T) {
 
 	registerTestService[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel](apiaction.SSE, "samples/stream", &sseSampleService{})
 	engine := gin.New()
-	engine.GET("/samples/stream", SSEHandler[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel](&types.ControllerConfig[*handlerRouteModel]{Route: "samples/stream"}))
+	engine.GET("/samples/stream", SSEHandler[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel](&gst.ControllerConfig[*handlerRouteModel]{Route: "samples/stream"}))
 
 	shutdown, beginShutdown := context.WithCancel(t.Context())
 	req := httptest.NewRequestWithContext(streamctx.WithServerShutdown(t.Context(), shutdown), http.MethodGet, "/samples/stream", nil)
@@ -77,7 +77,7 @@ func TestSSEHandlerAnswersAStreamEndedBeforeItOpenedByWhatEndedIt(t *testing.T) 
 
 	registerTestService[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel](apiaction.SSE, "samples/ended-stream", &sseSampleService{})
 	engine := gin.New()
-	engine.GET("/samples/ended-stream", SSEHandler[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel](&types.ControllerConfig[*handlerRouteModel]{Route: "samples/ended-stream"}))
+	engine.GET("/samples/ended-stream", SSEHandler[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel](&gst.ControllerConfig[*handlerRouteModel]{Route: "samples/ended-stream"}))
 	// serveEnded serves req, ends its stream through end and returns the
 	// answer recorded.
 	serveEnded := func(t *testing.T, req *http.Request, end func()) *httptest.ResponseRecorder {
@@ -101,7 +101,7 @@ func TestSSEHandlerAnswersAStreamEndedBeforeItOpenedByWhatEndedIt(t *testing.T) 
 		ctx, cancel := context.WithCancel(t.Context())
 		rec := serveEnded(t, httptest.NewRequestWithContext(ctx, http.MethodGet, "/samples/ended-stream", nil), cancel)
 
-		require.Equal(t, types.StatusClientClosedRequest, rec.Code)
+		require.Equal(t, gst.StatusClientClosedRequest, rec.Code)
 		require.Equal(t, "context canceled", envelopeMsg(t, rec))
 	})
 

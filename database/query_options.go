@@ -7,8 +7,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/types"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"gorm.io/plugin/dbresolver"
@@ -45,11 +45,11 @@ import (
 //
 // Examples:
 //
-//	WithCursor(types.CursorForward(SampleCols.ID.Asc(), "")).WithLimit(10).List(&first)
-//	WithCursor(types.CursorForward(SampleCols.ID.Asc(), lastID)).WithLimit(10).List(&next)
-//	WithCursor(types.CursorBackward(SampleCols.ID.Asc(), firstID)).WithLimit(10).List(&prev)
-//	WithCursor(types.CursorForward(SampleCols.ID.Desc(), lastID)).WithLimit(10).List(&older)
-func (db *database[M]) WithCursor(cursor types.Cursor) types.Database[M] {
+//	WithCursor(gst.CursorForward(SampleCols.ID.Asc(), "")).WithLimit(10).List(&first)
+//	WithCursor(gst.CursorForward(SampleCols.ID.Asc(), lastID)).WithLimit(10).List(&next)
+//	WithCursor(gst.CursorBackward(SampleCols.ID.Asc(), firstID)).WithLimit(10).List(&prev)
+//	WithCursor(gst.CursorForward(SampleCols.ID.Desc(), lastID)).WithLimit(10).List(&older)
+func (db *database[M]) WithCursor(cursor gst.Cursor) gst.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
@@ -65,11 +65,11 @@ func (db *database[M]) WithCursor(cursor types.Cursor) types.Database[M] {
 		return db
 	}
 	if order := cursor.Order(); len(order.Column()) == 0 {
-		order = types.NewOrder(order.Table(), modelschema.DefaultCursorColumn, types.OrderDirectionOf(order))
+		order = gst.NewOrder(order.Table(), modelschema.DefaultCursorColumn, gst.OrderDirectionOf(order))
 		if cursor.Backward() {
-			cursor = types.CursorBackward(order, cursor.Value())
+			cursor = gst.CursorBackward(order, cursor.Value())
 		} else {
-			cursor = types.CursorForward(order, cursor.Value())
+			cursor = gst.CursorForward(order, cursor.Value())
 		}
 	}
 	if err := db.identifyingCursorColumn(cursor.Order().Column()); err != nil {
@@ -105,7 +105,7 @@ func (db *database[M]) identifyingCursorColumn(column string) error {
 // read, not a typo, and the statement would sort by the wrong column as valid
 // SQL. An order built from a plain name carries no table and names this
 // model's column.
-func (db *database[M]) ownOrder(option string, order types.Order) error {
+func (db *database[M]) ownOrder(option string, order gst.Order) error {
 	if len(order.Table()) > 0 && order.Table() != db.outerTableName() {
 		return errors.Wrapf(ErrColumnTable, "%s column %q belongs to table %q, model %s reads %q", option, order.Column(), order.Table(), reflect.TypeOf(*new(M)).Elem().Name(), db.outerTableName())
 	}
@@ -124,13 +124,13 @@ func (db *database[M]) applyCursorPagination() {
 	if !db.cursor.Enabled() {
 		return
 	}
-	direction := types.OrderDirectionOf(db.cursor.Order())
+	direction := gst.OrderDirectionOf(db.cursor.Order())
 	if db.cursor.Backward() {
 		direction = direction.Flip()
 	}
 	if db.cursor.Bounded() {
 		operator := " > "
-		if direction == types.OrderDesc {
+		if direction == gst.OrderDesc {
 			operator = " < "
 		}
 		typ, column := reflect.TypeOf(*new(M)), db.cursor.Order().Column()
@@ -144,7 +144,7 @@ func (db *database[M]) applyCursorPagination() {
 		}
 		db.ins = db.ins.Where(lhs+operator+rhs, value)
 	}
-	db.ins = db.ins.Order(db.orderClause(types.NewOrder("", db.cursor.Order().Column(), direction)))
+	db.ins = db.ins.Order(db.orderClause(gst.NewOrder("", db.cursor.Order().Column(), direction)))
 }
 
 // WithSelect specifies columns to select when querying or updating records,
@@ -170,7 +170,7 @@ func (db *database[M]) applyCursorPagination() {
 // Use with caution.
 //
 // Affected operations: Update, Upsert, List, Get, First, Last, Take.
-func (db *database[M]) WithSelect(columns ...types.AnyColumnRef) types.Database[M] {
+func (db *database[M]) WithSelect(columns ...gst.AnyColumnRef) gst.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	if len(columns) == 0 {
@@ -211,7 +211,7 @@ func (db *database[M]) WithSelect(columns ...types.AnyColumnRef) types.Database[
 
 // knownModelColumns returns the model's database column set for validating
 // explicit column references before they reach SQL.
-func knownModelColumns[M types.Model]() (map[string]struct{}, error) {
+func knownModelColumns[M gst.Model]() (map[string]struct{}, error) {
 	columns, err := modelschema.Columns(reflect.TypeOf(*new(M)).Elem())
 	if err != nil {
 		return nil, err
@@ -261,7 +261,7 @@ func knownModelColumns[M types.Model]() (map[string]struct{}, error) {
 //	    record.Status = "processed"
 //	    return database.Database[*model.Sample](ctx).Update(record)
 //	})
-func (db *database[M]) WithLock(mode ...LockMode) types.Database[M] {
+func (db *database[M]) WithLock(mode ...LockMode) gst.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
@@ -331,7 +331,7 @@ func (db *database[M]) WithLock(mode ...LockMode) types.Database[M] {
 // Calling WithOrder without any term, or with a term whose column is empty,
 // adds nothing. A reference of another model's column fails the chain with
 // ErrColumnTable, the way WithSelect refuses one.
-func (db *database[M]) WithOrder(orders ...types.Order) types.Database[M] {
+func (db *database[M]) WithOrder(orders ...gst.Order) gst.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	for _, order := range orders {
@@ -373,12 +373,12 @@ func (db *database[M]) completeOrder() {
 	if err != nil {
 		return
 	}
-	direction := types.OrderAsc
+	direction := gst.OrderAsc
 	for _, order := range db.orders {
 		if _, ok := identifying[order.Column()]; ok {
 			return
 		}
-		direction = orderDirection(types.OrderDirectionOf(order))
+		direction = orderDirection(gst.OrderDirectionOf(order))
 	}
 	columns, err := modelschema.Columns(reflect.TypeOf(*new(M)))
 	if err != nil {
@@ -386,17 +386,17 @@ func (db *database[M]) completeOrder() {
 	}
 	for _, col := range columns {
 		if col.PrimaryKey {
-			db.ins = db.ins.Order(db.orderClause(types.NewOrder("", col.DBName, direction)))
+			db.ins = db.ins.Order(db.orderClause(gst.NewOrder("", col.DBName, direction)))
 		}
 	}
 }
 
 // orderClause renders one ORDER BY term. A zero direction is read as
 // ascending, matching SQL's own default.
-func (db *database[M]) orderClause(order types.Order) string {
-	direction := types.OrderAsc
-	if types.OrderDirectionOf(order) == types.OrderDesc {
-		direction = types.OrderDesc
+func (db *database[M]) orderClause(order gst.Order) string {
+	direction := gst.OrderAsc
+	if gst.OrderDirectionOf(order) == gst.OrderDesc {
+		direction = gst.OrderDesc
 	}
 	return db.quoteIdent(order.Column()) + " " + string(direction)
 }
@@ -426,7 +426,7 @@ func (db *database[M]) orderClause(order types.Order) string {
 // row apart, or none at all, is completed with the primary key when List runs,
 // in the direction of the last term (see completeOrder), so the pages hold
 // still between queries.
-func (db *database[M]) WithPagination(page, size int) types.Database[M] {
+func (db *database[M]) WithPagination(page, size int) gst.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	db.paginated = true
@@ -464,7 +464,7 @@ func (db *database[M]) WithPagination(page, size int) types.Database[M] {
 // Note: WithLimit only affects SELECT queries (List, Get, First, Last, etc.):
 // the statements GORM builds for Create, Update and Delete carry no LIMIT
 // clause.
-func (db *database[M]) WithLimit(limit int) types.Database[M] {
+func (db *database[M]) WithLimit(limit int) gst.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	if limit <= 0 {
@@ -517,7 +517,7 @@ func (db *database[M]) WithLimit(limit int) types.Database[M] {
 // The orders sort the associated rows, not the model's, so the table a
 // column reference carries is not checked here, unlike WithOrder: an order
 // of the wrong model is the caller's to avoid.
-func (db *database[M]) WithExpand(expand []string, orders ...types.Order) types.Database[M] {
+func (db *database[M]) WithExpand(expand []string, orders ...gst.Order) gst.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	// The order terms sort the preloaded rows of each association, so their
@@ -577,7 +577,7 @@ func (db *database[M]) WithExpand(expand []string, orders ...types.Order) types.
 // cannot be undone.
 //
 // Only works on 'Delete' method.
-func (db *database[M]) WithPurge(enable ...bool) types.Database[M] {
+func (db *database[M]) WithPurge(enable ...bool) gst.Database[M] {
 	_enable := true
 	if len(enable) > 0 {
 		_enable = enable[0]
@@ -613,7 +613,7 @@ func (db *database[M]) WithPurge(enable ...bool) types.Database[M] {
 //	WithAllowMissing().Delete(&note)   // nil, the version unchecked
 //
 // Only works on 'Delete' method.
-func (db *database[M]) WithAllowMissing() types.Database[M] {
+func (db *database[M]) WithAllowMissing() gst.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	db.allowMissing = true
@@ -641,7 +641,7 @@ func (db *database[M]) WithAllowMissing() types.Database[M] {
 //
 //	all := make([]*Sample, 0)
 //	Database[*Sample](ctx).WithDeleted().WithQuery(&Sample{Kind: "billing"}).List(&all)  // live + soft-deleted
-func (db *database[M]) WithDeleted() types.Database[M] {
+func (db *database[M]) WithDeleted() gst.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	db.includeDeleted = true
@@ -688,7 +688,7 @@ func (db *database[M]) WithDeleted() types.Database[M] {
 //	rows := make([]*AuditLog, 0)
 //	Database[*AuditLog](ctx).WithReplica().WithQuery(query).List(&rows)  // replica-eligible read
 //	Database[*Report](ctx).WithReplica(false).Get(report, id)            // fresh read of a PreferReplica model
-func (db *database[M]) WithReplica(prefer ...bool) types.Database[M] {
+func (db *database[M]) WithReplica(prefer ...bool) gst.Database[M] {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 

@@ -7,8 +7,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/grpcserver"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/i18n"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
@@ -26,27 +26,27 @@ import (
 func TestStatusErrorMapsTheStatusToTheCode(t *testing.T) {
 	for _, tc := range []struct {
 		name string
-		err  *types.Error
+		err  *gst.Error
 		want codes.Code
 	}{
-		{"400", types.NewError(http.StatusBadRequest, "bad request"), codes.InvalidArgument},
-		{"401", types.NewError(http.StatusUnauthorized, "who are you"), codes.Unauthenticated},
-		{"403", types.NewError(http.StatusForbidden, "not yours"), codes.PermissionDenied},
-		{"404", types.NewError(http.StatusNotFound, "no such record"), codes.NotFound},
-		{"408", types.NewError(http.StatusRequestTimeout, "too slow"), codes.DeadlineExceeded},
-		{"409", types.NewError(http.StatusConflict, "busy"), codes.Aborted},
-		{"409 of a duplicated key", types.NewErrorWithCause(http.StatusConflict, "taken", errors.Wrap(database.ErrDuplicatedKey, "create sample")), codes.AlreadyExists},
-		{"409 of a stale object", types.NewErrorWithCause(http.StatusConflict, "reload", errors.Wrap(database.ErrStaleObject, "update sample")), codes.Aborted},
-		{"409 of a foreign key", types.NewErrorWithCause(http.StatusConflict, "refers", errors.Wrap(database.ErrForeignKeyViolated, "create sample")), codes.FailedPrecondition},
-		{"412", types.NewError(http.StatusPreconditionFailed, "not yet"), codes.FailedPrecondition},
-		{"422", types.NewError(http.StatusUnprocessableEntity, "cannot"), codes.InvalidArgument},
-		{"429", types.NewError(http.StatusTooManyRequests, "slow down"), codes.ResourceExhausted},
-		{"499", types.NewError(types.StatusClientClosedRequest, "gone"), codes.Canceled},
-		{"500", types.NewError(http.StatusInternalServerError, "broken"), codes.Internal},
-		{"501", types.NewError(http.StatusNotImplemented, "not here"), codes.Unimplemented},
-		{"502", types.NewError(http.StatusBadGateway, "upstream broke"), codes.Internal},
-		{"503", types.NewError(http.StatusServiceUnavailable, "later"), codes.Unavailable},
-		{"504", types.NewError(http.StatusGatewayTimeout, "upstream"), codes.DeadlineExceeded},
+		{"400", gst.NewError(http.StatusBadRequest, "bad request"), codes.InvalidArgument},
+		{"401", gst.NewError(http.StatusUnauthorized, "who are you"), codes.Unauthenticated},
+		{"403", gst.NewError(http.StatusForbidden, "not yours"), codes.PermissionDenied},
+		{"404", gst.NewError(http.StatusNotFound, "no such record"), codes.NotFound},
+		{"408", gst.NewError(http.StatusRequestTimeout, "too slow"), codes.DeadlineExceeded},
+		{"409", gst.NewError(http.StatusConflict, "busy"), codes.Aborted},
+		{"409 of a duplicated key", gst.NewErrorWithCause(http.StatusConflict, "taken", errors.Wrap(database.ErrDuplicatedKey, "create sample")), codes.AlreadyExists},
+		{"409 of a stale object", gst.NewErrorWithCause(http.StatusConflict, "reload", errors.Wrap(database.ErrStaleObject, "update sample")), codes.Aborted},
+		{"409 of a foreign key", gst.NewErrorWithCause(http.StatusConflict, "refers", errors.Wrap(database.ErrForeignKeyViolated, "create sample")), codes.FailedPrecondition},
+		{"412", gst.NewError(http.StatusPreconditionFailed, "not yet"), codes.FailedPrecondition},
+		{"422", gst.NewError(http.StatusUnprocessableEntity, "cannot"), codes.InvalidArgument},
+		{"429", gst.NewError(http.StatusTooManyRequests, "slow down"), codes.ResourceExhausted},
+		{"499", gst.NewError(gst.StatusClientClosedRequest, "gone"), codes.Canceled},
+		{"500", gst.NewError(http.StatusInternalServerError, "broken"), codes.Internal},
+		{"501", gst.NewError(http.StatusNotImplemented, "not here"), codes.Unimplemented},
+		{"502", gst.NewError(http.StatusBadGateway, "upstream broke"), codes.Internal},
+		{"503", gst.NewError(http.StatusServiceUnavailable, "later"), codes.Unavailable},
+		{"504", gst.NewError(http.StatusGatewayTimeout, "upstream"), codes.DeadlineExceeded},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			st := status.Convert(grpcserver.StatusError(tc.err))
@@ -59,14 +59,14 @@ func TestStatusErrorMapsTheStatusToTheCode(t *testing.T) {
 }
 
 // TestStatusErrorAnswersATypedNilServiceErrorAsTheServerFailure pins that a
-// typed nil *types.Error, the error a `var e *gst.Error; return e` hands its
-// caller, answers Internal with types.FailureMsg, as every failure of the
+// typed nil *gst.Error, the error a `var e *gst.Error; return e` hands its
+// caller, answers Internal with gst.FailureMsg, as every failure of the
 // server's own does.
 func TestStatusErrorAnswersATypedNilServiceErrorAsTheServerFailure(t *testing.T) {
-	st := status.Convert(grpcserver.StatusError((*types.Error)(nil)))
+	st := status.Convert(grpcserver.StatusError((*gst.Error)(nil)))
 
 	require.Equal(t, codes.Internal, st.Code())
-	require.Equal(t, types.FailureMsg, st.Message())
+	require.Equal(t, gst.FailureMsg, st.Message())
 }
 
 // TestStatusErrorAttachesTheFieldViolations pins that a service error
@@ -74,12 +74,12 @@ func TestStatusErrorAnswersATypedNilServiceErrorAsTheServerFailure(t *testing.T)
 // the message naming them, and a google.rpc.BadRequest detail listing each
 // field and its description, the shape AIP-193 gives a validation failure.
 func TestStatusErrorAttachesTheFieldViolations(t *testing.T) {
-	violations := []types.FieldViolation{
+	violations := []gst.FieldViolation{
 		{Field: "name", Description: "name is a required field"},
 		{Field: "address.city", Description: "address.city is a required field"},
 	}
 
-	st := status.Convert(grpcserver.StatusError(types.NewInvalidFields(violations, errors.New("validation failed"))))
+	st := status.Convert(grpcserver.StatusError(gst.NewInvalidFields(violations, errors.New("validation failed"))))
 
 	require.Equal(t, codes.InvalidArgument, st.Code())
 	require.Equal(t, "name is a required field; address.city is a required field", st.Message())
@@ -99,17 +99,17 @@ func TestStatusErrorAttachesTheFieldViolations(t *testing.T) {
 // Internal with a fixed message, its text kept out of the answer the way the
 // HTTP listener keeps internal detail out of the envelope; nil stays nil.
 func TestStatusErrorAnswersServiceErrorsAndHidesTheRest(t *testing.T) {
-	refused := status.Convert(grpcserver.StatusError(types.NewErrorWithCause(http.StatusForbidden, "not yours", errors.New("row belongs to u-2"))))
+	refused := status.Convert(grpcserver.StatusError(gst.NewErrorWithCause(http.StatusForbidden, "not yours", errors.New("row belongs to u-2"))))
 	require.Equal(t, codes.PermissionDenied, refused.Code())
 	require.Equal(t, "not yours", refused.Message())
 
-	wrapped := status.Convert(grpcserver.StatusError(errors.Wrap(types.NewError(http.StatusNotFound, "no such record"), "get sample")))
+	wrapped := status.Convert(grpcserver.StatusError(errors.Wrap(gst.NewError(http.StatusNotFound, "no such record"), "get sample")))
 	require.Equal(t, codes.NotFound, wrapped.Code())
 	require.Equal(t, "no such record", wrapped.Message())
 
 	broken := status.Convert(grpcserver.StatusError(errors.New("dial tcp: connection refused")))
 	require.Equal(t, codes.Internal, broken.Code())
-	require.Equal(t, types.FailureMsg, broken.Message())
+	require.Equal(t, gst.FailureMsg, broken.Message())
 
 	require.NoError(t, grpcserver.StatusError(nil))
 }
@@ -125,18 +125,18 @@ func TestStatusErrorAnswersInTheLanguageOfTheProcess(t *testing.T) {
 	require.NoError(t, i18n.SetLanguage(i18n.Chinese))
 	t.Cleanup(func() { require.NoError(t, i18n.SetLanguage(i18n.English)) })
 
-	sealed := status.Convert(grpcserver.StatusError(types.NewError(http.StatusConflict, "the sample is sealed")))
+	sealed := status.Convert(grpcserver.StatusError(gst.NewError(http.StatusConflict, "the sample is sealed")))
 	require.Equal(t, codes.Aborted, sealed.Code())
 	require.Equal(t, "样本已封存", sealed.Message())
 
-	open := status.Convert(grpcserver.StatusError(types.NewError(http.StatusConflict, "the sample is open")))
+	open := status.Convert(grpcserver.StatusError(gst.NewError(http.StatusConflict, "the sample is open")))
 	require.Equal(t, "the sample is open", open.Message())
 
 	broken := status.Convert(grpcserver.StatusError(errors.New("dial tcp: connection refused")))
 	require.Equal(t, codes.Internal, broken.Code())
 	require.Equal(t, "服务器无法处理该请求。", broken.Message())
 
-	refused := status.Convert(grpcserver.StatusError(types.NewInvalidFields([]types.FieldViolation{{Field: "name", Description: "name为必填字段"}}, nil)))
+	refused := status.Convert(grpcserver.StatusError(gst.NewInvalidFields([]gst.FieldViolation{{Field: "name", Description: "name为必填字段"}}, nil)))
 	require.Equal(t, "name为必填字段", refused.Message())
 	require.Len(t, refused.Details(), 1)
 	bad, ok := refused.Details()[0].(*errdetails.BadRequest)

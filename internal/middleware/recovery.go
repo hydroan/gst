@@ -12,9 +12,9 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/execctx"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/response"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
 	"go.uber.org/zap"
@@ -102,7 +102,7 @@ func recoveryWithTracing(log *zap.Logger, stack bool) gin.HandlerFunc {
 			// What the panic was stays in the log above. The caller gets the
 			// envelope every other response carries, so one reader can parse
 			// them all and quote back the trace id that explains this one.
-			response.Abort(c, types.NewError(http.StatusInternalServerError, types.FailureMsg))
+			response.Abort(c, gst.NewError(http.StatusInternalServerError, gst.FailureMsg))
 		}
 	})
 }

@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 	"gorm.io/gorm"
 )
 
@@ -28,10 +28,10 @@ var (
 // union renders on its own statement and pushes into every member.
 type aliasOrder struct {
 	alias     string
-	direction types.OrderDirection
+	direction gst.OrderDirection
 }
 
-// union implements types.Union. It borrows a chain minted by its first branch
+// union implements gst.Union. It borrows a chain minted by its first branch
 // for everything an operation shares — the connection and the transaction the
 // context carries, tracing, the statement comment and SQL collection — and
 // stacks the members the branches render.
@@ -42,19 +42,19 @@ type union[R any] struct {
 	err   error // set when the union could not be assembled; surfaced by the terminal
 
 	branches   []nestedSelect
-	orders     []types.Ordering
+	orders     []gst.Ordering
 	limit      int
 	offset     int
 	hasLimit   bool
 	paged      bool // Page set the limit and offset; a read then needs an order (see build).
 	dryRun     bool
-	statements *[]types.SQLStatement
+	statements *[]gst.SQLStatement
 }
 
 // UnionAll stacks the rows of branches into one result scanned into R; see
-// types.Union for the contract and an example. The branches are selects
+// gst.Union for the contract and an example. The branches are selects
 // scanning into R, over any models of the default database.
-func UnionAll[R any](ctx context.Context, branches ...types.SelectBranch[R]) types.Union[R] {
+func UnionAll[R any](ctx context.Context, branches ...gst.SelectBranch[R]) gst.Union[R] {
 	if DB() == nil {
 		panic("database is not initialized")
 	}
@@ -64,7 +64,7 @@ func UnionAll[R any](ctx context.Context, branches ...types.SelectBranch[R]) typ
 // UnionAllOn is UnionAll on an application-held database instance, the one
 // every branch was opened on with SelectOn. See DatabaseOn for the instance
 // semantics, including the panic on nil.
-func UnionAllOn[R any](ctx context.Context, instance *gorm.DB, branches ...types.SelectBranch[R]) types.Union[R] {
+func UnionAllOn[R any](ctx context.Context, instance *gorm.DB, branches ...gst.SelectBranch[R]) gst.Union[R] {
 	if instance == nil {
 		panic("database instance cannot be nil")
 	}
@@ -75,7 +75,7 @@ func UnionAllOn[R any](ctx context.Context, instance *gorm.DB, branches ...types
 // package that attached, opened on the same handle the union runs on. A
 // branch failing any of it fails the union at its terminal rather than
 // here, the way a selector that could not attach does.
-func unionFor[R any](ctx context.Context, base *gorm.DB, branches []types.SelectBranch[R]) *union[R] {
+func unionFor[R any](ctx context.Context, base *gorm.DB, branches []gst.SelectBranch[R]) *union[R] {
 	if ctx == nil {
 		// Reported at the terminal like the union's other defects; the union
 		// is still built, on a context of its own, so every call stays safe.
@@ -120,7 +120,7 @@ func unionFor[R any](ctx context.Context, base *gorm.DB, branches []types.Select
 
 // OrderBy adds orders to the orderings of the stacked rows, after the ones
 // given before.
-func (u *union[R]) OrderBy(orders ...types.Ordering) types.Union[R] {
+func (u *union[R]) OrderBy(orders ...gst.Ordering) gst.Union[R] {
 	u.orders = append(u.orders, orders...)
 	return u
 }
@@ -128,7 +128,7 @@ func (u *union[R]) OrderBy(orders ...types.Ordering) types.Union[R] {
 // Limit caps the number of stacked rows, read from the first: a Limit after a
 // Page drops the page's skip. A non-positive limit means no limit, as on a
 // selector.
-func (u *union[R]) Limit(n int) types.Union[R] {
+func (u *union[R]) Limit(n int) gst.Union[R] {
 	u.offset, u.paged = 0, false
 	if n <= 0 {
 		u.limit, u.hasLimit = 0, false
@@ -140,7 +140,7 @@ func (u *union[R]) Limit(n int) types.Union[R] {
 
 // Page keeps one page of the stacked rows: the limit is the page's size and
 // the offset the rows of the pages before it, as on a selector.
-func (u *union[R]) Page(page, size int) types.Union[R] {
+func (u *union[R]) Page(page, size int) gst.Union[R] {
 	if size <= 0 {
 		u.limit, u.offset, u.hasLimit, u.paged = 0, 0, false, false
 		return u
@@ -155,7 +155,7 @@ func (u *union[R]) Page(page, size int) types.Union[R] {
 // WithDryRun marks the union a dry run and keeps the collector its statements
 // go to. An explicitly nil collector fails the union with ErrNilSQLBuilder,
 // unless an earlier defect has failed it already.
-func (u *union[R]) WithDryRun(collector ...*[]types.SQLStatement) types.Union[R] {
+func (u *union[R]) WithDryRun(collector ...*[]gst.SQLStatement) gst.Union[R] {
 	u.dryRun = true
 	if len(collector) > 0 {
 		if collector[0] == nil {
@@ -338,7 +338,7 @@ func (u *union[R]) validate() error {
 		if _, ok := columns[ordered.alias]; !ok {
 			return errors.Wrapf(ErrUnionOrderNotSelected, "%s has no field for %q", typ, ordered.alias)
 		}
-		if to, ok := o.(types.TermOrder); ok && !u.anyBranchSelects(types.TermOrderTermOf(to)) {
+		if to, ok := o.(gst.TermOrder); ok && !u.anyBranchSelects(gst.TermOrderTermOf(to)) {
 			return errors.Wrapf(ErrUnionOrderNotSelected, "no branch projects the term %q", ordered.alias)
 		}
 	}
@@ -349,18 +349,18 @@ func (u *union[R]) validate() error {
 // sorts by and the direction: a term ordering by the term's alias, a column
 // ordering by the column's name, which is the alias a column projects under
 // unless renamed.
-func (u *union[R]) orderedAlias(o types.Ordering) (aliasOrder, error) {
+func (u *union[R]) orderedAlias(o gst.Ordering) (aliasOrder, error) {
 	switch o := o.(type) {
-	case types.TermOrder:
-		if !types.TermOrderDirectionOf(o).Valid() {
-			return aliasOrder{}, errors.Wrapf(ErrUnknownOrderDirection, "%q", types.TermOrderDirectionOf(o))
+	case gst.TermOrder:
+		if !gst.TermOrderDirectionOf(o).Valid() {
+			return aliasOrder{}, errors.Wrapf(ErrUnknownOrderDirection, "%q", gst.TermOrderDirectionOf(o))
 		}
-		return aliasOrder{alias: termAlias(types.TermOrderTermOf(o)), direction: orderDirection(types.TermOrderDirectionOf(o))}, nil
-	case types.Order:
-		if !types.OrderDirectionOf(o).Valid() {
-			return aliasOrder{}, errors.Wrapf(ErrUnknownOrderDirection, "%q", types.OrderDirectionOf(o))
+		return aliasOrder{alias: termAlias(gst.TermOrderTermOf(o)), direction: orderDirection(gst.TermOrderDirectionOf(o))}, nil
+	case gst.Order:
+		if !gst.OrderDirectionOf(o).Valid() {
+			return aliasOrder{}, errors.Wrapf(ErrUnknownOrderDirection, "%q", gst.OrderDirectionOf(o))
 		}
-		return aliasOrder{alias: o.Column(), direction: orderDirection(types.OrderDirectionOf(o))}, nil
+		return aliasOrder{alias: o.Column(), direction: orderDirection(gst.OrderDirectionOf(o))}, nil
 	default:
 		return aliasOrder{}, errors.Wrapf(ErrUnknownOrderDirection, "%T", o)
 	}
@@ -391,7 +391,7 @@ func (u *union[R]) pushdown(orders []aliasOrder) ([]aliasOrder, int) {
 }
 
 // anyBranchSelects reports whether some branch projects exactly this term.
-func (u *union[R]) anyBranchSelects(t types.Term) bool {
+func (u *union[R]) anyBranchSelects(t gst.Term) bool {
 	for _, b := range u.branches {
 		if b.isSelected(t) {
 			return true

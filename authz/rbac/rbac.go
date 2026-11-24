@@ -4,8 +4,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/tenant"
-	"github.com/hydroan/gst/internal/types"
 )
 
 var (
@@ -38,7 +38,7 @@ type rbac struct {
 // installed under. Read outside it, a caller could be handed a policy set
 // whose adapter has not been assigned yet, and the first write through it
 // would dereference a nil adapter.
-func RBAC() types.RBAC {
+func RBAC() gst.RBAC {
 	policyMu.RLock()
 	rules, store := policyRules, policyStore
 	policyMu.RUnlock()

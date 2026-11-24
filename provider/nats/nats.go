@@ -8,8 +8,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/lifecycle"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	"github.com/nats-io/nats.go"
@@ -28,7 +28,7 @@ func init() {
 		Name:      "nats",
 		Stage:     lifecycle.StageProvider,
 		Enabled:   func() bool { return config.App.Nats.Enabled },
-		SetLogger: func(l types.Logger) { logger.Nats = l },
+		SetLogger: func(l gst.Logger) { logger.Nats = l },
 		Start:     start,
 		Stop:      stop,
 	})

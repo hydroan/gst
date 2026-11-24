@@ -3,7 +3,7 @@ package controller
 import (
 	"reflect"
 
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // This file holds the normalization both transports run on what they
@@ -35,7 +35,7 @@ func (a *action[M, REQ, RSP]) normalizeModel(m *M) {
 // normalizeBatch normalizes what the bound batch payload holds (see
 // normalizeValue), nil entries compacted away so the shared batch pipeline
 // never dereferences a nil item.
-func normalizeBatch[M types.Model](req *batch[M]) {
+func normalizeBatch[M gst.Model](req *batch[M]) {
 	normalizeValue(reflect.ValueOf(req))
 }
 

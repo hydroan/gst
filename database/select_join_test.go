@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/tenant"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -60,10 +60,10 @@ func TestSelectJoinReadsTheJoinedColumns(t *testing.T) {
 		Category string
 		Amount   int64
 	}
-	tagged := func(on types.Filter) types.Selector[*TestRecordTag, taggedRecord] {
+	tagged := func(on gst.Filter) gst.Selector[*TestRecordTag, taggedRecord] {
 		return database.Select[*TestRecordTag, taggedRecord](ctx,
 			TestRecordTagCols.ID, TestRecordTagCols.Label, TestAggregateRecordCols.Category, TestAggregateRecordCols.Amount).
-			Join(types.Join[*TestAggregateRecord](on)).
+			Join(gst.Join[*TestAggregateRecord](on)).
 			OrderBy(TestRecordTagCols.ID.Asc())
 	}
 	want := []taggedRecord{
@@ -79,7 +79,7 @@ func TestSelectJoinReadsTheJoinedColumns(t *testing.T) {
 	})
 
 	t.Run("RendersEveryColumnQualifiedAndTheSoftDeleteInTheOn", func(t *testing.T) {
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		rows := make([]taggedRecord, 0)
 		require.NoError(t, tagged(TestAggregateRecordCols.ID.EqCol(TestRecordTagCols.RecordID)).WithDryRun(&statements).Scan(&rows))
 		require.Len(t, statements, 1)
@@ -102,7 +102,7 @@ func TestSelectJoinReadsTheJoinedColumns(t *testing.T) {
 		require.NoError(t, reversed.Scan(&rows))
 		require.Equal(t, want, rows)
 
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		require.NoError(t, reversed.WithDryRun(&statements).Scan(&rows))
 		require.Contains(t, statements[0].Query,
 			" ON "+qualified("test_record_tags", "record_id")+" = "+qualified("test_aggregate_records", "id")+" AND ")
@@ -112,7 +112,7 @@ func TestSelectJoinReadsTheJoinedColumns(t *testing.T) {
 		rows := make([]taggedRecord, 0)
 		require.NoError(t, database.Select[*TestRecordTag, taggedRecord](ctx,
 			TestRecordTagCols.ID, TestRecordTagCols.Label, TestAggregateRecordCols.Category, TestAggregateRecordCols.Amount).
-			Join(types.Join[*TestAggregateRecord](TestAggregateRecordCols.ID.EqCol(TestRecordTagCols.RecordID))).
+			Join(gst.Join[*TestAggregateRecord](TestAggregateRecordCols.ID.EqCol(TestRecordTagCols.RecordID))).
 			OrderBy(TestAggregateRecordCols.Amount.Desc()).
 			Scan(&rows))
 		require.Equal(t, []taggedRecord{want[2], want[1], want[0]}, rows)
@@ -123,7 +123,7 @@ func TestSelectLeftJoinKeepsUnmatchedRows(t *testing.T) {
 	defer cleanupJoinData()
 	setupJoinData(t)
 	ctx := context.Background()
-	withAccount := func(source types.JoinSource) types.Selector[*TestPayment, paymentAccount] {
+	withAccount := func(source gst.JoinSource) gst.Selector[*TestPayment, paymentAccount] {
 		return database.Select[*TestPayment, paymentAccount](ctx,
 			TestPaymentCols.ID, TestPaymentCols.Account, TestPaymentCols.Amount, TestAccountCols.Name.As("account_name")).
 			Join(source).
@@ -135,7 +135,7 @@ func TestSelectLeftJoinKeepsUnmatchedRows(t *testing.T) {
 		// The join pins the account's code, unique through Indexes: bolt has
 		// no account row, so p3 keeps a NULL name instead of disappearing.
 		rows := make([]paymentAccount, 0)
-		require.NoError(t, withAccount(types.LeftJoin[*TestAccount](onCode)).Scan(&rows))
+		require.NoError(t, withAccount(gst.LeftJoin[*TestAccount](onCode)).Scan(&rows))
 		require.Equal(t, []paymentAccount{
 			{ID: "p1", Account: "acme", Amount: 100, AccountName: new("Acme Ltd")},
 			{ID: "p2", Account: "acme", Amount: 200, AccountName: new("Acme Ltd")},
@@ -143,8 +143,8 @@ func TestSelectLeftJoinKeepsUnmatchedRows(t *testing.T) {
 			{ID: "p4", Account: "acme", Amount: 400, AccountName: new("Acme Ltd")},
 		}, rows)
 
-		statements := make([]types.SQLStatement, 0)
-		require.NoError(t, withAccount(types.LeftJoin[*TestAccount](onCode)).WithDryRun(&statements).Scan(&rows))
+		statements := make([]gst.SQLStatement, 0)
+		require.NoError(t, withAccount(gst.LeftJoin[*TestAccount](onCode)).WithDryRun(&statements).Scan(&rows))
 		require.Contains(t, statements[0].Query,
 			" FROM "+quoteIdent("test_payments")+" LEFT JOIN "+quoteIdent("test_accounts")+
 				" ON "+qualified("test_accounts", "code")+" = "+qualified("test_payments", "account")+
@@ -153,15 +153,15 @@ func TestSelectLeftJoinKeepsUnmatchedRows(t *testing.T) {
 
 	t.Run("JoinDropsThePaymentWithoutAnAccount", func(t *testing.T) {
 		rows := make([]paymentAccount, 0)
-		require.NoError(t, withAccount(types.Join[*TestAccount](onCode)).Scan(&rows))
+		require.NoError(t, withAccount(gst.Join[*TestAccount](onCode)).Scan(&rows))
 		require.Equal(t, []string{"p1", "p2", "p4"}, []string{rows[0].ID, rows[1].ID, rows[2].ID})
 		require.Len(t, rows, 3)
 	})
 
 	t.Run("CountsTheJoinedRows", func(t *testing.T) {
 		inner, left := 0, 0
-		require.NoError(t, withAccount(types.Join[*TestAccount](onCode)).Count(&inner))
-		require.NoError(t, withAccount(types.LeftJoin[*TestAccount](onCode)).Count(&left))
+		require.NoError(t, withAccount(gst.Join[*TestAccount](onCode)).Count(&inner))
+		require.NoError(t, withAccount(gst.LeftJoin[*TestAccount](onCode)).Count(&left))
 		require.Equal(t, 3, inner)
 		require.Equal(t, 4, left)
 	})
@@ -173,7 +173,7 @@ func TestSelectLeftJoinKeepsUnmatchedRows(t *testing.T) {
 		}
 		rows := make([]plain, 0)
 		err := database.Select[*TestPayment, plain](ctx, TestPaymentCols.ID, TestAccountCols.Name.As("account_name")).
-			Join(types.LeftJoin[*TestAccount](onCode)).
+			Join(gst.LeftJoin[*TestAccount](onCode)).
 			Scan(&rows)
 		require.ErrorIs(t, err, database.ErrNullableResultField)
 		require.ErrorContains(t, err, "LEFT JOIN")
@@ -192,7 +192,7 @@ func TestSelectJoinPredicatesAndFilters(t *testing.T) {
 			rows := make([]paymentAccount, 0)
 			require.NoError(t, database.Select[*TestPayment, paymentAccount](ctx,
 				TestPaymentCols.ID, TestPaymentCols.Account, TestPaymentCols.Amount, TestAccountCols.Name.As("account_name")).
-				Join(types.Join[*TestAccount](onCode, TestAccountCols.Tier.Eq(tier))).
+				Join(gst.Join[*TestAccount](onCode, TestAccountCols.Tier.Eq(tier))).
 				OrderBy(TestPaymentCols.ID.Asc()).
 				Scan(&rows))
 			collected := make([]string, 0, len(rows))
@@ -204,11 +204,11 @@ func TestSelectJoinPredicatesAndFilters(t *testing.T) {
 		require.Equal(t, []string{"p1", "p2", "p4"}, ids(t, "gold"))
 		require.Empty(t, ids(t, "silver"), "a condition in the ON narrows which account can match")
 
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		rows := make([]paymentAccount, 0)
 		require.NoError(t, database.Select[*TestPayment, paymentAccount](ctx,
 			TestPaymentCols.ID, TestPaymentCols.Account, TestPaymentCols.Amount, TestAccountCols.Name.As("account_name")).
-			Join(types.Join[*TestAccount](onCode, TestAccountCols.Tier.Eq("gold"))).
+			Join(gst.Join[*TestAccount](onCode, TestAccountCols.Tier.Eq("gold"))).
 			WithDryRun(&statements).Scan(&rows))
 		require.Contains(t, statements[0].Query,
 			" ON ("+qualified("test_accounts", "code")+" = "+qualified("test_payments", "account")+" AND "+qualified("test_accounts", "tier")+" = ")
@@ -218,7 +218,7 @@ func TestSelectJoinPredicatesAndFilters(t *testing.T) {
 		rows := make([]paymentAccount, 0)
 		sel := database.Select[*TestPayment, paymentAccount](ctx,
 			TestPaymentCols.ID, TestPaymentCols.Account, TestPaymentCols.Amount, TestAccountCols.Name.As("account_name")).
-			Join(types.LeftJoin[*TestAccount](onCode)).
+			Join(gst.LeftJoin[*TestAccount](onCode)).
 			Where(TestPaymentCols.Amount.Gte(200), TestAccountCols.Tier.Eq("gold")).
 			OrderBy(TestPaymentCols.ID.Asc())
 		require.NoError(t, sel.Scan(&rows))
@@ -227,7 +227,7 @@ func TestSelectJoinPredicatesAndFilters(t *testing.T) {
 			{ID: "p4", Account: "acme", Amount: 400, AccountName: new("Acme Ltd")},
 		}, rows)
 
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		require.NoError(t, sel.WithDryRun(&statements).Scan(&rows))
 		sql := statements[0].Query
 		require.Contains(t, sql, " WHERE ("+qualified("test_payments", "amount")+" >= ")
@@ -244,7 +244,7 @@ func TestSelectJoinPredicatesAndFilters(t *testing.T) {
 		require.NoError(t, database.Select[*TestPayment, totals](ctx,
 			TestPaymentCols.Amount.Sum().Where(TestAccountCols.Tier.Eq("gold")).As("gold"),
 			TestPaymentCols.Amount.Sum().As("all")).
-			Join(types.LeftJoin[*TestAccount](onCode)).
+			Join(gst.LeftJoin[*TestAccount](onCode)).
 			ScanOne(&got))
 		require.Equal(t, totals{Gold: 700, All: 1000}, got)
 	})
@@ -269,7 +269,7 @@ func TestSelectJoinMatchesNumbersByTheirText(t *testing.T) {
 	t.Run("AColumnOfTheJoinedModel", func(t *testing.T) {
 		rows := make([]row, 0)
 		require.NoError(t, database.Select[*TestRecordTag, row](ctx, TestRecordTagCols.ID).
-			Join(types.Join[*TestAggregateRecord](TestAggregateRecordCols.ID.EqCol(TestRecordTagCols.RecordID), TestAggregateRecordCols.Amount.Like("3"))).
+			Join(gst.Join[*TestAggregateRecord](TestAggregateRecordCols.ID.EqCol(TestRecordTagCols.RecordID), TestAggregateRecordCols.Amount.Like("3"))).
 			Scan(&rows))
 		require.Equal(t, []row{{ID: "t2"}}, rows, "of the tagged records only a3 holds 300")
 	})
@@ -281,7 +281,7 @@ func TestSelectJoinMatchesNumbersByTheirText(t *testing.T) {
 		amounts := database.Select[*TestPayment, paidAmount](ctx, TestPaymentCols.Amount.Group())
 		rows := make([]row, 0)
 		require.NoError(t, database.Select[*TestAggregateRecord, row](ctx, TestAggregateRecordCols.ID).
-			Join(types.JoinSelect(amounts, TestPaymentCols.Amount.EqCol(TestAggregateRecordCols.Amount), TestPaymentCols.Amount.Like("2"))).
+			Join(gst.JoinSelect(amounts, TestPaymentCols.Amount.EqCol(TestAggregateRecordCols.Amount), TestPaymentCols.Amount.Like("2"))).
 			Scan(&rows))
 		require.Equal(t, []row{{ID: "a2"}}, rows, "of the amounts paid only 200 matches")
 	})
@@ -302,7 +302,7 @@ func TestSelectJoinGroupedAndWindowed(t *testing.T) {
 		rows := make([]accountTotal, 0)
 		sel := database.Select[*TestPayment, accountTotal](ctx,
 			TestPaymentCols.Account.Group(), TestAccountCols.Name.Max().As("name"), TestPaymentCols.Amount.Sum()).
-			Join(types.LeftJoin[*TestAccount](onCode)).
+			Join(gst.LeftJoin[*TestAccount](onCode)).
 			OrderBy(TestPaymentCols.Account.Group().Asc())
 		require.NoError(t, sel.Scan(&rows))
 		require.Equal(t, []accountTotal{
@@ -310,7 +310,7 @@ func TestSelectJoinGroupedAndWindowed(t *testing.T) {
 			{Account: "bolt", Name: nil, Amount: 300},
 		}, rows)
 
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		require.NoError(t, sel.WithDryRun(&statements).Scan(&rows))
 		require.Contains(t, statements[0].Query, "MAX("+qualified("test_accounts", "name")+") AS "+quoteIdent("name"))
 		require.Contains(t, statements[0].Query, " GROUP BY "+qualified("test_payments", "account")+" ORDER BY "+quoteIdent("account")+" ASC")
@@ -324,7 +324,7 @@ func TestSelectJoinGroupedAndWindowed(t *testing.T) {
 		rows := make([]tierTotal, 0)
 		require.NoError(t, database.Select[*TestPayment, tierTotal](ctx,
 			TestAccountCols.Tier.Group(), TestPaymentCols.Amount.Sum()).
-			Join(types.LeftJoin[*TestAccount](onCode)).
+			Join(gst.LeftJoin[*TestAccount](onCode)).
 			OrderBy(TestPaymentCols.Amount.Sum().Desc()).
 			Scan(&rows))
 		require.Equal(t, []tierTotal{
@@ -339,7 +339,7 @@ func TestSelectJoinGroupedAndWindowed(t *testing.T) {
 		}
 		got := tiers{}
 		require.NoError(t, database.Select[*TestPayment, tiers](ctx, TestAccountCols.Tier.CountDistinct().As("tiers")).
-			Join(types.LeftJoin[*TestAccount](onCode)).
+			Join(gst.LeftJoin[*TestAccount](onCode)).
 			ScanOne(&got))
 		require.Equal(t, int64(1), got.Tiers)
 	})
@@ -350,11 +350,11 @@ func TestSelectJoinGroupedAndWindowed(t *testing.T) {
 			Tier *string
 			Rn   int64
 		}
-		rn := types.RowNumber().
-			Over(types.PartitionBy(TestAccountCols.Tier).OrderBy(TestPaymentCols.PaidAt.Desc())).
+		rn := gst.RowNumber().
+			Over(gst.PartitionBy(TestAccountCols.Tier).OrderBy(TestPaymentCols.PaidAt.Desc())).
 			As("rn")
 		sel := database.Select[*TestPayment, latest](ctx, TestPaymentCols.ID, TestAccountCols.Tier, rn).
-			Join(types.LeftJoin[*TestAccount](onCode)).
+			Join(gst.LeftJoin[*TestAccount](onCode)).
 			Qualify(rn.Eq(1)).
 			OrderBy(TestPaymentCols.ID.Asc())
 		rows := make([]latest, 0)
@@ -364,7 +364,7 @@ func TestSelectJoinGroupedAndWindowed(t *testing.T) {
 			{ID: "p4", Tier: new("gold"), Rn: 1},
 		}, rows, "the latest payment of the gold tier and of the payments without an account")
 
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		require.NoError(t, sel.WithDryRun(&statements).Scan(&rows))
 		require.Contains(t, statements[0].Query,
 			"ROW_NUMBER() OVER (PARTITION BY "+qualified("test_accounts", "tier")+
@@ -386,8 +386,8 @@ func TestSelectJoinGroupedAndWindowed(t *testing.T) {
 		rows := make([]share, 0)
 		sel := database.Select[*TestPayment, share](ctx,
 			TestPaymentCols.ID.Group(), TestAccountCols.ID.Group().As("account_id"),
-			TestPaymentCols.Amount.Sum(), TestPaymentCols.Amount.Sum().Over(types.PartitionBy(TestAccountCols.ID)).As("share")).
-			Join(types.LeftJoin[*TestAccount](onCode)).
+			TestPaymentCols.Amount.Sum(), TestPaymentCols.Amount.Sum().Over(gst.PartitionBy(TestAccountCols.ID)).As("share")).
+			Join(gst.LeftJoin[*TestAccount](onCode)).
 			OrderBy(TestPaymentCols.ID.Group().Asc())
 		require.NoError(t, sel.Scan(&rows))
 		require.Equal(t, []share{
@@ -397,7 +397,7 @@ func TestSelectJoinGroupedAndWindowed(t *testing.T) {
 			{ID: "p4", AccountID: new("acc1"), Amount: 400, Share: 700},
 		}, rows)
 
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		require.NoError(t, sel.WithDryRun(&statements).Scan(&rows))
 		require.Contains(t, statements[0].Query, "OVER (PARTITION BY "+qualified("test_accounts", "id")+")")
 	})
@@ -410,8 +410,8 @@ func TestSelectJoinGroupedAndWindowed(t *testing.T) {
 			Share int64
 		}
 		err := database.Select[*TestPayment, wrong](ctx, TestPaymentCols.ID.Group(),
-			TestPaymentCols.Amount.Sum().Over(types.PartitionBy(TestAccountCols.ID)).As("share")).
-			Join(types.LeftJoin[*TestAccount](onCode)).
+			TestPaymentCols.Amount.Sum().Over(gst.PartitionBy(TestAccountCols.ID)).As("share")).
+			Join(gst.LeftJoin[*TestAccount](onCode)).
 			Scan(&[]wrong{})
 		require.ErrorIs(t, err, database.ErrWindowTermNotSelected)
 	})
@@ -436,8 +436,8 @@ func TestSelectJoinRowLevelReads(t *testing.T) {
 		require.NoError(t, database.Database[*TestRecordTag](ctx).Create(&TestRecordTag{ID: "t4", RecordID: "zz", Label: "loose", Category: "none"}))
 		rows := make([]running, 0)
 		require.NoError(t, database.Select[*TestRecordTag, running](ctx, TestRecordTagCols.ID,
-			TestAggregateRecordCols.Amount.Sum().Over(types.OrderBy(TestRecordTagCols.ID.Asc())).As("total")).
-			Join(types.LeftJoin[*TestAggregateRecord](onRecord)).
+			TestAggregateRecordCols.Amount.Sum().Over(gst.OrderBy(TestRecordTagCols.ID.Asc())).As("total")).
+			Join(gst.LeftJoin[*TestAggregateRecord](onRecord)).
 			OrderBy(TestRecordTagCols.ID.Asc()).
 			Scan(&rows))
 		require.Equal(t, []running{{ID: "t1", Total: 100}, {ID: "t2", Total: 400}, {ID: "t3", Total: 800}, {ID: "t4", Total: 800}}, rows)
@@ -453,11 +453,11 @@ func TestSelectJoinRowLevelReads(t *testing.T) {
 			Rn   int64
 		}
 		tags, counts := tagCounts(ctx)
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		rows := make([]numbered, 0)
 		sel := database.Select[*TestAggregateRecord, numbered](ctx, TestAggregateRecordCols.ID, tags,
-			types.RowNumber().Over(types.PartitionBy(tags).OrderBy(TestAggregateRecordCols.ID.Asc())).As("rn")).
-			Join(types.LeftJoinSelect(counts, TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID))).
+			gst.RowNumber().Over(gst.PartitionBy(tags).OrderBy(TestAggregateRecordCols.ID.Asc())).As("rn")).
+			Join(gst.LeftJoinSelect(counts, TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID))).
 			OrderBy(TestAggregateRecordCols.ID.Asc())
 		require.NoError(t, sel.WithDryRun(&statements).Scan(&rows))
 		require.Contains(t, statements[0].Query, "OVER (PARTITION BY "+qualified("j0", "tags")+" ORDER BY ")
@@ -485,8 +485,8 @@ func TestSelectJoinRowLevelReads(t *testing.T) {
 		rows := make([]tagged, 0)
 		sel := database.Select[*TestRecordTag, tagged](ctx,
 			TestAggregateRecordCols.Category.As("record_category"), TestRecordTagCols.ID, TestRecordTagCols.Category).
-			Join(types.Join[*TestAggregateRecord](onRecord)).
-			OrderBy(types.Desc("category"), types.Asc("id"))
+			Join(gst.Join[*TestAggregateRecord](onRecord)).
+			OrderBy(gst.Desc("category"), gst.Asc("id"))
 		require.NoError(t, sel.Scan(&rows))
 		require.Equal(t, []tagged{
 			{ID: "t3", RecordCategory: "beta", Category: "beta"},
@@ -494,7 +494,7 @@ func TestSelectJoinRowLevelReads(t *testing.T) {
 			{ID: "t2", RecordCategory: "alpha", Category: "alpha"},
 		}, rows)
 
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		require.NoError(t, sel.WithDryRun(&statements).Scan(&rows))
 		require.Contains(t, statements[0].Query, " ORDER BY "+quoteIdent("category")+" DESC,"+quoteIdent("id")+" ASC")
 	})
@@ -513,11 +513,11 @@ func TestSelectJoinRowLevelReads(t *testing.T) {
 			ID       *int64
 			Rn       int64
 		}
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		rows := make([]numbered, 0)
 		require.NoError(t, database.Select[*TestAggregateRecord, numbered](ctx, TestAggregateRecordCols.Category, perRecord,
-			types.RowNumber().Over(types.OrderBy(TestAggregateRecordCols.Category.Asc())).As("rn")).
-			Join(types.LeftJoinSelect(counts, TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID))).
+			gst.RowNumber().Over(gst.OrderBy(TestAggregateRecordCols.Category.Asc())).As("rn")).
+			Join(gst.LeftJoinSelect(counts, TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID))).
 			WithDryRun(&statements).Scan(&rows))
 		require.Contains(t, statements[0].Query,
 			"ROW_NUMBER() OVER (ORDER BY "+qualified("test_aggregate_records", "category")+" ASC, "+qualified("test_aggregate_records", "id")+" ASC)")
@@ -527,16 +527,16 @@ func TestSelectJoinRowLevelReads(t *testing.T) {
 		// The JSON predicate quotes its own operand, so it is handed the
 		// column under its table; bare, two tables with the column name
 		// would make the statement ambiguous.
-		userID := types.NewColumn[*TestUser, string]("id")
-		userAddr := types.NewJSONStringsColumn[*TestUser]("addr")
+		userID := gst.NewColumn[*TestUser, string]("id")
+		userAddr := gst.NewJSONStringsColumn[*TestUser]("addr")
 		type named struct {
 			ID   string
 			Name string
 		}
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		rows := make([]named, 0)
 		require.NoError(t, database.Select[*TestRecordTag, named](ctx, TestRecordTagCols.ID, colName.As("name")).
-			Join(types.Join[*TestUser](userID.EqCol(TestRecordTagCols.RecordID))).
+			Join(gst.Join[*TestUser](userID.EqCol(TestRecordTagCols.RecordID))).
 			Where(userAddr.JSONContains("home")).
 			WithDryRun(&statements).Scan(&rows))
 		require.Contains(t, statements[0].Query, qualified("test_users", "addr"))
@@ -565,20 +565,20 @@ func TestSelectJoinKeepsTheJoinedModelsTenant(t *testing.T) {
 		&TestRecordTag{ID: "tg1", RecordID: mine.ID, Label: "a"},
 		&TestRecordTag{ID: "tg2", RecordID: theirs.ID, Label: "b"},
 	))
-	itemID := types.NewColumn[*TestTenantSoftDeleteItem, string]("id")
-	itemName := types.NewColumn[*TestTenantSoftDeleteItem, string]("name")
+	itemID := gst.NewColumn[*TestTenantSoftDeleteItem, string]("id")
+	itemName := gst.NewColumn[*TestTenantSoftDeleteItem, string]("name")
 	type taggedItem struct {
 		ID   string
 		Name *string
 	}
-	read := func(ctx context.Context) ([]taggedItem, []types.SQLStatement) {
+	read := func(ctx context.Context) ([]taggedItem, []gst.SQLStatement) {
 		t.Helper()
 		sel := database.Select[*TestRecordTag, taggedItem](ctx, TestRecordTagCols.ID, itemName.As("name")).
-			Join(types.LeftJoin[*TestTenantSoftDeleteItem](itemID.EqCol(TestRecordTagCols.RecordID))).
+			Join(gst.LeftJoin[*TestTenantSoftDeleteItem](itemID.EqCol(TestRecordTagCols.RecordID))).
 			OrderBy(TestRecordTagCols.ID.Asc())
 		rows := make([]taggedItem, 0)
 		require.NoError(t, sel.Scan(&rows))
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		require.NoError(t, sel.WithDryRun(&statements).Scan(&rows))
 		return rows, statements
 	}
@@ -627,7 +627,7 @@ func TestSelectJoinHidesWhatAListOnTheJoinedModelHides(t *testing.T) {
 	}
 	rows := make([]paid, 0)
 	require.NoError(t, database.Select[*TestPayment, paid](ctx, TestPaymentCols.ID, TestVisibleAccountCols.Name.As("name")).
-		Join(types.LeftJoin[*TestVisibleAccount](TestVisibleAccountCols.Code.EqCol(TestPaymentCols.Account))).
+		Join(gst.LeftJoin[*TestVisibleAccount](TestVisibleAccountCols.Code.EqCol(TestPaymentCols.Account))).
 		OrderBy(TestPaymentCols.ID.Asc()).
 		Scan(&rows))
 	require.Equal(t, []paid{
@@ -663,7 +663,7 @@ func TestSelectJoinReadsTheLiveRowOfAKeyDeletedRowsShare(t *testing.T) {
 	}
 	rows := make([]paid, 0)
 	require.NoError(t, database.Select[*TestPayment, paid](ctx, TestPaymentCols.ID, TestAccountCols.Name.As("name")).
-		Join(types.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestPaymentCols.Account))).
+		Join(gst.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestPaymentCols.Account))).
 		OrderBy(TestPaymentCols.ID.Asc()).
 		Scan(&rows))
 	require.Equal(t, []paid{
@@ -687,11 +687,11 @@ func TestSelectJoinInsideAUnionBranch(t *testing.T) {
 		AccountName *string
 	}
 	payments := database.Select[*TestPayment, flowAccount](ctx,
-		types.Literal("payment").As("kind"), TestPaymentCols.ID, TestAccountCols.Name.As("account_name")).
-		Join(types.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestPaymentCols.Account)))
+		gst.Literal("payment").As("kind"), TestPaymentCols.ID, TestAccountCols.Name.As("account_name")).
+		Join(gst.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestPaymentCols.Account)))
 	refunds := database.Select[*TestRefund, flowAccount](ctx,
-		types.Literal("refund").As("kind"), TestRefundCols.ID, TestAccountCols.Name.As("account_name")).
-		Join(types.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestRefundCols.Account)))
+		gst.Literal("refund").As("kind"), TestRefundCols.ID, TestAccountCols.Name.As("account_name")).
+		Join(gst.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestRefundCols.Account)))
 	require.NoError(t, database.Database[*TestRefund](ctx).Create(refundSeed()...))
 
 	rows := make([]flowAccount, 0)
@@ -712,7 +712,7 @@ func TestSelectJoinBuildErrors(t *testing.T) {
 	ctx := context.Background()
 	rows := make([]paymentAccount, 0)
 	onCode := TestAccountCols.Code.EqCol(TestPaymentCols.Account)
-	withAccount := func(source types.JoinSource) types.Selector[*TestPayment, paymentAccount] {
+	withAccount := func(source gst.JoinSource) gst.Selector[*TestPayment, paymentAccount] {
 		return database.Select[*TestPayment, paymentAccount](ctx,
 			TestPaymentCols.ID, TestPaymentCols.Account, TestPaymentCols.Amount, TestAccountCols.Name.As("account_name")).
 			Join(source)
@@ -727,20 +727,20 @@ func TestSelectJoinBuildErrors(t *testing.T) {
 		}
 		tagRows := make([]recordTag, 0)
 		err := database.Select[*TestAggregateRecord, recordTag](ctx, TestAggregateRecordCols.ID, TestRecordTagCols.Label).
-			Join(types.Join[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID))).
+			Join(gst.Join[*TestRecordTag](TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID))).
 			Scan(&tagRows)
 		require.ErrorIs(t, err, database.ErrJoinNotUnique)
 		require.ErrorContains(t, err, "record_id")
 	})
 
 	t.Run("NoPredicateTiesTheTables", func(t *testing.T) {
-		require.ErrorIs(t, withAccount(types.Join[*TestAccount](TestAccountCols.Tier.Eq("gold"))).Scan(&rows), database.ErrJoinNoCorrelation)
+		require.ErrorIs(t, withAccount(gst.Join[*TestAccount](TestAccountCols.Tier.Eq("gold"))).Scan(&rows), database.ErrJoinNoCorrelation)
 	})
 
 	t.Run("PlainNamesCannotTie", func(t *testing.T) {
 		// The string form of EqCol carries no tables, so it cannot say which
 		// side is the joined one and proves nothing.
-		err := withAccount(types.Join[*TestAccount](types.FilterEqCol("code", "account"))).Scan(&rows)
+		err := withAccount(gst.Join[*TestAccount](gst.FilterEqCol("code", "account"))).Scan(&rows)
 		require.ErrorIs(t, err, database.ErrJoinNoCorrelation)
 		require.ErrorContains(t, err, "names a column without a table")
 	})
@@ -749,32 +749,32 @@ func TestSelectJoinBuildErrors(t *testing.T) {
 		// An ON tied to a table the query reads through no source declared
 		// before it names that table: the join is declared too early, or
 		// the table is not joined at all.
-		err := withAccount(types.Join[*TestAccount](TestAccountCols.Code.EqCol(TestRecordTagCols.Category))).Scan(&rows)
+		err := withAccount(gst.Join[*TestAccount](TestAccountCols.Code.EqCol(TestRecordTagCols.Category))).Scan(&rows)
 		require.ErrorIs(t, err, database.ErrJoinNoCorrelation)
 		require.ErrorContains(t, err, `ties it to "test_record_tags", which no source declared before it reads`)
 	})
 
 	t.Run("KeyInsideAnOrGroupProvesNothing", func(t *testing.T) {
-		require.ErrorIs(t, withAccount(types.Join[*TestAccount](types.FilterOr(onCode, TestAccountCols.Code.Eq("acme")))).Scan(&rows), database.ErrJoinNoCorrelation)
+		require.ErrorIs(t, withAccount(gst.Join[*TestAccount](gst.FilterOr(onCode, TestAccountCols.Code.Eq("acme")))).Scan(&rows), database.ErrJoinNoCorrelation)
 	})
 
 	t.Run("ValueEqualityPinsAKeyToo", func(t *testing.T) {
 		// Pinning the unique code to a value proves uniqueness without a
 		// column pair, but nothing ties the account to the payment: the
 		// join must still name a column of the query.
-		require.ErrorIs(t, withAccount(types.Join[*TestAccount](TestAccountCols.Code.Eq("acme"))).Scan(&rows), database.ErrJoinNoCorrelation)
+		require.ErrorIs(t, withAccount(gst.Join[*TestAccount](TestAccountCols.Code.Eq("acme"))).Scan(&rows), database.ErrJoinNoCorrelation)
 	})
 
 	t.Run("ModelJoinedTwice", func(t *testing.T) {
 		err := database.Select[*TestPayment, paymentAccount](ctx,
 			TestPaymentCols.ID, TestPaymentCols.Account, TestPaymentCols.Amount, TestAccountCols.Name.As("account_name")).
-			Join(types.Join[*TestAccount](onCode), types.Join[*TestAccount](onCode)).
+			Join(gst.Join[*TestAccount](onCode), gst.Join[*TestAccount](onCode)).
 			Scan(&rows)
 		require.ErrorIs(t, err, database.ErrJoinDuplicateTable)
 	})
 
 	t.Run("ModelJoiningItself", func(t *testing.T) {
-		require.ErrorIs(t, withAccount(types.Join[*TestPayment](TestPaymentCols.ID.EqCol(TestPaymentCols.Account))).Scan(&rows), database.ErrJoinDuplicateTable)
+		require.ErrorIs(t, withAccount(gst.Join[*TestPayment](TestPaymentCols.ID.EqCol(TestPaymentCols.Account))).Scan(&rows), database.ErrJoinDuplicateTable)
 	})
 
 	t.Run("JoinedSelectOverTheQueriedTable", func(t *testing.T) {
@@ -793,7 +793,7 @@ func TestSelectJoinBuildErrors(t *testing.T) {
 			Total *int64
 		}
 		err := database.Select[*TestPayment, paymentShare](ctx, TestPaymentCols.ID, total).
-			Join(types.LeftJoinSelect(perAccount, TestPaymentCols.Account.EqCol(TestPaymentCols.Account))).
+			Join(gst.LeftJoinSelect(perAccount, TestPaymentCols.Account.EqCol(TestPaymentCols.Account))).
 			Scan(&[]paymentShare{})
 		require.ErrorIs(t, err, database.ErrJoinDuplicateTable)
 		require.ErrorContains(t, err, "joined select over")
@@ -806,7 +806,7 @@ func TestSelectJoinBuildErrors(t *testing.T) {
 		}
 		wrongRows := make([]wrong, 0)
 		err := database.Select[*TestPayment, wrong](ctx, TestPaymentCols.Account.Group(), TestAccountCols.Name.Count().As("names")).
-			Join(types.LeftJoin[*TestAccount](onCode)).
+			Join(gst.LeftJoin[*TestAccount](onCode)).
 			Scan(&wrongRows)
 		require.ErrorIs(t, err, database.ErrJoinMeasure)
 	})
@@ -825,7 +825,7 @@ func TestSelectJoinBuildErrors(t *testing.T) {
 	t.Run("EqColOfATableNotJoined", func(t *testing.T) {
 		// The other side of an EqCol names a table the query does not read:
 		// refused under both sentinels, the way a filter naming that table is.
-		err := withAccount(types.LeftJoin[*TestAccount](onCode)).
+		err := withAccount(gst.LeftJoin[*TestAccount](onCode)).
 			Where(TestPaymentCols.Account.EqCol(TestRecordTagCols.Label)).
 			Scan(&rows)
 		require.ErrorIs(t, err, database.ErrColumnTable)
@@ -845,7 +845,7 @@ func TestSelectJoinBuildErrors(t *testing.T) {
 	})
 
 	t.Run("OrderByAColumnOfATableNotJoined", func(t *testing.T) {
-		err := withAccount(types.LeftJoin[*TestAccount](onCode)).OrderBy(TestRefundCols.ID.Asc()).Scan(&rows)
+		err := withAccount(gst.LeftJoin[*TestAccount](onCode)).OrderBy(TestRefundCols.ID.Asc()).Scan(&rows)
 		require.ErrorIs(t, err, database.ErrOrderTermNotSelected)
 	})
 }
@@ -858,7 +858,7 @@ type tagsPerRecord struct {
 }
 
 // tagCounts is that select, with the term the query reads back from it.
-func tagCounts(ctx context.Context) (types.Term, types.Selector[*TestRecordTag, tagsPerRecord]) {
+func tagCounts(ctx context.Context) (gst.Term, gst.Selector[*TestRecordTag, tagsPerRecord]) {
 	tags := TestRecordTagCols.ID.Count().As("tags")
 	return tags, database.Select[*TestRecordTag, tagsPerRecord](ctx, TestRecordTagCols.RecordID.Group(), tags)
 }
@@ -878,17 +878,17 @@ func TestSelectJoinSelectReadsTheDerivedTerms(t *testing.T) {
 		Category string
 		Tags     *int64
 	}
-	withTags := func(source func(types.Selector[*TestRecordTag, tagsPerRecord], types.Filter) types.JoinSource, on func() types.Filter) (types.Term, types.Selector[*TestAggregateRecord, recordTags]) {
+	withTags := func(source func(gst.Selector[*TestRecordTag, tagsPerRecord], gst.Filter) gst.JoinSource, on func() gst.Filter) (gst.Term, gst.Selector[*TestAggregateRecord, recordTags]) {
 		tags, counts := tagCounts(ctx)
 		return tags, database.Select[*TestAggregateRecord, recordTags](ctx,
 			TestAggregateRecordCols.ID, TestAggregateRecordCols.Category, tags).
 			Join(source(counts, on())).
 			OrderBy(TestAggregateRecordCols.ID.Asc())
 	}
-	left := func(sub types.Selector[*TestRecordTag, tagsPerRecord], on types.Filter) types.JoinSource {
-		return types.LeftJoinSelect(sub, on)
+	left := func(sub gst.Selector[*TestRecordTag, tagsPerRecord], on gst.Filter) gst.JoinSource {
+		return gst.LeftJoinSelect(sub, on)
 	}
-	onRecord := func() types.Filter { return TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID) }
+	onRecord := func() gst.Filter { return TestRecordTagCols.RecordID.EqCol(TestAggregateRecordCols.ID) }
 
 	t.Run("LeftJoinSelectLeavesRecordsWithoutTagsNull", func(t *testing.T) {
 		_, sel := withTags(left, onRecord)
@@ -906,7 +906,7 @@ func TestSelectJoinSelectReadsTheDerivedTerms(t *testing.T) {
 
 	t.Run("RendersTheDerivedTableAndReadsItsColumn", func(t *testing.T) {
 		_, sel := withTags(left, onRecord)
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		rows := make([]recordTags, 0)
 		require.NoError(t, sel.WithDryRun(&statements).Scan(&rows))
 		require.Len(t, statements, 1)
@@ -933,14 +933,14 @@ func TestSelectJoinSelectReadsTheDerivedTerms(t *testing.T) {
 		tags, counts := tagCounts(ctx)
 		rows := make([]tagged, 0)
 		require.NoError(t, database.Select[*TestAggregateRecord, tagged](ctx, TestAggregateRecordCols.ID, tags).
-			Join(types.JoinSelect(counts, onRecord())).
+			Join(gst.JoinSelect(counts, onRecord())).
 			OrderBy(TestAggregateRecordCols.ID.Asc()).
 			Scan(&rows))
 		require.Equal(t, []tagged{{ID: "a1", Tags: 1}, {ID: "a3", Tags: 1}, {ID: "a4", Tags: 1}}, rows)
 
 		inner, leftCount := 0, 0
 		require.NoError(t, database.Select[*TestAggregateRecord, tagged](ctx, TestAggregateRecordCols.ID, tags).
-			Join(types.JoinSelect(counts, onRecord())).Count(&inner))
+			Join(gst.JoinSelect(counts, onRecord())).Count(&inner))
 		_, sel := withTags(left, onRecord)
 		require.NoError(t, sel.Count(&leftCount))
 		require.Equal(t, 3, inner)
@@ -948,11 +948,11 @@ func TestSelectJoinSelectReadsTheDerivedTerms(t *testing.T) {
 	})
 
 	t.Run("EitherColumnMayBeWrittenFirst", func(t *testing.T) {
-		_, sel := withTags(left, func() types.Filter { return TestAggregateRecordCols.ID.EqCol(TestRecordTagCols.RecordID) })
+		_, sel := withTags(left, func() gst.Filter { return TestAggregateRecordCols.ID.EqCol(TestRecordTagCols.RecordID) })
 		rows := make([]recordTags, 0)
 		require.NoError(t, sel.Scan(&rows))
 		require.Len(t, rows, 6)
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		require.NoError(t, sel.WithDryRun(&statements).Scan(&rows))
 		require.Contains(t, statements[0].Query, ") AS "+quoteIdent("j0")+" ON "+qualified("test_aggregate_records", "id")+" = "+qualified("j0", "record_id")+" WHERE ")
 	})
@@ -961,8 +961,8 @@ func TestSelectJoinSelectReadsTheDerivedTerms(t *testing.T) {
 		// The tags count their notes through a select of their own; a query
 		// joining that select ties it on the tag id alone: the notes are a
 		// column of the derived table, not a key a column of the query equals.
-		noteID := types.NewColumn[*TestTagNote, string]("id")
-		noteTag := types.NewColumn[*TestTagNote, string]("tag_id")
+		noteID := gst.NewColumn[*TestTagNote, string]("id")
+		noteTag := gst.NewColumn[*TestTagNote, string]("tag_id")
 		notes := noteID.Count().As("notes")
 		perTag := database.Select[*TestTagNote, struct {
 			TagID string
@@ -972,15 +972,15 @@ func TestSelectJoinSelectReadsTheDerivedTerms(t *testing.T) {
 			ID    string
 			Notes *int64
 		}](ctx, TestRecordTagCols.ID.Group(), notes).
-			Join(types.LeftJoinSelect(perTag, noteTag.EqCol(TestRecordTagCols.ID)))
+			Join(gst.LeftJoinSelect(perTag, noteTag.EqCol(TestRecordTagCols.ID)))
 		type noted struct {
 			ID    string
 			Notes *int64
 		}
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		rows := make([]noted, 0)
 		require.NoError(t, database.Select[*TestAggregateRecord, noted](ctx, TestAggregateRecordCols.ID, notes).
-			Join(types.LeftJoinSelect(perRecordTag, TestRecordTagCols.ID.EqCol(TestAggregateRecordCols.ID))).
+			Join(gst.LeftJoinSelect(perRecordTag, TestRecordTagCols.ID.EqCol(TestAggregateRecordCols.ID))).
 			WithDryRun(&statements).Scan(&rows))
 		require.Contains(t, statements[0].Query, ") AS "+quoteIdent("j0")+" ON "+qualified("j0", "id")+" = "+qualified("test_aggregate_records", "id"))
 		require.Contains(t, statements[0].Query, qualified("j0", "notes")+" AS "+quoteIdent("notes"))
@@ -996,12 +996,12 @@ func TestSelectJoinSelectReadsTheDerivedTerms(t *testing.T) {
 			Share int64
 		}
 		tags, counts := tagCounts(ctx)
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		rows := make([]share, 0)
 		require.NoError(t, database.Select[*TestAggregateRecord, share](ctx,
 			TestAggregateRecordCols.ID.Group(), tags,
-			TestAggregateRecordCols.Amount.Sum().Over(types.PartitionBy(tags)).As("share")).
-			Join(types.LeftJoinSelect(counts, onRecord())).
+			TestAggregateRecordCols.Amount.Sum().Over(gst.PartitionBy(tags)).As("share")).
+			Join(gst.LeftJoinSelect(counts, onRecord())).
 			WithDryRun(&statements).Scan(&rows))
 		require.Contains(t, statements[0].Query, "OVER (PARTITION BY "+qualified("j0", "tags")+")")
 	})
@@ -1020,7 +1020,7 @@ func TestSelectJoinSelectReadsTheDerivedTerms(t *testing.T) {
 		}](ctx, TestRecordTagCols.Category.Group(), tags)
 		rows := make([]categoryTags, 0)
 		require.NoError(t, database.Select[*TestAggregateRecord, categoryTags](ctx, TestAggregateRecordCols.ID, tags).
-			Join(types.JoinSelect(perCategory, TestRecordTagCols.Category.EqCol(TestAggregateRecordCols.Category))).
+			Join(gst.JoinSelect(perCategory, TestRecordTagCols.Category.EqCol(TestAggregateRecordCols.Category))).
 			OrderBy(tags.Desc(), TestAggregateRecordCols.ID.Asc()).
 			Scan(&rows))
 		require.Equal(t, []categoryTags{
@@ -1058,12 +1058,12 @@ func TestSelectJoinSelectReadsTheDerivedTerms(t *testing.T) {
 	t.Run("ConsumesTheSelectsDryRun", func(t *testing.T) {
 		// The query's terminal runs the joined select for real and consumes
 		// a dry run set on it, so the select read again on its own executes.
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		tags, counts := tagCounts(ctx)
 		rows := make([]recordTags, 0)
 		require.NoError(t, database.Select[*TestAggregateRecord, recordTags](ctx,
 			TestAggregateRecordCols.ID, TestAggregateRecordCols.Category, tags).
-			Join(types.LeftJoinSelect(counts.WithDryRun(&statements), onRecord())).
+			Join(gst.LeftJoinSelect(counts.WithDryRun(&statements), onRecord())).
 			Scan(&rows))
 		require.Len(t, rows, 6)
 		require.Empty(t, statements)
@@ -1076,7 +1076,7 @@ func TestSelectJoinSelectReadsTheDerivedTerms(t *testing.T) {
 		counts.WithDryRun(&statements)
 		type short struct{ ID string }
 		require.Error(t, database.Select[*TestAggregateRecord, short](ctx, TestAggregateRecordCols.ID, tags).
-			Join(types.LeftJoinSelect(counts, onRecord())).
+			Join(gst.LeftJoinSelect(counts, onRecord())).
 			Scan(&[]short{}))
 		require.NoError(t, counts.Scan(&perRecord))
 		require.Len(t, perRecord, 3)
@@ -1086,7 +1086,7 @@ func TestSelectJoinSelectReadsTheDerivedTerms(t *testing.T) {
 		// consuming on its way out.
 		counts.WithDryRun(&statements)
 		require.ErrorIs(t, database.Select[*TestAggregateRecord, recordTags](ctx, TestAggregateRecordCols.ID, TestAggregateRecordCols.Category, tags).
-			Join(types.LeftJoinSelect(counts, onRecord())).
+			Join(gst.LeftJoinSelect(counts, onRecord())).
 			WithDryRun(nil).Scan(&rows), database.ErrNilSQLBuilder)
 		require.NoError(t, counts.Scan(&perRecord))
 		require.Len(t, perRecord, 3)
@@ -1098,7 +1098,7 @@ func TestSelectJoinSelectReadsTheDerivedTerms(t *testing.T) {
 		// the query's count of its rows would be one per record, the
 		// select's is the tags of each, and the aliased term reads the
 		// select's.
-		n := types.Count().As("n")
+		n := gst.Count().As("n")
 		perRecord := database.Select[*TestRecordTag, struct {
 			RecordID string
 			N        int64
@@ -1109,9 +1109,9 @@ func TestSelectJoinSelectReadsTheDerivedTerms(t *testing.T) {
 		}
 		rows := make([]counted, 0)
 		query := database.Select[*TestAggregateRecord, counted](ctx, TestAggregateRecordCols.ID.Group(), n).
-			Join(types.JoinSelect(perRecord, onRecord())).
+			Join(gst.JoinSelect(perRecord, onRecord())).
 			OrderBy(TestAggregateRecordCols.ID.Group().Asc())
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		require.NoError(t, query.WithDryRun(&statements).Scan(&rows))
 		require.Contains(t, statements[0].Query, qualified("j0", "n")+" AS "+quoteIdent("n"))
 		require.NoError(t, query.Scan(&rows))
@@ -1121,8 +1121,8 @@ func TestSelectJoinSelectReadsTheDerivedTerms(t *testing.T) {
 	t.Run("ChainedSelectsInAnyTermOrder", func(t *testing.T) {
 		// The notes are tied on the tags' key; the query groups by that key
 		// through the tags' key term, wherever in the projection it stands.
-		noteTag := types.NewColumn[*TestTagNote, string]("tag_id")
-		notes := types.NewColumn[*TestTagNote, string]("id").Count().As("notes")
+		noteTag := gst.NewColumn[*TestTagNote, string]("tag_id")
+		notes := gst.NewColumn[*TestTagNote, string]("id").Count().As("notes")
 		type chained struct {
 			ID       string
 			RecordID *string
@@ -1136,13 +1136,13 @@ func TestSelectJoinSelectReadsTheDerivedTerms(t *testing.T) {
 				Notes int64
 			}](ctx, noteTag.Group(), notes)
 			key := TestRecordTagCols.RecordID.Group()
-			exprs := []types.Expr{TestAggregateRecordCols.ID.Group(), key, tags, notes}
+			exprs := []gst.Expr{TestAggregateRecordCols.ID.Group(), key, tags, notes}
 			if keyLast {
-				exprs = []types.Expr{TestAggregateRecordCols.ID.Group(), tags, notes, key}
+				exprs = []gst.Expr{TestAggregateRecordCols.ID.Group(), tags, notes, key}
 			}
 			rows := make([]chained, 0)
 			require.NoError(t, database.Select[*TestAggregateRecord, chained](ctx, exprs...).
-				Join(types.LeftJoinSelect(counts, onRecord()), types.LeftJoinSelect(perTag, noteTag.EqCol(TestRecordTagCols.RecordID))).
+				Join(gst.LeftJoinSelect(counts, onRecord()), gst.LeftJoinSelect(perTag, noteTag.EqCol(TestRecordTagCols.RecordID))).
 				OrderBy(TestAggregateRecordCols.ID.Group().Asc()).
 				Scan(&rows))
 			require.Len(t, rows, 6)
@@ -1159,26 +1159,26 @@ func TestSelectJoinSelectReadsTheDerivedTerms(t *testing.T) {
 			Tags     int64
 			Tier     *string
 		}](ctx, TestRecordTagCols.Category.Group(), tags, TestAccountCols.Tier.Max().As("tier")).
-			Join(types.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestRecordTagCols.Category)))
+			Join(gst.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestRecordTagCols.Category)))
 		paid := TestPaymentCols.Amount.Sum().As("paid")
 		perAccount := database.Select[*TestPayment, struct {
 			Account string
 			Paid    int64
 			Name    *string
 		}](ctx, TestPaymentCols.Account.Group(), paid, TestAccountCols.Name.Max().As("name")).
-			Join(types.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestPaymentCols.Account)))
+			Join(gst.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestPaymentCols.Account)))
 		type accounted struct {
 			ID   string
 			Tier *string
 			Tags *int64
 			Paid *int64
 		}
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		rows := make([]accounted, 0)
 		sel := database.Select[*TestAggregateRecord, accounted](ctx, TestAggregateRecordCols.ID, TestAccountCols.Tier.As("tier"), tags, paid).
-			Join(types.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestAggregateRecordCols.Category)),
-				types.LeftJoinSelect(perCategory, TestRecordTagCols.Category.EqCol(TestAggregateRecordCols.Category)),
-				types.LeftJoinSelect(perAccount, TestPaymentCols.Account.EqCol(TestAggregateRecordCols.Category))).
+			Join(gst.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestAggregateRecordCols.Category)),
+				gst.LeftJoinSelect(perCategory, TestRecordTagCols.Category.EqCol(TestAggregateRecordCols.Category)),
+				gst.LeftJoinSelect(perAccount, TestPaymentCols.Account.EqCol(TestAggregateRecordCols.Category))).
 			OrderBy(TestAggregateRecordCols.ID.Asc())
 		require.NoError(t, sel.WithDryRun(&statements).Scan(&rows))
 		require.Equal(t, 3, strings.Count(statements[0].Query, "LEFT JOIN "+quoteIdent("test_accounts")+" ON "))
@@ -1206,10 +1206,10 @@ func TestSelectJoinSelectInAGroupedSelect(t *testing.T) {
 		Account  string
 		Refunded int64
 	}](ctx, TestRefundCols.Account.Group(), refunded)
-	flows := func() types.Selector[*TestPayment, accountFlow] {
+	flows := func() gst.Selector[*TestPayment, accountFlow] {
 		return database.Select[*TestPayment, accountFlow](ctx,
 			TestPaymentCols.Account.Group(), TestPaymentCols.Amount.Sum().As("paid"), refunded).
-			Join(types.LeftJoinSelect(refunds, TestRefundCols.Account.EqCol(TestPaymentCols.Account))).
+			Join(gst.LeftJoinSelect(refunds, TestRefundCols.Account.EqCol(TestPaymentCols.Account))).
 			OrderBy(TestPaymentCols.Account.Group().Asc())
 	}
 
@@ -1221,7 +1221,7 @@ func TestSelectJoinSelectInAGroupedSelect(t *testing.T) {
 			{Account: "bolt", Paid: 300, Refunded: new(int64(30))},
 		}, rows)
 
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		require.NoError(t, flows().WithDryRun(&statements).Scan(&rows))
 		sql := statements[0].Query
 		require.Contains(t, sql, qualified("j0", "refunded")+" AS "+quoteIdent("refunded"))
@@ -1250,7 +1250,7 @@ func TestSelectJoinSelectInAGroupedSelect(t *testing.T) {
 		rows := make([]monthFlow, 0)
 		err := database.Select[*TestPayment, monthFlow](ctx,
 			TestPaymentCols.PaidAt.ByMonth().As("month"), TestPaymentCols.Amount.Sum().As("paid"), refunded).
-			Join(types.LeftJoinSelect(refunds, TestRefundCols.Account.EqCol(TestPaymentCols.Account))).
+			Join(gst.LeftJoinSelect(refunds, TestRefundCols.Account.EqCol(TestPaymentCols.Account))).
 			Scan(&rows)
 		require.ErrorIs(t, err, database.ErrJoinSelectNotKeyed)
 	})
@@ -1277,8 +1277,8 @@ func TestSelectJoinMixesSources(t *testing.T) {
 	sel := database.Select[*TestPayment, paymentContext](ctx,
 		TestPaymentCols.ID, TestAccountCols.Name.As("account_name"), refunded).
 		Join(
-			types.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestPaymentCols.Account)),
-			types.LeftJoinSelect(refunds, TestRefundCols.Account.EqCol(TestPaymentCols.Account)),
+			gst.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestPaymentCols.Account)),
+			gst.LeftJoinSelect(refunds, TestRefundCols.Account.EqCol(TestPaymentCols.Account)),
 		).
 		OrderBy(TestPaymentCols.ID.Asc())
 	rows := make([]paymentContext, 0)
@@ -1290,7 +1290,7 @@ func TestSelectJoinMixesSources(t *testing.T) {
 		{ID: "p4", AccountName: new("Acme Ltd"), Refunded: new(int64(50))},
 	}, rows)
 
-	statements := make([]types.SQLStatement, 0)
+	statements := make([]gst.SQLStatement, 0)
 	require.NoError(t, sel.WithDryRun(&statements).Scan(&rows))
 	sql := statements[0].Query
 	require.Contains(t, sql, " LEFT JOIN "+quoteIdent("test_accounts")+" ON ")
@@ -1318,7 +1318,7 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 			ID   string
 			Tags *string
 		}](ctx, TestAggregateRecordCols.ID, tags).
-			Join(types.LeftJoinSelect(plain, onRecord)).
+			Join(gst.LeftJoinSelect(plain, onRecord)).
 			Scan(&[]struct {
 				ID   string
 				Tags *string
@@ -1329,7 +1329,7 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 	t.Run("SelectCarryingOrdering", func(t *testing.T) {
 		tags, counts := tagCounts(ctx)
 		err := database.Select[*TestAggregateRecord, recordTags](ctx, TestAggregateRecordCols.ID, tags).
-			Join(types.LeftJoinSelect(counts.OrderBy(tags.Desc()), onRecord)).
+			Join(gst.LeftJoinSelect(counts.OrderBy(tags.Desc()), onRecord)).
 			Scan(&rows)
 		require.ErrorIs(t, err, database.ErrNestedSelectOrdered)
 	})
@@ -1348,7 +1348,7 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 			Total *int64
 		}
 		err := database.Select[*TestRefund, refundDay](ctx, TestRefundCols.ID, total).
-			Join(types.LeftJoinSelect(perDay, TestPaymentCols.PaidAt.EqCol(TestRefundCols.SettledAt))).
+			Join(gst.LeftJoinSelect(perDay, TestPaymentCols.PaidAt.EqCol(TestRefundCols.SettledAt))).
 			Scan(&[]refundDay{})
 		require.ErrorIs(t, err, database.ErrJoinSelectBucketKey)
 	})
@@ -1363,7 +1363,7 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 			Tags     int64
 		}](ctx, TestRecordTagCols.RecordID.Group(), TestRecordTagCols.Label.Group(), tags)
 		err := database.Select[*TestAggregateRecord, recordTags](ctx, TestAggregateRecordCols.ID, tags).
-			Join(types.LeftJoinSelect(perLabel, onRecord)).
+			Join(gst.LeftJoinSelect(perLabel, onRecord)).
 			Scan(&rows)
 		require.ErrorIs(t, err, database.ErrJoinNotUnique)
 		require.ErrorContains(t, err, "record_id")
@@ -1378,7 +1378,7 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 			Label string
 			Tags  *int64
 		}](ctx, TestAggregateRecordCols.ID, TestRecordTagCols.Label, tags).
-			Join(types.LeftJoinSelect(counts, onRecord)).
+			Join(gst.LeftJoinSelect(counts, onRecord)).
 			Scan(&[]struct {
 				ID    string
 				Label string
@@ -1392,7 +1392,7 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 		stacked := database.UnionAll[tagsPerRecord](ctx, counts)
 		tags := TestRecordTagCols.ID.Count().As("tags")
 		err := database.Select[*TestAggregateRecord, recordTags](ctx, TestAggregateRecordCols.ID, tags).
-			Join(types.LeftJoinSelect(stacked, onRecord)).
+			Join(gst.LeftJoinSelect(stacked, onRecord)).
 			Scan(&rows)
 		require.ErrorIs(t, err, database.ErrJoinSource)
 	})
@@ -1407,9 +1407,9 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 			RecCat string
 			Tags   int64
 		}](ctx, TestRecordTagCols.Category.Group().As("tag_cat"), TestAggregateRecordCols.Category.Group().As("rec_cat"), tags).
-			Join(types.Join[*TestAggregateRecord](TestAggregateRecordCols.ID.EqCol(TestRecordTagCols.RecordID)))
+			Join(gst.Join[*TestAggregateRecord](TestAggregateRecordCols.ID.EqCol(TestRecordTagCols.RecordID)))
 		err := database.Select[*TestAggregateRecord, recordTags](ctx, TestAggregateRecordCols.ID, tags).
-			Join(types.LeftJoinSelect(perCategories, TestRecordTagCols.Category.EqCol(TestAggregateRecordCols.Category))).
+			Join(gst.LeftJoinSelect(perCategories, TestRecordTagCols.Category.EqCol(TestAggregateRecordCols.Category))).
 			Scan(&rows)
 		require.ErrorIs(t, err, database.ErrJoinSelectKey)
 		require.ErrorContains(t, err, "test_aggregate_records")
@@ -1425,7 +1425,7 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 			Tags int64
 		}](ctx, TestRecordTagCols.RecordID.Group().As("a"), TestRecordTagCols.RecordID.Group().As("b"), tags)
 		err := database.Select[*TestAggregateRecord, recordTags](ctx, TestAggregateRecordCols.ID, tags).
-			Join(types.LeftJoinSelect(twice, onRecord)).
+			Join(gst.LeftJoinSelect(twice, onRecord)).
 			Scan(&rows)
 		require.ErrorIs(t, err, database.ErrJoinSelectKey)
 		require.ErrorContains(t, err, "twice")
@@ -1436,9 +1436,9 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 		// subquery can correlate with; the condition belongs to the select's
 		// own Where.
 		tags, counts := tagCounts(ctx)
-		noteTag := types.NewColumn[*TestTagNote, string]("tag_id")
+		noteTag := gst.NewColumn[*TestTagNote, string]("tag_id")
 		err := database.Select[*TestAggregateRecord, recordTags](ctx, TestAggregateRecordCols.ID, tags).
-			Join(types.LeftJoinSelect(counts, onRecord, types.FilterExists[*TestTagNote](noteTag.EqCol(TestRecordTagCols.RecordID)))).
+			Join(gst.LeftJoinSelect(counts, onRecord, gst.FilterExists[*TestTagNote](noteTag.EqCol(TestRecordTagCols.RecordID)))).
 			Scan(&rows)
 		require.ErrorIs(t, err, database.ErrUnusableFilter)
 		require.ErrorContains(t, err, "its own Where")
@@ -1459,20 +1459,20 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 			Tags     int64
 			ID       *string
 		}](ctx, TestRecordTagCols.RecordID.Group(), tags, recordID).
-			Join(types.LeftJoinSelect(perRecord, TestAggregateRecordCols.ID.EqCol(TestRecordTagCols.RecordID)))
+			Join(gst.LeftJoinSelect(perRecord, TestAggregateRecordCols.ID.EqCol(TestRecordTagCols.RecordID)))
 		type keyed struct {
 			ID   *string
 			Tags *int64
 		}
 		err := database.Select[*TestAggregateRecord, keyed](ctx, recordID, tags).
-			Join(types.LeftJoinSelect(perTag, onRecord)).
+			Join(gst.LeftJoinSelect(perTag, onRecord)).
 			Scan(&[]keyed{})
 		require.ErrorIs(t, err, database.ErrDuplicateAlias)
 		require.ErrorContains(t, err, "under its default alias")
 		// The query's own column, spelled as its own, reads as its own.
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		require.NoError(t, database.Select[*TestAggregateRecord, recordTags](ctx, TestAggregateRecordCols.ID, tags).
-			Join(types.LeftJoinSelect(perTag, onRecord)).
+			Join(gst.LeftJoinSelect(perTag, onRecord)).
 			WithDryRun(&statements).Scan(&rows))
 		require.Contains(t, statements[0].Query, "SELECT "+qualified("test_aggregate_records", "id")+" AS ")
 	})
@@ -1484,13 +1484,13 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 		perRecord := database.Select[*TestRecordTag, struct {
 			RecordID string
 			Count    int64
-		}](ctx, TestRecordTagCols.RecordID.Group(), types.Count())
+		}](ctx, TestRecordTagCols.RecordID.Group(), gst.Count())
 		type counted struct {
 			ID    string
 			Count *int64
 		}
-		err := database.Select[*TestAggregateRecord, counted](ctx, TestAggregateRecordCols.ID.Group(), types.Count()).
-			Join(types.LeftJoinSelect(perRecord, onRecord)).
+		err := database.Select[*TestAggregateRecord, counted](ctx, TestAggregateRecordCols.ID.Group(), gst.Count()).
+			Join(gst.LeftJoinSelect(perRecord, onRecord)).
 			Scan(&[]counted{})
 		require.ErrorIs(t, err, database.ErrDuplicateAlias)
 		require.ErrorContains(t, err, "under its default alias")
@@ -1500,7 +1500,7 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 		// A constant is the query's own under any alias: written by the
 		// select too, it is refused rather than read as either, and whether
 		// a row matched is read from the select's key.
-		kind := types.Literal("tagged").As("kind")
+		kind := gst.Literal("tagged").As("kind")
 		perRecord := database.Select[*TestRecordTag, struct {
 			RecordID string
 			Kind     string
@@ -1510,7 +1510,7 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 			Kind *string
 		}
 		err := database.Select[*TestAggregateRecord, marked](ctx, TestAggregateRecordCols.ID, kind).
-			Join(types.LeftJoinSelect(perRecord, onRecord)).
+			Join(gst.LeftJoinSelect(perRecord, onRecord)).
 			Scan(&[]marked{})
 		require.ErrorIs(t, err, database.ErrDuplicateAlias)
 		require.ErrorContains(t, err, "a constant is the query's own")
@@ -1522,26 +1522,26 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 		// default name, built by hand without one — are refused alike.
 		for _, tt := range []struct {
 			label    string
-			own, sub types.Term
+			own, sub gst.Term
 		}{
 			{"NeverAliased", TestAccountCols.Tier.Max(), TestAccountCols.Tier.Max()},
 			{"AliasedToNothing", TestAccountCols.Tier.Max().As(""), TestAccountCols.Tier.Max()},
 			{"AliasedToTheDefault", TestAccountCols.Tier.Max().As("tier"), TestAccountCols.Tier.Max().As("")},
-			{"BuiltByHand", types.NewTerm(types.FnMax, "test_accounts", "tier", "", ""), TestAccountCols.Tier.Max()},
+			{"BuiltByHand", gst.NewTerm(gst.FnMax, "test_accounts", "tier", "", ""), TestAccountCols.Tier.Max()},
 		} {
 			t.Run(tt.label, func(t *testing.T) {
 				perCategory := database.Select[*TestRecordTag, struct {
 					Category string
 					Tier     *string
 				}](ctx, TestRecordTagCols.Category.Group(), tt.sub).
-					Join(types.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestRecordTagCols.Category)))
+					Join(gst.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestRecordTagCols.Category)))
 				type tiered struct {
 					ID   string
 					Tier *string
 				}
 				err := database.Select[*TestAggregateRecord, tiered](ctx, TestAggregateRecordCols.ID, tt.own).
-					Join(types.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestAggregateRecordCols.Category)),
-						types.LeftJoinSelect(perCategory, TestRecordTagCols.Category.EqCol(TestAggregateRecordCols.Category))).
+					Join(gst.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestAggregateRecordCols.Category)),
+						gst.LeftJoinSelect(perCategory, TestRecordTagCols.Category.EqCol(TestAggregateRecordCols.Category))).
 					Scan(&[]tiered{})
 				require.ErrorIs(t, err, database.ErrDuplicateAlias)
 				require.ErrorContains(t, err, "under its default alias")
@@ -1552,7 +1552,7 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 	t.Run("AliasedTermsReadThrough", func(t *testing.T) {
 		// An alias is written on purpose: the select's aliased Count is read
 		// through, as is the aliased term of a model the query joins itself.
-		n := types.Count().As("n")
+		n := gst.Count().As("n")
 		perRecord := database.Select[*TestRecordTag, struct {
 			RecordID string
 			N        int64
@@ -1561,9 +1561,9 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 			ID string
 			N  *int64
 		}
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		require.NoError(t, database.Select[*TestAggregateRecord, marked](ctx, TestAggregateRecordCols.ID, n).
-			Join(types.LeftJoinSelect(perRecord, onRecord)).
+			Join(gst.LeftJoinSelect(perRecord, onRecord)).
 			WithDryRun(&statements).Scan(&[]marked{}))
 		require.Contains(t, statements[0].Query, qualified("j0", "n")+" AS "+quoteIdent("n"))
 
@@ -1572,7 +1572,7 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 			Category string
 			TopTier  *string
 		}](ctx, TestRecordTagCols.Category.Group(), tier).
-			Join(types.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestRecordTagCols.Category)))
+			Join(gst.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestRecordTagCols.Category)))
 		type tiered struct {
 			ID      string
 			Name    *string
@@ -1580,8 +1580,8 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 		}
 		statements = statements[:0]
 		require.NoError(t, database.Select[*TestAggregateRecord, tiered](ctx, TestAggregateRecordCols.ID, TestAccountCols.Name.As("name"), tier).
-			Join(types.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestAggregateRecordCols.Category)),
-				types.LeftJoinSelect(perCategory, TestRecordTagCols.Category.EqCol(TestAggregateRecordCols.Category))).
+			Join(gst.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestAggregateRecordCols.Category)),
+				gst.LeftJoinSelect(perCategory, TestRecordTagCols.Category.EqCol(TestAggregateRecordCols.Category))).
 			WithDryRun(&statements).Scan(&[]tiered{}))
 		require.Contains(t, statements[0].Query, qualified("j1", "top_tier")+" AS "+quoteIdent("top_tier"))
 	})
@@ -1595,17 +1595,17 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 			Category string
 			SubTier  *string
 		}](ctx, TestRecordTagCols.Category.Group(), subTier).
-			Join(types.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestRecordTagCols.Category)))
+			Join(gst.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestRecordTagCols.Category)))
 		ownTier := TestAccountCols.Tier.Max().As("own_tier")
 		type tiered struct {
 			Category string
 			OwnTier  *string
 			SubTier  *string
 		}
-		statements := make([]types.SQLStatement, 0)
+		statements := make([]gst.SQLStatement, 0)
 		require.NoError(t, database.Select[*TestAggregateRecord, tiered](ctx, TestAggregateRecordCols.Category.Group(), ownTier, subTier).
-			Join(types.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestAggregateRecordCols.Category)),
-				types.LeftJoinSelect(perCategory, TestRecordTagCols.Category.EqCol(TestAggregateRecordCols.Category))).
+			Join(gst.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestAggregateRecordCols.Category)),
+				gst.LeftJoinSelect(perCategory, TestRecordTagCols.Category.EqCol(TestAggregateRecordCols.Category))).
 			WithDryRun(&statements).Scan(&[]tiered{}))
 		require.Contains(t, statements[0].Query, "MAX("+qualified("test_accounts", "tier")+") AS "+quoteIdent("own_tier"))
 		require.Contains(t, statements[0].Query, qualified("j1", "sub_tier")+" AS "+quoteIdent("sub_tier"))
@@ -1615,22 +1615,22 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 		// A select joined into itself, directly or through another, is
 		// refused rather than described without end.
 		tags, counts := tagCounts(ctx)
-		counts.Join(types.LeftJoinSelect(counts, TestRecordTagCols.RecordID.EqCol(TestRecordTagCols.RecordID)))
+		counts.Join(gst.LeftJoinSelect(counts, TestRecordTagCols.RecordID.EqCol(TestRecordTagCols.RecordID)))
 		err := counts.Scan(&[]tagsPerRecord{})
 		require.ErrorIs(t, err, database.ErrJoinDuplicateTable)
 		require.ErrorContains(t, err, "joins itself")
 
-		noteTag := types.NewColumn[*TestTagNote, string]("tag_id")
-		notes := types.NewColumn[*TestTagNote, string]("id").Count().As("notes")
+		noteTag := gst.NewColumn[*TestTagNote, string]("tag_id")
+		notes := gst.NewColumn[*TestTagNote, string]("id").Count().As("notes")
 		perTag := database.Select[*TestTagNote, struct {
 			TagID string
 			Notes int64
 		}](ctx, noteTag.Group(), notes)
 		_, perRecord := tagCounts(ctx)
-		perRecord.Join(types.LeftJoinSelect(perTag, noteTag.EqCol(TestRecordTagCols.RecordID)))
-		perTag.Join(types.LeftJoinSelect(perRecord, TestRecordTagCols.RecordID.EqCol(noteTag)))
+		perRecord.Join(gst.LeftJoinSelect(perTag, noteTag.EqCol(TestRecordTagCols.RecordID)))
+		perTag.Join(gst.LeftJoinSelect(perRecord, TestRecordTagCols.RecordID.EqCol(noteTag)))
 		err = database.Select[*TestAggregateRecord, recordTags](ctx, TestAggregateRecordCols.ID, tags).
-			Join(types.LeftJoinSelect(perRecord, onRecord)).
+			Join(gst.LeftJoinSelect(perRecord, onRecord)).
 			Scan(&rows)
 		require.ErrorIs(t, err, database.ErrJoinDuplicateTable)
 		require.ErrorContains(t, err, "joins itself")
@@ -1640,8 +1640,8 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 		// A key of the notes read through the tags names the tags' derived
 		// column; it does not prove the query groups by the notes' own key,
 		// which another select is tied to.
-		noteTag := types.NewColumn[*TestTagNote, string]("tag_id")
-		noteID := types.NewColumn[*TestTagNote, string]("id")
+		noteTag := gst.NewColumn[*TestTagNote, string]("tag_id")
+		noteID := gst.NewColumn[*TestTagNote, string]("id")
 		perNote := database.Select[*TestTagNote, struct {
 			Nt string
 			Un int64
@@ -1654,7 +1654,7 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 			ID    string
 			TagID *string
 		}](ctx, TestRecordTagCols.ID.Group(), noteTag.Group()).
-			Join(types.LeftJoinSelect(perTag, noteTag.EqCol(TestRecordTagCols.ID)))
+			Join(gst.LeftJoinSelect(perTag, noteTag.EqCol(TestRecordTagCols.ID)))
 		paid := TestPaymentCols.Amount.Sum().As("paid")
 		perAccount := database.Select[*TestPayment, struct {
 			Account string
@@ -1667,9 +1667,9 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 		}
 		err := database.Select[*TestAggregateRecord, out](ctx,
 			TestAggregateRecordCols.Category.Group(), noteTag.Group(), paid).
-			Join(types.LeftJoinSelect(perNote, noteTag.EqCol(TestAggregateRecordCols.ID)),
-				types.LeftJoinSelect(perRecordTag, TestRecordTagCols.ID.EqCol(TestAggregateRecordCols.Category)),
-				types.LeftJoinSelect(perAccount, TestPaymentCols.Account.EqCol(noteTag))).
+			Join(gst.LeftJoinSelect(perNote, noteTag.EqCol(TestAggregateRecordCols.ID)),
+				gst.LeftJoinSelect(perRecordTag, TestRecordTagCols.ID.EqCol(TestAggregateRecordCols.Category)),
+				gst.LeftJoinSelect(perAccount, TestPaymentCols.Account.EqCol(noteTag))).
 			Scan(&[]out{})
 		require.ErrorIs(t, err, database.ErrJoinSelectNotKeyed)
 		require.ErrorContains(t, err, `key term "nt"`)
@@ -1679,8 +1679,8 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 		// A select tied to a column another select's model has, but does not
 		// key, is refused before the grouping is proved, in either shape.
 		tags, counts := tagCounts(ctx)
-		noteTag := types.NewColumn[*TestTagNote, string]("tag_id")
-		notes := types.NewColumn[*TestTagNote, string]("id").Count().As("notes")
+		noteTag := gst.NewColumn[*TestTagNote, string]("tag_id")
+		notes := gst.NewColumn[*TestTagNote, string]("id").Count().As("notes")
 		perTag := database.Select[*TestTagNote, struct {
 			TagID string
 			Notes int64
@@ -1690,9 +1690,9 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 			Tags  *int64
 			Notes *int64
 		}
-		for _, key := range []types.Expr{TestAggregateRecordCols.ID.Group(), TestAggregateRecordCols.ID} {
+		for _, key := range []gst.Expr{TestAggregateRecordCols.ID.Group(), TestAggregateRecordCols.ID} {
 			err := database.Select[*TestAggregateRecord, noted](ctx, key, tags, notes).
-				Join(types.LeftJoinSelect(counts, onRecord), types.LeftJoinSelect(perTag, noteTag.EqCol(TestRecordTagCols.Label))).
+				Join(gst.LeftJoinSelect(counts, onRecord), gst.LeftJoinSelect(perTag, noteTag.EqCol(TestRecordTagCols.Label))).
 				Scan(&[]noted{})
 			require.ErrorIs(t, err, database.ErrJoinSelectColumn)
 			require.ErrorContains(t, err, "is not a key of that joined select")
@@ -1704,7 +1704,7 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 		// key is refused with the keys, as it is in Where.
 		tags, counts := tagCounts(ctx)
 		err := database.Select[*TestAggregateRecord, recordTags](ctx, TestAggregateRecordCols.ID, tags).
-			Join(types.LeftJoinSelect(counts, onRecord, TestRecordTagCols.Label.Eq("vip"))).
+			Join(gst.LeftJoinSelect(counts, onRecord, TestRecordTagCols.Label.Eq("vip"))).
 			Scan(&rows)
 		require.ErrorIs(t, err, database.ErrJoinSelectColumn)
 		require.ErrorContains(t, err, "may name the select's keys, record_id")
@@ -1719,8 +1719,8 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 			Rn int64
 		}
 		err := database.Select[*TestAggregateRecord, numbered](ctx, TestAggregateRecordCols.ID,
-			types.RowNumber().Over(types.PartitionBy(tags).OrderBy(TestAggregateRecordCols.ID.Asc())).As("rn")).
-			Join(types.LeftJoinSelect(counts, onRecord)).
+			gst.RowNumber().Over(gst.PartitionBy(tags).OrderBy(TestAggregateRecordCols.ID.Asc())).As("rn")).
+			Join(gst.LeftJoinSelect(counts, onRecord)).
 			Scan(&[]numbered{})
 		require.ErrorIs(t, err, database.ErrWindowTermNotSelected)
 		require.ErrorContains(t, err, "project it")
@@ -1735,7 +1735,7 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 			X  *int64
 		}
 		err := database.Select[*TestAggregateRecord, renamed](ctx, TestAggregateRecordCols.ID, tags.As("x")).
-			Join(types.LeftJoinSelect(counts, onRecord)).
+			Join(gst.LeftJoinSelect(counts, onRecord)).
 			Scan(&[]renamed{})
 		require.ErrorIs(t, err, database.ErrJoinSelectColumn)
 		require.ErrorContains(t, err, "under another alias")
@@ -1749,13 +1749,13 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 			Category string
 			TopTier  *string
 		}](ctx, TestRecordTagCols.Category.Group(), topTier).
-			Join(types.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestRecordTagCols.Category)))
+			Join(gst.LeftJoin[*TestAccount](TestAccountCols.Code.EqCol(TestRecordTagCols.Category)))
 		type renamed struct {
 			ID   string
 			Tier *string
 		}
 		err := database.Select[*TestAggregateRecord, renamed](ctx, TestAggregateRecordCols.ID, TestAccountCols.Tier.Max().As("tier")).
-			Join(types.LeftJoinSelect(perCategory, TestRecordTagCols.Category.EqCol(TestAggregateRecordCols.Category))).
+			Join(gst.LeftJoinSelect(perCategory, TestRecordTagCols.Category.EqCol(TestAggregateRecordCols.Category))).
 			Scan(&[]renamed{})
 		require.ErrorIs(t, err, database.ErrJoinSelectColumn)
 		require.ErrorContains(t, err, `"tier" is the term "top_tier" of the joined select over "test_record_tags" altered`)
@@ -1766,19 +1766,19 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 		// renamed by the query, is named as that select's.
 		tags, counts := tagCounts(ctx)
 		top := TestRecordTagCols.Label.Max().As("top")
-		noteTag := types.NewColumn[*TestTagNote, string]("tag_id")
+		noteTag := gst.NewColumn[*TestTagNote, string]("tag_id")
 		perTag := database.Select[*TestTagNote, struct {
 			RecordID string
 			Top      *string
 		}](ctx, noteTag.Group().As("record_id"), top).
-			Join(types.LeftJoin[*TestRecordTag](TestRecordTagCols.ID.EqCol(noteTag)))
+			Join(gst.LeftJoin[*TestRecordTag](TestRecordTagCols.ID.EqCol(noteTag)))
 		type renamed struct {
 			ID   string
 			Tags *int64
 			Best *string
 		}
 		err := database.Select[*TestAggregateRecord, renamed](ctx, TestAggregateRecordCols.ID, tags, TestRecordTagCols.Label.Max().As("best")).
-			Join(types.LeftJoinSelect(counts, onRecord), types.LeftJoinSelect(perTag, noteTag.EqCol(TestAggregateRecordCols.ID))).
+			Join(gst.LeftJoinSelect(counts, onRecord), gst.LeftJoinSelect(perTag, noteTag.EqCol(TestAggregateRecordCols.ID))).
 			Scan(&[]renamed{})
 		require.ErrorIs(t, err, database.ErrJoinSelectColumn)
 		require.ErrorContains(t, err, `"best" is the term "top" of the joined select over "test_tag_notes"`)
@@ -1790,7 +1790,7 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 		// itself, and under the select's alias it would silently count the
 		// query's rows instead of reading the select's count; a term of the
 		// select's own table is its term altered.
-		n := types.Count().As("n")
+		n := gst.Count().As("n")
 		perRecord := database.Select[*TestRecordTag, struct {
 			RecordID string
 			N        int64
@@ -1799,18 +1799,18 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 			ID string
 			N  *int64
 		}
-		err := database.Select[*TestAggregateRecord, counted](ctx, TestAggregateRecordCols.ID, n.Over(types.PartitionBy(TestAggregateRecordCols.Category))).
-			Join(types.LeftJoinSelect(perRecord, onRecord)).
+		err := database.Select[*TestAggregateRecord, counted](ctx, TestAggregateRecordCols.ID, n.Over(gst.PartitionBy(TestAggregateRecordCols.Category))).
+			Join(gst.LeftJoinSelect(perRecord, onRecord)).
 			Scan(&[]counted{})
 		require.ErrorIs(t, err, database.ErrDuplicateAlias)
 		require.ErrorContains(t, err, "with a window or conditions of its own")
 		err = database.Select[*TestAggregateRecord, counted](ctx, TestAggregateRecordCols.ID, n.Where(TestAggregateRecordCols.Status.Eq("done"))).
-			Join(types.LeftJoinSelect(perRecord, onRecord)).
+			Join(gst.LeftJoinSelect(perRecord, onRecord)).
 			Scan(&[]counted{})
 		require.ErrorIs(t, err, database.ErrDuplicateAlias)
 		tags, counts := tagCounts(ctx)
-		err = database.Select[*TestAggregateRecord, recordTags](ctx, TestAggregateRecordCols.ID, tags.Over(types.PartitionBy(TestAggregateRecordCols.Category))).
-			Join(types.LeftJoinSelect(counts, onRecord)).
+		err = database.Select[*TestAggregateRecord, recordTags](ctx, TestAggregateRecordCols.ID, tags.Over(gst.PartitionBy(TestAggregateRecordCols.Category))).
+			Join(gst.LeftJoinSelect(counts, onRecord)).
 			Scan(&rows)
 		require.ErrorIs(t, err, database.ErrJoinSelectColumn)
 		require.ErrorContains(t, err, "altered")
@@ -1821,20 +1821,20 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 		// through a join of their own, would read from either; the query has
 		// to alias them apart.
 		top := TestRecordTagCols.Label.Max().As("top")
-		noteTag := types.NewColumn[*TestTagNote, string]("tag_id")
+		noteTag := gst.NewColumn[*TestTagNote, string]("tag_id")
 		type keyed struct {
 			RecordID string
 			Top      *string
 		}
 		perRecord := database.Select[*TestRecordTag, keyed](ctx, TestRecordTagCols.RecordID.Group(), top)
 		perTag := database.Select[*TestTagNote, keyed](ctx, noteTag.Group().As("record_id"), top).
-			Join(types.LeftJoin[*TestRecordTag](TestRecordTagCols.ID.EqCol(noteTag)))
+			Join(gst.LeftJoin[*TestRecordTag](TestRecordTagCols.ID.EqCol(noteTag)))
 		type topped struct {
 			ID  string
 			Top *string
 		}
 		err := database.Select[*TestAggregateRecord, topped](ctx, TestAggregateRecordCols.ID, top).
-			Join(types.LeftJoinSelect(perRecord, onRecord), types.LeftJoinSelect(perTag, noteTag.EqCol(TestAggregateRecordCols.ID))).
+			Join(gst.LeftJoinSelect(perRecord, onRecord), gst.LeftJoinSelect(perTag, noteTag.EqCol(TestAggregateRecordCols.ID))).
 			Scan(&[]topped{})
 		require.ErrorIs(t, err, database.ErrDuplicateAlias)
 		require.ErrorContains(t, err, "two joined selects")
@@ -1851,8 +1851,8 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 		}
 		err := database.Select[*TestAggregateRecord, share](ctx,
 			TestAggregateRecordCols.ID.Group(), tags,
-			TestAggregateRecordCols.Amount.Sum().Over(types.PartitionBy(TestRecordTagCols.ID)).As("share")).
-			Join(types.LeftJoinSelect(counts, onRecord)).
+			TestAggregateRecordCols.Amount.Sum().Over(gst.PartitionBy(TestRecordTagCols.ID)).As("share")).
+			Join(gst.LeftJoinSelect(counts, onRecord)).
 			Scan(&[]share{})
 		require.ErrorIs(t, err, database.ErrWindowTermNotSelected)
 	})
@@ -1867,7 +1867,7 @@ func TestSelectJoinSelectBuildErrors(t *testing.T) {
 			Total int64
 			Tags  *int64
 		}](ctx, TestAggregateRecordCols.Amount.Sum().As("total"), tags).
-			Join(types.LeftJoinSelect(counts, onRecord)).
+			Join(gst.LeftJoinSelect(counts, onRecord)).
 			ScanOne(&one)
 		require.ErrorIs(t, err, database.ErrScanOneRowLevel)
 	})

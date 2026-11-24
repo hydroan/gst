@@ -7,10 +7,10 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/auditmanager"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	modellogmgmt "github.com/hydroan/gst/internal/modulemodel/logmgmt"
 	"github.com/hydroan/gst/internal/testutil"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,7 +34,7 @@ func TestRecordOperationSkipsBuildWhenDisabled(t *testing.T) {
 	manager := auditmanager.New(&config.Audit{Enabled: false})
 
 	var built int
-	require.NoError(t, manager.RecordOperation(context.Background(), &auditSample{}, types.OperationCreate,
+	require.NoError(t, manager.RecordOperation(context.Background(), &auditSample{}, gst.OperationCreate,
 		func() *modellogmgmt.OperationLog {
 			built++
 			return &modellogmgmt.OperationLog{}
@@ -49,11 +49,11 @@ func TestRecordOperationSkipsBuildWhenDisabled(t *testing.T) {
 func TestRecordOperationSkipsBuildWhenOperationExcluded(t *testing.T) {
 	manager := auditmanager.New(&config.Audit{
 		Enabled:           true,
-		ExcludeOperations: []types.Operation{types.OperationList},
+		ExcludeOperations: []gst.Operation{gst.OperationList},
 	})
 
 	var built int
-	require.NoError(t, manager.RecordOperation(context.Background(), &auditSample{}, types.OperationList,
+	require.NoError(t, manager.RecordOperation(context.Background(), &auditSample{}, gst.OperationList,
 		func() *modellogmgmt.OperationLog {
 			built++
 			return &modellogmgmt.OperationLog{}
@@ -66,11 +66,11 @@ func TestRecordOperationSkipsBuildWhenOperationExcluded(t *testing.T) {
 // before it reads anything only the operation log wants: whether the log
 // records this operation, which is the audit switch and the exclusions.
 func TestEnabledFollowsTheSwitchAndTheExclusions(t *testing.T) {
-	require.False(t, auditmanager.New(&config.Audit{}).Enabled(types.OperationDelete), "a disabled audit records nothing")
+	require.False(t, auditmanager.New(&config.Audit{}).Enabled(gst.OperationDelete), "a disabled audit records nothing")
 
-	manager := auditmanager.New(&config.Audit{Enabled: true, ExcludeOperations: []types.Operation{types.OperationList}})
-	require.True(t, manager.Enabled(types.OperationDelete))
-	require.False(t, manager.Enabled(types.OperationList), "an excluded operation is not recorded")
+	manager := auditmanager.New(&config.Audit{Enabled: true, ExcludeOperations: []gst.Operation{gst.OperationList}})
+	require.True(t, manager.Enabled(gst.OperationDelete))
+	require.False(t, manager.Enabled(gst.OperationList), "an excluded operation is not recorded")
 }
 
 // TestRecordOperationStampsOperationAndTable pins what the manager fills in
@@ -81,7 +81,7 @@ func TestRecordOperationStampsOperationAndTable(t *testing.T) {
 	manager := auditmanager.New(&config.Audit{Enabled: true})
 
 	var built int
-	require.NoError(t, manager.RecordOperation(context.Background(), &auditSample{}, types.OperationCreate,
+	require.NoError(t, manager.RecordOperation(context.Background(), &auditSample{}, gst.OperationCreate,
 		func() *modellogmgmt.OperationLog {
 			built++
 			return &modellogmgmt.OperationLog{Model: t.Name(), User: "operator"}
@@ -89,7 +89,7 @@ func TestRecordOperationStampsOperationAndTable(t *testing.T) {
 	require.Equal(t, 1, built, "an enabled audit must build the entry exactly once")
 
 	entry := recordedEntry(t, t.Name())
-	require.Equal(t, types.OperationCreate, entry.OP, "the manager stamps the operation it was given")
+	require.Equal(t, gst.OperationCreate, entry.OP, "the manager stamps the operation it was given")
 	require.Equal(t, "audit_samples", entry.Table, "the manager stamps the model's own table")
 	require.Equal(t, "operator", entry.User, "fields the build set must survive untouched")
 }
@@ -105,13 +105,13 @@ func TestRecordOperationWritesOnceTheClientWentAway(t *testing.T) {
 	clientGone, goAway := context.WithCancel(context.Background())
 	goAway()
 
-	require.NoError(t, manager.RecordOperation(clientGone, &auditSample{}, types.OperationDelete,
+	require.NoError(t, manager.RecordOperation(clientGone, &auditSample{}, gst.OperationDelete,
 		func() *modellogmgmt.OperationLog {
 			return &modellogmgmt.OperationLog{Model: t.Name(), User: "operator"}
 		}))
 
 	entry := recordedEntry(t, t.Name())
-	require.Equal(t, types.OperationDelete, entry.OP, "the entry of an operation that happened is written anyway")
+	require.Equal(t, gst.OperationDelete, entry.OP, "the entry of an operation that happened is written anyway")
 }
 
 // TestRecordOperationRefusesNilBuild pins that a missing build is refused
@@ -121,7 +121,7 @@ func TestRecordOperationRefusesNilBuild(t *testing.T) {
 	for _, enabled := range []bool{true, false} {
 		manager := auditmanager.New(&config.Audit{Enabled: enabled})
 
-		err := manager.RecordOperation(context.Background(), &auditSample{}, types.OperationCreate, nil)
+		err := manager.RecordOperation(context.Background(), &auditSample{}, gst.OperationCreate, nil)
 		require.Error(t, err, "a nil build is refused whether the audit is on or off")
 	}
 }

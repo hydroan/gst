@@ -6,13 +6,13 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // TableChan is the internal queue for default-database table registration.
 // It receives the models Register queues, for dbruntime.InitDatabase to
 // process.
-var TableChan = make(chan types.Model, 10240)
+var TableChan = make(chan gst.Model, 10240)
 
 // tablesPending counts the models queued for table registration whose table is
 // not ready yet. The queue length alone cannot answer that: a receive takes a
@@ -58,7 +58,7 @@ func TablesPending() int {
 // a schema dump, a migration plan — has to read it from here.
 var (
 	registeredMu     sync.Mutex
-	registeredModels []types.Model
+	registeredModels []gst.Model
 )
 
 // Register records M as a registered model and queues it for table
@@ -75,7 +75,7 @@ var (
 // of the registered models (see modelschema.Fingerprint) would then leave
 // out. The model counts as pending before it takes the queue, so the pending
 // count never misses one.
-func Register[M types.Model]() {
+func Register[M gst.Model]() {
 	typ := reflect.TypeFor[M]()
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
@@ -118,15 +118,15 @@ func RegisteredModels() []any {
 }
 
 // newModel returns a fresh zero value of M.
-func newModel[M types.Model]() M {
+func newModel[M gst.Model]() M {
 	return reflect.New(reflect.TypeOf(*new(M)).Elem()).Interface().(M) //nolint:errcheck
 }
 
 // newModelOf returns a fresh zero value of m's concrete type.
-func newModelOf(m types.Model) types.Model {
+func newModelOf(m gst.Model) gst.Model {
 	typ := reflect.TypeOf(m)
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
-	return reflect.New(typ).Interface().(types.Model) //nolint:errcheck
+	return reflect.New(typ).Interface().(gst.Model) //nolint:errcheck
 }

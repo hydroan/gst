@@ -14,6 +14,7 @@ import (
 	"github.com/hydroan/gst/authz/rbac"
 	"github.com/hydroan/gst/client"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/gst"
 	modeliamsession "github.com/hydroan/gst/internal/modulemodel/iam/session"
 	modeliamuser "github.com/hydroan/gst/internal/modulemodel/iam/user"
 	serviceiamsession "github.com/hydroan/gst/internal/moduleservice/iam/session"
@@ -21,7 +22,6 @@ import (
 	"github.com/hydroan/gst/internal/response"
 	"github.com/hydroan/gst/internal/router"
 	"github.com/hydroan/gst/internal/testutil"
-	"github.com/hydroan/gst/internal/types"
 	"github.com/hydroan/gst/module/iam"
 	gstredis "github.com/hydroan/gst/redis"
 	"github.com/stretchr/testify/require"
@@ -274,7 +274,7 @@ func TestSessionList(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		// Match the framework client's User-Agent: the session is bound to
 		// the browser fingerprint captured at login.
-		req.Header.Set("User-Agent", types.FrameworkName)
+		req.Header.Set("User-Agent", gst.FrameworkName)
 		req.AddCookie(&http.Cookie{Name: "session_id", Value: sessionID})
 
 		resp, err := http.DefaultClient.Do(req)
@@ -347,7 +347,7 @@ func TestSessionUserStateRefresh(t *testing.T) {
 		_, err := serviceiamsession.ValidateSessionUserState(canceledCtx, session)
 		require.Error(t, err)
 
-		var serviceErr *types.Error
+		var serviceErr *gst.Error
 		require.True(t, errors.As(err, &serviceErr))
 		require.Equal(t, http.StatusInternalServerError, serviceErr.Status())
 		require.Contains(t, err.Error(), "failed to refresh session user state")
@@ -1222,7 +1222,7 @@ func requireSessionNotFound(t *testing.T, sessionID string) {
 	t.Helper()
 
 	_, err := serviceiamsession.Store.LoadSession(t.Context(), sessionID)
-	require.ErrorIs(t, err, types.ErrEntryNotFound)
+	require.ErrorIs(t, err, gst.ErrEntryNotFound)
 }
 
 func requireUserSessionContains(t *testing.T, userID, sessionID string) {

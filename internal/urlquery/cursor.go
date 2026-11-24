@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/types"
 )
 
 // Cursor returns the cursor position of the request, ready to be passed to
@@ -43,46 +43,46 @@ import (
 //
 // A URL cursor always pages an ascending feed: _cursor_next only chooses
 // whether the request travels along the feed or back down it. A descending
-// feed is a service-side cursor, built with types.CursorForward on a Desc
+// feed is a service-side cursor, built with gst.CursorForward on a Desc
 // order.
-func Cursor(q url.Values, m types.Model) (types.Cursor, error) {
+func Cursor(q url.Values, m gst.Model) (gst.Cursor, error) {
 	if !model.IsCursorable(m) {
-		return types.Cursor{}, nil
+		return gst.Cursor{}, nil
 	}
 	var untaken []string
-	for _, key := range [...]string{types.QueryPage, types.QuerySortBy} {
+	for _, key := range [...]string{gst.QueryPage, gst.QuerySortBy} {
 		if q.Has(key) {
 			untaken = append(untaken, key)
 		}
 	}
 	if len(untaken) > 0 {
-		return types.Cursor{}, UnsupportedParameterError(untaken)
+		return gst.Cursor{}, UnsupportedParameterError(untaken)
 	}
-	value := q.Get(types.QueryCursorValue)
+	value := q.Get(gst.QueryCursorValue)
 
 	// An unnamed column leaves the order column empty on purpose: the database
 	// layer owns the primary key fallback, so both this path and a service
 	// building a cursor by hand land on the same default.
 	column := ""
 	var cursorColumn modelschema.Column
-	if field := strings.TrimSpace(q.Get(types.QueryCursorField)); len(field) > 0 {
+	if field := strings.TrimSpace(q.Get(gst.QueryCursorField)); len(field) > 0 {
 		columns, err := modelschema.FilterableIndex(reflect.TypeOf(m))
 		if err != nil {
-			return types.Cursor{}, err
+			return gst.Cursor{}, err
 		}
 		resolved, ok := columns[field]
 		if !ok {
-			return types.Cursor{}, errors.Newf("unknown cursor column %q", field)
+			return gst.Cursor{}, errors.Newf("unknown cursor column %q", field)
 		}
 		identifying, err := modelschema.IdentifyingColumns(m)
 		if err != nil {
-			return types.Cursor{}, err
+			return gst.Cursor{}, err
 		}
 		if _, ok := identifying[resolved.DBName]; !ok {
 			// Rows sharing the boundary's value are split between pages, and
 			// the ones the page had no room for are never read again. The
 			// client is told instead of quietly getting fewer rows.
-			return types.Cursor{}, errors.Newf(
+			return gst.Cursor{}, errors.Newf(
 				"cursor column %q is not unique: page by the primary key, or by a NOT NULL column with a unique index of its own", field)
 		}
 		column = resolved.DBName
@@ -97,7 +97,7 @@ func Cursor(q url.Values, m types.Model) (types.Cursor, error) {
 		// queries a different model with it.
 		parsed, err := modelschema.Columns(reflect.TypeOf(m))
 		if err != nil {
-			return types.Cursor{}, err
+			return gst.Cursor{}, err
 		}
 		for _, col := range parsed {
 			if col.DBName == modelschema.DefaultCursorColumn {
@@ -109,17 +109,17 @@ func Cursor(q url.Values, m types.Model) (types.Cursor, error) {
 	if len(value) == 0 {
 		// The first page: the feed from its start, in its order, with no
 		// boundary to start past.
-		return types.CursorForward(types.Asc(column), ""), nil
+		return gst.CursorForward(gst.Asc(column), ""), nil
 	}
 	value, err := normalizeCursorValue(cursorColumn, value)
 	if err != nil {
-		return types.Cursor{}, err
+		return gst.Cursor{}, err
 	}
 
-	if next, _ := modelschema.ParseBool(q.Get(types.QueryCursorNext)); next {
-		return types.CursorForward(types.Asc(column), value), nil
+	if next, _ := modelschema.ParseBool(q.Get(gst.QueryCursorNext)); next {
+		return gst.CursorForward(gst.Asc(column), value), nil
 	}
-	return types.CursorBackward(types.Asc(column), value), nil
+	return gst.CursorBackward(gst.Asc(column), value), nil
 }
 
 // normalizeCursorValue checks the boundary value against what the cursor

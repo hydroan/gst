@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/types"
+	"github.com/hydroan/gst/internal/gst"
 )
 
 // TestSetRolePermissionsReplacesTheWholeSet covers the replace semantics: the
@@ -18,7 +18,7 @@ func TestSetRolePermissionsReplacesTheWholeSet(t *testing.T) {
 	r := newRolePermissionsFixture(t)
 	ctx := context.Background()
 
-	if err := r.SetRolePermissions(ctx, "default", "role_a", []types.Permission{
+	if err := r.SetRolePermissions(ctx, "default", "role_a", []gst.Permission{
 		{Object: "/api/things", Action: "GET"},
 		{Object: "/api/things", Action: "POST"},
 	}); err != nil {
@@ -28,7 +28,7 @@ func TestSetRolePermissionsReplacesTheWholeSet(t *testing.T) {
 	assertAuthorized(t, r, "/api/things", "POST", true)
 
 	// Dropping POST from the set has to take that access away.
-	if err := r.SetRolePermissions(ctx, "default", "role_a", []types.Permission{
+	if err := r.SetRolePermissions(ctx, "default", "role_a", []gst.Permission{
 		{Object: "/api/things", Action: "GET"},
 	}); err != nil {
 		t.Fatal(err)
@@ -88,7 +88,7 @@ func TestSetRolePermissionsLeavesOtherRolesAlone(t *testing.T) {
 func TestSetRolePermissionsDropsDuplicates(t *testing.T) {
 	r := newRolePermissionsFixture(t)
 
-	if err := r.SetRolePermissions(context.Background(), "default", "role_a", []types.Permission{
+	if err := r.SetRolePermissions(context.Background(), "default", "role_a", []gst.Permission{
 		{Object: "/api/things", Action: "GET"},
 		{Object: "/api/things", Action: "GET"},
 	}); err != nil {
@@ -115,9 +115,9 @@ func TestSetRolePermissionsReplacesAtomically(t *testing.T) {
 	r := newRolePermissionsFixture(t)
 	ctx := context.Background()
 
-	permissions := make([]types.Permission, 0, 50)
+	permissions := make([]gst.Permission, 0, 50)
 	for i := range 50 {
-		permissions = append(permissions, types.Permission{
+		permissions = append(permissions, gst.Permission{
 			Object: fmt.Sprintf("/api/things/%d", i),
 			Action: "GET",
 		})
@@ -178,7 +178,7 @@ func TestPermissionWritesRefuseTheReservedRole(t *testing.T) {
 	r := newRolePermissionsFixture(t)
 	ctx := context.Background()
 
-	if err := r.SetRolePermissions(ctx, "tenant_a", RoleAuthenticated, []types.Permission{
+	if err := r.SetRolePermissions(ctx, "tenant_a", RoleAuthenticated, []gst.Permission{
 		{Object: "/api/things", Action: "GET"},
 	}); !errors.Is(err, ErrReservedRole) {
 		t.Errorf("SetRolePermissions: expected ErrReservedRole, got %v", err)
@@ -195,7 +195,7 @@ func TestPermissionWritesRefuseTheReservedRole(t *testing.T) {
 	// The method that writes that rule on purpose still can, and what it writes
 	// is exactly the reach the refusal protects: a subject holding no role, in a
 	// tenant the call never named.
-	if err = r.SetPermissionsForAuthenticated(ctx, []types.Permission{
+	if err = r.SetPermissionsForAuthenticated(ctx, []gst.Permission{
 		{Object: "/api/things", Action: "GET"},
 	}); err != nil {
 		t.Fatal(err)
@@ -229,7 +229,7 @@ func TestSetPermissionsForAuthenticatedReplacesTheWholeSet(t *testing.T) {
 	r := newRolePermissionsFixture(t)
 	ctx := context.Background()
 
-	if err := r.SetPermissionsForAuthenticated(ctx, []types.Permission{
+	if err := r.SetPermissionsForAuthenticated(ctx, []gst.Permission{
 		{Object: "/api/open", Action: "GET"},
 		{Object: "/api/open", Action: "POST"},
 	}); err != nil {
