@@ -3,9 +3,9 @@ package elastic
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 	"time"
-
-	"github.com/jinzhu/copier"
 )
 
 const (
@@ -449,12 +449,20 @@ func (qb *QueryBuilder) BuildQuery() map[string]any {
 	return req.Query
 }
 
-// Clone returns a builder with the same clauses; clauses added to it leave
-// the original alone.
+// Clone returns a builder with the same clauses, parameters and aggregations.
+// The two share nothing they add to: a clause, a sort or an aggregation
+// added to either afterwards leaves the other, and every other clone, alone.
 func (qb *QueryBuilder) Clone() *QueryBuilder {
-	clone := new(QueryBuilder)
-	_ = copier.Copy(clone, qb)
-	return clone
+	clone := *qb
+	clone.must = slices.Clone(qb.must)
+	clone.mustNot = slices.Clone(qb.mustNot)
+	clone.should = slices.Clone(qb.should)
+	clone.filter = slices.Clone(qb.filter)
+	clone.sort = slices.Clone(qb.sort)
+	clone.source = slices.Clone(qb.source)
+	clone.searchAfter = slices.Clone(qb.searchAfter)
+	clone.aggs = maps.Clone(qb.aggs)
+	return &clone
 }
 
 // String returns the JSON representation of the query

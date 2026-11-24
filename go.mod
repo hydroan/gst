@@ -62,7 +62,6 @@ require (
 	github.com/influxdata/influxdb-client-go/v2 v2.14.0
 	github.com/jackc/pgx/v5 v5.13.0
 	github.com/jhump/protoreflect/v2 v2.0.1
-	github.com/jinzhu/copier v0.4.0
 	github.com/json-iterator/go v1.1.12
 	github.com/karlseguin/ccache/v3 v3.0.8
 	github.com/kr/pretty v0.3.1

@@ -251,21 +251,35 @@ func TestSearchReportsWhetherTheTotalIsExact(t *testing.T) {
 }
 
 // TestQueryBuilderCloneIsIndependent pins that a clone starts with the
-// original's clauses and that clauses added to it leave the original alone.
+// original's clauses, parameters and aggregations, and that what is added to
+// a clone afterwards reaches neither the original nor another clone of it.
+// The original holds three clauses, which leaves its list room for a fourth:
+// clones sharing that room would each write their fourth clause over the
+// other's.
 func TestQueryBuilderCloneIsIndependent(t *testing.T) {
-	original := elastic.NewQueryBuilder().Term("kind.keyword", "note").Sort("seq", elastic.Asc).Size(5)
-	clone := original.Clone().Term("author.keyword", "a")
+	original := elastic.NewQueryBuilder().
+		Term("kind.keyword", "note").Term("state.keyword", "open").Term("lang.keyword", "en").
+		Sort("seq", elastic.Asc).Size(5).
+		AggsCardinality("authors", "author.keyword")
+	first := original.Clone().Term("author.keyword", "a").AggsCardinality("kinds", "kind.keyword")
+	second := original.Clone().Term("author.keyword", "b")
 
-	originalReq, err := original.Build()
-	require.NoError(t, err)
-	cloneReq, err := clone.Build()
-	require.NoError(t, err)
-	originalBody, err := json.Marshal(originalReq)
-	require.NoError(t, err)
-	cloneBody, err := json.Marshal(cloneReq)
-	require.NoError(t, err)
-	require.JSONEq(t, `{"query":{"bool":{"must":[{"term":{"kind.keyword":"note"}}]}},"sort":[{"seq":{"order":"asc"}}],"size":5}`, string(originalBody))
-	require.JSONEq(t, `{"query":{"bool":{"must":[{"term":{"kind.keyword":"note"}},{"term":{"author.keyword":"a"}}]}},"sort":[{"seq":{"order":"asc"}}],"size":5}`, string(cloneBody))
+	body := func(qb *elastic.QueryBuilder) string {
+		req, err := qb.Build()
+		require.NoError(t, err)
+		encoded, err := json.Marshal(req)
+		require.NoError(t, err)
+		return string(encoded)
+	}
+	const (
+		clauses = `{"term":{"kind.keyword":"note"}},{"term":{"state.keyword":"open"}},{"term":{"lang.keyword":"en"}}`
+		rest    = `"sort":[{"seq":{"order":"asc"}}],"size":5`
+		authors = `"authors":{"cardinality":{"field":"author.keyword"}}`
+	)
+	require.JSONEq(t, `{"query":{"bool":{"must":[`+clauses+`]}},`+rest+`,"aggs":{`+authors+`}}`, body(original))
+	require.JSONEq(t, `{"query":{"bool":{"must":[`+clauses+`,{"term":{"author.keyword":"a"}}]}},`+rest+
+		`,"aggs":{`+authors+`,"kinds":{"cardinality":{"field":"kind.keyword"}}}}`, body(first))
+	require.JSONEq(t, `{"query":{"bool":{"must":[`+clauses+`,{"term":{"author.keyword":"b"}}]}},`+rest+`,"aggs":{`+authors+`}}`, body(second))
 }
 
 func TestQueryBuilderNestsABoolOfShouldClauses(t *testing.T) {
