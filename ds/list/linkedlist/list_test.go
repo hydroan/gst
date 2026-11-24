@@ -403,9 +403,12 @@ func requireMergesIntoEachOtherSettle(t *testing.T, merge func(into, from *linke
 			wg.Wait()
 		}
 	}()
+	// The rounds take under a second on an idle machine and many times that
+	// on a loaded one, so the limit is one only merges waiting on each other
+	// reach.
 	select {
 	case <-done:
-	case <-time.After(10 * time.Second):
+	case <-time.After(2 * time.Minute):
 		t.Fatal("two lists merging into each other at the same time deadlocked")
 	}
 }
