@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/lifecycle"
 	"go.uber.org/zap"
 )
 
@@ -43,11 +44,11 @@ func Run() error {
 		ReadHeaderTimeout: 5 * time.Second, // Prevent Slowloris attacks
 	}
 
+	zap.S().Infow("pprof server started", "listen", config.App.PprofListen, "port", config.App.PprofPort)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		zap.S().Errorw("failed to start pprof server", "err", err)
 		return err
 	}
-	zap.S().Infow("pprof server started", "listen", config.App.PprofListen, "port", config.App.PprofPort)
 
 	return nil
 }
@@ -65,16 +66,8 @@ func Stop(abandon context.Context) {
 		return
 	}
 
-	zap.S().Infow("pprof server shutdown initiated")
 	ctx, cancel := context.WithTimeout(abandon, drainTimeout)
 	defer cancel()
-	if err := server.Shutdown(ctx); err != nil {
-		zap.S().Warnw("pprof server closing the connections its drain left open", "err", err, "reason", context.Cause(ctx))
-		if closeErr := server.Close(); closeErr != nil {
-			zap.S().Errorw("pprof server close failed", "err", closeErr)
-		}
-	} else {
-		zap.S().Infow("pprof server shutdown completed")
-	}
+	lifecycle.ShutdownHTTPServer(ctx, server, "pprof server")
 	server = nil
 }
