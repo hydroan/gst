@@ -607,17 +607,9 @@ func Stop(abandon context.Context) {
 	if server == nil {
 		return
 	}
-	zap.S().Infow("backend server shutdown initiated")
 	ctx, cancel := context.WithTimeout(abandon, drainTimeout)
 	defer cancel()
-	if err := server.Shutdown(ctx); err != nil {
-		zap.S().Warnw("backend server closing the connections its drain left open", "err", err, "reason", context.Cause(ctx))
-		if closeErr := server.Close(); closeErr != nil {
-			zap.S().Errorw("backend server close failed", "err", closeErr)
-		}
-	} else {
-		zap.S().Infow("backend server shutdown completed")
-	}
+	lifecycle.ShutdownHTTPServer(ctx, server, "backend server")
 	if cut := websocket.Drain(ctx); cut > 0 {
 		zap.S().Warnw("backend server closed the WebSocket connections its drain left open", "connections", cut, "reason", context.Cause(ctx))
 	}

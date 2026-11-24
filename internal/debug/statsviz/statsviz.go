@@ -12,6 +12,7 @@ import (
 
 	"github.com/arl/statsviz"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/lifecycle"
 	"go.uber.org/zap"
 )
 
@@ -61,16 +62,8 @@ func Stop(abandon context.Context) {
 		return
 	}
 
-	zap.S().Infow("statsviz server shutdown initiated")
 	ctx, cancel := context.WithTimeout(abandon, drainTimeout)
 	defer cancel()
-	if err := server.Shutdown(ctx); err != nil {
-		zap.S().Warnw("statsviz server closing the connections its drain left open", "err", err, "reason", context.Cause(ctx))
-		if closeErr := server.Close(); closeErr != nil {
-			zap.S().Errorw("statsviz server close failed", "err", closeErr)
-		}
-	} else {
-		zap.S().Infow("statsviz server shutdown completed")
-	}
+	lifecycle.ShutdownHTTPServer(ctx, server, "statsviz server")
 	server = nil
 }

@@ -5,7 +5,10 @@
 // holds what such work has in common: Fail and FailNow, the ways out of a
 // process that cannot go on, Await, the wait for work to return, Interrupted,
 // the test of whether work stopped because it was asked to, and PanicError,
-// the error a panic recovered from it is reported as.
+// the error a panic recovered from it is reported as. And it holds what a
+// shutdown has in common: StopTimeout, the window each of its phases waits
+// within, and ShutdownHTTPServer, the way an HTTP server of the process is
+// shut down within such a window.
 //
 // A component registers from its package initialiser, so importing its
 // package is the single act that enables it: a project that never imports the
