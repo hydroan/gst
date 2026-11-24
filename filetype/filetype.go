@@ -14,12 +14,11 @@ import (
 // references:
 //     https://github.com/gabriel-vasile/mimetype/blob/master/supported_mimes.md
 
-const (
-	MAX_READ_FILESIZE = 10 * 1024 * 1024 //nolint:staticcheck
-)
+// maxReadFileSize is how much of a file Detect reads to tell its filetype.
+const maxReadFileSize = 10 * 1024 * 1024
 
-// Detect detect filetype for binary files and text/plain files.
-// NOTE: the max read file size is 10MB.
+// Detect detects the filetype of the file filename, a binary one or a plain
+// text one, from its first 10MB at most.
 func Detect(filename string) (Filetype, Mime) {
 	fi, err := os.Stat(filename)
 	if err != nil {
@@ -28,7 +27,7 @@ func Detect(filename string) (Filetype, Mime) {
 	}
 	var buf []byte
 
-	if fi.Size() <= MAX_READ_FILESIZE {
+	if fi.Size() <= maxReadFileSize {
 		buf, err = os.ReadFile(filename)
 		if err != nil {
 			zap.S().Error(err)
@@ -36,7 +35,7 @@ func Detect(filename string) (Filetype, Mime) {
 		}
 	} else {
 		var fd *os.File
-		buf = make([]byte, MAX_READ_FILESIZE)
+		buf = make([]byte, maxReadFileSize)
 		if fd, err = os.Open(filename); err != nil {
 			zap.S().Error(err)
 			return FiletypeUnknown, MimeUnknown
@@ -62,7 +61,7 @@ func Detect(filename string) (Filetype, Mime) {
 	case string(FiletypeDOC), string(FiletypeXLS), string(FiletypePPT),
 		string(FiletypeDOCX), string(FiletypeXLSX), string(FiletypePPTX):
 		mtype := mimetype.Detect(buf)
-		return GetFiletypeAndMime(strings.TrimPrefix(mtype.Extension(), "."))
+		return FiletypeAndMime(strings.TrimPrefix(mtype.Extension(), "."))
 
 	// If the filetype is FiletypeZIP, the filetype may be doc, xls, ppt, odt, ods, odp,
 	// you should check filetype again by package "mimetype".
@@ -72,7 +71,7 @@ func Detect(filename string) (Filetype, Mime) {
 		if ft == "application/octec-stream" {
 			return FiletypeZIP, MimeZIP
 		}
-		return GetFiletypeAndMime(ft)
+		return FiletypeAndMime(ft)
 
 	// If the filetype is Unknown, the filetype may be text/plain files,
 	// you should check filetype again by package "mimetype".
@@ -96,10 +95,10 @@ func Detect(filename string) (Filetype, Mime) {
 		if mtype.String() == MimeOLE {
 			return FiletypeOLE, MimeOLE
 		}
-		return GetFiletypeAndMime(strings.TrimPrefix(mtype.Extension(), "."))
+		return FiletypeAndMime(strings.TrimPrefix(mtype.Extension(), "."))
 
 	default:
-		return GetFiletypeAndMime(kind.Extension)
+		return FiletypeAndMime(kind.Extension)
 	}
 }
 
@@ -116,7 +115,7 @@ func DetectBytes(data []byte) (Filetype, Mime) {
 	case string(FiletypeDOC), string(FiletypeXLS), string(FiletypePPT),
 		string(FiletypeDOCX), string(FiletypeXLSX), string(FiletypePPTX):
 		mtype := mimetype.Detect(data)
-		return GetFiletypeAndMime(strings.TrimPrefix(mtype.Extension(), "."))
+		return FiletypeAndMime(strings.TrimPrefix(mtype.Extension(), "."))
 
 	// If the filetype is FiletypeZIP, the filetype may be doc, xls, ppt, odt, ods, odp,
 	// you should check filetype again by package "mimetype".
@@ -126,21 +125,21 @@ func DetectBytes(data []byte) (Filetype, Mime) {
 		if ft == "application/octec-stream" {
 			return FiletypeZIP, MimeZIP
 		}
-		return GetFiletypeAndMime(ft)
+		return FiletypeAndMime(ft)
 
 	// If the filetype is Unknown, the filetype may be text/plain files,
 	// you should check filetype again by package "mimetype".
 	case filetype.Unknown.Extension:
 		mtype := mimetype.Detect(data)
-		return GetFiletypeAndMime(strings.TrimPrefix(mtype.Extension(), "."))
+		return FiletypeAndMime(strings.TrimPrefix(mtype.Extension(), "."))
 
 	default:
-		return GetFiletypeAndMime(kind.Extension)
+		return FiletypeAndMime(kind.Extension)
 	}
 }
 
-// MimeByFiletype get mime by filetype.
-// It will return MimeUnknow if filetype not support or filetype is FiletypeUnknow.
+// MimeByFiletype returns the mime of filetype, and MimeUnknown for a filetype
+// the package does not know, FiletypeUnknown among them.
 func MimeByFiletype(filetype Filetype) Mime {
 	mime, ok := MapFiletypeMime[filetype]
 	if ok {
@@ -149,10 +148,9 @@ func MimeByFiletype(filetype Filetype) Mime {
 	return MimeUnknown
 }
 
-// GetFiletypeAndMime get the Filetype and Mime by the provided string.
-// It will return FiletypeUnknow, MimeUnknow, if provided string not a
-// available filetype.
-func GetFiletypeAndMime(s string) (Filetype, Mime) {
+// FiletypeAndMime returns the Filetype s names, png for one, with its Mime,
+// and FiletypeUnknown with MimeUnknown for a name the package does not know.
+func FiletypeAndMime(s string) (Filetype, Mime) {
 	filetype := Filetype(s)
 	mime, ok := MapFiletypeMime[filetype]
 	if ok {

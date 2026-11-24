@@ -184,23 +184,23 @@ func TestConvertImageWritesTheFormatAskedForUnderTheTemporaryDirectory(t *testin
 	textSource := filepath.Join(sources, "sample.txt")
 	require.NoError(t, os.WriteFile(textSource, []byte("sample text\n"), 0o600))
 
-	jpg, err := filetype.ConvertImage2JPG(pngSource)
+	jpg, err := filetype.ConvertImageToJPG(pngSource)
 	require.NoError(t, err)
 	require.Equal(t, filepath.Join(os.TempDir(), "sample.png"), jpg)
 	kind, mime := filetype.Detect(jpg)
 	require.Equal(t, filetype.FiletypeJPG, kind)
 	require.Equal(t, filetype.MimeJPG, mime)
 
-	converted, err := filetype.ConvertImage2PNG(jpgSource)
+	converted, err := filetype.ConvertImageToPNG(jpgSource)
 	require.NoError(t, err)
 	require.Equal(t, filepath.Join(os.TempDir(), "sample.jpg"), converted)
 	kind, mime = filetype.Detect(converted)
 	require.Equal(t, filetype.FiletypePNG, kind)
 	require.Equal(t, filetype.MimePNG, mime)
 
-	_, err = filetype.ConvertImage2JPG(textSource)
+	_, err = filetype.ConvertImageToJPG(textSource)
 	require.Error(t, err, "a text file is no image to convert")
-	_, err = filetype.ConvertImage2PNG(textSource)
+	_, err = filetype.ConvertImageToPNG(textSource)
 	require.Error(t, err)
 }
 

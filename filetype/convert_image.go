@@ -8,11 +8,10 @@ import (
 	"github.com/sunshineplan/imgconv"
 )
 
-const IMAGE_TMP_FILE_PREFIX = "convert-image" //nolint:staticcheck
-
-// ConvertImage2JPG convert image to jpg format (ignore source image filetype).
-// the converted image default store to server temporary directory.
-func ConvertImage2JPG(filename string) (string, error) {
+// ConvertImageToJPG converts the image file filename to JPEG, whatever format
+// it is in, and returns the name of the converted file, which it writes to
+// the system's temporary directory under the last element of filename.
+func ConvertImageToJPG(filename string) (string, error) {
 	imgObj, err := imgconv.Open(filename)
 	if err != nil {
 		return "", err
@@ -31,9 +30,10 @@ func ConvertImage2JPG(filename string) (string, error) {
 	return localFilename, imgconv.Write(file, imgObj, &imgconv.FormatOption{Format: imgconv.JPEG})
 }
 
-// ConvertImage2PNG convert image to png format (ignore source image filetype),
-// and return the converted image filename.
-func ConvertImage2PNG(filename string) (string, error) {
+// ConvertImageToPNG converts the image file filename to PNG, whatever format
+// it is in, and returns the name of the converted file, which it writes to
+// the system's temporary directory under the last element of filename.
+func ConvertImageToPNG(filename string) (string, error) {
 	imgObj, err := imgconv.Open(filename)
 	if err != nil {
 		return "", err
