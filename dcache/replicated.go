@@ -131,7 +131,7 @@ func (v eventLogView) MarshalJSON() ([]byte, error) {
 	// as a zero duration would read as "expired on arrival".
 	ttl := "never"
 	if v.e.TTL != 0 {
-		ttl = logfield.FormatDurationSmart(v.e.TTL, 2)
+		ttl = logfield.FormatDurationSmart(v.e.TTL)
 	}
 	return json.Marshal(map[string]any{
 		"ts":       time.Unix(0, v.e.TS).UTC().Format(logfield.TimeLayout),

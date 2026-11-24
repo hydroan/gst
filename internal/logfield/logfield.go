@@ -156,34 +156,21 @@ func (d duration) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 }
 
 // FormatDurationSmart formats a time.Duration into a string, picking the unit
-// that keeps the value readable:
+// that keeps the value readable and printing two digits after the decimal
+// point:
 //   - Less than 1µs: nanoseconds (e.g., "900ns").
-//   - Less than 1ms: microseconds with the given precision (e.g., "18.40µs").
-//   - Less than 1s: milliseconds with the given precision (e.g., "123.451ms").
-//   - Less than 1min: seconds with the given precision (e.g., "2.013s").
-//   - 1min or more: minutes with the given precision (e.g., "1.502min").
+//   - Less than 1ms: microseconds (e.g., "18.40µs").
+//   - Less than 1s: milliseconds (e.g., "123.45ms").
+//   - Less than 1min: seconds (e.g., "2.01s").
+//   - 1min or more: minutes (e.g., "1.50min").
 //
 // Nanoseconds are the resolution of time.Duration itself, so that tier prints
-// an integer and ignores precision; decimals there would only claim a
-// resolution that does not exist.
+// an integer; decimals there would only claim a resolution that does not
+// exist.
 //
-// Negative durations are supported and formatted with a '-' sign. The precision
-// parameter controls the number of digits after the decimal point (2 by
-// default, minimum 0, maximum 9).
-func FormatDurationSmart(d time.Duration, precisions ...int) string {
-	precision := 2
-	if len(precisions) > 0 {
-		precision = precisions[0]
-	}
-	if precision < 0 {
-		precision = 0
-	}
-	if precision > 9 {
-		precision = 9
-	}
-
-	// Format string, e.g., "%.2f"
-	format := "%." + strconv.Itoa(precision) + "f%s"
+// Negative durations are supported and formatted with a '-' sign.
+func FormatDurationSmart(d time.Duration) string {
+	const format = "%.2f%s"
 
 	ns := d.Nanoseconds()
 	absNs := ns
