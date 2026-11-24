@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/database"
@@ -357,4 +358,15 @@ func TestSetIDRejectsUnparsableIntegerKeyedModelID(t *testing.T) {
 		require.Falsef(t, setID(m, id), "id %q should be rejected", id)
 		require.Zero(t, m.ID)
 	}
+}
+
+// TestBytesToStringConvertsWithoutCopying pins that bytesToString gives back
+// the text of the bytes it is given, sharing their memory rather than
+// copying it, and the empty string for nil.
+func TestBytesToStringConvertsWithoutCopying(t *testing.T) {
+	data := []byte("shared")
+	text := bytesToString(data)
+	require.Equal(t, "shared", text)
+	require.Same(t, &data[0], unsafe.StringData(text))
+	require.Empty(t, bytesToString(nil))
 }

@@ -11,7 +11,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/util"
 	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -201,7 +200,7 @@ func tracing() gin.HandlerFunc {
 			// way.
 			ctx = c.Request.Context()
 			traceID = requestctx.TraceIDOf(c.Request.Header.Get(execctx.HeaderTraceID))
-			spanID = util.SpanID()
+			spanID = execctx.NewSpanID()
 		}
 
 		// The trace id is the identity of this execution: everything downstream

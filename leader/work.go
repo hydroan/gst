@@ -11,7 +11,6 @@ import (
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/operation"
-	"github.com/hydroan/gst/internal/util"
 	"go.uber.org/zap"
 )
 
@@ -168,7 +167,7 @@ func tenureEnd(held context.Context, h *lease.Handle) (reason string, lost bool)
 func (w *work) run(ctx context.Context) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = util.PanicError(r)
+			err = lifecycle.PanicError(r)
 			log.Errorz("leader work panicked", zap.Error(err), zap.String("name", w.name))
 		}
 	}()

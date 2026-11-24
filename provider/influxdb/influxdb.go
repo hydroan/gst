@@ -11,7 +11,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/lifecycle"
-	"github.com/hydroan/gst/internal/util"
+	"github.com/hydroan/gst/internal/tlsconfig"
 	"github.com/hydroan/gst/logger"
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	"github.com/influxdata/influxdb-client-go/v2/api"
@@ -122,7 +122,7 @@ func New(cfg config.Influxdb) (influxdb2.Client, error) {
 	if cfg.TLSEnabled {
 		var tlsConf *tls.Config
 		var err error
-		if tlsConf, err = util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify); err != nil {
+		if tlsConf, err = tlsconfig.Build(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify); err != nil {
 			return nil, errors.Wrap(err, "failed to build tls config")
 		}
 		if tlsConf != nil {

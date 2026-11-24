@@ -80,3 +80,53 @@ func TestDurationRendersTheFieldPair(t *testing.T) {
 		require.Equal(t, tc.expected, strings.TrimSpace(buf.String()), "Duration(%v)", tc.input)
 	}
 }
+
+func TestFormatDurationSmart(t *testing.T) {
+	tests := []struct {
+		input     time.Duration
+		precision int
+		expected  string
+	}{
+		// nanosecond tier: prints an integer, precision does not apply
+		{0, 2, "0ns"},
+		{1 * time.Nanosecond, 2, "1ns"},
+		{900 * time.Nanosecond, 3, "900ns"},
+		{-900 * time.Nanosecond, 3, "-900ns"},
+		// tier boundaries: each unit starts exactly at 1 of that unit
+		{999 * time.Nanosecond, 2, "999ns"},
+		{1 * time.Microsecond, 2, "1.00µs"},
+		{999500 * time.Nanosecond, 1, "999.5µs"},
+		{1 * time.Millisecond, 2, "1.00ms"},
+		{999 * time.Millisecond, 1, "999.0ms"},
+		{1 * time.Second, 2, "1.00s"},
+		{59 * time.Second, 0, "59s"},
+		{60 * time.Second, 1, "1.0min"},
+		// microsecond tier
+		{18400 * time.Nanosecond, 2, "18.40µs"},
+		{500 * time.Microsecond, 2, "500.00µs"},
+		{-500 * time.Microsecond, 2, "-500.00µs"},
+		// remaining tiers
+		{2 * time.Millisecond, 0, "2ms"},
+		{1500 * time.Millisecond, 2, "1.50s"},
+		{2 * time.Second, 2, "2.00s"},
+		{90 * time.Second, 3, "1.500min"},
+		{2*time.Minute + 3*time.Second, 2, "2.05min"},
+		{-2 * time.Second, 2, "-2.00s"},
+		{-90 * time.Second, 1, "-1.5min"},
+		// test precision bounds
+		{123456789 * time.Nanosecond, -5, "123ms"},
+		{123456789 * time.Nanosecond, 15, "123.456789000ms"},
+	}
+
+	for _, tc := range tests {
+		got := logfield.FormatDurationSmart(tc.input, tc.precision)
+		if got != tc.expected {
+			t.Errorf("FormatDurationSmart(%v, %d) = %v; want %v", tc.input, tc.precision, got, tc.expected)
+		}
+	}
+
+	// precision defaults to 2 when omitted
+	if got := logfield.FormatDurationSmart(2120 * time.Microsecond); got != "2.12ms" {
+		t.Errorf("FormatDurationSmart(2120µs) = %v; want 2.12ms", got)
+	}
+}

@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/lifecycle"
-	"github.com/hydroan/gst/internal/util"
 	"go.uber.org/zap"
 )
 
@@ -171,7 +170,7 @@ func (w *work) run(ctx context.Context) {
 func (w *work) call(ctx context.Context) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = util.PanicError(r)
+			err = lifecycle.PanicError(r)
 		}
 	}()
 	return w.fn(ctx)

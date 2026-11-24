@@ -10,11 +10,12 @@
 package logfield
 
 import (
+	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/util"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -150,6 +151,56 @@ type duration time.Duration
 
 func (d duration) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	enc.AddInt64(KeyDuration, int64(d))
-	enc.AddString(KeyDurationHuman, util.FormatDurationSmart(time.Duration(d)))
+	enc.AddString(KeyDurationHuman, FormatDurationSmart(time.Duration(d)))
 	return nil
+}
+
+// FormatDurationSmart formats a time.Duration into a string, picking the unit
+// that keeps the value readable:
+//   - Less than 1µs: nanoseconds (e.g., "900ns").
+//   - Less than 1ms: microseconds with the given precision (e.g., "18.40µs").
+//   - Less than 1s: milliseconds with the given precision (e.g., "123.451ms").
+//   - Less than 1min: seconds with the given precision (e.g., "2.013s").
+//   - 1min or more: minutes with the given precision (e.g., "1.502min").
+//
+// Nanoseconds are the resolution of time.Duration itself, so that tier prints
+// an integer and ignores precision; decimals there would only claim a
+// resolution that does not exist.
+//
+// Negative durations are supported and formatted with a '-' sign. The precision
+// parameter controls the number of digits after the decimal point (2 by
+// default, minimum 0, maximum 9).
+func FormatDurationSmart(d time.Duration, precisions ...int) string {
+	precision := 2
+	if len(precisions) > 0 {
+		precision = precisions[0]
+	}
+	if precision < 0 {
+		precision = 0
+	}
+	if precision > 9 {
+		precision = 9
+	}
+
+	// Format string, e.g., "%.2f"
+	format := "%." + strconv.Itoa(precision) + "f%s"
+
+	ns := d.Nanoseconds()
+	absNs := ns
+	if absNs < 0 {
+		absNs = -absNs
+	}
+
+	switch {
+	case absNs < 1e3: // <1µs
+		return strconv.FormatInt(ns, 10) + "ns"
+	case absNs < 1e6: // <1ms
+		return fmt.Sprintf(format, float64(ns)/1e3, "µs")
+	case absNs < 1e9: // <1s
+		return fmt.Sprintf(format, float64(ns)/1e6, "ms")
+	case absNs < 60*1e9: // <1min
+		return fmt.Sprintf(format, float64(ns)/1e9, "s")
+	default:
+		return fmt.Sprintf(format, float64(ns)/(60*1e9), "min")
+	}
 }

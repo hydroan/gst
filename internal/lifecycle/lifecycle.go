@@ -3,8 +3,9 @@
 // loops, anything that owns a connection or a background goroutine — and,
 // through the component package, a project's own long-running work. It also
 // holds what such work has in common: Fail and FailNow, the ways out of a
-// process that cannot go on, Await, the wait for work to return, and
-// Interrupted, the test of whether work stopped because it was asked to.
+// process that cannot go on, Await, the wait for work to return, Interrupted,
+// the test of whether work stopped because it was asked to, and PanicError,
+// the error a panic recovered from it is reported as.
 //
 // A component registers from its package initialiser, so importing its
 // package is the single act that enables it: a project that never imports the

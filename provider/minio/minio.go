@@ -17,7 +17,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/lifecycle"
-	"github.com/hydroan/gst/internal/util"
+	"github.com/hydroan/gst/internal/tlsconfig"
 	"github.com/hydroan/gst/logger"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -225,7 +225,7 @@ func New(cfg config.Minio) (cli *minio.Client, err error) {
 	if cfg.TLSEnabled {
 		var tlsConfig *tls.Config
 		var transport *http.Transport
-		if tlsConfig, err = util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify); err != nil {
+		if tlsConfig, err = tlsconfig.Build(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify); err != nil {
 			return nil, errors.Wrap(err, "failed to build TLS config")
 		}
 		if transport, err = minio.DefaultTransport(cfg.Secure); err != nil {

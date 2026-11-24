@@ -8,7 +8,7 @@ package operation
 import (
 	"context"
 
-	"github.com/hydroan/gst/internal/util"
+	"github.com/hydroan/gst/internal/execctx"
 	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -20,7 +20,7 @@ import (
 // span is nil and the id is generated. The caller ends the span.
 func Begin(ctx context.Context, component, name string) (context.Context, trace.Span, string) {
 	if !gstotel.IsEnabled() {
-		return ctx, nil, util.TraceID()
+		return ctx, nil, execctx.NewTraceID()
 	}
 	ctx, span := gstotel.StartSpan(ctx, gstotel.OperationSpanName(component, name))
 	return ctx, span, span.SpanContext().TraceID().String()

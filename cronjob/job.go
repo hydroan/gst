@@ -10,7 +10,6 @@ import (
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/operation"
-	"github.com/hydroan/gst/internal/util"
 	gstotel "github.com/hydroan/gst/otel"
 	"github.com/robfig/cron/v3"
 	"go.opentelemetry.io/otel/attribute"
@@ -363,7 +362,7 @@ func (j *job) run(ctx context.Context, at time.Time, fields ...zap.Field) (runEr
 	defer func() { end(runErr, interruption(ctx, runErr)) }()
 	defer func() {
 		if r := recover(); r != nil {
-			runErr = util.PanicError(r)
+			runErr = lifecycle.PanicError(r)
 			log.Errorz("cronjob panicked", append([]zap.Field{zap.Error(runErr)}, round...)...)
 		}
 	}()

@@ -10,7 +10,6 @@ import (
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
-	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -64,8 +63,8 @@ func routeFromConfig[M gst.Model](cfg ...*gst.ControllerConfig[M]) string {
 // answers (see reportFailure), and false is returned.
 func routeID[M gst.Model](c *gin.Context, cfg []*gst.ControllerConfig[M], log gst.Logger, span trace.Span) (string, bool) {
 	var id string
-	if len(cfg) > 0 {
-		id = requestctx.FromGin(c).Param(util.Deref(cfg[0]).ParamName)
+	if len(cfg) > 0 && cfg[0] != nil {
+		id = requestctx.FromGin(c).Param(cfg[0].ParamName)
 	}
 	if len(id) == 0 {
 		response.Error(c, reportFailure(log, span, missingRouteParamMsg, nil, badRequest(missingRouteParamMsg)))

@@ -8,7 +8,7 @@ import (
 	mysqldriver "github.com/go-sql-driver/mysql"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/dbruntime"
-	"github.com/hydroan/gst/internal/util"
+	"github.com/hydroan/gst/internal/tlsconfig"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 	"gorm.io/driver/mysql"
@@ -214,7 +214,7 @@ var tlsNames atomic.Uint64
 // and returns the name the tls parameter of a DSN selects it by; "" for a
 // configuration that leaves TLS off, whose other TLS keys are not read. The
 // configuration is built the way every component builds one (see
-// util.BuildTLSConfig): the CA bundle the server's certificate must chain to,
+// tlsconfig.Build): the CA bundle the server's certificate must chain to,
 // the client certificate when both of its files are given, one without the
 // other being refused, and the verification skipped only where the
 // configuration says so.
@@ -229,7 +229,7 @@ func registerTLS(cfg config.MySQL) (string, error) {
 	if !cfg.TLSEnabled {
 		return "", nil
 	}
-	tlsConfig, err := util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify)
+	tlsConfig, err := tlsconfig.Build(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify)
 	if err != nil {
 		return "", errors.Wrap(err, "mysql tls")
 	}

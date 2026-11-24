@@ -23,7 +23,6 @@ import (
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/instance"
 	"github.com/hydroan/gst/internal/logfield"
-	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	"github.com/panjf2000/ants/v2"
 	"github.com/twmb/franz-go/pkg/kerr"
@@ -132,7 +131,7 @@ func (v eventLogView) MarshalJSON() ([]byte, error) {
 	// as a zero duration would read as "expired on arrival".
 	ttl := "never"
 	if v.e.TTL != 0 {
-		ttl = util.FormatDurationSmart(v.e.TTL, 2)
+		ttl = logfield.FormatDurationSmart(v.e.TTL, 2)
 	}
 	return json.Marshal(map[string]any{
 		"ts":       time.Unix(0, v.e.TS).UTC().Format(logfield.TimeLayout),

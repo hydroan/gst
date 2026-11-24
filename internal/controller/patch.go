@@ -9,7 +9,6 @@ import (
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/gst"
 	modellogmgmt "github.com/hydroan/gst/internal/modulemodel/logmgmt"
-	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -92,9 +91,9 @@ func (a *action[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceContext s
 			respData, _ := json.Marshal(cur)
 			entry := operationLog(ctx, a.name)
 			entry.RecordID = cur.GetID()
-			entry.Record = util.BytesToString(record)
-			entry.Request = util.BytesToString(record)
-			entry.Response = util.BytesToString(respData)
+			entry.Record = bytesToString(record)
+			entry.Request = bytesToString(record)
+			entry.Response = bytesToString(respData)
 			return entry
 		}); err != nil {
 		log.Warnz("record operation log failed", zap.Error(err))

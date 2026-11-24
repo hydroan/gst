@@ -12,7 +12,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/lifecycle"
-	"github.com/hydroan/gst/internal/util"
+	"github.com/hydroan/gst/internal/tlsconfig"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 )
@@ -99,7 +99,7 @@ func New(cfg config.Ldap) (*ldap.Conn, error) {
 
 	if cfg.TLSEnabled {
 		var tlsConf *tls.Config
-		if tlsConf, err = util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify); err != nil {
+		if tlsConf, err = tlsconfig.Build(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify); err != nil {
 			return nil, errors.Wrap(err, "failed to build TLS config")
 		}
 		if conn, err = ldap.DialURL("ldaps://"+addr, ldap.DialWithTLSConfig(tlsConf)); err != nil {

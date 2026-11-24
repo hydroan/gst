@@ -7,7 +7,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/lifecycle"
-	"github.com/hydroan/gst/internal/util"
 )
 
 // Hold keeps h renewed on a goroutine of its own and returns a context that
@@ -160,7 +159,7 @@ func Run(ctx context.Context, h *Handle, log gst.Logger, work func(ctx context.C
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				returned <- util.PanicError(r)
+				returned <- lifecycle.PanicError(r)
 			}
 		}()
 		returned <- work(ctx)

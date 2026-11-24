@@ -10,7 +10,6 @@ import (
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/gst"
 	modellogmgmt "github.com/hydroan/gst/internal/modulemodel/logmgmt"
-	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 )
@@ -88,9 +87,9 @@ func (a *action[M, REQ, RSP]) updateManyFlow(ctx context.Context, newServiceCont
 		func() *modellogmgmt.OperationLog {
 			record, _ := json.Marshal(req)
 			entry := operationLog(ctx, a.name)
-			entry.Record = util.BytesToString(record)
-			entry.Request = util.BytesToString(record)
-			entry.Response = util.BytesToString(record)
+			entry.Record = bytesToString(record)
+			entry.Request = bytesToString(record)
+			entry.Response = bytesToString(record)
 			return entry
 		}); err != nil {
 		log.Warnz("record operation log failed", zap.Error(err))

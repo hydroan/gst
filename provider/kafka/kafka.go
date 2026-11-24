@@ -9,7 +9,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/lifecycle"
-	"github.com/hydroan/gst/internal/util"
+	"github.com/hydroan/gst/internal/tlsconfig"
 	"github.com/hydroan/gst/logger"
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -112,7 +112,7 @@ func buildOpts(cfg config.Kafka) ([]kgo.Opt, error) {
 	}
 
 	if cfg.TLSEnabled {
-		tlsConfig, err := util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify)
+		tlsConfig, err := tlsconfig.Build(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to build TLS config")
 		}

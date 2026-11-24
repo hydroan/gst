@@ -10,7 +10,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/lifecycle"
-	"github.com/hydroan/gst/internal/util"
+	"github.com/hydroan/gst/internal/tlsconfig"
 	"github.com/hydroan/gst/logger"
 	"github.com/nats-io/nats.go"
 	"go.uber.org/zap"
@@ -121,7 +121,7 @@ func connectOptions(cfg config.Nats) ([]nats.Option, error) {
 
 	if cfg.TLSEnabled {
 		var tlsConfig *tls.Config
-		if tlsConfig, err = util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify); err != nil {
+		if tlsConfig, err = tlsconfig.Build(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify); err != nil {
 			return nil, errors.Wrap(err, "failed to build TLS config")
 		}
 		opts = append(opts, nats.Secure(tlsConfig))

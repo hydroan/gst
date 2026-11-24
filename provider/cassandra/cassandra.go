@@ -11,7 +11,7 @@ import (
 	"github.com/hydroan/gst/internal/cqlpolicy"
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/lifecycle"
-	"github.com/hydroan/gst/internal/util"
+	"github.com/hydroan/gst/internal/tlsconfig"
 	"github.com/hydroan/gst/logger"
 	"go.uber.org/zap"
 )
@@ -134,7 +134,7 @@ func newCluster(cfg config.Cassandra) (*gocql.ClusterConfig, error) {
 	// Configure TLS if enabled
 	if cfg.TLSEnabled {
 		var tlsConfig *tls.Config
-		if tlsConfig, err = util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify); err != nil {
+		if tlsConfig, err = tlsconfig.Build(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify); err != nil {
 			return nil, errors.Wrap(err, "failed to build TLS config")
 		}
 		cluster.SslOpts = &gocql.SslOptions{Config: tlsConfig}

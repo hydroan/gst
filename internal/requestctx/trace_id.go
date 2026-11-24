@@ -3,7 +3,7 @@ package requestctx
 import (
 	"strings"
 
-	"github.com/hydroan/gst/internal/util"
+	"github.com/hydroan/gst/internal/execctx"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -19,5 +19,5 @@ func TraceIDOf(candidate string) string {
 	if id, err := trace.TraceIDFromHex(strings.TrimSpace(candidate)); err == nil {
 		return id.String()
 	}
-	return util.TraceID()
+	return execctx.NewTraceID()
 }

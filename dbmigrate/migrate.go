@@ -19,7 +19,7 @@ import (
 	mysqldriver "github.com/go-sql-driver/mysql"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/dbruntime"
-	"github.com/hydroan/gst/internal/util"
+	"github.com/hydroan/gst/internal/tlsconfig"
 	"github.com/sqldef/sqldef/v3/database"
 	"github.com/sqldef/sqldef/v3/database/mysql"
 	"github.com/sqldef/sqldef/v3/database/postgres"
@@ -306,10 +306,10 @@ const mysqlTLSName = "gst-migrate"
 // MySQL driver under mysqlTLSName, the name sqldef then selects it by: sqldef
 // takes the TLS setup of a connection by the name the driver knows it under,
 // and builds none itself past a CA bundle. The configuration is the one the
-// application's own connections run under (see util.BuildTLSConfig), so a
+// application's own connections run under (see tlsconfig.Build), so a
 // migration reaches the server the way the application does.
 func registerMySQLTLS(cfg config.MySQL) error {
-	tlsConfig, err := util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify)
+	tlsConfig, err := tlsconfig.Build(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify)
 	if err != nil {
 		return errors.Wrap(err, "mysql tls")
 	}

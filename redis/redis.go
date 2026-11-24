@@ -13,7 +13,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/util"
+	"github.com/hydroan/gst/internal/tlsconfig"
 	jsoniter "github.com/json-iterator/go"
 	redisotel "github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
@@ -143,7 +143,7 @@ func New(cfg config.Redis) (*redis.Client, error) {
 	if cfg.TLSEnabled {
 		var tlsConfig *tls.Config
 		var err error
-		if tlsConfig, err = util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify); err != nil {
+		if tlsConfig, err = tlsconfig.Build(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify); err != nil {
 			return nil, errors.Wrap(err, "failed to build TLS config")
 		}
 		opts.TLSConfig = tlsConfig
@@ -186,7 +186,7 @@ func NewCluster(cfg config.Redis) (*redis.ClusterClient, error) {
 	if cfg.TLSEnabled {
 		var tlsConfig *tls.Config
 		var err error
-		if tlsConfig, err = util.BuildTLSConfig(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify); err != nil {
+		if tlsConfig, err = tlsconfig.Build(cfg.CertFile, cfg.KeyFile, cfg.CAFile, cfg.InsecureSkipVerify); err != nil {
 			return nil, errors.Wrap(err, "failed to build TLS config")
 		}
 		opts.TLSConfig = tlsConfig

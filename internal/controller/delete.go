@@ -9,7 +9,6 @@ import (
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/gst"
 	modellogmgmt "github.com/hydroan/gst/internal/modulemodel/logmgmt"
-	"github.com/hydroan/gst/internal/util"
 	"github.com/hydroan/gst/logger"
 	gstotel "github.com/hydroan/gst/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -79,7 +78,7 @@ func (a *action[M, REQ, RSP]) deleteFlow(ctx context.Context, newServiceContext 
 			record, _ := json.Marshal(copied)
 			entry := operationLog(ctx, a.name)
 			entry.RecordID = m.GetID()
-			entry.Record = util.BytesToString(record)
+			entry.Record = bytesToString(record)
 			return entry
 		}); err != nil {
 		log.Warnz("record operation log failed", zap.Error(err))

@@ -4,6 +4,7 @@ import (
 	"context"
 	"reflect"
 	"slices"
+	"unsafe"
 
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/execctx"
@@ -133,6 +134,13 @@ func operationLog(ctx context.Context, modelName string) *modellogmgmt.Operation
 		Method:    meta.Method(),
 		UserAgent: meta.UserAgent(),
 	}
+}
+
+// bytesToString converts a byte slice to a string without a memory
+// allocation. For more details, see
+// https://github.com/golang/go/issues/53003#issuecomment-1140276077.
+func bytesToString(b []byte) string {
+	return unsafe.String(unsafe.SliceData(b), len(b))
 }
 
 // setID copies the id the request names a record by — the route parameter

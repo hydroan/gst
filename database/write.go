@@ -12,7 +12,6 @@ import (
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/util"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -288,6 +287,9 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 	if err = db.prepare(); err != nil {
 		return err
 	}
+	// prepare settled whether the delete removes the rows or soft deletes
+	// them: WithPurge's word when it was called, the model's own otherwise.
+	purge := *db.enablePurge
 	// Conditions on the chain (WithQuery) name rows, every row of the table
 	// when AllowEmpty declared it; records name themselves. A delete passes
 	// one or the other.
@@ -373,7 +375,7 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 				if v, _ := modelschema.VersionValue(dryRunObjs[i]); v > 0 {
 					tx = tx.Where(db.quoteIdent(versionColumn)+" = ?", v)
 				}
-				if util.Deref(db.enablePurge) {
+				if purge {
 					tx = tx.Unscoped()
 				}
 				if err = db.collectSQL(tx.Delete(dryRunObjs[i])); err != nil {
@@ -384,7 +386,7 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 		}
 		for i := 0; i < len(dryRunObjs); i += batchSize {
 			end := min(i+batchSize, len(dryRunObjs))
-			if util.Deref(db.enablePurge) {
+			if purge {
 				tx := dryRunSession(db.ins).Session(session).Unscoped().Delete(dryRunObjs[i:end])
 				if err = db.collectSQL(tx); err != nil {
 					return err
@@ -432,7 +434,7 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 				if v > 0 {
 					tx = tx.Where(db.quoteIdent(versionColumn)+" = ?", v)
 				}
-				if util.Deref(db.enablePurge) {
+				if purge {
 					tx = tx.Unscoped()
 				}
 				res := tx.Delete(objs[i])
@@ -444,7 +446,7 @@ func (db *database[M]) Delete(objs ...M) (err error) {
 				}
 				matched += res.RowsAffected
 			}
-		case util.Deref(db.enablePurge):
+		case purge:
 			// delete permanently.
 			for i := 0; i < len(objs); i += batchSize {
 				end := min(i+batchSize, len(objs))
