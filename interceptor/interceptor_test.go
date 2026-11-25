@@ -22,11 +22,11 @@ import (
 // TestRegisterAuthGuardsTheServicesThroughTheServer pins the entries end to
 // end, on the server's own listener: the interceptors RegisterAuth adds run
 // for every method of the registered services but the public ones, here
-// JwtAuth, which lets a call carrying a token through, refuses one without,
+// JWTAuth, which lets a call carrying a token through, refuses one without,
 // and is not consulted for a public method.
 func TestRegisterAuthGuardsTheServicesThroughTheServer(t *testing.T) {
 	withSigningKey(t, "test-signing-key")
-	interceptor.RegisterAuth(interceptor.JwtAuth())
+	interceptor.RegisterAuth(interceptor.JWTAuth())
 	grpcserver.Register(func(r grpc.ServiceRegistrar) {
 		r.RegisterService(&grpc.ServiceDesc{
 			ServiceName: "gst.test.Echo",
@@ -36,7 +36,7 @@ func TestRegisterAuthGuardsTheServicesThroughTheServer(t *testing.T) {
 		}, nil)
 	}, grpcserver.Method{Name: "/gst.test.Echo/Look", Public: true}, grpcserver.Method{Name: "/gst.test.Echo/Ping"})
 	conn := dial(t, startServer(t))
-	token, _, err := jwt.GenTokens("u-1", "alice")
+	token, _, err := jwt.IssueTokens("u-1", "alice")
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()

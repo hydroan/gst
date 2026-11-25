@@ -21,7 +21,7 @@ func TestMain(m *testing.M) {
 func TestIndexLifecycle(t *testing.T) {
 	ctx := context.Background()
 	name := "sample-lifecycle"
-	require.NoError(t, elastic.Index.Create(ctx, name, &elastic.IndexOption{
+	require.NoError(t, elastic.Index.Create(ctx, name, &elastic.IndexOptions{
 		Settings: map[string]any{"number_of_shards": 1, "number_of_replicas": 0},
 		Mappings: map[string]any{"properties": map[string]any{"title": map[string]any{"type": "text"}}},
 	}))
@@ -442,7 +442,7 @@ func (d sampleDocument) Document() map[string]any { return d.fields }
 func newSampleIndex(t *testing.T, docs ...elastic.Documenter) string {
 	t.Helper()
 	name := "sample-" + strings.ToLower(strings.ReplaceAll(t.Name(), "/", "-"))
-	require.NoError(t, elastic.Index.Create(context.Background(), name, &elastic.IndexOption{
+	require.NoError(t, elastic.Index.Create(context.Background(), name, &elastic.IndexOptions{
 		Settings: map[string]any{"number_of_shards": 1, "number_of_replicas": 0},
 	}))
 	t.Cleanup(func() { require.NoError(t, elastic.Index.Delete(context.Background(), name)) })

@@ -46,7 +46,7 @@ import (
 const Default = tenant.Default
 
 var (
-	// ErrTenantRequired reports an insert made under a cross-tenant scope
+	// ErrRequired reports an insert made under a cross-tenant scope
 	// without naming the tenant the row belongs to.
 	//
 	// A cross-tenant caller is the one caller the framework cannot stamp for:
@@ -54,16 +54,16 @@ var (
 	// Refusing is the only safe answer — defaulting would file the row under
 	// whichever tenant the framework picked, silently and in the one situation
 	// where the caller had the reach to mean any of them.
-	ErrTenantRequired = tenant.ErrTenantRequired
+	ErrRequired = tenant.ErrRequired
 
-	// ErrTenantImmutable reports an update carrying a tenant other than the one
+	// ErrImmutable reports an update carrying a tenant other than the one
 	// the caller is acting in.
 	//
 	// The column is write-once, so the update could not have moved the row
 	// whatever it said. Refusing is what keeps that from being a silent no-op:
 	// a client that believed it moved a row and received a success would be
 	// wrong about where its data is, and nothing in the response would say so.
-	ErrTenantImmutable = tenant.ErrTenantImmutable
+	ErrImmutable = tenant.ErrImmutable
 )
 
 // Scope is embedded by models whose rows each belong to one tenant.

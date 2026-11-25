@@ -97,7 +97,7 @@ func New(cfg config.Kafka, opts ...kgo.Opt) (*kgo.Client, error) {
 func buildOpts(cfg config.Kafka) ([]kgo.Opt, error) {
 	opts := []kgo.Opt{
 		kgo.SeedBrokers(cfg.Brokers...),
-		Logger(&logger.Kafka),
+		WithLogger(&logger.Kafka),
 	}
 	if cfg.ClientID != "" {
 		opts = append(opts, kgo.ClientID(cfg.ClientID))

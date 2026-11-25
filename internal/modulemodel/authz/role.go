@@ -85,7 +85,7 @@ func (r *Role) validate() error {
 	// The system role is addressed by its constant ID and never lives in the
 	// roles table; reject both the ID and the name to avoid a user-created
 	// role masquerading as it.
-	if r.ID == rbac.SystemRoleRoot || r.Name == rbac.SystemRoleRoot {
+	if r.ID == rbac.RoleSystemRoot || r.Name == rbac.RoleSystemRoot {
 		return gst.NewError(http.StatusBadRequest, systemRootReservedMsg)
 	}
 

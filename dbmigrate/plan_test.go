@@ -149,7 +149,7 @@ func (m migrationTarget) insert(table string, pairs ...string) {
 // plan plans the migration of the target towards schema, applying nothing.
 func (m migrationTarget) plan(t *testing.T, schema ...string) dbmigrate.Plan {
 	t.Helper()
-	plan, err := dbmigrate.Migrate([]string{strings.Join(schema, "\n")}, m.typ, m.cfg, &dbmigrate.MigrateOption{DryRun: true})
+	plan, err := dbmigrate.Migrate([]string{strings.Join(schema, "\n")}, m.typ, m.cfg, &dbmigrate.MigrateOptions{DryRun: true})
 	require.NoError(t, err)
 	return plan
 }
@@ -212,7 +212,7 @@ func TestMigrateRefusesToDropAColumnUnlessTheDataLossIsAccepted(t *testing.T) {
 			require.ErrorContains(t, err, "samples.note")
 			require.Equal(t, []string{"kept"}, target.rows(note))
 
-			require.NoError(t, dbmigrate.Apply(plan, target.typ, target.cfg, &dbmigrate.ApplyOption{AcceptDataLoss: true}))
+			require.NoError(t, dbmigrate.Apply(plan, target.typ, target.cfg, &dbmigrate.ApplyOptions{AcceptDataLoss: true}))
 			after := target.plan(t, without)
 			require.False(t, after.Changed(), "%v", after.Statements)
 			require.Empty(t, after.DroppedColumns)
@@ -345,7 +345,7 @@ func TestApplyReportsTheStatementThatFailed(t *testing.T) {
 			require.Len(t, plan.Statements, 2, "%v", plan.Statements)
 
 			started := make([]int, 0)
-			err := dbmigrate.Apply(plan, target.typ, target.cfg, &dbmigrate.ApplyOption{
+			err := dbmigrate.Apply(plan, target.typ, target.cfg, &dbmigrate.ApplyOptions{
 				Progress: func(index int, statement string) {
 					require.Equal(t, plan.Statements[index], statement)
 					started = append(started, index)

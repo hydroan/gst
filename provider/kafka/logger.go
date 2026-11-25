@@ -5,14 +5,14 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
-// Logger adapts a framework component logger into the franz-go logger
+// WithLogger adapts a framework component logger into the franz-go logger
 // option. New attaches this provider's own logger by default; a caller that
 // owns its client appends this option to route the client's lines into its
 // own component file instead — later options win. The pointer is
 // dereferenced on every line, so a logger installed after the client was
 // built still receives the logs, and a nil entry (a process that never ran
 // the logging setup, e.g. unit tests) drops the line.
-func Logger(l *gst.Logger) kgo.Opt {
+func WithLogger(l *gst.Logger) kgo.Opt {
 	return kgo.WithLogger(kgoLogger{l: l})
 }
 

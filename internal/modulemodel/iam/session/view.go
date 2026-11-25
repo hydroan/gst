@@ -36,7 +36,7 @@ type PrincipalView struct {
 	MustChangePassword bool   `json:"must_change_password"`
 
 	// IsSystemRoot reports whether the principal holds the system-level
-	// rbac.SystemRoleRoot role.
+	// rbac.RoleSystemRoot role.
 	//
 	// It states one fact about who the principal is, not what the principal may
 	// do. Every request is decided on its own by authorization and by whatever

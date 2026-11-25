@@ -413,7 +413,7 @@ func performMigration(schema string, cfg *dbmigrate.DatabaseConfig) error {
 	// again to execute would plan against whatever the database has by then,
 	// which is not what was approved.
 	planned := func() (dbmigrate.Plan, error) {
-		return dbmigrate.Migrate([]string{schema}, dbtyp, cfg, &dbmigrate.MigrateOption{DryRun: true})
+		return dbmigrate.Migrate([]string{schema}, dbtyp, cfg, &dbmigrate.MigrateOptions{DryRun: true})
 	}
 	plan, err := planned()
 	if err != nil {
@@ -519,7 +519,7 @@ func performMigration(schema string, cfg *dbmigrate.DatabaseConfig) error {
 	onTerminal := isTerminal(os.Stdout)
 	running := -1
 	started := time.Now()
-	err = dbmigrate.Apply(plan, dbtyp, cfg, &dbmigrate.ApplyOption{
+	err = dbmigrate.Apply(plan, dbtyp, cfg, &dbmigrate.ApplyOptions{
 		AcceptDataLoss: accepted,
 		Progress: func(index int, _ string) {
 			running = index

@@ -183,7 +183,7 @@ func (r *rbac) HasSystemRole(ctx context.Context, subject string, role string) (
 }
 
 func isBuiltInSystemRole(subject string, role string) bool {
-	return subject == UserRoot && role == SystemRoleRoot
+	return subject == UserRoot && role == RoleSystemRoot
 }
 
 // RemoveSubject removes every tenant-scoped and system-level role assignment

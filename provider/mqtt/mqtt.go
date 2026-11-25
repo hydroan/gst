@@ -188,12 +188,12 @@ func stop(_ context.Context) error {
 	return nil
 }
 
-func Publish(topic string, payload any, opts ...PublishOption) error {
+func Publish(topic string, payload any, opts ...PublishOptions) error {
 	c, err := Client()
 	if err != nil {
 		return err
 	}
-	opt := DefaultPublishOption
+	opt := DefaultPublishOptions
 	if len(opts) > 0 {
 		opt = opts[0]
 	}
@@ -236,12 +236,12 @@ func Publish(topic string, payload any, opts ...PublishOption) error {
 
 type MessageHandler func(topic string, payload []byte) error
 
-func Subscribe(topic string, handler MessageHandler, opts ...SubscribeOption) error {
+func Subscribe(topic string, handler MessageHandler, opts ...SubscribeOptions) error {
 	c, err := Client()
 	if err != nil {
 		return err
 	}
-	opt := DefaultSubscribeOption
+	opt := DefaultSubscribeOptions
 	if len(opts) > 0 {
 		opt = opts[0]
 	}

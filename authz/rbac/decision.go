@@ -13,10 +13,10 @@ const (
 	// access to every object/action inside the tenant, bypassing explicit
 	// permission policies entirely.
 	RoleAdmin = "admin"
-	// SystemRoleRoot is the system-level super-admin role, granted via
+	// RoleSystemRoot is the system-level super-admin role, granted via
 	// g2(subject, role) outside any tenant. UserRoot is assigned this role by
 	// default during RBAC Init.
-	SystemRoleRoot = "system_root"
+	RoleSystemRoot = "system_root"
 	// RoleAuthenticated is the implicit role every authenticated subject
 	// carries. No grouping rule ever assigns it, and no role may claim it as
 	// an ID: authorization grants policies written for it without consulting

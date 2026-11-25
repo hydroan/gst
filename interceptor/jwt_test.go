@@ -32,18 +32,18 @@ func withSigningKey(t *testing.T, key string) {
 	t.Cleanup(func() { config.App.Auth = saved })
 }
 
-// TestJwtAuthAdmitsABearerTokenAndNamesTheCaller pins the admitting path: a
+// TestJWTAuthAdmitsABearerTokenAndNamesTheCaller pins the admitting path: a
 // call carrying a token the framework issued, as "authorization: Bearer
 // <token>", goes on with the token's user as the caller in the request
 // metadata and the x-session-id metadata as the session, the fields the
 // HTTP middleware sets from the same token.
-func TestJwtAuthAdmitsABearerTokenAndNamesTheCaller(t *testing.T) {
+func TestJWTAuthAdmitsABearerTokenAndNamesTheCaller(t *testing.T) {
 	withSigningKey(t, "test-signing-key")
-	token, _, err := jwt.GenTokens("u-1", "alice")
+	token, _, err := jwt.IssueTokens("u-1", "alice")
 	require.NoError(t, err)
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+token, "x-session-id", "s-1"))
 
-	ctx, err = interceptor.JwtAuth()(ctx)
+	ctx, err = interceptor.JWTAuth()(ctx)
 
 	require.NoError(t, err)
 	seen := requestctx.FromContext(ctx)
@@ -52,21 +52,21 @@ func TestJwtAuthAdmitsABearerTokenAndNamesTheCaller(t *testing.T) {
 	require.Equal(t, "s-1", seen.SessionID())
 }
 
-// TestJwtAuthRefusesWhatItCannotVerify pins the refusing path: no
+// TestJWTAuthRefusesWhatItCannotVerify pins the refusing path: no
 // authorization metadata, a scheme other than Bearer, a token that does not
 // parse, one signed with another key and a refresh token, which parses and
 // names no user, are all answered Unauthenticated with one fixed message and
 // no context to go on with; the reasons stay in the log, one entry a refusal
 // with the path and method of the call, the way the HTTP middleware keeps
 // them from a caller probing the checks.
-func TestJwtAuthRefusesWhatItCannotVerify(t *testing.T) {
+func TestJWTAuthRefusesWhatItCannotVerify(t *testing.T) {
 	core, logs := observer.New(zapcore.DebugLevel)
 	t.Cleanup(zap.ReplaceGlobals(zap.New(core)))
 	withSigningKey(t, "another-signing-key")
-	foreign, _, err := jwt.GenTokens("u-1", "alice")
+	foreign, _, err := jwt.IssueTokens("u-1", "alice")
 	require.NoError(t, err)
 	withSigningKey(t, "test-signing-key")
-	_, refresh, err := jwt.GenTokens("u-1", "alice")
+	_, refresh, err := jwt.IssueTokens("u-1", "alice")
 	require.NoError(t, err)
 	for name, md := range map[string]metadata.MD{
 		"without authorization":            {},
@@ -79,7 +79,7 @@ func TestJwtAuthRefusesWhatItCannotVerify(t *testing.T) {
 			ctx := metadata.NewIncomingContext(context.Background(), md)
 			ctx = requestctx.WithMetadata(ctx, requestctx.New(requestctx.Fields{Path: "/gst.test.Echo/Get", Method: http.MethodGet}))
 
-			admitted, err := interceptor.JwtAuth()(ctx)
+			admitted, err := interceptor.JWTAuth()(ctx)
 
 			require.Equal(t, codes.Unauthenticated, status.Code(err))
 			require.Equal(t, "invalid token", status.Convert(err).Message())
@@ -95,18 +95,18 @@ func TestJwtAuthRefusesWhatItCannotVerify(t *testing.T) {
 	}
 }
 
-// TestJwtAuthRefusesInTheLanguageOfTheProcess pins the language of the
+// TestJWTAuthRefusesInTheLanguageOfTheProcess pins the language of the
 // refusal: the one message a refused token is answered with is answered in
 // the language the process answers in, the one the HTTP middleware answers
 // it in.
-func TestJwtAuthRefusesInTheLanguageOfTheProcess(t *testing.T) {
+func TestJWTAuthRefusesInTheLanguageOfTheProcess(t *testing.T) {
 	withSigningKey(t, "test-signing-key")
 	require.NoError(t, i18n.SetLanguage(i18n.Chinese))
 	t.Cleanup(func() { require.NoError(t, i18n.SetLanguage(i18n.English)) })
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer not-a-token"))
 	ctx = requestctx.WithMetadata(ctx, requestctx.New(requestctx.Fields{Path: "/gst.test.Echo/Get", Method: http.MethodGet}))
 
-	_, err := interceptor.JwtAuth()(ctx)
+	_, err := interceptor.JWTAuth()(ctx)
 
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
 	require.Equal(t, "令牌无效", status.Convert(err).Message())

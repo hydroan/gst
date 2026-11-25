@@ -21,8 +21,8 @@ const DefaultHeartbeatInterval = 15 * time.Second
 // the wire.
 const heartbeatComment = "ping"
 
-// Option configures Serve.
-type Option func(*options)
+// ServeOption configures Serve.
+type ServeOption func(*options)
 
 type options struct {
 	heartbeatInterval time.Duration
@@ -32,7 +32,7 @@ type options struct {
 // be positive; heartbeats cannot be disabled, because a connection without
 // keep-alive traffic silently dies on idle proxy timeouts and undetected
 // client disconnects.
-func WithHeartbeatInterval(interval time.Duration) Option {
+func WithHeartbeatInterval(interval time.Duration) ServeOption {
 	return func(o *options) {
 		o.heartbeatInterval = interval
 	}
@@ -133,7 +133,7 @@ func (c *Conn) markClosed() {
 // fn's error, or the setup
 // failure that prevented streaming (reported before anything was written, so
 // the caller can still answer with a regular error response).
-func Serve(w http.ResponseWriter, r *http.Request, fn func(conn *Conn) error, opts ...Option) error {
+func Serve(w http.ResponseWriter, r *http.Request, fn func(conn *Conn) error, opts ...ServeOption) error {
 	if w == nil || r == nil {
 		return errors.New("sse: response writer and request cannot be nil")
 	}

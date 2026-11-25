@@ -406,7 +406,7 @@ rsp, err := stream.Recv() // rsp.Total 是 2
 - 认证与权限：握手就是一次普通的 `GET`，没声明 `Public()` 的流照常过认证中间件。权限不按 `GET` 判，按「`STREAM` 加路径」判：
   这和 gRPC 上同一个动作认的是同一条策略，授权模块的路由清单里流也列在 `STREAM` 下，只授了 `GET` 的角色开不了流。
   会话放在 Cookie 里的项目（iam 模块），浏览器握手时会自动带上；浏览器的 WebSocket 带不了自定义请求头，
-  所以靠 `Authorization` 请求头认证的项目（`middleware.JwtAuth`）在浏览器里握手会被拒，程序里用 `client` 包不受影响。
+  所以靠 `Authorization` 请求头认证的项目（`middleware.JWTAuth`）在浏览器里握手会被拒，程序里用 `client` 包不受影响。
 - 多副本：一条连接接在哪个副本上，就一直在哪个副本上，框架只管这条连接上的收发。要让连在别的副本上的客户端
   也收到消息，得经副本共用的东西送过去，比如 Redis 频道；副本停机时它的连接收到 `1001`，客户端重连就落到别的副本上。
   做法和核对步骤见 [examples/cluster](./examples/cluster/README.md) 的「WebSocket」一章。

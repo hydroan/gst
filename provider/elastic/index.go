@@ -9,8 +9,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// IndexOption carries the settings and mappings Create gives a new index.
-type IndexOption struct {
+// IndexOptions carries the settings and mappings Create gives a new index.
+type IndexOptions struct {
 	Settings map[string]any
 	Mappings map[string]any
 }
@@ -19,13 +19,13 @@ type IndexOption struct {
 // first option when one is given. An index of that name already existing is
 // an error.
 //
-//	err := elastic.Index.Create(ctx, "sample", &elastic.IndexOption{
+//	err := elastic.Index.Create(ctx, "sample", &elastic.IndexOptions{
 //	    Settings: map[string]any{"number_of_shards": 1},
 //	    Mappings: map[string]any{"properties": map[string]any{
 //	        "title": map[string]any{"type": "text"},
 //	    }},
 //	})
-func (*index) Create(ctx context.Context, indexName string, options ...*IndexOption) error {
+func (*index) Create(ctx context.Context, indexName string, options ...*IndexOptions) error {
 	if err := _check(); err != nil {
 		return errors.Wrap(err, "elasticsearch client check")
 	}

@@ -102,7 +102,7 @@ func (r *rbac) denyReason(tenant string, subject string) DenyReason {
 func (r *rbac) authorize(
 	tenant string, subject string, object string, action string,
 ) (bool, GrantSource, []string, error) {
-	if r.hasRoleLink(systemRoleGrouping, subject, SystemRoleRoot) {
+	if r.hasRoleLink(systemRoleGrouping, subject, RoleSystemRoot) {
 		return true, GrantSourceSystemRoot, nil, nil
 	}
 	if r.hasRoleLink(tenantRoleGrouping, subject, RoleAdmin, tenant) {

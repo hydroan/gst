@@ -137,7 +137,7 @@ func TestScopeRefusesAnUpdateThatNamesAnotherTenant(t *testing.T) {
 	ctx := tenant.In(context.Background(), "alpha")
 
 	err := db.WithContext(ctx).Save(&Record{ID: "a1", Name: "moved", TenantID: "beta"}).Error
-	require.ErrorIs(t, err, tenant.ErrTenantImmutable)
+	require.ErrorIs(t, err, tenant.ErrImmutable)
 
 	// Naming the tenant the row already belongs to is what every
 	// read-modify-write round trip does, so it has to go through.
@@ -193,7 +193,7 @@ func TestAcrossRefusesAnInsertThatNamesNoTenant(t *testing.T) {
 	ctx := tenant.Across(context.Background())
 
 	err := db.WithContext(ctx).Create(&Record{ID: "r1", Name: "r1"}).Error
-	require.ErrorIs(t, err, tenant.ErrTenantRequired)
+	require.ErrorIs(t, err, tenant.ErrRequired)
 
 	require.NoError(t, db.WithContext(ctx).
 		Create(&Record{ID: "r2", Name: "r2", TenantID: "beta"}).Error)
@@ -243,6 +243,6 @@ func TestScopeSurvivesASubqueryAndAPreload(t *testing.T) {
 	assert.ElementsMatch(t, []string{"a1"}, names, "a subquery has to carry the predicate too")
 }
 
-func TestErrTenantRequiredIsMatchable(t *testing.T) {
-	assert.True(t, errors.Is(tenant.ErrTenantRequired, tenant.ErrTenantRequired))
+func TestErrRequiredIsMatchable(t *testing.T) {
+	assert.True(t, errors.Is(tenant.ErrRequired, tenant.ErrRequired))
 }

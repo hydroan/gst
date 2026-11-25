@@ -152,7 +152,7 @@ func errIfMenuWriteForbidden(ctx context.Context) error {
 	if subject == "" {
 		return nil
 	}
-	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, subject, rbac.SystemRoleRoot)
+	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, subject, rbac.RoleSystemRoot)
 	if err != nil {
 		return gst.NewErrorWithCause(http.StatusInternalServerError, authorizationUnavailableMsg, err)
 	}

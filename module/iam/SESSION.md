@@ -347,7 +347,7 @@ T6 --> P4
 客户端不该因此清掉 cookie，存储恢复后会话照常可用，回查用户状态失败同样答 500 且不删快照。存储应答了、但存的值解不成快照
 （比如发版改了快照字段的类型）就删掉它答 401，让用户重新登录，而不是答 500 直到键过期。`iam.Register()` 因此在启动期检查
 `Redis.Enabled`，没开就拒绝启动。框架层在 Redis 禁用时的行为是整齐的：typed `redis.Cache` 与
-`ZAdd` / `ZRem` / `SetNX` / `Expire` / `Del` 都经 `redis.Client()` 返回 `ErrRedisIsDisabled`；启动期那道检查让
+`ZAdd` / `ZRem` / `SetNX` / `Expire` / `Del` 都经 `redis.Client()` 返回 `redis.ErrDisabled`；启动期那道检查让
 它们永远没机会被调到。
 
 **会话不会因活跃而续期。** 见上面的 TTL 节奏。

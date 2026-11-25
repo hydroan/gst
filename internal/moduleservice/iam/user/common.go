@@ -34,7 +34,7 @@ func isSystemRoot(ctx *gst.ServiceContext, actor *modeliamuser.User) (bool, erro
 	if actor == nil || strings.TrimSpace(actor.GetID()) == "" {
 		return false, nil
 	}
-	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, actor.GetID(), rbac.SystemRoleRoot)
+	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, actor.GetID(), rbac.RoleSystemRoot)
 	if err != nil {
 		return false, errors.Wrap(err, "authorization unavailable")
 	}

@@ -58,8 +58,8 @@ func SQLiteTarget(cfg config.Sqlite) (*DatabaseConfig, bool) {
 	return &DatabaseConfig{Database: cfg.Path}, true
 }
 
-// MigrateOption tunes a single migration run.
-type MigrateOption struct {
+// MigrateOptions tunes a single migration run.
+type MigrateOptions struct {
 	// DryRun plans the migration and reports what would change without
 	// touching the database.
 	DryRun bool
@@ -146,12 +146,12 @@ func (p Plan) Changed() bool { return len(p.Statements) > 0 }
 // planning nothing: SQLite's ALTER TABLE cannot change a column, and sqldef
 // plans no statement for it. The error names the table and the columns and
 // points to the rebuild SQLite documents for such changes.
-func Migrate(schemas []string, dbtyp config.DBType, cfg *DatabaseConfig, opt *MigrateOption) (plan Plan, err error) {
+func Migrate(schemas []string, dbtyp config.DBType, cfg *DatabaseConfig, opt *MigrateOptions) (plan Plan, err error) {
 	if len(schemas) == 0 || cfg == nil {
 		return Plan{}, nil
 	}
 	if opt == nil {
-		opt = &MigrateOption{}
+		opt = &MigrateOptions{}
 	}
 
 	// Opening a sqlite database file creates it, so a dry run plans against a
@@ -191,8 +191,8 @@ func Migrate(schemas []string, dbtyp config.DBType, cfg *DatabaseConfig, opt *Mi
 	return plan, nil
 }
 
-// ApplyOption tunes how a plan is applied.
-type ApplyOption struct {
+// ApplyOptions tunes how a plan is applied.
+type ApplyOptions struct {
 	// AcceptDataLoss lets Apply run a plan that drops columns, and with them
 	// the data they hold. Without it such a plan is refused whole.
 	AcceptDataLoss bool
@@ -210,12 +210,12 @@ type ApplyOption struct {
 // was and what is left of the ones before it: MySQL commits every statement
 // on its own, so they stay applied, while PostgreSQL and SQLite run the plan
 // in one transaction and roll all of it back.
-func Apply(plan Plan, dbtyp config.DBType, cfg *DatabaseConfig, opt *ApplyOption) error {
+func Apply(plan Plan, dbtyp config.DBType, cfg *DatabaseConfig, opt *ApplyOptions) error {
 	if !plan.Changed() || cfg == nil {
 		return nil
 	}
 	if opt == nil {
-		opt = &ApplyOption{}
+		opt = &ApplyOptions{}
 	}
 	if err := refuseDataLoss(plan, opt.AcceptDataLoss); err != nil {
 		return err

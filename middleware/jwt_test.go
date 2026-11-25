@@ -19,37 +19,37 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 )
 
-// TestJwtAuthAdmitsABearerTokenAndNamesTheCaller pins the admitting path: a
+// TestJWTAuthAdmitsABearerTokenAndNamesTheCaller pins the admitting path: a
 // request carrying a token the framework issued, as "Authorization: Bearer
 // <token>", goes on with the token's user and username in the request
 // context and the X-Session-Id header as the session, the fields the gRPC
 // interceptor sets from the same token.
-func TestJwtAuthAdmitsABearerTokenAndNamesTheCaller(t *testing.T) {
+func TestJWTAuthAdmitsABearerTokenAndNamesTheCaller(t *testing.T) {
 	withSigningKey(t, "test-signing-key")
-	token, _, err := jwt.GenTokens("u-1", "alice")
+	token, _, err := jwt.IssueTokens("u-1", "alice")
 	require.NoError(t, err)
 
-	w := serveJwtAuth(t, http.Header{"Authorization": {"Bearer " + token}, "X-Session-Id": {"s-1"}})
+	w := serveJWTAuth(t, http.Header{"Authorization": {"Bearer " + token}, "X-Session-Id": {"s-1"}})
 
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	require.Equal(t, "u-1 alice s-1", w.Body.String())
 }
 
-// TestJwtAuthRefusesWhatItCannotVerify pins the refusing path: no
+// TestJWTAuthRefusesWhatItCannotVerify pins the refusing path: no
 // Authorization header, a scheme other than Bearer, a token that does not
 // parse, one signed with another key and a refresh token, which parses and
 // names no user, are all answered 401 with one fixed message, and the handler
 // behind the middleware never runs; the reasons stay in the log, one entry a
 // refusal with the path and method of the request, the way the gRPC
 // interceptor keeps them from a caller probing the checks.
-func TestJwtAuthRefusesWhatItCannotVerify(t *testing.T) {
+func TestJWTAuthRefusesWhatItCannotVerify(t *testing.T) {
 	core, logs := observer.New(zapcore.DebugLevel)
 	t.Cleanup(zap.ReplaceGlobals(zap.New(core)))
 	withSigningKey(t, "another-signing-key")
-	foreign, _, err := jwt.GenTokens("u-1", "alice")
+	foreign, _, err := jwt.IssueTokens("u-1", "alice")
 	require.NoError(t, err)
 	withSigningKey(t, "test-signing-key")
-	_, refresh, err := jwt.GenTokens("u-1", "alice")
+	_, refresh, err := jwt.IssueTokens("u-1", "alice")
 	require.NoError(t, err)
 	for name, header := range map[string]http.Header{
 		"without authorization":            {},
@@ -59,7 +59,7 @@ func TestJwtAuthRefusesWhatItCannotVerify(t *testing.T) {
 		"with a refresh token":             {"Authorization": {"Bearer " + refresh}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			w := serveJwtAuth(t, header)
+			w := serveJWTAuth(t, header)
 
 			require.Equal(t, http.StatusUnauthorized, w.Code)
 			var envelope struct {
@@ -78,16 +78,16 @@ func TestJwtAuthRefusesWhatItCannotVerify(t *testing.T) {
 	}
 }
 
-// TestJwtAuthRefusesInTheLanguageOfTheProcess pins the language of the
+// TestJWTAuthRefusesInTheLanguageOfTheProcess pins the language of the
 // refusal: the one message a refused token is answered with is answered in
 // the language the process answers in, the one the gRPC interceptor answers
 // it in.
-func TestJwtAuthRefusesInTheLanguageOfTheProcess(t *testing.T) {
+func TestJWTAuthRefusesInTheLanguageOfTheProcess(t *testing.T) {
 	withSigningKey(t, "test-signing-key")
 	require.NoError(t, i18n.SetLanguage(i18n.Chinese))
 	t.Cleanup(func() { require.NoError(t, i18n.SetLanguage(i18n.English)) })
 
-	w := serveJwtAuth(t, http.Header{"Authorization": {"Bearer not-a-token"}})
+	w := serveJWTAuth(t, http.Header{"Authorization": {"Bearer not-a-token"}})
 
 	require.Equal(t, http.StatusUnauthorized, w.Code)
 	var envelope struct {
@@ -109,14 +109,14 @@ func withSigningKey(t *testing.T, key string) {
 	t.Cleanup(func() { config.App.Auth = saved })
 }
 
-// serveJwtAuth sends a request with header through JwtAuth to a handler that
+// serveJWTAuth sends a request with header through JWTAuth to a handler that
 // answers 200 with the user, username and session the middleware put in the
 // request context.
-func serveJwtAuth(t *testing.T, header http.Header) *httptest.ResponseRecorder {
+func serveJWTAuth(t *testing.T, header http.Header) *httptest.ResponseRecorder {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	router.Use(middleware.JwtAuth())
+	router.Use(middleware.JWTAuth())
 	router.GET("/api/jwt", func(c *gin.Context) {
 		c.String(http.StatusOK, "%s %s %s", c.GetString(requestctx.KeyUserID), c.GetString(requestctx.KeyUsername), c.GetString(requestctx.KeySessionID))
 	})

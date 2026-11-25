@@ -89,7 +89,7 @@ func TestMqtt(t *testing.T) {
 		message := "test message with qos 1"
 
 		// publish with QoS 1
-		err := mqtt.Publish(topic, message, mqtt.PublishOption{
+		err := mqtt.Publish(topic, message, mqtt.PublishOptions{
 			QoS:     1,
 			Retain:  true,
 			Timeout: 5 * time.Second,
@@ -172,13 +172,13 @@ func TestMqtt(t *testing.T) {
 	// 	assert.Error(t, err)
 	//
 	// 	// an invalid QoS
-	// 	err = mqtt.Publish("test/topic", "test message", mqtt.PublishOption{
+	// 	err = mqtt.Publish("test/topic", "test message", mqtt.PublishOptions{
 	// 		QoS: 3, // invalid QoS value
 	// 	})
 	// 	assert.Error(t, err)
 	//
 	// 	// a timeout
-	// 	err = mqtt.Publish("test/topic", "test message", mqtt.PublishOption{
+	// 	err = mqtt.Publish("test/topic", "test message", mqtt.PublishOptions{
 	// 		Timeout: 1 * time.Nanosecond,
 	// 	})
 	// 	assert.Error(t, err)

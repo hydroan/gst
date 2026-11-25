@@ -136,5 +136,5 @@ func isSystemRoot(ctx *gst.ServiceContext, user *modeliamuser.User) (bool, error
 	if user == nil || strings.TrimSpace(user.GetID()) == "" {
 		return false, nil
 	}
-	return rbac.RBAC().HasSystemRole(ctx, user.GetID(), rbac.SystemRoleRoot)
+	return rbac.RBAC().HasSystemRole(ctx, user.GetID(), rbac.RoleSystemRoot)
 }

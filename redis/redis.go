@@ -37,8 +37,8 @@ var (
 	cli redis.UniversalClient
 	mu  sync.RWMutex
 
-	ErrKeyNotExists    = errors.New("key no longer exists, may be expired")
-	ErrRedisIsDisabled = errors.New("redis is disabled")
+	ErrKeyNotExists = errors.New("key no longer exists, may be expired")
+	ErrDisabled     = errors.New("redis is disabled")
 )
 
 // Init connects the process-wide client and verifies it with a ping, then
@@ -198,7 +198,7 @@ func NewCluster(cfg config.Redis) (*redis.ClusterClient, error) {
 // Client returns the initialized Redis client handle, standalone or
 // cluster depending on configuration.
 //
-// It reports ErrRedisIsDisabled whenever no handle is held, which covers a
+// It reports ErrDisabled whenever no handle is held, which covers a
 // deployment that never enabled Redis, one whose Init failed, and a process
 // past Close. Every operation in this package goes through it, so an absent
 // handle is an error at the call site instead of a zero value the caller
@@ -212,14 +212,14 @@ func Client() (redis.UniversalClient, error) {
 		// locate the operation that ran without a handle. Every helper in this
 		// package forwards this error as-is, so this is its single capture
 		// point (see the error-stack contract in the database package doc).
-		return nil, errors.WithStack(ErrRedisIsDisabled)
+		return nil, errors.WithStack(ErrDisabled)
 	}
 	return cli, nil
 }
 
 // Health reports whether the held connection still answers, which is what a
 // readiness probe asks. A process holding no handle reports
-// ErrRedisIsDisabled, the same answer every operation gives it.
+// ErrDisabled, the same answer every operation gives it.
 //
 // A nil ctx is treated as context.Background. The round trip is bounded by
 // pingTimeout regardless, so a caller whose own deadline is further out does
@@ -242,7 +242,7 @@ func Health(ctx context.Context) error {
 }
 
 // Close releases the connection and drops the handle, so operations that
-// arrive afterwards report ErrRedisIsDisabled instead of reaching a closed
+// arrive afterwards report ErrDisabled instead of reaching a closed
 // connection. A process that never connected reports no error.
 func Close() error {
 	mu.Lock()

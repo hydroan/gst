@@ -104,7 +104,7 @@ func (l *LoginService) Create(ctx *gst.ServiceContext, req *modeliamaccount.Logi
 	// Resolved for every login, not only the ones that name a tenant: the
 	// principal in the response reports it, and it is what exempts a system
 	// root from the tenant membership check below.
-	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, targetUser.ID, rbac.SystemRoleRoot)
+	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, targetUser.ID, rbac.RoleSystemRoot)
 	if err != nil {
 		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, authorizationUnavailableMsg, err)
 	}

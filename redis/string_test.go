@@ -255,8 +255,8 @@ func TestIncrFixedWindowBoundsTheCountToItsFirstWindow(t *testing.T) {
 			}
 		})
 
-		if _, err := gstredis.IncrFixedWindow(ctx, "redis-test:fixed-window:closed", time.Minute); !errors.Is(err, gstredis.ErrRedisIsDisabled) {
-			t.Fatalf("want ErrRedisIsDisabled, got %v", err)
+		if _, err := gstredis.IncrFixedWindow(ctx, "redis-test:fixed-window:closed", time.Minute); !errors.Is(err, gstredis.ErrDisabled) {
+			t.Fatalf("want ErrDisabled, got %v", err)
 		}
 	})
 }

@@ -151,7 +151,7 @@ func TestAuthorizeResolvesInheritedRoleLinks(t *testing.T) {
 
 	for _, grouping := range [][]string{
 		{"u_relayed_system", "relay_role"},
-		{"relay_role", SystemRoleRoot},
+		{"relay_role", RoleSystemRoot},
 	} {
 		seed(t, systemRoleGrouping, grouping)
 	}
@@ -202,7 +202,7 @@ func TestHasSystemRoleAgreesWithAuthorize(t *testing.T) {
 
 	for _, grouping := range [][]string{
 		{"u_relayed_system", "relay_role"},
-		{"relay_role", SystemRoleRoot},
+		{"relay_role", RoleSystemRoot},
 	} {
 		seed(t, systemRoleGrouping, grouping)
 	}
@@ -215,11 +215,11 @@ func TestHasSystemRoleAgreesWithAuthorize(t *testing.T) {
 		{"assigned directly", "u_system", true},
 		{"reached through another role", "u_relayed_system", true},
 		{"holds no system role", "u_member", false},
-		{"named after the role", SystemRoleRoot, false},
+		{"named after the role", RoleSystemRoot, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			held, err := r.HasSystemRole(ctx, c.subject, SystemRoleRoot)
+			held, err := r.HasSystemRole(ctx, c.subject, RoleSystemRoot)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -250,7 +250,7 @@ func TestAuthorizeRejectsSubjectsNamedAfterARole(t *testing.T) {
 	r := newAuthorizeFixture(t)
 	ctx := context.Background()
 
-	for _, subject := range []string{SystemRoleRoot, RoleAdmin} {
+	for _, subject := range []string{RoleSystemRoot, RoleAdmin} {
 		t.Run(subject, func(t *testing.T) {
 			decision, err := r.Authorize(ctx, "default", subject, "/api/unrelated", "DELETE")
 			allowed := decision.Allowed
@@ -273,7 +273,7 @@ func TestAuthorizeWithoutPoliciesAnswersTheRoleBranches(t *testing.T) {
 	r := newTestRBAC(t, 0)
 	ctx := context.Background()
 
-	seed(t, systemRoleGrouping, []string{"u_system", SystemRoleRoot})
+	seed(t, systemRoleGrouping, []string{"u_system", RoleSystemRoot})
 	seed(t, tenantRoleGrouping, []string{"u_admin", RoleAdmin, "default"})
 
 	cases := []struct {
@@ -363,7 +363,7 @@ func newAuthorizeFixture(t *testing.T) *rbac {
 	} {
 		seed(t, tenantRoleGrouping, grouping)
 	}
-	seed(t, systemRoleGrouping, []string{"u_system", SystemRoleRoot})
+	seed(t, systemRoleGrouping, []string{"u_system", RoleSystemRoot})
 	return r
 }
 

@@ -12,7 +12,7 @@ listen =
 port = 8080
 
 [auth]
-; Required before mounting middleware.JwtAuth: every token this application
+; Required before mounting middleware.JWTAuth: every token this application
 ; issues is signed with this key and every token it accepts is verified against
 ; it. It has no default, because a key shipped with the framework is a key every
 ; deployment shares and anyone holding the framework source can compute.

@@ -41,7 +41,7 @@ func newProducer(cfg config.Kafka, topic string) (*kgo.Client, error) {
 	return kafka.New(cfg,
 		// Route the client's own log lines into dcache's file instead of the
 		// kafka provider's; the last logger option wins.
-		kafka.Logger(&logger.Dcache),
+		kafka.WithLogger(&logger.Dcache),
 		kgo.AllowAutoTopicCreation(),
 		// The client id names the process, so the broker's per-client
 		// metrics and quotas tell replicas apart even on one host.
@@ -84,7 +84,7 @@ func newConsumer(cfg config.Kafka, topic string, group string, onAssigned func()
 		// reads nothing until it does; the callback is how construction knows
 		// the instance has stopped being deaf to its peers.
 		kgo.OnPartitionsAssigned(func(context.Context, *kgo.Client, map[string][]int32) { onAssigned() }),
-		kafka.Logger(&logger.Dcache),
+		kafka.WithLogger(&logger.Dcache),
 		kgo.AllowAutoTopicCreation(),
 		kgo.ConsumeTopics(topic),
 		kgo.ClientID(fmt.Sprintf("consumer-%s-%s", topic, instance.ID())),

@@ -11,7 +11,7 @@ import (
 	"github.com/hydroan/gst/internal/response"
 )
 
-// JwtAuth authenticates a request from the bearer token in its Authorization
+// JWTAuth authenticates a request from the bearer token in its Authorization
 // header, and the X-Session-Id header as its session (see
 // jwt.HeaderSessionID). A request it refuses, its token missing, malformed,
 // expired or signed by something else, is answered 401 with one fixed
@@ -23,7 +23,7 @@ import (
 // makes and the reason IAM's own sessions are not built on it. Building the
 // middleware declares the token to the OpenAPI document as the bearerAuth
 // scheme.
-func JwtAuth() gin.HandlerFunc {
+func JWTAuth() gin.HandlerFunc {
 	apidoc.RegisterSecurityScheme("bearerAuth", apidoc.SecurityScheme{Type: "http", Scheme: "bearer"})
 	return func(c *gin.Context) {
 		_, claims, err := jwt.ParseTokenFromHeader(c.Request.Header)

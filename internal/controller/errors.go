@@ -132,8 +132,8 @@ func failDatabase(ctx context.Context, log gst.Logger, err error) error {
 // database.ErrStaleObject and database.ErrForeignKeyViolated 409;
 // database.ErrVersionRequired, database.ErrIDRequired,
 // database.ErrCheckConstraintViolated, database.ErrValueTooLong,
-// database.ErrNotNullViolated, tenant.ErrTenantImmutable and
-// tenant.ErrTenantRequired, request defects all, 400, each with its fixed
+// database.ErrNotNullViolated, tenant.ErrImmutable and
+// tenant.ErrRequired, request defects all, 400, each with its fixed
 // client-safe message and err behind it as the cause; anything else is
 // answered as it is, the server's own failure. Handlers log the full error
 // themselves, so every branch deliberately keeps internal detail out of the
@@ -175,7 +175,7 @@ func databaseError(err error) error {
 		// A value the table refuses, by a check, by the length of the
 		// column or by a column that requires one: the request's own defect.
 		return gst.NewErrorWithCause(http.StatusBadRequest, invalidArgumentMsg, err)
-	case errors.Is(err, tenant.ErrTenantImmutable), errors.Is(err, tenant.ErrTenantRequired):
+	case errors.Is(err, tenant.ErrImmutable), errors.Is(err, tenant.ErrRequired):
 		// A tenant the record cannot have: another one than the caller acts
 		// in, which the write-once column never takes, or none from a caller
 		// acting in every tenant, which leaves nothing to file the record

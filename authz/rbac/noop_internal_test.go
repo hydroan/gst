@@ -32,13 +32,13 @@ func TestRBACWithoutAPolicySetRefusesWrites(t *testing.T) {
 		},
 		"AssignRole":         func() error { return r.AssignRole(ctx, "tenant_a", "u1", "role_a") },
 		"UnassignRole":       func() error { return r.UnassignRole(ctx, "tenant_a", "u1", "role_a") },
-		"AssignSystemRole":   func() error { return r.AssignSystemRole(ctx, "u1", SystemRoleRoot) },
-		"UnassignSystemRole": func() error { return r.UnassignSystemRole(ctx, "u1", SystemRoleRoot) },
+		"AssignSystemRole":   func() error { return r.AssignSystemRole(ctx, "u1", RoleSystemRoot) },
+		"UnassignSystemRole": func() error { return r.UnassignSystemRole(ctx, "u1", RoleSystemRoot) },
 		"RemoveSubject":      func() error { return r.RemoveSubject(ctx, "u1") },
 	}
 	for name, write := range writes {
 		t.Run(name, func(t *testing.T) {
-			require.ErrorIs(t, write(), ErrRBACDisabled)
+			require.ErrorIs(t, write(), ErrDisabled)
 		})
 	}
 }
@@ -59,11 +59,11 @@ func TestRBACWithoutAPolicySetAnswersReads(t *testing.T) {
 
 	// The built-in root subject keeps system_root so that modules registering no
 	// authz can still use root-only administrative flows.
-	systemRoot, err := r.HasSystemRole(ctx, UserRoot, SystemRoleRoot)
+	systemRoot, err := r.HasSystemRole(ctx, UserRoot, RoleSystemRoot)
 	require.NoError(t, err)
 	assert.True(t, systemRoot)
 
-	systemRoot, err = r.HasSystemRole(ctx, "u1", SystemRoleRoot)
+	systemRoot, err = r.HasSystemRole(ctx, "u1", RoleSystemRoot)
 	require.NoError(t, err)
 	assert.False(t, systemRoot)
 

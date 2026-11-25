@@ -36,7 +36,7 @@ var routeParam = regexp.MustCompile(`:([a-zA-Z0-9_]+)`)
 // Authz must be called before config.Init so config.Init can read
 // AUTH_RBAC_ENABLED from the environment and enable RBAC initialization.
 //
-// Authz must run after an authentication interceptor, IAMSession or JwtAuth,
+// Authz must run after an authentication interceptor, IAMSession or JWTAuth,
 // that establishes the caller; registered ahead of one, it refuses every
 // call as anonymous. The call's tenant is the caller's, tenant.Default when
 // the caller carries none, and the caller is established again with the

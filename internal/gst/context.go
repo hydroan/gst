@@ -187,7 +187,7 @@ func (sc *ServiceContext) Data(code int, contentType string, data []byte) {
 //			}
 //		}
 //	})
-func (sc *ServiceContext) SSE(fn func(conn *sse.Conn) error, opts ...sse.Option) error {
+func (sc *ServiceContext) SSE(fn func(conn *sse.Conn) error, opts ...sse.ServeOption) error {
 	if sc == nil || sc.ginCtx == nil {
 		sc.recordHTTPOnlyMethodCall()
 		return errors.New("service context carries no HTTP response to stream on")

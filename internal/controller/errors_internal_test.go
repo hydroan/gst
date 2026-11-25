@@ -43,8 +43,8 @@ func TestDatabaseErrorMapsEachDatabaseErrorToItsAnswer(t *testing.T) {
 		{"check_constraint_answers_400", errors.Wrap(database.ErrCheckConstraintViolated, "create sample"), http.StatusBadRequest, "The request contains invalid parameters."},
 		{"value_too_long_answers_400", errors.Wrap(database.ErrValueTooLong, "create sample"), http.StatusBadRequest, "The request contains invalid parameters."},
 		{"not_null_answers_400", errors.Wrap(database.ErrNotNullViolated, "create sample"), http.StatusBadRequest, "The request contains invalid parameters."},
-		{"another_tenant_answers_400", errors.Wrapf(tenant.ErrTenantImmutable, "named %q while acting in %q", "other", tenant.Default), http.StatusBadRequest, "The request contains invalid parameters."},
-		{"no_tenant_answers_400", errors.Wrap(tenant.ErrTenantRequired, "create sample"), http.StatusBadRequest, "The request contains invalid parameters."},
+		{"another_tenant_answers_400", errors.Wrapf(tenant.ErrImmutable, "named %q while acting in %q", "other", tenant.Default), http.StatusBadRequest, "The request contains invalid parameters."},
+		{"no_tenant_answers_400", errors.Wrap(tenant.ErrRequired, "create sample"), http.StatusBadRequest, "The request contains invalid parameters."},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

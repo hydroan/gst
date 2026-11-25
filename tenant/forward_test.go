@@ -55,5 +55,5 @@ func TestPackageForwardsWhatAProjectUses(t *testing.T) {
 		}
 	}
 	slices.Sort(exported)
-	require.Equal(t, []string{"Across", "Default", "ErrTenantImmutable", "ErrTenantRequired", "From", "In", "Scope"}, exported)
+	require.Equal(t, []string{"Across", "Default", "ErrImmutable", "ErrRequired", "From", "In", "Scope"}, exported)
 }

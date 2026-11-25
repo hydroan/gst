@@ -21,7 +21,7 @@ func ensureAdminSessionActor(ctx *gst.ServiceContext) error {
 	if err != nil {
 		return err
 	}
-	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, user.GetID(), rbac.SystemRoleRoot)
+	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, user.GetID(), rbac.RoleSystemRoot)
 	if err != nil {
 		return gst.NewErrorWithCause(http.StatusInternalServerError, authorizationUnavailableMsg, err)
 	}

@@ -1,4 +1,4 @@
-// Package jwt issues and checks the tokens of a JWT login: GenTokens signs an
+// Package jwt issues and checks the tokens of a JWT login: IssueTokens signs an
 // access token and a refresh token for a user, ParseToken and Verify check the
 // access token a request carries, and RefreshTokens trades a refresh token for
 // a new pair. The tokens are self-contained, so any process holding the
@@ -85,13 +85,13 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-// GenTokens issues an access token and a refresh token for a user.
+// IssueTokens issues an access token and a refresh token for a user.
 //
 // The tokens are self-contained: everything a later Verify needs is signed into
 // the access token, and nothing about them is written down here. That is what
 // makes them usable across processes without a shared store, and it is the
 // whole point of choosing them over an opaque session id.
-func GenTokens(userID string, username string) (aToken, rToken string, err error) {
+func IssueTokens(userID string, username string) (aToken, rToken string, err error) {
 	if len(userID) < MinUserIDLength || len(username) < MinUsernameLength {
 		return "", "", errors.New("invalid user id or username")
 	}
@@ -191,7 +191,7 @@ func RefreshTokens(accessToken, refreshToken string) (newAccessToken, newRefresh
 		return "", "", ErrTokenMalformed
 	}
 
-	return GenTokens(accessClaims.UserID, accessClaims.Username)
+	return IssueTokens(accessClaims.UserID, accessClaims.Username)
 }
 
 // ParseToken parses tokenStr, checks its signature, lifetime, and issuer, and

@@ -12,7 +12,7 @@ var defaultSystemRootSubjects = []string{
 	UserRoot,
 }
 
-var defaultSystemRole = SystemRoleRoot
+var defaultSystemRole = RoleSystemRoot
 
 // Init loads the stored policy set and installs it, when RBAC is enabled.
 //

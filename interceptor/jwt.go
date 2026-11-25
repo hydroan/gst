@@ -18,8 +18,8 @@ import (
 // every read, and allocates to do it when the key is not lowercase already.
 var keySessionID = strings.ToLower(jwt.HeaderSessionID)
 
-// JwtAuth authenticates a call from the bearer token in its authorization
-// metadata, the way middleware.JwtAuth authenticates a request from the
+// JWTAuth authenticates a call from the bearer token in its authorization
+// metadata, the way middleware.JWTAuth authenticates a request from the
 // Authorization header, with the same token: "authorization: Bearer <token>",
 // the x-session-id metadata standing for the X-Session-Id header (see
 // jwt.HeaderSessionID). A call it refuses, its token missing, malformed,
@@ -31,7 +31,7 @@ var keySessionID = strings.ToLower(jwt.HeaderSessionID)
 // therefore is not something this interceptor can do, which is the trade a
 // stateless token makes and the reason IAM's own sessions are not built on
 // it.
-func JwtAuth() gstgrpc.Interceptor {
+func JWTAuth() gstgrpc.Interceptor {
 	return func(ctx context.Context) (context.Context, error) {
 		token, ok := gstgrpc.Bearer(ctx)
 		var claims *jwt.Claims

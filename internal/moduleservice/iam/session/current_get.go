@@ -40,7 +40,7 @@ func (c *CurrentGetService) Get(ctx *gst.ServiceContext, req *model.Empty) (rsp 
 	// Resolved per request rather than read off the session snapshot, so a
 	// system role granted or revoked mid-session is reported here as it stands
 	// instead of as it stood at login.
-	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, currentUser.ID, rbac.SystemRoleRoot)
+	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, currentUser.ID, rbac.RoleSystemRoot)
 	if err != nil {
 		return nil, gst.NewErrorWithCause(http.StatusInternalServerError, authorizationUnavailableMsg, err)
 	}

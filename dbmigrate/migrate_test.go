@@ -88,20 +88,20 @@ func TestMigrate(t *testing.T) {
 		databaseConfig.SSLMode = "disable"
 
 		plan, err := dbmigrate.Migrate([]string{schema}, config.DBMySQL, databaseConfig,
-			&dbmigrate.MigrateOption{
+			&dbmigrate.MigrateOptions{
 				DryRun: true,
 			})
 		require.NoError(t, err)
 		require.True(t, plan.Changed())
 
 		plan, err = dbmigrate.Migrate([]string{schema}, config.DBMySQL, databaseConfig,
-			&dbmigrate.MigrateOption{})
+			&dbmigrate.MigrateOptions{})
 		require.NoError(t, err)
 		require.True(t, plan.Changed())
 
 		// A converged schema plans nothing on a re-run, custom indexes included.
 		plan, err = dbmigrate.Migrate([]string{schema}, config.DBMySQL, databaseConfig,
-			&dbmigrate.MigrateOption{
+			&dbmigrate.MigrateOptions{
 				DryRun: true,
 			})
 		require.NoError(t, err)
@@ -125,7 +125,7 @@ func TestMigrate(t *testing.T) {
 		plan, err := dbmigrate.Migrate(
 			[]string{schema}, config.DBPostgres,
 			databaseConfig,
-			&dbmigrate.MigrateOption{
+			&dbmigrate.MigrateOptions{
 				DryRun: true,
 			},
 		)
@@ -135,7 +135,7 @@ func TestMigrate(t *testing.T) {
 		plan, err = dbmigrate.Migrate(
 			[]string{schema}, config.DBPostgres,
 			databaseConfig,
-			&dbmigrate.MigrateOption{},
+			&dbmigrate.MigrateOptions{},
 		)
 		require.NoError(t, err)
 		require.True(t, plan.Changed())
@@ -143,7 +143,7 @@ func TestMigrate(t *testing.T) {
 		plan, err = dbmigrate.Migrate(
 			[]string{schema}, config.DBPostgres,
 			databaseConfig,
-			&dbmigrate.MigrateOption{
+			&dbmigrate.MigrateOptions{
 				DryRun: true,
 			},
 		)
@@ -162,7 +162,7 @@ func TestMigrate(t *testing.T) {
 			&dbmigrate.DatabaseConfig{
 				Database: database,
 			},
-			&dbmigrate.MigrateOption{
+			&dbmigrate.MigrateOptions{
 				DryRun: true,
 			})
 		require.NoError(t, err)
@@ -172,7 +172,7 @@ func TestMigrate(t *testing.T) {
 			&dbmigrate.DatabaseConfig{
 				Database: database,
 			},
-			&dbmigrate.MigrateOption{})
+			&dbmigrate.MigrateOptions{})
 		require.NoError(t, err)
 		require.True(t, plan.Changed())
 
@@ -180,7 +180,7 @@ func TestMigrate(t *testing.T) {
 			&dbmigrate.DatabaseConfig{
 				Database: database,
 			},
-			&dbmigrate.MigrateOption{
+			&dbmigrate.MigrateOptions{
 				DryRun: true,
 			})
 		require.NoError(t, err)
@@ -219,7 +219,7 @@ func TestMigratePlansAMissingSqliteFileWithoutCreatingIt(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := &dbmigrate.DatabaseConfig{Database: tc.dsn}
 
-			plan, err := dbmigrate.Migrate([]string{schema}, config.DBSqlite, cfg, &dbmigrate.MigrateOption{DryRun: true})
+			plan, err := dbmigrate.Migrate([]string{schema}, config.DBSqlite, cfg, &dbmigrate.MigrateOptions{DryRun: true})
 			require.NoError(t, err)
 			require.True(t, plan.Changed())
 			require.True(t, plan.CreatesDatabase)
@@ -228,7 +228,7 @@ func TestMigratePlansAMissingSqliteFileWithoutCreatingIt(t *testing.T) {
 			require.NoError(t, dbmigrate.Apply(plan, config.DBSqlite, cfg, nil))
 			require.FileExists(t, tc.file)
 
-			plan, err = dbmigrate.Migrate([]string{schema}, config.DBSqlite, cfg, &dbmigrate.MigrateOption{DryRun: true})
+			plan, err = dbmigrate.Migrate([]string{schema}, config.DBSqlite, cfg, &dbmigrate.MigrateOptions{DryRun: true})
 			require.NoError(t, err)
 			require.False(t, plan.Changed())
 			require.False(t, plan.CreatesDatabase)
@@ -248,7 +248,7 @@ func TestMigrateRefusesASqliteFileItCannotCreate(t *testing.T) {
 	require.NoError(t, err)
 	root := t.TempDir()
 	plan := func(file string) error {
-		_, err := dbmigrate.Migrate([]string{schema}, config.DBSqlite, &dbmigrate.DatabaseConfig{Database: file}, &dbmigrate.MigrateOption{DryRun: true})
+		_, err := dbmigrate.Migrate([]string{schema}, config.DBSqlite, &dbmigrate.DatabaseConfig{Database: file}, &dbmigrate.MigrateOptions{DryRun: true})
 		return err
 	}
 
@@ -298,26 +298,26 @@ func TestMigrateDropsRemovedIndex(t *testing.T) {
 	databaseConfig := mysqlDatabaseConfig()
 	databaseConfig.Database = database
 
-	plan, err := dbmigrate.Migrate([]string{withIndex}, config.DBMySQL, databaseConfig, &dbmigrate.MigrateOption{})
+	plan, err := dbmigrate.Migrate([]string{withIndex}, config.DBMySQL, databaseConfig, &dbmigrate.MigrateOptions{})
 	require.NoError(t, err)
 	require.True(t, plan.Changed())
 	require.Equal(t, 1, mysqlIndexCount(t, databaseConfig, "widgets", "idx_widgets_tag"))
 
 	// The removal is planned, with no column dropped beside it...
-	plan, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBMySQL, databaseConfig, &dbmigrate.MigrateOption{DryRun: true})
+	plan, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBMySQL, databaseConfig, &dbmigrate.MigrateOptions{DryRun: true})
 	require.NoError(t, err)
 	require.True(t, plan.Changed())
 	require.Empty(t, plan.DroppedColumns)
 	require.Equal(t, 1, mysqlIndexCount(t, databaseConfig, "widgets", "idx_widgets_tag"))
 
 	// ...and applying it drops the index for good.
-	plan, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBMySQL, databaseConfig, &dbmigrate.MigrateOption{})
+	plan, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBMySQL, databaseConfig, &dbmigrate.MigrateOptions{})
 	require.NoError(t, err)
 	require.True(t, plan.Changed())
 	require.Equal(t, 0, mysqlIndexCount(t, databaseConfig, "widgets", "idx_widgets_tag"))
 
 	// The converged schema plans nothing on a re-run.
-	plan, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBMySQL, databaseConfig, &dbmigrate.MigrateOption{DryRun: true})
+	plan, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBMySQL, databaseConfig, &dbmigrate.MigrateOptions{DryRun: true})
 	require.NoError(t, err)
 	require.False(t, plan.Changed())
 }
@@ -346,26 +346,26 @@ func TestMigrateDropsRemovedIndexOnPostgres(t *testing.T) {
 	})
 	databaseConfig := postgresDatabaseConfig(database)
 
-	plan, err := dbmigrate.Migrate([]string{withIndex}, config.DBPostgres, databaseConfig, &dbmigrate.MigrateOption{})
+	plan, err := dbmigrate.Migrate([]string{withIndex}, config.DBPostgres, databaseConfig, &dbmigrate.MigrateOptions{})
 	require.NoError(t, err)
 	require.True(t, plan.Changed())
 	require.Equal(t, 1, postgresIndexCount(t, databaseConfig, "widgets", "idx_widgets_tag"))
 
 	// The removal is planned, with no column dropped beside it...
-	plan, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBPostgres, databaseConfig, &dbmigrate.MigrateOption{DryRun: true})
+	plan, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBPostgres, databaseConfig, &dbmigrate.MigrateOptions{DryRun: true})
 	require.NoError(t, err)
 	require.True(t, plan.Changed())
 	require.Empty(t, plan.DroppedColumns)
 	require.Equal(t, 1, postgresIndexCount(t, databaseConfig, "widgets", "idx_widgets_tag"))
 
 	// ...and applying it drops the index for good.
-	plan, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBPostgres, databaseConfig, &dbmigrate.MigrateOption{})
+	plan, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBPostgres, databaseConfig, &dbmigrate.MigrateOptions{})
 	require.NoError(t, err)
 	require.True(t, plan.Changed())
 	require.Equal(t, 0, postgresIndexCount(t, databaseConfig, "widgets", "idx_widgets_tag"))
 
 	// The converged schema plans nothing on a re-run.
-	plan, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBPostgres, databaseConfig, &dbmigrate.MigrateOption{DryRun: true})
+	plan, err = dbmigrate.Migrate([]string{withoutIndex}, config.DBPostgres, databaseConfig, &dbmigrate.MigrateOptions{DryRun: true})
 	require.NoError(t, err)
 	require.False(t, plan.Changed())
 }
@@ -389,7 +389,7 @@ func TestApplyRunsThePlanItWasGiven(t *testing.T) {
 		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;"
 
 	plan, err := dbmigrate.Migrate([]string{schema}, config.DBMySQL, databaseConfig,
-		&dbmigrate.MigrateOption{DryRun: true})
+		&dbmigrate.MigrateOptions{DryRun: true})
 	require.NoError(t, err)
 	require.True(t, plan.Changed())
 	require.Contains(t, strings.Join(plan.Statements, "\n"), "CREATE TABLE", "the plan carries the statements it showed")
@@ -398,7 +398,7 @@ func TestApplyRunsThePlanItWasGiven(t *testing.T) {
 
 	// The schema now matches, so nothing is planned any more.
 	after, err := dbmigrate.Migrate([]string{schema}, config.DBMySQL, databaseConfig,
-		&dbmigrate.MigrateOption{DryRun: true})
+		&dbmigrate.MigrateOptions{DryRun: true})
 	require.NoError(t, err)
 	require.False(t, after.Changed())
 
@@ -440,16 +440,16 @@ func TestMigrateReachesAMySQLTargetUnderTheTLSKeysOfTheApplication(t *testing.T)
 	t.Cleanup(func() { config.App.MySQL = section })
 
 	config.App.MySQL = plain
-	_, err = dbmigrate.Migrate([]string{schema}, config.DBMySQL, target, &dbmigrate.MigrateOption{DryRun: true})
+	_, err = dbmigrate.Migrate([]string{schema}, config.DBMySQL, target, &dbmigrate.MigrateOptions{DryRun: true})
 	require.ErrorContains(t, err, "Error 3159")
 
 	config.App.MySQL = secure
-	plan, err := dbmigrate.Migrate([]string{schema}, config.DBMySQL, target, &dbmigrate.MigrateOption{DryRun: true})
+	plan, err := dbmigrate.Migrate([]string{schema}, config.DBMySQL, target, &dbmigrate.MigrateOptions{DryRun: true})
 	require.NoError(t, err)
 	require.True(t, plan.Changed())
 	require.NoError(t, dbmigrate.Apply(plan, config.DBMySQL, target, nil))
 
-	plan, err = dbmigrate.Migrate([]string{schema}, config.DBMySQL, target, &dbmigrate.MigrateOption{DryRun: true})
+	plan, err = dbmigrate.Migrate([]string{schema}, config.DBMySQL, target, &dbmigrate.MigrateOptions{DryRun: true})
 	require.NoError(t, err)
 	require.False(t, plan.Changed(), "the table the plan created is there")
 }
@@ -701,14 +701,14 @@ func TestMigrateHandlesUniqueIndexesOverTheLiveRows(t *testing.T) {
 			}
 			plan := func(cfg *dbmigrate.DatabaseConfig, desired []string) dbmigrate.Plan {
 				t.Helper()
-				planned, err := dbmigrate.Migrate(desired, d.typ, cfg, &dbmigrate.MigrateOption{DryRun: true})
+				planned, err := dbmigrate.Migrate(desired, d.typ, cfg, &dbmigrate.MigrateOptions{DryRun: true})
 				require.NoError(t, err)
 				return planned
 			}
 			create := func(name string, current []string) *dbmigrate.DatabaseConfig {
 				t.Helper()
 				cfg := d.target(t, fmt.Sprintf("gst_dbmigrate_live_%s_%d", name, stamp))
-				_, err := dbmigrate.Migrate(current, d.typ, cfg, &dbmigrate.MigrateOption{})
+				_, err := dbmigrate.Migrate(current, d.typ, cfg, &dbmigrate.MigrateOptions{})
 				require.NoError(t, err)
 				return cfg
 			}
@@ -793,7 +793,7 @@ func TestMigrateRefusesASQLiteColumnChangeItCannotPlan(t *testing.T) {
 			"  PRIMARY KEY (`id`)\n" +
 			");"
 
-		plan, err := dbmigrate.Migrate([]string{before}, config.DBSqlite, databaseConfig, &dbmigrate.MigrateOption{})
+		plan, err := dbmigrate.Migrate([]string{before}, config.DBSqlite, databaseConfig, &dbmigrate.MigrateOptions{})
 		require.NoError(t, err)
 		require.True(t, plan.Changed())
 
@@ -801,7 +801,7 @@ func TestMigrateRefusesASQLiteColumnChangeItCannotPlan(t *testing.T) {
 		// the addition could be planned, the other two cannot, and the
 		// migration refuses the whole rather than apply the half it can
 		// express.
-		_, err = dbmigrate.Migrate([]string{after}, config.DBSqlite, databaseConfig, &dbmigrate.MigrateOption{DryRun: true})
+		_, err = dbmigrate.Migrate([]string{after}, config.DBSqlite, databaseConfig, &dbmigrate.MigrateOptions{DryRun: true})
 		require.Error(t, err)
 		require.ErrorContains(t, err, "samples")
 		require.ErrorContains(t, err, "amount")
@@ -809,7 +809,7 @@ func TestMigrateRefusesASQLiteColumnChangeItCannotPlan(t *testing.T) {
 		require.ErrorContains(t, err, "rebuild")
 
 		// The same schema again plans nothing and refuses nothing.
-		plan, err = dbmigrate.Migrate([]string{before}, config.DBSqlite, databaseConfig, &dbmigrate.MigrateOption{DryRun: true})
+		plan, err = dbmigrate.Migrate([]string{before}, config.DBSqlite, databaseConfig, &dbmigrate.MigrateOptions{DryRun: true})
 		require.NoError(t, err)
 		require.False(t, plan.Changed())
 	})
@@ -824,18 +824,18 @@ func TestMigrateRefusesASQLiteColumnChangeItCannotPlan(t *testing.T) {
 
 		file := filepath.Join(t.TempDir(), "drift.db")
 		databaseConfig := &dbmigrate.DatabaseConfig{Database: file}
-		plan, err := dbmigrate.Migrate([]string{before}, config.DBSqlite, databaseConfig, &dbmigrate.MigrateOption{})
+		plan, err := dbmigrate.Migrate([]string{before}, config.DBSqlite, databaseConfig, &dbmigrate.MigrateOptions{})
 		require.NoError(t, err)
 		require.True(t, plan.Changed())
 
 		// The model's amount column changed from integer to text.
-		_, err = dbmigrate.Migrate([]string{after}, config.DBSqlite, databaseConfig, &dbmigrate.MigrateOption{DryRun: true})
+		_, err = dbmigrate.Migrate([]string{after}, config.DBSqlite, databaseConfig, &dbmigrate.MigrateOptions{DryRun: true})
 		require.Error(t, err)
 		require.ErrorContains(t, err, "amount_samples")
 		require.ErrorContains(t, err, "amount")
 		require.ErrorContains(t, err, "rebuild")
 
-		plan, err = dbmigrate.Migrate([]string{before}, config.DBSqlite, databaseConfig, &dbmigrate.MigrateOption{DryRun: true})
+		plan, err = dbmigrate.Migrate([]string{before}, config.DBSqlite, databaseConfig, &dbmigrate.MigrateOptions{DryRun: true})
 		require.NoError(t, err)
 		require.False(t, plan.Changed())
 	})

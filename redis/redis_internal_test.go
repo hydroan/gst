@@ -56,8 +56,8 @@ func TestOperationsWithoutClientReportDisabled(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := tc.call(); !errors.Is(err, ErrRedisIsDisabled) {
-				t.Fatalf("want ErrRedisIsDisabled, got %v", err)
+			if err := tc.call(); !errors.Is(err, ErrDisabled) {
+				t.Fatalf("want ErrDisabled, got %v", err)
 			}
 		})
 	}
@@ -71,8 +71,8 @@ func TestSetNXWithoutClientDoesNotReportAcquired(t *testing.T) {
 	ctx := withoutClient(t)
 
 	acquired, err := SetNX(ctx, "key", "value", time.Minute)
-	if !errors.Is(err, ErrRedisIsDisabled) {
-		t.Fatalf("want ErrRedisIsDisabled, got %v", err)
+	if !errors.Is(err, ErrDisabled) {
+		t.Fatalf("want ErrDisabled, got %v", err)
 	}
 	if acquired {
 		t.Fatal("want acquired false without a client")

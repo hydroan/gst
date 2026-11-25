@@ -95,7 +95,7 @@ func (m *MenuService) ListAfter(ctx *gst.ServiceContext, data *[]*modelauthz.Men
 // role here, or whose roles select no menu at all, yields an empty set with
 // restricted true, which the caller turns into an empty result.
 func visibleMenuIDs(ctx *gst.ServiceContext, log gst.Logger) ([]string, bool, error) {
-	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, ctx.UserID(), rbac.SystemRoleRoot)
+	systemRoot, err := rbac.RBAC().HasSystemRole(ctx, ctx.UserID(), rbac.RoleSystemRoot)
 	if err != nil {
 		return nil, false, gst.NewErrorWithCause(http.StatusInternalServerError, authorizationUnavailableMsg, err)
 	}

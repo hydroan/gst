@@ -169,7 +169,7 @@ func emptyUserVisibilityQueryOptions() gst.QueryOptions {
 func excludeSystemRootSubjects(ctx *gst.ServiceContext, subjectIDs []string) ([]string, error) {
 	filtered := make([]string, 0, len(subjectIDs))
 	for _, subjectID := range subjectIDs {
-		systemRoot, err := rbac.RBAC().HasSystemRole(ctx, subjectID, rbac.SystemRoleRoot)
+		systemRoot, err := rbac.RBAC().HasSystemRole(ctx, subjectID, rbac.RoleSystemRoot)
 		if err != nil {
 			return nil, errors.Wrap(err, "authorization unavailable")
 		}

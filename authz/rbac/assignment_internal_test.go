@@ -20,7 +20,7 @@ func TestTenantsForSubjectReadsEveryTenantTheSubjectHoldsARoleIn(t *testing.T) {
 	require.NoError(t, r.AssignRole(ctx, "alpha", "u1", "editor"))
 	require.NoError(t, r.AssignRole(ctx, "alpha", "u1", RoleAdmin))
 	require.NoError(t, r.AssignRole(ctx, "gamma", "u2", "viewer"))
-	require.NoError(t, r.AssignSystemRole(ctx, "u1", SystemRoleRoot))
+	require.NoError(t, r.AssignSystemRole(ctx, "u1", RoleSystemRoot))
 
 	tenants, err := r.TenantsForSubject(ctx, "u1")
 	require.NoError(t, err)

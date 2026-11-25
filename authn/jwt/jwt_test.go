@@ -45,12 +45,12 @@ func TestSigningKeyRequired(t *testing.T) {
 	withTokenConfig(t, time.Hour, 24*time.Hour)
 	// Issue a valid pair first, then take the key away: parsing must refuse
 	// even a token this process itself signed a moment ago.
-	accessToken, refreshToken, err := jwt.GenTokens(sampleUserID, sampleUsername)
+	accessToken, refreshToken, err := jwt.IssueTokens(sampleUserID, sampleUsername)
 	require.NoError(t, err)
 	config.App.Auth.JWTSecret = "   "
 
 	t.Run("refuses_to_issue", func(t *testing.T) {
-		_, _, err := jwt.GenTokens(sampleUserID, sampleUsername)
+		_, _, err := jwt.IssueTokens(sampleUserID, sampleUsername)
 		require.ErrorIs(t, err, jwt.ErrMissingSigningKey)
 	})
 
@@ -65,11 +65,11 @@ func TestSigningKeyRequired(t *testing.T) {
 	})
 }
 
-func TestGenTokens(t *testing.T) {
+func TestIssueTokens(t *testing.T) {
 	t.Run("issues_a_parsable_access_token", func(t *testing.T) {
 		withTokenConfig(t, time.Hour, 24*time.Hour)
 
-		accessToken, refreshToken, err := jwt.GenTokens(sampleUserID, sampleUsername)
+		accessToken, refreshToken, err := jwt.IssueTokens(sampleUserID, sampleUsername)
 		require.NoError(t, err)
 		require.NotEmpty(t, accessToken)
 		require.NotEmpty(t, refreshToken)
@@ -86,9 +86,9 @@ func TestGenTokens(t *testing.T) {
 	t.Run("does_not_invalidate_a_token_it_issued_earlier", func(t *testing.T) {
 		withTokenConfig(t, time.Hour, 24*time.Hour)
 
-		first, _, err := jwt.GenTokens(sampleUserID, sampleUsername)
+		first, _, err := jwt.IssueTokens(sampleUserID, sampleUsername)
 		require.NoError(t, err)
-		_, _, err = jwt.GenTokens(sampleUserID, sampleUsername)
+		_, _, err = jwt.IssueTokens(sampleUserID, sampleUsername)
 		require.NoError(t, err)
 
 		claims, err := jwt.ParseToken(first)
@@ -99,7 +99,7 @@ func TestGenTokens(t *testing.T) {
 	t.Run("rejects_a_user_it_cannot_name", func(t *testing.T) {
 		withTokenConfig(t, time.Hour, 24*time.Hour)
 
-		_, _, err := jwt.GenTokens("", sampleUsername)
+		_, _, err := jwt.IssueTokens("", sampleUsername)
 		require.Error(t, err)
 	})
 
@@ -110,7 +110,7 @@ func TestGenTokens(t *testing.T) {
 		withTokenConfig(t, time.Hour, 24*time.Hour)
 
 		for _, username := range []string{sampleUsername, "admin", "root"} {
-			accessToken, refreshToken, err := jwt.GenTokens(sampleUserID, username)
+			accessToken, refreshToken, err := jwt.IssueTokens(sampleUserID, username)
 			require.NoError(t, err)
 			require.NotEmpty(t, refreshToken, "username %q must get a refresh token like any other", username)
 
@@ -136,7 +136,7 @@ func TestParseToken(t *testing.T) {
 	})
 
 	t.Run("rejects_a_tampered_token", func(t *testing.T) {
-		accessToken, _, err := jwt.GenTokens(sampleUserID, sampleUsername)
+		accessToken, _, err := jwt.IssueTokens(sampleUserID, sampleUsername)
 		require.NoError(t, err)
 
 		// Flipping a character inside the signature breaks it without touching
@@ -166,7 +166,7 @@ func TestParseToken(t *testing.T) {
 	})
 
 	t.Run("rejects_a_token_signed_with_another_key", func(t *testing.T) {
-		accessToken, _, err := jwt.GenTokens(sampleUserID, sampleUsername)
+		accessToken, _, err := jwt.IssueTokens(sampleUserID, sampleUsername)
 		require.NoError(t, err)
 
 		config.App.Auth.JWTSecret = sampleSigningKey + "-rotated"
@@ -178,7 +178,7 @@ func TestParseToken(t *testing.T) {
 	t.Run("rejects_an_expired_token", func(t *testing.T) {
 		withTokenConfig(t, -time.Minute, 24*time.Hour)
 
-		accessToken, _, err := jwt.GenTokens(sampleUserID, sampleUsername)
+		accessToken, _, err := jwt.IssueTokens(sampleUserID, sampleUsername)
 		require.NoError(t, err)
 
 		_, err = jwt.ParseToken(accessToken)
@@ -189,7 +189,7 @@ func TestParseToken(t *testing.T) {
 func TestParseTokenFromHeader(t *testing.T) {
 	withTokenConfig(t, time.Hour, 24*time.Hour)
 
-	accessToken, _, err := jwt.GenTokens(sampleUserID, sampleUsername)
+	accessToken, _, err := jwt.IssueTokens(sampleUserID, sampleUsername)
 	require.NoError(t, err)
 
 	t.Run("reads_a_bearer_token", func(t *testing.T) {
@@ -229,7 +229,7 @@ func TestVerify(t *testing.T) {
 	withTokenConfig(t, time.Hour, 24*time.Hour)
 
 	t.Run("accepts_a_token_it_issued", func(t *testing.T) {
-		accessToken, _, err := jwt.GenTokens(sampleUserID, sampleUsername)
+		accessToken, _, err := jwt.IssueTokens(sampleUserID, sampleUsername)
 		require.NoError(t, err)
 
 		claims, err := jwt.ParseToken(accessToken)
@@ -250,7 +250,7 @@ func TestRefreshTokens(t *testing.T) {
 	withTokenConfig(t, time.Hour, 24*time.Hour)
 
 	t.Run("issues_a_new_pair", func(t *testing.T) {
-		accessToken, refreshToken, err := jwt.GenTokens(sampleUserID, sampleUsername)
+		accessToken, refreshToken, err := jwt.IssueTokens(sampleUserID, sampleUsername)
 		require.NoError(t, err)
 
 		newAccess, newRefresh, err := jwt.RefreshTokens(accessToken, refreshToken)
@@ -264,7 +264,7 @@ func TestRefreshTokens(t *testing.T) {
 	})
 
 	t.Run("rejects_a_refresh_token_that_is_not_one", func(t *testing.T) {
-		accessToken, _, err := jwt.GenTokens(sampleUserID, sampleUsername)
+		accessToken, _, err := jwt.IssueTokens(sampleUserID, sampleUsername)
 		require.NoError(t, err)
 
 		_, _, err = jwt.RefreshTokens(accessToken, "not-a-refresh-token")
@@ -275,7 +275,7 @@ func TestRefreshTokens(t *testing.T) {
 	// passes for one unless the claims tell them apart: accepted, it would
 	// let whoever holds the short-lived access token alone mint a pair.
 	t.Run("rejects_an_access_token_passed_as_the_refresh_token", func(t *testing.T) {
-		accessToken, _, err := jwt.GenTokens(sampleUserID, sampleUsername)
+		accessToken, _, err := jwt.IssueTokens(sampleUserID, sampleUsername)
 		require.NoError(t, err)
 
 		_, _, err = jwt.RefreshTokens(accessToken, accessToken)
@@ -283,7 +283,7 @@ func TestRefreshTokens(t *testing.T) {
 	})
 
 	t.Run("rejects_a_refresh_token_passed_as_the_access_token", func(t *testing.T) {
-		_, refreshToken, err := jwt.GenTokens(sampleUserID, sampleUsername)
+		_, refreshToken, err := jwt.IssueTokens(sampleUserID, sampleUsername)
 		require.NoError(t, err)
 
 		_, _, err = jwt.RefreshTokens(refreshToken, refreshToken)
@@ -291,7 +291,7 @@ func TestRefreshTokens(t *testing.T) {
 	})
 
 	t.Run("rejects_tokens_of_another_issuer", func(t *testing.T) {
-		accessToken, refreshToken, err := jwt.GenTokens(sampleUserID, sampleUsername)
+		accessToken, refreshToken, err := jwt.IssueTokens(sampleUserID, sampleUsername)
 		require.NoError(t, err)
 		registered := gojwt.RegisteredClaims{
 			ExpiresAt: gojwt.NewNumericDate(time.Now().Add(time.Hour)),
@@ -319,7 +319,7 @@ func signSampleToken(t *testing.T, claims gojwt.Claims) string {
 }
 
 // TestLogRefusalKeepsTheReasonInTheLogAndReturnsOneMessage pins what both
-// JwtAuth adapters record a refused token through: the reason goes to the
+// JWTAuth adapters record a refused token through: the reason goes to the
 // log as a warning, with the path and method of the request or call that
 // carried the token, and what comes back is the one message they answer
 // with, whatever the reason.

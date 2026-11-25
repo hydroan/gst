@@ -60,8 +60,8 @@ type (
 	// Conn is one live SSE connection, valid inside the streaming callback.
 	Conn = sse.Conn
 
-	// Option configures a streaming connection.
-	Option = sse.Option
+	// ServeOption configures a streaming connection.
+	ServeOption = sse.ServeOption
 
 	// Hub is an in-process publish/subscribe broker fanning events out to
 	// streaming connections.
@@ -76,7 +76,7 @@ type (
 
 // WithHeartbeatInterval overrides DefaultHeartbeatInterval for one
 // connection. The interval must be positive; heartbeats cannot be disabled.
-func WithHeartbeatInterval(interval time.Duration) Option {
+func WithHeartbeatInterval(interval time.Duration) ServeOption {
 	return sse.WithHeartbeatInterval(interval)
 }
 

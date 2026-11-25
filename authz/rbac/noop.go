@@ -7,7 +7,7 @@ import (
 	"github.com/hydroan/gst/internal/gst"
 )
 
-// ErrRBACDisabled reports a policy write made in a process that holds no policy
+// ErrDisabled reports a policy write made in a process that holds no policy
 // set to write it to.
 //
 // A write has nowhere to go before Init has installed a policy set: there is no
@@ -20,10 +20,10 @@ import (
 // Reads are answered instead of refused. A denial and an empty role set are both
 // true of a process deciding from no policies, so answering them states the
 // situation rather than hiding it.
-var ErrRBACDisabled = errors.New("rbac: authorization is not initialized")
+var ErrDisabled = errors.New("rbac: authorization is not initialized")
 
 // noop implements RBAC behavior before a policy set is installed. It answers
-// reads and refuses writes with ErrRBACDisabled; HasSystemRole still answers
+// reads and refuses writes with ErrDisabled; HasSystemRole still answers
 // true for the built-in root subject holding system_root, so a check for that
 // role passes without a policy set.
 type noop struct{}
@@ -39,25 +39,25 @@ func (noop) Authorize(
 }
 
 func (noop) RemoveRole(ctx context.Context, tenant string, role string) error {
-	return ErrRBACDisabled
+	return ErrDisabled
 }
 
 func (noop) SetRolePermissions(
 	ctx context.Context, tenant string, role string, permissions []gst.Permission,
 ) error {
-	return ErrRBACDisabled
+	return ErrDisabled
 }
 
 func (noop) SetPermissionsForAuthenticated(ctx context.Context, permissions []gst.Permission) error {
-	return ErrRBACDisabled
+	return ErrDisabled
 }
 
 func (noop) AssignRole(ctx context.Context, tenant string, subject string, role string) error {
-	return ErrRBACDisabled
+	return ErrDisabled
 }
 
 func (noop) UnassignRole(ctx context.Context, tenant string, subject string, role string) error {
-	return ErrRBACDisabled
+	return ErrDisabled
 }
 
 func (noop) RolesForSubject(ctx context.Context, tenant string, subject string) ([]string, error) {
@@ -69,11 +69,11 @@ func (noop) SubjectsInTenant(ctx context.Context, tenant string) ([]string, erro
 func (noop) TenantsForSubject(ctx context.Context, subject string) ([]string, error) { return nil, nil }
 
 func (noop) AssignSystemRole(ctx context.Context, subject string, role string) error {
-	return ErrRBACDisabled
+	return ErrDisabled
 }
 
 func (noop) UnassignSystemRole(ctx context.Context, subject string, role string) error {
-	return ErrRBACDisabled
+	return ErrDisabled
 }
 
 func (noop) HasSystemRole(ctx context.Context, subject string, role string) (bool, error) {
@@ -81,7 +81,7 @@ func (noop) HasSystemRole(ctx context.Context, subject string, role string) (boo
 }
 
 func (noop) RemoveSubject(ctx context.Context, subject string) error {
-	return ErrRBACDisabled
+	return ErrDisabled
 }
 
 // ReloadPolicies succeeds because there is no in-memory policy set to rebuild.

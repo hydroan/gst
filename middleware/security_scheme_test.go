@@ -14,7 +14,7 @@ import (
 // a project names the schemes it mounts and no other.
 func TestAuthMiddlewareDeclareTheirSecuritySchemes(t *testing.T) {
 	middleware.IAMSession()
-	middleware.JwtAuth()
+	middleware.JWTAuth()
 
 	schemes := apidoc.SecuritySchemes()
 	require.Equal(t, apidoc.SecurityScheme{Type: "apiKey", In: "cookie", Name: "session_id", Description: "IAM session cookie issued by POST /api/login"}, schemes["cookieAuth"])

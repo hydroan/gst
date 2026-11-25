@@ -455,12 +455,12 @@ func TestAuthzRole(t *testing.T) {
 			// Both the reserved ID and the reserved name are rejected, so a
 			// user-created role can never masquerade as the system role.
 			_, err := cli.Post[authz.Role](t.Context(), rolePath, &authz.Role{
-				ID:   rbac.SystemRoleRoot,
+				ID:   rbac.RoleSystemRoot,
 				Name: "some_role_name",
 			})
 			requireRefusedAsInvalid(t, err)
 			_, err = cli.Post[authz.Role](t.Context(), rolePath, &authz.Role{
-				Name: rbac.SystemRoleRoot,
+				Name: rbac.RoleSystemRoot,
 			})
 			requireRefusedAsInvalid(t, err)
 		})
@@ -550,7 +550,7 @@ func TestAuthzRole(t *testing.T) {
 		// column is written on insert and never again. This client is
 		// system_root, which acts in no single tenant, so there is no scope to
 		// compare the named value against and the update is answered rather
-		// than refused — a tenant-scoped caller gets tenant.ErrTenantImmutable
+		// than refused — a tenant-scoped caller gets tenant.ErrImmutable
 		// instead. Either way the role stays where it is, which is what the
 		// policies below prove.
 		t.Run("tenant_update_cannot_move_the_role", func(t *testing.T) {
@@ -904,15 +904,15 @@ func TestIAMPrincipalReportsSystemRoot(t *testing.T) {
 		require.False(t, rsp.Principal.IsSystemRoot)
 
 		t.Cleanup(func() {
-			_ = rbac.RBAC().UnassignSystemRole(context.Background(), userID, rbac.SystemRoleRoot)
+			_ = rbac.RBAC().UnassignSystemRole(context.Background(), userID, rbac.RoleSystemRoot)
 		})
-		require.NoError(t, rbac.RBAC().AssignSystemRole(context.Background(), userID, rbac.SystemRoleRoot))
+		require.NoError(t, rbac.RBAC().AssignSystemRole(context.Background(), userID, rbac.RoleSystemRoot))
 
 		rsp, err = cli.Get[iam.CurrentGetRsp](t.Context(), currentPath)
 		require.NoError(t, err)
 		require.True(t, rsp.Principal.IsSystemRoot)
 
-		require.NoError(t, rbac.RBAC().UnassignSystemRole(context.Background(), userID, rbac.SystemRoleRoot))
+		require.NoError(t, rbac.RBAC().UnassignSystemRole(context.Background(), userID, rbac.RoleSystemRoot))
 
 		rsp, err = cli.Get[iam.CurrentGetRsp](t.Context(), currentPath)
 		require.NoError(t, err)
