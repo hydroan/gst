@@ -468,11 +468,13 @@ func requireMixedPairsMerge(t *testing.T, merge func(into, from *linkedlist.List
 	}
 }
 
+// TestList_Clone pins the copy Clone gives: the same values on nodes of its
+// own, so that neither list sees what the other does afterwards, and, for a
+// list safe for concurrent use, a copy that is safe for concurrent use too.
 func TestList_Clone(t *testing.T) {
 	original, err := linkedlist.NewFromSlice([]int{1, 2, 3})
 	require.NoError(t, err)
-	cloned, err := original.Clone()
-	require.NoError(t, err)
+	cloned := original.Clone()
 
 	// Verify content is same
 	assert.Equal(t, original.Slice(), cloned.Slice())
@@ -480,6 +482,23 @@ func TestList_Clone(t *testing.T) {
 	// Verify it's a deep copy
 	original.PushBack(4)
 	assert.NotEqual(t, original.Slice(), cloned.Slice())
+
+	empty, err := linkedlist.New[int]()
+	require.NoError(t, err)
+	assert.True(t, empty.Clone().IsEmpty())
+
+	// The copy of a list safe for concurrent use takes concurrent writes: a
+	// copy without a lock loses nodes here, and the race detector reports it.
+	safe, err := linkedlist.NewFromSlice([]int{1, 2, 3}, linkedlist.WithSafe[int]())
+	require.NoError(t, err)
+	safeClone := safe.Clone()
+	var wg sync.WaitGroup
+	for i := range 8 {
+		wg.Go(func() { safeClone.PushBack(i) })
+	}
+	wg.Wait()
+	assert.Equal(t, 11, safeClone.Len())
+	assert.Equal(t, 3, safe.Len())
 }
 
 func TestList_Range(t *testing.T) {
@@ -668,8 +687,7 @@ func TestList_ConcurrentUse(t *testing.T) {
 				_ = l.NewIterator(l.Front())
 				_ = l.NewIterator(l.Back())
 				l.Range(func(int) bool { return true })
-				_, err := l.Clone()
-				assert.NoError(t, err)
+				_ = l.Clone()
 			}
 		})
 	}

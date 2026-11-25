@@ -428,22 +428,19 @@ func lockBoth[V any](l, other *List[V]) (unlock func()) {
 	}
 }
 
-// Clone returns a deep copy of the list.
-// The new list contains new nodes with the same values.
-func (l *List[V]) Clone() (*List[V], error) {
+// Clone returns a deep copy of the list: new nodes with the same values, on a
+// list that is safe for concurrent use when l is, with a lock of its own.
+func (l *List[V]) Clone() *List[V] {
 	if l.safe {
 		l.mu.RLock()
 		defer l.mu.RUnlock()
 	}
 
-	newList, err := New[V]()
-	if err != nil {
-		return nil, err
-	}
+	clone := &List[V]{safe: l.safe}
 	for n := l.head; n != nil; n = n.next {
-		newList.pushBackNode(&Node[V]{Value: n.Value})
+		clone.pushBackNode(&Node[V]{Value: n.Value})
 	}
-	return newList, nil
+	return clone
 }
 
 // Front returns the first node of the list, or nil when the list is empty.
