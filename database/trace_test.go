@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/database"
-	gstotel "github.com/hydroan/gst/internal/otel"
-	"github.com/hydroan/gst/internal/testutil/oteltest"
+	"github.com/hydroan/gst/internal/testutil/tracingtest"
+	"github.com/hydroan/gst/internal/tracing"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/sdk/trace"
@@ -21,8 +21,8 @@ import (
 // span of its own only when the model overrides it: the framework base's no-op
 // still runs, but there is nothing to time, so it must not export a span.
 func TestTraceModelHookSpansOnlyOverriddenHooks(t *testing.T) {
-	oteltest.Enable(t)
-	recorder := oteltest.Record(t)
+	tracingtest.Enable(t)
+	recorder := tracingtest.Record(t)
 	defer cleanupTestData()
 
 	t.Run("an overridden hook gets a span and its no-op partner does not", func(t *testing.T) {
@@ -32,11 +32,11 @@ func TestTraceModelHookSpansOnlyOverriddenHooks(t *testing.T) {
 		user := &TestUser{Name: "trace-create", Email: "trace-create@example.com"}
 		require.NoError(t, database.Database[*TestUser](context.Background()).Create(user))
 
-		names := oteltest.EndedNames(recorder)
+		names := tracingtest.EndedNames(recorder)
 		require.Contains(t, names, "database.TestUser.Create")
 		require.Contains(t, names, "model.TestUser.CreateBefore")
 		require.NotContains(t, names, "model.TestUser.CreateAfter")
-		hook := oteltest.EndedNamed(t, recorder, "model.TestUser.CreateBefore")
+		hook := tracingtest.EndedNamed(t, recorder, "model.TestUser.CreateBefore")
 		require.Equal(t, codes.Unset, hook.Status().Code, "a hook that returned leaves the status unset")
 	})
 
@@ -47,7 +47,7 @@ func TestTraceModelHookSpansOnlyOverriddenHooks(t *testing.T) {
 		stored := new(TestItem)
 		require.NoError(t, database.Database[*TestItem](context.Background()).Get(stored, item.ID))
 
-		names := oteltest.EndedNames(recorder)
+		names := tracingtest.EndedNames(recorder)
 		require.Contains(t, names, "database.TestItem.Get")
 		for _, name := range names {
 			require.False(t, strings.HasPrefix(name, "model.TestItem."), "no-op hook must not export span %q", name)
@@ -63,8 +63,8 @@ func TestTraceModelHookSpansOnlyOverriddenHooks(t *testing.T) {
 // neither a recorded error, while a real failure records the error and marks
 // the span failed.
 func TestTraceSpanReadsOutcomeLikeTheLog(t *testing.T) {
-	oteltest.Enable(t)
-	recorder := oteltest.Record(t)
+	tracingtest.Enable(t)
+	recorder := tracingtest.Record(t)
 	defer cleanupTestData()
 
 	t.Run("a completed operation leaves the span's status unset", func(t *testing.T) {
@@ -98,7 +98,7 @@ func TestTraceSpanReadsOutcomeLikeTheLog(t *testing.T) {
 		err := database.Database[*versionedNote](context.Background()).Update(stale)
 		require.ErrorIs(t, err, database.ErrStaleObject)
 
-		span := lastEndedNamed(t, recorder, gstotel.FrameworkSpanName("database", "versionedNote", "Update"))
+		span := lastEndedNamed(t, recorder, tracing.ResourceSpanName("database", "versionedNote", "Update"))
 		require.Equal(t, codes.Unset, span.Status().Code)
 		require.Empty(t, span.Events(), "a stale object must not be recorded as an exception")
 		attrs := spanAttributes(span)
@@ -166,8 +166,8 @@ func spanAttributes(span trace.ReadOnlySpan) map[string]any {
 // terminals trace under: the span names, and the log phase field they
 // derive from, are what dashboards and log searches key on.
 func TestTraceSelectPhasesNameTheSpans(t *testing.T) {
-	oteltest.Enable(t)
-	recorder := oteltest.Record(t)
+	tracingtest.Enable(t)
+	recorder := tracingtest.Record(t)
 	defer cleanupAggregateData()
 	defer cleanupTagData()
 	setupAggregateData(t)
@@ -190,7 +190,7 @@ func TestTraceSelectPhasesNameTheSpans(t *testing.T) {
 	stacked := 0
 	require.NoError(t, database.UnionAll[feedRow](ctx, recordsBranch(ctx), tagsBranch(ctx)).Count(&stacked))
 
-	names := oteltest.EndedNames(recorder)
+	names := tracingtest.EndedNames(recorder)
 	require.Contains(t, names, "database.TestAggregateRecord.Select")
 	require.Contains(t, names, "database.TestAggregateRecord.SelectOne")
 	require.Contains(t, names, "database.TestAggregateRecord.SelectCount")

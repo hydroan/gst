@@ -23,9 +23,9 @@ import (
 	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/logger"
-	gstotel "github.com/hydroan/gst/internal/otel"
 	"github.com/hydroan/gst/internal/tenant"
-	"github.com/hydroan/gst/internal/testutil/oteltest"
+	"github.com/hydroan/gst/internal/testutil/tracingtest"
+	"github.com/hydroan/gst/internal/tracing"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
@@ -340,8 +340,8 @@ func TestServiceCallDelegatesToThePhaseService(t *testing.T) {
 // it, and the service span of a delegated action inside it.
 func TestCallsRunInTheControllerSpan(t *testing.T) {
 	conn := sampleServer(t)
-	oteltest.Enable(t)
-	recorder := oteltest.Record(t)
+	tracingtest.Enable(t)
+	recorder := tracingtest.Record(t)
 	record := createSample(t, "call-span")
 
 	_, err := invoke(t, conn, "Get", map[string]any{"id": record.GetID()})
@@ -349,7 +349,7 @@ func TestCallsRunInTheControllerSpan(t *testing.T) {
 	_, err = invoke(t, conn, "Action", map[string]any{"payload": map[string]any{"note": "traced"}})
 	require.NoError(t, err)
 
-	got := oteltest.EndedNamed(t, recorder, gstotel.FrameworkSpanName("controller", "sampleRecord", "Get"))
+	got := tracingtest.EndedNamed(t, recorder, tracing.ResourceSpanName("controller", "sampleRecord", "Get"))
 	require.ElementsMatch(t, []attribute.KeyValue{
 		attribute.String("component", "controller"),
 		attribute.String("controller.operation", "Get"),
@@ -357,8 +357,8 @@ func TestCallsRunInTheControllerSpan(t *testing.T) {
 		attribute.String("controller.method", http.MethodGet),
 		attribute.String("controller.path", "/api/controller-sample-get"),
 	}, got.Attributes())
-	service := oteltest.EndedNamed(t, recorder, gstotel.FrameworkSpanName("service", "sampleRecord", "Create"))
-	controllerSpan := oteltest.EndedNamed(t, recorder, gstotel.FrameworkSpanName("controller", "sampleRecord", "Create"))
+	service := tracingtest.EndedNamed(t, recorder, tracing.ResourceSpanName("service", "sampleRecord", "Create"))
+	controllerSpan := tracingtest.EndedNamed(t, recorder, tracing.ResourceSpanName("controller", "sampleRecord", "Create"))
 	require.Equal(t, controllerSpan.SpanContext().SpanID(), service.Parent().SpanID(), "the service span runs inside the controller span")
 }
 

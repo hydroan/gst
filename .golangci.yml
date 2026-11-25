@@ -140,7 +140,7 @@ linters:
             - "!**/i18n/forward_test.go"
             - "!**/datatypes/forward_test.go"
             - "!**/apidoc/forward_test.go"
-            - "!**/otel/forward_test.go"
+            - "!**/tracing/forward_test.go"
             - "!**/logger/forward_test.go"
             - "!**/inspect/inspect_test.go"
             - "!**/service/service_bench_test.go"
@@ -186,8 +186,8 @@ linters:
               desc: "framework code imports github.com/hydroan/gst/internal/datatypes; the public package forwards the field types to projects and the module sources"
             - pkg: "github.com/hydroan/gst/apidoc$"
               desc: "framework code imports github.com/hydroan/gst/internal/apidoc; the public package forwards the registrations to generated project code and the module sources"
-            - pkg: "github.com/hydroan/gst/otel$"
-              desc: "framework code imports github.com/hydroan/gst/internal/otel; the public package forwards the span helpers to projects and the module sources"
+            - pkg: "github.com/hydroan/gst/tracing$"
+              desc: "framework code imports github.com/hydroan/gst/internal/tracing; the public package forwards the span helpers to projects and the module sources"
             - pkg: "github.com/hydroan/gst/logger$"
               desc: "framework code imports github.com/hydroan/gst/internal/logger; the public package forwards the streams a project logs to and the loggers it builds to projects and the module sources"
         # The same rule for the public middleware package: the handlers of
@@ -472,9 +472,6 @@ linters:
       alias:
         # The framework's own packages named like a well-known third-party
         # package.
-        # The public otel package and the package behind it.
-        - pkg: github.com/hydroan/gst/(internal/)?otel
-          alias: gstotel
         - pkg: github.com/hydroan/gst/grpc
           alias: gstgrpc
         - pkg: github.com/hydroan/gst/redis

@@ -14,7 +14,7 @@ import (
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/service"
-	"github.com/hydroan/gst/internal/testutil/oteltest"
+	"github.com/hydroan/gst/internal/testutil/tracingtest"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/sdk/trace"
@@ -110,8 +110,8 @@ func (*handlerListBeforeService) ListBefore(*gst.ServiceContext, *[]*handlerRout
 // base's no-op still runs, but there is nothing to time, so it must not
 // export a span.
 func TestTraceServiceHookSpansOnlyOverriddenHooks(t *testing.T) {
-	oteltest.Enable(t)
-	recorder := oteltest.Record(t)
+	tracingtest.Enable(t)
+	recorder := tracingtest.Record(t)
 	a := newAction[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel]("samples", apiaction.List, apiaction.ListBefore, apiaction.ListAfter)
 
 	t.Run("the_default_service_exports_no_hook_span", func(t *testing.T) {
@@ -120,7 +120,7 @@ func TestTraceServiceHookSpansOnlyOverriddenHooks(t *testing.T) {
 		require.NoError(t, a.traceServiceHook(context.Background(), apiaction.ListBefore, svc, bareServiceContext, func(sc *gst.ServiceContext) error {
 			return svc.ListBefore(sc, &data)
 		}))
-		require.NotContains(t, oteltest.EndedNames(recorder), "service.HandlerRouteModel.ListBefore")
+		require.NotContains(t, tracingtest.EndedNames(recorder), "service.HandlerRouteModel.ListBefore")
 	})
 
 	t.Run("an_overridden_hook_gets_a_span_and_its_no-op_partner_does_not", func(t *testing.T) {
@@ -132,7 +132,7 @@ func TestTraceServiceHookSpansOnlyOverriddenHooks(t *testing.T) {
 		require.NoError(t, a.traceServiceHook(context.Background(), apiaction.ListAfter, svc, bareServiceContext, func(sc *gst.ServiceContext) error {
 			return svc.ListAfter(sc, &data)
 		}))
-		names := oteltest.EndedNames(recorder)
+		names := tracingtest.EndedNames(recorder)
 		require.Contains(t, names, "service.HandlerRouteModel.ListBefore")
 		require.NotContains(t, names, "service.HandlerRouteModel.ListAfter")
 	})
@@ -145,8 +145,8 @@ func TestTraceServiceHookSpansOnlyOverriddenHooks(t *testing.T) {
 // leaves the status unset and records nothing; the span reports the hook
 // unsuccessful either way.
 func TestServiceSpanIsMarkedFailedForTheServersFailuresAlone(t *testing.T) {
-	oteltest.Enable(t)
-	recorder := oteltest.Record(t)
+	tracingtest.Enable(t)
+	recorder := tracingtest.Record(t)
 	a := newAction[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel]("samples", apiaction.List, apiaction.ListBefore, apiaction.ListAfter)
 	unsuccessful := func(span trace.ReadOnlySpan) bool {
 		for _, attr := range span.Attributes() {
@@ -164,7 +164,7 @@ func TestServiceSpanIsMarkedFailedForTheServersFailuresAlone(t *testing.T) {
 		})
 		require.Same(t, refusal, err)
 
-		span := oteltest.EndedNamed(t, recorder, "service.HandlerRouteModel.ListBefore")
+		span := tracingtest.EndedNamed(t, recorder, "service.HandlerRouteModel.ListBefore")
 		require.Equal(t, codes.Unset, span.Status().Code, "what the client brought on itself is no failure of the server")
 		require.Empty(t, span.Events())
 		require.True(t, unsuccessful(span))
@@ -177,7 +177,7 @@ func TestServiceSpanIsMarkedFailedForTheServersFailuresAlone(t *testing.T) {
 		})
 		require.Same(t, failure, err)
 
-		span := oteltest.EndedNamed(t, recorder, "service.HandlerRouteModel.ListAfter")
+		span := tracingtest.EndedNamed(t, recorder, "service.HandlerRouteModel.ListAfter")
 		require.Equal(t, codes.Error, span.Status().Code)
 		require.Len(t, span.Events(), 1, "the error is recorded as one exception event")
 		require.True(t, unsuccessful(span))

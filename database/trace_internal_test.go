@@ -11,8 +11,8 @@ import (
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/logger"
 	"github.com/hydroan/gst/internal/model"
-	gstotel "github.com/hydroan/gst/internal/otel"
-	"github.com/hydroan/gst/internal/testutil/oteltest"
+	"github.com/hydroan/gst/internal/testutil/tracingtest"
+	"github.com/hydroan/gst/internal/tracing"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -38,17 +38,17 @@ func (*traceSample) CreateBefore(context.Context) error { return nil }
 // without bumping its capacity fails here instead of regrowing the slice on
 // every operation.
 func TestOperationSpanAttributesFitTheCapacityInTheWorstCase(t *testing.T) {
-	oteltest.Enable(t)
-	recorder := oteltest.Record(t)
+	tracingtest.Enable(t)
+	recorder := tracingtest.Record(t)
 
 	db := &database[*traceSample]{ins: DB(), ctx: context.Background()}
 	done, _ := db.traceAs("TraceSample", apiaction.Create, 3)
 	done(errors.New("sample failure"))
 
-	span := oteltest.EndedNamed(t, recorder, "database.TraceSample.Create")
+	span := tracingtest.EndedNamed(t, recorder, "database.TraceSample.Create")
 	// Each batch is pinned by the count under its own keys, so one batch
 	// growing past its capacity is not hidden by the other shrinking.
-	batches := oteltest.AttributesByKey(t, span.Attributes(),
+	batches := tracingtest.AttributesByKey(t, span.Attributes(),
 		[]attribute.Key{"component", "database.operation", "database.model", "database.dry_run", "database.batch_size"},
 		[]attribute.Key{"database.duration_ms", "database.record_not_found", "database.stale_object", "database.canceled", "database.refused", "error"},
 	)
@@ -171,8 +171,8 @@ func TestAnOperationAHookRefusedIsNoFailureOfTheDatabase(t *testing.T) {
 	}
 	run := func(t *testing.T, hookErr error) (operation, hook trace.ReadOnlySpan) {
 		t.Helper()
-		oteltest.Enable(t)
-		recorder := oteltest.Record(t)
+		tracingtest.Enable(t)
+		recorder := tracingtest.Record(t)
 
 		db := &database[*traceSample]{ins: DB(), ctx: context.Background()}
 		done, span := db.traceAs("TraceSample", apiaction.Create)
@@ -180,7 +180,7 @@ func TestAnOperationAHookRefusedIsNoFailureOfTheDatabase(t *testing.T) {
 		done(err)
 
 		require.Same(t, hookErr, err)
-		return oteltest.EndedNamed(t, recorder, "database.TraceSample.Create"), oteltest.EndedNamed(t, recorder, "model.TraceSample.CreateBefore")
+		return tracingtest.EndedNamed(t, recorder, "database.TraceSample.Create"), tracingtest.EndedNamed(t, recorder, "model.TraceSample.CreateBefore")
 	}
 
 	t.Run("a refusal leaves both spans unset", func(t *testing.T) {
@@ -215,17 +215,17 @@ func TestAnOperationAHookRefusedIsNoFailureOfTheDatabase(t *testing.T) {
 // to the outcome batch of a hook that failed, on top of the three attributes
 // the hook span starts with.
 func TestHookSpanAttributesFitTheCapacityInTheWorstCase(t *testing.T) {
-	oteltest.Enable(t)
-	recorder := oteltest.Record(t)
+	tracingtest.Enable(t)
+	recorder := tracingtest.Record(t)
 
-	ctx, parent := gstotel.StartSpan(context.Background(), "sample.parent")
+	ctx, parent := tracing.StartSpan(context.Background(), "sample.parent")
 	err := traceModelHook[*traceSample](ctx, apiaction.CreateBefore, parent, func(context.Context) error {
 		return errors.New("sample hook failure")
 	})
 	parent.End()
 	require.Error(t, err)
 
-	span := oteltest.EndedNamed(t, recorder, "model.TraceSample.CreateBefore")
+	span := tracingtest.EndedNamed(t, recorder, "model.TraceSample.CreateBefore")
 	// component, model.model and model.phase are set as the span starts; the
 	// outcome batch adds the rest.
 	const startAttrs = 3

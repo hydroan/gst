@@ -1,4 +1,4 @@
-package otel
+package tracing
 
 import (
 	"context"
@@ -162,7 +162,7 @@ func TestRecordErrorRecordsErrorOriginStackTrace(t *testing.T) {
 
 			stackTrace := exceptionStackTrace(t, span)
 			require.Contains(t, stackTrace, "newStackTracedError")
-			require.Contains(t, stackTrace, "otel_internal_test.go")
+			require.Contains(t, stackTrace, "tracing_internal_test.go")
 		})
 	}
 }
@@ -227,7 +227,7 @@ func TestRecordPanicReturnsTheErrorWithNoSpanToRecordOn(t *testing.T) {
 	require.EqualError(t, RecordPanic(nil, "boom"), "panic recovered: boom")
 }
 
-func TestFrameworkSpanNameUsesDottedGoNames(t *testing.T) {
+func TestResourceSpanNameUsesDottedGoNames(t *testing.T) {
 	tests := []struct {
 		name      string
 		component string
@@ -235,6 +235,13 @@ func TestFrameworkSpanNameUsesDottedGoNames(t *testing.T) {
 		operation string
 		want      string
 	}{
+		{
+			name:      "database get",
+			component: "database",
+			resource:  "Record",
+			operation: "Get",
+			want:      "database.Record.Get",
+		},
 		{
 			name:      "controller create",
 			component: "controller",
@@ -288,12 +295,12 @@ func TestFrameworkSpanNameUsesDottedGoNames(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			require.Equal(t, tt.want, FrameworkSpanName(tt.component, tt.resource, tt.operation))
+			require.Equal(t, tt.want, ResourceSpanName(tt.component, tt.resource, tt.operation))
 		})
 	}
 }
 
-func TestOperationSpanNameUsesDottedGoNames(t *testing.T) {
+func TestSpanNameUsesDottedGoNames(t *testing.T) {
 	tests := []struct {
 		name      string
 		component string
@@ -334,7 +341,7 @@ func TestOperationSpanNameUsesDottedGoNames(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			require.Equal(t, tt.want, OperationSpanName(tt.component, tt.operation))
+			require.Equal(t, tt.want, SpanName(tt.component, tt.operation))
 		})
 	}
 }
@@ -345,13 +352,13 @@ func TestOperationSpanNameUsesDottedGoNames(t *testing.T) {
 // allocates the name's own text and nothing else, where a segment more
 // would grow the list onto the heap.
 func TestSpanNameSegmentsFitTheCapacityInTheWorstCase(t *testing.T) {
-	name := FrameworkSpanName("service", "AdminUserSession", "DeleteManyAfter")
+	name := ResourceSpanName("service", "AdminUserSession", "DeleteManyAfter")
 	require.Len(t, strings.Split(name, "."), spanNameSegmentCap)
 
 	// AllocsPerRun averages over whole allocations, so the count is an
 	// integer already.
 	allocs := int(testing.AllocsPerRun(100, func() {
-		_ = FrameworkSpanName("service", "AdminUserSession", "DeleteManyAfter")
+		_ = ResourceSpanName("service", "AdminUserSession", "DeleteManyAfter")
 	}))
 	require.Equal(t, 1, allocs)
 }

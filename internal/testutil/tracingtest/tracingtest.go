@@ -1,10 +1,10 @@
-// Package oteltest turns real OpenTelemetry tracing on inside one framework
-// test and reads back the spans it exports.
+// Package tracingtest turns real OpenTelemetry tracing on inside one
+// framework test and reads back the spans it exports.
 //
 // It is the framework's own test support: no public package forwards it, so
 // a project built on gst never sees it, and it can follow the framework's
 // test needs without becoming a contract.
-package oteltest
+package tracingtest
 
 import (
 	"testing"
@@ -12,7 +12,7 @@ import (
 
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/logger"
-	gstotel "github.com/hydroan/gst/internal/otel"
+	"github.com/hydroan/gst/internal/tracing"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -20,9 +20,9 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
-// unreachableEndpoint is where the exporter is pointed by default: nothing
-// listens there, so exports fail fast and the spans a test reads come from
-// Record instead.
+// unreachableEndpoint is where the exporter is pointed: nothing listens
+// there, so exports fail fast and the spans a test reads come from Record
+// instead.
 const unreachableEndpoint = "http://127.0.0.1:1/v1/traces"
 
 // Option adjusts the tracing configuration Enable installs.
@@ -31,12 +31,6 @@ type Option func(*config.OTEL)
 // WithSampler sets the sampler; the default samples every trace.
 func WithSampler(sampler config.TracesSampler) Option {
 	return func(c *config.OTEL) { c.TracesSampler = sampler }
-}
-
-// WithEndpoint points the exporter somewhere other than the unreachable
-// default.
-func WithEndpoint(endpoint string) Option {
-	return func(c *config.OTEL) { c.ExporterOTLPTracesEndpoint = endpoint }
 }
 
 // Enable turns tracing on for the rest of the test. Only config.App.OTEL is
@@ -84,10 +78,10 @@ func Enable(t *testing.T, opts ...Option) {
 		logger.OTEL = originalLogger
 	})
 
-	gstotel.Close()
-	require.NoError(t, gstotel.Init())
+	tracing.Close()
+	require.NoError(t, tracing.Init())
 	t.Cleanup(func() {
-		gstotel.Close()
+		tracing.Close()
 	})
 }
 

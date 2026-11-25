@@ -13,8 +13,8 @@ import (
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
-	gstotel "github.com/hydroan/gst/internal/otel"
 	"github.com/hydroan/gst/internal/service"
+	"github.com/hydroan/gst/internal/tracing"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -153,7 +153,7 @@ type phaseSpan struct {
 // the phase's method name as its operation.
 func newPhaseSpan(component, modelName string, phase apiaction.Phase) phaseSpan {
 	return phaseSpan{
-		name:      gstotel.FrameworkSpanName(component, modelName, phase.Name()),
+		name:      tracing.ResourceSpanName(component, modelName, phase.Name()),
 		operation: phase.Name(),
 	}
 }
@@ -263,14 +263,14 @@ func routeParamError(params iter.Seq2[string, string], exempt string) error {
 // served at, the same two for a request and for a call, as the registration
 // described the call's action. The caller ends the span.
 func (a *action[M, REQ, RSP]) startSpan(ctx context.Context, method, path string) (context.Context, trace.Span) {
-	spanCtx, span := gstotel.StartSpan(gstotel.RequestRootContext(ctx), a.controllerSpan.name)
+	spanCtx, span := tracing.StartSpan(tracing.RequestRootContext(ctx), a.controllerSpan.name)
 
 	// Attributes are built as typed values and submitted in one call, the same
 	// shape the tracing middleware uses. Passing them as map[string]any instead
 	// allocates the map, boxes every value into an interface, and then costs a
 	// type switch to arrive back at these very attributes — per request, on the
 	// sampled path.
-	if gstotel.IsSpanRecording(span) {
+	if tracing.IsSpanRecording(span) {
 		span.SetAttributes(
 			attribute.String("component", "controller"),
 			attribute.String("controller.operation", a.controllerSpan.operation),
@@ -300,7 +300,7 @@ func (a *action[M, REQ, RSP]) traceServiceHook(parentCtx context.Context, phase 
 		return httpOnlyMethodCalled(sc)
 	}
 	span := a.serviceSpan(phase)
-	if !gstotel.IsEnabled() || !service.OverridesHook(svc, span.operation) {
+	if !tracing.IsEnabled() || !service.OverridesHook(svc, span.operation) {
 		return run(parentCtx)
 	}
 	_, err := traceServiceCall[struct{}](parentCtx, span, a.name, func(spanCtx context.Context) (struct{}, error) {
@@ -338,10 +338,10 @@ func (a *action[M, REQ, RSP]) traceServiceOperation(parentCtx context.Context, p
 // "hook." prefix for every service call, the keys dashboards and queries
 // select on.
 func traceServiceCall[T any](parentCtx context.Context, span phaseSpan, modelName string, fn func(context.Context) (T, error)) (T, error) {
-	spanCtx, s := gstotel.StartSpan(parentCtx, span.name)
+	spanCtx, s := tracing.StartSpan(parentCtx, span.name)
 	defer s.End()
 
-	recording := gstotel.IsSpanRecording(s)
+	recording := tracing.IsSpanRecording(s)
 	if recording {
 		s.SetAttributes(
 			attribute.String("component", "service"),
@@ -369,7 +369,7 @@ func traceServiceCall[T any](parentCtx context.Context, span phaseSpan, modelNam
 			// Marked failed for the server's failures alone, like the
 			// controller span the call runs in (see reportFailure).
 			if err != nil && gst.ServerFailure(err) {
-				gstotel.RecordError(s, err)
+				tracing.RecordError(s, err)
 			}
 		}
 	}()

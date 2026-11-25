@@ -11,7 +11,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/response"
-	"github.com/hydroan/gst/internal/testutil/oteltest"
+	"github.com/hydroan/gst/internal/testutil/tracingtest"
 	"github.com/hydroan/gst/middleware/ratelimiter"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
@@ -35,7 +35,7 @@ func TestMiddlewareWrapperKeepsContextOfMiddlewareThatReturns(t *testing.T) {
 	var handlerStamp any
 
 	router := gin.New()
-	router.Use(tracing())
+	router.Use(requestTrace())
 	router.Use(func(c *gin.Context) {
 		rootSpanID = trace.SpanFromContext(c.Request.Context()).SpanContext().SpanID()
 	})
@@ -61,15 +61,15 @@ func TestMiddlewareWrapperKeepsContextOfMiddlewareThatReturns(t *testing.T) {
 // rate limiter is the framework middleware of that shape.
 func TestMiddlewareWrapperEndsSpanBeforeHandlerWhenMiddlewareReturns(t *testing.T) {
 	setupTracingTest(t)
-	recorder := oteltest.Record(t)
+	recorder := tracingtest.Record(t)
 
 	var endedBeforeHandler []string
 
 	router := gin.New()
-	router.Use(tracing())
+	router.Use(requestTrace())
 	router.Use(middlewareWrapper("RateLimiter", ratelimiter.RateLimiter()))
 	router.GET("/api/ping", func(c *gin.Context) {
-		endedBeforeHandler = oteltest.EndedNames(recorder)
+		endedBeforeHandler = tracingtest.EndedNames(recorder)
 		c.Status(http.StatusNoContent)
 	})
 
@@ -85,19 +85,19 @@ func TestMiddlewareWrapperEndsSpanBeforeHandlerWhenMiddlewareReturns(t *testing.
 // down.
 func TestMiddlewareWrapperCoversDownstreamOfMiddlewareThatCallsNext(t *testing.T) {
 	setupTracingTest(t)
-	recorder := oteltest.Record(t)
+	recorder := tracingtest.Record(t)
 
 	var endedBeforeHandler []string
 	var handlerStamp any
 
 	router := gin.New()
-	router.Use(tracing())
+	router.Use(requestTrace())
 	router.Use(middlewareWrapper("observe", func(c *gin.Context) {
 		c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), wrapperStampKey{}, "stamped"))
 		c.Next()
 	}))
 	router.GET("/api/ping", func(c *gin.Context) {
-		endedBeforeHandler = oteltest.EndedNames(recorder)
+		endedBeforeHandler = tracingtest.EndedNames(recorder)
 		handlerStamp = c.Request.Context().Value(wrapperStampKey{})
 		c.Status(http.StatusNoContent)
 	})
@@ -107,17 +107,17 @@ func TestMiddlewareWrapperCoversDownstreamOfMiddlewareThatCallsNext(t *testing.T
 	require.Equal(t, http.StatusNoContent, w.Code)
 	require.Equal(t, "stamped", handlerStamp)
 	require.False(t, slices.Contains(endedBeforeHandler, "middleware.Observe"), "a middleware that calls Next keeps its span open over the handler")
-	require.Contains(t, oteltest.EndedNames(recorder), "middleware.Observe")
+	require.Contains(t, tracingtest.EndedNames(recorder), "middleware.Observe")
 }
 
 func TestMiddlewareWrapperKeepsMiddlewareSpanWhenSamplerDrops(t *testing.T) {
-	setupTracingTest(t, oteltest.WithSampler(config.TracesSamplerAlwaysOff))
+	setupTracingTest(t, tracingtest.WithSampler(config.TracesSamplerAlwaysOff))
 
 	var rootSpanContext trace.SpanContext
 	var middlewareSpanContext trace.SpanContext
 
 	router := gin.New()
-	router.Use(tracing())
+	router.Use(requestTrace())
 	router.Use(middlewareWrapper("test", func(c *gin.Context) {
 		rootSpan, exists := c.Get("otel_span")
 		require.True(t, exists)
@@ -148,15 +148,15 @@ func TestMiddlewareWrapperKeepsMiddlewareSpanWhenSamplerDrops(t *testing.T) {
 }
 
 // TestMiddlewareWrapperLeavesARefusalUnset pins the status of a middleware
-// span to the convention of the request root span (see tracing): a
+// span to the convention of the request root span (see requestTrace): a
 // middleware refusing the request, 4xx, did its job and leaves the status
 // Unset, while one answering a server error sets Error.
 func TestMiddlewareWrapperLeavesARefusalUnset(t *testing.T) {
 	setupTracingTest(t)
-	recorder := oteltest.Record(t)
+	recorder := tracingtest.Record(t)
 
 	router := gin.New()
-	router.Use(tracing())
+	router.Use(requestTrace())
 	router.Use(middlewareWrapper("refusing", func(c *gin.Context) {
 		if c.Request.URL.Path == "/api/refused" {
 			response.Abort(c, gst.NewError(http.StatusForbidden, "sample refusal"))
@@ -180,14 +180,14 @@ func TestMiddlewareWrapperLeavesARefusalUnset(t *testing.T) {
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, tc.route, nil))
 
-		span := oteltest.EndedNamed(t, recorder, tc.span)
+		span := tracingtest.EndedNamed(t, recorder, tc.span)
 		require.Equal(t, tc.code, span.Status().Code, tc.route)
 	}
 }
 
 func TestMiddlewareWrapperStartsMiddlewareSpansFromRequestRoot(t *testing.T) {
 	source := readMiddlewareSource(t, "wrapper.go")
-	require.Contains(t, source, "parentCtx := gstotel.RequestRootContext(originalCtx)")
+	require.Contains(t, source, "parentCtx := tracing.RequestRootContext(originalCtx)")
 }
 
 // TestMiddlewareWrapperSpanAttributesFitTheCapacityInTheWorstCase pins
@@ -197,10 +197,10 @@ func TestMiddlewareWrapperStartsMiddlewareSpansFromRequestRoot(t *testing.T) {
 // regrowing the slice on every middleware of every traced request.
 func TestMiddlewareWrapperSpanAttributesFitTheCapacityInTheWorstCase(t *testing.T) {
 	setupTracingTest(t)
-	recorder := oteltest.Record(t)
+	recorder := tracingtest.Record(t)
 
 	router := gin.New()
-	router.Use(tracing())
+	router.Use(requestTrace())
 	router.Use(middlewareWrapper("sample", func(c *gin.Context) {
 		response.Abort(c, gst.NewError(http.StatusForbidden, "sample refusal"))
 	}))
@@ -209,7 +209,7 @@ func TestMiddlewareWrapperSpanAttributesFitTheCapacityInTheWorstCase(t *testing.
 	w := performWrapperRequest(router)
 	require.Equal(t, http.StatusForbidden, w.Code)
 
-	span := oteltest.EndedNamed(t, recorder, "middleware.Sample")
+	span := tracingtest.EndedNamed(t, recorder, "middleware.Sample")
 	// middleware.name, http.request.method, url.path and http.route are set
 	// as the span starts; the outcome batch adds the rest.
 	require.Len(t, span.Attributes(), middlewareStartAttrCap+middlewareOutcomeAttrCap,
@@ -226,17 +226,17 @@ func TestMiddlewareWrapperSpanAttributesFitTheCapacityInTheWorstCase(t *testing.
 // http.route rather than an empty one.
 func TestMiddlewareWrapperLeavesTheRouteOffARequestNoRouteMatched(t *testing.T) {
 	setupTracingTest(t)
-	recorder := oteltest.Record(t)
+	recorder := tracingtest.Record(t)
 
 	router := gin.New()
-	router.Use(tracing())
+	router.Use(requestTrace())
 	router.Use(middlewareWrapper("sample", func(*gin.Context) {}))
 
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/unregistered", nil))
 	require.Equal(t, http.StatusNotFound, w.Code)
 
-	span := oteltest.EndedNamed(t, recorder, "middleware.Sample")
+	span := tracingtest.EndedNamed(t, recorder, "middleware.Sample")
 	require.ElementsMatch(t, []attribute.Key{
 		"middleware.name", "http.request.method", "url.path",
 		"middleware.duration_ms", "middleware.duration_ns", "http.response.status_code", "middleware.error", "service.name",

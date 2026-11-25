@@ -7,8 +7,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
-	gstotel "github.com/hydroan/gst/internal/otel"
-	"github.com/hydroan/gst/internal/testutil/oteltest"
+	"github.com/hydroan/gst/internal/testutil/tracingtest"
+	"github.com/hydroan/gst/internal/tracing"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -237,7 +237,7 @@ func TestDatabaseWithLock(t *testing.T) {
 // not change commit/rollback behavior, and that the closure context carries the
 // transaction span so inner operation spans nest under it.
 func TestTransactionWithOTELEnabled(t *testing.T) {
-	oteltest.Enable(t)
+	tracingtest.Enable(t)
 	defer cleanupTestData()
 
 	t.Run("commit", func(t *testing.T) {
@@ -274,8 +274,8 @@ func TestTransactionWithOTELEnabled(t *testing.T) {
 // it, such as the controller fallback for a request or the cronjob runner for
 // a job.
 func TestTransactionFailureIsRecordedOnSpan(t *testing.T) {
-	oteltest.Enable(t)
-	recorder := oteltest.Record(t)
+	tracingtest.Enable(t)
+	recorder := tracingtest.Record(t)
 	defer cleanupTestData()
 
 	errTest := errors.New("sample failure")
@@ -285,7 +285,7 @@ func TestTransactionFailureIsRecordedOnSpan(t *testing.T) {
 	})
 	require.ErrorIs(t, err, errTest)
 
-	span := oteltest.EndedNamed(t, recorder, gstotel.OperationSpanName("database", "Transaction"))
+	span := tracingtest.EndedNamed(t, recorder, tracing.SpanName("database", "Transaction"))
 	require.Equal(t, codes.Error, span.Status().Code)
 	require.Equal(t, errTest.Error(), span.Status().Description)
 	exception := false

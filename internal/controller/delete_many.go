@@ -11,7 +11,7 @@ import (
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/logger"
 	modellogmgmt "github.com/hydroan/gst/internal/modulemodel/logmgmt"
-	gstotel "github.com/hydroan/gst/internal/otel"
+	"github.com/hydroan/gst/internal/tracing"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
@@ -68,7 +68,7 @@ func (a *action[M, REQ, RSP]) deleteManyFlow(ctx context.Context, newServiceCont
 		stored, err := a.recordsByID(database.Database[M](ctx).WithReplica(false).WithExpand(a.newModel().Expands()), req.itemIDs())
 		if err != nil {
 			log.Errorz("database operation failed", zap.Error(err))
-			gstotel.RecordError(trace.SpanFromContext(ctx), err)
+			tracing.RecordError(trace.SpanFromContext(ctx), err)
 		}
 		for _, m := range req.Items {
 			if record, ok := stored[m.GetID()]; ok {

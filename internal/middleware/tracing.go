@@ -10,8 +10,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/execctx"
-	gstotel "github.com/hydroan/gst/internal/otel"
 	"github.com/hydroan/gst/internal/requestctx"
+	"github.com/hydroan/gst/internal/tracing"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -48,11 +48,12 @@ var (
 	schemeHTTPS = semconv.URLScheme("https")
 )
 
-// tracing returns the middleware that opens the request root span, stamps
-// the trace id on the request context as the identity of this execution, and
-// publishes the trace and span ids to the gin context and the response
-// headers, falling back to generated ids when OpenTelemetry is disabled.
-func tracing() gin.HandlerFunc {
+// requestTrace returns the middleware that opens the request root span,
+// stamps the trace id on the request context as the identity of this
+// execution, and publishes the trace and span ids to the gin context and the
+// response headers, falling back to generated ids when OpenTelemetry is
+// disabled.
+func requestTrace() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var traceID, spanID string
 		var span trace.Span
@@ -61,7 +62,7 @@ func tracing() gin.HandlerFunc {
 		var start time.Time
 
 		// If OTEL is enabled, create OpenTelemetry span and use its trace ID
-		if gstotel.IsEnabled() {
+		if tracing.IsEnabled() {
 			// The span is named after the method and the route pattern gin
 			// matched, so every request to one route shares one name. A
 			// request no route matched is named after its method alone, the
@@ -77,12 +78,13 @@ func tracing() gin.HandlerFunc {
 
 			// Extract the upstream trace context before starting the server
 			// span: the W3C headers, or the framework's own trace id header
-			// when they carry none (see the propagators otel.Init installs).
+			// when they carry none (see the propagators tracing.Init
+			// installs).
 			parentCtx := otel.GetTextMapPropagator().Extract(c.Request.Context(), propagation.HeaderCarrier(c.Request.Header))
 
 			// Start new span
-			ctx, span = gstotel.StartSpan(parentCtx, spanName, trace.WithSpanKind(trace.SpanKindServer))
-			ctx = gstotel.ContextWithRequestRootSpan(ctx)
+			ctx, span = tracing.StartSpan(parentCtx, spanName, trace.WithSpanKind(trace.SpanKindServer))
+			ctx = tracing.ContextWithRequestRootSpan(ctx)
 
 			// Extract OTEL trace ID and span ID
 			spanContext := span.SpanContext()
@@ -103,7 +105,7 @@ func tracing() gin.HandlerFunc {
 			// display. Repeating them would cost two string formats, two
 			// attributes and their encoding on every sampled request, for
 			// values a backend already has.
-			recording = gstotel.IsSpanRecording(span)
+			recording = tracing.IsSpanRecording(span)
 			if recording {
 				// The scheme is the one the client used: TLS on this
 				// connection or the one a proxy in front declares, the
@@ -246,8 +248,8 @@ func splitHostPort(hostport string) (host string, port int) {
 	return host, int(parsed)
 }
 
-// requestSpan returns the server span tracing opened for the request or,
-// when there is none, the span current in the request context.
+// requestSpan returns the server span requestTrace opened for the request
+// or, when there is none, the span current in the request context.
 func requestSpan(c *gin.Context) trace.Span {
 	if span, exists := c.Get("otel_span"); exists {
 		if otelSpan, ok := span.(trace.Span); ok {

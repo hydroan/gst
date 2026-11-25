@@ -1,12 +1,12 @@
-// Package otel is the framework's OpenTelemetry tracing: it builds the tracer
-// provider from the [otel] configuration and exports spans over OTLP, names
-// the spans the framework owns, and records errors and recovered panics on
-// them.
+// Package tracing is the framework's OpenTelemetry tracing: it builds the
+// tracer provider from the [otel] configuration and exports spans over OTLP,
+// names the spans the framework owns, and records errors and recovered
+// panics on them.
 //
-// The public otel package forwards to projects the part they trace their own
-// work with, and documents the configuration; the rest serves the framework
-// alone, and framework code reaches both here.
-package otel
+// The public tracing package forwards to projects the part they trace their
+// own work with, and documents the configuration; the rest serves the
+// framework alone, and framework code reaches both here.
+package tracing
 
 import (
 	"context"
@@ -34,7 +34,6 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.opentelemetry.io/otel/trace"
-	"go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/zap"
 )
 
@@ -335,35 +334,29 @@ func newBatchSpanProcessorOptions(cfg config.OTEL) []sdktrace.BatchSpanProcessor
 	}
 }
 
-// Tracer returns the framework's tracer, or a no-op one while no tracer
-// provider is installed.
-func Tracer() trace.Tracer {
-	if tracerProvider == nil {
-		return noop.NewTracerProvider().Tracer("noop")
-	}
-	return tracer
-}
-
 // IsEnabled returns whether OpenTelemetry tracing is enabled.
 func IsEnabled() bool {
 	return config.App.OTEL.Enabled && tracerProvider != nil
 }
 
-// FrameworkSpanName returns the canonical name for gst-owned resource spans.
-// The format is component.GoModel.GoOperation so Jaeger labels map directly to
-// the framework type and method names used in code.
-func FrameworkSpanName(component string, resource string, operation string) string {
+// ResourceSpanName returns the name of the span of an operation on a
+// resource, in the form component.Resource.Operation: ResourceSpanName(
+// "database", "Record", "Get") is "database.Record.Get". The resource and
+// the operation are the Go names of the model and the method, so a span
+// reads like the code it traces.
+func ResourceSpanName(component string, resource string, operation string) string {
 	return joinSpanName(component, resource, operation)
 }
 
-// OperationSpanName returns the canonical name for gst-owned operation spans
-// that do not have a resource segment, such as middleware, cache, and RBAC.
-func OperationSpanName(component string, operation string) string {
+// SpanName returns the name of the span of an operation that has no
+// resource, a middleware, a cache call or an RBAC check among them, in the
+// form component.Operation: SpanName("cache", "get") is "cache.Get".
+func SpanName(component string, operation string) string {
 	return joinSpanName(component, operation)
 }
 
 // spanNameSegmentCap is the most segments a span name has: the component,
-// the resource and the operation of FrameworkSpanName. joinSpanName sizes
+// the resource and the operation of ResourceSpanName. joinSpanName sizes
 // its segment list to it, which keeps the list off the heap; the worst-case
 // test keeps the count honest when a segment is added.
 const spanNameSegmentCap = 3
@@ -417,8 +410,10 @@ func spanSymbolName(segment string) string {
 	return strcase.UpperCamelCase(spanNameSeparators.Replace(segment))
 }
 
-// StartSpan starts a new span with the given name and options. The caller owns
-// the returned span and must end it after the traced operation finishes.
+// StartSpan starts a span named name under the span ctx carries and returns
+// it with the context that carries it. The caller owns the span and ends it
+// when the traced work finishes. With tracing off nothing is started: ctx
+// comes back as it is, with the span it already carries.
 func StartSpan(ctx context.Context, name string, opts ...trace.SpanStartOption) (context.Context, trace.Span) {
 	if !IsEnabled() {
 		return ctx, trace.SpanFromContext(ctx)

@@ -19,12 +19,13 @@ import (
 // installed it still wraps the statement context twice and boxes a
 // non-recording span, six allocations per statement measured on a List.
 //
-// The decision reads the configuration rather than otel.IsEnabled: the
-// default handles open during bootstrap before the otel package initializes,
-// when IsEnabled is still false for a deployment that has tracing on, and
-// the configured flag is the very fact that initialization consults first.
-// The plugin binds its tracer when installed, so a handle opened with
-// tracing off stays untraced whatever the process does afterwards.
+// The decision reads the configuration rather than tracing.IsEnabled: the
+// default handles open during bootstrap before the tracing package
+// initializes, when IsEnabled is still false for a deployment that has
+// tracing on, and the configured flag is the very fact that initialization
+// consults first. The plugin binds its tracer when installed, so a handle
+// opened with tracing off stays untraced whatever the process does
+// afterwards.
 func InstallTracing(db *gorm.DB) {
 	if !config.App.OTEL.Enabled {
 		return

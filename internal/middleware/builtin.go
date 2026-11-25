@@ -17,7 +17,7 @@ import "github.com/gin-gonic/gin"
 // is the request's first and, through the memo it fills, its only one.
 func Builtin() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
-		tracing(),
+		requestTrace(),
 		accessLogger(),
 		bodyLogger(),
 		recovery(),

@@ -8,7 +8,7 @@ import (
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/logger"
-	gstotel "github.com/hydroan/gst/internal/otel"
+	"github.com/hydroan/gst/internal/tracing"
 	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -69,7 +69,7 @@ func TransactionOn(ctx context.Context, instance *gorm.DB, fn func(ctx context.C
 
 // transactionSpanName is the name of the span a transaction runs under,
 // built once: transactionOn starts one for every transaction it opens.
-var transactionSpanName = gstotel.OperationSpanName("database", "Transaction")
+var transactionSpanName = tracing.SpanName("database", "Transaction")
 
 // transactionOn is the shared body of Transaction and TransactionOn. The
 // connection handle keys the context transaction, so per-instance
@@ -88,7 +88,7 @@ func transactionOn(ctx context.Context, base *gorm.DB, fn func(ctx context.Conte
 		return fn(ctx)
 	}
 
-	spanCtx, span := gstotel.StartSpan(ctx, transactionSpanName)
+	spanCtx, span := tracing.StartSpan(ctx, transactionSpanName)
 	defer span.End()
 	// No recording gate here: both attributes are constants, so there is
 	// nothing to skip building. Gate where assembling the attributes costs
@@ -119,7 +119,7 @@ func transactionOn(ctx context.Context, base *gorm.DB, fn func(ctx context.Conte
 	// logging the error belongs to the boundary that owns it (the controller
 	// fallback for a request, the cronjob runner for a job), so no log line
 	// is written here.
-	gstotel.RecordError(span, txErr)
+	tracing.RecordError(span, txErr)
 	return txErr
 }
 

@@ -9,9 +9,9 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/gst"
-	gstotel "github.com/hydroan/gst/internal/otel"
 	"github.com/hydroan/gst/internal/tenant"
-	"github.com/hydroan/gst/internal/testutil/oteltest"
+	"github.com/hydroan/gst/internal/testutil/tracingtest"
+	"github.com/hydroan/gst/internal/tracing"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
 	"go.uber.org/zap"
@@ -210,8 +210,8 @@ func (r *entryRecorder) Errorz(msg string, fields ...zap.Field) {
 // was given and the error after them, a failure reported without an error
 // the fields alone, and the answer is returned.
 func TestReportFailureFollowsTheAnswer(t *testing.T) {
-	oteltest.Enable(t)
-	recorder := oteltest.Record(t)
+	tracingtest.Enable(t)
+	recorder := tracingtest.Record(t)
 	cause := errors.New("the cause of the failure")
 
 	for _, tt := range []struct {
@@ -234,14 +234,14 @@ func TestReportFailureFollowsTheAnswer(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			rec := &entryRecorder{}
-			_, span := gstotel.StartSpan(context.Background(), tt.name)
+			_, span := tracing.StartSpan(context.Background(), tt.name)
 
 			got := reportFailure(rec, span, "sample operation failed", cause, tt.answer, zap.String("id", "7abc"))
 			span.End()
 
 			require.Same(t, tt.answer, got)
 			require.Equal(t, []loggedEntry{{tt.want, "sample operation failed", []zap.Field{zap.String("id", "7abc"), zap.Error(cause)}}}, rec.entries)
-			ended := oteltest.EndedNamed(t, recorder, tt.name)
+			ended := tracingtest.EndedNamed(t, recorder, tt.name)
 			if tt.want == zapcore.ErrorLevel {
 				require.Equal(t, codes.Error, ended.Status().Code)
 				require.Len(t, ended.Events(), 1, "the error is recorded as one exception event")
@@ -254,7 +254,7 @@ func TestReportFailureFollowsTheAnswer(t *testing.T) {
 
 	t.Run("a failure reported without an error logs the fields alone", func(t *testing.T) {
 		rec := &entryRecorder{}
-		_, span := gstotel.StartSpan(context.Background(), "a failure without an error")
+		_, span := tracing.StartSpan(context.Background(), "a failure without an error")
 		answer := notFound(nil)
 
 		got := reportFailure(rec, span, "route id rejected by model", nil, answer, zap.String("id", "7abc"))
@@ -262,7 +262,7 @@ func TestReportFailureFollowsTheAnswer(t *testing.T) {
 
 		require.Same(t, answer, got)
 		require.Equal(t, []loggedEntry{{zapcore.InfoLevel, "route id rejected by model", []zap.Field{zap.String("id", "7abc")}}}, rec.entries)
-		ended := oteltest.EndedNamed(t, recorder, "a failure without an error")
+		ended := tracingtest.EndedNamed(t, recorder, "a failure without an error")
 		require.Equal(t, codes.Unset, ended.Status().Code)
 		require.Empty(t, ended.Events())
 	})

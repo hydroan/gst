@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/hydroan/gst/internal/gst"
-	gstotel "github.com/hydroan/gst/internal/otel"
+	"github.com/hydroan/gst/internal/tracing"
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -37,12 +37,12 @@ const (
 // database spans appear under the RBAC operation in the request trace.
 func traceRBAC(ctx context.Context, operation string, fields []attribute.KeyValue) (context.Context, func(error)) {
 	ctx = contextOrBackground(ctx)
-	if !gstotel.IsEnabled() {
+	if !tracing.IsEnabled() {
 		return ctx, func(error) {}
 	}
 
-	spanCtx, span := gstotel.StartSpan(ctx, gstotel.OperationSpanName("rbac", operation))
-	recording := gstotel.IsSpanRecording(span)
+	spanCtx, span := tracing.StartSpan(ctx, tracing.SpanName("rbac", operation))
+	recording := tracing.IsSpanRecording(span)
 	if recording {
 		attrs := make([]attribute.KeyValue, 0, rbacOperationAttrCount+len(fields))
 		attrs = append(
@@ -61,14 +61,14 @@ func traceRBAC(ctx context.Context, operation string, fields []attribute.KeyValu
 		}
 		span.SetAttributes(attribute.Bool("rbac.success", err == nil))
 		if err != nil {
-			gstotel.RecordError(span, err)
+			tracing.RecordError(span, err)
 		}
 	}
 }
 
 // authorizeSpanName is the name of the span one decision is made under,
 // built once: a decision is made on every request.
-var authorizeSpanName = gstotel.OperationSpanName("rbac", "authorize")
+var authorizeSpanName = tracing.SpanName("rbac", "authorize")
 
 // traceAuthorize starts the span one decision is made under, and returns a
 // callback that records what was decided rather than only whether deciding
@@ -86,12 +86,12 @@ var authorizeSpanName = gstotel.OperationSpanName("rbac", "authorize")
 // assembling the attributes first and discarding them would put that cost on
 // every request in a deployment that samples, or traces not at all.
 func traceAuthorize(ctx context.Context, tenant string) func(gst.Decision, error) {
-	if !gstotel.IsEnabled() {
+	if !tracing.IsEnabled() {
 		return func(gst.Decision, error) {}
 	}
 
-	_, span := gstotel.StartSpan(contextOrBackground(ctx), authorizeSpanName)
-	if !gstotel.IsSpanRecording(span) {
+	_, span := tracing.StartSpan(contextOrBackground(ctx), authorizeSpanName)
+	if !tracing.IsSpanRecording(span) {
 		return func(gst.Decision, error) { span.End() }
 	}
 	span.SetAttributes(
@@ -129,7 +129,7 @@ func traceAuthorize(ctx context.Context, tenant string) func(gst.Decision, error
 		span.SetAttributes(attrs...)
 
 		if err != nil {
-			gstotel.RecordError(span, err)
+			tracing.RecordError(span, err)
 		}
 	}
 }

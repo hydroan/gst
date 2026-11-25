@@ -41,9 +41,9 @@ import (
 	"github.com/hydroan/gst/internal/logger"
 	prommetrics "github.com/hydroan/gst/internal/metrics"
 	"github.com/hydroan/gst/internal/middleware"
-	gstotel "github.com/hydroan/gst/internal/otel"
 	"github.com/hydroan/gst/internal/router"
 	"github.com/hydroan/gst/internal/service"
+	"github.com/hydroan/gst/internal/tracing"
 	"github.com/hydroan/gst/module"
 	gstredis "github.com/hydroan/gst/redis"
 	"go.uber.org/zap"
@@ -107,7 +107,7 @@ func Bootstrap() error {
 	startup.Register(
 		// backbone clients
 		gstredis.Init,
-		gstotel.Init,
+		tracing.Init,
 	)
 	if err := startup.Init(); err != nil {
 		return err
@@ -135,7 +135,7 @@ func Bootstrap() error {
 	)
 
 	registerCleanup(closeComponent("redis", gstredis.Close))
-	registerCleanup(closeComponent("otel", gstotel.Close))
+	registerCleanup(closeComponent("otel", tracing.Close))
 
 	if err := startup.Init(); err != nil {
 		return err

@@ -11,8 +11,8 @@ import (
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/logger"
-	gstotel "github.com/hydroan/gst/internal/otel"
 	"github.com/hydroan/gst/internal/requestctx"
+	"github.com/hydroan/gst/internal/tracing"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -130,7 +130,7 @@ func enterCall(ctx context.Context, fullMethod string) *callScope {
 	var traceID string
 	if sc := trace.SpanContextFromContext(ctx); sc.HasTraceID() {
 		traceID = sc.TraceID().String()
-		ctx = gstotel.ContextWithRequestRootSpan(ctx)
+		ctx = tracing.ContextWithRequestRootSpan(ctx)
 	} else {
 		traceID = execctx.TraceIDOf(first(md, keyTraceID))
 	}

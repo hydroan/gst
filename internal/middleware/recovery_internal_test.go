@@ -10,7 +10,7 @@ import (
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/logger"
-	"github.com/hydroan/gst/internal/testutil/oteltest"
+	"github.com/hydroan/gst/internal/testutil/tracingtest"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -120,14 +120,14 @@ func TestRecoveryLogsThePanicToTheRecoveryLogger(t *testing.T) {
 // span of a call.
 func TestRecoveryRecordsThePanicOnTheRequestSpan(t *testing.T) {
 	setupTracingTest(t)
-	recorder := oteltest.Record(t)
+	recorder := tracingtest.Record(t)
 
 	engine := gin.New()
-	engine.Use(tracing(), recoveryWithTracing(nil, false))
+	engine.Use(requestTrace(), recoveryWithTracing(nil, false))
 	engine.GET("/panic", func(*gin.Context) { panic("boom") })
 	engine.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/panic", nil))
 
-	span := oteltest.EndedNamed(t, recorder, "GET /panic")
+	span := tracingtest.EndedNamed(t, recorder, "GET /panic")
 	require.Equal(t, codes.Error, span.Status().Code)
 	attrs := make(map[attribute.Key]any, len(span.Attributes()))
 	for _, attr := range span.Attributes() {

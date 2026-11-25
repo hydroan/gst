@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/hydroan/gst/internal/gst"
-	"github.com/hydroan/gst/internal/testutil/oteltest"
+	"github.com/hydroan/gst/internal/testutil/tracingtest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,14 +25,14 @@ func TestRBACTraceFieldsFitTheCapacityInTheWorstCase(t *testing.T) {
 // own fields: the span ends up with those, the fields, and the success flag
 // the finish callback adds, and nothing else.
 func TestTraceRBACAttributesFitTheCapacityInTheWorstCase(t *testing.T) {
-	oteltest.Enable(t)
-	recorder := oteltest.Record(t)
+	tracingtest.Enable(t)
+	recorder := tracingtest.Record(t)
 
 	fields := rbacTraceFields("sample-tenant", "sample-role")
 	_, finish := traceRBAC(context.Background(), "sample", fields)
 	finish(nil)
 
-	span := oteltest.EndedNamed(t, recorder, "rbac.Sample")
+	span := tracingtest.EndedNamed(t, recorder, "rbac.Sample")
 	// The finish callback adds rbac.success on top of the batch.
 	const finishAttrs = 1
 	require.Len(t, span.Attributes(), rbacOperationAttrCount+len(fields)+finishAttrs,
@@ -44,8 +44,8 @@ func TestTraceRBACAttributesFitTheCapacityInTheWorstCase(t *testing.T) {
 // optional attribute — a grant source, a denial reason and a matched rule —
 // on top of the three attributes the span starts with.
 func TestTraceAuthorizeAttributesFitTheCapacityInTheWorstCase(t *testing.T) {
-	oteltest.Enable(t)
-	recorder := oteltest.Record(t)
+	tracingtest.Enable(t)
+	recorder := tracingtest.Record(t)
 
 	finish := traceAuthorize(context.Background(), "sample-tenant")
 	finish(gst.Decision{
@@ -55,7 +55,7 @@ func TestTraceAuthorizeAttributesFitTheCapacityInTheWorstCase(t *testing.T) {
 		MatchedRule: []string{"sample-tenant", "/api/samples", "GET"},
 	}, nil)
 
-	span := oteltest.EndedNamed(t, recorder, "rbac.Authorize")
+	span := tracingtest.EndedNamed(t, recorder, "rbac.Authorize")
 	// component, rbac.operation and rbac.tenant are set as the span starts;
 	// the outcome batch adds the rest.
 	const startAttrs = 3

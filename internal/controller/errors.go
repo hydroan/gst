@@ -8,8 +8,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/gst"
-	gstotel "github.com/hydroan/gst/internal/otel"
 	"github.com/hydroan/gst/internal/tenant"
+	"github.com/hydroan/gst/internal/tracing"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
@@ -68,7 +68,7 @@ func reportFailure(log gst.Logger, span trace.Span, msg string, err, answer erro
 	switch level := gst.FailureLevel(answer); {
 	case level >= slog.LevelError:
 		log.Errorz(msg, fields...)
-		gstotel.RecordError(span, err)
+		tracing.RecordError(span, err)
 	case level >= slog.LevelWarn:
 		log.Warnz(msg, fields...)
 	default:

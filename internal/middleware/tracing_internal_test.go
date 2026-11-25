@@ -11,7 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/execctx"
-	"github.com/hydroan/gst/internal/testutil/oteltest"
+	"github.com/hydroan/gst/internal/testutil/tracingtest"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -24,7 +24,7 @@ func TestTracingUsesIncomingTraceparent(t *testing.T) {
 	const incomingTraceID = "11111111111111111111111111111111"
 
 	router := gin.New()
-	router.Use(tracing())
+	router.Use(requestTrace())
 	router.GET("/api/ping", func(c *gin.Context) {
 		spanContext := trace.SpanFromContext(c.Request.Context()).SpanContext()
 		require.True(t, spanContext.HasTraceID())
@@ -49,7 +49,7 @@ func TestTracingUsesIncomingTraceIDHeader(t *testing.T) {
 	const incomingTraceID = "33333333333333333333333333333333"
 
 	router := gin.New()
-	router.Use(tracing())
+	router.Use(requestTrace())
 	router.GET("/api/ping", func(c *gin.Context) {
 		spanContext := trace.SpanFromContext(c.Request.Context()).SpanContext()
 		require.True(t, spanContext.HasTraceID())
@@ -90,7 +90,7 @@ func TestTracingHoldsTheTraceIDHeaderToOneRuleWhenOTELDisabled(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			var stamped, published, spanID string
 			router := gin.New()
-			router.Use(tracing())
+			router.Use(requestTrace())
 			router.GET("/api/ping", func(c *gin.Context) {
 				stamped = execctx.FromContext(c.Request.Context()).TraceID
 				published = c.GetString(execctx.KeyTraceID)
@@ -126,7 +126,7 @@ func TestTracingReplacesATraceIDHeaderThatIsNotOne(t *testing.T) {
 	setupTracingTest(t)
 
 	router := gin.New()
-	router.Use(tracing())
+	router.Use(requestTrace())
 	router.GET("/api/ping", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 
 	w := httptest.NewRecorder()
@@ -140,10 +140,10 @@ func TestTracingReplacesATraceIDHeaderThatIsNotOne(t *testing.T) {
 }
 
 func TestTracingSkipsRecordingOnlyStateWhenSamplerDrops(t *testing.T) {
-	setupTracingTest(t, oteltest.WithSampler(config.TracesSamplerAlwaysOff))
+	setupTracingTest(t, tracingtest.WithSampler(config.TracesSamplerAlwaysOff))
 
 	router := gin.New()
-	router.Use(tracing())
+	router.Use(requestTrace())
 	router.GET("/api/ping", func(c *gin.Context) {
 		span := trace.SpanFromContext(c.Request.Context())
 		require.True(t, span.SpanContext().HasTraceID())
@@ -170,10 +170,10 @@ func TestTracingSkipsRecordingOnlyStateWhenSamplerDrops(t *testing.T) {
 // per path. That path stays on the span as url.path.
 func TestTracingNamesTheSpanAfterTheRoutePattern(t *testing.T) {
 	setupTracingTest(t)
-	recorder := oteltest.Record(t)
+	recorder := tracingtest.Record(t)
 
 	router := gin.New()
-	router.Use(tracing())
+	router.Use(requestTrace())
 	router.GET("/api/samples/:id", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 
 	paths := []string{"/api/samples/1", "/api/samples/2", "/unregistered/1", "/unregistered/2"}
@@ -183,7 +183,7 @@ func TestTracingNamesTheSpanAfterTheRoutePattern(t *testing.T) {
 
 	require.Equal(t,
 		[]string{"GET /api/samples/:id", "GET /api/samples/:id", "GET", "GET"},
-		oteltest.EndedNames(recorder),
+		tracingtest.EndedNames(recorder),
 	)
 
 	targets := make([]string, 0, len(paths))
@@ -206,10 +206,10 @@ func TestTracingNamesTheSpanAfterTheRoutePattern(t *testing.T) {
 // later error is masked by it.
 func TestTracingSetsTheSpanStatusTheWayTheGRPCLineDoes(t *testing.T) {
 	setupTracingTest(t)
-	recorder := oteltest.Record(t)
+	recorder := tracingtest.Record(t)
 
 	router := gin.New()
-	router.Use(tracing())
+	router.Use(requestTrace())
 	router.GET("/api/ok", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 	router.GET("/api/missing", func(c *gin.Context) { c.Status(http.StatusNotFound) })
 	router.GET("/api/failed", func(c *gin.Context) { c.Status(http.StatusInternalServerError) })
@@ -230,14 +230,14 @@ func TestTracingSetsTheSpanStatusTheWayTheGRPCLineDoes(t *testing.T) {
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, tc.route, nil))
 
-		span := oteltest.EndedNamed(t, recorder, "GET "+tc.route)
+		span := tracingtest.EndedNamed(t, recorder, "GET "+tc.route)
 		require.Equal(t, tc.code, span.Status().Code, tc.route)
 	}
 }
 
 func TestTracingMarksHTTPSpanAsRequestRoot(t *testing.T) {
 	source := readMiddlewareSource(t, "tracing.go")
-	require.Contains(t, source, "ctx = gstotel.ContextWithRequestRootSpan(ctx)")
+	require.Contains(t, source, "ctx = tracing.ContextWithRequestRootSpan(ctx)")
 }
 
 // TestTracingDescribesTheRequestByTheHTTPConventions pins the attributes of
@@ -251,10 +251,10 @@ func TestTracingMarksHTTPSpanAsRequestRoot(t *testing.T) {
 // included.
 func TestTracingDescribesTheRequestByTheHTTPConventions(t *testing.T) {
 	setupTracingTest(t)
-	recorder := oteltest.Record(t)
+	recorder := tracingtest.Record(t)
 
 	router := gin.New()
-	router.Use(tracing())
+	router.Use(requestTrace())
 	router.POST("/api/samples/:id", func(c *gin.Context) { c.String(http.StatusCreated, "created") })
 
 	t.Run("a request carrying everything the span describes", func(t *testing.T) {
@@ -279,7 +279,7 @@ func TestTracingDescribesTheRequestByTheHTTPConventions(t *testing.T) {
 			"http.request.body.size":    int64(2),
 			"http.response.status_code": int64(http.StatusCreated),
 			"http.response.body.size":   int64(len("created")),
-		}, spanAttributeValues(t, oteltest.EndedNamed(t, recorder, "POST /api/samples/:id").Attributes()))
+		}, spanAttributeValues(t, tracingtest.EndedNamed(t, recorder, "POST /api/samples/:id").Attributes()))
 	})
 
 	t.Run("a request carrying none of the optional parts", func(t *testing.T) {
@@ -295,7 +295,7 @@ func TestTracingDescribesTheRequestByTheHTTPConventions(t *testing.T) {
 			"server.address":            "sample.test",
 			"client.address":            "192.0.2.10",
 			"http.response.status_code": int64(http.StatusNotFound),
-		}, spanAttributeValues(t, oteltest.EndedNamed(t, recorder, "DELETE").Attributes()))
+		}, spanAttributeValues(t, tracingtest.EndedNamed(t, recorder, "DELETE").Attributes()))
 	})
 }
 
@@ -334,10 +334,10 @@ func TestSplitHostPort(t *testing.T) {
 // traced request.
 func TestTracingSpanAttributesFitTheCapacityInTheWorstCase(t *testing.T) {
 	setupTracingTest(t)
-	recorder := oteltest.Record(t)
+	recorder := tracingtest.Record(t)
 
 	router := gin.New()
-	router.Use(tracing())
+	router.Use(requestTrace())
 	router.POST("/api/samples", func(c *gin.Context) {
 		_ = c.Error(errors.New("first sample failure"))
 		_ = c.Error(errors.New("second sample failure"))
@@ -352,13 +352,13 @@ func TestTracingSpanAttributesFitTheCapacityInTheWorstCase(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusInternalServerError, w.Code)
 
-	span := oteltest.EndedNamed(t, recorder, "POST /api/samples")
+	span := tracingtest.EndedNamed(t, recorder, "POST /api/samples")
 	// Each batch is pinned by the count under its own keys, so one batch
 	// growing past its capacity is not hidden by the other shrinking. The
 	// error batch adds one attribute per error and re-sets the error flag the
 	// response batch already carries; a span keeps one value per key.
 	const errorsReported = 2
-	batches := oteltest.AttributesByKey(t, span.Attributes(),
+	batches := tracingtest.AttributesByKey(t, span.Attributes(),
 		[]attribute.Key{"http.request.method", "url.path", "url.query", "url.scheme", "server.address", "server.port", "http.route", "user_agent.original", "client.address", "http.request.body.size"},
 		[]attribute.Key{"http.response.status_code", "http.response.body.size", "http.duration_ms", "error"},
 		[]attribute.Key{"error.0", "error.1"},
@@ -370,11 +370,11 @@ func TestTracingSpanAttributesFitTheCapacityInTheWorstCase(t *testing.T) {
 
 // setupTracingTest enables real tracing for one middleware test and puts gin
 // into test mode; opts adjust the sampler or the exporter endpoint.
-func setupTracingTest(t *testing.T, opts ...oteltest.Option) {
+func setupTracingTest(t *testing.T, opts ...tracingtest.Option) {
 	t.Helper()
 
 	gin.SetMode(gin.TestMode)
-	oteltest.Enable(t, opts...)
+	tracingtest.Enable(t, opts...)
 }
 
 func readMiddlewareSource(t *testing.T, filename string) string {

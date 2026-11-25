@@ -9,7 +9,7 @@ import (
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/database"
 	modeliamaccount "github.com/hydroan/gst/internal/modulemodel/iam/account"
-	gstotel "github.com/hydroan/gst/otel"
+	"github.com/hydroan/gst/tracing"
 	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -95,12 +95,12 @@ func LoadPasswordCredential(ctx context.Context, userID string) (*modeliamaccoun
 // outcome and never marks the span as failed; only unexpected verification
 // errors are recorded as span errors.
 func VerifyPasswordCredential(ctx context.Context, credential *modeliamaccount.PasswordCredential, password string) error {
-	_, span := gstotel.StartSpan(ctx, gstotel.OperationSpanName("iam", "VerifyPassword"))
+	_, span := tracing.StartSpan(ctx, tracing.SpanName("iam", "VerifyPassword"))
 	defer span.End()
 
 	if credential == nil {
 		err := errors.New("password credential is required")
-		gstotel.RecordError(span, err)
+		tracing.RecordError(span, err)
 		return err
 	}
 
@@ -111,7 +111,7 @@ func VerifyPasswordCredential(ctx context.Context, credential *modeliamaccount.P
 	err := bcrypt.CompareHashAndPassword([]byte(credential.PasswordHash), []byte(password))
 	span.SetAttributes(attribute.Bool("iam.password.match", err == nil))
 	if err != nil && !errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
-		gstotel.RecordError(span, err)
+		tracing.RecordError(span, err)
 	}
 	return err
 }
@@ -142,13 +142,13 @@ func hashAccountPassword(ctx context.Context, password string) (string, error) {
 		return "", err
 	}
 
-	_, span := gstotel.StartSpan(ctx, gstotel.OperationSpanName("iam", "HashPassword"))
+	_, span := tracing.StartSpan(ctx, tracing.SpanName("iam", "HashPassword"))
 	defer span.End()
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		serviceErr := gst.NewErrorWithCause(http.StatusInternalServerError, failedToHashPasswordMsg, err)
-		gstotel.RecordError(span, serviceErr)
+		tracing.RecordError(span, serviceErr)
 		return "", serviceErr
 	}
 	return string(hashedPassword), nil

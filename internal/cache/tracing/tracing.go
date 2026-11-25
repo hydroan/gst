@@ -18,15 +18,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/gst"
-	gstotel "github.com/hydroan/gst/internal/otel"
+	"github.com/hydroan/gst/internal/tracing"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -48,7 +46,7 @@ func NewWrapper[T any](cache gst.Cache[T], cacheType string) *Wrapper[T] {
 // Get retrieves a value by key with tracing.
 func (tw *Wrapper[T]) Get(ctx context.Context, key string) (T, error) {
 	ctx = orBackground(ctx)
-	if !gstotel.IsEnabled() {
+	if !tracing.IsEnabled() {
 		return tw.cache.Get(ctx, key)
 	}
 	spanCtx, span := tw.startSpan(ctx, "get")
@@ -58,7 +56,7 @@ func (tw *Wrapper[T]) Get(ctx context.Context, key string) (T, error) {
 	// every cache operation of every sampled-out request. They are submitted in
 	// one call once the outcome is known, because each call on a recording span
 	// locks it and re-runs attribute deduplication.
-	recording := gstotel.IsSpanRecording(span)
+	recording := tracing.IsSpanRecording(span)
 
 	value, err := tw.cache.Get(spanCtx, key)
 	if recording {
@@ -68,8 +66,7 @@ func (tw *Wrapper[T]) Get(ctx context.Context, key string) (T, error) {
 	// way instrumentation does, and only a failure of the backend marks the
 	// span failed.
 	if err != nil && !errors.Is(err, gst.ErrEntryNotFound) {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, fmt.Sprintf("Failed to get cache key: %v", err))
+		tracing.RecordError(span, err)
 	}
 	return value, err
 }
@@ -77,18 +74,17 @@ func (tw *Wrapper[T]) Get(ctx context.Context, key string) (T, error) {
 // Set stores a key-value pair with tracing.
 func (tw *Wrapper[T]) Set(ctx context.Context, key string, value T, ttl time.Duration) error {
 	ctx = orBackground(ctx)
-	if !gstotel.IsEnabled() {
+	if !tracing.IsEnabled() {
 		return tw.cache.Set(ctx, key, value, ttl)
 	}
 	spanCtx, span := tw.startSpan(ctx, "set")
 	defer span.End()
-	if gstotel.IsSpanRecording(span) {
+	if tracing.IsSpanRecording(span) {
 		span.SetAttributes(append(tw.attributes("set", key), attribute.String("cache.ttl", ttl.String()))...)
 	}
 
 	if err := tw.cache.Set(spanCtx, key, value, ttl); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, fmt.Sprintf("Failed to set cache key: %v", err))
+		tracing.RecordError(span, err)
 		return err
 	}
 	return nil
@@ -97,18 +93,17 @@ func (tw *Wrapper[T]) Set(ctx context.Context, key string, value T, ttl time.Dur
 // Delete removes a key from the cache with tracing.
 func (tw *Wrapper[T]) Delete(ctx context.Context, key string) error {
 	ctx = orBackground(ctx)
-	if !gstotel.IsEnabled() {
+	if !tracing.IsEnabled() {
 		return tw.cache.Delete(ctx, key)
 	}
 	spanCtx, span := tw.startSpan(ctx, "delete")
 	defer span.End()
-	if gstotel.IsSpanRecording(span) {
+	if tracing.IsSpanRecording(span) {
 		span.SetAttributes(tw.attributes("delete", key)...)
 	}
 
 	if err := tw.cache.Delete(spanCtx, key); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, fmt.Sprintf("Failed to delete cache key: %v", err))
+		tracing.RecordError(span, err)
 		return err
 	}
 	return nil
@@ -117,12 +112,12 @@ func (tw *Wrapper[T]) Delete(ctx context.Context, key string) error {
 // Exists checks if a key exists in the cache with tracing.
 func (tw *Wrapper[T]) Exists(ctx context.Context, key string) bool {
 	ctx = orBackground(ctx)
-	if !gstotel.IsEnabled() {
+	if !tracing.IsEnabled() {
 		return tw.cache.Exists(ctx, key)
 	}
 	spanCtx, span := tw.startSpan(ctx, "exists")
 	defer span.End()
-	recording := gstotel.IsSpanRecording(span)
+	recording := tracing.IsSpanRecording(span)
 
 	exists := tw.cache.Exists(spanCtx, key)
 	if recording {
@@ -170,12 +165,8 @@ func orBackground(ctx context.Context) context.Context {
 	return ctx
 }
 
-// startSpan creates a new span for the given cache operation as a child of
-// ctx. The caller owns the returned span and must end it after the cache
-// operation finishes.
+// startSpan starts the span of the given cache operation as a child of ctx.
+// The caller owns the returned span and ends it after the operation finishes.
 func (tw *Wrapper[T]) startSpan(ctx context.Context, operation string) (context.Context, trace.Span) {
-	tracer := gstotel.Tracer()
-	operationName := gstotel.OperationSpanName("cache", operation)
-	spanCtx, span := tracer.Start(ctx, operationName) //nolint:spancheck // Caller receives and ends the returned span.
-	return spanCtx, span                              //nolint:spancheck // Caller receives and ends the returned span.
+	return tracing.StartSpan(ctx, tracing.SpanName("cache", operation))
 }

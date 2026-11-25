@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	gstotel "github.com/hydroan/gst/internal/otel"
+	"github.com/hydroan/gst/internal/tracing"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
@@ -53,19 +53,19 @@ func middlewareWrapper(name string, middleware gin.HandlerFunc) gin.HandlerFunc 
 	// The canonical gst operation name of the middleware's span, built once
 	// here, as the middleware is wrapped, and shared by every request it
 	// serves.
-	spanName := gstotel.OperationSpanName("middleware", name)
+	spanName := tracing.SpanName("middleware", name)
 
 	return func(c *gin.Context) {
 		// Skip tracing if OTEL is not enabled
-		if !gstotel.IsEnabled() {
+		if !tracing.IsEnabled() {
 			middleware(c)
 			return
 		}
 
 		// Start new span for middleware execution under the HTTP request span.
 		originalCtx := c.Request.Context()
-		parentCtx := gstotel.RequestRootContext(originalCtx)
-		ctx, span := gstotel.StartSpan(parentCtx, spanName)
+		parentCtx := tracing.RequestRootContext(originalCtx)
+		ctx, span := tracing.StartSpan(parentCtx, spanName)
 		defer span.End()
 
 		// The middleware runs with its own span current. Whatever it attaches
@@ -78,11 +78,11 @@ func middlewareWrapper(name string, middleware gin.HandlerFunc) gin.HandlerFunc 
 			c.Request = c.Request.WithContext(trace.ContextWithSpan(c.Request.Context(), trace.SpanFromContext(parentCtx)))
 		}()
 
-		recording := gstotel.IsSpanRecording(span)
+		recording := tracing.IsSpanRecording(span)
 		var start time.Time
 		if recording {
 			// The span describes the request it serves the way the request
-			// root span does (see tracing): by the names of the
+			// root span does (see requestTrace): by the names of the
 			// OpenTelemetry HTTP conventions, the route left off a request
 			// that matched none.
 			attrs := make([]attribute.KeyValue, 0, middlewareStartAttrCap)
@@ -123,7 +123,7 @@ func middlewareWrapper(name string, middleware gin.HandlerFunc) gin.HandlerFunc 
 			// A middleware answering a server error failed; one refusing the
 			// request, 4xx, did its job and leaves the status Unset, the way
 			// the request root span and the gRPC line's spans read (see
-			// tracing), and Ok is never set.
+			// requestTrace), and Ok is never set.
 			if status >= http.StatusInternalServerError {
 				span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", status))
 				attrs = append(attrs, attribute.Bool("middleware.error", true))
@@ -131,8 +131,8 @@ func middlewareWrapper(name string, middleware gin.HandlerFunc) gin.HandlerFunc 
 				attrs = append(attrs, attribute.Bool("middleware.error", false))
 			}
 
-			// Add the service name attribute cached at otel Init.
-			if serviceName := gstotel.ServiceNameAttr(); serviceName.Valid() {
+			// Add the service name attribute tracing.Init cached.
+			if serviceName := tracing.ServiceNameAttr(); serviceName.Valid() {
 				attrs = append(attrs, serviceName)
 			}
 			span.SetAttributes(attrs...)

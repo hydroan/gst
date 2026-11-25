@@ -21,8 +21,8 @@ import (
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/logger"
 	"github.com/hydroan/gst/internal/testutil"
-	"github.com/hydroan/gst/internal/testutil/oteltest"
 	"github.com/hydroan/gst/internal/testutil/testcontainer"
+	"github.com/hydroan/gst/internal/testutil/tracingtest"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 	"gorm.io/gorm"
@@ -351,8 +351,8 @@ func TestTenureCarriesItsIdentity(t *testing.T) {
 // of the tenure's length.
 func TestTenureOpensASpanWhenTracingIsOn(t *testing.T) {
 	withLeaderLoggerConfig(t)
-	oteltest.Enable(t)
-	recorder := oteltest.Record(t)
+	tracingtest.Enable(t)
+	recorder := tracingtest.Record(t)
 	resetLeaderState(t)
 
 	observed := make(chan tenureObservation, 1)
@@ -371,7 +371,7 @@ func TestTenureOpensASpanWhenTracingIsOn(t *testing.T) {
 	}
 	require.True(t, got.span.HasTraceID(), "the work must run under the tenure's span")
 	require.Equal(t, got.span.TraceID().String(), got.identity.TraceID)
-	span := oteltest.EndedNamed(t, recorder, "leader.TracedWork")
+	span := tracingtest.EndedNamed(t, recorder, "leader.TracedWork")
 	require.Equal(t, got.identity.TraceID, span.SpanContext().TraceID().String())
 	require.Equal(t, got.span.SpanID(), span.SpanContext().SpanID(), "the span the work runs under is the one ended at the tenure's start")
 }

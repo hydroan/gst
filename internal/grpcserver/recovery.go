@@ -10,7 +10,7 @@ import (
 	"github.com/hydroan/gst/internal/i18n"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/logger"
-	gstotel "github.com/hydroan/gst/internal/otel"
+	"github.com/hydroan/gst/internal/tracing"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -19,7 +19,7 @@ import (
 
 // recovered is the recovery handler of both chains. It records the panic on
 // the call's span the way the HTTP recovery middleware does on the request's
-// (see otel.RecordPanic), logs it with the method, the trace id and the
+// (see tracing.RecordPanic), logs it with the method, the trace id and the
 // stack to the recovery log, the one the HTTP listener's panics go to, and
 // answers codes.Internal with the fixed message StatusError answers the
 // server's own failures with; what the panic was stays in the log and the
@@ -29,7 +29,7 @@ func recovered(ctx context.Context, p any) error {
 	// whether or not the span records; nothing here reads that error, so a
 	// call no span records skips it.
 	if span := trace.SpanFromContext(ctx); span.IsRecording() {
-		_ = gstotel.RecordPanic(span, p)
+		_ = tracing.RecordPanic(span, p)
 	}
 	if logger.Recovery != nil {
 		method, _ := grpc.Method(ctx)

@@ -12,7 +12,7 @@ import (
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/lease"
 	"github.com/hydroan/gst/internal/logger"
-	"github.com/hydroan/gst/internal/testutil/oteltest"
+	"github.com/hydroan/gst/internal/testutil/tracingtest"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/sdk/trace"
@@ -826,8 +826,8 @@ func TestRoundThatLosesItsLeaseWhileWindingDownIsLoggedAsALoss(t *testing.T) {
 // an event and no error status, so a search for failed rounds skips it.
 func TestRoundInterruptedAtShutdownIsAWarning(t *testing.T) {
 	dir := withCronjobLoggerConfig(t)
-	oteltest.Enable(t)
-	recorder := oteltest.Record(t)
+	tracingtest.Enable(t)
+	recorder := tracingtest.Record(t)
 	resetCronjobState(t)
 	withBoundCronjobLogger(t)
 	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
@@ -851,7 +851,7 @@ func TestRoundInterruptedAtShutdownIsAWarning(t *testing.T) {
 	require.Equal(t, "shutting down", entry["reason"])
 	require.Equal(t, "WARN", entry["level"])
 
-	span := oteltest.EndedNamed(t, recorder, "cronjob.InterruptedJob")
+	span := tracingtest.EndedNamed(t, recorder, "cronjob.InterruptedJob")
 	require.Equal(t, codes.Unset, span.Status().Code, "an interrupted round is neither a success nor a failure")
 	require.Len(t, span.Events(), 1)
 	require.Equal(t, "interrupted", span.Events()[0].Name)
@@ -996,8 +996,8 @@ func TestRunStampsRoundIdentity(t *testing.T) {
 // status unset, the way instrumentation does.
 func TestRunOpensRoundSpanWhenTracingIsOn(t *testing.T) {
 	withCronjobLoggerConfig(t)
-	oteltest.Enable(t)
-	recorder := oteltest.Record(t)
+	tracingtest.Enable(t)
+	recorder := tracingtest.Record(t)
 	resetCronjobState(t)
 	clock := withFakeClock(t, time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC))
 
@@ -1023,7 +1023,7 @@ func TestRunOpensRoundSpanWhenTracingIsOn(t *testing.T) {
 
 	require.True(t, got.span.HasTraceID(), "the job must run under the round's span")
 	require.Equal(t, got.span.TraceID().String(), got.identity.TraceID)
-	span := oteltest.EndedNamed(t, recorder, "cronjob.TracedJob")
+	span := tracingtest.EndedNamed(t, recorder, "cronjob.TracedJob")
 	require.Equal(t, got.identity.TraceID, span.SpanContext().TraceID().String())
 	require.Equal(t, codes.Unset, span.Status().Code, "a round that finished leaves the status unset")
 }

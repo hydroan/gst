@@ -9,19 +9,19 @@ import (
 	"context"
 
 	"github.com/hydroan/gst/internal/execctx"
-	gstotel "github.com/hydroan/gst/internal/otel"
+	"github.com/hydroan/gst/internal/tracing"
 	"go.opentelemetry.io/otel/trace"
 )
 
 // Begin returns the context the named operation of component runs on, its
 // root span and its trace id. With tracing on the span is started under
-// gstotel.OperationSpanName(component, name) — the parent of every span the
-// operation's work opens — and the id is the span's; with tracing off the
-// span is nil and the id is generated. The caller ends the span.
+// tracing.SpanName(component, name) — the parent of every span the operation's
+// work opens — and the id is the span's; with tracing off the span is nil and
+// the id is generated. The caller ends the span.
 func Begin(ctx context.Context, component, name string) (context.Context, trace.Span, string) {
-	if !gstotel.IsEnabled() {
+	if !tracing.IsEnabled() {
 		return ctx, nil, execctx.NewTraceID()
 	}
-	ctx, span := gstotel.StartSpan(ctx, gstotel.OperationSpanName(component, name))
+	ctx, span := tracing.StartSpan(ctx, tracing.SpanName(component, name))
 	return ctx, span, span.SpanContext().TraceID().String()
 }

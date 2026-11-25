@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/internal/execctx"
-	"github.com/hydroan/gst/internal/testutil/oteltest"
+	"github.com/hydroan/gst/internal/testutil/tracingtest"
 	"github.com/prometheus/client_golang/prometheus"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
@@ -88,8 +88,8 @@ type traced struct {
 // on the span the way the HTTP recovery middleware records one.
 func TestCallsAreTracedWithTracingOn(t *testing.T) {
 	reset(t)
-	oteltest.Enable(t)
-	recorder := oteltest.Record(t)
+	tracingtest.Enable(t)
+	recorder := tracingtest.Record(t)
 	seen := make(chan traced, 1)
 	report := func(ctx context.Context) error {
 		seen <- traced{traceID: execctx.FromContext(ctx).TraceID, span: trace.SpanContextFromContext(ctx)}
@@ -113,7 +113,7 @@ func TestCallsAreTracedWithTracingOn(t *testing.T) {
 		require.NoError(t, call(ctx, conn, "Look", grpc.Header(&header)))
 
 		got := <-seen
-		span := oteltest.EndedNamed(t, recorder, "gst.test.Echo/Look")
+		span := tracingtest.EndedNamed(t, recorder, "gst.test.Echo/Look")
 		require.Equal(t, trace.SpanKindServer, span.SpanKind())
 		require.True(t, got.span.IsValid(), "the handler runs inside the span")
 		require.Equal(t, span.SpanContext().TraceID(), got.span.TraceID())
@@ -136,7 +136,7 @@ func TestCallsAreTracedWithTracingOn(t *testing.T) {
 		require.NoError(t, call(ctx, conn, "Seeded"))
 
 		got := <-seen
-		span := oteltest.EndedNamed(t, recorder, "gst.test.Echo/Seeded")
+		span := tracingtest.EndedNamed(t, recorder, "gst.test.Echo/Seeded")
 		require.Equal(t, "0af7651916cd43dd8448eb211c80319c", got.traceID)
 		require.Equal(t, "b7ad6b7169203331", span.Parent().SpanID().String())
 	})
@@ -150,7 +150,7 @@ func TestCallsAreTracedWithTracingOn(t *testing.T) {
 		require.NoError(t, call(ctx, conn, "Quoted", grpc.Header(&header)))
 
 		got := <-seen
-		span := oteltest.EndedNamed(t, recorder, "gst.test.Echo/Quoted")
+		span := tracingtest.EndedNamed(t, recorder, "gst.test.Echo/Quoted")
 		require.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", span.SpanContext().TraceID().String())
 		require.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", got.traceID)
 		require.Equal(t, []string{"4bf92f3577b34da6a3ce929d0e0e4736"}, header.Get("x-trace-id"))
@@ -163,7 +163,7 @@ func TestCallsAreTracedWithTracingOn(t *testing.T) {
 		err := call(ctx, conn, "Deny")
 
 		require.Equal(t, codes.PermissionDenied, status.Code(err))
-		span := oteltest.EndedNamed(t, recorder, "gst.test.Echo/Deny")
+		span := tracingtest.EndedNamed(t, recorder, "gst.test.Echo/Deny")
 		// A refusal is the caller's error: the conventions leave the server
 		// span's status unset for it and carry the code as an attribute; a
 		// failure of the server's own, INTERNAL among them, sets the error
@@ -179,7 +179,7 @@ func TestCallsAreTracedWithTracingOn(t *testing.T) {
 		err := call(ctx, conn, "Boom")
 
 		require.Equal(t, codes.Internal, status.Code(err))
-		span := oteltest.EndedNamed(t, recorder, "gst.test.Echo/Boom")
+		span := tracingtest.EndedNamed(t, recorder, "gst.test.Echo/Boom")
 		require.Equal(t, otelcodes.Error, span.Status().Code)
 		attrs := attributesOf(span)
 		require.Equal(t, "INTERNAL", attrs["rpc.response.status_code"])

@@ -34,7 +34,7 @@ func TestAccessLoggerFieldsFitTheCapacityInTheWorstCase(t *testing.T) {
 	standInRequestMetrics(t)
 
 	router := gin.New()
-	router.Use(tracing(), accessLogger())
+	router.Use(requestTrace(), accessLogger())
 	router.GET("/api/ping", func(c *gin.Context) {
 		_ = c.Error(errors.New("probe failed"))
 		c.Set(requestctx.KeyCloseCode, 1000)

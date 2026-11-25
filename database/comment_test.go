@@ -16,7 +16,7 @@ import (
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/testutil/oteltest"
+	"github.com/hydroan/gst/internal/testutil/tracingtest"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -162,8 +162,8 @@ func TestSQLCommentCarriesLeaderTenure(t *testing.T) {
 // round the statement carries that span's trace id — the id the SQL log
 // records for it — instead of staying clean.
 func TestSQLCommentMatchesOperationSpanOutsideRequest(t *testing.T) {
-	oteltest.Enable(t)
-	recorder := oteltest.Record(t)
+	tracingtest.Enable(t)
+	recorder := tracingtest.Record(t)
 	defer cleanupTestData()
 	setupTestData(t)
 
@@ -173,7 +173,7 @@ func TestSQLCommentMatchesOperationSpanOutsideRequest(t *testing.T) {
 	users := make([]*TestUser, 0)
 	require.NoError(t, database.DatabaseOn[*TestUser](context.Background(), session).List(&users))
 
-	span := oteltest.EndedNamed(t, recorder, "database.TestUser.List")
+	span := tracingtest.EndedNamed(t, recorder, "database.TestUser.List")
 	require.Contains(t, capture.last(), "/* trace_id='"+span.SpanContext().TraceID().String()+"' */")
 }
 

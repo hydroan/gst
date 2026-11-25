@@ -7,7 +7,7 @@ import (
 	"github.com/cockroachdb/errors"
 	grpcprom "github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/recovery"
-	gstotel "github.com/hydroan/gst/internal/otel"
+	"github.com/hydroan/gst/internal/tracing"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
@@ -45,7 +45,7 @@ var (
 // handler, the counterpart of the HTTP listener's tracing middleware: it
 // opens the server span of every call, unary or stream, at the transport
 // layer ahead of the chains, from the trace context the call's metadata
-// carries through the propagators otel.Init installed, names it by the full
+// carries through the propagators tracing.Init installed, names it by the full
 // method, records the rpc attributes of the semantic conventions and the
 // status the call ended with, and ends it after the response went out. The
 // request scope reads the span for the call's trace id (see requestScope).
@@ -62,7 +62,7 @@ func chains(stopping context.Context) []grpc.ServerOption {
 		grpc.ChainUnaryInterceptor(unary...),
 		grpc.ChainStreamInterceptor(stream...),
 	}
-	if gstotel.IsEnabled() {
+	if tracing.IsEnabled() {
 		opts = append(opts, grpc.StatsHandler(otelgrpc.NewServerHandler()))
 	}
 	return opts

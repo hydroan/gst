@@ -10,7 +10,7 @@ import (
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/logger"
 	modellogmgmt "github.com/hydroan/gst/internal/modulemodel/logmgmt"
-	gstotel "github.com/hydroan/gst/internal/otel"
+	"github.com/hydroan/gst/internal/tracing"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
@@ -56,7 +56,7 @@ func (a *action[M, REQ, RSP]) deleteFlow(ctx context.Context, newServiceContext 
 				return notFound(err)
 			}
 			log.Errorz("database operation failed", zap.Error(err))
-			gstotel.RecordError(trace.SpanFromContext(ctx), err)
+			tracing.RecordError(trace.SpanFromContext(ctx), err)
 		}
 	}
 

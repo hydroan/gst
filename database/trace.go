@@ -11,9 +11,8 @@ import (
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/logger"
 	"github.com/hydroan/gst/internal/model"
-	gstotel "github.com/hydroan/gst/internal/otel"
+	"github.com/hydroan/gst/internal/tracing"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
@@ -94,7 +93,7 @@ const (
 //	HTTP or gRPC → Controller → Service → Database → GORM
 //
 // Note: Must be called after `defer db.reset()` to ensure proper cleanup order.
-// Spans are recorded when gstotel.IsEnabled() returns true.
+// Spans are recorded when tracing.IsEnabled() returns true.
 func (db *database[M]) trace(phase apiaction.Phase, batch ...int) (func(error), trace.Span) {
 	return db.traceAs(reflect.TypeOf(*new(M)).Elem().Name(), phase, batch...)
 }
@@ -133,9 +132,9 @@ func (db *database[M]) traceAs(modelName string, phase apiaction.Phase, batch ..
 
 	ctx := db.ctx
 	var span trace.Span
-	if gstotel.IsEnabled() && ctx != nil {
-		spanName := gstotel.FrameworkSpanName("database", modelName, phase.Name())
-		ctx, span = gstotel.StartSpan(ctx, spanName)
+	if tracing.IsEnabled() && ctx != nil {
+		spanName := tracing.ResourceSpanName("database", modelName, phase.Name())
+		ctx, span = tracing.StartSpan(ctx, spanName)
 		db.ctx = ctx
 
 		// Update GORM database context with new span context
@@ -145,7 +144,7 @@ func (db *database[M]) traceAs(modelName string, phase apiaction.Phase, batch ..
 		// SetAttributes call; every call on a recording span locks the span and
 		// re-runs deduplication. When adding attributes, extend the batches in
 		// this function instead of adding SetAttributes calls.
-		if gstotel.IsSpanRecording(span) {
+		if tracing.IsSpanRecording(span) {
 			attrs := make([]attribute.KeyValue, 0, operationStartAttrCap)
 			attrs = append(
 				attrs,
@@ -185,7 +184,7 @@ func (db *database[M]) traceAs(modelName string, phase apiaction.Phase, batch ..
 		// canceled field, one a model hook refused database.refused beside
 		// the log's refused field, and only a real failure records the error
 		// and sets the error status.
-		if gstotel.IsSpanRecording(span) {
+		if tracing.IsSpanRecording(span) {
 			attrs := make([]attribute.KeyValue, 0, operationOutcomeAttrCap)
 			attrs = append(attrs, attribute.Int64("database.duration_ms", duration.Milliseconds()))
 
@@ -206,8 +205,7 @@ func (db *database[M]) traceAs(modelName string, phase apiaction.Phase, batch ..
 				// failure of the database.
 				attrs = append(attrs, attribute.Bool("database.refused", true))
 			default:
-				span.SetStatus(codes.Error, err.Error())
-				gstotel.RecordError(span, err)
+				tracing.RecordError(span, err)
 				attrs = append(attrs, attribute.Bool("error", true))
 			}
 			span.SetAttributes(attrs...)
@@ -296,7 +294,7 @@ func traceModelHook[M gst.Model](ctx context.Context, phase apiaction.Phase, par
 	if ctx != nil {
 		hookCtx = ctx
 	}
-	if !gstotel.IsEnabled() || ctx == nil || parentSpan == nil {
+	if !tracing.IsEnabled() || ctx == nil || parentSpan == nil {
 		return fn(hookCtx)
 	}
 	// An unoverridden hook is the framework base's no-op: it still runs, but
@@ -308,12 +306,12 @@ func traceModelHook[M gst.Model](ctx context.Context, phase apiaction.Phase, par
 	modelName := reflect.TypeOf(*new(M)).Elem().Name()
 	// Use a structured gst span name under the database span for hook
 	// execution.
-	spanName := gstotel.FrameworkSpanName("model", modelName, phase.Name())
+	spanName := tracing.ResourceSpanName("model", modelName, phase.Name())
 	parentCtx := trace.ContextWithSpan(hookCtx, parentSpan)
-	childCtx, span := gstotel.StartSpan(parentCtx, spanName)
+	childCtx, span := tracing.StartSpan(parentCtx, spanName)
 	defer span.End()
 
-	recording := gstotel.IsSpanRecording(span)
+	recording := tracing.IsSpanRecording(span)
 	var start time.Time
 	if recording {
 		// Add hook-specific attributes
@@ -346,8 +344,7 @@ func traceModelHook[M gst.Model](ctx context.Context, phase apiaction.Phase, par
 		// the operation with a status of its choosing answered the client,
 		// which is no failure of the hook.
 		if err != nil && gst.ServerFailure(err) {
-			span.SetStatus(codes.Error, err.Error())
-			gstotel.RecordError(span, err)
+			tracing.RecordError(span, err)
 			attrs = append(attrs, attribute.Bool("error", true))
 		}
 		span.SetAttributes(attrs...)

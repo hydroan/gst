@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/hydroan/gst/config"
-	"github.com/hydroan/gst/internal/testutil/oteltest"
+	"github.com/hydroan/gst/internal/testutil/tracingtest"
 	gstredis "github.com/hydroan/gst/redis"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
@@ -53,8 +53,8 @@ func TestInitInstrumentsTracingWithoutCallerAttributes(t *testing.T) {
 		require.NoError(t, gstredis.Close())
 		require.NoError(t, gstredis.Init())
 	})
-	oteltest.Enable(t)
-	recorder := oteltest.Record(t)
+	tracingtest.Enable(t)
+	recorder := tracingtest.Record(t)
 	require.NoError(t, gstredis.Close())
 	require.NoError(t, gstredis.Init())
 
@@ -62,7 +62,7 @@ func TestInitInstrumentsTracingWithoutCallerAttributes(t *testing.T) {
 	require.NoError(t, gstredis.Set(t.Context(), key, "value", time.Minute))
 	t.Cleanup(func() { _ = gstredis.Del(t.Context(), key) })
 
-	span := oteltest.EndedNamed(t, recorder, "set")
+	span := tracingtest.EndedNamed(t, recorder, "set")
 	keys := make([]string, 0, len(span.Attributes()))
 	for _, kv := range span.Attributes() {
 		keys = append(keys, string(kv.Key))

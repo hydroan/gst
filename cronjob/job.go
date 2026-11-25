@@ -10,10 +10,9 @@ import (
 	"github.com/hydroan/gst/internal/lifecycle"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/operation"
-	gstotel "github.com/hydroan/gst/internal/otel"
+	"github.com/hydroan/gst/internal/tracing"
 	"github.com/robfig/cron/v3"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
@@ -426,15 +425,14 @@ func beginRound(parent context.Context, name string) (ctx context.Context, trace
 		if span == nil {
 			return
 		}
-		if gstotel.IsSpanRecording(span) {
+		if tracing.IsSpanRecording(span) {
 			switch {
 			case err == nil:
 				// Finished: the status stays unset.
 			case interruption != "":
 				span.AddEvent("interrupted", trace.WithAttributes(attribute.String("reason", interruption)))
 			default:
-				span.SetStatus(codes.Error, err.Error())
-				gstotel.RecordError(span, err)
+				tracing.RecordError(span, err)
 			}
 		}
 		span.End()

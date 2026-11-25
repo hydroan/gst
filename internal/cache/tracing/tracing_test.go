@@ -2,14 +2,16 @@ package tracing_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/cache/tracing"
 	"github.com/hydroan/gst/internal/gst"
-	"github.com/hydroan/gst/internal/testutil/oteltest"
+	"github.com/hydroan/gst/internal/testutil/tracingtest"
 	"go.opentelemetry.io/otel/codes"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
 
 // recordingCache captures the arguments of the last call so tests can assert
@@ -20,9 +22,11 @@ type recordingCache struct {
 	lastVal string
 	lastTTL time.Duration
 
-	value  string
-	getErr error
-	exists bool
+	value     string
+	getErr    error
+	setErr    error
+	deleteErr error
+	exists    bool
 }
 
 func (c *recordingCache) Get(ctx context.Context, key string) (string, error) {
@@ -32,12 +36,12 @@ func (c *recordingCache) Get(ctx context.Context, key string) (string, error) {
 
 func (c *recordingCache) Set(ctx context.Context, key string, value string, ttl time.Duration) error {
 	c.lastCtx, c.lastKey, c.lastVal, c.lastTTL = ctx, key, value, ttl
-	return nil
+	return c.setErr
 }
 
 func (c *recordingCache) Delete(ctx context.Context, key string) error {
 	c.lastCtx, c.lastKey = ctx, key
-	return nil
+	return c.deleteErr
 }
 
 func (c *recordingCache) Exists(ctx context.Context, key string) bool {
@@ -118,8 +122,8 @@ func TestWrapperNormalizesNilContext(t *testing.T) {
 // check leave the status unset, the miss being a normal outcome rather than
 // a failure, and only an error of the backend marks the span failed.
 func TestWrapperLeavesTheStatusOfACompletedOperationUnset(t *testing.T) {
-	oteltest.Enable(t)
-	recorder := oteltest.Record(t)
+	tracingtest.Enable(t)
+	recorder := tracingtest.Record(t)
 	inner := &recordingCache{value: "stored", exists: true}
 	wrapped := tracing.NewWrapper[string](inner, "sample")
 	ctx := context.Background()
@@ -147,7 +151,7 @@ func TestWrapperLeavesTheStatusOfACompletedOperationUnset(t *testing.T) {
 
 	ended := recorder.Ended()
 	if len(ended) != 6 {
-		t.Fatalf("want 6 spans, got %d: %v", len(ended), oteltest.EndedNames(recorder))
+		t.Fatalf("want 6 spans, got %d: %v", len(ended), tracingtest.EndedNames(recorder))
 	}
 	for _, span := range ended[:5] {
 		if span.Status().Code != codes.Unset {
@@ -159,5 +163,53 @@ func TestWrapperLeavesTheStatusOfACompletedOperationUnset(t *testing.T) {
 	}
 	if failed := ended[5]; failed.Status().Code != codes.Error || len(failed.Events()) == 0 {
 		t.Errorf("the backend error must mark the span failed and be recorded: status = %v, events = %d", failed.Status().Code, len(failed.Events()))
+	}
+}
+
+// TestWrapperRecordsABackendFailure asserts what the span of a failed
+// operation carries, the same for a get, a set and a delete: the error of the
+// backend as the status description, and one exception event with the stack
+// of where the error was created, the way the framework records a failure on
+// every span of its own.
+func TestWrapperRecordsABackendFailure(t *testing.T) {
+	tracingtest.Enable(t)
+	recorder := tracingtest.Record(t)
+	failure := errors.New("backend down")
+	inner := &recordingCache{getErr: failure, setErr: failure, deleteErr: failure}
+	wrapped := tracing.NewWrapper[string](inner, "sample")
+	ctx := context.Background()
+
+	if _, err := wrapped.Get(ctx, "key-get"); !errors.Is(err, failure) {
+		t.Fatalf("get: want the backend error, got %v", err)
+	}
+	if err := wrapped.Set(ctx, "key-set", "value", time.Minute); !errors.Is(err, failure) {
+		t.Fatalf("set: want the backend error, got %v", err)
+	}
+	if err := wrapped.Delete(ctx, "key-delete"); !errors.Is(err, failure) {
+		t.Fatalf("delete: want the backend error, got %v", err)
+	}
+
+	ended := recorder.Ended()
+	if len(ended) != 3 {
+		t.Fatalf("want 3 spans, got %d: %v", len(ended), tracingtest.EndedNames(recorder))
+	}
+	for _, span := range ended {
+		if status := span.Status(); status.Code != codes.Error || status.Description != failure.Error() {
+			t.Errorf("%s: status = %v %q, want Error %q", span.Name(), status.Code, status.Description, failure.Error())
+		}
+		events := span.Events()
+		if len(events) != 1 || events[0].Name != semconv.ExceptionEventName {
+			t.Errorf("%s: want one exception event, got %d", span.Name(), len(events))
+			continue
+		}
+		var stack string
+		for _, attr := range events[0].Attributes {
+			if attr.Key == semconv.ExceptionStacktraceKey {
+				stack = attr.Value.AsString()
+			}
+		}
+		if !strings.Contains(stack, "tracing_test.go") {
+			t.Errorf("%s: the exception must carry the stack of where the error was created, got %q", span.Name(), stack)
+		}
 	}
 }

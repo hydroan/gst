@@ -15,8 +15,8 @@ import (
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/logger"
-	gstotel "github.com/hydroan/gst/internal/otel"
 	"github.com/hydroan/gst/internal/response"
+	"github.com/hydroan/gst/internal/tracing"
 	"go.uber.org/zap"
 )
 
@@ -41,7 +41,7 @@ func recoveryWithTracing(log *zap.Logger, stack bool) gin.HandlerFunc {
 	return gin.CustomRecoveryWithWriter(nil, func(c *gin.Context, recovered any) {
 		// The panic goes on the request's span; the error describing it is
 		// what a response that has begun reports on the context below.
-		panicErr := gstotel.RecordPanic(requestSpan(c), recovered)
+		panicErr := tracing.RecordPanic(requestSpan(c), recovered)
 
 		// Check for a broken connection, as it is not really a
 		// condition that warrants a panic stack trace.

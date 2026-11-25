@@ -14,7 +14,7 @@ import (
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/service"
 	"github.com/hydroan/gst/internal/streamctx"
-	"github.com/hydroan/gst/internal/testutil/oteltest"
+	"github.com/hydroan/gst/internal/testutil/tracingtest"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/sdk/trace"
@@ -38,8 +38,8 @@ func (*sseSampleService) SSE(ctx *gst.ServiceContext) error {
 // neither span is marked as failed although the service returned the ending.
 func TestSSEHandlerRecordsAStreamEndedByShutdownAsInterrupted(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	oteltest.Enable(t)
-	recorder := oteltest.Record(t)
+	tracingtest.Enable(t)
+	recorder := tracingtest.Record(t)
 
 	registerTestService[*handlerRouteModel, *handlerRouteModel, *handlerRouteModel](apiaction.SSE, "samples/stream", &sseSampleService{})
 	engine := gin.New()
@@ -59,10 +59,10 @@ func TestSSEHandlerRecordsAStreamEndedByShutdownAsInterrupted(t *testing.T) {
 		t.Fatal("the request must end when the server shuts down")
 	}
 
-	controllerSpan := oteltest.EndedNamed(t, recorder, "controller.HandlerRouteModel.SSE")
+	controllerSpan := tracingtest.EndedNamed(t, recorder, "controller.HandlerRouteModel.SSE")
 	require.Equal(t, []string{"server shutting down"}, eventReasons(controllerSpan, "interrupted"))
 	require.Equal(t, codes.Unset, controllerSpan.Status().Code, "a stream ended by the shutdown is not a failure")
-	serviceSpan := oteltest.EndedNamed(t, recorder, "service.HandlerRouteModel.SSE")
+	serviceSpan := tracingtest.EndedNamed(t, recorder, "service.HandlerRouteModel.SSE")
 	require.Equal(t, codes.Unset, serviceSpan.Status().Code, "nor is it one on the service span")
 }
 

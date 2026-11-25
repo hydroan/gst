@@ -81,10 +81,10 @@ func Init() (err error) {
 	}
 	// Instrumentation follows the configured flag for the reason
 	// dbruntime.InstallTracing gives for the database handles: the client
-	// connects before the otel package initializes, and the hook binds its
-	// tracer when installed. Left on regardless, every command would still
-	// format its full statement and open a non-recording span for nobody,
-	// nine allocations per command measured on a SET.
+	// connects before the tracing package initializes, and the hook binds
+	// its tracer when installed. Left on regardless, every command would
+	// still format its full statement and open a non-recording span for
+	// nobody, nine allocations per command measured on a SET.
 	//
 	// No metrics hook is installed. The framework never installs an
 	// OpenTelemetry meter provider — its metrics are served through the
