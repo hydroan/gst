@@ -13,8 +13,10 @@ type iterator[V any] struct {
 // NewIterator returns an iterator positioned at the node n. A node not on
 // this list gives an iterator that is not valid.
 func (l *List[V]) NewIterator(n *Node[V]) container.MutableBidiIterator[V] {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
+	if l.safe {
+		l.mu.RLock()
+		defer l.mu.RUnlock()
+	}
 
 	if n != nil && n.list != l {
 		n = nil

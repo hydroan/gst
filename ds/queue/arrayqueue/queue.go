@@ -5,22 +5,21 @@ package arrayqueue
 import (
 	"fmt"
 	"strings"
-
-	"github.com/hydroan/gst/ds/container"
+	"sync"
 )
 
 // Queue represents a queue backed by a slice.
 // This queue implements the FIFO (first-in, first-out) behavior.
 type Queue[E any] struct {
 	elements []E
-	mu       container.Locker
+	mu       sync.RWMutex
 	safe     bool
 }
 
 // New creates and initializes an empty queue.
 // Options can be provided to customize the queue's properties (e.g., thread safety).
 func New[E any](ops ...Option[E]) (*Queue[E], error) {
-	q := &Queue[E]{elements: make([]E, 0), mu: container.NopLocker{}}
+	q := &Queue[E]{elements: make([]E, 0)}
 	for _, op := range ops {
 		if op == nil {
 			continue
@@ -98,7 +97,7 @@ func (q *Queue[E]) Dequeue() (E, bool) {
 	return e, true
 }
 
-// Peek returns first element of the queue without remove it.
+// Peek returns first element of the queue without removing it.
 // Returns zero value of element and false if queue is empty.
 func (q *Queue[E]) Peek() (E, bool) {
 	if q.safe {

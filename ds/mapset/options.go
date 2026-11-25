@@ -1,8 +1,6 @@
 package mapset
 
 import (
-	"sync"
-
 	"github.com/hydroan/gst/ds/container"
 )
 
@@ -12,7 +10,6 @@ type Option[T comparable] func(*Set[T]) error
 // WithSafe creates an Option that makes the Set safe for concurrent use.
 func WithSafe[E comparable]() Option[E] {
 	return func(s *Set[E]) error {
-		s.mu = new(sync.RWMutex)
 		s.safe = true
 		return nil
 	}

@@ -1,7 +1,5 @@
 package priorityqueue
 
-import "sync"
-
 // Option is a function type that configures a property of a priority queue.
 type Option[E any] func(q *Queue[E]) error
 
@@ -9,7 +7,6 @@ type Option[E any] func(q *Queue[E]) error
 func WithSafe[E any]() Option[E] {
 	return func(q *Queue[E]) error {
 		q.safe = true
-		q.mu = &sync.RWMutex{}
 		return nil
 	}
 }

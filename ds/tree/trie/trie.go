@@ -5,8 +5,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
-
-	"github.com/hydroan/gst/ds/container"
+	"sync"
 )
 
 // Node represents a node in the trie.
@@ -44,24 +43,29 @@ func (n *Node[K, V]) clone() *Node[K, V] {
 	return newN
 }
 
+// KeysValue is one entry of a trie: a key, as the sequence of its elements,
+// and the value stored under it.
 type KeysValue[K comparable, V any] struct {
 	Keys  []K `json:"keys"`
 	Value V   `json:"value"`
 }
 
+// Trie is a prefix tree. A key is a sequence of elements of type K, laid out
+// along a path from the root, and its value of type V sits where the key ends.
 type Trie[K comparable, V any] struct {
 	root *Node[K, V]
 	size int
 
 	safe bool
-	mu   container.Locker
+	mu   sync.RWMutex
 
 	nodeFormatter func(V, int, bool) string
 	keyFormatter  func(K, V, int, bool) string
 }
 
+// New creates and returns an empty trie.
 func New[K comparable, V any](ops ...Option[K, V]) (*Trie[K, V], error) {
-	t := &Trie[K, V]{mu: container.NopLocker{}}
+	t := &Trie[K, V]{}
 	for _, op := range ops {
 		if op == nil {
 			continue
@@ -574,7 +578,7 @@ func (t *Trie[K, V]) PrefixCount(prefix []K) int {
 	return curr.count
 }
 
-// Range call "fn" for each keys-value pair in the trie.
+// Range calls "fn" for each keys-value pair in the trie.
 // If "fn" returns false, stops the iteration.
 func (t *Trie[K, V]) Range(fn func([]K, V) bool) {
 	if fn == nil {

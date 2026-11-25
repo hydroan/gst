@@ -6,23 +6,23 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 
-	"github.com/hydroan/gst/ds/container"
 	"github.com/hydroan/gst/ds/list/linkedlist"
 )
 
-// Stack represents a stack based on linkedlist..
+// Stack represents a stack backed by a linked list.
 // The stack provides typical LIFO(last-in, first-out) behavior.
 type Stack[E any] struct {
 	list *linkedlist.List[E]
 	safe bool
-	mu   container.Locker
+	mu   sync.RWMutex
 }
 
 // New creates and initializes an empty stack.
 // Options can be provided to customize the stack's properties (e.g., thread safety).
 func New[E any](ops ...Option[E]) (s *Stack[E], err error) {
-	s = &Stack[E]{mu: container.NopLocker{}}
+	s = &Stack[E]{}
 	for _, op := range ops {
 		if op == nil {
 			continue

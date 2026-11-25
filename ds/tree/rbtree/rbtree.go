@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/hydroan/gst/ds/container"
 )
@@ -17,7 +18,7 @@ type Tree[K comparable, V any] struct {
 	cmp  func(K, K) int
 
 	safe          bool
-	mu            container.Locker
+	mu            sync.RWMutex
 	color         bool
 	nodeFormatter func(K, V) string
 }
@@ -29,7 +30,7 @@ func New[K comparable, V any](cmp func(K, K) int, ops ...Option[K, V]) (*Tree[K,
 	if cmp == nil {
 		return nil, container.ErrComparisonNil
 	}
-	t := &Tree[K, V]{cmp: cmp, mu: container.NopLocker{}}
+	t := &Tree[K, V]{cmp: cmp}
 	for _, op := range ops {
 		if op == nil {
 			continue
@@ -49,8 +50,8 @@ func NewOrdered[K cmp.Ordered, V any](ops ...Option[K, V]) (*Tree[K, V], error) 
 	return New(cmp.Compare[K], ops...)
 }
 
-// NewFromSlice creates and returns a red-black tree from a given slice.
-// It uses cmp.Compare[K] as the default comparison function.
+// NewFromSlice creates and returns a red-black tree from a given slice: each
+// element is stored under its index, and cmp.Compare[int] orders the keys.
 func NewFromSlice[V any](slice []V, ops ...Option[int, V]) (*Tree[int, V], error) {
 	t, err := NewOrdered(ops...)
 	if err != nil {
@@ -90,7 +91,7 @@ func NewFromOrderedMap[K cmp.Ordered, V any](m map[K]V, ops ...Option[K, V]) (*T
 }
 
 // Put inserts a key-value pair into the tree.
-// if the key already exists, its value will be updated.
+// If the key already exists, its value will be updated.
 func (t *Tree[K, V]) Put(key K, val V) {
 	if t.safe {
 		t.mu.Lock()
@@ -496,6 +497,7 @@ func (t *Tree[K, V]) LevelOrder(fn func(K, V) bool) {
 	}
 }
 
+// BlackCount returns the number of black nodes in the tree.
 func (t *Tree[K, V]) BlackCount() int {
 	if t.safe {
 		t.mu.RLock()
@@ -516,6 +518,7 @@ func blackCount[K comparable, V any](n *node[K, V]) int {
 	return count
 }
 
+// RedCount returns the number of red nodes in the tree.
 func (t *Tree[K, V]) RedCount() int {
 	if t.safe {
 		t.mu.RLock()
@@ -536,6 +539,8 @@ func redCount[K comparable, V any](n *node[K, V]) int {
 	return count
 }
 
+// LeafCount returns the number of leaves in the tree: the nodes with no
+// children.
 func (t *Tree[K, V]) LeafCount() int {
 	if t.safe {
 		t.mu.RLock()
@@ -555,6 +560,8 @@ func leafCount[K comparable, V any](n *node[K, V]) int {
 	return leafCount(n.Left) + leafCount(n.Right)
 }
 
+// MaxDepth returns the number of nodes on the longest path from the root to a
+// leaf, 0 for an empty tree.
 func (t *Tree[K, V]) MaxDepth() int {
 	if t.safe {
 		t.mu.RLock()
@@ -574,6 +581,8 @@ func maxDepth[K comparable, V any](n *node[K, V]) int {
 	return max(maxDepth(n.Left), maxDepth(n.Right)) + 1
 }
 
+// MinDepth returns the number of nodes on the shortest path from the root to
+// a leaf, 0 for an empty tree.
 func (t *Tree[K, V]) MinDepth() int {
 	if t.safe {
 		t.mu.RLock()

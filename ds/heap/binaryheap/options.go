@@ -1,9 +1,5 @@
 package binaryheap
 
-import (
-	"sync"
-)
-
 // Option is a function type that configures a property of a binary heap.
 type Option[T any] func(*Heap[T]) error
 
@@ -11,7 +7,6 @@ type Option[T any] func(*Heap[T]) error
 func WithSafe[T any]() Option[T] {
 	return func(h *Heap[T]) error {
 		h.safe = true
-		h.mu = &sync.RWMutex{}
 		return nil
 	}
 }

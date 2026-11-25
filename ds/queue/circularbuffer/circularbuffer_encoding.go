@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 )
 
+// MarshalJSON will marshal the buffer into a JSON array, the oldest element
+// first.
 func (cb *Buffer[E]) MarshalJSON() ([]byte, error) {
 	if cb.safe {
 		cb.mu.RLock()
@@ -23,6 +25,9 @@ func (cb *Buffer[E]) MarshalJSON() ([]byte, error) {
 	return json.Marshal(elements)
 }
 
+// UnmarshalJSON replaces the elements of the buffer with those of a JSON
+// array, enqueued in order. The buffer keeps its size, so an array longer
+// than it is handled as Enqueue handles a full buffer.
 func (cb *Buffer[E]) UnmarshalJSON(data []byte) error {
 	if cb.safe {
 		cb.mu.Lock()

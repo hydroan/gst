@@ -1,8 +1,6 @@
 package splaytree
 
 import (
-	"sync"
-
 	"github.com/hydroan/gst/ds/container"
 )
 
@@ -13,7 +11,6 @@ type Option[K comparable, V any] func(*Tree[K, V]) error
 func WithSafe[K comparable, V any]() Option[K, V] {
 	return func(t *Tree[K, V]) error {
 		t.safe = true
-		t.mu = &sync.RWMutex{}
 		return nil
 	}
 }

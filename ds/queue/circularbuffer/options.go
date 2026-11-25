@@ -1,9 +1,5 @@
 package circularbuffer
 
-import (
-	"sync"
-)
-
 // Option is a function that can be used to configure a Buffer.
 type Option[T any] func(*Buffer[T]) error
 
@@ -11,7 +7,6 @@ type Option[T any] func(*Buffer[T]) error
 func WithSafe[T any]() Option[T] {
 	return func(cb *Buffer[T]) error {
 		cb.safe = true
-		cb.mu = &sync.RWMutex{}
 		return nil
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/hydroan/gst/ds/container"
 )
@@ -17,7 +18,7 @@ type Tree[K comparable, V any] struct {
 	size int
 
 	safe          bool
-	mu            container.Locker
+	mu            sync.RWMutex
 	nodeFormatter func(K, V) string
 }
 
@@ -28,7 +29,7 @@ func New[K comparable, V any](cmp func(K, K) int, ops ...Option[K, V]) (*Tree[K,
 	if cmp == nil {
 		return nil, container.ErrComparisonNil
 	}
-	t := &Tree[K, V]{cmp: cmp, mu: container.NopLocker{}}
+	t := &Tree[K, V]{cmp: cmp}
 	for _, op := range ops {
 		if op == nil {
 			continue
@@ -48,8 +49,8 @@ func NewOrdered[K cmp.Ordered, V any](ops ...Option[K, V]) (*Tree[K, V], error) 
 	return New(cmp.Compare[K], ops...)
 }
 
-// NewFromSlice creates and returns an AVL tree from a given slice.
-// It uses cmp.Compare[K] as the default comparison function.
+// NewFromSlice creates and returns an AVL tree from a given slice: each
+// element is stored under its index, and cmp.Compare[int] orders the keys.
 func NewFromSlice[V any](slice []V, ops ...Option[int, V]) (*Tree[int, V], error) {
 	t, err := NewOrdered(ops...)
 	if err != nil {
@@ -88,7 +89,7 @@ func NewFromOrderedMap[K cmp.Ordered, V any](m map[K]V, ops ...Option[K, V]) (*T
 	return t, nil
 }
 
-// Put insert a key-pair into the tree.
+// Put inserts a key-value pair into the tree.
 // If the key already exists, its value will be updated.
 func (t *Tree[K, V]) Put(key K, val V) {
 	if t.safe {

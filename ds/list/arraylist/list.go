@@ -4,6 +4,7 @@ package arraylist
 import (
 	"cmp"
 	"slices"
+	"sync"
 
 	"github.com/hydroan/gst/ds/container"
 )
@@ -15,15 +16,16 @@ const (
 	minCap = 16
 )
 
-// List represents a resizable array-backed list.
-// Call New or NewFromSlice default creates a list without concurrent safety.
-// Call New or NewFromSlice with `WithSafe` option to make the List safe for concurrent use.
+// List represents a resizable array-backed list. It is safe for concurrent
+// use only when built with the WithSafe option.
 type List[E any] struct {
 	elements []E
 	cmp      func(E, E) int
-	mu       container.Locker
 
+	// safe is set by WithSafe. Every method reads it before it takes mu, so
+	// a list built without WithSafe does not pay for a lock it has no use for.
 	safe bool
+	mu   sync.RWMutex
 }
 
 // New creates and returns a new array-backed list.
@@ -36,8 +38,7 @@ func New[E any](cmp func(E, E) int, ops ...Option[E]) (*List[E], error) {
 		return nil, container.ErrComparisonNil
 	}
 	l := &List[E]{
-		elements: make([]E, 0, minCap), // NOTE: zero capacity will cause growBy blocked.
-		mu:       container.NopLocker{},
+		elements: make([]E, 0, minCap),
 		cmp:      cmp,
 	}
 	for _, op := range ops {
@@ -58,8 +59,8 @@ func NewOrdered[E cmp.Ordered](ops ...Option[E]) (*List[E], error) {
 	return New(cmp.Compare[E], ops...)
 }
 
-// NewFromSlice creates a new array-backed list from the given slice.
-// The provided equal function is used to compare elements for equality.
+// NewFromSlice creates a new array-backed list holding a copy of the given
+// slice. The provided cmp orders the elements, as in New.
 // Optional options can be passed to modify the list's behavior, such as enabling concurrent safety.
 func NewFromSlice[E any](cmp func(E, E) int, elements []E, ops ...Option[E]) (*List[E], error) {
 	l, err := New(cmp, ops...)
@@ -80,7 +81,6 @@ func NewFromOrderedSlice[E cmp.Ordered](elements []E, ops ...Option[E]) (*List[E
 
 // Get returns the element at the given index.
 func (l *List[E]) Get(index int) (E, bool) {
-	// Checking "l.safe" before acquiring the lock is more efficient based on benchmark result.
 	if l.safe {
 		l.mu.RLock()
 		defer l.mu.RUnlock()
@@ -98,7 +98,6 @@ func (l *List[E]) Append(el ...E) {
 	if len(el) == 0 {
 		return
 	}
-	// Checking "l.safe" before acquiring the lock is more efficient based on benchmark result.
 	if l.safe {
 		l.mu.Lock()
 		defer l.mu.Unlock()
@@ -122,7 +121,6 @@ func (l *List[E]) Insert(index int, el ...E) {
 	if len(el) == 0 {
 		return
 	}
-	// Checking "l.safe" before acquiring the lock is more efficient based on benchmark result.
 	if l.safe {
 		l.mu.Lock()
 		defer l.mu.Unlock()
@@ -149,7 +147,6 @@ func (l *List[E]) Insert(index int, el ...E) {
 // If the index is the length of the list, the element will be appended.
 // If the index out of range, this function is no-op.
 func (l *List[E]) Set(index int, e E) {
-	// Checking "l.safe" before acquiring the lock is more efficient based on benchmark result.
 	if l.safe {
 		l.mu.Lock()
 		defer l.mu.Unlock()
@@ -165,9 +162,8 @@ func (l *List[E]) Set(index int, e E) {
 	l.elements[index] = e
 }
 
-// Remove removes all the elements from the list.
+// Remove removes every element equal to e from the list.
 func (l *List[E]) Remove(e E) {
-	// Checking "l.safe" before acquiring the lock is more efficient based on benchmark result.
 	if l.safe {
 		l.mu.Lock()
 		defer l.mu.Unlock()
@@ -186,7 +182,6 @@ func (l *List[E]) Remove(e E) {
 // RemoveAt removes the element at the given index.
 // If the index out of range, this function is no-op and returns zero value of E.
 func (l *List[E]) RemoveAt(index int) E {
-	// Checking "l.safe" before acquiring the lock is more efficient based on benchmark result.
 	if l.safe {
 		l.mu.Lock()
 		defer l.mu.Unlock()
@@ -232,9 +227,10 @@ func (l *List[E]) Contains(el ...E) bool {
 }
 
 func (l *List[E]) contains(e E) bool {
-	// Skipping the "l.safe" check is more efficient based on benchmark result.
-	l.mu.RLock()
-	defer l.mu.RUnlock()
+	if l.safe {
+		l.mu.RLock()
+		defer l.mu.RUnlock()
+	}
 
 	for _, v := range l.elements {
 		if l.cmp(v, e) == 0 {
@@ -248,7 +244,6 @@ func (l *List[E]) contains(e E) bool {
 // The returned slice is a copy of the internal slice,
 // and modifications to it will not affect the list.
 func (l *List[E]) Values() []E {
-	// Skipping the "l.safe" check is more efficient based on benchmark result.
 	if l.safe {
 		l.mu.RLock()
 		defer l.mu.RUnlock()
@@ -258,9 +253,10 @@ func (l *List[E]) Values() []E {
 
 // IndexOf returns the index of the first occurrence of element in the list.
 func (l *List[E]) IndexOf(e E) int {
-	// Skipping the "l.safe" check is more efficient based on benchmark result.
-	l.mu.RLock()
-	defer l.mu.RUnlock()
+	if l.safe {
+		l.mu.RLock()
+		defer l.mu.RUnlock()
+	}
 
 	for i, v := range l.elements {
 		if l.cmp(v, e) == 0 {
@@ -272,7 +268,6 @@ func (l *List[E]) IndexOf(e E) int {
 
 // IsEmpty reports whether the list has no elements.
 func (l *List[E]) IsEmpty() bool {
-	// Checking "l.safe" before acquiring the lock is more efficient based on benchmark result.
 	if l.safe {
 		l.mu.RLock()
 		defer l.mu.RUnlock()
@@ -282,7 +277,6 @@ func (l *List[E]) IsEmpty() bool {
 
 // Len returns the number of elements in the list.
 func (l *List[E]) Len() int {
-	// Checking "l.safe" before acquiring the lock is more efficient based on benchmark result.
 	if l.safe {
 		l.mu.RLock()
 		defer l.mu.RUnlock()
@@ -291,14 +285,8 @@ func (l *List[E]) Len() int {
 	return len(l.elements)
 }
 
-// Sort sorts the list using the given comparator
-// if cmp is nil, the function is no-op.
-// cmp should return:
-// - A negative value if first argument is less than second.
-// - Zero if the arguments are equal.
-// - A positive value if first argument is greater than second.
+// Sort sorts the list by the comparison function it was built with.
 func (l *List[E]) Sort() {
-	// Whether to check "l.safe" has no significant performance impact according to benchmark.
 	if l.safe {
 		l.mu.Lock()
 		defer l.mu.Unlock()
@@ -312,7 +300,6 @@ func (l *List[E]) Sort() {
 
 // Swap swaps the elements at the given indexes.
 func (l *List[E]) Swap(i, j int) {
-	// Check "l.safe" before acquiring the lock is more efficient based on benchmark result.
 	if l.safe {
 		l.mu.Lock()
 		defer l.mu.Unlock()
@@ -329,7 +316,6 @@ func (l *List[E]) Range(fn func(e E) bool) {
 	if fn == nil {
 		return
 	}
-	// Whether to check "l.safe" has no significant performance impact according to benchmark.
 	if l.safe {
 		l.mu.RLock()
 		defer l.mu.RUnlock()

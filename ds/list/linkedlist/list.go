@@ -13,6 +13,7 @@ package linkedlist
 import (
 	"reflect"
 	"slices"
+	"sync"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/ds/container"
@@ -27,13 +28,13 @@ var ErrMergeWithSelf = errors.New("cannot merge a list with itself")
 type List[V any] struct {
 	head, tail *Node[V]
 	count      int
-	mu         container.Locker
+	mu         sync.RWMutex
+	safe       bool
 }
 
 // New creates and returns an empty doubly-linked list.
 func New[V any](ops ...Option[V]) (*List[V], error) {
 	l := new(List[V])
-	l.mu = container.NopLocker{}
 	for _, op := range ops {
 		if op == nil {
 			continue
@@ -60,8 +61,10 @@ func NewFromSlice[V any](s []V, ops ...Option[V]) (*List[V], error) {
 // PushBack adds a new node with value v to the end of the list.
 // Returns a pointer to the newly added node.
 func (l *List[V]) PushBack(v V) *Node[V] {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	if l.safe {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+	}
 
 	return l.pushBackNode(&Node[V]{Value: v})
 }
@@ -86,8 +89,10 @@ func (l *List[V]) pushBackNode(n *Node[V]) *Node[V] {
 
 // PushFront adds a new node with value v to the beginning of the list.
 func (l *List[V]) PushFront(v V) *Node[V] {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	if l.safe {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+	}
 
 	return l.pushFrontNode(&Node[V]{Value: v})
 }
@@ -116,8 +121,10 @@ func (l *List[V]) InsertAfter(n *Node[V], v V) *Node[V] {
 	if n == nil {
 		return nil
 	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	if l.safe {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+	}
 
 	if n.list != l {
 		return nil
@@ -141,8 +148,10 @@ func (l *List[V]) InsertBefore(n *Node[V], v V) *Node[V] {
 	if n == nil {
 		return nil
 	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	if l.safe {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+	}
 
 	if n.list != l {
 		return nil
@@ -168,8 +177,10 @@ func (l *List[V]) Remove(n *Node[V]) V {
 	if n == nil {
 		return v
 	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	if l.safe {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+	}
 
 	if n.list != l {
 		return n.Value
@@ -201,8 +212,10 @@ func (l *List[V]) remove(n *Node[V]) V {
 // PopFront removes and returns the first node of the list.
 // Returns nil if the list is empty.
 func (l *List[V]) PopFront() V {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	if l.safe {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+	}
 
 	var v V
 	if l.isEmpty() {
@@ -214,8 +227,10 @@ func (l *List[V]) PopFront() V {
 // PopBack removes and returns the last node of the list.
 // Returns nil if the list is empty.
 func (l *List[V]) PopBack() V {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	if l.safe {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+	}
 
 	var v V
 	if l.isEmpty() {
@@ -227,8 +242,10 @@ func (l *List[V]) PopBack() V {
 // Slice returns a slice containing all values in the list,
 // in the order they appear.
 func (l *List[V]) Slice() []V {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
+	if l.safe {
+		l.mu.RLock()
+		defer l.mu.RUnlock()
+	}
 
 	s := make([]V, 0, l.count)
 	for n := l.head; n != nil; n = n.next {
@@ -240,8 +257,10 @@ func (l *List[V]) Slice() []V {
 // Range calls the given function for each element in the list,
 // in order from front to back.
 func (l *List[V]) Range(fn func(v V) bool) {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
+	if l.safe {
+		l.mu.RLock()
+		defer l.mu.RUnlock()
+	}
 
 	for n := l.head; n != nil; n = n.next {
 		if !fn(n.Value) {
@@ -256,8 +275,10 @@ func (l *List[V]) Find(v V, equal func(V, V) bool) *Node[V] {
 	if equal == nil {
 		return nil
 	}
-	l.mu.RLock()
-	defer l.mu.RUnlock()
+	if l.safe {
+		l.mu.RLock()
+		defer l.mu.RUnlock()
+	}
 
 	for n := l.head; n != nil; n = n.next {
 		if equal(n.Value, v) {
@@ -270,8 +291,10 @@ func (l *List[V]) Find(v V, equal func(V, V) bool) *Node[V] {
 // Reverse reverses the order of nodes in the list in-place.
 // Empty list and single-node list remain unchanged.
 func (l *List[V]) Reverse() {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	if l.safe {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+	}
 
 	if l.count <= 1 {
 		return
@@ -343,14 +366,15 @@ func (l *List[V]) MergeSorted(other *List[V], cmp func(V, V) int) error {
 		return ErrMergeWithSelf
 	}
 
-	var unlock func()
 	if other == nil {
-		l.mu.Lock()
-		unlock = l.mu.Unlock
+		if l.safe {
+			l.mu.Lock()
+			defer l.mu.Unlock()
+		}
 	} else {
-		unlock = lockBoth(l, other)
+		unlock := lockBoth(l, other)
+		defer unlock()
 	}
-	defer unlock()
 
 	size := l.count
 	if other != nil {
@@ -381,25 +405,36 @@ func (l *List[V]) MergeSorted(other *List[V], cmp func(V, V) int) error {
 // lockBoth write-locks l and other in the order of their addresses, which is
 // the same order whichever of the two lists a merge starts from: two lists
 // merging into each other at once then never each hold the lock the other
-// waits for. It returns the function that unlocks both.
+// waits for. A list that is not safe for concurrent use is left unlocked. It
+// returns the function that unlocks what was locked.
 func lockBoth[V any](l, other *List[V]) (unlock func()) {
 	first, second := l, other
 	if reflect.ValueOf(first).Pointer() > reflect.ValueOf(second).Pointer() {
 		first, second = second, first
 	}
-	first.mu.Lock()
-	second.mu.Lock()
+	if first.safe {
+		first.mu.Lock()
+	}
+	if second.safe {
+		second.mu.Lock()
+	}
 	return func() {
-		second.mu.Unlock()
-		first.mu.Unlock()
+		if second.safe {
+			second.mu.Unlock()
+		}
+		if first.safe {
+			first.mu.Unlock()
+		}
 	}
 }
 
 // Clone returns a deep copy of the list.
 // The new list contains new nodes with the same values.
 func (l *List[V]) Clone() (*List[V], error) {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
+	if l.safe {
+		l.mu.RLock()
+		defer l.mu.RUnlock()
+	}
 
 	newList, err := New[V]()
 	if err != nil {
@@ -413,32 +448,40 @@ func (l *List[V]) Clone() (*List[V], error) {
 
 // Front returns the first node of the list, or nil when the list is empty.
 func (l *List[V]) Front() *Node[V] {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
+	if l.safe {
+		l.mu.RLock()
+		defer l.mu.RUnlock()
+	}
 
 	return l.head
 }
 
 // Back returns the last node of the list, or nil when the list is empty.
 func (l *List[V]) Back() *Node[V] {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
+	if l.safe {
+		l.mu.RLock()
+		defer l.mu.RUnlock()
+	}
 
 	return l.tail
 }
 
 // Len returns the number of nodes in the list.
 func (l *List[V]) Len() int {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
+	if l.safe {
+		l.mu.RLock()
+		defer l.mu.RUnlock()
+	}
 
 	return l.count
 }
 
 // IsEmpty reports whether the list has no elements.
 func (l *List[V]) IsEmpty() bool {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
+	if l.safe {
+		l.mu.RLock()
+		defer l.mu.RUnlock()
+	}
 
 	return l.isEmpty()
 }
@@ -449,8 +492,10 @@ func (l *List[V]) isEmpty() bool {
 
 // Clear removes all nodes from the list; each is then on no list.
 func (l *List[V]) Clear() {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	if l.safe {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+	}
 
 	curr := l.head
 	for curr != nil {

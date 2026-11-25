@@ -6,8 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-
-	"github.com/hydroan/gst/ds/container"
+	"sync"
 )
 
 // Stack represents a stack backed by a slice.
@@ -15,13 +14,13 @@ import (
 type Stack[E any] struct {
 	elements []E
 	safe     bool
-	mu       container.Locker
+	mu       sync.RWMutex
 }
 
 // New creates and initializes an empty stack.
 // Options can be provided to customize the stack's properties (e.g., thread safety).
 func New[E any](ops ...Option[E]) (*Stack[E], error) {
-	s := &Stack[E]{elements: make([]E, 0), mu: container.NopLocker{}}
+	s := &Stack[E]{elements: make([]E, 0)}
 	for _, op := range ops {
 		if op == nil {
 			continue

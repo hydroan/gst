@@ -6,9 +6,9 @@ package circularbuffer
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/ds/container"
 )
 
 // Buffer represents a generic circular buffer implementation.
@@ -22,7 +22,7 @@ type Buffer[E any] struct {
 	maxSize int
 
 	safe bool
-	mu   container.Locker
+	mu   sync.RWMutex
 	drop bool
 }
 
@@ -31,7 +31,7 @@ func New[E any](size int, ops ...Option[E]) (*Buffer[E], error) {
 	if size <= 0 {
 		return nil, errors.New("size must be greater than 0")
 	}
-	cb := &Buffer[E]{maxSize: size, mu: container.NopLocker{}}
+	cb := &Buffer[E]{maxSize: size}
 
 	for _, op := range ops {
 		if op == nil {

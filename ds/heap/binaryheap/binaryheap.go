@@ -7,22 +7,23 @@ import (
 	"cmp"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/hydroan/gst/ds/container"
 )
 
-// Heap is a generic binary heap implementation that support both max-heap and min-heap.
-// By default, is operates as a min-heap where smallest element has the highest priority.
+// Heap is a generic binary heap implementation that supports both max-heap and min-heap.
+// By default, it operates as a min-heap where the smallest element has the highest priority.
 //
-// To creates a max-heap where largest element has the highest priority,
-// use "WithMaxHeap" option in the NewXXX function.
+// To create a max-heap where the largest element has the highest priority,
+// use the "WithMaxHeap" option in the NewXXX function.
 type Heap[E any] struct {
 	data []E
 
 	cmp func(E, E) int
 
 	safe    bool
-	mu      container.Locker
+	mu      sync.RWMutex
 	maxHeap bool
 }
 
@@ -32,15 +33,15 @@ type Heap[E any] struct {
 //   - negative value if a < b
 //   - positive value if a > b
 //
-// The provided options are provided to customize the heap property.
+// The options customize the properties of the heap.
 // For example:
 //   - pass WithSafe to create a thread-safe heap.
-//   - pass WithMaxHeap to create a max-heap  instead of the default min-heap.
+//   - pass WithMaxHeap to create a max-heap instead of the default min-heap.
 func New[E any](cmp func(E, E) int, ops ...Option[E]) (*Heap[E], error) {
 	if cmp == nil {
 		return nil, container.ErrComparisonNil
 	}
-	h := &Heap[E]{data: make([]E, 0), cmp: cmp, mu: container.NopLocker{}}
+	h := &Heap[E]{data: make([]E, 0), cmp: cmp}
 	for _, op := range ops {
 		if op == nil {
 			continue
@@ -52,14 +53,14 @@ func New[E any](cmp func(E, E) int, ops ...Option[E]) (*Heap[E], error) {
 	return h, nil
 }
 
-// NewOrdered is a shortcut for New(cmp.Compare, ops...)
-// more detailed see "New"
+// NewOrdered is a shortcut for New(cmp.Compare, ops...).
+// See New for details.
 func NewOrdered[E cmp.Ordered](ops ...Option[E]) (*Heap[E], error) {
 	return New(cmp.Compare, ops...)
 }
 
 // NewFromSlice creates and returns a min-heap from the given slice.
-// more detailed see "New"
+// See New for details.
 func NewFromSlice[E any](slice []E, cmp func(E, E) int, ops ...Option[E]) (*Heap[E], error) {
 	h, err := New(cmp, ops...)
 	if err != nil {
@@ -71,8 +72,9 @@ func NewFromSlice[E any](slice []E, cmp func(E, E) int, ops ...Option[E]) (*Heap
 	return h, nil
 }
 
-// NewFromOrderedSlice is a shortcut for NewFromSlice(cmp.Ordered, ops...).
-// more detailed see "New"
+// NewFromOrderedSlice creates and returns a min-heap from the given slice,
+// ordered by cmp.Compare.
+// See New for details.
 func NewFromOrderedSlice[E cmp.Ordered](slice []E, ops ...Option[E]) (*Heap[E], error) {
 	h, err := NewOrdered(ops...)
 	if err != nil {
@@ -85,7 +87,7 @@ func NewFromOrderedSlice[E cmp.Ordered](slice []E, ops ...Option[E]) (*Heap[E], 
 }
 
 // NewFromMapKeys creates and returns a min-heap from the given map keys.
-// more detailed see "New"
+// See New for details.
 func NewFromMapKeys[K comparable](m map[K]any, cmp func(K, K) int, ops ...Option[K]) (*Heap[K], error) {
 	h, err := New(cmp, ops...)
 	if err != nil {
@@ -98,7 +100,7 @@ func NewFromMapKeys[K comparable](m map[K]any, cmp func(K, K) int, ops ...Option
 }
 
 // NewFromMapValues creates and returns a min-heap from the given map values.
-// more detailed see "New"
+// See New for details.
 func NewFromMapValues[K comparable, V comparable](m map[K]V, cmp func(V, V) int, ops ...Option[V]) (*Heap[V], error) {
 	h, err := New(cmp, ops...)
 	if err != nil {
@@ -110,8 +112,9 @@ func NewFromMapValues[K comparable, V comparable](m map[K]V, cmp func(V, V) int,
 	return h, nil
 }
 
-// NewFromOrderedMapKeys is a shortcut for NewFromMapKeys(cmp.Ordered, ops...).
-// more detailed see "New"
+// NewFromOrderedMapKeys creates and returns a min-heap from the given map keys,
+// ordered by cmp.Compare.
+// See New for details.
 func NewFromOrderedMapKeys[K cmp.Ordered, V any](m map[K]V, ops ...Option[K]) (*Heap[K], error) {
 	h, err := NewOrdered(ops...)
 	if err != nil {
@@ -123,8 +126,9 @@ func NewFromOrderedMapKeys[K cmp.Ordered, V any](m map[K]V, ops ...Option[K]) (*
 	return h, nil
 }
 
-// NewFromOrderedMapValues is a shortcut for NewFromMapValues(cmp.Ordered, ops...).
-// more detailed see "New"
+// NewFromOrderedMapValues creates and returns a min-heap from the given map
+// values, ordered by cmp.Compare.
+// See New for details.
 func NewFromOrderedMapValues[K comparable, V cmp.Ordered](m map[K]V, ops ...Option[V]) (*Heap[V], error) {
 	h, err := NewOrdered(ops...)
 	if err != nil {
@@ -277,7 +281,7 @@ func (h *Heap[E]) options() []Option[E] {
 	return ops
 }
 
-// Range call then given function on each element in the heap.
+// Range calls the given function on each element in the heap.
 // If the function returns false, the iteration stops.
 func (h *Heap[E]) Range(fn func(e E) bool) {
 	if fn == nil {

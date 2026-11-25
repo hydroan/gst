@@ -1,6 +1,7 @@
 package multimap_test
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -278,6 +279,53 @@ func TestMultiMap_CloneHasItsOwnLock(t *testing.T) {
 	assert.Equal(t, []int{1, 2}, vals)
 	vals, _ = original.Get("a")
 	assert.Equal(t, []int{1}, vals)
+}
+
+// TestMultiMap_ConcurrentUse pins what WithSafe gives: the methods of a map
+// called from several goroutines at once lose nothing, and leave no race for
+// the race detector to report.
+func TestMultiMap_ConcurrentUse(t *testing.T) {
+	m, err := multimap.New[int, int](intCmp, multimap.WithSafe[int, int]())
+	require.NoError(t, err)
+
+	const workers, rounds = 8, 100
+	var wg sync.WaitGroup
+	for w := range workers {
+		// Each writer keeps to keys of its own, so what it leaves is known:
+		// every value under the first, nothing under the other two.
+		wg.Go(func() {
+			for i := range rounds {
+				m.Add(w, i)
+				m.Set(w+workers, i)
+				m.DeleteValue(w+workers, i)
+				m.Add(w+2*workers, i)
+				m.Delete(w + 2*workers)
+			}
+		})
+		wg.Go(func() {
+			for range rounds {
+				_, _ = m.Get(w)
+				_, _ = m.GetOne(w)
+				_ = m.Has(w)
+				_ = m.Contains(w, 0)
+				_ = m.Count(w)
+				_ = m.Len()
+				_ = m.Size()
+				_ = m.IsEmpty()
+				_ = m.Keys()
+				_ = m.Values()
+				_ = m.Map()
+				_ = m.Clone()
+				m.Range(func(int, []int) bool { return true })
+			}
+		})
+	}
+	wg.Wait()
+
+	assert.Equal(t, workers, m.Len())
+	assert.Equal(t, workers*rounds, m.Size())
+	m.Clear()
+	assert.True(t, m.IsEmpty())
 }
 
 // requireFinishes fails the test when fn has not returned within ten seconds,

@@ -5,16 +5,17 @@ package multimap
 
 import (
 	"slices"
+	"sync"
 
 	"github.com/hydroan/gst/ds/container"
 )
 
 // MultiMap represents a map that can store multiple values for each key.
-// call New with `WithSafe` option to make the MultiMap safe for concurrent use.
+// Call New with the `WithSafe` option to make the MultiMap safe for concurrent use.
 type MultiMap[K comparable, V any] struct {
 	data map[K][]V
 	cmp  func(V, V) int
-	mu   container.Locker
+	mu   sync.RWMutex
 	safe bool
 }
 
@@ -27,7 +28,6 @@ func New[K comparable, V any](cmp func(V, V) int, ops ...Option[K, V]) (*MultiMa
 	m := &MultiMap[K, V]{
 		data: make(map[K][]V),
 		cmp:  cmp,
-		mu:   container.NopLocker{},
 	}
 	for _, op := range ops {
 		if op == nil {
@@ -57,8 +57,10 @@ func NewFromMap[K comparable, V any](m map[K][]V, cmp func(V, V) int, ops ...Opt
 // Get returns all values associated with the key and whether the key exists.
 // The returned slice is a copy of the internal slice to prevent modifications.
 func (m *MultiMap[K, V]) Get(key K) ([]V, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	if m.safe {
+		m.mu.RLock()
+		defer m.mu.RUnlock()
+	}
 
 	values, exists := m.data[key]
 	if !exists {
@@ -70,8 +72,10 @@ func (m *MultiMap[K, V]) Get(key K) ([]V, bool) {
 // GetOne returns the first value associated with the key and whether it exists.
 // If the key doesn't exist, it returns the zero value and false.
 func (m *MultiMap[K, V]) GetOne(key K) (V, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	if m.safe {
+		m.mu.RLock()
+		defer m.mu.RUnlock()
+	}
 
 	values, exists := m.data[key]
 	if !exists {
@@ -83,8 +87,10 @@ func (m *MultiMap[K, V]) GetOne(key K) (V, bool) {
 
 // Add appends val to the values associated with the key.
 func (m *MultiMap[K, V]) Add(key K, val V) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	if m.safe {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+	}
 
 	m.data[key] = append(m.data[key], val)
 }
@@ -92,8 +98,10 @@ func (m *MultiMap[K, V]) Add(key K, val V) {
 // Set replaces the values associated with the key with a copy of values.
 // Setting no values removes the key, the way removing its last value does.
 func (m *MultiMap[K, V]) Set(key K, values ...V) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	if m.safe {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+	}
 
 	if len(values) == 0 {
 		delete(m.data, key)
@@ -104,8 +112,10 @@ func (m *MultiMap[K, V]) Set(key K, values ...V) {
 
 // Delete removes the key and all its associated values from the map.
 func (m *MultiMap[K, V]) Delete(key K) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	if m.safe {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+	}
 
 	delete(m.data, key)
 }
@@ -114,8 +124,10 @@ func (m *MultiMap[K, V]) Delete(key K) {
 // If all values are removed, the key is also removed.
 // Returns the number of values deleted.
 func (m *MultiMap[K, V]) DeleteValue(key K, val V) int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	if m.safe {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+	}
 
 	values, exists := m.data[key]
 	if !exists {
@@ -143,16 +155,20 @@ func (m *MultiMap[K, V]) DeleteValue(key K, val V) int {
 
 // Len returns the total number of keys in the MultiMap.
 func (m *MultiMap[K, V]) Len() int {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	if m.safe {
+		m.mu.RLock()
+		defer m.mu.RUnlock()
+	}
 
 	return len(m.data)
 }
 
 // Size returns the total number of values across all keys in the MultiMap.
 func (m *MultiMap[K, V]) Size() int {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	if m.safe {
+		m.mu.RLock()
+		defer m.mu.RUnlock()
+	}
 
 	size := 0
 	for _, values := range m.data {
@@ -161,18 +177,22 @@ func (m *MultiMap[K, V]) Size() int {
 	return size
 }
 
-// IsEmpty returns true if the MultiMap has no any key-values pairs.
+// IsEmpty reports whether the MultiMap has no key-values pairs.
 func (m *MultiMap[K, V]) IsEmpty() bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	if m.safe {
+		m.mu.RLock()
+		defer m.mu.RUnlock()
+	}
 
 	return len(m.data) == 0
 }
 
 // Has reports whether the MultiMap contains the specified key.
 func (m *MultiMap[K, V]) Has(key K) bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	if m.safe {
+		m.mu.RLock()
+		defer m.mu.RUnlock()
+	}
 
 	_, exists := m.data[key]
 	return exists
@@ -180,8 +200,10 @@ func (m *MultiMap[K, V]) Has(key K) bool {
 
 // Contains reports whether the MultiMap contains the specified value for the given key.
 func (m *MultiMap[K, V]) Contains(key K, val V) bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	if m.safe {
+		m.mu.RLock()
+		defer m.mu.RUnlock()
+	}
 
 	values, exists := m.data[key]
 	if !exists {
@@ -196,20 +218,24 @@ func (m *MultiMap[K, V]) Contains(key K, val V) bool {
 	return false
 }
 
-// Count returns the number of values associates with the given key.
-// Returns 0 if the key not exists.
+// Count returns the number of values associated with the given key.
+// Returns 0 if the key does not exist.
 func (m *MultiMap[K, V]) Count(key K) int {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	if m.safe {
+		m.mu.RLock()
+		defer m.mu.RUnlock()
+	}
 
 	return len(m.data[key])
 }
 
-// Keys returns a slice containing all key in the MultiMap.
+// Keys returns a slice containing all keys in the MultiMap.
 // The order of keys is not guaranteed.
 func (m *MultiMap[K, V]) Keys() []K {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	if m.safe {
+		m.mu.RLock()
+		defer m.mu.RUnlock()
+	}
 
 	keys := make([]K, 0, len(m.data))
 	for k := range m.data {
@@ -221,8 +247,10 @@ func (m *MultiMap[K, V]) Keys() []K {
 // Values returns a slice containing all values across all keys in the MultiMap.
 // The order of values is not guaranteed.
 func (m *MultiMap[K, V]) Values() []V {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	if m.safe {
+		m.mu.RLock()
+		defer m.mu.RUnlock()
+	}
 
 	capacity := 0
 	for _, values := range m.data {
@@ -237,18 +265,22 @@ func (m *MultiMap[K, V]) Values() []V {
 
 // Clear removes all key-values pairs from the MultiMap.
 func (m *MultiMap[K, V]) Clear() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	if m.safe {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+	}
 
 	clear(m.data)
 }
 
-// Range iterates over the MultiMap and call function fn for each key-value pairs.
-// If fn returns false, iteration stop immediately.
+// Range iterates over the MultiMap and calls function fn for each key and its values.
+// If fn returns false, iteration stops immediately.
 // If fn is nil, Range returns without doing anything.
 func (m *MultiMap[K, V]) Range(fn func(key K, values []V) bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	if m.safe {
+		m.mu.RLock()
+		defer m.mu.RUnlock()
+	}
 
 	if fn == nil {
 		return
@@ -263,8 +295,10 @@ func (m *MultiMap[K, V]) Range(fn func(key K, values []V) bool) {
 // Clone returns a deep copy of the MultiMap, made with the same options and
 // so with a lock of its own when the MultiMap is safe for concurrent use.
 func (m *MultiMap[K, V]) Clone() *MultiMap[K, V] {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	if m.safe {
+		m.mu.RLock()
+		defer m.mu.RUnlock()
+	}
 
 	cloned, _ := New(m.cmp, m.options()...)
 	for k, values := range m.data {
@@ -282,10 +316,12 @@ func (m *MultiMap[K, V]) options() []Option[K, V] {
 }
 
 // Map returns a deep copy of the internal map.
-// the returned map can be safely modified without affecting the MultiMap.
+// The returned map can be safely modified without affecting the MultiMap.
 func (m *MultiMap[K, V]) Map() map[K][]V {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	if m.safe {
+		m.mu.RLock()
+		defer m.mu.RUnlock()
+	}
 
 	result := make(map[K][]V, len(m.data))
 	for k, values := range m.data {

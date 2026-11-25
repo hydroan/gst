@@ -1,8 +1,6 @@
 package skiplist
 
 import (
-	"sync"
-
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/ds/container"
 )
@@ -14,7 +12,6 @@ type Option[K comparable, V any] func(*List[K, V]) error
 func WithSafe[K comparable, V any]() Option[K, V] {
 	return func(l *List[K, V]) error {
 		l.safe = true
-		l.mu = &sync.RWMutex{}
 		return nil
 	}
 }

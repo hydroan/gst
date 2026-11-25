@@ -9,19 +9,19 @@ import (
 	"reflect"
 	"slices"
 	"strings"
-
-	"github.com/hydroan/gst/ds/container"
+	"sync"
 )
 
+// Set is a set of comparable elements backed by a map.
 type Set[E comparable] struct {
 	set    map[E]struct{}
-	mu     container.Locker
+	mu     sync.RWMutex
 	safe   bool
 	cmp    func(E, E) int
 	sorted bool
 }
 
-// New creates a new set without pre-allocates space.
+// New creates a new set without pre-allocating space.
 // Options can be provided to customize the set's properties (e.g., thread safety).
 func New[E comparable](ops ...Option[E]) (*Set[E], error) {
 	return NewWithSize(0, ops...)
@@ -32,7 +32,6 @@ func New[E comparable](ops ...Option[E]) (*Set[E], error) {
 func NewWithSize[T comparable](size int, ops ...Option[T]) (*Set[T], error) {
 	s := &Set[T]{
 		set: make(map[T]struct{}, size),
-		mu:  container.NopLocker{},
 	}
 	for _, op := range ops {
 		if op == nil {
@@ -397,8 +396,8 @@ func (s *Set[E]) IsSuperset(other *Set[E]) bool {
 }
 
 // IsProperSuperset checks if the current set is a proper superset of given set.
-// A proper superset means all elements of given set are present int the current set.
-// and the current set has additional element not present in the given set.
+// A proper superset means all elements of the given set are present in the current set,
+// and the current set has additional elements not present in the given set.
 func (s *Set[E]) IsProperSuperset(other *Set[E]) bool {
 	if other == nil {
 		// Every non-empty set is a proper superset of the empty (nil) set; the
@@ -415,7 +414,7 @@ func (s *Set[E]) IsProperSuperset(other *Set[E]) bool {
 //
 // The returned set inherits the properties of the current set.
 // For example: if the current set is concurrent-safe, the returned set is also
-// be concurrent-safe.
+// concurrent-safe.
 func (s *Set[E]) Difference(other *Set[E]) *Set[E] {
 	if other == nil {
 		return s.Clone()
@@ -440,7 +439,7 @@ func (s *Set[E]) Difference(other *Set[E]) *Set[E] {
 //
 // The returned set inherits the properties of the current set.
 // For example, if the current set is concurrent-safe, the returned set is also
-// be concurrent-safe
+// concurrent-safe.
 func (s *Set[E]) SymmetricDifference(other *Set[E]) *Set[E] {
 	if other == nil {
 		return s.Clone()
@@ -464,15 +463,15 @@ func (s *Set[E]) SymmetricDifference(other *Set[E]) *Set[E] {
 	return diff
 }
 
-// Union returns computes union of the current set and the given set.
-// The resulting is contains all the elements that are present in
+// Union computes the union of the current set and the given set.
+// The resulting set contains all the elements that are present in
 // either the current set or the given set.
 //
 // If the given set is nil or empty, returns the deep clone of the current set.
 //
 // The returned set inherits the properties of the current set.
 // For example, if the current set is concurrent-safe, the returned set is also
-// be concurrent-safe
+// concurrent-safe.
 func (s *Set[E]) Union(other *Set[E]) *Set[E] {
 	if other == nil {
 		return s.Clone()
@@ -498,6 +497,7 @@ func (s *Set[E]) Union(other *Set[E]) *Set[E] {
 // If the given set is nil or empty, returns an empty set.
 // The returned set inherits the properties of the current set.
 // For example, if the current set is concurrent-safe, the returned set is also
+// concurrent-safe.
 func (s *Set[E]) Intersect(other *Set[E]) *Set[E] {
 	if other == nil {
 		inter, _ := New(s.options()...)
@@ -638,16 +638,17 @@ func (s *Set[E]) isSuperset(other *Set[E]) bool {
 // returns a function that releases the same locks. Ordering acquisition by mutex
 // address prevents AB-BA deadlocks between concurrent binary operations (for
 // example a.Union(b) racing b.Union(a)). Sets that are not concurrent-safe are
-// skipped, and a mutex shared by both sets (such as s == other) is locked once.
+// skipped, and the one mutex of a set combined with itself is locked once.
 func (s *Set[E]) lockBothRead(other *Set[E]) func() {
-	var first, second container.Locker
+	var first, second *sync.RWMutex
 	if s.safe {
-		first = s.mu
+		first = &s.mu
 	}
-	if other.safe && other.mu != first {
-		second = other.mu
+	if other.safe && &other.mu != first {
+		second = &other.mu
 	}
-	if first != nil && second != nil && lockerAddr(second) < lockerAddr(first) {
+	if first != nil && second != nil &&
+		reflect.ValueOf(second).Pointer() < reflect.ValueOf(first).Pointer() {
 		first, second = second, first
 	}
 	if first != nil {
@@ -664,10 +665,4 @@ func (s *Set[E]) lockBothRead(other *Set[E]) func() {
 			first.RUnlock()
 		}
 	}
-}
-
-// lockerAddr returns the address of the underlying lock so that a pair of locks
-// can be acquired in a deterministic order.
-func lockerAddr(l container.Locker) uintptr {
-	return reflect.ValueOf(l).Pointer()
 }

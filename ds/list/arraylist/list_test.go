@@ -140,7 +140,7 @@ func TestLenIsEmpty(t *testing.T) {
 // TestNewOrdered pins the lists that compare their elements by their order,
 // cmp.Compare: sorting orders them and IndexOf finds them by it, from an
 // empty list or a slice alike; WithSafe gives one that takes concurrent
-// appends.
+// appends and lookups.
 func TestNewOrdered(t *testing.T) {
 	l, err := arraylist.NewOrdered[int]()
 	require.NoError(t, err)
@@ -159,9 +159,15 @@ func TestNewOrdered(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := range 8 {
 		wg.Go(func() { safe.Append(i) })
+		wg.Go(func() {
+			_ = safe.Contains(i)
+			_ = safe.IndexOf(i)
+		})
 	}
 	wg.Wait()
 	assert.Equal(t, 8, safe.Len())
+	assert.True(t, safe.Contains(0, 7))
+	assert.NotEqual(t, -1, safe.IndexOf(7))
 }
 
 // TestGetIndexOfSwapRange pins the reads and the swap by index: Get and

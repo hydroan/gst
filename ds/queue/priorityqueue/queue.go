@@ -7,6 +7,7 @@ package priorityqueue
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/hydroan/gst/ds/container"
 	"github.com/hydroan/gst/ds/heap/binaryheap"
@@ -19,12 +20,12 @@ type Queue[E any] struct {
 	cmp  func(E, E) int
 
 	safe bool
-	mu   container.Locker
+	mu   sync.RWMutex
 
 	maxPriority bool
 }
 
-// New creates and returns a priority queue with the given comprarison function and options.
+// New creates and returns a priority queue with the given comparison function and options.
 // The provided options configure the properties of the priority queue.
 // For example:
 //   - WithSafe(): creates a thread-safe priority queue.
@@ -36,7 +37,7 @@ func New[E any](cmp func(E, E) int, ops ...Option[E]) (*Queue[E], error) {
 	if cmp == nil {
 		return nil, container.ErrComparisonNil
 	}
-	q := &Queue[E]{cmp: cmp, mu: container.NopLocker{}}
+	q := &Queue[E]{cmp: cmp}
 	for _, op := range ops {
 		if op == nil {
 			continue
@@ -80,7 +81,7 @@ func (q *Queue[E]) Dequeue() (E, bool) {
 	return q.heap.Pop()
 }
 
-// Peek returns first element of the queue without remove it.
+// Peek returns first element of the queue without removing it.
 // Returns zero value of element and false if queue is empty.
 func (q *Queue[E]) Peek() (E, bool) {
 	if q.safe {

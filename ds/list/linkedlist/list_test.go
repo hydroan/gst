@@ -265,6 +265,10 @@ func TestList_Merge(t *testing.T) {
 		assert.Equal(t, []int{1, 3, 5}, l.Slice())
 	})
 
+	t.Run("merge lists of which only one is safe for concurrent use", func(t *testing.T) {
+		requireMixedPairsMerge(t, func(a, b *linkedlist.List[int]) error { return a.Merge(b) }, []int{1, 3, 5, 2, 4, 6})
+	})
+
 	t.Run("merge lists into each other from several goroutines", func(t *testing.T) {
 		requireMergesIntoEachOtherSettle(t, func(a, b *linkedlist.List[int]) error { return a.Merge(b) })
 	})
@@ -343,10 +347,14 @@ func TestList_MergeSorted(t *testing.T) {
 	})
 
 	t.Run("an unsorted list merged with a nil one ends sorted", func(t *testing.T) {
-		l, err := linkedlist.NewFromSlice([]int{3, 1, 2})
-		require.NoError(t, err)
-		require.NoError(t, l.MergeSorted(nil, cmp))
-		assert.Equal(t, []int{1, 2, 3}, l.Slice())
+		// A list safe for concurrent use takes its own lock for the merge;
+		// Slice takes it again, so it also shows the merge gave it back.
+		for _, ops := range [][]linkedlist.Option[int]{nil, {linkedlist.WithSafe[int]()}} {
+			l, err := linkedlist.NewFromSlice([]int{3, 1, 2}, ops...)
+			require.NoError(t, err)
+			require.NoError(t, l.MergeSorted(nil, cmp))
+			assert.Equal(t, []int{1, 2, 3}, l.Slice())
+		}
 	})
 
 	t.Run("a nil comparison function changes neither list", func(t *testing.T) {
@@ -364,6 +372,10 @@ func TestList_MergeSorted(t *testing.T) {
 		require.NoError(t, err)
 		require.ErrorIs(t, l.MergeSorted(l, cmp), linkedlist.ErrMergeWithSelf)
 		assert.Equal(t, []int{3, 1, 2}, l.Slice())
+	})
+
+	t.Run("merge lists of which only one is safe for concurrent use", func(t *testing.T) {
+		requireMixedPairsMerge(t, func(a, b *linkedlist.List[int]) error { return a.MergeSorted(b, cmp) }, []int{1, 2, 3, 4, 5, 6})
 	})
 
 	t.Run("merge lists into each other from several goroutines", func(t *testing.T) {
@@ -410,6 +422,49 @@ func requireMergesIntoEachOtherSettle(t *testing.T, merge func(into, from *linke
 	case <-done:
 	case <-time.After(2 * time.Minute):
 		t.Fatal("two lists merging into each other at the same time deadlocked")
+	}
+}
+
+// requireMixedPairsMerge merges a list that is safe for concurrent use and
+// one that is not into each other, there and back, and requires the merged
+// values to be want both times: the way back needs every lock of the way
+// there given back, and a merge that kept one runs into the time limit. The
+// safe list is the first of the pair in one round and the second in the next,
+// because the two lists are locked in the order of their addresses: either of
+// them can be the one locked first.
+func requireMixedPairsMerge(t *testing.T, merge func(into, from *linkedlist.List[int]) error, want []int) {
+	t.Helper()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := range 32 {
+			pair := make([]*linkedlist.List[int], 2)
+			for j, values := range [][]int{{1, 3, 5}, {2, 4, 6}} {
+				var ops []linkedlist.Option[int]
+				if j == i%2 {
+					ops = append(ops, linkedlist.WithSafe[int]())
+				}
+				l, err := linkedlist.NewFromSlice(values, ops...)
+				if !assert.NoError(t, err) {
+					return
+				}
+				pair[j] = l
+			}
+			a, b := pair[0], pair[1]
+
+			assert.NoError(t, merge(a, b))
+			assert.Equal(t, want, a.Slice())
+			assert.Empty(t, b.Slice())
+			assert.NoError(t, merge(b, a))
+			assert.Equal(t, want, b.Slice())
+			assert.Empty(t, a.Slice())
+		}
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Minute):
+		t.Fatal("a merge of a safe list and an unsafe one kept a lock it had taken")
 	}
 }
 
@@ -581,6 +636,72 @@ func TestList_Iterator(t *testing.T) {
 	other, err := linkedlist.NewFromSlice([]int{7})
 	require.NoError(t, err)
 	assert.False(t, l.NewIterator(other.Front()).IsValid())
+}
+
+// TestList_ConcurrentUse pins what WithSafe gives: the methods of a list
+// called from several goroutines at once lose nothing, and leave no race for
+// the race detector to report.
+func TestList_ConcurrentUse(t *testing.T) {
+	l, err := linkedlist.New[int](linkedlist.WithSafe[int]())
+	require.NoError(t, err)
+	equal := func(a, b int) bool { return a == b }
+
+	const workers, rounds = 8, 100
+	pushed := make([][]*linkedlist.Node[int], workers)
+	var wg sync.WaitGroup
+	for w := range workers {
+		wg.Go(func() {
+			for i := range rounds {
+				n := l.PushBack(i)
+				l.PushFront(i)
+				l.InsertAfter(n, i)
+				l.InsertBefore(n, i)
+				pushed[w] = append(pushed[w], n)
+			}
+		})
+		wg.Go(func() {
+			for range rounds {
+				_ = l.Len()
+				_ = l.IsEmpty()
+				_ = l.Slice()
+				_ = l.Find(1, equal)
+				_ = l.NewIterator(l.Front())
+				_ = l.NewIterator(l.Back())
+				l.Range(func(int) bool { return true })
+				_, err := l.Clone()
+				assert.NoError(t, err)
+			}
+		})
+	}
+	wg.Wait()
+	require.Equal(t, 4*workers*rounds, l.Len())
+
+	// Each goroutine takes off the nodes it pushed back while the list is
+	// being reversed under it, then all of them pop from both ends.
+	for w := range workers {
+		wg.Go(func() {
+			for _, n := range pushed[w] {
+				l.Remove(n)
+				l.Reverse()
+			}
+		})
+	}
+	wg.Wait()
+	require.Equal(t, 3*workers*rounds, l.Len())
+
+	for range workers {
+		wg.Go(func() {
+			for range rounds {
+				l.PopFront()
+				l.PopBack()
+			}
+		})
+	}
+	wg.Wait()
+	require.Equal(t, workers*rounds, l.Len())
+
+	l.Clear()
+	assert.True(t, l.IsEmpty())
 }
 
 // TestNode_Each walks a list from a node in its middle, onward and

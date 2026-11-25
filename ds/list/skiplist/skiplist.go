@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hydroan/gst/ds/container"
@@ -68,8 +69,8 @@ type List[K comparable, V any] struct {
 	rand *rand.Rand     // Random number generator for level assignment
 	cmp  func(K, K) int // Comparison function for ordering keys
 
-	safe bool             // Whether the skip list is thread-safe
-	mu   container.Locker // Mutex for synchronization (used if safe=true)
+	safe bool         // Whether the skip list is thread-safe
+	mu   sync.RWMutex // Mutex for synchronization (used if safe=true)
 
 	nodeFormatter func(K, V) string
 }
@@ -98,7 +99,7 @@ func New[K comparable, V any](cmp func(K, K) int, ops ...Option[K, V]) (*List[K,
 	return sl, nil
 }
 
-// NewOrdered is a convenience function of New that uses cmp.Ordered as the comparison function.
+// NewOrdered is a convenience function of New that uses cmp.Compare as the comparison function.
 func NewOrdered[K cmp.Ordered, V any](ops ...Option[K, V]) (*List[K, V], error) {
 	return New(cmp.Compare, ops...)
 }
@@ -115,7 +116,7 @@ func NewFromMap[K comparable, V any](cmp func(K, K) int, m map[K]V, ops ...Optio
 	return sl, nil
 }
 
-// NewFromOrderedMap is a convenience function of NewFromMap that uses cmp.Ordered as the comparison function.
+// NewFromOrderedMap is a convenience function of NewFromMap that uses cmp.Compare as the comparison function.
 func NewFromOrderedMap[K cmp.Ordered, V any](m map[K]V, ops ...Option[K, V]) (*List[K, V], error) {
 	return NewFromMap(cmp.Compare, m, ops...)
 }
@@ -204,7 +205,7 @@ func (sl *List[K, V]) Get(key K) (v V, found bool) {
 }
 
 // Delete removes a key-value pair from the skiplist.
-// Returns the delted value and true if it exists, zero value and false otherwise.
+// Returns the deleted value and true if it exists, zero value and false otherwise.
 func (sl *List[K, V]) Delete(key K) (v V, found bool) {
 	if sl.safe {
 		sl.mu.Lock()
@@ -327,7 +328,7 @@ func (sl *List[K, V]) Max() (k K, v V, found bool) {
 	return curr.Key, curr.Value, true
 }
 
-// Floor find the largest key less than or equal to the given key.
+// Floor finds the largest key less than or equal to the given key.
 // Returns the key-value pair and true if found, zero value and false if not found.
 func (sl *List[K, V]) Floor(key K) (k K, v V, found bool) {
 	if sl.safe {
@@ -350,7 +351,7 @@ func (sl *List[K, V]) Floor(key K) (k K, v V, found bool) {
 	return curr.Key, curr.Value, true
 }
 
-// Ceiling find the smallest key greater than or equal to the given key.
+// Ceiling finds the smallest key greater than or equal to the given key.
 // Returns the key-value pair and true if found, zero value and false if not found.
 func (sl *List[K, V]) Ceiling(key K) (k K, v V, found bool) {
 	if sl.safe {

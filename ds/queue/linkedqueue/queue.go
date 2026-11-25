@@ -5,8 +5,8 @@ package linkedqueue
 import (
 	"fmt"
 	"strings"
+	"sync"
 
-	"github.com/hydroan/gst/ds/container"
 	"github.com/hydroan/gst/ds/list/linkedlist"
 )
 
@@ -14,14 +14,14 @@ import (
 // This queue implements the FIFO (first-in, first-out) behavior.
 type Queue[E any] struct {
 	list *linkedlist.List[E]
-	mu   container.Locker
+	mu   sync.RWMutex
 	safe bool
 }
 
 // New creates and initializes an empty queue.
 // Options can be provided to customize the queue's properties (e.g., thread safety).
 func New[E any](ops ...Option[E]) (*Queue[E], error) {
-	q := &Queue[E]{mu: container.NopLocker{}}
+	q := &Queue[E]{}
 	var err error
 	for _, op := range ops {
 		if op == nil {
@@ -109,7 +109,7 @@ func (q *Queue[E]) Dequeue() (E, bool) {
 	return q.list.PopFront(), true
 }
 
-// Peek returns first element of the queue without remove it.
+// Peek returns first element of the queue without removing it.
 // Returns zero value of element and false if queue is empty.
 func (q *Queue[E]) Peek() (E, bool) {
 	if q.safe {
