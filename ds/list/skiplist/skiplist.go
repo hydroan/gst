@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hydroan/gst/ds/types"
+	"github.com/hydroan/gst/ds/container"
 )
 
 const (
@@ -18,7 +18,7 @@ const (
 	defaultProbability = 0.25
 )
 
-// Node represents an element in the SkipList, storing a key-value pair and multiple level pointers.
+// Node represents an element in the list, storing a key-value pair and multiple level pointers.
 type Node[K comparable, V any] struct {
 	Key   K // Key of the node
 	Value V // Associated value of the node
@@ -46,12 +46,12 @@ type Node[K comparable, V any] struct {
 	next []*Node[K, V] // Pointers to the next nodes at different levels
 }
 
-// SkipList represents a probabilistic balanced data structure for fast lookups, insertions, and deletions.
+// List represents a probabilistic balanced data structure for fast lookups, insertions, and deletions.
 // It maintains multiple levels of linked lists, allowing logarithmic time complexity (O(log n)) for operations.
-type SkipList[K comparable, V any] struct {
+type List[K comparable, V any] struct {
 	head *Node[K, V] // Sentinel head node, does not hold any key-value pair
 
-	// The SkipList structure is organized as follows:
+	// The skip list is organized as follows:
 	// Level 3:              (20) --------- (50)
 	// Level 2:       (10) -- (20) --- (35) -- (50) -- (70)
 	// Level 1: (5) -- (10) -- (15) -- (20) -- (30) -- (35) -- (40) -- (50) -- (60) -- (70) -- (80)
@@ -68,18 +68,18 @@ type SkipList[K comparable, V any] struct {
 	rand *rand.Rand     // Random number generator for level assignment
 	cmp  func(K, K) int // Comparison function for ordering keys
 
-	safe bool         // Whether the skip list is thread-safe
-	mu   types.Locker // Mutex for synchronization (used if safe=true)
+	safe bool             // Whether the skip list is thread-safe
+	mu   container.Locker // Mutex for synchronization (used if safe=true)
 
 	nodeFormatter func(K, V) string
 }
 
 // New creates a new skiplist with the given comparison function and optional parameters.
-func New[K comparable, V any](cmp func(K, K) int, ops ...Option[K, V]) (*SkipList[K, V], error) {
+func New[K comparable, V any](cmp func(K, K) int, ops ...Option[K, V]) (*List[K, V], error) {
 	if cmp == nil {
-		return nil, types.ErrComparisonNil
+		return nil, container.ErrComparisonNil
 	}
-	sl := &SkipList[K, V]{
+	sl := &List[K, V]{
 		head:     &Node[K, V]{next: make([]*Node[K, V], defaultMaxLevel)},
 		level:    1,
 		maxLevel: defaultMaxLevel,
@@ -99,12 +99,12 @@ func New[K comparable, V any](cmp func(K, K) int, ops ...Option[K, V]) (*SkipLis
 }
 
 // NewOrdered is a convenience function of New that uses cmp.Ordered as the comparison function.
-func NewOrdered[K cmp.Ordered, V any](ops ...Option[K, V]) (*SkipList[K, V], error) {
+func NewOrdered[K cmp.Ordered, V any](ops ...Option[K, V]) (*List[K, V], error) {
 	return New(cmp.Compare, ops...)
 }
 
 // NewFromMap creates a new skiplist from the given map.
-func NewFromMap[K comparable, V any](cmp func(K, K) int, m map[K]V, ops ...Option[K, V]) (*SkipList[K, V], error) {
+func NewFromMap[K comparable, V any](cmp func(K, K) int, m map[K]V, ops ...Option[K, V]) (*List[K, V], error) {
 	sl, err := New(cmp, ops...)
 	if err != nil {
 		return nil, err
@@ -116,13 +116,13 @@ func NewFromMap[K comparable, V any](cmp func(K, K) int, m map[K]V, ops ...Optio
 }
 
 // NewFromOrderedMap is a convenience function of NewFromMap that uses cmp.Ordered as the comparison function.
-func NewFromOrderedMap[K cmp.Ordered, V any](m map[K]V, ops ...Option[K, V]) (*SkipList[K, V], error) {
+func NewFromOrderedMap[K cmp.Ordered, V any](m map[K]V, ops ...Option[K, V]) (*List[K, V], error) {
 	return NewFromMap(cmp.Compare, m, ops...)
 }
 
 // Put inserts a key-value pair into the skip list.
 // If the key already exists, its value is updated.
-func (sl *SkipList[K, V]) Put(key K, value V) {
+func (sl *List[K, V]) Put(key K, value V) {
 	if sl.safe {
 		sl.mu.Lock()
 		defer sl.mu.Unlock()
@@ -131,7 +131,7 @@ func (sl *SkipList[K, V]) Put(key K, value V) {
 	sl.put(key, value)
 }
 
-func (sl *SkipList[K, V]) put(key K, value V) {
+func (sl *List[K, V]) put(key K, value V) {
 	// Trace update positions at each level.
 	update := make([]*Node[K, V], sl.maxLevel)
 	curr := sl.head
@@ -175,9 +175,9 @@ func (sl *SkipList[K, V]) put(key K, value V) {
 	sl.size++
 }
 
-// Get searches for a key in the SkipList and returns its associated value.
+// Get searches for a key in the list and returns its associated value.
 // If the key is found, it returns the value and true; otherwise, it returns the zero value and false.
-func (sl *SkipList[K, V]) Get(key K) (v V, found bool) {
+func (sl *List[K, V]) Get(key K) (v V, found bool) {
 	if sl.safe {
 		sl.mu.RLock()
 		defer sl.mu.RUnlock()
@@ -205,7 +205,7 @@ func (sl *SkipList[K, V]) Get(key K) (v V, found bool) {
 
 // Delete removes a key-value pair from the skiplist.
 // Returns the delted value and true if it exists, zero value and false otherwise.
-func (sl *SkipList[K, V]) Delete(key K) (v V, found bool) {
+func (sl *List[K, V]) Delete(key K) (v V, found bool) {
 	if sl.safe {
 		sl.mu.Lock()
 		defer sl.mu.Unlock()
@@ -252,7 +252,7 @@ func (sl *SkipList[K, V]) Delete(key K) (v V, found bool) {
 }
 
 // IsEmpty reports whether the skiplist is empty.
-func (sl *SkipList[K, V]) IsEmpty() bool {
+func (sl *List[K, V]) IsEmpty() bool {
 	if sl.safe {
 		sl.mu.RLock()
 		defer sl.mu.RUnlock()
@@ -262,7 +262,7 @@ func (sl *SkipList[K, V]) IsEmpty() bool {
 }
 
 // Len returns the number of elements in the skiplist.
-func (sl *SkipList[K, V]) Len() int {
+func (sl *List[K, V]) Len() int {
 	if sl.safe {
 		sl.mu.Lock()
 		defer sl.mu.Unlock()
@@ -272,7 +272,7 @@ func (sl *SkipList[K, V]) Len() int {
 }
 
 // Clear removes all keys-value pairs from the skiplist.
-func (sl *SkipList[K, V]) Clear() {
+func (sl *List[K, V]) Clear() {
 	if sl.safe {
 		sl.mu.Lock()
 		defer sl.mu.Unlock()
@@ -292,7 +292,7 @@ func (sl *SkipList[K, V]) Clear() {
 
 // Min returns the minimum key-value pair in the skiplist.
 // Returns zero value and false if the skiplist is empty.
-func (sl *SkipList[K, V]) Min() (k K, v V, found bool) {
+func (sl *List[K, V]) Min() (k K, v V, found bool) {
 	if sl.safe {
 		sl.mu.RLock()
 		defer sl.mu.RUnlock()
@@ -306,7 +306,7 @@ func (sl *SkipList[K, V]) Min() (k K, v V, found bool) {
 
 // Max returns the maximum key-value pair in the skiplist.
 // Returns zero value and false if the skiplist is empty.
-func (sl *SkipList[K, V]) Max() (k K, v V, found bool) {
+func (sl *List[K, V]) Max() (k K, v V, found bool) {
 	if sl.safe {
 		sl.mu.RLock()
 		defer sl.mu.RUnlock()
@@ -329,7 +329,7 @@ func (sl *SkipList[K, V]) Max() (k K, v V, found bool) {
 
 // Floor find the largest key less than or equal to the given key.
 // Returns the key-value pair and true if found, zero value and false if not found.
-func (sl *SkipList[K, V]) Floor(key K) (k K, v V, found bool) {
+func (sl *List[K, V]) Floor(key K) (k K, v V, found bool) {
 	if sl.safe {
 		sl.mu.RLock()
 		defer sl.mu.RUnlock()
@@ -352,7 +352,7 @@ func (sl *SkipList[K, V]) Floor(key K) (k K, v V, found bool) {
 
 // Ceiling find the smallest key greater than or equal to the given key.
 // Returns the key-value pair and true if found, zero value and false if not found.
-func (sl *SkipList[K, V]) Ceiling(key K) (k K, v V, found bool) {
+func (sl *List[K, V]) Ceiling(key K) (k K, v V, found bool) {
 	if sl.safe {
 		sl.mu.RLock()
 		defer sl.mu.RUnlock()
@@ -375,7 +375,7 @@ func (sl *SkipList[K, V]) Ceiling(key K) (k K, v V, found bool) {
 
 // Keys returns all keys in the skiplist.
 // Returns empty slice(not nil) if the skiplist is empty
-func (sl *SkipList[K, V]) Keys() []K {
+func (sl *List[K, V]) Keys() []K {
 	if sl.safe {
 		sl.mu.RLock()
 		defer sl.mu.RUnlock()
@@ -392,7 +392,7 @@ func (sl *SkipList[K, V]) Keys() []K {
 
 // Values returns all values in the skiplist.
 // Returns empty slice(not nil) if the skiplist is empty
-func (sl *SkipList[K, V]) Values() []V {
+func (sl *List[K, V]) Values() []V {
 	if sl.safe {
 		sl.mu.RLock()
 		defer sl.mu.RUnlock()
@@ -407,10 +407,10 @@ func (sl *SkipList[K, V]) Values() []V {
 	return values
 }
 
-// Range iterates over all key-value pairs in the SkipList in ascending order.
+// Range iterates over all key-value pairs in the list in ascending order.
 // The function `fn` is called for each key-value pair.
 // If `fn` returns false, iteration stops early.
-func (sl *SkipList[K, V]) Range(fn func(K, V) bool) {
+func (sl *List[K, V]) Range(fn func(K, V) bool) {
 	if fn == nil {
 		return
 	}
@@ -429,7 +429,7 @@ func (sl *SkipList[K, V]) Range(fn func(K, V) bool) {
 }
 
 // Clone returns a deep copy of the skiplist.
-func (sl *SkipList[K, V]) Clone() *SkipList[K, V] {
+func (sl *List[K, V]) Clone() *List[K, V] {
 	if sl.safe {
 		sl.mu.RLock()
 		defer sl.mu.RUnlock()
@@ -444,7 +444,7 @@ func (sl *SkipList[K, V]) Clone() *SkipList[K, V] {
 	return clone
 }
 
-func (sl *SkipList[K, V]) options() []Option[K, V] {
+func (sl *List[K, V]) options() []Option[K, V] {
 	ops := make([]Option[K, V], 0)
 	if sl.safe {
 		ops = append(ops, WithSafe[K, V]())
@@ -461,7 +461,7 @@ func (sl *SkipList[K, V]) options() []Option[K, V] {
 }
 
 // String returns a string representation of the skiplist.
-func (sl *SkipList[K, V]) String() string {
+func (sl *List[K, V]) String() string {
 	if sl.safe {
 		sl.mu.RLock()
 		defer sl.mu.RUnlock()
@@ -493,7 +493,7 @@ func (sl *SkipList[K, V]) String() string {
 
 // randomLevel generates a level for the new node using probability `p`.
 // It ensures that higher levels occur exponentially less frequently.
-func (sl *SkipList[K, V]) randomLevel() int {
+func (sl *List[K, V]) randomLevel() int {
 	level := 1
 	for level < sl.maxLevel && sl.rand.Float64() < sl.p {
 		level++

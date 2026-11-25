@@ -6,7 +6,7 @@ package multimap
 import (
 	"slices"
 
-	"github.com/hydroan/gst/ds/types"
+	"github.com/hydroan/gst/ds/container"
 )
 
 // MultiMap represents a map that can store multiple values for each key.
@@ -14,20 +14,20 @@ import (
 type MultiMap[K comparable, V any] struct {
 	data map[K][]V
 	cmp  func(V, V) int
-	mu   types.Locker
+	mu   container.Locker
 	safe bool
 }
 
 // New creates an empty MultiMap. cmp compares values: two values are equal
-// when it returns 0. A nil cmp fails with types.ErrComparisonNil.
+// when it returns 0. A nil cmp fails with container.ErrComparisonNil.
 func New[K comparable, V any](cmp func(V, V) int, ops ...Option[K, V]) (*MultiMap[K, V], error) {
 	if cmp == nil {
-		return nil, types.ErrComparisonNil
+		return nil, container.ErrComparisonNil
 	}
 	m := &MultiMap[K, V]{
 		data: make(map[K][]V),
 		cmp:  cmp,
-		mu:   types.FakeLocker{},
+		mu:   container.NopLocker{},
 	}
 	for _, op := range ops {
 		if op == nil {

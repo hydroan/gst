@@ -8,7 +8,7 @@ type pair[K comparable, V any] struct {
 }
 
 // MarshalJSON implements the json.Marshaler interface.
-func (sl *SkipList[K, V]) MarshalJSON() ([]byte, error) {
+func (sl *List[K, V]) MarshalJSON() ([]byte, error) {
 	if sl.safe {
 		sl.mu.RLock()
 		defer sl.mu.RUnlock()
@@ -27,7 +27,7 @@ func (sl *SkipList[K, V]) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON implements the json.Unmarshaler interface.
-func (sl *SkipList[K, V]) UnmarshalJSON(data []byte) error {
+func (sl *List[K, V]) UnmarshalJSON(data []byte) error {
 	if sl.safe {
 		sl.mu.Lock()
 		defer sl.mu.Unlock()

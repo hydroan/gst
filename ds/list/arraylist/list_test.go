@@ -4,8 +4,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/hydroan/gst/ds/container"
 	"github.com/hydroan/gst/ds/list/arraylist"
-	"github.com/hydroan/gst/ds/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -25,7 +25,7 @@ func TestNew(t *testing.T) {
 
 	t.Run("nil comparison function", func(t *testing.T) {
 		list, err := arraylist.New[int](nil)
-		require.ErrorIs(t, err, types.ErrComparisonNil)
+		require.ErrorIs(t, err, container.ErrComparisonNil)
 		assert.Nil(t, list)
 	})
 }

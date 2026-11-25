@@ -7,9 +7,9 @@ import (
 	"github.com/hydroan/gst/ds/list/skiplist"
 )
 
-func createSkipList(b *testing.B, size int, safe bool) *skiplist.SkipList[int64, int64] {
+func createSkipList(b *testing.B, size int, safe bool) *skiplist.List[int64, int64] {
 	b.Helper()
-	var sl *skiplist.SkipList[int64, int64]
+	var sl *skiplist.List[int64, int64]
 	var err error
 	if safe {
 		sl, err = skiplist.NewOrdered(skiplist.WithSafe[int64, int64]())
@@ -25,7 +25,7 @@ func createSkipList(b *testing.B, size int, safe bool) *skiplist.SkipList[int64,
 	return sl
 }
 
-func benchmark(b *testing.B, sizes []int, do func(sl *skiplist.SkipList[int64, int64])) {
+func benchmark(b *testing.B, sizes []int, do func(sl *skiplist.List[int64, int64])) {
 	b.Helper()
 	for _, size := range sizes {
 		b.Run(fmt.Sprintf("size-%d", size), func(b *testing.B) {
@@ -58,7 +58,7 @@ func benchmark(b *testing.B, sizes []int, do func(sl *skiplist.SkipList[int64, i
 	}
 }
 
-func benchmarkIndex(b *testing.B, sizes []int, do func(sl *skiplist.SkipList[int64, int64], i int)) {
+func benchmarkIndex(b *testing.B, sizes []int, do func(sl *skiplist.List[int64, int64], i int)) {
 	b.Helper()
 	for _, size := range sizes {
 		b.Run(fmt.Sprintf("size-%d", size), func(b *testing.B) {
@@ -92,76 +92,76 @@ func benchmarkIndex(b *testing.B, sizes []int, do func(sl *skiplist.SkipList[int
 }
 
 func BenchmarkSkipList_Put(b *testing.B) {
-	benchmarkIndex(b, []int{100}, func(sl *skiplist.SkipList[int64, int64], i int) {
+	benchmarkIndex(b, []int{100}, func(sl *skiplist.List[int64, int64], i int) {
 		sl.Put(int64(i%100), int64(i%100))
 	})
-	benchmarkIndex(b, []int{1000000}, func(sl *skiplist.SkipList[int64, int64], i int) {
+	benchmarkIndex(b, []int{1000000}, func(sl *skiplist.List[int64, int64], i int) {
 		sl.Put(int64(i%1000000), int64(i%1000000))
 	})
 }
 
 func BenchmarkSkipList_Get(b *testing.B) {
-	benchmarkIndex(b, []int{100}, func(sl *skiplist.SkipList[int64, int64], i int) {
+	benchmarkIndex(b, []int{100}, func(sl *skiplist.List[int64, int64], i int) {
 		sl.Get(int64(i % 100))
 	})
-	benchmarkIndex(b, []int{1000000}, func(sl *skiplist.SkipList[int64, int64], i int) {
+	benchmarkIndex(b, []int{1000000}, func(sl *skiplist.List[int64, int64], i int) {
 		sl.Get(int64(i % 1000000))
 	})
 }
 
 func BenchmarkSkipList_Delete(b *testing.B) {
-	benchmarkIndex(b, []int{100}, func(sl *skiplist.SkipList[int64, int64], i int) {
+	benchmarkIndex(b, []int{100}, func(sl *skiplist.List[int64, int64], i int) {
 		_, _ = sl.Delete(int64(i % 100))
 	})
-	benchmarkIndex(b, []int{1000000}, func(sl *skiplist.SkipList[int64, int64], i int) {
+	benchmarkIndex(b, []int{1000000}, func(sl *skiplist.List[int64, int64], i int) {
 		_, _ = sl.Delete(int64(i % 1000000))
 	})
 }
 
 func BenchmarkSkipList_Min(b *testing.B) {
-	benchmark(b, []int{100, 1000000}, func(sl *skiplist.SkipList[int64, int64]) {
+	benchmark(b, []int{100, 1000000}, func(sl *skiplist.List[int64, int64]) {
 		_, _, _ = sl.Min()
 	})
 }
 
 func BenchmarkSkipList_Max(b *testing.B) {
-	benchmark(b, []int{100, 1000000}, func(sl *skiplist.SkipList[int64, int64]) {
+	benchmark(b, []int{100, 1000000}, func(sl *skiplist.List[int64, int64]) {
 		_, _, _ = sl.Max()
 	})
 }
 
 func BenchmarkSkipList_Floor(b *testing.B) {
-	benchmark(b, []int{100}, func(sl *skiplist.SkipList[int64, int64]) {
+	benchmark(b, []int{100}, func(sl *skiplist.List[int64, int64]) {
 		_, _, _ = sl.Floor(50)
 	})
-	benchmark(b, []int{1000000}, func(sl *skiplist.SkipList[int64, int64]) {
+	benchmark(b, []int{1000000}, func(sl *skiplist.List[int64, int64]) {
 		_, _, _ = sl.Floor(500000)
 	})
 }
 
 func BenchmarkSkipList_Ceiling(b *testing.B) {
-	benchmark(b, []int{100}, func(sl *skiplist.SkipList[int64, int64]) {
+	benchmark(b, []int{100}, func(sl *skiplist.List[int64, int64]) {
 		_, _, _ = sl.Ceiling(50)
 	})
-	benchmark(b, []int{1000000}, func(sl *skiplist.SkipList[int64, int64]) {
+	benchmark(b, []int{1000000}, func(sl *skiplist.List[int64, int64]) {
 		_, _, _ = sl.Ceiling(500000)
 	})
 }
 
 func BenchmarkSkipList_Keys(b *testing.B) {
-	benchmark(b, []int{100, 1000000}, func(sl *skiplist.SkipList[int64, int64]) {
+	benchmark(b, []int{100, 1000000}, func(sl *skiplist.List[int64, int64]) {
 		_ = sl.Keys()
 	})
 }
 
 func BenchmarkSkipList_Values(b *testing.B) {
-	benchmark(b, []int{100, 1000000}, func(sl *skiplist.SkipList[int64, int64]) {
+	benchmark(b, []int{100, 1000000}, func(sl *skiplist.List[int64, int64]) {
 		_ = sl.Values()
 	})
 }
 
 func BenchmarkSkipList_Range(b *testing.B) {
-	benchmark(b, []int{100, 1000000}, func(sl *skiplist.SkipList[int64, int64]) {
+	benchmark(b, []int{100, 1000000}, func(sl *skiplist.List[int64, int64]) {
 		sl.Range(func(i1, i2 int64) bool {
 			_, _ = i1, i2
 			return true
@@ -170,13 +170,13 @@ func BenchmarkSkipList_Range(b *testing.B) {
 }
 
 func BenchmarkSkipList_Clone(b *testing.B) {
-	benchmark(b, []int{100, 1000000}, func(sl *skiplist.SkipList[int64, int64]) {
+	benchmark(b, []int{100, 1000000}, func(sl *skiplist.List[int64, int64]) {
 		_ = sl.Clone()
 	})
 }
 
 func BenchmarkSkipList_MarshalJSON(b *testing.B) {
-	benchmark(b, []int{100, 1000000}, func(sl *skiplist.SkipList[int64, int64]) {
+	benchmark(b, []int{100, 1000000}, func(sl *skiplist.List[int64, int64]) {
 		_, _ = sl.MarshalJSON()
 	})
 }

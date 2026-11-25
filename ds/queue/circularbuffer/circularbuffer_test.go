@@ -225,7 +225,7 @@ func TestCircularBuffer_Slice(t *testing.T) {
 
 func TestCircularBuffer_Encoding(t *testing.T) {
 	var err error
-	var cb, cb2, cb3 *circularbuffer.CircularBuffer[int]
+	var cb, cb2, cb3 *circularbuffer.Buffer[int]
 	if cb, err = circularbuffer.New(3, circularbuffer.WithSafe[int]()); err != nil {
 		t.Fatal(err)
 	}

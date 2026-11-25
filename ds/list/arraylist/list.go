@@ -5,7 +5,7 @@ import (
 	"cmp"
 	"slices"
 
-	"github.com/hydroan/gst/ds/types"
+	"github.com/hydroan/gst/ds/container"
 )
 
 const (
@@ -21,7 +21,7 @@ const (
 type List[E any] struct {
 	elements []E
 	cmp      func(E, E) int
-	mu       types.Locker
+	mu       container.Locker
 
 	safe bool
 }
@@ -29,15 +29,15 @@ type List[E any] struct {
 // New creates and returns a new array-backed list.
 // The provided cmp orders the elements: Sort sorts by it, and Contains,
 // IndexOf and Remove treat two elements as equal when it returns 0. A nil
-// cmp fails with types.ErrComparisonNil.
+// cmp fails with container.ErrComparisonNil.
 // Optional options can be passed to modify the list's behavior, such as enabling concurrent safety.
 func New[E any](cmp func(E, E) int, ops ...Option[E]) (*List[E], error) {
 	if cmp == nil {
-		return nil, types.ErrComparisonNil
+		return nil, container.ErrComparisonNil
 	}
 	l := &List[E]{
 		elements: make([]E, 0, minCap), // NOTE: zero capacity will cause growBy blocked.
-		mu:       types.FakeLocker{},
+		mu:       container.NopLocker{},
 		cmp:      cmp,
 	}
 	for _, op := range ops {
@@ -52,7 +52,7 @@ func New[E any](cmp func(E, E) int, ops ...Option[E]) (*List[E], error) {
 }
 
 // NewOrdered creates and returns a new array-backed list for ordered elements.
-// It use cmp.Compare[E] as the default comparison function for elements.
+// It uses cmp.Compare[E] as the default comparison function for elements.
 // Optional options can be passed to modify the list's behavior, such as enabling concurrent safety.
 func NewOrdered[E cmp.Ordered](ops ...Option[E]) (*List[E], error) {
 	return New(cmp.Compare[E], ops...)
@@ -72,7 +72,7 @@ func NewFromSlice[E any](cmp func(E, E) int, elements []E, ops ...Option[E]) (*L
 }
 
 // NewFromOrderedSlice creates a new array-backed list from the given slice.
-// It use cmp.Compare[E] as the default comparison function for elements.
+// It uses cmp.Compare[E] as the default comparison function for elements.
 // Optional options can be passed to modify the list's behavior, such as enabling concurrent safety.
 func NewFromOrderedSlice[E cmp.Ordered](elements []E, ops ...Option[E]) (*List[E], error) {
 	return NewFromSlice(cmp.Compare[E], elements, ops...)

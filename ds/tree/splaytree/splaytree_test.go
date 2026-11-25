@@ -6,15 +6,15 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/hydroan/gst/ds/container"
 	"github.com/hydroan/gst/ds/tree/splaytree"
-	"github.com/hydroan/gst/ds/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func newIntStringTree(t *testing.T) *splaytree.Tree[int, string] {
 	t.Helper()
-	tree, err := splaytree.NewOrderedKeys(splaytree.WithSafe[int, string]())
+	tree, err := splaytree.NewOrdered(splaytree.WithSafe[int, string]())
 	require.NoError(t, err)
 	return tree
 }
@@ -28,7 +28,7 @@ func TestSplayTree_New(t *testing.T) {
 		{
 			name:    "nil comparator",
 			cmp:     nil,
-			wantErr: types.ErrComparisonNil,
+			wantErr: container.ErrComparisonNil,
 		},
 		{
 			name: "valid comparator",
@@ -353,12 +353,12 @@ func TestSplayTree_MarshalJSON(t *testing.T) {
 // its key alone unless a formatter is given, and as the formatter renders the
 // key and the value when one is.
 func TestSplayTree_StringUsesTheNodeFormatter(t *testing.T) {
-	plain, err := splaytree.NewOrderedKeys[int, string]()
+	plain, err := splaytree.NewOrdered[int, string]()
 	require.NoError(t, err)
 	plain.Put(1, "one")
 	assert.Equal(t, "SplayTree\n╰── 1\n", plain.String())
 
-	formatted, err := splaytree.NewOrderedKeys(splaytree.WithNodeFormatter(func(k int, v string) string {
+	formatted, err := splaytree.NewOrdered(splaytree.WithNodeFormatter(func(k int, v string) string {
 		return strconv.Itoa(k) + ":" + v
 	}))
 	require.NoError(t, err)

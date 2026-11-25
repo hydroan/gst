@@ -10,12 +10,12 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/hydroan/gst/ds/types"
+	"github.com/hydroan/gst/ds/container"
 )
 
 type Set[E comparable] struct {
 	set    map[E]struct{}
-	mu     types.Locker
+	mu     container.Locker
 	safe   bool
 	cmp    func(E, E) int
 	sorted bool
@@ -32,7 +32,7 @@ func New[E comparable](ops ...Option[E]) (*Set[E], error) {
 func NewWithSize[T comparable](size int, ops ...Option[T]) (*Set[T], error) {
 	s := &Set[T]{
 		set: make(map[T]struct{}, size),
-		mu:  types.FakeLocker{},
+		mu:  container.NopLocker{},
 	}
 	for _, op := range ops {
 		if op == nil {
@@ -640,7 +640,7 @@ func (s *Set[E]) isSuperset(other *Set[E]) bool {
 // example a.Union(b) racing b.Union(a)). Sets that are not concurrent-safe are
 // skipped, and a mutex shared by both sets (such as s == other) is locked once.
 func (s *Set[E]) lockBothRead(other *Set[E]) func() {
-	var first, second types.Locker
+	var first, second container.Locker
 	if s.safe {
 		first = s.mu
 	}
@@ -668,6 +668,6 @@ func (s *Set[E]) lockBothRead(other *Set[E]) func() {
 
 // lockerAddr returns the address of the underlying lock so that a pair of locks
 // can be acquired in a deterministic order.
-func lockerAddr(l types.Locker) uintptr {
+func lockerAddr(l container.Locker) uintptr {
 	return reflect.ValueOf(l).Pointer()
 }

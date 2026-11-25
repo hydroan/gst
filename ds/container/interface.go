@@ -1,10 +1,9 @@
-package types
+package container
 
 import "sync"
 
-// Map represents a generic map interface that can be implemented
-// by different map types like HashMap, TreeMap, LinkedHashMap,
-// SkipListMap, BTreeMap, etc.
+// Map is the interface of a keyed container: reading, writing and removing
+// the value of a key, and walking the keys and the values.
 type Map[K, V any] interface {
 	Get(key K) (V, bool)
 	Set(key K, value V)
@@ -18,10 +17,10 @@ type Map[K, V any] interface {
 	Keys() []K
 	Values() []V
 	Range(func(key K, value V) bool)
-
-	// Clone() Map[K, V]
 }
 
+// Locker is the lock a structure holds: a sync.RWMutex once WithSafe is
+// given, and in most structures a NopLocker until then.
 type Locker interface {
 	Lock()
 	Unlock()

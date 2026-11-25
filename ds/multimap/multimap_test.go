@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hydroan/gst/ds/container"
 	"github.com/hydroan/gst/ds/multimap"
-	"github.com/hydroan/gst/ds/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,7 +28,7 @@ func TestMultiMap_Creation(t *testing.T) {
 			{
 				name:    "with nil comparison function",
 				cmp:     nil,
-				wantErr: types.ErrComparisonNil,
+				wantErr: container.ErrComparisonNil,
 			},
 		}
 

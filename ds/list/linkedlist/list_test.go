@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hydroan/gst/ds/container"
 	"github.com/hydroan/gst/ds/list/linkedlist"
-	"github.com/hydroan/gst/ds/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -354,7 +354,7 @@ func TestList_MergeSorted(t *testing.T) {
 		require.NoError(t, err)
 		l2, err := linkedlist.NewFromSlice([]int{2})
 		require.NoError(t, err)
-		require.ErrorIs(t, l1.MergeSorted(l2, nil), types.ErrComparisonNil)
+		require.ErrorIs(t, l1.MergeSorted(l2, nil), container.ErrComparisonNil)
 		assert.Equal(t, []int{3, 1}, l1.Slice())
 		assert.Equal(t, []int{2}, l2.Slice())
 	})
@@ -613,8 +613,8 @@ func TestNode_Each(t *testing.T) {
 // equals.
 type otherIterator struct{}
 
-func (otherIterator) IsValid() bool                  { return false }
-func (o otherIterator) Next() types.Iterator[int]    { return o }
-func (otherIterator) Value() int                     { return 0 }
-func (o otherIterator) Clone() types.Iterator[int]   { return o }
-func (otherIterator) Equal(types.Iterator[int]) bool { return false }
+func (otherIterator) IsValid() bool                      { return false }
+func (o otherIterator) Next() container.Iterator[int]    { return o }
+func (otherIterator) Value() int                         { return 0 }
+func (o otherIterator) Clone() container.Iterator[int]   { return o }
+func (otherIterator) Equal(container.Iterator[int]) bool { return false }

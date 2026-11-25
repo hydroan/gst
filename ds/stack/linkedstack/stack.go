@@ -7,8 +7,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/hydroan/gst/ds/container"
 	"github.com/hydroan/gst/ds/list/linkedlist"
-	"github.com/hydroan/gst/ds/types"
 )
 
 // Stack represents a stack based on linkedlist..
@@ -16,13 +16,13 @@ import (
 type Stack[E any] struct {
 	list *linkedlist.List[E]
 	safe bool
-	mu   types.Locker
+	mu   container.Locker
 }
 
-// New creates and initializes a empty stack.
+// New creates and initializes an empty stack.
 // Options can be provided to customize the stack's properties (e.g., thread safety).
 func New[E any](ops ...Option[E]) (s *Stack[E], err error) {
-	s = &Stack[E]{mu: types.FakeLocker{}}
+	s = &Stack[E]{mu: container.NopLocker{}}
 	for _, op := range ops {
 		if op == nil {
 			continue

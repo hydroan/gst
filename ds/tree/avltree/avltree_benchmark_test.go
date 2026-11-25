@@ -12,9 +12,9 @@ func createTree(b *testing.B, size int, safe bool) *avltree.Tree[float64, float6
 	var t *avltree.Tree[float64, float64]
 	var err error
 	if safe {
-		t, err = avltree.NewOrderedKeys(avltree.WithSafe[float64, float64]())
+		t, err = avltree.NewOrdered(avltree.WithSafe[float64, float64]())
 	} else {
-		t, err = avltree.NewOrderedKeys[float64, float64]()
+		t, err = avltree.NewOrdered[float64, float64]()
 	}
 	for i := range size {
 		t.Put(float64(i), float64(i))
@@ -30,9 +30,9 @@ func createTreeInt(b *testing.B, size int, safe bool) *avltree.Tree[int, int] {
 	var t *avltree.Tree[int, int]
 	var err error
 	if safe {
-		t, err = avltree.NewOrderedKeys(avltree.WithSafe[int, int]())
+		t, err = avltree.NewOrdered(avltree.WithSafe[int, int]())
 	} else {
-		t, err = avltree.NewOrderedKeys[int, int]()
+		t, err = avltree.NewOrdered[int, int]()
 	}
 	for i := range size {
 		t.Put(i, i)

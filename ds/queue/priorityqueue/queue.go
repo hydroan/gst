@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/hydroan/gst/ds/container"
 	"github.com/hydroan/gst/ds/heap/binaryheap"
-	"github.com/hydroan/gst/ds/types"
 )
 
 // Queue represents a priority queue.
@@ -19,7 +19,7 @@ type Queue[E any] struct {
 	cmp  func(E, E) int
 
 	safe bool
-	mu   types.Locker
+	mu   container.Locker
 
 	maxPriority bool
 }
@@ -30,13 +30,13 @@ type Queue[E any] struct {
 //   - WithSafe(): creates a thread-safe priority queue.
 //   - WithMaxPriority(): creates a priority queue where higher value has higher priority.
 //
-// By defaults, it creates a non-thread-safe priority queue use min-heap ordering.
-// (smaller values have higher priority).
+// By default, it creates a non-thread-safe priority queue that uses min-heap
+// ordering (smaller values have higher priority).
 func New[E any](cmp func(E, E) int, ops ...Option[E]) (*Queue[E], error) {
 	if cmp == nil {
-		return nil, types.ErrComparisonNil
+		return nil, container.ErrComparisonNil
 	}
-	q := &Queue[E]{cmp: cmp, mu: types.FakeLocker{}}
+	q := &Queue[E]{cmp: cmp, mu: container.NopLocker{}}
 	for _, op := range ops {
 		if op == nil {
 			continue

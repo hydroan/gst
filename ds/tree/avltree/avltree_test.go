@@ -9,15 +9,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hydroan/gst/ds/container"
 	"github.com/hydroan/gst/ds/tree/avltree"
-	"github.com/hydroan/gst/ds/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func newIntStringTree(t *testing.T) *avltree.Tree[int, string] {
 	t.Helper()
-	tree, err := avltree.NewOrderedKeys(avltree.WithSafe[int, string]())
+	tree, err := avltree.NewOrdered(avltree.WithSafe[int, string]())
 	require.NoError(t, err)
 	return tree
 }
@@ -31,7 +31,7 @@ func TestAVLTree_New(t *testing.T) {
 		{
 			name:    "nil comparator",
 			cmp:     nil,
-			wantErr: types.ErrComparisonNil,
+			wantErr: container.ErrComparisonNil,
 		},
 		{
 			name: "valid comparator",

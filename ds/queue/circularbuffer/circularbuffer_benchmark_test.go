@@ -8,7 +8,7 @@ import (
 	"github.com/hydroan/gst/ds/queue/circularbuffer"
 )
 
-func createCircularBuffer(b *testing.B, size int, safe bool, drop bool) *circularbuffer.CircularBuffer[int] {
+func createCircularBuffer(b *testing.B, size int, safe bool, drop bool) *circularbuffer.Buffer[int] {
 	b.Helper()
 	ops := make([]circularbuffer.Option[int], 0)
 	if safe {
@@ -30,7 +30,7 @@ func createCircularBuffer(b *testing.B, size int, safe bool, drop bool) *circula
 	return cb
 }
 
-func createCircularBuffer2(b *testing.B, size int, safe bool) *circularbuffer.CircularBuffer[int] {
+func createCircularBuffer2(b *testing.B, size int, safe bool) *circularbuffer.Buffer[int] {
 	b.Helper()
 	ops := make([]circularbuffer.Option[int], 0)
 	if safe {
@@ -49,7 +49,7 @@ func createCircularBuffer2(b *testing.B, size int, safe bool) *circularbuffer.Ci
 	return cb
 }
 
-func benchmark(b *testing.B, sizes []int, do func(cb *circularbuffer.CircularBuffer[int])) {
+func benchmark(b *testing.B, sizes []int, do func(cb *circularbuffer.Buffer[int])) {
 	b.Helper()
 	b.Run("overwrite", func(b *testing.B) {
 		for _, size := range sizes {
@@ -111,7 +111,7 @@ func benchmark(b *testing.B, sizes []int, do func(cb *circularbuffer.CircularBuf
 	})
 }
 
-func benchmark2(b *testing.B, sizes []int, do func(cb *circularbuffer.CircularBuffer[int])) {
+func benchmark2(b *testing.B, sizes []int, do func(cb *circularbuffer.Buffer[int])) {
 	b.Helper()
 	for _, size := range sizes {
 		b.Run(fmt.Sprintf("size-%d", size), func(b *testing.B) {
@@ -143,37 +143,37 @@ func benchmark2(b *testing.B, sizes []int, do func(cb *circularbuffer.CircularBu
 }
 
 func BenchmarkCircularBuffer_Enqueue(b *testing.B) {
-	benchmark(b, []int{100, 1000000}, func(cb *circularbuffer.CircularBuffer[int]) {
+	benchmark(b, []int{100, 1000000}, func(cb *circularbuffer.Buffer[int]) {
 		cb.Enqueue(0)
 	})
 }
 
 func BenchmarkCircularBuffer_Dequeue(b *testing.B) {
-	benchmark2(b, []int{100, 100000}, func(cb *circularbuffer.CircularBuffer[int]) {
+	benchmark2(b, []int{100, 100000}, func(cb *circularbuffer.Buffer[int]) {
 		_, _ = cb.Dequeue()
 	})
 }
 
 func BenchmarkCircularBuffer_Peek(b *testing.B) {
-	benchmark2(b, []int{100, 100000}, func(cb *circularbuffer.CircularBuffer[int]) {
+	benchmark2(b, []int{100, 100000}, func(cb *circularbuffer.Buffer[int]) {
 		_, _ = cb.Peek()
 	})
 }
 
 func BenchmarkCircularBuffer_Slice(b *testing.B) {
-	benchmark2(b, []int{100, 100000}, func(cb *circularbuffer.CircularBuffer[int]) {
+	benchmark2(b, []int{100, 100000}, func(cb *circularbuffer.Buffer[int]) {
 		_ = cb.Slice()
 	})
 }
 
 func BenchmarkCircularBuffer_Clone(b *testing.B) {
-	benchmark2(b, []int{100, 100000}, func(cb *circularbuffer.CircularBuffer[int]) {
+	benchmark2(b, []int{100, 100000}, func(cb *circularbuffer.Buffer[int]) {
 		_ = cb.Clone()
 	})
 }
 
 func BenchmarkCircularBuffer_Range(b *testing.B) {
-	benchmark2(b, []int{100, 100000}, func(cb *circularbuffer.CircularBuffer[int]) {
+	benchmark2(b, []int{100, 100000}, func(cb *circularbuffer.Buffer[int]) {
 		cb.Range(func(e int) bool {
 			_ = e
 			return true
@@ -182,7 +182,7 @@ func BenchmarkCircularBuffer_Range(b *testing.B) {
 }
 
 func BenchmarkCircularBuffer_MarshalJSON(b *testing.B) {
-	benchmark2(b, []int{100, 100000}, func(cb *circularbuffer.CircularBuffer[int]) {
+	benchmark2(b, []int{100, 100000}, func(cb *circularbuffer.Buffer[int]) {
 		_, _ = json.Marshal(cb)
 	})
 }
@@ -193,13 +193,13 @@ func BenchmarkCircularBuffer_UnmarshalJSON(b *testing.B) {
 		b.Fatal(err)
 	}
 	bytes := []byte("[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]")
-	benchmark2(b, []int{100, 100000}, func(cb *circularbuffer.CircularBuffer[int]) {
+	benchmark2(b, []int{100, 100000}, func(cb *circularbuffer.Buffer[int]) {
 		_ = json.Unmarshal(bytes, dst)
 	})
 }
 
 func BenchmarkCircularBuffer_String(b *testing.B) {
-	benchmark2(b, []int{100, 100000}, func(cb *circularbuffer.CircularBuffer[int]) {
+	benchmark2(b, []int{100, 100000}, func(cb *circularbuffer.Buffer[int]) {
 		_ = cb.String()
 	})
 }

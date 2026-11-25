@@ -15,7 +15,7 @@ import (
 	"slices"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/ds/types"
+	"github.com/hydroan/gst/ds/container"
 )
 
 // ErrMergeWithSelf is returned by Merge and MergeSorted when a list is asked
@@ -27,14 +27,13 @@ var ErrMergeWithSelf = errors.New("cannot merge a list with itself")
 type List[V any] struct {
 	head, tail *Node[V]
 	count      int
-	mu         types.Locker
-	safe       bool
+	mu         container.Locker
 }
 
 // New creates and returns an empty doubly-linked list.
 func New[V any](ops ...Option[V]) (*List[V], error) {
 	l := new(List[V])
-	l.mu = types.FakeLocker{}
+	l.mu = container.NopLocker{}
 	for _, op := range ops {
 		if op == nil {
 			continue
@@ -330,15 +329,15 @@ func (l *List[V]) Merge(other *List[V]) error {
 //   - zero if a = b.
 //   - positive value if a > b.
 //
-// Both input list can be unsorted, the resulting list will be sorted, also
-// when other is empty or nil; equal values keep their order, those of l
-// first. The nodes of both lists end up on l, so the handles to them stay
-// valid there, and the other list is emptied. It fails, changing neither
-// list, with types.ErrComparisonNil when cmp is nil and with ErrMergeWithSelf
-// when other is l itself.
+// Both input list can be unsorted, the resulting list will be sorted, also when
+// other is empty or nil; equal values keep their order, those of l first. The
+// nodes of both lists end up on l, so the handles to them stay valid there, and
+// the other list is emptied. It fails, changing neither list, with
+// container.ErrComparisonNil when cmp is nil and with ErrMergeWithSelf when
+// other is l itself.
 func (l *List[V]) MergeSorted(other *List[V], cmp func(V, V) int) error {
 	if cmp == nil {
-		return types.ErrComparisonNil
+		return container.ErrComparisonNil
 	}
 	if other == l {
 		return ErrMergeWithSelf

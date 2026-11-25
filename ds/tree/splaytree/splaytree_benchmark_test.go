@@ -13,9 +13,9 @@ func createTree(b *testing.B, size int, safe bool) *splaytree.Tree[float64, floa
 	var t *splaytree.Tree[float64, float64]
 	var err error
 	if safe {
-		t, err = splaytree.NewOrderedKeys(splaytree.WithSafe[float64, float64]())
+		t, err = splaytree.NewOrdered(splaytree.WithSafe[float64, float64]())
 	} else {
-		t, err = splaytree.NewOrderedKeys[float64, float64]()
+		t, err = splaytree.NewOrdered[float64, float64]()
 	}
 	for i := range size {
 		t.Put(float64(i), float64(i))

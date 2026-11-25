@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 )
 
-func (cb *CircularBuffer[E]) MarshalJSON() ([]byte, error) {
+func (cb *Buffer[E]) MarshalJSON() ([]byte, error) {
 	if cb.safe {
 		cb.mu.RLock()
 		defer cb.mu.RUnlock()
@@ -23,7 +23,7 @@ func (cb *CircularBuffer[E]) MarshalJSON() ([]byte, error) {
 	return json.Marshal(elements)
 }
 
-func (cb *CircularBuffer[E]) UnmarshalJSON(data []byte) error {
+func (cb *Buffer[E]) UnmarshalJSON(data []byte) error {
 	if cb.safe {
 		cb.mu.Lock()
 		defer cb.mu.Unlock()

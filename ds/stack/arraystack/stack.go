@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/hydroan/gst/ds/types"
+	"github.com/hydroan/gst/ds/container"
 )
 
 // Stack represents a stack backed by a slice.
@@ -15,13 +15,13 @@ import (
 type Stack[E any] struct {
 	elements []E
 	safe     bool
-	mu       types.Locker
+	mu       container.Locker
 }
 
-// New creates and initializes a empty stack.
+// New creates and initializes an empty stack.
 // Options can be provided to customize the stack's properties (e.g., thread safety).
 func New[E any](ops ...Option[E]) (*Stack[E], error) {
-	s := &Stack[E]{elements: make([]E, 0), mu: types.FakeLocker{}}
+	s := &Stack[E]{elements: make([]E, 0), mu: container.NopLocker{}}
 	for _, op := range ops {
 		if op == nil {
 			continue

@@ -6,22 +6,22 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/hydroan/gst/ds/container"
 	"github.com/hydroan/gst/ds/list/linkedlist"
-	"github.com/hydroan/gst/ds/types"
 )
 
-// Queue represents a queue based on an linkedlist-backed list.
+// Queue represents a queue based on a linkedlist-backed list.
 // This queue implements the FIFO (first-in, first-out) behavior.
 type Queue[E any] struct {
 	list *linkedlist.List[E]
-	mu   types.Locker
+	mu   container.Locker
 	safe bool
 }
 
-// New creates and initializes a empty queue.
+// New creates and initializes an empty queue.
 // Options can be provided to customize the queue's properties (e.g., thread safety).
 func New[E any](ops ...Option[E]) (*Queue[E], error) {
-	q := &Queue[E]{mu: types.FakeLocker{}}
+	q := &Queue[E]{mu: container.NopLocker{}}
 	var err error
 	for _, op := range ops {
 		if op == nil {
@@ -84,7 +84,7 @@ func NewFromMapValues[K comparable, V any](m map[K]V, ops ...Option[V]) (*Queue[
 	return q, nil
 }
 
-// Enqueue adds a element to the end of the queue.
+// Enqueue adds an element to the end of the queue.
 func (q *Queue[E]) Enqueue(e E) {
 	if q.safe {
 		q.mu.Lock()

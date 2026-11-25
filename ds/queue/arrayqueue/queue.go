@@ -6,21 +6,21 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hydroan/gst/ds/types"
+	"github.com/hydroan/gst/ds/container"
 )
 
 // Queue represents a queue backed by a slice.
 // This queue implements the FIFO (first-in, first-out) behavior.
 type Queue[E any] struct {
 	elements []E
-	mu       types.Locker
+	mu       container.Locker
 	safe     bool
 }
 
-// New creates and initializes a empty queue.
+// New creates and initializes an empty queue.
 // Options can be provided to customize the queue's properties (e.g., thread safety).
 func New[E any](ops ...Option[E]) (*Queue[E], error) {
-	q := &Queue[E]{elements: make([]E, 0), mu: types.FakeLocker{}}
+	q := &Queue[E]{elements: make([]E, 0), mu: container.NopLocker{}}
 	for _, op := range ops {
 		if op == nil {
 			continue
@@ -69,7 +69,7 @@ func NewFromMapValues[K comparable, V any](m map[K]V, ops ...Option[V]) (*Queue[
 	return q, nil
 }
 
-// Enqueue adds a element to the end of the queue.
+// Enqueue adds an element to the end of the queue.
 func (q *Queue[E]) Enqueue(e E) {
 	if q.safe {
 		q.mu.Lock()

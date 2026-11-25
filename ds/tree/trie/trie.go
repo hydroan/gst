@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/hydroan/gst/ds/types"
+	"github.com/hydroan/gst/ds/container"
 )
 
 // Node represents a node in the trie.
@@ -54,14 +54,14 @@ type Trie[K comparable, V any] struct {
 	size int
 
 	safe bool
-	mu   types.Locker
+	mu   container.Locker
 
 	nodeFormatter func(V, int, bool) string
 	keyFormatter  func(K, V, int, bool) string
 }
 
 func New[K comparable, V any](ops ...Option[K, V]) (*Trie[K, V], error) {
-	t := &Trie[K, V]{mu: types.FakeLocker{}}
+	t := &Trie[K, V]{mu: container.NopLocker{}}
 	for _, op := range ops {
 		if op == nil {
 			continue

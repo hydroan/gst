@@ -3,13 +3,13 @@ package mapset
 import (
 	"sync"
 
-	"github.com/hydroan/gst/ds/types"
+	"github.com/hydroan/gst/ds/container"
 )
 
 // Option is a functional option type for configuring a Set.
 type Option[T comparable] func(*Set[T]) error
 
-// WithSafe creates a option that make the Set safe for concurrent use.
+// WithSafe creates an Option that makes the Set safe for concurrent use.
 func WithSafe[E comparable]() Option[E] {
 	return func(s *Set[E]) error {
 		s.mu = new(sync.RWMutex)
@@ -31,7 +31,7 @@ func WithSafe[E comparable]() Option[E] {
 func WithSorted[E comparable](cmp func(E, E) int) Option[E] {
 	return func(s *Set[E]) error {
 		if cmp == nil {
-			return types.ErrComparisonNil
+			return container.ErrComparisonNil
 		}
 		s.sorted = true
 		s.cmp = cmp

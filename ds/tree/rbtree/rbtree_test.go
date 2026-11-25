@@ -9,15 +9,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hydroan/gst/ds/container"
 	"github.com/hydroan/gst/ds/tree/rbtree"
-	"github.com/hydroan/gst/ds/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func newIntStringTree(t *testing.T) *rbtree.Tree[int, string] {
 	t.Helper()
-	tree, err := rbtree.NewOrderedKeys(rbtree.WithSafe[int, string]())
+	tree, err := rbtree.NewOrdered(rbtree.WithSafe[int, string]())
 	require.NoError(t, err)
 	return tree
 }
@@ -31,7 +31,7 @@ func TestRedBlackTree_New(t *testing.T) {
 		{
 			name:    "nil comparator",
 			cmp:     nil,
-			wantErr: types.ErrComparisonNil,
+			wantErr: container.ErrComparisonNil,
 		},
 		{
 			name: "valid comparator",
@@ -160,7 +160,7 @@ func TestRedBlackTree_Delete(t *testing.T) {
 }
 
 func TestRedBlackTree_Clear(t *testing.T) {
-	tree, err := rbtree.NewOrderedKeys[int, string]()
+	tree, err := rbtree.NewOrdered[int, string]()
 	require.NoError(t, err)
 
 	tree.Put(1, "one")
@@ -175,7 +175,7 @@ func TestRedBlackTree_Clear(t *testing.T) {
 }
 
 func TestRedBlackTree_KeysValues(t *testing.T) {
-	tree, err := rbtree.NewOrderedKeys[int, string]()
+	tree, err := rbtree.NewOrdered[int, string]()
 	require.NoError(t, err)
 	tree.Put(3, "three")
 	tree.Put(1, "one")
@@ -343,7 +343,7 @@ func TestRedBlackTree_MarshalJSON(t *testing.T) {
 }
 
 func TestRedBlackTree_Traversals(t *testing.T) {
-	tree, err := rbtree.NewOrderedKeys[int, string]()
+	tree, err := rbtree.NewOrdered[int, string]()
 	require.NoError(t, err)
 	tree.Put(10, "ten")
 	tree.Put(5, "five")
@@ -416,7 +416,7 @@ func TestRedBlackTree_String(t *testing.T) {
 	fmt.Println("=== Test Red-Black Tree Visualization ===")
 
 	// 1️⃣ create an int -> string red-black tree
-	tree, err := rbtree.NewOrderedKeys(rbtree.WithColorfulString[int, string]())
+	tree, err := rbtree.NewOrdered(rbtree.WithColorfulString[int, string]())
 	require.NoError(t, err)
 	tree.Put(10, "ten")
 	tree.Put(20, "twenty")
@@ -433,7 +433,7 @@ func TestRedBlackTree_String(t *testing.T) {
 	fmt.Println(tree.String())
 
 	// 2️⃣ create a string -> int red-black tree
-	treeStr, err := rbtree.NewOrderedKeys(rbtree.WithColorfulString[string, int](), rbtree.WithNodeFormatter(func(k string, v int) string {
+	treeStr, err := rbtree.NewOrdered(rbtree.WithColorfulString[string, int](), rbtree.WithNodeFormatter(func(k string, v int) string {
 		return fmt.Sprintf("%s:%d ", k, v)
 	}))
 	require.NoError(t, err)
@@ -449,7 +449,7 @@ func TestRedBlackTree_String(t *testing.T) {
 	fmt.Println(treeStr.String())
 
 	// 3️⃣ create a float64 -> string red-black tree
-	treeFloat, err := rbtree.NewOrderedKeys(rbtree.WithColorfulString[float64, string](), rbtree.WithNodeFormatter(func(k float64, v string) string {
+	treeFloat, err := rbtree.NewOrdered(rbtree.WithColorfulString[float64, string](), rbtree.WithNodeFormatter(func(k float64, v string) string {
 		return fmt.Sprintf("%.2f:%s ", k, v)
 	}))
 	require.NoError(t, err)
@@ -463,7 +463,7 @@ func TestRedBlackTree_String(t *testing.T) {
 	fmt.Println("\n🔹 Red-Black Tree (float64 -> string):")
 	fmt.Println(treeFloat.String())
 
-	tt, _ := rbtree.NewOrderedKeys(rbtree.WithColorfulString[float64, float64]())
+	tt, _ := rbtree.NewOrdered(rbtree.WithColorfulString[float64, float64]())
 	r := rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), uint64(time.Now().UnixNano())))
 	for range 10000 {
 		v := r.Float64()

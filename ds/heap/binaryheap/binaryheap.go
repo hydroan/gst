@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hydroan/gst/ds/types"
+	"github.com/hydroan/gst/ds/container"
 )
 
 // Heap is a generic binary heap implementation that support both max-heap and min-heap.
@@ -22,7 +22,7 @@ type Heap[E any] struct {
 	cmp func(E, E) int
 
 	safe    bool
-	mu      types.Locker
+	mu      container.Locker
 	maxHeap bool
 }
 
@@ -38,9 +38,9 @@ type Heap[E any] struct {
 //   - pass WithMaxHeap to create a max-heap  instead of the default min-heap.
 func New[E any](cmp func(E, E) int, ops ...Option[E]) (*Heap[E], error) {
 	if cmp == nil {
-		return nil, types.ErrComparisonNil
+		return nil, container.ErrComparisonNil
 	}
-	h := &Heap[E]{data: make([]E, 0), cmp: cmp, mu: types.FakeLocker{}}
+	h := &Heap[E]{data: make([]E, 0), cmp: cmp, mu: container.NopLocker{}}
 	for _, op := range ops {
 		if op == nil {
 			continue

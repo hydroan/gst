@@ -8,13 +8,13 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/ds/types"
+	"github.com/hydroan/gst/ds/container"
 )
 
-// CircularBuffer represents a generic circular buffer implementation.
+// Buffer represents a generic circular buffer implementation.
 // It supports thread-safe operations and can be configured to either drop new data
 // or overwrite old data when the buffer is full.
-type CircularBuffer[E any] struct {
+type Buffer[E any] struct {
 	buf     []E
 	head    int
 	tail    int
@@ -22,16 +22,16 @@ type CircularBuffer[E any] struct {
 	maxSize int
 
 	safe bool
-	mu   types.Locker
+	mu   container.Locker
 	drop bool
 }
 
 // New creates a new circular buffer with the specified size.
-func New[E any](size int, ops ...Option[E]) (*CircularBuffer[E], error) {
+func New[E any](size int, ops ...Option[E]) (*Buffer[E], error) {
 	if size <= 0 {
 		return nil, errors.New("size must be greater than 0")
 	}
-	cb := &CircularBuffer[E]{maxSize: size, mu: types.FakeLocker{}}
+	cb := &Buffer[E]{maxSize: size, mu: container.NopLocker{}}
 
 	for _, op := range ops {
 		if op == nil {
@@ -48,7 +48,7 @@ func New[E any](size int, ops ...Option[E]) (*CircularBuffer[E], error) {
 // NewFromSlice creates a new circular buffer initialized with the given slice.
 // The buffer size will be equal to the length of the slice and will contain
 // all elements from the slice.
-func NewFromSlice[E any](slice []E, ops ...Option[E]) (*CircularBuffer[E], error) {
+func NewFromSlice[E any](slice []E, ops ...Option[E]) (*Buffer[E], error) {
 	cb, err := New(len(slice), ops...)
 	if err != nil {
 		return nil, err
@@ -59,10 +59,10 @@ func NewFromSlice[E any](slice []E, ops ...Option[E]) (*CircularBuffer[E], error
 	return cb, nil
 }
 
-// Enqueue adds an element to the CircularBuffer. A full buffer overwrites
+// Enqueue adds an element to the buffer. A full buffer overwrites
 // its oldest element, or, built WithDrop, refuses the new one and returns
 // false; Enqueue returns true otherwise.
-func (cb *CircularBuffer[E]) Enqueue(e E) bool {
+func (cb *Buffer[E]) Enqueue(e E) bool {
 	if cb.safe {
 		cb.mu.Lock()
 		defer cb.mu.Unlock()
@@ -71,7 +71,7 @@ func (cb *CircularBuffer[E]) Enqueue(e E) bool {
 	return cb.enqueue(e)
 }
 
-func (cb *CircularBuffer[E]) enqueue(e E) bool {
+func (cb *Buffer[E]) enqueue(e E) bool {
 	if cb.buf == nil {
 		cb.buf = make([]E, cb.maxSize)
 	}
@@ -88,9 +88,9 @@ func (cb *CircularBuffer[E]) enqueue(e E) bool {
 	return true
 }
 
-// Dequeue removes an element from the CircularBuffer.
+// Dequeue removes an element from the buffer.
 // Returns zero value and false if the buffer is empty, otherwise the element and true.
-func (cb *CircularBuffer[E]) Dequeue() (E, bool) {
+func (cb *Buffer[E]) Dequeue() (E, bool) {
 	if cb.safe {
 		cb.mu.Lock()
 		defer cb.mu.Unlock()
@@ -108,9 +108,9 @@ func (cb *CircularBuffer[E]) Dequeue() (E, bool) {
 	return d, true
 }
 
-// Peek returns the first element in the CircularBuffer without removing it.
+// Peek returns the first element in the buffer without removing it.
 // Returns zero value and false if the buffer is empty, otherwise the element and true.
-func (cb *CircularBuffer[E]) Peek() (E, bool) {
+func (cb *Buffer[E]) Peek() (E, bool) {
 	if cb.safe {
 		cb.mu.RLock()
 		defer cb.mu.RUnlock()
@@ -123,8 +123,8 @@ func (cb *CircularBuffer[E]) Peek() (E, bool) {
 	return cb.buf[cb.head], true
 }
 
-// IsEmpty reports whether the CircularBuffer is empty.
-func (cb *CircularBuffer[E]) IsEmpty() bool {
+// IsEmpty reports whether the buffer is empty.
+func (cb *Buffer[E]) IsEmpty() bool {
 	if cb.safe {
 		cb.mu.RLock()
 		defer cb.mu.RUnlock()
@@ -136,8 +136,8 @@ func (cb *CircularBuffer[E]) IsEmpty() bool {
 	return false
 }
 
-// IsFull reports whether the CircularBuffer holds as many elements as its size.
-func (cb *CircularBuffer[E]) IsFull() bool {
+// IsFull reports whether the buffer holds as many elements as its size.
+func (cb *Buffer[E]) IsFull() bool {
 	if cb.safe {
 		cb.mu.RLock()
 		defer cb.mu.RUnlock()
@@ -146,8 +146,8 @@ func (cb *CircularBuffer[E]) IsFull() bool {
 	return cb.size == cb.maxSize
 }
 
-// Len returns the number of elements in the CircularBuffer.
-func (cb *CircularBuffer[E]) Len() int {
+// Len returns the number of elements in the buffer.
+func (cb *Buffer[E]) Len() int {
 	if cb.safe {
 		cb.mu.RLock()
 		defer cb.mu.RUnlock()
@@ -156,8 +156,8 @@ func (cb *CircularBuffer[E]) Len() int {
 	return cb.size
 }
 
-// Clear removes all elements from the CircularBuffer.
-func (cb *CircularBuffer[E]) Clear() {
+// Clear removes all elements from the buffer.
+func (cb *Buffer[E]) Clear() {
 	if cb.safe {
 		cb.mu.Lock()
 		defer cb.mu.Unlock()
@@ -175,9 +175,9 @@ func (cb *CircularBuffer[E]) Clear() {
 	cb.size = 0
 }
 
-// Slice returns a slice of all elements in the CircularBuffer.
-// It returns empty slice(not nil) if the CircularBuffer is empty.
-func (cb *CircularBuffer[E]) Slice() []E {
+// Slice returns a slice of all elements in the buffer.
+// It returns empty slice(not nil) if the buffer is empty.
+func (cb *Buffer[E]) Slice() []E {
 	if cb.safe {
 		cb.mu.RLock()
 		defer cb.mu.RUnlock()
@@ -201,8 +201,8 @@ func (cb *CircularBuffer[E]) Slice() []E {
 	return result
 }
 
-// Clone returns a copy of the CircularBuffer.
-func (cb *CircularBuffer[E]) Clone() *CircularBuffer[E] {
+// Clone returns a copy of the buffer.
+func (cb *Buffer[E]) Clone() *Buffer[E] {
 	if cb.safe {
 		cb.mu.RLock()
 		defer cb.mu.RUnlock()
@@ -218,7 +218,7 @@ func (cb *CircularBuffer[E]) Clone() *CircularBuffer[E] {
 	return clone
 }
 
-func (cb *CircularBuffer[E]) options() []Option[E] {
+func (cb *Buffer[E]) options() []Option[E] {
 	ops := make([]Option[E], 0)
 
 	if cb.safe {
@@ -230,9 +230,9 @@ func (cb *CircularBuffer[E]) options() []Option[E] {
 	return ops
 }
 
-// Range calls "fn" for each element in the CircularBuffer.
+// Range calls "fn" for each element in the buffer.
 // function "fn" returns false to stop the iteration.
-func (cb *CircularBuffer[E]) Range(fn func(e E) bool) {
+func (cb *Buffer[E]) Range(fn func(e E) bool) {
 	if fn == nil {
 		return
 	}
@@ -251,8 +251,8 @@ func (cb *CircularBuffer[E]) Range(fn func(e E) bool) {
 	}
 }
 
-// String returns a string representation of the CircularBuffer.
-func (cb *CircularBuffer[E]) String() string {
+// String returns a string representation of the buffer.
+func (cb *Buffer[E]) String() string {
 	if cb.safe {
 		cb.mu.RLock()
 		defer cb.mu.RUnlock()

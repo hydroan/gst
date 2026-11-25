@@ -7,7 +7,7 @@ import (
 // Option is a function type that configures a property of a binary heap.
 type Option[T any] func(*Heap[T]) error
 
-// WithSafe return a Option to configure a binary heap to be thread-safe.
+// WithSafe returns an Option to configure a binary heap to be thread-safe.
 func WithSafe[T any]() Option[T] {
 	return func(h *Heap[T]) error {
 		h.safe = true
@@ -16,7 +16,7 @@ func WithSafe[T any]() Option[T] {
 	}
 }
 
-// WithMaxHeap return a Option to configure a binary heap to be a max-heap.
+// WithMaxHeap returns an Option to configure a binary heap to be a max-heap.
 func WithMaxHeap[T any]() Option[T] {
 	return func(h *Heap[T]) error {
 		h.maxHeap = true
