@@ -1,3 +1,9 @@
+// Package response writes what the HTTP listener answers a request with: the
+// success envelope (JSON), the envelope of a request that was refused or
+// failed (Error, and Abort for code outside the controller path), and a file
+// sent as a download (Attachment).
+//
+// The public response package forwards Abort to projects.
 package response
 
 import (
