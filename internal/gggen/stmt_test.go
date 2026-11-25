@@ -274,10 +274,10 @@ func TestStmtRouterRegister(t *testing.T) {
 			reqName:      "*BoxRequest",
 			rspName:      "*BoxResponse",
 			gstModelPkg:  "model",
-			routerGroup:  "Pub",
+			routerGroup:  "Public",
 			route:        "/api/login",
 			phase:        "Update",
-			want:         `router.Register[*pkgmodel.Record, *pkgmodel.BoxRequest, *pkgmodel.BoxResponse](router.Pub(), "/api/login", &gst.ControllerConfig[*pkgmodel.Record]{}, service.Update)`,
+			want:         `router.Register[*pkgmodel.Record, *pkgmodel.BoxRequest, *pkgmodel.BoxResponse](router.Public(), "/api/login", &gst.ControllerConfig[*pkgmodel.Record]{}, service.Update)`,
 		},
 		{
 			name:         "list_with_empty_payload",

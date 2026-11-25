@@ -227,8 +227,8 @@ const (
 	GstControllerConfigParamName = "ParamName"
 	// ServiceBase is the type a service struct embeds.
 	ServiceBase = "Base"
-	// RouterAuth and RouterPub are the functions returning the route group
-	// a route registers on: the authenticated one and the public one.
-	RouterAuth = "Auth"
-	RouterPub  = "Pub"
+	// RouterAuth and RouterPublic are the functions returning the route
+	// group a route registers on: the authenticated one and the public one.
+	RouterAuth   = "Auth"
+	RouterPublic = "Public"
 )

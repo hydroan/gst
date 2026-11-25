@@ -158,7 +158,7 @@ func StmtServiceRegister(serviceImport string, phase apiaction.Phase, route stri
 // A dsl.PayloadEmpty side becomes *model.Empty under gstModelPkg, the
 // qualifier the router file uses for model.Empty, resolved once per file by
 // RouterGstModelUse. routerGroup names the router group accessor ("Auth" or
-// "Pub"), route is the path the route is served at, shared verbatim with the
+// "Public"), route is the path the route is served at, shared verbatim with the
 // matching StmtServiceRegister statement, paramName is the route parameter the
 // controller reads the resource id from, "" for none, and phase names the
 // phase of the action as the service package spells it, such as Create.

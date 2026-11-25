@@ -23,7 +23,7 @@
 //	)
 //
 // Route paths are normalized (leading slashes and "api/" prefix are removed).
-// Authentication is controlled by Module.Pub() method.
+// Authentication is controlled by Module.Public() method.
 //
 // See module/helloworld for complete examples.
 package module
@@ -139,7 +139,7 @@ func Wait() {
 //   - options: Route options created by CRUD or Exact.
 //
 // Routes are registered based on mod.Route() and mod.Param().
-// Authentication is determined by mod.Pub().
+// Authentication is determined by mod.Public().
 //
 // Must be called during application initialization, typically in a Register() function.
 func Use[M gst.Model, REQ gst.Request, RSP gst.Response](mod gst.Module[M, REQ, RSP], options ...UseOption) {
@@ -232,12 +232,13 @@ func registerCRUDRouter[M gst.Model, REQ gst.Request, RSP gst.Response](mod gst.
 	registerRouter(mod, crudRoute(route, param, phase), cfg, phase)
 }
 
-// registerRouter registers an HTTP route with the appropriate router based on mod.Pub().
-// If mod.Pub() returns true, registers with public router; otherwise with authenticated router.
+// registerRouter registers an HTTP route with the appropriate router based on
+// mod.Public(). If mod.Public() returns true, registers with public router;
+// otherwise with authenticated router.
 func registerRouter[M gst.Model, REQ gst.Request, RSP gst.Response](mod gst.Module[M, REQ, RSP], route string, cfg *gst.ControllerConfig[M], phase apiaction.Phase) {
-	if mod.Pub() {
+	if mod.Public() {
 		// Register with public router - no authentication required
-		router.Register[M, REQ, RSP](router.Pub(), route, cfg, phase)
+		router.Register[M, REQ, RSP](router.Public(), route, cfg, phase)
 	} else {
 		// Register with authenticated router - authentication/authorization required
 		router.Register[M, REQ, RSP](router.Auth(), route, cfg, phase)

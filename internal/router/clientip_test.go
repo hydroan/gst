@@ -14,7 +14,7 @@ import (
 const clientIPRoute = "/client-ip"
 
 func registerClientIPRoute() {
-	router.Pub().GET(apiaction.APIPath(clientIPRoute), func(c *gin.Context) {
+	router.Public().GET(apiaction.APIPath(clientIPRoute), func(c *gin.Context) {
 		c.String(http.StatusOK, c.ClientIP())
 	})
 }

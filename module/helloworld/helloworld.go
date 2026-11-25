@@ -36,6 +36,6 @@ type Module struct{}
 func (Module) Service() gst.Service[*Helloworld, *Req, *Rsp] {
 	return &Service{}
 }
-func (Module) Pub() bool     { return false }
+func (Module) Public() bool  { return false }
 func (Module) Route() string { return "hello-world" }
 func (Module) Param() string { return "id" }

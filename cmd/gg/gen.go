@@ -222,7 +222,7 @@ func genRunWithOptions(opts genRunOptions) error {
 			}
 			base := ggconst.RouterAuth
 			if act.Public {
-				base = ggconst.RouterPub
+				base = ggconst.RouterPublic
 			}
 			routerStmts = append(routerStmts, gggen.StmtRouterRegister(importQualifier(routerAliases, m.ImportPath(), m.ModelPkgName), m.ModelName, act.Payload, act.Result, gstModelPkg, base, route, paramName, act.Phase.Name()))
 		})

@@ -237,7 +237,7 @@ func BuildServiceFile(modulePath, pkgName string, aliases map[string]string, stm
 //
 //	func Init() error {
 //		router.Register[*model.Box, *model.Box, *model.Box](router.Auth(), "/api/boxes", &gst.ControllerConfig[*model.Box]{}, service.List)
-//		router.Register[*model.User, *model.User, *model.User](router.Pub(), "/api/users", &gst.ControllerConfig[*model.User]{}, service.Create)
+//		router.Register[*model.User, *model.User, *model.User](router.Public(), "/api/users", &gst.ControllerConfig[*model.User]{}, service.Create)
 //		return nil
 //	}
 func BuildRouterFile(modulePath, pkgName, gstModelPkg string, aliases map[string]string, stmts ...ast.Stmt) (string, error) {

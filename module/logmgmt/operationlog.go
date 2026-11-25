@@ -18,5 +18,5 @@ func (*OperationLogModule) Service() gst.Service[*OperationLog, *OperationLog, *
 }
 
 func (*OperationLogModule) Route() string { return "/log/operationlog" }
-func (*OperationLogModule) Pub() bool     { return false }
+func (*OperationLogModule) Public() bool  { return false }
 func (*OperationLogModule) Param() string { return "id" }

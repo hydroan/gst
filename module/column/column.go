@@ -23,6 +23,6 @@ type mod struct{}
 func (*mod) Service() gst.Service[*empty, *empty, rsp] {
 	return &srv{}
 }
-func (*mod) Pub() bool     { return false }
+func (*mod) Public() bool  { return false }
 func (*mod) Route() string { return "column" }
 func (*mod) Param() string { return "id" }

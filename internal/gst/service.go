@@ -111,9 +111,9 @@ type Module[M Model, REQ Request, RSP Response] interface {
 	// Route returns the base API path for this module's endpoints.
 	Route() string
 
-	// Pub determines whether the API endpoints are public or require
+	// Public determines whether the API endpoints are public or require
 	// authentication.
-	Pub() bool
+	Public() bool
 
 	// Param returns the URL parameter name used for resource identification.
 	Param() string

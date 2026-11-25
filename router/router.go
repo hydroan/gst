@@ -1,6 +1,6 @@
 // Package router registers a project's HTTP routes and the hooks that run
 // once they are ready. The generated route registrations call Register on the
-// Auth or Pub group, a project seeds its data from OnRoutesReady, Routes
+// Auth or Public group, a project seeds its data from OnRoutesReady, Routes
 // lists what was registered and Route tells a middleware what the request
 // in hand was registered as. The server itself — building the engine,
 // serving, shutting down — is the framework's to run.
@@ -33,7 +33,7 @@ func APIPath(route string) string {
 
 // Register registers route on group for each of phases, the actions to
 // serve on it. group is the route group the route belongs to: Auth, whose
-// routes run the middleware registered with middleware.RegisterAuth, or Pub,
+// routes run the middleware registered with middleware.RegisterAuth, or Public,
 // whose routes do not. Each phase is served by the framework's handler for
 // it, under its HTTP method (see service.Phase.HTTPMethod):
 //
@@ -66,12 +66,12 @@ func Auth() *gin.RouterGroup {
 	return router.Auth()
 }
 
-// Pub returns the route group of the public routes, the ones the middleware
+// Public returns the route group of the public routes, the ones the middleware
 // registered with middleware.RegisterAuth does not run on; routes register
 // on it by their path the way they do on Auth. It is nil until the
 // framework has bootstrapped.
-func Pub() *gin.RouterGroup {
-	return router.Pub()
+func Public() *gin.RouterGroup {
+	return router.Public()
 }
 
 // OnRoutesReady registers a hook that runs after all routes are registered

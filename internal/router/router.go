@@ -41,9 +41,9 @@ import (
 )
 
 var (
-	root *gin.Engine
-	auth *gin.RouterGroup
-	pub  *gin.RouterGroup
+	root   *gin.Engine
+	auth   *gin.RouterGroup
+	public *gin.RouterGroup
 
 	server *http.Server
 
@@ -52,7 +52,7 @@ var (
 	registerMu sync.Mutex
 	routeMu    sync.RWMutex
 	routes     = make(map[string][]string)
-	// authRoutes are the endpoints registered on a group other than Pub,
+	// authRoutes are the endpoints registered on a group other than Public,
 	// the ones the auth middleware guards, or would (see
 	// warnUnguardedRoutes); authGuarded reports whether an auth middleware
 	// was ever mounted on the authenticated group (see Init).
@@ -67,7 +67,7 @@ var (
 
 // Init builds the engine: gin in release mode with the configured trusted
 // proxies, the framework's middleware chain, the envelope answers for an
-// unmatched path or method, the operational endpoints, and the Auth and Pub
+// unmatched path or method, the operational endpoints, and the Auth and Public
 // route groups along with the handlers middleware.Register and
 // middleware.RegisterAuth mount through. It fails on a server.trusted_proxies
 // entry that cannot be read and on a server.websocket_origins pattern that is
@@ -190,10 +190,10 @@ func Init() error {
 	// The groups hang off the root: a route registers by the path it is
 	// served at, prefix included (see apiaction.APIPath), so no group adds
 	// one. Auth runs the authentication middleware the project registers,
-	// Pub does not.
+	// Public does not.
 	auth = root.Group("")
 	auth.Use(middleware.AuthMarker())
-	pub = root.Group("")
+	public = root.Group("")
 	// A middleware registered once a route is would miss every route before
 	// it: gin fixes the chain of a route as the route registers. The handlers
 	// report it at once, before the server runs as well as after, the way
@@ -214,7 +214,7 @@ func Init() error {
 		func(mid gin.HandlerFunc) {
 			refuseLate("Register")
 			auth.Use(mid)
-			pub.Use(mid)
+			public.Use(mid)
 		},
 		func(mid gin.HandlerFunc) {
 			refuseLate("RegisterAuth")
@@ -230,9 +230,9 @@ func Init() error {
 // forwards to it and documents the contract.
 func Auth() *gin.RouterGroup { return auth }
 
-// Pub returns the public route group Init built; the public router.Pub forwards
-// to it and documents the contract.
-func Pub() *gin.RouterGroup { return pub }
+// Public returns the public route group Init built; the public router.Public
+// forwards to it and documents the contract.
+func Public() *gin.RouterGroup { return public }
 
 // Register registers route on the router group for each of phases, each served
 // by the controller handler of that phase, and records it for Routes, the route
@@ -293,7 +293,7 @@ func register[M gst.Model, REQ gst.Request, RSP gst.Response](router *gin.Router
 
 	// Everything except the public route group is documented as requiring
 	// authentication, which is the safe default for custom sub groups.
-	authRequired := router != pub
+	authRequired := router != public
 
 	// handle serves a phase's controller under the method the phase maps to,
 	// apiaction.Phase.HTTPMethod: the one table gg routes and gg gen's route

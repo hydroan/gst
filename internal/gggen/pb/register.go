@@ -157,7 +157,7 @@ func (g *generator) registrations(out *goFile, files []*pbschema.ProtoFile) {
 				}
 				elts = append(elts, keyValue("HTTPMethod", method), keyValue("Route", strLit(r.Registered)))
 				if r.Action.Public {
-					elts = append(elts, keyValue("Public", ident("true")))
+					elts = append(elts, keyValue("Public", ident("true"))) //gst:literal the field of grpc.Method
 				}
 				args = append(args, compositeLit(sel(out.imports.fixedRef(ggconst.ImportPathGRPC), "Method"), elts...))
 			}

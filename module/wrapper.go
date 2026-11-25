@@ -9,11 +9,14 @@ import (
 
 var _ gst.Module[*model.Empty, *model.Empty, *model.Empty] = &Wrapper[*model.Empty, *model.Empty, *model.Empty]{}
 
+// Wrapper is a Module put together from its parts: the route it serves, the
+// name of its resource parameter, whether its routes are public, and the
+// service behind them.
 type Wrapper[M gst.Model, REQ gst.Request, RSP gst.Response] struct {
-	route string
-	param string
-	pub   bool
-	svc   gst.Service[M, REQ, RSP]
+	route  string
+	param  string
+	public bool
+	svc    gst.Service[M, REQ, RSP]
 }
 
 func (w *Wrapper[M, REQ, RSP]) Service() gst.Service[M, REQ, RSP] {
@@ -27,15 +30,19 @@ func (w *Wrapper[M, REQ, RSP]) Route() string {
 	return w.route
 }
 
-func (w *Wrapper[M, REQ, RSP]) Pub() bool {
-	return w.pub
+func (w *Wrapper[M, REQ, RSP]) Public() bool {
+	return w.public
 }
 
 func (w *Wrapper[M, REQ, RSP]) Param() string {
 	return w.param
 }
 
-func NewWrapper[M gst.Model, REQ gst.Request, RSP gst.Response](route string, param string, pub bool, svc ...gst.Service[M, REQ, RSP]) gst.Module[M, REQ, RSP] {
+// NewWrapper returns a Module serving route. param names the URL parameter of
+// the resource id, apiaction.ParamID when empty; public reports whether the
+// routes are served without authentication; svc is the service behind them,
+// a service.Base when none is given.
+func NewWrapper[M gst.Model, REQ gst.Request, RSP gst.Response](route string, param string, public bool, svc ...gst.Service[M, REQ, RSP]) gst.Module[M, REQ, RSP] {
 	if len(param) == 0 {
 		param = apiaction.ParamID
 	}
@@ -46,9 +53,9 @@ func NewWrapper[M gst.Model, REQ gst.Request, RSP gst.Response](route string, pa
 	}
 
 	return &Wrapper[M, REQ, RSP]{
-		route: route,
-		param: param,
-		pub:   pub,
-		svc:   serviceImpl,
+		route:  route,
+		param:  param,
+		public: public,
+		svc:    serviceImpl,
 	}
 }

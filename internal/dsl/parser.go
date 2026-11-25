@@ -505,12 +505,12 @@ func parseAction(phase apiaction.Phase, funcName string, expr ast.Expr) (*Action
 				switch fun := call.Fun.(type) {
 				case *ast.Ident:
 					// anonymous import: Public()
-					if fun != nil && fun.Name == "Public" {
+					if fun != nil && fun.Name == "Public" { //gst:literal the DSL keyword
 						isPublicCall = true
 					}
 				case *ast.SelectorExpr:
 					// non-anonymous import: dsl.Public()
-					if fun != nil && fun.Sel != nil && fun.Sel.Name == "Public" {
+					if fun != nil && fun.Sel != nil && fun.Sel.Name == "Public" { //gst:literal the DSL keyword
 						isPublicCall = true
 					}
 				}

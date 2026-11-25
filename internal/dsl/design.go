@@ -269,7 +269,7 @@ var methodList = []string{
 	"Migrate",
 	"GRPC",
 	"Service",
-	"Public",
+	"Public", //gst:literal the DSL keyword
 	"Exact",
 	"Payload",
 	"Result",

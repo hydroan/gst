@@ -38,6 +38,6 @@ func (*Module2) Param() string {
 	return ""
 }
 
-func (*Module2) Pub() bool {
+func (*Module2) Public() bool {
 	return false
 }

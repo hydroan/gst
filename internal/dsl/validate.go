@@ -145,7 +145,7 @@ var serviceNamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)
 
 var actionOnlyMethodNames = map[string]bool{
 	"Service":          true,
-	"Public":           true,
+	"Public":           true, //gst:literal the DSL keyword
 	"Exact":            true,
 	"Payload":          true,
 	"Result":           true,
@@ -446,7 +446,7 @@ func validateActionCall(call *ast.CallExpr, actionName string, rootModelFile, vi
 					errs = append(errs, errors.Newf("%s: %s action declares %s[%s]; the type must be exported, since the generated code refers to it from another package", filename, actionName, name, nodeSource(arg)))
 				}
 			}
-		case name == "Public":
+		case name == "Public": //gst:literal the DSL keyword
 			continue
 		case isActionMethod(name):
 			errs = append(errs, errors.Newf("%s: %s action cannot contain nested %s action", filename, actionName, name))

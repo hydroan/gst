@@ -17,5 +17,5 @@ func (*MenuModule) Service() gst.Service[*Menu, *Menu, *Menu] {
 	return &serviceauthz.MenuService{}
 }
 func (*MenuModule) Route() string { return "authz/menus" }
-func (*MenuModule) Pub() bool     { return false }
+func (*MenuModule) Public() bool  { return false }
 func (*MenuModule) Param() string { return "id" }

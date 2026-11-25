@@ -20,5 +20,5 @@ func (*RoutesModule) Service() gst.Service[*Routes, *model.Empty, *RoutesRsp] {
 	return &serviceauthz.RoutesService{}
 }
 func (*RoutesModule) Route() string { return "authz/routes" }
-func (*RoutesModule) Pub() bool     { return false }
+func (*RoutesModule) Public() bool  { return false }
 func (*RoutesModule) Param() string { return "id" }

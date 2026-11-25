@@ -25,5 +25,5 @@ func (*LoginLogModule) Service() gst.Service[*LoginLog, *LoginLog, *LoginLog] {
 	return &servicelogmgmt.LoginLogService{}
 }
 func (*LoginLogModule) Route() string { return "/log/loginlog" }
-func (*LoginLogModule) Pub() bool     { return false }
+func (*LoginLogModule) Public() bool  { return false }
 func (*LoginLogModule) Param() string { return "id" }
