@@ -250,8 +250,8 @@ func (recordService) ListRecordByOwner(ctx context.Context, req *ListRecordByOwn
 }
 
 // RecordToProto encodes Record values into their message, nil into nil. A
-// value a type cannot write as text (see grpc.TextOf) is an error, which the
-// call answers Internal.
+// value a type cannot write as text (see grpc.TextToProto) is an error,
+// which the call answers Internal.
 func RecordToProto(m *model.Record) (*Record, error) {
 	if m == nil {
 		return nil, nil
@@ -261,8 +261,8 @@ func RecordToProto(m *model.Record) (*Record, error) {
 	p.Id = grpc.UTF8(m.ID)
 	p.CreatedBy = grpc.UTF8(m.CreatedBy)
 	p.UpdatedBy = grpc.UTF8(m.UpdatedBy)
-	p.CreatedAt = grpc.Timestamp(m.CreatedAt)
-	p.UpdatedAt = grpc.Timestamp(m.UpdatedAt)
+	p.CreatedAt = grpc.TimeToProto(m.CreatedAt)
+	p.UpdatedAt = grpc.TimeToProto(m.UpdatedAt)
 	p.Title = grpc.UTF8(m.Title)
 	p.Status = grpc.UTF8(string(m.Status))
 	if m.Summary != nil {
@@ -286,8 +286,8 @@ func RecordToProto(m *model.Record) (*Record, error) {
 	p.Enabled = m.Enabled
 	p.Payload = m.Payload
 	p.Raw = m.Raw
-	p.Extra = grpc.Struct(m.Extra)
-	p.Due = grpc.Timestamp(m.Due)
+	p.Extra = grpc.MapToProto(m.Extra)
+	p.Due = grpc.TimeToProto(m.Due)
 	p.Meta, err = RecordMetaToProto(&m.Meta)
 	if err != nil {
 		return nil, err
@@ -295,26 +295,26 @@ func RecordToProto(m *model.Record) (*Record, error) {
 	p.Window = new(RecordWindow)
 	p.Window.From = grpc.UTF8(m.Window.From)
 	p.Window.To = grpc.UTF8(m.Window.To)
-	p.Addr, err = grpc.TextOf(&m.Addr)
+	p.Addr, err = grpc.TextToProto(&m.Addr)
 	if err != nil {
 		return nil, err
 	}
 	if m.Peer != nil {
 		var x string
-		x, err = grpc.TextOf(m.Peer)
+		x, err = grpc.TextToProto(m.Peer)
 		if err != nil {
 			return nil, err
 		}
 		p.Peer = &x
 	}
-	p.Grade, err = grpc.TextOf(&m.Grade)
+	p.Grade, err = grpc.TextToProto(&m.Grade)
 	if err != nil {
 		return nil, err
 	}
 	if m.Addrs != nil {
 		p.Addrs = make([]string, len(m.Addrs))
 		for i, v := range m.Addrs {
-			p.Addrs[i], err = grpc.TextOf(&v)
+			p.Addrs[i], err = grpc.TextToProto(&v)
 			if err != nil {
 				return nil, err
 			}
@@ -337,11 +337,11 @@ func RecordFromProto(p *Record) (*model.Record, error) {
 	m.ID = p.GetId()
 	m.CreatedBy = p.GetCreatedBy()
 	m.UpdatedBy = p.GetUpdatedBy()
-	m.CreatedAt, err = grpc.Time("created_at", p.GetCreatedAt())
+	m.CreatedAt, err = grpc.TimeFromProto("created_at", p.GetCreatedAt())
 	if err != nil {
 		return nil, err
 	}
-	m.UpdatedAt, err = grpc.Time("updated_at", p.GetUpdatedAt())
+	m.UpdatedAt, err = grpc.TimeFromProto("updated_at", p.GetUpdatedAt())
 	if err != nil {
 		return nil, err
 	}
@@ -361,8 +361,8 @@ func RecordFromProto(p *Record) (*model.Record, error) {
 	if err != nil {
 		return nil, err
 	}
-	m.Extra = grpc.Map(p.GetExtra())
-	m.Due, err = grpc.Time("due", p.GetDue())
+	m.Extra = grpc.MapFromProto(p.GetExtra())
+	m.Due, err = grpc.TimeFromProto("due", p.GetDue())
 	if err != nil {
 		return nil, err
 	}
@@ -379,21 +379,21 @@ func RecordFromProto(p *Record) (*model.Record, error) {
 		m.Window.To = v.GetTo()
 	}
 	if s := p.GetAddr(); s != "" {
-		m.Addr, err = grpc.Text[netip.Addr]("addr", s)
+		m.Addr, err = grpc.TextFromProto[netip.Addr]("addr", s)
 		if err != nil {
 			return nil, err
 		}
 	}
 	if p.Peer != nil {
 		var x netip.Addr
-		x, err = grpc.Text[netip.Addr]("peer", *p.Peer)
+		x, err = grpc.TextFromProto[netip.Addr]("peer", *p.Peer)
 		if err != nil {
 			return nil, err
 		}
 		m.Peer = &x
 	}
 	if s := p.GetGrade(); s != "" {
-		m.Grade, err = grpc.Text[model.RecordGrade]("grade", s)
+		m.Grade, err = grpc.TextFromProto[model.RecordGrade]("grade", s)
 		if err != nil {
 			return nil, err
 		}
@@ -401,7 +401,7 @@ func RecordFromProto(p *Record) (*model.Record, error) {
 	if p.GetAddrs() != nil {
 		m.Addrs = make([]netip.Addr, len(p.GetAddrs()))
 		for i, v := range p.GetAddrs() {
-			m.Addrs[i], err = grpc.Text[netip.Addr](grpc.Element("addrs", i), v)
+			m.Addrs[i], err = grpc.TextFromProto[netip.Addr](grpc.Element("addrs", i), v)
 			if err != nil {
 				return nil, err
 			}

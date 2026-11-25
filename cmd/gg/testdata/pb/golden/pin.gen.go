@@ -80,8 +80,8 @@ func (pinService) GetPin(ctx context.Context, req *GetPinRequest) (*GetPinRespon
 }
 
 // PinToProto encodes Pin values into their message, nil into nil. A value a
-// type cannot write as text (see grpc.TextOf) is an error, which the call
-// answers Internal.
+// type cannot write as text (see grpc.TextToProto) is an error, which the
+// call answers Internal.
 func PinToProto(m *model.Pin) (*Pin, error) {
 	if m == nil {
 		return nil, nil
@@ -91,8 +91,8 @@ func PinToProto(m *model.Pin) (*Pin, error) {
 	p.Id = grpc.UTF8(m.ID)
 	p.CreatedBy = grpc.UTF8(m.CreatedBy)
 	p.UpdatedBy = grpc.UTF8(m.UpdatedBy)
-	p.CreatedAt = grpc.Timestamp(m.CreatedAt)
-	p.UpdatedAt = grpc.Timestamp(m.UpdatedAt)
+	p.CreatedAt = grpc.TimeToProto(m.CreatedAt)
+	p.UpdatedAt = grpc.TimeToProto(m.UpdatedAt)
 	p.Label = grpc.UTF8(m.Label)
 	p.Link, err = pb_record.LinkToProto(&m.Link)
 	if err != nil {
@@ -115,11 +115,11 @@ func PinFromProto(p *Pin) (*model.Pin, error) {
 	m.ID = p.GetId()
 	m.CreatedBy = p.GetCreatedBy()
 	m.UpdatedBy = p.GetUpdatedBy()
-	m.CreatedAt, err = grpc.Time("created_at", p.GetCreatedAt())
+	m.CreatedAt, err = grpc.TimeFromProto("created_at", p.GetCreatedAt())
 	if err != nil {
 		return nil, err
 	}
-	m.UpdatedAt, err = grpc.Time("updated_at", p.GetUpdatedAt())
+	m.UpdatedAt, err = grpc.TimeFromProto("updated_at", p.GetUpdatedAt())
 	if err != nil {
 		return nil, err
 	}

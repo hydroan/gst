@@ -134,8 +134,8 @@ func TicketToProto(m *model.Ticket) (*Ticket, error) {
 	p.Id = grpc.UTF8(m.ID)
 	p.CreatedBy = grpc.UTF8(m.CreatedBy)
 	p.UpdatedBy = grpc.UTF8(m.UpdatedBy)
-	p.CreatedAt = grpc.Timestamp(m.CreatedAt)
-	p.UpdatedAt = grpc.Timestamp(m.UpdatedAt)
+	p.CreatedAt = grpc.TimeToProto(m.CreatedAt)
+	p.UpdatedAt = grpc.TimeToProto(m.UpdatedAt)
 	p.TenantId = grpc.UTF8(string(m.TenantID))
 	p.Code = grpc.UTF8(m.Code)
 	p.Title = grpc.UTF8(m.Title)
@@ -159,11 +159,11 @@ func TicketFromProto(p *Ticket) (*model.Ticket, error) {
 	m.ID = p.GetId()
 	m.CreatedBy = p.GetCreatedBy()
 	m.UpdatedBy = p.GetUpdatedBy()
-	m.CreatedAt, err = grpc.Time("created_at", p.GetCreatedAt())
+	m.CreatedAt, err = grpc.TimeFromProto("created_at", p.GetCreatedAt())
 	if err != nil {
 		return nil, err
 	}
-	m.UpdatedAt, err = grpc.Time("updated_at", p.GetUpdatedAt())
+	m.UpdatedAt, err = grpc.TimeFromProto("updated_at", p.GetUpdatedAt())
 	if err != nil {
 		return nil, err
 	}

@@ -121,15 +121,15 @@ var requestDecoding = jsonv2.WithUnmarshalers(jsonv2.JoinUnmarshalers(
 // json.Number they refuse: the parse error of a time comes back bare, a
 // *time.ParseError, and the refusal of a number is an UnmarshalTypeError naming
 // no field. At its pointer the refusal is reported as a json.UnmarshalTypeError
-// naming the field, which clientSafeBindError answers with
-// "invalid value for field 'due_at'", the way a generated FromProto refuses the
-// value over gRPC (see grpc.Time and grpc.Number). A JSON number or a null is
+// naming the field, which clientSafeBindError answers with "invalid value for
+// field 'due_at'", the way a generated FromProto refuses the value over gRPC
+// (see grpc.TimeFromProto and grpc.NumberFromProto). A JSON number or a null is
 // left to the default decoding, through errors.ErrUnsupported: it names the
 // field of what it refuses, and it honors the field's own tag options, which
-// this function never sees, a json.Number with the string option taking no
-// bare number. The gRPC stand-in of the contract table, fromProto in
-// call_grpc_test.go, decodes through a copy of this function: a change to
-// one is a change to the other.
+// this function never sees, a json.Number with the string option taking no bare
+// number. The gRPC stand-in of the contract table, fromProto in
+// call_grpc_test.go, decodes through a copy of this function: a change to one
+// is a change to the other.
 func decodeAtPointer[T any](dec *jsontext.Decoder, v *T) error {
 	if kind := dec.PeekKind(); kind == '0' || kind == 'n' {
 		return errors.ErrUnsupported

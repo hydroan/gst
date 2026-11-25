@@ -26,13 +26,15 @@ import (
 // and nil to nil, so a value comes back from a message as it went in. It
 // also holds what a generated FromProto reads a value through when the
 // message's type is wider than the model's, or than what the HTTP listener
-// lets through: Narrow and Number, Time, Date and TimeOfDay, Document and
-// Finite refuse what the model's field cannot hold, the way the HTTP listener
-// refuses it, so that a record a gRPC call wrote reads back over HTTP, while
-// Map and Value carry a dynamic value either way; and what a generated
-// ToProto writes a value through the way the JSON encoder writes it: UTF8,
-// which replaces what a message cannot carry in a string, and NumberText,
-// which writes the empty JSON number of a repeated field or a map as 0.
+// lets through: Narrow and NumberFromProto, TimeFromProto, DateFromProto and
+// TimeOfDayFromProto, Document and Finite refuse what the model's field
+// cannot hold, the way the HTTP listener refuses it, so that a record a gRPC
+// call wrote reads back over HTTP, while MapFromProto and ValueToProto carry
+// a dynamic value either way; and what a generated ToProto writes a value
+// through the way the JSON encoder writes it: UTF8, which replaces what a
+// message cannot carry in a string, and NumberToProto, which writes the
+// empty JSON number of a repeated field or a map as 0. A conversion with two
+// directions is named for both: XFromProto reads what XToProto writes.
 
 // Narrow returns v as the narrower integer type T a model field holds, int8
 // for the int32 its message carries, and refuses a value T cannot hold, 300
@@ -48,17 +50,17 @@ func Narrow[T ~int8 | ~int16 | ~uint8 | ~uint16, V ~int32 | ~uint32](field strin
 	return narrowed, nil
 }
 
-// Number returns s as the json.Number a model field holds, and refuses with
-// invalidValue naming field, `"abc" is not a JSON number` the detail, a
-// string that is no JSON number literal, text, a quoted number or the
-// empty string among them: the message carries the number as a string, and
-// one that is not a number would be written out as one. encoding/json
+// NumberFromProto returns s as the json.Number a model field holds, and
+// refuses with invalidValue naming field, `"abc" is not a JSON number` the
+// detail, a string that is no JSON number literal, text, a quoted number or
+// the empty string among them: the message carries the number as a string,
+// and one that is not a number would be written out as one. encoding/json
 // judges the literal, so the two listeners refuse the same strings. The
 // generated FromProto reads every json.Number through it: a field the
 // message leaves empty, "", stands for the unset value and is read as it
 // is, while an element of a repeated field or the value of a map entry,
 // which has no unset state, is read through it whatever it holds.
-func Number(field, s string) (json.Number, error) {
+func NumberFromProto(field, s string) (json.Number, error) {
 	var n json.Number
 	if err := json.Unmarshal([]byte(s), &n); err != nil || string(n) != s {
 		return "", invalidValue(field, fmt.Sprintf("%q is not a JSON number", s))
@@ -66,13 +68,13 @@ func Number(field, s string) (json.Number, error) {
 	return n, nil
 }
 
-// NumberText returns the text a message carries for n, a json.Number held
+// NumberToProto returns the text a message carries for n, a json.Number held
 // as an element of a repeated field or the value of a map entry: n through
 // UTF8 like any string, and the empty number, what an HTTP body's null
 // leaves in one, as "0", the number encoding/json writes it as, so that the
-// message read back through Number is taken. A field's empty number is the
-// field unset, which the generated ToProto writes as it is.
-func NumberText(n json.Number) string {
+// message read back through NumberFromProto is taken. A field's empty number
+// is the field unset, which the generated ToProto writes as it is.
+func NumberToProto(n json.Number) string {
 	if n == "" {
 		return "0"
 	}
@@ -94,13 +96,13 @@ func Finite[T ~float32 | ~float64, V ~float32 | ~float64](field string, v V) (T,
 	return T(v), nil
 }
 
-// Time returns the time ts holds, in UTC, and the zero time for nil; a
-// Timestamp outside the range a Timestamp may hold, the years 1 to 9999,
-// is refused with invalidValue naming field and timestamppb's own account
-// of it, "timestamp (seconds:253402300800) after 9999-12-31", its proto
-// prefix dropped, the way the HTTP listener refuses a time it cannot
+// TimeFromProto returns the time ts holds, in UTC, and the zero time for
+// nil; a Timestamp outside the range a Timestamp may hold, the years 1 to
+// 9999, is refused with invalidValue naming field and timestamppb's own
+// account of it, "timestamp (seconds:253402300800) after 9999-12-31", its
+// proto prefix dropped, the way the HTTP listener refuses a time it cannot
 // parse. The generated FromProto reads every time through it.
-func Time(field string, ts *timestamppb.Timestamp) (time.Time, error) {
+func TimeFromProto(field string, ts *timestamppb.Timestamp) (time.Time, error) {
 	if ts == nil {
 		return time.Time{}, nil
 	}
@@ -110,27 +112,27 @@ func Time(field string, ts *timestamppb.Timestamp) (time.Time, error) {
 	return ts.AsTime(), nil
 }
 
-// Timestamp returns the Timestamp of t, and nil for the zero time, which a
+// TimeToProto returns the Timestamp of t, and nil for the zero time, which a
 // message leaves unset. Where a nil would stand for something else, in a
 // repeated field, a map value or an optional field, the generated ToProto
 // writes the zero time as the Timestamp of 0001-01-01 instead, which comes
 // back as the zero time.
-func Timestamp(t time.Time) *timestamppb.Timestamp {
+func TimeToProto(t time.Time) *timestamppb.Timestamp {
 	if t.IsZero() {
 		return nil
 	}
 	return timestamppb.New(t)
 }
 
-// Date returns the day d names, and the zero day for nil, which a message
-// leaves unset. A google.type.Date may leave its year, its month or its day
-// at zero, naming a month of a year or a day of any year, and may name a day
-// the calendar does not hold; a model's day is a full date of the years 1 to
-// 9999, so any of those is refused with invalidValue naming field,
-// "2026-02-30 is not a day of the calendar" the detail, the way the HTTP
-// listener refuses a day it cannot read. The generated FromProto reads every
-// day through it.
-func Date(field string, d *date.Date) (datatypes.Date, error) {
+// DateFromProto returns the day d names, and the zero day for nil, which a
+// message leaves unset. A google.type.Date may leave its year, its month or
+// its day at zero, naming a month of a year or a day of any year, and may
+// name a day the calendar does not hold; a model's day is a full date of the
+// years 1 to 9999, so any of those is refused with invalidValue naming
+// field, "2026-02-30 is not a day of the calendar" the detail, the way the
+// HTTP listener refuses a day it cannot read. The generated FromProto reads
+// every day through it.
+func DateFromProto(field string, d *date.Date) (datatypes.Date, error) {
 	if d == nil {
 		return datatypes.Date{}, nil
 	}
@@ -144,24 +146,25 @@ func Date(field string, d *date.Date) (datatypes.Date, error) {
 	return datatypes.Date(on), nil
 }
 
-// DatePB returns the google.type.Date of the day d names, the zero day as
-// 0001-01-01, which Date reads back as the zero day. The generated ToProto
-// writes every day through it, and leaves the field of a zero day unset
-// where the field stands alone, the way Timestamp leaves the zero time.
-func DatePB(d datatypes.Date) *date.Date {
+// DateToProto returns the google.type.Date of the day d names, the zero day
+// as 0001-01-01, which DateFromProto reads back as the zero day. The
+// generated ToProto writes every day through it, and leaves the field of a
+// zero day unset where the field stands alone, the way TimeToProto leaves
+// the zero time.
+func DateToProto(d datatypes.Date) *date.Date {
 	year, month, day := time.Time(d).Date()
-	return &date.Date{Year: int32(year), Month: int32(month), Day: int32(day)} //nolint:gosec // G115: a month and a day fit, and a year past the range of an int32 is far outside the years 1 to 9999 Date reads back.
+	return &date.Date{Year: int32(year), Month: int32(month), Day: int32(day)} //nolint:gosec // G115: a month and a day fit, and a year past the range of an int32 is far outside the years 1 to 9999 DateFromProto reads back.
 }
 
-// TimeOfDay returns the time of day t names, and midnight for nil, which a
-// message leaves unset. A google.type.TimeOfDay may name an hour, a minute,
-// a second or a fraction no clock shows, the 24 it allows for the end of a
-// day and the 60 it allows for a leap second among them; a model's time of
-// day is one time.TimeOnly spells, so any of those is refused with
+// TimeOfDayFromProto returns the time of day t names, and midnight for nil,
+// which a message leaves unset. A google.type.TimeOfDay may name an hour, a
+// minute, a second or a fraction no clock shows, the 24 it allows for the
+// end of a day and the 60 it allows for a leap second among them; a model's
+// time of day is one time.TimeOnly spells, so any of those is refused with
 // invalidValue naming field, "25:00:00.000000000 is not a time of day" the
 // detail, the way the HTTP listener refuses a time of day it cannot read.
 // The generated FromProto reads every time of day through it.
-func TimeOfDay(field string, t *timeofday.TimeOfDay) (datatypes.TimeOfDay, error) {
+func TimeOfDayFromProto(field string, t *timeofday.TimeOfDay) (datatypes.TimeOfDay, error) {
 	if t == nil {
 		return 0, nil
 	}
@@ -172,10 +175,11 @@ func TimeOfDay(field string, t *timeofday.TimeOfDay) (datatypes.TimeOfDay, error
 	return datatypes.NewTimeOfDay(int(hours), int(minutes), int(seconds), int(nanos)), nil
 }
 
-// TimeOfDayPB returns the google.type.TimeOfDay of the time of day t names,
-// midnight as the message of four zeros, which TimeOfDay reads back as
-// midnight. The generated ToProto writes every time of day through it.
-func TimeOfDayPB(t datatypes.TimeOfDay) *timeofday.TimeOfDay {
+// TimeOfDayToProto returns the google.type.TimeOfDay of the time of day t
+// names, midnight as the message of four zeros, which TimeOfDayFromProto
+// reads back as midnight. The generated ToProto writes every time of day
+// through it.
+func TimeOfDayToProto(t datatypes.TimeOfDay) *timeofday.TimeOfDay {
 	since := time.Duration(t)
 	return &timeofday.TimeOfDay{
 		Hours:   int32(since / time.Hour), //nolint:gosec // G115: the hours of a time of day fit.
@@ -186,9 +190,9 @@ func TimeOfDayPB(t datatypes.TimeOfDay) *timeofday.TimeOfDay {
 }
 
 // Document returns b, the bytes of a JSON document a model field holds as
-// a json.RawMessage, alone or in a datatypes.JSON, nil for none, and refuses bytes
-// that are no JSON document with invalidValue naming field, "not a JSON
-// document" the detail: the HTTP listener reads the document out of the
+// a json.RawMessage, alone or in a datatypes.JSON, nil for none, and refuses
+// bytes that are no JSON document with invalidValue naming field, "not a
+// JSON document" the detail: the HTTP listener reads the document out of the
 // body it decoded, which encoding/json refused if the document was not
 // JSON, and what a message carries is written out as one. The generated
 // FromProto reads every JSON document through it.
@@ -202,9 +206,9 @@ func Document(field string, b []byte) ([]byte, error) {
 	return b, nil
 }
 
-// Text returns s, the text a value of the model field's type T writes with
-// its MarshalText, read into a T through its UnmarshalText, the way
-// encoding/json reads a JSON string into a type with the methods: a
+// TextFromProto returns s, the text a value of the model field's type T
+// writes with its MarshalText, read into a T through its UnmarshalText, the
+// way encoding/json reads a JSON string into a type with the methods: a
 // netip.Addr from "10.0.0.1". A text the type refuses is refused with
 // invalidValue naming field, `"10.0.0" cannot be read as a netip.Addr:
 // ParseAddr("10.0.0"): IPv4 address too short` the detail. The generated
@@ -214,7 +218,7 @@ func Document(field string, b []byte) ([]byte, error) {
 // without it, while an optional field, an element of a repeated field or
 // the value of a map entry, which hold what they are given, are read
 // through it whatever they hold.
-func Text[T any, P interface {
+func TextFromProto[T any, P interface {
 	*T
 	encoding.TextUnmarshaler
 }](field, s string) (T, error) {
@@ -225,15 +229,15 @@ func Text[T any, P interface {
 	return v, nil
 }
 
-// TextOf returns the text v writes with its MarshalText, through UTF8 like
-// any string: the string encoding/json writes for a type with the method. A
-// value the type cannot write as text, a project enum holding a value its
-// method does not know, is an error the generated ToProto answers and the
-// call answers Internal, logged in the access log, the way the HTTP
+// TextToProto returns the text v writes with its MarshalText, through UTF8
+// like any string: the string encoding/json writes for a type with the
+// method. A value the type cannot write as text, a project enum holding a
+// value its method does not know, is an error the generated ToProto answers
+// and the call answers Internal, logged in the access log, the way the HTTP
 // listener answers a response it cannot encode. The generated ToProto
 // writes every value of a type with a text method and no JSON one through
 // it.
-func TextOf(v encoding.TextMarshaler) (string, error) {
+func TextToProto(v encoding.TextMarshaler) (string, error) {
 	text, err := v.MarshalText()
 	if err != nil {
 		return "", errors.Wrapf(err, "%T cannot be written as text", v)
@@ -266,12 +270,12 @@ func UTF8(s string) string {
 	return b.String()
 }
 
-// Value returns the Value holding v, the JSON value encoding/json encodes v
-// to, and nil for nil: a Go value travels in a Value as it travels in a JSON
-// body. It panics on a value encoding/json cannot encode, a channel or a
-// function, which the HTTP envelope answers 500 instead; the recovery
-// interceptor answers Internal and logs it.
-func Value(v any) *structpb.Value {
+// ValueToProto returns the Value holding v, the JSON value encoding/json
+// encodes v to, and nil for nil: a Go value travels in a Value as it travels
+// in a JSON body. It panics on a value encoding/json cannot encode, a
+// channel or a function, which the HTTP envelope answers 500 instead; the
+// recovery interceptor answers Internal and logs it.
+func ValueToProto(v any) *structpb.Value {
 	if v == nil {
 		return nil
 	}
@@ -286,10 +290,10 @@ func Value(v any) *structpb.Value {
 	return value
 }
 
-// Struct returns the Struct holding m, the JSON object encoding/json encodes
-// m to, and nil for a nil map. It panics on a value encoding/json cannot
-// encode, like Value.
-func Struct(m map[string]any) *structpb.Struct {
+// MapToProto returns the Struct holding m, the JSON object encoding/json
+// encodes m to, and nil for a nil map. It panics on a value encoding/json
+// cannot encode, like ValueToProto.
+func MapToProto(m map[string]any) *structpb.Struct {
 	if m == nil {
 		return nil
 	}
@@ -304,11 +308,11 @@ func Struct(m map[string]any) *structpb.Struct {
 	return s
 }
 
-// Map returns the object s holds as a map, and nil for nil. A NaN or an
-// infinity among its numbers comes back as the string "NaN", "Infinity"
-// or "-Infinity", the spelling the JSON mapping of a Value gives it, which
-// a JSON body carries as it is.
-func Map(s *structpb.Struct) map[string]any {
+// MapFromProto returns the object s holds as a map, and nil for nil. A NaN
+// or an infinity among its numbers comes back as the string "NaN",
+// "Infinity" or "-Infinity", the spelling the JSON mapping of a Value gives
+// it, which a JSON body carries as it is.
+func MapFromProto(s *structpb.Struct) map[string]any {
 	if s == nil {
 		return nil
 	}

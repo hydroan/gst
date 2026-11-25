@@ -153,8 +153,8 @@ func NoteToProto(m *board.Note) (*Note, error) {
 	p.Id = grpc.UTF8(m.ID)
 	p.CreatedBy = grpc.UTF8(m.CreatedBy)
 	p.UpdatedBy = grpc.UTF8(m.UpdatedBy)
-	p.CreatedAt = grpc.Timestamp(m.CreatedAt)
-	p.UpdatedAt = grpc.Timestamp(m.UpdatedAt)
+	p.CreatedAt = grpc.TimeToProto(m.CreatedAt)
+	p.UpdatedAt = grpc.TimeToProto(m.UpdatedAt)
 	p.Title = grpc.UTF8(m.Title)
 	p.Body = grpc.UTF8(m.Body)
 	p.Published = m.Published
@@ -178,11 +178,11 @@ func NoteFromProto(p *Note) (*board.Note, error) {
 	m.ID = p.GetId()
 	m.CreatedBy = p.GetCreatedBy()
 	m.UpdatedBy = p.GetUpdatedBy()
-	m.CreatedAt, err = grpc.Time("created_at", p.GetCreatedAt())
+	m.CreatedAt, err = grpc.TimeFromProto("created_at", p.GetCreatedAt())
 	if err != nil {
 		return nil, err
 	}
-	m.UpdatedAt, err = grpc.Time("updated_at", p.GetUpdatedAt())
+	m.UpdatedAt, err = grpc.TimeFromProto("updated_at", p.GetUpdatedAt())
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +191,7 @@ func NoteFromProto(p *Note) (*board.Note, error) {
 	m.Published = p.GetPublished()
 	if p.GetPublishedAt() != nil {
 		var x time.Time
-		x, err = grpc.Time("published_at", p.GetPublishedAt())
+		x, err = grpc.TimeFromProto("published_at", p.GetPublishedAt())
 		if err != nil {
 			return nil, err
 		}
@@ -231,7 +231,7 @@ func NotePublishRspToProto(m *board.NotePublishRsp) (*NotePublishRsp, error) {
 	p := new(NotePublishRsp)
 	p.Id = grpc.UTF8(m.ID)
 	p.Channel = grpc.UTF8(m.Channel)
-	p.PublishedAt = grpc.Timestamp(m.PublishedAt)
+	p.PublishedAt = grpc.TimeToProto(m.PublishedAt)
 	return p, nil
 }
 
@@ -248,7 +248,7 @@ func NotePublishRspFromProto(p *NotePublishRsp) (*board.NotePublishRsp, error) {
 	var err error
 	m.ID = p.GetId()
 	m.Channel = p.GetChannel()
-	m.PublishedAt, err = grpc.Time("published_at", p.GetPublishedAt())
+	m.PublishedAt, err = grpc.TimeFromProto("published_at", p.GetPublishedAt())
 	if err != nil {
 		return nil, err
 	}

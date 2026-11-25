@@ -376,12 +376,12 @@ const (
 // int64, a string enum for a string, is converted; a string is written
 // through grpc.UTF8 wherever it sits, alone, optional, as an element or as a
 // key, so a []string converts element by element (see utf8Guarded); a time
-// becomes a Timestamp through grpc.Timestamp, a day a google.type.Date
-// through grpc.DatePB (see dateOf), a time of day a google.type.TimeOfDay
-// through grpc.TimeOfDayPB, any
-// value a Value through grpc.Value, a JSON object a Struct through
-// grpc.Struct, and raw JSON travels as its bytes; a type with a text method
-// (see pbschema.FieldType.Text) is written through grpc.TextOf and a
+// becomes a Timestamp through grpc.TimeToProto, a day a google.type.Date
+// through grpc.DateToProto (see dateOf), a time of day a google.type.TimeOfDay
+// through grpc.TimeOfDayToProto, any
+// value a Value through grpc.ValueToProto, a JSON object a Struct through
+// grpc.MapToProto, and raw JSON travels as its bytes; a type with a text method
+// (see pbschema.FieldType.Text) is written through grpc.TextToProto and a
 // project struct converts through its XToProto, each a statement that may
 // fail to write the value (see refusing); an unnamed struct converts field
 // by field into its own message; a slice or a map of any of these converts
@@ -394,8 +394,8 @@ const (
 //	p.Id = grpc.UTF8(m.ID)
 //	p.CreatedBy = grpc.UTF8(m.CreatedBy)
 //	p.UpdatedBy = grpc.UTF8(m.UpdatedBy)
-//	p.CreatedAt = grpc.Timestamp(m.CreatedAt)
-//	p.UpdatedAt = grpc.Timestamp(m.UpdatedAt)
+//	p.CreatedAt = grpc.TimeToProto(m.CreatedAt)
+//	p.UpdatedAt = grpc.TimeToProto(m.UpdatedAt)
 //	p.Title = grpc.UTF8(m.Title)
 //	p.Status = grpc.UTF8(string(m.Status))
 //	if m.Summary != nil {
@@ -419,8 +419,8 @@ const (
 //	p.Enabled = m.Enabled
 //	p.Payload = m.Payload
 //	p.Raw = m.Raw
-//	p.Extra = grpc.Struct(m.Extra)
-//	p.Due = grpc.Timestamp(m.Due)
+//	p.Extra = grpc.MapToProto(m.Extra)
+//	p.Due = grpc.TimeToProto(m.Due)
 //	p.Meta, err = RecordMetaToProto(&m.Meta)
 //	if err != nil {
 //		return nil, err
@@ -428,26 +428,26 @@ const (
 //	p.Window = new(RecordWindow)
 //	p.Window.From = grpc.UTF8(m.Window.From)
 //	p.Window.To = grpc.UTF8(m.Window.To)
-//	p.Addr, err = grpc.TextOf(&m.Addr)
+//	p.Addr, err = grpc.TextToProto(&m.Addr)
 //	if err != nil {
 //		return nil, err
 //	}
 //	if m.Peer != nil {
 //		var x string
-//		x, err = grpc.TextOf(m.Peer)
+//		x, err = grpc.TextToProto(m.Peer)
 //		if err != nil {
 //			return nil, err
 //		}
 //		p.Peer = &x
 //	}
-//	p.Grade, err = grpc.TextOf(&m.Grade)
+//	p.Grade, err = grpc.TextToProto(&m.Grade)
 //	if err != nil {
 //		return nil, err
 //	}
 //	if m.Addrs != nil {
 //		p.Addrs = make([]string, len(m.Addrs))
 //		for i, v := range m.Addrs {
-//			p.Addrs[i], err = grpc.TextOf(&v)
+//			p.Addrs[i], err = grpc.TextToProto(&v)
 //			if err != nil {
 //				return nil, err
 //			}
@@ -471,12 +471,12 @@ const (
 // optional integer as
 //
 //	if !time.Time(m.Date).IsZero() {
-//		p.Date = grpc.DatePB(m.Date)
+//		p.Date = grpc.DateToProto(m.Date)
 //	}
-//	p.Clock = grpc.TimeOfDayPB(m.Clock)
+//	p.Clock = grpc.TimeOfDayToProto(m.Clock)
 //	data := m.Doc.Data()
 //	p.Doc = data
-//	p.Attrs = grpc.Struct(m.Attrs)
+//	p.Attrs = grpc.MapToProto(m.Attrs)
 //	data2 := m.Options.Data()
 //	p.Options, err = ShapeOptionsToProto(&data2)
 //	if err != nil {
@@ -522,22 +522,22 @@ const (
 //	}
 //
 // and the JSON numbers of a repeated field and of a map, which have no
-// unset state, an empty one written as 0 (see grpc.NumberText), as
+// unset state, an empty one written as 0 (see grpc.NumberToProto), as
 //
 //	if m.Amounts != nil {
 //		p.Amounts = make([]string, len(m.Amounts))
 //		for i, v := range m.Amounts {
-//			p.Amounts[i] = grpc.NumberText(v)
+//			p.Amounts[i] = grpc.NumberToProto(v)
 //		}
 //	}
 //	p.Pair = make([]string, len(m.Pair))
 //	for i, v := range m.Pair {
-//		p.Pair[i] = grpc.NumberText(v)
+//		p.Pair[i] = grpc.NumberToProto(v)
 //	}
 //	if m.Rates != nil {
 //		p.Rates = make(map[string]string, len(m.Rates))
 //		for k, v := range m.Rates {
-//			p.Rates[grpc.UTF8(k)] = grpc.NumberText(v)
+//			p.Rates[grpc.UTF8(k)] = grpc.NumberToProto(v)
 //		}
 //	}
 func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft pbschema.FieldType, inner bool) []ast.Stmt {
@@ -558,10 +558,10 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft pbschema.FieldT
 			// a slice, converted element by element below.
 			if ft.Optional {
 				x := w.temp("x")
-				body := append([]ast.Stmt{w.varDeclExpr(x, ident("string"))}, w.refusing(ident(x), call(w.grpc("TextOf"), src))...)
+				body := append([]ast.Stmt{w.varDeclExpr(x, ident("string"))}, w.refusing(ident(x), call(w.grpc("TextToProto"), src))...)
 				return []ast.Stmt{ifNotNil(src, append(body, assign(dst, addr(ident(x))))...)}
 			}
-			return []ast.Stmt{ifNotNil(src, w.refusing(dst, call(w.grpc("TextOf"), src))...)}
+			return []ast.Stmt{ifNotNil(src, w.refusing(dst, call(w.grpc("TextToProto"), src))...)}
 		}
 		if _, scalar := elem.Underlying().(*types.Basic); scalar && ft.Kind != descriptorpb.FieldDescriptorProto_TYPE_MESSAGE {
 			// A pointer to a scalar: the optional field it maps to holds
@@ -585,7 +585,7 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft pbschema.FieldT
 		// The text the value writes, through a pointer to it so that a
 		// method on the pointer counts as well; a slice or an array of
 		// texts converts element by element below.
-		return w.refusing(dst, call(w.grpc("TextOf"), addr(src)))
+		return w.refusing(dst, call(w.grpc("TextToProto"), addr(src)))
 	}
 
 	switch typeKey(t) {
@@ -594,16 +594,16 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft pbschema.FieldT
 	case dateTypeKey:
 		return w.dateOf(dst, src, inner)
 	case timeOfDayTypeKey:
-		return []ast.Stmt{assign(dst, call(w.grpc("TimeOfDayPB"), src))}
+		return []ast.Stmt{assign(dst, call(w.grpc("TimeOfDayToProto"), src))}
 	case "gorm.io/gorm.DeletedAt":
 		return []ast.Stmt{ifStmt(nil, sel(src, "Valid"), assign(dst, call(sel(w.out.imports.fixedRef(importPathTimestampPB), "New"), sel(src, "Time"))))}
 	case "encoding/json.Number":
 		// A field's empty number is the field unset, written as it is; an
 		// element or a map value has no unset state, so an empty one is
 		// written as the number the JSON encoder writes it as (see
-		// grpc.NumberText).
+		// grpc.NumberToProto).
 		if inner {
-			return []ast.Stmt{assign(dst, call(w.grpc("NumberText"), src))}
+			return []ast.Stmt{assign(dst, call(w.grpc("NumberToProto"), src))}
 		}
 		return []ast.Stmt{assign(dst, call(w.grpc("UTF8"), call(ident("string"), src)))}
 	}
@@ -611,7 +611,7 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft pbschema.FieldT
 		if kind, builtin := jsonshape.BuiltinOf(n); builtin {
 			switch kind {
 			case jsonshape.BuiltinObject:
-				return []ast.Stmt{assign(dst, call(w.grpc("Struct"), src))}
+				return []ast.Stmt{assign(dst, call(w.grpc("MapToProto"), src))}
 			case jsonshape.BuiltinWrapper:
 				data := w.funcTemp("data")
 				return append([]ast.Stmt{define([]string{data}, call(sel(src, "Data")))}, w.toProto(dst, ident(data), n.TypeArgs().At(0), ft, inner)...)
@@ -642,7 +642,7 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft pbschema.FieldT
 		}
 	case *types.Map:
 		if ft.TypeName == pbschema.WellKnownStruct {
-			return []ast.Stmt{assign(dst, call(w.grpc("Struct"), src))}
+			return []ast.Stmt{assign(dst, call(w.grpc("MapToProto"), src))}
 		}
 		if assignable(t, ft, false) && !utf8Guarded(u.Key()) && !utf8Guarded(u.Elem()) {
 			return []ast.Stmt{assign(dst, src)}
@@ -660,14 +660,14 @@ func (w *fileWriter) toProto(dst, src ast.Expr, t types.Type, ft pbschema.FieldT
 			rangeStmt(k, v, src, w.toProto(index(dst, key), ident(v), u.Elem(), *ft.MapValue, true)...),
 		)}
 	case *types.Interface:
-		return []ast.Stmt{assign(dst, call(w.grpc("Value"), src))}
+		return []ast.Stmt{assign(dst, call(w.grpc("ValueToProto"), src))}
 	case *types.Struct:
 		return append([]ast.Stmt{assign(dst, newCall(ident(ft.Nested.GoName)))}, w.structToProto(dst, src, ft.Nested)...)
 	}
 	panic(fmt.Sprintf("pb: no encoding for a %s", t))
 }
 
-// timestampOf returns the Timestamp of the time src: grpc.Timestamp, which
+// timestampOf returns the Timestamp of the time src: grpc.TimeToProto, which
 // leaves the zero time unset, for a field of its own, and timestamppb.New,
 // which writes the zero time as the Timestamp of 0001-01-01, for a value an
 // unset message would stand for something else in the place of, inner: an
@@ -677,11 +677,11 @@ func (w *fileWriter) timestampOf(src ast.Expr, inner bool) ast.Expr {
 	if inner {
 		return call(sel(w.out.imports.fixedRef(importPathTimestampPB), "New"), src)
 	}
-	return call(w.grpc("Timestamp"), src)
+	return call(w.grpc("TimeToProto"), src)
 }
 
 // dateOf returns the statements writing the day src into dst as the
-// google.type.Date grpc.DatePB answers: whatever the day, the zero one as
+// google.type.Date grpc.DateToProto answers: whatever the day, the zero one as
 // 0001-01-01, where an unset message would stand for something else, inner,
 // an element, a map value or what an optional field points to; and in a
 // field of its own only a day that is not the zero one, which the field
@@ -691,18 +691,18 @@ func (w *fileWriter) timestampOf(src ast.Expr, inner bool) ast.Expr {
 // encode as
 //
 //	if m.Due != nil {
-//		p.Due = grpc.DatePB(*m.Due)
+//		p.Due = grpc.DateToProto(*m.Due)
 //	}
 //	if m.Days != nil {
 //		p.Days = make([]*date.Date, len(m.Days))
 //		for i, v := range m.Days {
-//			p.Days[i] = grpc.DatePB(v)
+//			p.Days[i] = grpc.DateToProto(v)
 //		}
 //	}
 //
 // and its day, a field of its own, the way toProto shows it.
 func (w *fileWriter) dateOf(dst, src ast.Expr, inner bool) []ast.Stmt {
-	write := assign(dst, call(w.grpc("DatePB"), src))
+	write := assign(dst, call(w.grpc("DateToProto"), src))
 	if inner {
 		return []ast.Stmt{write}
 	}
@@ -776,7 +776,7 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 // getters, so an unset one decodes into the zero value; the pointer of an
 // optional scalar is taken as it is. A value the Go type may not hold, a
 // narrow integer, a floating-point number or a JSON number (see reader), a
-// time, a JSON document, a text (see grpc.Text), and a message decoded
+// time, a JSON document, a text (see grpc.TextFromProto), and a message decoded
 // through a conversion function are read as statements that may refuse it
 // (see refusing and refusingAt), the path in the refusal.
 //
@@ -787,11 +787,11 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 //	m.ID = p.GetId()
 //	m.CreatedBy = p.GetCreatedBy()
 //	m.UpdatedBy = p.GetUpdatedBy()
-//	m.CreatedAt, err = grpc.Time("created_at", p.GetCreatedAt())
+//	m.CreatedAt, err = grpc.TimeFromProto("created_at", p.GetCreatedAt())
 //	if err != nil {
 //		return nil, err
 //	}
-//	m.UpdatedAt, err = grpc.Time("updated_at", p.GetUpdatedAt())
+//	m.UpdatedAt, err = grpc.TimeFromProto("updated_at", p.GetUpdatedAt())
 //	if err != nil {
 //		return nil, err
 //	}
@@ -811,8 +811,8 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 //	if err != nil {
 //		return nil, err
 //	}
-//	m.Extra = grpc.Map(p.GetExtra())
-//	m.Due, err = grpc.Time("due", p.GetDue())
+//	m.Extra = grpc.MapFromProto(p.GetExtra())
+//	m.Due, err = grpc.TimeFromProto("due", p.GetDue())
 //	if err != nil {
 //		return nil, err
 //	}
@@ -829,21 +829,21 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 //		m.Window.To = v.GetTo()
 //	}
 //	if s := p.GetAddr(); s != "" {
-//		m.Addr, err = grpc.Text[netip.Addr]("addr", s)
+//		m.Addr, err = grpc.TextFromProto[netip.Addr]("addr", s)
 //		if err != nil {
 //			return nil, err
 //		}
 //	}
 //	if p.Peer != nil {
 //		var x netip.Addr
-//		x, err = grpc.Text[netip.Addr]("peer", *p.Peer)
+//		x, err = grpc.TextFromProto[netip.Addr]("peer", *p.Peer)
 //		if err != nil {
 //			return nil, err
 //		}
 //		m.Peer = &x
 //	}
 //	if s := p.GetGrade(); s != "" {
-//		m.Grade, err = grpc.Text[model.RecordGrade]("grade", s)
+//		m.Grade, err = grpc.TextFromProto[model.RecordGrade]("grade", s)
 //		if err != nil {
 //			return nil, err
 //		}
@@ -851,7 +851,7 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 //	if p.GetAddrs() != nil {
 //		m.Addrs = make([]netip.Addr, len(p.GetAddrs()))
 //		for i, v := range p.GetAddrs() {
-//			m.Addrs[i], err = grpc.Text[netip.Addr](grpc.Element("addrs", i), v)
+//			m.Addrs[i], err = grpc.TextFromProto[netip.Addr](grpc.Element("addrs", i), v)
 //			if err != nil {
 //				return nil, err
 //			}
@@ -878,11 +878,11 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 // object, JSON wrapper, struct held by value, JSON number, integer enum
 // and optional integer as
 //
-//	m.Date, err = grpc.Date("date", p.GetDate())
+//	m.Date, err = grpc.DateFromProto("date", p.GetDate())
 //	if err != nil {
 //		return nil, err
 //	}
-//	m.Clock, err = grpc.TimeOfDay("clock", p.GetClock())
+//	m.Clock, err = grpc.TimeOfDayFromProto("clock", p.GetClock())
 //	if err != nil {
 //		return nil, err
 //	}
@@ -892,7 +892,7 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 //		return nil, err
 //	}
 //	m.Doc = datatypes.NewJSON(data)
-//	m.Attrs = grpc.Map(p.GetAttrs())
+//	m.Attrs = grpc.MapFromProto(p.GetAttrs())
 //	var data2 model.ShapeOptions
 //	if v := p.GetOptions(); v != nil {
 //		var x *model.ShapeOptions
@@ -912,7 +912,7 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 //		m.Audit = *x
 //	}
 //	if s := p.GetAmount(); s != "" {
-//		m.Amount, err = grpc.Number("amount", s)
+//		m.Amount, err = grpc.NumberFromProto("amount", s)
 //		if err != nil {
 //			return nil, err
 //		}
@@ -966,7 +966,7 @@ func selPath(x ast.Expr, path []string) ast.Expr {
 //	}
 //	if p.GetWhen() != nil {
 //		var x time.Time
-//		x, err = grpc.Time("when", p.GetWhen())
+//		x, err = grpc.TimeFromProto("when", p.GetWhen())
 //		if err != nil {
 //			return nil, err
 //		}
@@ -1032,13 +1032,13 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft pbschema.Fiel
 
 	if ft.Text && !ft.Repeated {
 		// The text the message carries, read through the type's own
-		// UnmarshalText (see grpc.Text). A field's empty text is the field
-		// unset, read as the zero value; an optional field carries its text
-		// through a pointer, read as it is; an element or a map value is
-		// read through elementFromProto, which has no unset state, a slice
-		// or an array of texts element by element below.
+		// UnmarshalText (see grpc.TextFromProto). A field's empty text is
+		// the field unset, read as the zero value; an optional field
+		// carries its text through a pointer, read as it is; an element or
+		// a map value is read through elementFromProto, which has no unset
+		// state, a slice or an array of texts element by element below.
 		read := func(value ast.Expr) ast.Expr {
-			return call(&ast.IndexExpr{X: w.grpc("Text"), Index: w.goType(declared)}, path, value)
+			return call(&ast.IndexExpr{X: w.grpc("TextFromProto"), Index: w.goType(declared)}, path, value)
 		}
 		if ft.Optional {
 			return w.refusing(dst, read(star(src)))
@@ -1049,16 +1049,16 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft pbschema.Fiel
 
 	switch typeKey(t) {
 	case "time.Time":
-		return w.refusing(dst, call(w.grpc("Time"), path, src))
+		return w.refusing(dst, call(w.grpc("TimeFromProto"), path, src))
 	case dateTypeKey:
-		return w.refusing(dst, call(w.grpc("Date"), path, src))
+		return w.refusing(dst, call(w.grpc("DateFromProto"), path, src))
 	case timeOfDayTypeKey:
-		return w.refusing(dst, call(w.grpc("TimeOfDay"), path, src))
+		return w.refusing(dst, call(w.grpc("TimeOfDayFromProto"), path, src))
 	case "gorm.io/gorm.DeletedAt":
 		return []ast.Stmt{w.guarded(src, func(v ast.Expr) []ast.Stmt {
 			at := w.temp("at")
 			deleted := compositeLit(sel(w.out.imports.fixedRef(importPathGorm), "DeletedAt"), keyValue("Time", ident(at)), keyValue("Valid", ident("true")))
-			read := append([]ast.Stmt{w.varDeclExpr(at, w.timeType())}, w.refusing(ident(at), call(w.grpc("Time"), path, v))...)
+			read := append([]ast.Stmt{w.varDeclExpr(at, w.timeType())}, w.refusing(ident(at), call(w.grpc("TimeFromProto"), path, v))...)
 			return append(read, assign(dst, deleted))
 		})}
 	}
@@ -1068,7 +1068,7 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft pbschema.Fiel
 			case jsonshape.BuiltinAny:
 				return w.refusing(dst, call(w.grpc("Document"), path, src))
 			case jsonshape.BuiltinObject:
-				return []ast.Stmt{assign(dst, call(w.grpc("Map"), src))}
+				return []ast.Stmt{assign(dst, call(w.grpc("MapFromProto"), src))}
 			case jsonshape.BuiltinWrapper:
 				data := w.funcTemp("data")
 				arg := n.TypeArgs().At(0)
@@ -1090,9 +1090,10 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft pbschema.Fiel
 		if read, ok := w.reader(declared, path, src); ok {
 			if typeKey(t) == "encoding/json.Number" {
 				// The empty string is the field unset, read as it is; any
-				// other is read through Number, which refuses what is no
-				// number. An element or a map value is read through
-				// elementFromProto, which refuses the empty string too.
+				// other is read through NumberFromProto, which refuses
+				// what is no number. An element or a map value is read
+				// through elementFromProto, which refuses the empty
+				// string too.
 				s := w.temp("s")
 				read, _ = w.reader(declared, path, ident(s))
 				return []ast.Stmt{ifStmt(define([]string{s}, src), &ast.BinaryExpr{X: ident(s), Op: token.NEQ, Y: strLit("")}, w.refusing(dst, read)...)}
@@ -1115,7 +1116,7 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft pbschema.Fiel
 			w.elementFromProto(index(dst, ident(i)), index(src, ident(i)), u.Elem(), elementOf(ft), w.elementPath(path, ident(i)))...)}
 	case *types.Map:
 		if ft.TypeName == pbschema.WellKnownStruct {
-			return []ast.Stmt{assign(dst, call(w.grpc("Map"), src))}
+			return []ast.Stmt{assign(dst, call(w.grpc("MapFromProto"), src))}
 		}
 		if assignable(t, ft, false) && !finiteGuarded(u.Elem()) {
 			return []ast.Stmt{assign(dst, src)}
@@ -1155,17 +1156,17 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft pbschema.Fiel
 // elementFromProto returns the statements decoding src, an element of a
 // repeated field or the value of a map entry at path, into dst, a Go value
 // of type t: what fromProto returns, but for a JSON number, read through
-// grpc.Number whatever it holds, and a text, read through grpc.Text
-// whatever it holds. A field's empty string is the field unset; an element
-// or a value has no unset state for it to stand for: it is no number, so it
-// is refused like any other string that is none, and it is the text the
-// type reads it as. The amounts and rates fields of the Shape model, a
-// repeated field and a map of JSON numbers, decode as
+// grpc.NumberFromProto whatever it holds, and a text, read through
+// grpc.TextFromProto whatever it holds. A field's empty string is the field
+// unset; an element or a value has no unset state for it to stand for: it
+// is no number, so it is refused like any other string that is none, and it
+// is the text the type reads it as. The amounts and rates fields of the
+// Shape model, a repeated field and a map of JSON numbers, decode as
 //
 //	if p.GetAmounts() != nil {
 //		m.Amounts = make([]json.Number, len(p.GetAmounts()))
 //		for i, v := range p.GetAmounts() {
-//			m.Amounts[i], err = grpc.Number(grpc.Element("amounts", i), v)
+//			m.Amounts[i], err = grpc.NumberFromProto(grpc.Element("amounts", i), v)
 //			if err != nil {
 //				return nil, err
 //			}
@@ -1177,7 +1178,7 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft pbschema.Fiel
 //	if p.GetRates() != nil {
 //		m.Rates = make(map[string]json.Number, len(p.GetRates()))
 //		for k, v := range p.GetRates() {
-//			m.Rates[k], err = grpc.Number(grpc.Entry("rates", k), v)
+//			m.Rates[k], err = grpc.NumberFromProto(grpc.Entry("rates", k), v)
 //			if err != nil {
 //				return nil, err
 //			}
@@ -1189,7 +1190,7 @@ func (w *fileWriter) fromProto(dst, src ast.Expr, t types.Type, ft pbschema.Fiel
 //	if p.GetAddrs() != nil {
 //		m.Addrs = make([]netip.Addr, len(p.GetAddrs()))
 //		for i, v := range p.GetAddrs() {
-//			m.Addrs[i], err = grpc.Text[netip.Addr](grpc.Element("addrs", i), v)
+//			m.Addrs[i], err = grpc.TextFromProto[netip.Addr](grpc.Element("addrs", i), v)
 //			if err != nil {
 //				return nil, err
 //			}
@@ -1201,7 +1202,7 @@ func (w *fileWriter) elementFromProto(dst, src ast.Expr, t types.Type, ft pbsche
 		return w.refusing(dst, read)
 	}
 	if ft.Text {
-		return w.refusing(dst, call(&ast.IndexExpr{X: w.grpc("Text"), Index: w.goType(t)}, path, src))
+		return w.refusing(dst, call(&ast.IndexExpr{X: w.grpc("TextFromProto"), Index: w.goType(t)}, path, src))
 	}
 	return w.fromProto(dst, src, t, ft, path)
 }
@@ -1261,14 +1262,14 @@ func (w *fileWriter) decoded(t types.Type, ft pbschema.FieldType, src ast.Expr) 
 // of the field at path is narrower than what its message field carries, or
 // than what a JSON body carries, and false when the value is read as it
 // is: grpc.Narrow for an int8, int16, uint8 or uint16, or a type over one,
-// read from an int32 or uint32, grpc.Finite for a float32 or float64, or
-// a type over one, and grpc.Number for a json.Number read from a string.
-// All refuse what t cannot hold, which is why the reading is a statement
-// of its own (see refusing) and not an expression.
+// read from an int32 or uint32, grpc.Finite for a float32 or float64, or a
+// type over one, and grpc.NumberFromProto for a json.Number read from a
+// string. All refuse what t cannot hold, which is why the reading is a
+// statement of its own (see refusing) and not an expression.
 func (w *fileWriter) reader(t types.Type, path ast.Expr, src ast.Expr) (ast.Expr, bool) {
 	u := types.Unalias(t)
 	if typeKey(u) == "encoding/json.Number" {
-		return call(w.grpc("Number"), path, src), true
+		return call(w.grpc("NumberFromProto"), path, src), true
 	}
 	if b, ok := u.Underlying().(*types.Basic); ok {
 		switch b.Kind() {
@@ -1364,7 +1365,7 @@ func (w *fileWriter) fieldFromProto(dst, src ast.Expr, fc pbschema.FieldConversi
 // msg, a project type: XToProto encoding a value into its message and
 // XFromProto decoding a message into a value, nil into nil both ways. Both
 // answer an error as well, which the handlers answer the call with:
-// XToProto the failure to write a value as text (see grpc.TextOf),
+// XToProto the failure to write a value as text (see grpc.TextToProto),
 // XFromProto the refusal of a value a field cannot hold (see refusing); a
 // message no field of which converts that way answers nil for it. A field
 // the server writes alone XToProto encodes and XFromProto leaves out,
@@ -1414,7 +1415,7 @@ func (w *fileWriter) conversionFuncs(msg *pbschema.Message) {
 		// err is declared once, for every value written through a helper or
 		// a conversion function that may fail to write it (see refusing).
 		body = append(body, errDecl())
-		doc += " A value a type cannot write as text (see grpc.TextOf) is an error, which the call answers Internal."
+		doc += " A value a type cannot write as text (see grpc.TextToProto) is an error, which the call answers Internal."
 	}
 	body = append(body, encoded...)
 	body = append(body, returns(ident("p"), ident("nil")))

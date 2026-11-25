@@ -52,37 +52,37 @@ func TestNarrowRefusesWhatTheTypeCannotHold(t *testing.T) {
 	requireFieldViolation(t, err, "level", "128 is out of range")
 }
 
-// TestNumberRefusesWhatIsNoJSONNumber pins Number, what a generated
-// FromProto reads a json.Number field through: a JSON number literal comes
-// back as it is, and anything else, text, a quoted number, a literal with
-// trailing space, the empty string, is refused with InvalidArgument naming
-// the field, the way encoding/json refuses it over HTTP; the empty string
-// of an unset field never reaches it, the one of an element or a map value
-// does.
-func TestNumberRefusesWhatIsNoJSONNumber(t *testing.T) {
-	amount, err := gstgrpc.Number("amount", "-12.5e3")
+// TestNumberFromProtoRefusesWhatIsNoJSONNumber pins NumberFromProto, what a
+// generated FromProto reads a json.Number field through: a JSON number literal
+// comes back as it is, and anything else, text, a quoted number, a literal
+// with trailing space, the empty string, is refused with InvalidArgument
+// naming the field, the way encoding/json refuses it over HTTP; the empty
+// string of an unset field never reaches it, the one of an element or a map
+// value does.
+func TestNumberFromProtoRefusesWhatIsNoJSONNumber(t *testing.T) {
+	amount, err := gstgrpc.NumberFromProto("amount", "-12.5e3")
 	require.NoError(t, err)
 	require.Equal(t, json.Number("-12.5e3"), amount)
 	for _, s := range []string{"abc", `"12"`, "12 ", "0x1f", "1.", "null", ""} {
-		_, err := gstgrpc.Number("amount", s)
+		_, err := gstgrpc.NumberFromProto("amount", s)
 		require.Equal(t, codes.InvalidArgument, status.Code(err), s)
 		require.Equal(t, "invalid value for field 'amount'", status.Convert(err).Message())
 		requireFieldViolation(t, err, "amount", strconv.Quote(s)+" is not a JSON number")
 	}
 }
 
-// TestNumberTextWritesTheEmptyNumberAsZero pins the text the generated
-// ToProto writes for a json.Number element or map value: the number as it
-// is, its invalid bytes replaced the way UTF8 replaces them, and the empty
-// number as "0", the number encoding/json writes it as, which Number reads
+// TestNumberToProtoWritesTheEmptyNumberAsZero pins the text the generated
+// ToProto writes for a json.Number element or map value: the number as it is,
+// its invalid bytes replaced the way UTF8 replaces them, and the empty number
+// as "0", the number encoding/json writes it as, which NumberFromProto reads
 // back.
-func TestNumberTextWritesTheEmptyNumberAsZero(t *testing.T) {
-	require.Equal(t, "-12.5e3", gstgrpc.NumberText("-12.5e3"))
-	require.Equal(t, "a�b", gstgrpc.NumberText("a\xffb"))
+func TestNumberToProtoWritesTheEmptyNumberAsZero(t *testing.T) {
+	require.Equal(t, "-12.5e3", gstgrpc.NumberToProto("-12.5e3"))
+	require.Equal(t, "a�b", gstgrpc.NumberToProto("a\xffb"))
 	encoded, err := json.Marshal(json.Number(""))
 	require.NoError(t, err)
-	require.Equal(t, string(encoded), gstgrpc.NumberText(""), "the empty number is written as encoding/json writes it")
-	read, err := gstgrpc.Number("amounts[0]", gstgrpc.NumberText(""))
+	require.Equal(t, string(encoded), gstgrpc.NumberToProto(""), "the empty number is written as encoding/json writes it")
+	read, err := gstgrpc.NumberFromProto("amounts[0]", gstgrpc.NumberToProto(""))
 	require.NoError(t, err)
 	require.Equal(t, json.Number("0"), read)
 }
@@ -116,11 +116,11 @@ func TestFiniteRefusesNaNAndTheInfinities(t *testing.T) {
 	}
 }
 
-// TestTimeRefusesATimestampOutOfRange pins that a Timestamp no time can be
-// made of, past the year 9999 or before the year 1, is refused with
-// InvalidArgument naming the field, the way the HTTP listener refuses a
-// time it cannot parse, rather than read as whatever AsTime makes of it.
-func TestTimeRefusesATimestampOutOfRange(t *testing.T) {
+// TestTimeFromProtoRefusesATimestampOutOfRange pins that a Timestamp no time
+// can be made of, past the year 9999 or before the year 1, is refused with
+// InvalidArgument naming the field, the way the HTTP listener refuses a time
+// it cannot parse, rather than read as whatever AsTime makes of it.
+func TestTimeFromProtoRefusesATimestampOutOfRange(t *testing.T) {
 	for _, tt := range []struct {
 		name string
 		ts   *timestamppb.Timestamp
@@ -131,7 +131,7 @@ func TestTimeRefusesATimestampOutOfRange(t *testing.T) {
 		{name: "nanos out of range", ts: &timestamppb.Timestamp{Nanos: 1_000_000_000}, want: "timestamp (nanos:1000000000) has out-of-range nanos"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := gstgrpc.Time("due", tt.ts)
+			_, err := gstgrpc.TimeFromProto("due", tt.ts)
 			require.Equal(t, codes.InvalidArgument, status.Code(err))
 			require.Equal(t, "invalid value for field 'due'", status.Convert(err).Message())
 			requireFieldViolation(t, err, "due", tt.want)
@@ -139,32 +139,32 @@ func TestTimeRefusesATimestampOutOfRange(t *testing.T) {
 	}
 }
 
-// TestTimestampLeavesTheZeroTimeUnset pins the two ways of a time through
+// TestTimeToProtoLeavesTheZeroTimeUnset pins the two ways of a time through
 // a message: a time comes back as it went in, in UTC, and the zero time
 // travels as no Timestamp at all.
-func TestTimestampLeavesTheZeroTimeUnset(t *testing.T) {
+func TestTimeToProtoLeavesTheZeroTimeUnset(t *testing.T) {
 	at := time.Date(2026, 9, 26, 8, 30, 0, 123456789, time.FixedZone("east", 8*3600))
 
-	back, err := gstgrpc.Time("at", gstgrpc.Timestamp(at))
+	back, err := gstgrpc.TimeFromProto("at", gstgrpc.TimeToProto(at))
 	require.NoError(t, err)
 	require.Equal(t, at.UTC(), back)
-	require.Nil(t, gstgrpc.Timestamp(time.Time{}))
-	zero, err := gstgrpc.Time("at", nil)
+	require.Nil(t, gstgrpc.TimeToProto(time.Time{}))
+	zero, err := gstgrpc.TimeFromProto("at", nil)
 	require.NoError(t, err)
 	require.True(t, zero.IsZero())
 }
 
-// TestDateRefusesWhatIsNoDay pins Date, what a generated FromProto reads a
-// day through: a full date comes back as its day, at midnight in UTC, and no
-// date as the zero day; a date leaving its year, its month or its day at
-// zero, one the calendar does not hold and one outside the years 1 to 9999
-// are refused with InvalidArgument naming the field, the way the HTTP
-// listener refuses a day it cannot read.
-func TestDateRefusesWhatIsNoDay(t *testing.T) {
-	got, err := gstgrpc.Date("day", &date.Date{Year: 2024, Month: 2, Day: 29})
+// TestDateFromProtoRefusesWhatIsNoDay pins DateFromProto, what a generated
+// FromProto reads a day through: a full date comes back as its day, at
+// midnight in UTC, and no date as the zero day; a date leaving its year, its
+// month or its day at zero, one the calendar does not hold and one outside the
+// years 1 to 9999 are refused with InvalidArgument naming the field, the way
+// the HTTP listener refuses a day it cannot read.
+func TestDateFromProtoRefusesWhatIsNoDay(t *testing.T) {
+	got, err := gstgrpc.DateFromProto("day", &date.Date{Year: 2024, Month: 2, Day: 29})
 	require.NoError(t, err)
 	require.Equal(t, datatypes.Date(time.Date(2024, time.February, 29, 0, 0, 0, 0, time.UTC)), got)
-	unset, err := gstgrpc.Date("day", nil)
+	unset, err := gstgrpc.DateFromProto("day", nil)
 	require.NoError(t, err)
 	require.True(t, time.Time(unset).IsZero())
 
@@ -183,7 +183,7 @@ func TestDateRefusesWhatIsNoDay(t *testing.T) {
 		{name: "a day below the first", d: &date.Date{Year: 2026, Month: 3, Day: -1}, want: "2026-03--1 is not a day of the calendar"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := gstgrpc.Date("day", tt.d)
+			_, err := gstgrpc.DateFromProto("day", tt.d)
 			require.Equal(t, codes.InvalidArgument, status.Code(err))
 			require.Equal(t, "invalid value for field 'day'", status.Convert(err).Message())
 			requireFieldViolation(t, err, "day", tt.want)
@@ -191,50 +191,50 @@ func TestDateRefusesWhatIsNoDay(t *testing.T) {
 	}
 }
 
-// TestDatePBWritesTheDayItsTimeReads pins the two ways of a day through
-// DatePB and Date: a day goes out as the year, month and day its time reads
-// in its own location and comes back as that day, and the zero day goes out
-// as 0001-01-01 and comes back as the zero day.
-func TestDatePBWritesTheDayItsTimeReads(t *testing.T) {
+// TestDateToProtoWritesTheDayItsTimeReads pins the two ways of a day through
+// DateToProto and DateFromProto: a day goes out as the year, month and day its
+// time reads in its own location and comes back as that day, and the zero day
+// goes out as 0001-01-01 and comes back as the zero day.
+func TestDateToProtoWritesTheDayItsTimeReads(t *testing.T) {
 	// 07:30 at +08:00 on the 2nd is the 2nd, though the 1st in UTC.
 	on := datatypes.Date(time.Date(2026, time.January, 2, 7, 30, 0, 0, time.FixedZone("", 8*3600)))
-	msg := gstgrpc.DatePB(on)
+	msg := gstgrpc.DateToProto(on)
 	require.True(t, proto.Equal(&date.Date{Year: 2026, Month: 1, Day: 2}, msg), msg)
-	back, err := gstgrpc.Date("day", msg)
+	back, err := gstgrpc.DateFromProto("day", msg)
 	require.NoError(t, err)
 	require.Equal(t, datatypes.Date(time.Date(2026, time.January, 2, 0, 0, 0, 0, time.UTC)), back)
 
-	zero := gstgrpc.DatePB(datatypes.Date{})
+	zero := gstgrpc.DateToProto(datatypes.Date{})
 	require.True(t, proto.Equal(&date.Date{Year: 1, Month: 1, Day: 1}, zero), zero)
-	back, err = gstgrpc.Date("day", zero)
+	back, err = gstgrpc.DateFromProto("day", zero)
 	require.NoError(t, err)
 	require.True(t, time.Time(back).IsZero())
 }
 
-// TestTimeOfDayReadsAndWritesATimeOfTheClock pins TimeOfDay and
-// TimeOfDayPB, what a generated FromProto and ToProto carry a time of day
-// through: a time of day goes out as its hours, minutes, seconds and
-// nanoseconds and comes back as it is, midnight as the message of four
-// zeros, and no message as midnight; an hour, a minute, a second or a
-// fraction no clock shows, the 24 and the 60 the message allows among them,
-// is refused with InvalidArgument naming the field, the way the HTTP
-// listener refuses a time of day it cannot read.
-func TestTimeOfDayReadsAndWritesATimeOfTheClock(t *testing.T) {
+// TestTimeOfDayFromProtoAndTimeOfDayToProtoCarryATimeOfTheClock pins
+// TimeOfDayFromProto and TimeOfDayToProto, what a generated FromProto and
+// ToProto carry a time of day through: a time of day goes out as its hours,
+// minutes, seconds and nanoseconds and comes back as it is, midnight as the
+// message of four zeros, and no message as midnight; an hour, a minute, a
+// second or a fraction no clock shows, the 24 and the 60 the message allows
+// among them, is refused with InvalidArgument naming the field, the way the
+// HTTP listener refuses a time of day it cannot read.
+func TestTimeOfDayFromProtoAndTimeOfDayToProtoCarryATimeOfTheClock(t *testing.T) {
 	half := datatypes.NewTimeOfDay(17, 30, 0, 500_000_000)
-	msg := gstgrpc.TimeOfDayPB(half)
+	msg := gstgrpc.TimeOfDayToProto(half)
 	require.True(t, proto.Equal(&timeofday.TimeOfDay{Hours: 17, Minutes: 30, Nanos: 500_000_000}, msg), msg)
-	back, err := gstgrpc.TimeOfDay("clock", msg)
+	back, err := gstgrpc.TimeOfDayFromProto("clock", msg)
 	require.NoError(t, err)
 	require.Equal(t, half, back)
 
 	last := datatypes.NewTimeOfDay(23, 59, 59, 999_999_999)
-	back, err = gstgrpc.TimeOfDay("clock", gstgrpc.TimeOfDayPB(last))
+	back, err = gstgrpc.TimeOfDayFromProto("clock", gstgrpc.TimeOfDayToProto(last))
 	require.NoError(t, err)
 	require.Equal(t, last, back)
 
-	zero := gstgrpc.TimeOfDayPB(0)
+	zero := gstgrpc.TimeOfDayToProto(0)
 	require.True(t, proto.Equal(&timeofday.TimeOfDay{}, zero), zero)
-	midnight, err := gstgrpc.TimeOfDay("clock", nil)
+	midnight, err := gstgrpc.TimeOfDayFromProto("clock", nil)
 	require.NoError(t, err)
 	require.Zero(t, midnight)
 
@@ -251,7 +251,7 @@ func TestTimeOfDayReadsAndWritesATimeOfTheClock(t *testing.T) {
 		{name: "nanos out of range", t: &timeofday.TimeOfDay{Nanos: 1_000_000_000}, want: "00:00:00.1000000000 is not a time of day"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := gstgrpc.TimeOfDay("clock", tt.t)
+			_, err := gstgrpc.TimeOfDayFromProto("clock", tt.t)
 			require.Equal(t, codes.InvalidArgument, status.Code(err))
 			require.Equal(t, "invalid value for field 'clock'", status.Convert(err).Message())
 			requireFieldViolation(t, err, "clock", tt.want)
@@ -297,47 +297,47 @@ func TestUTF8ReplacesInvalidBytesLikeTheJSONEncoder(t *testing.T) {
 	require.Equal(t, overHTTP, gstgrpc.UTF8(broken))
 }
 
-// TestValueCarriesWhatJSONEncodes pins that a Go value travels in a Value
-// as its JSON encoding: nested slices and structs, which structpb itself
+// TestValueToProtoCarriesWhatJSONEncodes pins that a Go value travels in a
+// Value as its JSON encoding: nested slices and structs, which structpb itself
 // refuses, are encoded the way a JSON body encodes them, and nil is unset.
-func TestValueCarriesWhatJSONEncodes(t *testing.T) {
+func TestValueToProtoCarriesWhatJSONEncodes(t *testing.T) {
 	type link struct {
 		URL string `json:"url"`
 	}
-	value := gstgrpc.Value(map[string]any{"tags": []string{"a", "b"}, "link": link{URL: "https://example.com"}, "n": 3})
+	value := gstgrpc.ValueToProto(map[string]any{"tags": []string{"a", "b"}, "link": link{URL: "https://example.com"}, "n": 3})
 
 	require.Equal(t, map[string]any{
 		"tags": []any{"a", "b"},
 		"link": map[string]any{"url": "https://example.com"},
 		"n":    float64(3),
 	}, value.AsInterface())
-	require.Nil(t, gstgrpc.Value(nil))
-	require.Equal(t, structpb.NullValue_NULL_VALUE, gstgrpc.Value((*int)(nil)).GetNullValue(), "a nil pointer is the JSON null, not an unset value")
+	require.Nil(t, gstgrpc.ValueToProto(nil))
+	require.Equal(t, structpb.NullValue_NULL_VALUE, gstgrpc.ValueToProto((*int)(nil)).GetNullValue(), "a nil pointer is the JSON null, not an unset value")
 }
 
-// TestValuePanicsOnWhatJSONCannotEncode pins that a value encoding/json
-// refuses is a panic, the way gin's renderer panics on it, and not a
-// silently empty Value.
-func TestValuePanicsOnWhatJSONCannotEncode(t *testing.T) {
+// TestValueToProtoPanicsOnWhatJSONCannotEncode pins that a value encoding/json
+// refuses is a panic, the way gin's renderer panics on it, and not a silently
+// empty Value.
+func TestValueToProtoPanicsOnWhatJSONCannotEncode(t *testing.T) {
 	require.PanicsWithValue(t, "grpc: encode chan int as a Value: json: unsupported type: chan int", func() {
-		gstgrpc.Value(make(chan int))
+		gstgrpc.ValueToProto(make(chan int))
 	})
 }
 
-// TestStructAndMapRoundTripAnObject pins that a map travels in a Struct as
-// its JSON object and comes back as a map, that nil stays nil on both
-// ways, where AsMap alone would answer an empty map, and that a number
-// JSON has no spelling for comes back as the string the Value mapping
-// gives it.
-func TestStructAndMapRoundTripAnObject(t *testing.T) {
+// TestMapToProtoAndMapFromProtoRoundTripAnObject pins that a map travels in a
+// Struct as its JSON object and comes back as a map, that nil stays nil on
+// both ways, where AsMap alone would answer an empty map, and that a number
+// JSON has no spelling for comes back as the string the Value mapping gives
+// it.
+func TestMapToProtoAndMapFromProtoRoundTripAnObject(t *testing.T) {
 	m := map[string]any{"count": 2, "tags": []string{"a"}, "nested": map[string]any{"ok": true}}
 
-	require.Equal(t, map[string]any{"count": float64(2), "tags": []any{"a"}, "nested": map[string]any{"ok": true}}, gstgrpc.Map(gstgrpc.Struct(m)))
-	require.Nil(t, gstgrpc.Struct(nil))
-	require.Nil(t, gstgrpc.Map(nil))
-	require.Empty(t, gstgrpc.Map(&structpb.Struct{}))
-	require.NotNil(t, gstgrpc.Map(&structpb.Struct{}))
-	require.Equal(t, map[string]any{"n": "NaN"}, gstgrpc.Map(&structpb.Struct{Fields: map[string]*structpb.Value{"n": structpb.NewNumberValue(math.NaN())}}), "a NaN comes back spelt as the JSON mapping of a Value spells it")
+	require.Equal(t, map[string]any{"count": float64(2), "tags": []any{"a"}, "nested": map[string]any{"ok": true}}, gstgrpc.MapFromProto(gstgrpc.MapToProto(m)))
+	require.Nil(t, gstgrpc.MapToProto(nil))
+	require.Nil(t, gstgrpc.MapFromProto(nil))
+	require.Empty(t, gstgrpc.MapFromProto(&structpb.Struct{}))
+	require.NotNil(t, gstgrpc.MapFromProto(&structpb.Struct{}))
+	require.Equal(t, map[string]any{"n": "NaN"}, gstgrpc.MapFromProto(&structpb.Struct{Fields: map[string]*structpb.Value{"n": structpb.NewNumberValue(math.NaN())}}), "a NaN comes back spelt as the JSON mapping of a Value spells it")
 }
 
 // filterMessage stands for the nested Filter message of a List request,
@@ -401,27 +401,27 @@ func (g *grade) UnmarshalText(text []byte) error {
 	return nil
 }
 
-// TestTextReadsWhatTextOfWrites pins the text round trip of a type with the
-// text methods: TextOf writes what MarshalText writes, Text reads it back
-// through UnmarshalText, a text the type refuses is refused with
-// invalidValue naming the field, and a value the type cannot write is an
-// error carrying the type's own account.
-func TestTextReadsWhatTextOfWrites(t *testing.T) {
-	text, err := gstgrpc.TextOf(netip.MustParseAddr("10.0.0.1"))
+// TestTextFromProtoReadsWhatTextToProtoWrites pins the text round trip of a
+// type with the text methods: TextToProto writes what MarshalText writes,
+// TextFromProto reads it back through UnmarshalText, a text the type refuses
+// is refused with invalidValue naming the field, and a value the type cannot
+// write is an error carrying the type's own account.
+func TestTextFromProtoReadsWhatTextToProtoWrites(t *testing.T) {
+	text, err := gstgrpc.TextToProto(netip.MustParseAddr("10.0.0.1"))
 	require.NoError(t, err)
 	require.Equal(t, "10.0.0.1", text)
-	addr, err := gstgrpc.Text[netip.Addr]("addr", text)
+	addr, err := gstgrpc.TextFromProto[netip.Addr]("addr", text)
 	require.NoError(t, err)
 	require.Equal(t, netip.MustParseAddr("10.0.0.1"), addr)
 
-	_, err = gstgrpc.Text[netip.Addr]("addr", "10.0.0")
+	_, err = gstgrpc.TextFromProto[netip.Addr]("addr", "10.0.0")
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 	require.Equal(t, "invalid value for field 'addr'", status.Convert(err).Message())
 	requireFieldViolation(t, err, "addr", `"10.0.0" cannot be read as a netip.Addr: ParseAddr("10.0.0"): IPv4 address too short`)
 
-	low, err := gstgrpc.Text[grade]("grade", "low")
+	low, err := gstgrpc.TextFromProto[grade]("grade", "low")
 	require.NoError(t, err)
 	require.Equal(t, grade(1), low)
-	_, err = gstgrpc.TextOf(grade(7))
+	_, err = gstgrpc.TextToProto(grade(7))
 	require.EqualError(t, err, "grpc_test.grade cannot be written as text: unknown grade 7")
 }

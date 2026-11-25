@@ -138,8 +138,8 @@ type FieldType struct {
 	// Text marks a string field carrying the text a Go type writes with its
 	// MarshalText and reads with its UnmarshalText (see
 	// jsonshape.Project.TextMethod), the way encoding/json carries it as a
-	// JSON string: the conversions write it through grpc.TextOf and read it
-	// through grpc.Text.
+	// JSON string: the conversions write it through grpc.TextToProto and
+	// read it through grpc.TextFromProto.
 	Text bool
 	// mapEntry is the synthetic entry message of a map field, nested in the
 	// enclosing message; mapKey and mapValue are the types of its key and
@@ -722,7 +722,7 @@ func (g *Schema) namedFieldType(n *types.Named, file *ProtoFile, parent *descrip
 	}
 	if g.project.TextMethod(n) != "" {
 		// The type travels as the text its method writes, a string, read
-		// back through its UnmarshalText (see grpc.Text).
+		// back through its UnmarshalText (see grpc.TextFromProto).
 		return FieldType{Kind: descriptorpb.FieldDescriptorProto_TYPE_STRING, Text: true}, true
 	}
 	if g.project.Declares(obj) {

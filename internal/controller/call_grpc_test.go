@@ -680,11 +680,11 @@ func field[T any](in map[string]any, key string) T {
 // fromProto converts raw, the record or the item a message carries, into T
 // through its JSON shape, the way a generated FromProto converts a message
 // into its model (see messageDecoding), refusing a value a field cannot hold
-// the way one does (see grpc.Narrow, grpc.Time and grpc.Number): with the
-// status of gst.NewInvalidValue naming the field as encoding/json names
-// it. A message carrying none, nil, is the nil model. It leaves tenant_id
-// out, as a generated FromProto does: the field is output-only on gRPC (see
-// TRANSPORTS.md, section 9).
+// the way one does (see grpc.Narrow, grpc.TimeFromProto and
+// grpc.NumberFromProto): with the status of gst.NewInvalidValue naming the
+// field as encoding/json names it. A message carrying none, nil, is the nil
+// model. It leaves tenant_id out, as a generated FromProto does: the field
+// is output-only on gRPC (see TRANSPORTS.md, section 9).
 func fromProto[T any](raw any) (T, error) {
 	var value T
 	if raw == nil {
@@ -725,12 +725,13 @@ var messageDecoding = jsonv2.WithUnmarshalers(jsonv2.JoinUnmarshalers(
 // does and refuses a value it cannot read at the value's JSON Pointer, so the
 // refusal names the field; a JSON number or a null is left to the default
 // decoding, which names the field of what it refuses. A generated FromProto
-// reads a Timestamp through grpc.Time and the text of a number through
-// grpc.Number, each refusing a value it cannot read by naming the field, while
-// a record of the contract table spells a time and a number as HTTP does. It
-// is a copy of the decodeAtPointer of request_bind_http.go, which this
-// external test package cannot reach, so both lines of the contract table
-// read a time and a number alike: a change to one is a change to the other.
+// reads a Timestamp through grpc.TimeFromProto and the text of a number
+// through grpc.NumberFromProto, each refusing a value it cannot read by naming
+// the field, while a record of the contract table spells a time and a number
+// as HTTP does. It is a copy of the decodeAtPointer of request_bind_http.go,
+// which this external test package cannot reach, so both lines of the contract
+// table read a time and a number alike: a change to one is a change to the
+// other.
 func decodeAtPointer[T any](dec *jsontext.Decoder, v *T) error {
 	if kind := dec.PeekKind(); kind == '0' || kind == 'n' {
 		return errors.ErrUnsupported
@@ -747,13 +748,13 @@ func decodeAtPointer[T any](dec *jsontext.Decoder, v *T) error {
 
 // timeOfDayAsMessage reads a time of day for fromProto. A message carries
 // one as a google.type.TimeOfDay, which a generated FromProto reads through
-// grpc.TimeOfDay, refusing an hour, a minute or a second no clock shows by
-// naming the field, while a record of the contract table spells it as HTTP
-// does, 17:30:00.5. A spelling is read the way a request body reads it (see
-// ownTextAtPointer in request_bind_http.go, which this external test package
-// cannot reach), and one naming no time of day, 25:00:00, is refused naming
-// the field, the way grpc.TimeOfDay refuses the hour 25. A null is a time
-// of day the message leaves unset, read as none.
+// grpc.TimeOfDayFromProto, refusing an hour, a minute or a second no clock
+// shows by naming the field, while a record of the contract table spells it
+// as HTTP does, 17:30:00.5. A spelling is read the way a request body reads
+// it (see ownTextAtPointer in request_bind_http.go, which this external test
+// package cannot reach), and one naming no time of day, 25:00:00, is refused
+// naming the field, the way grpc.TimeOfDayFromProto refuses the hour 25. A
+// null is a time of day the message leaves unset, read as none.
 var timeOfDayAsMessage = jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, t *datatypes.TimeOfDay) error {
 	value, err := dec.ReadValue()
 	if err != nil {
@@ -766,14 +767,14 @@ var timeOfDayAsMessage = jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, t 
 })
 
 // dayAsDate reads a day for fromProto. A message carries one as a
-// google.type.Date, which a generated FromProto reads through grpc.Date,
-// refusing a year, month and day the calendar does not hold by naming the
-// field, while a record of the contract table spells it as HTTP does,
-// 2026-01-02. A spelling is read the way a request body reads it (see
-// ownTextAtPointer in request_bind_http.go, which this external test
-// package cannot reach), and one naming no day, 2026-02-30, is refused naming the
-// field, the way grpc.Date refuses the 30th of February. A null is a date
-// the message leaves unset, read as none.
+// google.type.Date, which a generated FromProto reads through
+// grpc.DateFromProto, refusing a year, month and day the calendar does not hold
+// by naming the field, while a record of the contract table spells it as HTTP
+// does, 2026-01-02. A spelling is read the way a request body reads it (see
+// ownTextAtPointer in request_bind_http.go, which this external test package
+// cannot reach), and one naming no day, 2026-02-30, is refused naming the
+// field, the way grpc.DateFromProto refuses the 30th of February. A null is a
+// date the message leaves unset, read as none.
 var dayAsDate = jsonv2.UnmarshalFromFunc(func(dec *jsontext.Decoder, day *datatypes.Date) error {
 	value, err := dec.ReadValue()
 	if err != nil {

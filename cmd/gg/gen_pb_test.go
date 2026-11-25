@@ -2451,9 +2451,10 @@ func TestConversionsGuardContainerElements(t *testing.T) {
 	}
 
 	// A JSON number in a repeated field, an array or a map is read through
-	// grpc.Number like a number field, the empty string included, which is
-	// no number and stands for no unset field there: it is refused naming
-	// the element by its index and the map value by its key.
+	// grpc.NumberFromProto like a number field, the empty string included,
+	// which is no number and stands for no unset field there: it is
+	// refused naming the element by its index and the map value by its
+	// key.
 	for _, tt := range []struct {
 		field string
 		msg   *pb.Shape

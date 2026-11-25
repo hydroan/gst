@@ -127,8 +127,8 @@ func (itemService) MergeItem(ctx context.Context, req *MergeItemRequest) (*Merge
 }
 
 // ItemToProto encodes Item values into their message, nil into nil. A value
-// a type cannot write as text (see grpc.TextOf) is an error, which the call
-// answers Internal.
+// a type cannot write as text (see grpc.TextToProto) is an error, which the
+// call answers Internal.
 func ItemToProto(m *record.Item) (*Item, error) {
 	if m == nil {
 		return nil, nil
@@ -138,8 +138,8 @@ func ItemToProto(m *record.Item) (*Item, error) {
 	p.Id = grpc.UTF8(m.ID)
 	p.CreatedBy = grpc.UTF8(m.CreatedBy)
 	p.UpdatedBy = grpc.UTF8(m.UpdatedBy)
-	p.CreatedAt = grpc.Timestamp(m.CreatedAt)
-	p.UpdatedAt = grpc.Timestamp(m.UpdatedAt)
+	p.CreatedAt = grpc.TimeToProto(m.CreatedAt)
+	p.UpdatedAt = grpc.TimeToProto(m.UpdatedAt)
 	p.Content = grpc.UTF8(m.Content)
 	if m.Links != nil {
 		p.Links = make([]*Link, len(m.Links))
@@ -167,11 +167,11 @@ func ItemFromProto(p *Item) (*record.Item, error) {
 	m.ID = p.GetId()
 	m.CreatedBy = p.GetCreatedBy()
 	m.UpdatedBy = p.GetUpdatedBy()
-	m.CreatedAt, err = grpc.Time("created_at", p.GetCreatedAt())
+	m.CreatedAt, err = grpc.TimeFromProto("created_at", p.GetCreatedAt())
 	if err != nil {
 		return nil, err
 	}
-	m.UpdatedAt, err = grpc.Time("updated_at", p.GetUpdatedAt())
+	m.UpdatedAt, err = grpc.TimeFromProto("updated_at", p.GetUpdatedAt())
 	if err != nil {
 		return nil, err
 	}
@@ -240,8 +240,8 @@ func MergeReqFromProto(p *MergeReq) (*record.MergeReq, error) {
 }
 
 // MergeRspToProto encodes MergeRsp values into their message, nil into nil.
-// A value a type cannot write as text (see grpc.TextOf) is an error, which
-// the call answers Internal.
+// A value a type cannot write as text (see grpc.TextToProto) is an error,
+// which the call answers Internal.
 func MergeRspToProto(m *record.MergeRsp) (*MergeRsp, error) {
 	if m == nil {
 		return nil, nil

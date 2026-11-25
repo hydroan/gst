@@ -168,8 +168,8 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 		{
 			// A day the calendar does not hold is refused naming the field on
 			// both lines: the text a body carries, and the year, month and
-			// day a message carries (see grpc.Date). An instant is a spelling
-			// HTTP alone carries, HTTP's to refuse (see
+			// day a message carries (see grpc.DateFromProto). An instant is a
+			// spelling HTTP alone carries, HTTP's to refuse (see
 			// TestCreateReadsADayAsWritten).
 			name: "Create refuses a day the calendar does not hold", fixture: dated, phase: apiaction.Create,
 			input: contractInput{record: map[string]any{"name": uniqueName("contract-no-day"), "day": "2026-02-30"}},

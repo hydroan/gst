@@ -57,8 +57,8 @@ func RunToProto(m *model.Run) (*Run, error) {
 	p.Id = grpc.UTF8(m.ID)
 	p.CreatedBy = grpc.UTF8(m.CreatedBy)
 	p.UpdatedBy = grpc.UTF8(m.UpdatedBy)
-	p.CreatedAt = grpc.Timestamp(m.CreatedAt)
-	p.UpdatedAt = grpc.Timestamp(m.UpdatedAt)
+	p.CreatedAt = grpc.TimeToProto(m.CreatedAt)
+	p.UpdatedAt = grpc.TimeToProto(m.UpdatedAt)
 	p.Kind = grpc.UTF8(m.Kind)
 	p.Name = grpc.UTF8(m.Name)
 	p.Replica = grpc.UTF8(m.Replica)
@@ -82,11 +82,11 @@ func RunFromProto(p *Run) (*model.Run, error) {
 	m.ID = p.GetId()
 	m.CreatedBy = p.GetCreatedBy()
 	m.UpdatedBy = p.GetUpdatedBy()
-	m.CreatedAt, err = grpc.Time("created_at", p.GetCreatedAt())
+	m.CreatedAt, err = grpc.TimeFromProto("created_at", p.GetCreatedAt())
 	if err != nil {
 		return nil, err
 	}
-	m.UpdatedAt, err = grpc.Time("updated_at", p.GetUpdatedAt())
+	m.UpdatedAt, err = grpc.TimeFromProto("updated_at", p.GetUpdatedAt())
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +95,7 @@ func RunFromProto(p *Run) (*model.Run, error) {
 	m.Replica = p.GetReplica()
 	if p.GetEndedAt() != nil {
 		var x time.Time
-		x, err = grpc.Time("ended_at", p.GetEndedAt())
+		x, err = grpc.TimeFromProto("ended_at", p.GetEndedAt())
 		if err != nil {
 			return nil, err
 		}

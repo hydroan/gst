@@ -63,8 +63,8 @@ func (shapeService) GetShape(ctx context.Context, req *GetShapeRequest) (*GetSha
 }
 
 // ShapeToProto encodes Shape values into their message, nil into nil. A
-// value a type cannot write as text (see grpc.TextOf) is an error, which the
-// call answers Internal.
+// value a type cannot write as text (see grpc.TextToProto) is an error,
+// which the call answers Internal.
 func ShapeToProto(m *model.Shape) (*Shape, error) {
 	if m == nil {
 		return nil, nil
@@ -74,15 +74,15 @@ func ShapeToProto(m *model.Shape) (*Shape, error) {
 	p.Id = grpc.UTF8(m.ID)
 	p.CreatedBy = grpc.UTF8(m.CreatedBy)
 	p.UpdatedBy = grpc.UTF8(m.UpdatedBy)
-	p.CreatedAt = grpc.Timestamp(m.CreatedAt)
-	p.UpdatedAt = grpc.Timestamp(m.UpdatedAt)
+	p.CreatedAt = grpc.TimeToProto(m.CreatedAt)
+	p.UpdatedAt = grpc.TimeToProto(m.UpdatedAt)
 	if !time.Time(m.Date).IsZero() {
-		p.Date = grpc.DatePB(m.Date)
+		p.Date = grpc.DateToProto(m.Date)
 	}
-	p.Clock = grpc.TimeOfDayPB(m.Clock)
+	p.Clock = grpc.TimeOfDayToProto(m.Clock)
 	data := m.Doc.Data()
 	p.Doc = data
-	p.Attrs = grpc.Struct(m.Attrs)
+	p.Attrs = grpc.MapToProto(m.Attrs)
 	data2 := m.Options.Data()
 	p.Options, err = ShapeOptionsToProto(&data2)
 	if err != nil {
@@ -147,7 +147,7 @@ func ShapeToProto(m *model.Shape) (*Shape, error) {
 	if m.When != nil {
 		p.When = timestamppb.New(*m.When)
 	}
-	p.Any = grpc.Value(m.Any)
+	p.Any = grpc.ValueToProto(m.Any)
 	p.Blob = m.Blob
 	if m.Names != nil {
 		p.Names = make([]string, len(m.Names))
@@ -209,7 +209,7 @@ func ShapeToProto(m *model.Shape) (*Shape, error) {
 		p.Extra = data3
 	}
 	if m.Meta != nil {
-		p.Meta = grpc.Struct(*m.Meta)
+		p.Meta = grpc.MapToProto(*m.Meta)
 	}
 	p.Name = grpc.UTF8(m.Name)
 	p.MetaName = grpc.UTF8(m.ShapeMeta.Name)
@@ -272,26 +272,26 @@ func ShapeToProto(m *model.Shape) (*Shape, error) {
 	if m.Amounts != nil {
 		p.Amounts = make([]string, len(m.Amounts))
 		for i, v := range m.Amounts {
-			p.Amounts[i] = grpc.NumberText(v)
+			p.Amounts[i] = grpc.NumberToProto(v)
 		}
 	}
 	p.Pair = make([]string, len(m.Pair))
 	for i, v := range m.Pair {
-		p.Pair[i] = grpc.NumberText(v)
+		p.Pair[i] = grpc.NumberToProto(v)
 	}
 	if m.Rates != nil {
 		p.Rates = make(map[string]string, len(m.Rates))
 		for k, v := range m.Rates {
-			p.Rates[grpc.UTF8(k)] = grpc.NumberText(v)
+			p.Rates[grpc.UTF8(k)] = grpc.NumberToProto(v)
 		}
 	}
 	if m.Due != nil {
-		p.Due = grpc.DatePB(*m.Due)
+		p.Due = grpc.DateToProto(*m.Due)
 	}
 	if m.Days != nil {
 		p.Days = make([]*date.Date, len(m.Days))
 		for i, v := range m.Days {
-			p.Days[i] = grpc.DatePB(v)
+			p.Days[i] = grpc.DateToProto(v)
 		}
 	}
 	return p, nil
@@ -311,19 +311,19 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 	m.ID = p.GetId()
 	m.CreatedBy = p.GetCreatedBy()
 	m.UpdatedBy = p.GetUpdatedBy()
-	m.CreatedAt, err = grpc.Time("created_at", p.GetCreatedAt())
+	m.CreatedAt, err = grpc.TimeFromProto("created_at", p.GetCreatedAt())
 	if err != nil {
 		return nil, err
 	}
-	m.UpdatedAt, err = grpc.Time("updated_at", p.GetUpdatedAt())
+	m.UpdatedAt, err = grpc.TimeFromProto("updated_at", p.GetUpdatedAt())
 	if err != nil {
 		return nil, err
 	}
-	m.Date, err = grpc.Date("date", p.GetDate())
+	m.Date, err = grpc.DateFromProto("date", p.GetDate())
 	if err != nil {
 		return nil, err
 	}
-	m.Clock, err = grpc.TimeOfDay("clock", p.GetClock())
+	m.Clock, err = grpc.TimeOfDayFromProto("clock", p.GetClock())
 	if err != nil {
 		return nil, err
 	}
@@ -333,7 +333,7 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 		return nil, err
 	}
 	m.Doc = datatypes.NewJSON(data)
-	m.Attrs = grpc.Map(p.GetAttrs())
+	m.Attrs = grpc.MapFromProto(p.GetAttrs())
 	var data2 model.ShapeOptions
 	if v := p.GetOptions(); v != nil {
 		var x *model.ShapeOptions
@@ -353,7 +353,7 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 		m.Audit = *x
 	}
 	if s := p.GetAmount(); s != "" {
-		m.Amount, err = grpc.Number("amount", s)
+		m.Amount, err = grpc.NumberFromProto("amount", s)
 		if err != nil {
 			return nil, err
 		}
@@ -428,7 +428,7 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 	}
 	if p.GetWhen() != nil {
 		var x time.Time
-		x, err = grpc.Time("when", p.GetWhen())
+		x, err = grpc.TimeFromProto("when", p.GetWhen())
 		if err != nil {
 			return nil, err
 		}
@@ -501,7 +501,7 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 	}
 	if p.GetMeta() != nil {
 		var x datatypes.JSONMap
-		x = grpc.Map(p.GetMeta())
+		x = grpc.MapFromProto(p.GetMeta())
 		m.Meta = &x
 	}
 	m.Name = p.GetName()
@@ -569,7 +569,7 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 	}
 	if p.Price != nil {
 		var x json.Number
-		x, err = grpc.Number("price", *p.Price)
+		x, err = grpc.NumberFromProto("price", *p.Price)
 		if err != nil {
 			return nil, err
 		}
@@ -578,7 +578,7 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 	if p.GetStamps() != nil {
 		m.Stamps = make([]time.Time, len(p.GetStamps()))
 		for i, v := range p.GetStamps() {
-			m.Stamps[i], err = grpc.Time(grpc.Element("stamps", i), v)
+			m.Stamps[i], err = grpc.TimeFromProto(grpc.Element("stamps", i), v)
 			if err != nil {
 				return nil, err
 			}
@@ -622,14 +622,14 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 	if p.GetAmounts() != nil {
 		m.Amounts = make([]json.Number, len(p.GetAmounts()))
 		for i, v := range p.GetAmounts() {
-			m.Amounts[i], err = grpc.Number(grpc.Element("amounts", i), v)
+			m.Amounts[i], err = grpc.NumberFromProto(grpc.Element("amounts", i), v)
 			if err != nil {
 				return nil, err
 			}
 		}
 	}
 	for i := range min(len(p.GetPair()), len(m.Pair)) {
-		m.Pair[i], err = grpc.Number(grpc.Element("pair", i), p.GetPair()[i])
+		m.Pair[i], err = grpc.NumberFromProto(grpc.Element("pair", i), p.GetPair()[i])
 		if err != nil {
 			return nil, err
 		}
@@ -637,7 +637,7 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 	if p.GetRates() != nil {
 		m.Rates = make(map[string]json.Number, len(p.GetRates()))
 		for k, v := range p.GetRates() {
-			m.Rates[k], err = grpc.Number(grpc.Entry("rates", k), v)
+			m.Rates[k], err = grpc.NumberFromProto(grpc.Entry("rates", k), v)
 			if err != nil {
 				return nil, err
 			}
@@ -645,7 +645,7 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 	}
 	if p.GetDue() != nil {
 		var x datatypes.Date
-		x, err = grpc.Date("due", p.GetDue())
+		x, err = grpc.DateFromProto("due", p.GetDue())
 		if err != nil {
 			return nil, err
 		}
@@ -654,7 +654,7 @@ func ShapeFromProto(p *Shape) (*model.Shape, error) {
 	if p.GetDays() != nil {
 		m.Days = make([]datatypes.Date, len(p.GetDays()))
 		for i, v := range p.GetDays() {
-			m.Days[i], err = grpc.Date(grpc.Element("days", i), v)
+			m.Days[i], err = grpc.DateFromProto(grpc.Element("days", i), v)
 			if err != nil {
 				return nil, err
 			}
@@ -711,7 +711,7 @@ func ShapeAuditFromProto(p *ShapeAudit) (*model.ShapeAudit, error) {
 	var err error
 	if v := p.GetRemoved(); v != nil {
 		var at time.Time
-		at, err = grpc.Time("removed", v)
+		at, err = grpc.TimeFromProto("removed", v)
 		if err != nil {
 			return nil, err
 		}
