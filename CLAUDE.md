@@ -95,7 +95,7 @@ gst 是强约定框架（Apple 风格），不是自由框架（Windows 风格�
 - 只给项目用、或主要给项目用的能力，是顶层公开包，实现就写在包里，如 `bootstrap`、`database`、`controller`、`cronjob`、`leader`。
 - 只有框架自己用的包一律放 `internal`：项目开发者看不到，就不必理解这些细节。
 - 项目和框架都大量使用的能力，实现下沉到与公开包同名的 internal 包，再由顶层包做 alias 转发，只转发项目用得到的那部分，框架私用的符号不暴露。下沉只为把框架要用、却不该让项目看到的导出符号挡在公开面之外；它不是新包的默认形态：包里没有这样的符号、也指不出哪处代码已经需要它，就按第一条把实现写在公开包里，不为转发拆成两个包。转发是唯一形状，符号只是空函数、常量或类型也一样，公开包自己不声明任何东西：根包 `gst` 转发 `internal/gst`，`datatypes` 转发 `internal/datatypes`，`model` 转发 `internal/model` 与 `internal/modelschema`，`service` 转发 `internal/service` 与 `internal/apiaction`，`sse` 转发 `internal/sse`，`router` 转发 `internal/router` 与 `internal/apiaction` 的 `APIPath`，`middleware` 转发 `internal/middleware`，`dsl` 转发 `internal/dsl`，`tenant` 转发 `internal/tenant`，`i18n` 转发 `internal/i18n`，`apidoc` 转发 `internal/apidoc`，`tracing` 转发 `internal/tracing`，`logger` 转发 `internal/logger`。`grpc` 是混合形态：生成代码和项目用到的调用函数、拦截器与调用者类型转发 `internal/controller`、`internal/grpcserver`，只有生成代码用的转换帮手（Narrow、UTF8、Value 等）按第一条实现就写在包里。
-- middleware 与 interceptor 是例外：中间件和拦截器大多是给项目用的，所以这两个包按谁挂载分家，而不是像 router、dsl 那样全部在 internal 实现、公开包只转发。框架内建链上的中间件与拦截器是框架逻辑，只有它们算核心，放 internal/middleware 与 internal/grpcserver，由 internal/router、internal/grpcserver 装配；项目经 Register、RegisterAuth 自己挂的（如 Timeout、JwtAuth）是项目能力，同模块一样是业务侧，实现直接写在公开包里，不进 internal，也不得改动内建链与监听器的逻辑；随 gg module copy 复制的中间件同样在公开包，只引用公开包。公开包对 Register、RegisterAuth 这类挂载入口只做转发。框架自己构建、交给项目挂载的中间件（如 CircuitBreaker）实现在 internal/middleware，公开包只转发它的构造函数。
+- middleware 与 interceptor 是例外：中间件和拦截器大多是给项目用的，所以这两个包按谁挂载分家，而不是像 router、dsl 那样全部在 internal 实现、公开包只转发。框架内建链上的中间件与拦截器是框架逻辑，只有它们算核心，放 internal/middleware 与 internal/grpcserver，由 internal/router、internal/grpcserver 装配；项目经 Register、RegisterAuth 自己挂的（如 Timeout、JWTAuth）是项目能力，同模块一样是业务侧，实现直接写在公开包里，不进 internal，也不得改动内建链与监听器的逻辑；随 gg module copy 复制的中间件同样在公开包，只引用公开包。公开包对 Register、RegisterAuth 这类挂载入口只做转发。框架自己构建、交给项目挂载的中间件（如 CircuitBreaker）实现在 internal/middleware，公开包只转发它的构造函数。
 
 引用方向随之固定：internal 包（含测试）需要这些能力时直接引用对应的 internal 包，禁止反向 import 公开包，避免 internal → 公开 → internal 的依赖绕行和潜在 import 环；框架自身代码（含公开包）使用 internal 能力时同样直接引用 internal 实现包，公开转发包只服务业务项目。如果所需符号只存在于公开的转发包，把实现下沉到它转发的 internal 包、公开包照旧只转发，而不是让 internal 反向引用；实现就写在公开包里的（第一条），internal 包直接引用它，不为此另建同名 internal 包。
 
@@ -136,7 +136,7 @@ gst 是强约定框架（Apple 风格），不是自由框架（Windows 风格�
 
 如果我让你给出 git commit 建议，你给出的 git commit 建议必须符合如下规则：
 
-- 只查看暂存区代码变更，不要根据未暂存内容猜测；暂存区为空时直接说明没有可用变更，让用户先暂存。
+- 只查看暂存区代码变更，不要根据未暂存内容猜测；没暂存齐时怎么等，见全局规则「Git」一节。
 - 拆分粒度必须是整个文件，禁止按同一文件内的 hunk 拆分。
 - 每个 commit 用一条可直接复制执行的 `git commit -m "..." -- <文件...>` 命令给出文件归属，不要罗列裸文件名列表——裸列表没法直接照抄执行。多个 commit 就给多条独立命令，顺序即建议的提交顺序。
 - commit message 必须符合 conventional commit 规范、用英文，title 和 body 写在同一条命令里，禁止添加 `Co-Authored-By` 等联合开发者字样（项目由用户独立开发）。
