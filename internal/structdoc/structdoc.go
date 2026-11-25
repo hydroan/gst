@@ -41,16 +41,6 @@ var enumBaseKinds = map[string]bool{
 	"uint": true, "uint8": true, "uint16": true, "uint32": true, "uint64": true,
 }
 
-// ParseFile reads filename and returns the doc comments of every exported
-// struct declared in it, keyed by struct type name.
-func ParseFile(filename string) (map[string]apidoc.StructDoc, error) {
-	docs, err := ParseFileDocs(filename)
-	if err != nil {
-		return nil, err
-	}
-	return docs.Structs, nil
-}
-
 // ParseFileDocs reads filename and returns the exported struct and enum doc
 // comments declared in it.
 func ParseFileDocs(filename string) (Docs, error) {
@@ -59,20 +49,6 @@ func ParseFileDocs(filename string) (Docs, error) {
 		return Docs{}, err
 	}
 	return ParseSourceDocs(filename, src)
-}
-
-// ParseSource parses Go source code and returns the doc comments of every
-// exported struct declared in it, keyed by struct type name. Structs without
-// any struct or field comment are omitted. The filename is only used for
-// error positions.
-//
-//gst:api the counterpart of ParseFile for source held in memory
-func ParseSource(filename string, src []byte) (map[string]apidoc.StructDoc, error) {
-	docs, err := ParseSourceDocs(filename, src)
-	if err != nil {
-		return nil, err
-	}
-	return docs.Structs, nil
 }
 
 // ParseSourceDocs parses Go source code and returns the exported struct and

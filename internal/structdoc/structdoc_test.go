@@ -49,11 +49,12 @@ type writeState struct {
 }
 `
 
-func TestParseSource(t *testing.T) {
-	docs, err := structdoc.ParseSource("demo.go", []byte(testSource))
+func TestParseSourceDocsStructs(t *testing.T) {
+	parsed, err := structdoc.ParseSourceDocs("demo.go", []byte(testSource))
 	if err != nil {
-		t.Fatalf("ParseSource() error = %v", err)
+		t.Fatalf("ParseSourceDocs() error = %v", err)
 	}
+	docs := parsed.Structs
 
 	user, ok := docs["User"]
 	if !ok {
@@ -280,8 +281,8 @@ func TestExtractCommentTextLeavesOutDirectives(t *testing.T) {
 	}
 }
 
-func TestParseSourceInvalid(t *testing.T) {
-	if _, err := structdoc.ParseSource("bad.go", []byte("not go source")); err == nil {
-		t.Fatal("ParseSource() error = nil, want parse error")
+func TestParseSourceDocsInvalid(t *testing.T) {
+	if _, err := structdoc.ParseSourceDocs("bad.go", []byte("not go source")); err == nil {
+		t.Fatal("ParseSourceDocs() error = nil, want parse error")
 	}
 }
