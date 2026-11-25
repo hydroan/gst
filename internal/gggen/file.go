@@ -250,7 +250,7 @@ func BuildRouterFile(modulePath, pkgName, gstModelPkg string, aliases map[string
 	})
 
 	initDecl := &ast.FuncDecl{
-		Name: ast.NewIdent(ggconst.FuncInit2),
+		Name: ast.NewIdent(ggconst.FuncExportedInit),
 		Type: &ast.FuncType{
 			TypeParams: nil,
 			Params:     nil,
@@ -390,7 +390,7 @@ func BuildMainFile(projectName string, extraDirs ...string) (string, error) {
 								Args: []ast.Expr{
 									&ast.SelectorExpr{
 										X:   ast.NewIdent(ggconst.PkgRouter),
-										Sel: ast.NewIdent(ggconst.FuncInit2),
+										Sel: ast.NewIdent(ggconst.FuncExportedInit),
 									},
 								},
 							},

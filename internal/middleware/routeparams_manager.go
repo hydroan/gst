@@ -8,10 +8,11 @@ import (
 	"github.com/hydroan/gst/internal/requestctx"
 )
 
-// routeParams is a middleware to get route parameters
+// routeParams returns the middleware that stamps on the gin context the
+// names of the path parameters of the route the request matched.
 func routeParams() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Set(requestctx.KeyParams, RouteManager.Get(c.FullPath()))
+		c.Set(requestctx.KeyParams, RouteParamNames.Get(c.FullPath()))
 	}
 }
 
@@ -28,6 +29,8 @@ func NewRouteParamsManager() *RouteParamsManager {
 	}
 }
 
+// Add records the names of the path parameters of path, a route pattern
+// such as /records/:id.
 func (rpm *RouteParamsManager) Add(path string) {
 	path = strings.TrimSpace(path)
 	if len(path) == 0 {
@@ -38,13 +41,15 @@ func (rpm *RouteParamsManager) Add(path string) {
 	rpm.mu.Unlock()
 }
 
+// Get returns the parameter names Add recorded for path, and an empty slice
+// for a path that has none.
 func (rpm *RouteParamsManager) Get(path string) []string {
 	rpm.mu.RLock()
 	defer rpm.mu.RUnlock()
 	val := rpm.paramsMap[path]
 	if len(val) == 0 {
-		// NOTE: {}string <nil> not deep equal to []string{}
-		// map[key] returns {}string <nil> not []string{}
+		// A missing key reads as a nil slice, which is not deeply equal to
+		// an empty one, so a path with no parameters answers []string{}.
 		return []string{}
 	}
 	return val

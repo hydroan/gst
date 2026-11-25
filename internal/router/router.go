@@ -308,7 +308,7 @@ func register[M gst.Model, REQ gst.Request, RSP gst.Response](router *gin.Router
 			listed = apiaction.MethodStream
 		}
 		registerRoute(endpoint, listed, authRequired)
-		middleware.RouteManager.Add(endpoint)
+		middleware.RouteParamNames.Add(endpoint)
 		openapigen.Set[M, REQ, RSP](endpoint, authRequired, phase)
 	}
 

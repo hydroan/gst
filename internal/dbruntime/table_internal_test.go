@@ -418,7 +418,7 @@ func TestWaitReturnsOnceTheQueueDrains(t *testing.T) {
 	require.Equal(t, 1, model.TablesPending())
 
 	returned := make(chan error, 1)
-	go func() { returned <- Wait() }()
+	go func() { returned <- WaitTables() }()
 
 	select {
 	case err := <-returned:
@@ -459,7 +459,7 @@ func TestWaitReportsATableThePreparationCouldNotGet(t *testing.T) {
 	<-model.TableChan
 	prepareTable(db, &undeclaredRecord{})
 
-	err := Wait()
+	err := WaitTables()
 	require.ErrorContains(t, err, "failed to prepare table")
 	require.ErrorContains(t, err, "must declare an explicit table name")
 }

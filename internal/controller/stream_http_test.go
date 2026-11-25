@@ -422,12 +422,12 @@ func streamServer(t *testing.T, route string, chain ...gin.HandlerFunc) (string,
 	gin.SetMode(gin.TestMode)
 
 	pattern := "/api/boxes/:box/" + route
-	middleware.RouteManager.Add(pattern)
+	middleware.RouteParamNames.Add(pattern)
 	closeCodes := make(chan int, 8)
 	engine := gin.New()
 	engine.Use(chain...)
 	engine.GET(pattern, func(c *gin.Context) {
-		c.Set(requestctx.KeyParams, middleware.RouteManager.Get(c.FullPath()))
+		c.Set(requestctx.KeyParams, middleware.RouteParamNames.Get(c.FullPath()))
 		c.Set(requestctx.KeyUsername, "alice")
 		c.Set(requestctx.KeyUserID, "u-1")
 		// Deferred, so that it is read after a handler that panicked too.

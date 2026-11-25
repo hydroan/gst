@@ -22,8 +22,8 @@ import (
 )
 
 var (
-	cb           *gobreaker.CircuitBreaker
-	RouteManager *RouteParamsManager
+	cb              *gobreaker.CircuitBreaker
+	RouteParamNames *RouteParamsManager
 
 	middlewareMu       sync.Mutex
 	commonMiddlewares  []gin.HandlerFunc
@@ -154,7 +154,7 @@ func Init() (err error) {
 	)
 
 	// Init route params manager
-	RouteManager = NewRouteParamsManager()
+	RouteParamNames = NewRouteParamsManager()
 
 	return nil
 }

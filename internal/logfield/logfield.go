@@ -151,11 +151,11 @@ type duration time.Duration
 
 func (d duration) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	enc.AddInt64(KeyDuration, int64(d))
-	enc.AddString(KeyDurationHuman, FormatDurationSmart(time.Duration(d)))
+	enc.AddString(KeyDurationHuman, FormatDuration(time.Duration(d)))
 	return nil
 }
 
-// FormatDurationSmart formats a time.Duration into a string, picking the unit
+// FormatDuration formats a time.Duration into a string, picking the unit
 // that keeps the value readable and printing two digits after the decimal
 // point:
 //   - Less than 1µs: nanoseconds (e.g., "900ns").
@@ -169,7 +169,7 @@ func (d duration) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 // exist.
 //
 // Negative durations are supported and formatted with a '-' sign.
-func FormatDurationSmart(d time.Duration) string {
+func FormatDuration(d time.Duration) string {
 	const format = "%.2f%s"
 
 	ns := d.Nanoseconds()

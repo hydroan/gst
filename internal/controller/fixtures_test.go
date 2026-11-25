@@ -608,14 +608,14 @@ func serveAs(ctx context.Context, t *testing.T, method, pattern string, handler 
 
 	// Registered routes read their id through the route parameter names
 	// the framework's route middleware sets, as router.Register records them.
-	middleware.RouteManager.Add(pattern)
+	middleware.RouteParamNames.Add(pattern)
 	engine := gin.New()
 	// The engine takes the stance the router takes, so a forwarded address
 	// is believed from the same peers the gRPC line believes it from.
 	require.NoError(t, requestctx.ApplyTrustedProxies(engine, config.App.Server.TrustedProxies))
 	engine.Use(chain...)
 	engine.Handle(method, pattern, func(c *gin.Context) {
-		c.Set(requestctx.KeyParams, middleware.RouteManager.Get(c.FullPath()))
+		c.Set(requestctx.KeyParams, middleware.RouteParamNames.Get(c.FullPath()))
 		if username != "" {
 			c.Set(requestctx.KeyUsername, username)
 			c.Set(requestctx.KeyUserID, "u-1")

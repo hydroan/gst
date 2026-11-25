@@ -512,7 +512,7 @@ func GenerateServiceTestMain(modulePath, servicePkgName string, extraDirs ...str
 		Elts: []ast.Expr{
 			keyValue("Database", sel(ident("config"), "DBSqlite"), databasePos),
 			keyValue("Redis", ident("false"), redisPos),
-			keyValue("Routes", sel(ident(ggconst.PkgRouter), ggconst.FuncInit2), routesPos),
+			keyValue("Routes", sel(ident(ggconst.PkgRouter), ggconst.FuncExportedInit), routesPos),
 			// The function literal keeps its one-line body when its header
 			// is positioned on the line of its key.
 			keyValue("Seed", &ast.FuncLit{

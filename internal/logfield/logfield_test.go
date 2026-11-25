@@ -81,7 +81,7 @@ func TestDurationRendersTheFieldPair(t *testing.T) {
 	}
 }
 
-func TestFormatDurationSmart(t *testing.T) {
+func TestFormatDuration(t *testing.T) {
 	tests := []struct {
 		input    time.Duration
 		expected string
@@ -118,9 +118,9 @@ func TestFormatDurationSmart(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got := logfield.FormatDurationSmart(tc.input)
+		got := logfield.FormatDuration(tc.input)
 		if got != tc.expected {
-			t.Errorf("FormatDurationSmart(%v) = %v; want %v", tc.input, got, tc.expected)
+			t.Errorf("FormatDuration(%v) = %v; want %v", tc.input, got, tc.expected)
 		}
 	}
 }

@@ -20,12 +20,12 @@ import (
 )
 
 // tablePreparationStarted marks that InitDatabase has started the goroutine
-// that prepares tables, so a second call does not start a second one and Wait
-// can tell a queue being drained from one nothing is draining.
+// that prepares tables, so a second call does not start a second one and
+// WaitTables can tell a queue being drained from one nothing is draining.
 var tablePreparationStarted atomic.Int32
 
 // prepareTable creates the table backing one queued model in the default
-// database, and reports the model done only once the table is there. Wait
+// database, and reports the model done only once the table is there. WaitTables
 // counts on that ordering: a model still counts as pending for the whole of
 // ensureTable, not just for the time it sits on the queue.
 func prepareTable(db *gorm.DB, m gst.Model) {
@@ -54,7 +54,7 @@ func prepareTable(db *gorm.DB, m gst.Model) {
 		// its own, where a panic ends the process where it stands — the
 		// buffered log lines never reach the file, the exit code is the
 		// runtime's, and the entries already written can read as a start that
-		// went fine. Wait hands the failure to the caller, which leaves
+		// went fine. WaitTables hands the failure to the caller, which leaves
 		// through the one exit every other startup failure leaves through.
 		recordPrepareFailure(errors.Wrapf(err, "failed to prepare table(%s)", typ.String()))
 		return
@@ -62,7 +62,7 @@ func prepareTable(db *gorm.DB, m gst.Model) {
 	zap.S().Infow("database table ready", "model", typ.String(), logfield.Duration(time.Since(begin)))
 }
 
-// prepareFailure is the first failure the preparation met, the one Wait
+// prepareFailure is the first failure the preparation met, the one WaitTables
 // reports. Later ones are not collected: the first one already ends the
 // start, and the tables behind it were never going to be prepared.
 var prepareFailure struct {
@@ -204,14 +204,14 @@ func migrateTable(handler *gorm.DB, m gst.Model, tableName string) error {
 	})
 }
 
-// tableProgressLogInterval is how often Wait reports the remaining backlog. It
-// doubles as the upper bound on how long Wait sleeps in one go, so a lost or
-// coalesced wakeup delays the next look at the pending count by this much
-// rather than forever.
+// tableProgressLogInterval is how often WaitTables reports the remaining
+// backlog. It doubles as the upper bound on how long WaitTables sleeps in one
+// go, so a lost or coalesced wakeup delays the next look at the pending count
+// by this much rather than forever.
 const tableProgressLogInterval = 500 * time.Millisecond
 
-// Wait blocks until every model registered so far has its table, waking on
-// each table that finishes and reporting the remaining backlog on a fixed
+// WaitTables blocks until every model registered so far has its table, waking
+// on each table that finishes and reporting the remaining backlog on a fixed
 // cadence. It reads the pending count rather than the registration queue: a
 // model leaves that queue when its preparation starts, not when its table
 // exists.
@@ -224,12 +224,12 @@ const tableProgressLogInterval = 500 * time.Millisecond
 // Called before InitDatabase it returns straight away with a warning, because
 // nothing is preparing tables yet and there is no end to wait for.
 //
-// Wait only observes work already queued. If another subsystem, such as module
-// registration, can still call model.Register, drain that subsystem first and
-// then call Wait so its tables are visible.
-func Wait() error {
+// WaitTables only observes work already queued. If another subsystem, such as
+// module registration, can still call model.Register, drain that subsystem
+// first and then call WaitTables so its tables are visible.
+func WaitTables() error {
 	if tablePreparationStarted.Load() == 0 {
-		zap.S().Warnw("Wait() called before InitDatabase(), returning immediately",
+		zap.S().Warnw("WaitTables() called before InitDatabase(), returning immediately",
 			"reason", "processing goroutine not started")
 		return nil
 	}

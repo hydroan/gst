@@ -100,7 +100,7 @@ func Bootstrap() error {
 	warnUnlinkedProviders()
 	// First database drain: create the tables registered before the clients
 	// and modules initialize, typically by model package init functions.
-	if err := dbruntime.Wait(); err != nil {
+	if err := dbruntime.WaitTables(); err != nil {
 		return err
 	}
 
@@ -144,7 +144,7 @@ func Bootstrap() error {
 	// Second database drain: create the tables modules added during
 	// Bootstrap. InitRouterAndModules has waited for their registration, so
 	// the drain sees every entry they queued.
-	if err := dbruntime.Wait(); err != nil {
+	if err := dbruntime.WaitTables(); err != nil {
 		return err
 	}
 
@@ -229,12 +229,12 @@ func Run() (err error) {
 	// still open, and the providers close after their last user.
 	registerCleanup(stopLifecycle)
 
-	// Final pre-server drain for modules registered after Bootstrap but
-	// before Run. Keep module.Wait before dbruntime.Wait: late modules may
-	// enqueue tables, and dbruntime.Wait can only process entries that
+	// Final pre-server drain for modules registered after Bootstrap but before
+	// Run. Keep module.Wait before dbruntime.WaitTables: late modules may
+	// enqueue tables, and dbruntime.WaitTables can only process entries that
 	// already exist.
 	module.Wait()
-	if err = dbruntime.Wait(); err != nil {
+	if err = dbruntime.WaitTables(); err != nil {
 		return err
 	}
 

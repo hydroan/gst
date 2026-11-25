@@ -147,14 +147,14 @@ const (
 
 // Names of the functions many packages declare, one constant a name
 // whichever package declares it: FuncInit is Go's package initializer and
-// FuncInit2 the Init a package exports, the project's router.Init among
+// FuncExportedInit the Init a package exports, the project's router.Init among
 // them.
 const (
-	FuncInit     = "init"
-	FuncMain     = "main"
-	FuncInit2    = "Init"
-	FuncRegister = "Register"
-	FuncTestMain = "TestMain"
+	FuncInit         = "init"
+	FuncMain         = "main"
+	FuncExportedInit = "Init"
+	FuncRegister     = "Register"
+	FuncTestMain     = "TestMain"
 )
 
 // Cache file
