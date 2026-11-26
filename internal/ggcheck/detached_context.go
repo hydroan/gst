@@ -19,30 +19,30 @@ import (
 // context handed down to it — the write's for a model hook, a request's, a
 // round's, a tenure's, a lock's, the process's for a component, the start's
 // for a routes-ready hook — and must pass that context on to the database.
-var detachedContextDirs = []string{ggconst.DirModel, ggconst.DirService, ggconst.DirDAO, ggconst.DirCronjob, ggconst.DirLeader, ggconst.DirLock, ggconst.DirComponent, ggconst.DirRouter}
+var detachedContextDirs = []string{ggconst.DirModel, ggconst.DirService, ggconst.DirDAO, ggconst.DirMiddleware, ggconst.DirInterceptor, ggconst.DirCronjob, ggconst.DirLeader, ggconst.DirLock, ggconst.DirComponent, ggconst.DirRouter}
 
 // DetachedContext keeps context.Background() and context.TODO() out of the
 // framework database and dao calls of project code.
 var DetachedContext = Check{
 	Name: "Detached context",
-	Rule: "in model, service, dao, cronjob, leader, lock, component and router code, the context passed to a framework database function or to a dao function must not be context.Background() or context.TODO(): the context handed down — the write's for a model hook, a request's, a round's, a tenure's, a lock's, the process's, the start's — carries the identity, the transaction and the lease the work runs under; startup seeding runs in the router package's routes-ready hooks on the context the hook receives",
+	Rule: "in model, service, dao, middleware, interceptor, cronjob, leader, lock, component and router code, the context passed to a framework database function or to a dao function must not be context.Background() or context.TODO(): the context handed down — the write's for a model hook, a request's, a round's, a tenure's, a lock's, the process's, the start's — carries the identity, the transaction and the lease the work runs under; startup seeding runs in the router package's routes-ready hooks on the context the hook receives",
 	run:  checkDetachedContext,
 }
 
-// checkDetachedContext checks that in model, service, dao, cronjob, leader,
-// lock, component and router code, the context passed to a framework
-// database entry point or to a function of the project's dao packages is
-// never context.Background() or context.TODO() — written at the call, held
-// in a local variable first, or wrapped in a context derivation such as
-// context.WithTimeout. The context handed down to that code carries the
-// request's or the round's identity for every log line and statement, the
-// transaction the work may already be in, and the lease behind cluster-once
-// work; a detached context loses all three, so a transaction opened on it
-// neither joins the enclosing one nor stops when the lease is lost. A model
-// hook runs inside the write's transaction on the context it receives: a
-// database access on a detached context there needs a second connection,
-// which on SQLite waits for the one the transaction holds, and the
-// transaction waits for the hook. Startup seeding runs in the router
+// checkDetachedContext checks that in model, service, dao, middleware,
+// interceptor, cronjob, leader, lock, component and router code, the context
+// passed to a framework database entry point or to a function of the
+// project's dao packages is never context.Background() or context.TODO() —
+// written at the call, held in a local variable first, or wrapped in a
+// context derivation such as context.WithTimeout. The context handed down to
+// that code carries the request's or the round's identity for every log line
+// and statement, the transaction the work may already be in, and the lease
+// behind cluster-once work; a detached context loses all three, so a
+// transaction opened on it neither joins the enclosing one nor stops when the
+// lease is lost. A model hook runs inside the write's transaction on the
+// context it receives: a database access on a detached context there needs a
+// second connection, which on SQLite waits for the one the transaction holds,
+// and the transaction waits for the hook. Startup seeding runs in the router
 // package's routes-ready hooks, on the context the hook receives, and is
 // checked like the rest.
 //
@@ -57,7 +57,7 @@ var DetachedContext = Check{
 // under a dot is reported as such: its calls cannot be told apart.
 //
 // Code of copyable framework modules under the service directory is skipped:
-// it is checked inside the framework.
+// it is tested inside the framework repository.
 func checkDetachedContext(ignore gghelper.ProjectIgnore) []string {
 	modulePath, err := gghelper.ModulePath(".")
 	if err != nil {

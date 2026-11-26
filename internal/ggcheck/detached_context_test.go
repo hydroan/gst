@@ -8,18 +8,17 @@ import (
 	"github.com/hydroan/gst/internal/ggcheck"
 )
 
-// TestDetachedContextFlagsBackgroundAtDatabaseEntry pins the rule's
-// reach: a detached context handed to a framework database function or a
-// dao function is flagged in the directories that run under a context, a
-// model hook's among them —
-// written at the call, held in a variable first, derived through the context
-// package, under dot imports, and through a dao package whose name differs
-// from its directory's — a generic instantiation included, while the context
-// handed down passes, a variable that also receives a real context passes,
-// a closure's variable does not shadow the enclosing function's parameter,
-// copied framework modules are the framework's to check, ignored directories
-// are not read, and startup seeding in a module package stays outside the
-// rule.
+// TestDetachedContextFlagsBackgroundAtDatabaseEntry pins the rule's reach: a
+// detached context handed to a framework database function or a dao function
+// is flagged in the directories that run under a context, a model hook's, a
+// middleware's and an interceptor's among them — written at the call, held in
+// a variable first, derived through the context package, under dot imports,
+// and through a dao package whose name differs from its directory's — a
+// generic instantiation included, while the context handed down passes, a
+// variable that also receives a real context passes, a closure's variable
+// does not shadow the enclosing function's parameter, copied framework
+// modules are the framework's to check, ignored directories are not read, and
+// startup seeding in a module package stays outside the rule.
 func TestDetachedContextFlagsBackgroundAtDatabaseEntry(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
@@ -330,12 +329,54 @@ func poll(ctx context.Context) error {
 }
 `)
 
+	// A middleware and an interceptor run on the request's context: making
+	// their own is flagged, passing the request's on is not.
+	writeCheckFile(t, filepath.Join(projectDir, "middleware", "visit.go"), `package middleware
+
+import (
+	"context"
+
+	"github.com/gin-gonic/gin"
+	"tmpapp/dao"
+)
+
+func visit(c *gin.Context) {
+	if _, err := dao.Records(c.Request.Context()); err != nil {
+		c.Abort()
+		return
+	}
+	if _, err := dao.Records(context.Background()); err != nil {
+		c.Abort()
+	}
+}
+`)
+	writeCheckFile(t, filepath.Join(projectDir, "interceptor", "visit.go"), `package interceptor
+
+import (
+	"context"
+
+	"tmpapp/dao"
+)
+
+func visit(ctx context.Context) (context.Context, error) {
+	if _, err := dao.Records(ctx); err != nil {
+		return nil, err
+	}
+	if _, err := dao.Records(context.TODO()); err != nil {
+		return nil, err
+	}
+	return ctx, nil
+}
+`)
+
 	violations := runCheck(ggcheck.DetachedContext)
 
-	if len(violations) != 14 {
-		t.Fatalf("expected fourteen violations, got %#v", violations)
+	if len(violations) != 16 {
+		t.Fatalf("expected sixteen violations, got %#v", violations)
 	}
 	assertViolationContains(t, violations, filepath.Join("model", "audit.go"), ":15: dao.Records receives context.Background()")
+	assertViolationContains(t, violations, filepath.Join("middleware", "visit.go"), ":15: dao.Records receives context.Background()")
+	assertViolationContains(t, violations, filepath.Join("interceptor", "visit.go"), ":13: dao.Records receives context.TODO()")
 	assertViolationContains(t, violations, filepath.Join("router", "init.go"), ":15: dao.Records receives context.Background()")
 	assertViolationContains(t, violations, filepath.Join("component", "consumer.go"), ":10: dao.Records receives context.Background()")
 	assertViolationContains(t, violations, filepath.Join("service", "shadow", "shadow.go"), ":15: database.Transaction receives a context held in ctx")
