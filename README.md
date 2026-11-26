@@ -1246,7 +1246,7 @@ system root、网关头、gRPC、请求之外、工具链。
 `gg check` 会检查依赖边界、model/service 文件边界、命名规范、`json` tag、
 REQ/RSP 命名、业务项目根目录结构、框架字段的列名，以及声明了 `GRPC()` 的 model 的 protobuf
 定义（pb tag、撞名、与 `pb/` 下已提交契约的兼容）和它们的 service 有没有调用
-只有 HTTP 才有的 ServiceContext 方法。`gg gen` 生成前也会执行这些检查（protobuf
+只有 HTTP 才有的 ServiceContext 方法或 `sse.Serve`。`gg gen` 生成前也会执行这些检查（protobuf
 定义那条由生成本身完成，不重复跑；索引声明和框架字段列名两条要先编译项目，生成前
 项目未必编得过，不在生成前跑）；检查失败会停止生成。
 

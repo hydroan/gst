@@ -188,7 +188,7 @@ func genServiceMethod6(info *modelsource.Model, modelQualifier string, action *d
 // genServiceMethod7 uses AST to generate the SSE method scaffold. Like the
 // Import scaffold, it returns a literal nil error to keep generated code
 // compliant with the error discipline check; the business fills in
-// the streaming callback through ctx.SSE. For the model User it generates
+// the streaming callback through sse.Serve. For the model User it generates
 //
 //	func (u *Streamer) SSE(ctx *gst.ServiceContext) (err error) {
 //		log := u.WithContext(ctx, ctx.Phase())

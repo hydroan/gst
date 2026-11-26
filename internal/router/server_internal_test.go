@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/sse"
 	"github.com/hydroan/gst/internal/websocket"
@@ -23,12 +24,15 @@ import (
 // stream, and Shutdown returns well within its bound.
 func TestShutdownEndsOpenStreams(t *testing.T) {
 	returned := make(chan error, 1)
-	srv := newServer("", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		returned <- sse.Serve(w, r, func(conn *sse.Conn) error {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.GET("/", func(c *gin.Context) {
+		returned <- sse.Serve(gst.NewServiceContext(c, c.Request.Context(), ""), func(conn *sse.Conn) error {
 			<-conn.Context().Done()
 			return nil
 		})
-	}))
+	})
+	srv := newServer("", engine)
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	served := make(chan error, 1)

@@ -22,7 +22,7 @@ type Streamer struct {
 // keep an idle connection alive on their own.
 func (n *Streamer) SSE(ctx *gst.ServiceContext) error {
 	cfg := config.Get[configx.Notice]()
-	return ctx.SSE(func(conn *sse.Conn) error {
+	return sse.Serve(ctx, func(conn *sse.Conn) error {
 		for i := 1; i <= cfg.Count; i++ {
 			if err := conn.Send(sse.Event{Event: cfg.Event, Data: i}); err != nil {
 				return err

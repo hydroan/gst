@@ -236,6 +236,7 @@ func (a *errDiscAnalysis) collectFile(path string) {
 		db:         goast.ImportedNames(file, gstDatabaseImportPath, "database"),
 		gst:        goast.ImportedNames(file, ggconst.ImportPathGst, ggconst.PkgGst),
 		model:      goast.ImportedNames(file, ggconst.ImportPathModel, ggconst.PkgModel),
+		sse:        goast.ImportedNames(file, gstSSEImportPath, "sse"),
 		projectPkg: map[string]string{},
 	}
 	for _, imp := range file.Imports {
@@ -288,6 +289,7 @@ type errDiscFileCollector struct {
 	db    goast.PackageNames
 	gst   goast.PackageNames
 	model goast.PackageNames
+	sse   goast.PackageNames
 	// projectPkg maps every qualifier of a project package to its directory.
 	projectPkg map[string]string
 }
@@ -801,18 +803,14 @@ func (s *errDiscFuncScope) resolveCall(call *ast.CallExpr, visiting map[varObj]b
 		// package-level meaning of its name, an import included: with
 		// gst := other{} in the body, gst.NewError() is other's
 		// method, not the framework constructor.
-		if obj := declObj(ident); s.declaresLocally(obj) {
-			// ServiceContext.SSE errors are framework-governed: a setup
-			// failure carries a framework-built message, and an error after
-			// the stream opened never reaches the response envelope, so
-			// wrapping the call in gst.NewError adds nothing the client
-			// could see.
-			if s.ctxParams[obj] && fun.Sel.Name == "SSE" {
-				return []errDiscSource{{kind: errDiscSourceNewError}}
-			}
+		if s.declaresLocally(declObj(ident)) {
 			break
 		}
-		if s.file.gst.Refers(fun, "NewError", "NewErrorWithCause") {
+		// The errors of sse.Serve are framework-governed: a setup failure
+		// carries a framework-built message, and an error after the stream
+		// opened never reaches the response envelope, so wrapping the call
+		// in gst.NewError adds nothing the client could see.
+		if s.file.gst.Refers(fun, "NewError", "NewErrorWithCause") || s.file.sse.Refers(fun, "Serve") {
 			return []errDiscSource{{kind: errDiscSourceNewError}}
 		}
 		if s.file.db.Refers(fun, "Transaction") {

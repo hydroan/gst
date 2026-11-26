@@ -157,7 +157,7 @@ import (
 func (c *Creator) send(ctx *gst.ServiceContext) { _ = ctx.Param("id") }
 
 func (s *Streamer) send(ctx *gst.ServiceContext) error {
-	return ctx.SSE(func(conn *sse.Conn) error { return nil })
+	return sse.Serve(ctx, func(conn *sse.Conn) error { return nil })
 }
 `
 	createSending := `package entry
@@ -334,7 +334,7 @@ func writeGRPCCheckProject(t *testing.T, projectDir string) {
 	writeCheckFile(t, filepath.Join(projectDir, "service", "entry", "create.go"), grpcCheckCreate)
 	writeCheckFile(t, filepath.Join(projectDir, "service", "entry", "helper.go"), grpcCheckHelper)
 	// The SSE action of the model is HTTP only, so its service may call
-	// ctx.SSE, and so may a helper only the SSE service reaches: no gRPC
+	// sse.Serve, and so may a helper only the SSE service reaches: no gRPC
 	// call gets there.
 	writeCheckFile(t, filepath.Join(projectDir, "service", "entry", "sse.go"), `package entry
 
@@ -360,7 +360,7 @@ import (
 )
 
 func render(ctx *gst.ServiceContext) error {
-	return ctx.SSE(func(conn *sse.Conn) error { return nil })
+	return sse.Serve(ctx, func(conn *sse.Conn) error { return nil })
 }
 `)
 	writeCheckFile(t, filepath.Join(projectDir, "model", "plain.go"), `package model
@@ -460,6 +460,7 @@ func (s *ItemSealer) Create(ctx *gst.ServiceContext, item *pkg.Item) (*pkg.Item,
 import (
 	"github.com/hydroan/gst"
 	"github.com/hydroan/gst/service"
+	"github.com/hydroan/gst/sse"
 	"tmpapp/model/pkg"
 )
 
@@ -469,6 +470,7 @@ type RecordSealer struct {
 
 func (s *RecordSealer) Create(ctx *gst.ServiceContext, record *pkg.Record) (*pkg.Record, error) {
 	ctx.Data(200, "text/plain", nil)
+	_ = sse.Serve(ctx, func(conn *sse.Conn) error { return nil })
 	return record, nil
 }
 `
@@ -476,7 +478,11 @@ func (s *RecordSealer) Create(ctx *gst.ServiceContext, record *pkg.Record) (*pkg
 
 	violations := runCheck(ggcheck.GRPCServiceContext)
 
-	want := []string{fmt.Sprintf("service/pkg/sealrecord.go:%d: calls ctx.Data, which only HTTP serves; the model Record is served over gRPC as well, so keep its services to what both transports provide", sourceLine(t, sealRecord, "ctx.Data"))}
+	const message = "service/pkg/sealrecord.go:%d: calls %s, which only HTTP serves; the model Record is served over gRPC as well, so keep its services to what both transports provide"
+	want := []string{
+		fmt.Sprintf(message, sourceLine(t, sealRecord, "ctx.Data"), "ctx.Data"),
+		fmt.Sprintf(message, sourceLine(t, sealRecord, "sse.Serve"), "sse.Serve"),
+	}
 	if !slices.Equal(violations, want) {
 		t.Fatalf("violations = %#v, want %#v", violations, want)
 	}

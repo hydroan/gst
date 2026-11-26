@@ -5,8 +5,8 @@ import (
 	"sync/atomic"
 )
 
-// DefaultSubscriberBuffer is the per-subscriber event buffer capacity.
-const DefaultSubscriberBuffer = 64
+// defaultSubscriberBuffer is the per-subscriber event buffer capacity.
+const defaultSubscriberBuffer = 64
 
 // HubOption configures NewHub.
 type HubOption func(*hubOptions)
@@ -15,7 +15,7 @@ type hubOptions struct {
 	subscriberBuffer int
 }
 
-// WithSubscriberBuffer overrides DefaultSubscriberBuffer. The capacity must
+// WithSubscriberBuffer overrides defaultSubscriberBuffer. The capacity must
 // be positive; NewHub panics otherwise, as a non-positive buffer is a
 // construction-time programming error.
 func WithSubscriberBuffer(capacity int) HubOption {
@@ -59,7 +59,7 @@ type hubSubscriber struct {
 
 // NewHub returns a ready Hub. It panics on invalid options.
 func NewHub(opts ...HubOption) *Hub {
-	o := hubOptions{subscriberBuffer: DefaultSubscriberBuffer}
+	o := hubOptions{subscriberBuffer: defaultSubscriberBuffer}
 	for _, opt := range opts {
 		if opt != nil {
 			opt(&o)

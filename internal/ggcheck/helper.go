@@ -286,6 +286,10 @@ func importedNamesOf(filePath, importPath, defaultName string) (goast.PackageNam
 // starts a model-scoped operation chain.
 const gstDatabaseImportPath = ggconst.ImportPathGst + "/database"
 
+// gstSSEImportPath is the framework package whose Serve function opens a
+// Server-Sent Events stream on the response of a service context.
+const gstSSEImportPath = ggconst.ImportPathGst + "/sse"
+
 // gstDatabaseImportNames returns how filePath refers to the framework database
 // package, and whether it imports the package at all. It parses imports only,
 // so files that do not use the package stay cheap to scan.

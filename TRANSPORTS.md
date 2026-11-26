@@ -55,7 +55,7 @@ gst · HTTP 与 gRPC 两条传输线
     <div class="arch-arrow">▼</div>
     <div class="arch-layer stage">
       <div class="arch-layer-title">⑦ service · 业务代码只写一份</div>
-      <div class="arch-box lane shared"><b>service.Base[M, REQ, RSP] 与 Service("name") 的结构体</b><ul><li>标准动作：嵌 <code>service.Base</code>，按需覆盖钩子；自定义动作：<code>Create(ctx, req) (rsp, error)</code> 这类方法。</li><li>流式动作：<code>Stream(ctx, req, stream)</code> 三种签名之一，两条线都调用它：gRPC 的流式 rpc 和 HTTP 的 WebSocket 连接。</li><li>HTTP 独有的动作：SSE 的 <code>SSE(ctx) error</code>、Import 的 <code>Import(ctx, reader)</code>、Export 的 <code>Export(ctx, models…)</code> 只在 HTTP 上被调用。模型声明了 GRPC() 时，这三种动作以外的 service 用了 <code>ctx.SSE</code>、<code>FormFile</code>、<code>Data</code> 这类 HTTP 专属方法，gg check 会拦，因为 gRPC 上没有这些东西；没声明 GRPC() 的模型不受此限。</li><li>service 代码不 import gin 与 grpc；还能感知到传输的只剩 ServiceContext 元数据的取值（gRPC 上 Path 与 RequestURI 是 FullMethod，非 List/Get 动作的 Query 为空）。</li></ul></div>
+      <div class="arch-box lane shared"><b>service.Base[M, REQ, RSP] 与 Service("name") 的结构体</b><ul><li>标准动作：嵌 <code>service.Base</code>，按需覆盖钩子；自定义动作：<code>Create(ctx, req) (rsp, error)</code> 这类方法。</li><li>流式动作：<code>Stream(ctx, req, stream)</code> 三种签名之一，两条线都调用它：gRPC 的流式 rpc 和 HTTP 的 WebSocket 连接。</li><li>HTTP 独有的动作：SSE 的 <code>SSE(ctx) error</code>、Import 的 <code>Import(ctx, reader)</code>、Export 的 <code>Export(ctx, models…)</code> 只在 HTTP 上被调用。模型声明了 GRPC() 时，这三种动作以外的 service 用了 <code>sse.Serve</code> 或 <code>FormFile</code>、<code>Data</code> 这类 HTTP 专属方法，gg check 会拦，因为 gRPC 上没有这些东西；没声明 GRPC() 的模型不受此限。</li><li>service 代码不 import gin 与 grpc；还能感知到传输的只剩 ServiceContext 元数据的取值（gRPC 上 Path 与 RequestURI 是 FullMethod，非 List/Get 动作的 Query 为空）。</li></ul></div>
     </div>
   </div>
 </div>
@@ -177,7 +177,7 @@ HTTP 状态到 gRPC status 的映射（`grpcserver.StatusError`）：
 | Create / Get / List / Update / Patch / Delete | ✓ | ✓ | rpc 名 = 动作名 + 模型名，嵌套路由加 `By<参数>`；不要求 Service() |
 | CreateMany / UpdateMany / PatchMany / DeleteMany | ✓ | ✓ | 批量逐条校验，`items`（DeleteMany 是 `ids`）一项都没有即拒绝、不进钩子，UpdateMany / PatchMany 同一个 id 出现两次即拒绝；PatchMany 的每一项就是单条 Patch 的请求（id、记录、update_mask），和单条一样以项的 id 为准、记录自带的 id 不读，项里的路由参数与外层不一致即拒绝；带版本号的模型先查完每一项的版本号，再逐项校验字段，同一批几项各有缺陷时两线拒绝同一项 |
 | Route() 里的自定义动作 | ✓ | ✓ | rpc 名 = Service 名 + 模型名；Payload 挂成 `payload`，Result 挂成 `result` |
-| Import / Export / SSE | ✓ | — | 文件流与事件流只有 HTTP 能承载；gg check 在 GRPC() 模型的其他 service 里拦住 HTTP 专属的 ServiceContext 方法（Cookie、FormFile、SSE 等），这三种动作自己的 service 文件不扫，运行期在 gRPC 调用里碰到其中任何一个，调用一律答 Internal，钩子一返回就拦：Before 钩子里的在写库之前拦下，After 钩子里的在写库之后（和 After 钩子返回错误一样，行已写入） |
+| Import / Export / SSE | ✓ | — | 文件流与事件流只有 HTTP 能承载；gg check 在 GRPC() 模型的其他 service 里拦住 HTTP 专属的 ServiceContext 方法（Cookie、FormFile 等）和 `sse.Serve`，这三种动作自己的 service 文件不扫，运行期在 gRPC 调用里碰到其中任何一个，调用一律答 Internal，钩子一返回就拦：Before 钩子里的在写库之前拦下，After 钩子里的在写库之后（和 After 钩子返回错误一样，行已写入） |
 | Stream | ✓ | ✓ | 只允许自定义动作，必须 Service("name")；HTTP 上是 `GET` 握手打开的一条 WebSocket 连接，接口文档里写成成功答 101 的 `GET`，说明里写明两侧各发什么消息 |
 
 ## 6. 流式动作

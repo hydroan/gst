@@ -7,14 +7,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/streamctx"
 )
-
-// DefaultHeartbeatInterval is the pause between automatic keep-alive comment
-// frames. It stays well below the idle timeouts commonly configured on
-// reverse proxies (nginx defaults to 60s), so an event-quiet connection is
-// never mistaken for a dead one.
-const DefaultHeartbeatInterval = 15 * time.Second
 
 // heartbeatComment is the payload of automatic keep-alive frames. Comment
 // frames are invisible to EventSource clients, so the text only shows up on
@@ -28,8 +23,9 @@ type options struct {
 	heartbeatInterval time.Duration
 }
 
-// WithHeartbeatInterval overrides DefaultHeartbeatInterval. The interval must
-// be positive; heartbeats cannot be disabled, because a connection without
+// WithHeartbeatInterval overrides streamctx.DefaultHeartbeatInterval, the
+// pause between the keep-alive comment frames. The interval must be
+// positive; heartbeats cannot be disabled, because a connection without
 // keep-alive traffic silently dies on idle proxy timeouts and undetected
 // client disconnects.
 func WithHeartbeatInterval(interval time.Duration) ServeOption {
@@ -104,7 +100,7 @@ func (c *Conn) Send(event Event) error {
 	return nil
 }
 
-// markClosed rejects all further sends. Serve calls it after the callback
+// markClosed rejects all further sends. serve calls it after the callback
 // returned and the heartbeat stopped; a Conn leaked past its callback then
 // errors instead of writing into a finished response.
 func (c *Conn) markClosed() {
@@ -113,8 +109,47 @@ func (c *Conn) markClosed() {
 	c.closed = true
 }
 
-// Serve turns the response into a Server-Sent Events stream and runs fn with
-// the live connection. It owns the connection lifecycle:
+// Serve turns the response of the request ctx serves into a Server-Sent
+// Events stream and runs fn with the live connection.
+//
+// The framework owns the connection lifecycle: it clears the server's
+// per-request deadlines so the stream outlives the global WriteTimeout,
+// writes and flushes the SSE response headers, sends keep-alive comment
+// frames until fn returns, and invalidates the connection afterwards. fn
+// blocks until the stream is over; a callback that waits for events must
+// select on conn.Context().Done() to notice the client disconnecting or the
+// server shutting down.
+//
+// The error is fn's own error, or the setup failure that prevented streaming
+// (reported before anything was written, so it still surfaces as a regular
+// error response). A context carrying no HTTP response, one served over
+// gRPC, has nothing to stream on: the attempt is recorded (see
+// gst.HTTPOnlyMethodCalled) and reported as an error.
+//
+// Example, in the SSE method of a service:
+//
+//	return sse.Serve(ctx, func(conn *sse.Conn) error {
+//		for {
+//			select {
+//			case <-conn.Context().Done():
+//				return nil
+//			case event := <-events:
+//				if err := conn.Send(event); err != nil {
+//					return err
+//				}
+//			}
+//		}
+//	})
+func Serve(ctx *gst.ServiceContext, fn func(conn *Conn) error, opts ...ServeOption) error {
+	w, r, ok := gst.HTTPResponse(ctx)
+	if !ok {
+		return errors.New("service context carries no HTTP response to stream on")
+	}
+	return serve(w, r, fn, opts...)
+}
+
+// serve turns the response w into a Server-Sent Events stream of the request
+// r and runs fn with the live connection. It owns the connection lifecycle:
 //
 //   - clears the server's per-request read/write deadlines, so a global
 //     WriteTimeout does not kill the long-lived stream;
@@ -127,13 +162,9 @@ func (c *Conn) markClosed() {
 //   - rejects sends on the connection once fn returned, so a leaked Conn can
 //     never write into a finished response.
 //
-// fn blocks until the stream is over; returning ends the stream. A callback
-// that waits for events must select on conn.Context().Done() to notice the
-// client disconnecting or the server shutting down. The returned error is
-// fn's error, or the setup
-// failure that prevented streaming (reported before anything was written, so
-// the caller can still answer with a regular error response).
-func Serve(w http.ResponseWriter, r *http.Request, fn func(conn *Conn) error, opts ...ServeOption) error {
+// fn and the error returned are what Serve documents: returning from fn ends
+// the stream, and a setup failure is reported before anything was written.
+func serve(w http.ResponseWriter, r *http.Request, fn func(conn *Conn) error, opts ...ServeOption) error {
 	if w == nil || r == nil {
 		return errors.New("sse: response writer and request cannot be nil")
 	}
@@ -141,7 +172,7 @@ func Serve(w http.ResponseWriter, r *http.Request, fn func(conn *Conn) error, op
 		return errors.New("sse: serve callback cannot be nil")
 	}
 
-	o := options{heartbeatInterval: DefaultHeartbeatInterval}
+	o := options{heartbeatInterval: streamctx.DefaultHeartbeatInterval}
 	for _, opt := range opts {
 		if opt != nil {
 			opt(&o)

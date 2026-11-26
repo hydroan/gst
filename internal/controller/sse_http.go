@@ -19,8 +19,8 @@ import (
 // SSEHandler returns a Gin handler that streams Server-Sent Events.
 //
 // The action always delegates to the phase service's SSE method, which opens
-// the stream through ServiceContext.SSE and blocks until it is over; there is
-// no default streaming behavior. The whole request runs on the stream's
+// the stream through sse.Serve and blocks until it is over; there is no
+// default streaming behavior. The whole request runs on the stream's
 // context, see streamctx.New: the service's own work and the stream end
 // together when the client leaves or the server begins to shut down, so an
 // open stream never holds the shutdown.

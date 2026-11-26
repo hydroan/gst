@@ -298,10 +298,10 @@ func (u *Updater) validate(req *model.RecordReq) error {
 	return nil
 }
 
-// SSE returns the framework streaming call directly: ServiceContext.SSE
-// errors are framework-governed and count as a sanctioned exit.
+// SSE returns the framework streaming call directly: the errors of
+// sse.Serve are framework-governed and count as a sanctioned exit.
 func (u *Updater) SSE(ctx *gst.ServiceContext) error {
-	return ctx.SSE(func(conn *sse.Conn) error {
+	return sse.Serve(ctx, func(conn *sse.Conn) error {
 		return conn.Send(sse.Event{Data: "sample"})
 	})
 }

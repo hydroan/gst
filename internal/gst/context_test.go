@@ -14,7 +14,6 @@ import (
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/sse"
 	"github.com/stretchr/testify/require"
 )
 
@@ -171,10 +170,11 @@ func TestServiceContextResponseHelpers(t *testing.T) {
 
 // TestHTTPOnlyMethodCalledRecordsCallsWithoutHTTP pins the flag a transport
 // other than HTTP reads once a hook or a service method returns: every
-// HTTP-only method sets
-// it when there is no HTTP request or response behind the context, the
-// readers of the request as much as the writers of the response, and a nil
-// cookie -- nothing to write on any transport -- does not.
+// HTTP-only method sets it when there is no HTTP request or response behind
+// the context, the readers of the request as much as the writers of the
+// response, and so does HTTPResponse, which the framework's own writers of
+// the response go through; a nil cookie -- nothing to write on any transport
+// -- does not.
 func TestHTTPOnlyMethodCalledRecordsCallsWithoutHTTP(t *testing.T) {
 	tests := []struct {
 		name string
@@ -187,8 +187,10 @@ func TestHTTPOnlyMethodCalledRecordsCallsWithoutHTTP(t *testing.T) {
 		{name: "SetCookie", call: func(serviceCtx *gst.ServiceContext) {
 			serviceCtx.SetCookie(&http.Cookie{Name: "session_id", Value: "session-1"})
 		}, want: true},
-		{name: "SSE", call: func(serviceCtx *gst.ServiceContext) {
-			_ = serviceCtx.SSE(func(*sse.Conn) error { return nil })
+		{name: "HTTPResponse", call: func(serviceCtx *gst.ServiceContext) {
+			if _, _, ok := gst.HTTPResponse(serviceCtx); ok {
+				panic("a context served over no HTTP exchange carries no response")
+			}
 		}, want: true},
 		{name: "SetCookie nil", call: func(serviceCtx *gst.ServiceContext) {
 			serviceCtx.SetCookie(nil)
@@ -224,7 +226,8 @@ func TestServiceContextNilGinHelpers(t *testing.T) {
 
 	serviceCtx.Data(http.StatusCreated, "text/plain", []byte("created"))
 	serviceCtx.SetCookie(&http.Cookie{Name: "session_id", Value: "session-1"})
-	require.Error(t, serviceCtx.SSE(func(*sse.Conn) error { return nil }))
+	_, _, ok := gst.HTTPResponse(serviceCtx)
+	require.False(t, ok)
 
 	require.Empty(t, serviceCtx.PostForm("name"))
 
@@ -239,7 +242,8 @@ func TestServiceContextNilGinHelpers(t *testing.T) {
 	var nilCtx *gst.ServiceContext
 	nilCtx.Data(http.StatusCreated, "text/plain", []byte("created"))
 	nilCtx.SetCookie(&http.Cookie{Name: "session_id", Value: "session-1"})
-	require.Error(t, nilCtx.SSE(func(*sse.Conn) error { return nil }))
+	_, _, ok = gst.HTTPResponse(nilCtx)
+	require.False(t, ok)
 	require.Empty(t, nilCtx.PostForm("name"))
 
 	cookie, err = nilCtx.Cookie("session_id")

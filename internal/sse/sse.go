@@ -3,12 +3,14 @@
 // via a long-lived HTTP connection; the wire format and client processing
 // model are standardized in the WHATWG HTML specification.
 //
-// The package has two layers:
+// The package has three parts:
 //
 //   - sse.go: the wire format. Event is one frame, Encode writes it.
-//   - conn.go: the connection lifecycle. Serve prepares an HTTP response for
-//     streaming, hands the business a Conn that sends events safely, and ends
-//     the stream when the server shuts down.
+//   - conn.go: the connection lifecycle. Serve turns the response of a
+//     request into a stream, hands the business a Conn that sends events
+//     safely, and ends the stream when the server shuts down.
+//   - hub.go: the fan-out. A Hub delivers the event business code publishes
+//     to a topic to every connection subscribed to it.
 package sse
 
 import (

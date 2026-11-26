@@ -455,8 +455,8 @@ func Export(fn func()) { dsl.Export(fn) }
 // response body capture and request timeouts.
 //
 // SSE must declare Service(): there is no default streaming behavior, the
-// fixed service method SSE(ctx) error opens the stream via ServiceContext.SSE
-// and blocks until it is over. SSE must not declare Payload or Result — query
+// fixed service method SSE(ctx) error opens the stream via sse.Serve and
+// blocks until it is over. SSE must not declare Payload or Result — query
 // parameters are read from ServiceContext.Query(), and the response is the
 // event stream itself. An SSE action cannot share a route with List, as both
 // register the GET route path itself.

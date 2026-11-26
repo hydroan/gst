@@ -1,4 +1,4 @@
-package sse_test
+package sse
 
 import (
 	"bufio"
@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/internal/sse"
 	"github.com/hydroan/gst/internal/streamctx"
 )
 
@@ -49,27 +48,27 @@ func getStream(t *testing.T, url string, header http.Header) *http.Response {
 	return rsp
 }
 
-func TestServe_StreamOutlivesServerDeadlines(t *testing.T) {
+func TestStream_OutlivesServerDeadlines(t *testing.T) {
 	// The server kills any response not finished within 200ms; the stream
-	// below runs for ~1.2s and must survive because Serve cleared the
+	// below runs for ~1.2s and must survive because serve cleared the
 	// deadlines. The short heartbeat also exercises concurrent writes under
 	// the race detector.
 	srv := startStreamServer(t, 200*time.Millisecond, func(w http.ResponseWriter, r *http.Request) {
-		err := sse.Serve(w, r, func(conn *sse.Conn) error {
+		err := serve(w, r, func(conn *Conn) error {
 			for i := 1; i <= 6; i++ {
 				select {
 				case <-conn.Context().Done():
 					return nil
 				case <-time.After(200 * time.Millisecond):
 				}
-				if err := conn.Send(sse.Event{Event: "tick", Data: i}); err != nil {
+				if err := conn.Send(Event{Event: "tick", Data: i}); err != nil {
 					return err
 				}
 			}
 			return nil
-		}, sse.WithHeartbeatInterval(50*time.Millisecond))
+		}, WithHeartbeatInterval(50*time.Millisecond))
 		if err != nil {
-			t.Errorf("Serve failed: %v", err)
+			t.Errorf("serve failed: %v", err)
 		}
 	})
 
@@ -87,7 +86,7 @@ func TestServe_StreamOutlivesServerDeadlines(t *testing.T) {
 	}
 }
 
-func TestServe_StreamEndsWhenTheServerShutsDown(t *testing.T) {
+func TestStream_EndsWhenTheServerShutsDown(t *testing.T) {
 	// The request carries the shutdown signal of the server it arrived on, the
 	// way the framework's server stamps every request; the callback waits for
 	// nothing but its context.
@@ -95,13 +94,13 @@ func TestServe_StreamEndsWhenTheServerShutsDown(t *testing.T) {
 	causes := make(chan error, 1)
 	srv := startStreamServer(t, time.Second, func(w http.ResponseWriter, r *http.Request) {
 		r = r.WithContext(streamctx.WithServerShutdown(r.Context(), shutdown))
-		err := sse.Serve(w, r, func(conn *sse.Conn) error {
+		err := serve(w, r, func(conn *Conn) error {
 			<-conn.Context().Done()
 			causes <- context.Cause(conn.Context())
 			return nil
 		})
 		if err != nil {
-			t.Errorf("Serve failed: %v", err)
+			t.Errorf("serve failed: %v", err)
 		}
 	})
 
@@ -122,10 +121,10 @@ func TestServe_StreamEndsWhenTheServerShutsDown(t *testing.T) {
 	}
 }
 
-func TestServe_HeadersArriveBeforeFirstEvent(t *testing.T) {
+func TestStream_HeadersArriveBeforeFirstEvent(t *testing.T) {
 	release := make(chan struct{})
 	srv := startStreamServer(t, time.Second, func(w http.ResponseWriter, r *http.Request) {
-		_ = sse.Serve(w, r, func(conn *sse.Conn) error {
+		_ = serve(w, r, func(conn *Conn) error {
 			select {
 			case <-release:
 			case <-conn.Context().Done():
@@ -151,15 +150,15 @@ func TestServe_HeadersArriveBeforeFirstEvent(t *testing.T) {
 	_, _ = io.Copy(io.Discard, rsp.Body)
 }
 
-func TestServe_HeartbeatFramesFlow(t *testing.T) {
+func TestStream_HeartbeatFramesFlow(t *testing.T) {
 	srv := startStreamServer(t, time.Second, func(w http.ResponseWriter, r *http.Request) {
-		_ = sse.Serve(w, r, func(conn *sse.Conn) error {
+		_ = serve(w, r, func(conn *Conn) error {
 			select {
 			case <-conn.Context().Done():
 			case <-time.After(300 * time.Millisecond):
 			}
 			return nil
-		}, sse.WithHeartbeatInterval(50*time.Millisecond))
+		}, WithHeartbeatInterval(50*time.Millisecond))
 	})
 
 	rsp := getStream(t, srv.URL, nil)
@@ -173,11 +172,11 @@ func TestServe_HeartbeatFramesFlow(t *testing.T) {
 	}
 }
 
-func TestServe_ClientDisconnectCancelsContext(t *testing.T) {
+func TestStream_ClientDisconnectCancelsContext(t *testing.T) {
 	unblocked := make(chan error, 1)
 	srv := startStreamServer(t, time.Second, func(w http.ResponseWriter, r *http.Request) {
-		_ = sse.Serve(w, r, func(conn *sse.Conn) error {
-			if err := conn.Send(sse.Event{Data: "first"}); err != nil {
+		_ = serve(w, r, func(conn *Conn) error {
+			if err := conn.Send(Event{Data: "first"}); err != nil {
 				unblocked <- err
 				return err
 			}
@@ -204,10 +203,10 @@ func TestServe_ClientDisconnectCancelsContext(t *testing.T) {
 	}
 }
 
-func TestServe_LastEventID(t *testing.T) {
+func TestStream_LastEventID(t *testing.T) {
 	got := make(chan string, 1)
 	srv := startStreamServer(t, time.Second, func(w http.ResponseWriter, r *http.Request) {
-		_ = sse.Serve(w, r, func(conn *sse.Conn) error {
+		_ = serve(w, r, func(conn *Conn) error {
 			got <- conn.LastEventID()
 			return nil
 		})
@@ -224,10 +223,10 @@ func TestServe_LastEventID(t *testing.T) {
 	}
 }
 
-func TestServe_ConnUnusableAfterCallbackReturns(t *testing.T) {
-	leaked := make(chan *sse.Conn, 1)
+func TestStream_ConnUnusableAfterCallbackReturns(t *testing.T) {
+	leaked := make(chan *Conn, 1)
 	srv := startStreamServer(t, time.Second, func(w http.ResponseWriter, r *http.Request) {
-		_ = sse.Serve(w, r, func(conn *sse.Conn) error {
+		_ = serve(w, r, func(conn *Conn) error {
 			leaked <- conn
 			return nil
 		})
@@ -238,18 +237,18 @@ func TestServe_ConnUnusableAfterCallbackReturns(t *testing.T) {
 	_, _ = io.Copy(io.Discard, rsp.Body)
 
 	conn := <-leaked
-	if err := conn.Send(sse.Event{Data: "late"}); err == nil {
+	if err := conn.Send(Event{Data: "late"}); err == nil {
 		t.Error("Expected a send on a finished connection to fail")
 	}
 }
 
-func TestServe_SendRejectsInvalidEventAndKeepsStreaming(t *testing.T) {
+func TestStream_SendRejectsInvalidEventAndKeepsStreaming(t *testing.T) {
 	srv := startStreamServer(t, time.Second, func(w http.ResponseWriter, r *http.Request) {
-		_ = sse.Serve(w, r, func(conn *sse.Conn) error {
-			if err := conn.Send(sse.Event{}); err == nil {
+		_ = serve(w, r, func(conn *Conn) error {
+			if err := conn.Send(Event{}); err == nil {
 				t.Error("Expected an empty event to be rejected")
 			}
-			return conn.Send(sse.Event{Data: "still alive"})
+			return conn.Send(Event{Data: "still alive"})
 		})
 	})
 
@@ -276,10 +275,10 @@ func (w opaqueWriter) Flush() {
 	}
 }
 
-func TestServe_FailsFastWhenDeadlinesAreUnreachable(t *testing.T) {
+func TestStream_FailsFastWhenDeadlinesAreUnreachable(t *testing.T) {
 	served := make(chan error, 1)
 	srv := startStreamServer(t, time.Second, func(w http.ResponseWriter, r *http.Request) {
-		served <- sse.Serve(opaqueWriter{w}, r, func(*sse.Conn) error {
+		served <- serve(opaqueWriter{w}, r, func(*Conn) error {
 			t.Error("The callback must not run when streaming setup fails")
 			return nil
 		})
@@ -292,7 +291,7 @@ func TestServe_FailsFastWhenDeadlinesAreUnreachable(t *testing.T) {
 
 	err := <-served
 	if err == nil {
-		t.Fatal("Expected Serve to fail on a writer chain without Unwrap")
+		t.Fatal("Expected serve to fail on a writer chain without Unwrap")
 	}
 	if !strings.Contains(err.Error(), "Unwrap") {
 		t.Errorf("Expected the error to point at the missing Unwrap, got %q", err.Error())
@@ -302,17 +301,17 @@ func TestServe_FailsFastWhenDeadlinesAreUnreachable(t *testing.T) {
 	}
 }
 
-func TestServe_RejectsBadArguments(t *testing.T) {
-	if err := sse.Serve(nil, nil, func(*sse.Conn) error { return nil }); err == nil {
-		t.Error("Expected Serve to reject nil writer and request")
+func TestStream_RejectsBadArguments(t *testing.T) {
+	if err := serve(nil, nil, func(*Conn) error { return nil }); err == nil {
+		t.Error("Expected serve to reject nil writer and request")
 	}
 
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/stream", nil)
-	if err := sse.Serve(recorder, req, nil); err == nil {
-		t.Error("Expected Serve to reject a nil callback")
+	if err := serve(recorder, req, nil); err == nil {
+		t.Error("Expected serve to reject a nil callback")
 	}
-	if err := sse.Serve(recorder, req, func(*sse.Conn) error { return nil }, sse.WithHeartbeatInterval(0)); err == nil {
-		t.Error("Expected Serve to reject a non-positive heartbeat interval")
+	if err := serve(recorder, req, func(*Conn) error { return nil }, WithHeartbeatInterval(0)); err == nil {
+		t.Error("Expected serve to reject a non-positive heartbeat interval")
 	}
 }

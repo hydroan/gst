@@ -31,7 +31,7 @@ type noticeStreamer struct {
 }
 
 func (s *noticeStreamer) SSE(ctx *gst.ServiceContext) error {
-	return ctx.SSE(func(conn *sse.Conn) error {
+	return sse.Serve(ctx, func(conn *sse.Conn) error {
 		for i := 1; i <= 3; i++ {
 			if err := conn.Send(sse.Event{Event: "notice", Data: i}); err != nil {
 				return err
@@ -48,7 +48,7 @@ type endlessStreamer struct {
 }
 
 func (s *endlessStreamer) SSE(ctx *gst.ServiceContext) error {
-	return ctx.SSE(func(conn *sse.Conn) error {
+	return sse.Serve(ctx, func(conn *sse.Conn) error {
 		for i := 1; ; i++ {
 			select {
 			case <-conn.Context().Done():

@@ -12,7 +12,6 @@ import (
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/requestctx"
-	"github.com/hydroan/gst/internal/sse"
 )
 
 var _ context.Context = (*ServiceContext)(nil)
@@ -137,14 +136,15 @@ func (sc *ServiceContext) IsHTTPS() bool     { return requestctx.FromContext(sc)
 
 // HTTPOnlyMethods names the methods of ServiceContext that only an HTTP
 // request can serve, sorted: Cookie, PostForm and FormFile read what only
-// an HTTP request carries, Data and SSE write the response themselves, and
-// SetCookie writes a response header. Over gRPC they have nothing to work
-// on, so the services of a model declaring GRPC() must not call them; gg
-// check holds them to it (its check named gRPC service context), and a
-// call that reaches one at run time records it for HTTPOnlyMethodCalled,
-// which the transport answers as a failure once the hook or the service
-// method returns.
-var HTTPOnlyMethods = []string{"Cookie", "Data", "FormFile", "PostForm", "SSE", "SetCookie"}
+// an HTTP request carries, Data writes the response itself, and SetCookie
+// writes a response header. Over gRPC they have nothing to work on, so the
+// services of a model declaring GRPC() must not call them; gg check holds
+// them to it (its check named gRPC service context), and a call that
+// reaches one at run time records it for HTTPOnlyMethodCalled, which the
+// transport answers as a failure once the hook or the service method
+// returns. An entry built on HTTPResponse, the stream sse.Serve opens for
+// one, is held to the same.
+var HTTPOnlyMethods = []string{"Cookie", "Data", "FormFile", "PostForm", "SetCookie"}
 
 // Data writes data as the response body with the given status and content
 // type. Without a response to write to it writes nothing and records the
@@ -155,44 +155,6 @@ func (sc *ServiceContext) Data(code int, contentType string, data []byte) {
 		return
 	}
 	sc.ginCtx.Data(code, contentType, data)
-}
-
-// SSE turns the response into a Server-Sent Events stream and runs fn with
-// the live connection.
-//
-// The framework owns the connection lifecycle: it clears the server's
-// per-request deadlines so the stream outlives the global WriteTimeout,
-// writes and flushes the SSE response headers, sends keep-alive comment
-// frames until fn returns, and invalidates the connection afterwards. fn
-// blocks until the stream is over; a callback that waits for events must
-// select on conn.Context().Done() to notice the client disconnecting or the
-// server shutting down.
-//
-// The error is fn's own error, or the setup failure that prevented streaming
-// (reported before anything was written, so it still surfaces as a regular
-// error response). Without a response to stream on it records the attempt for
-// HTTPOnlyMethodCalled and reports the failure.
-//
-// Example, in the SSE method of a service:
-//
-//	return ctx.SSE(func(conn *sse.Conn) error {
-//		for {
-//			select {
-//			case <-conn.Context().Done():
-//				return nil
-//			case event := <-events:
-//				if err := conn.Send(event); err != nil {
-//					return err
-//				}
-//			}
-//		}
-//	})
-func (sc *ServiceContext) SSE(fn func(conn *sse.Conn) error, opts ...sse.ServeOption) error {
-	if sc == nil || sc.ginCtx == nil {
-		sc.recordHTTPOnlyMethodCall()
-		return errors.New("service context carries no HTTP response to stream on")
-	}
-	return sse.Serve(sc.ginCtx.Writer, sc.ginCtx.Request, fn, opts...)
 }
 
 // SetCookie adds cookie to the response headers. Without a response to write
@@ -263,6 +225,21 @@ func (sc *ServiceContext) recordHTTPOnlyMethodCall() {
 // framework's transports read it.
 func HTTPOnlyMethodCalled(sc *ServiceContext) bool {
 	return sc != nil && sc.httpOnlyMethodCalled
+}
+
+// HTTPResponse returns the response writer and the request of the HTTP
+// exchange sc serves, for a package of the framework that writes the
+// response itself, the stream sse.Serve opens for one. A context served over
+// another transport, or a nil one, has neither: the call is recorded for
+// HTTPOnlyMethodCalled and reports false. It is a package function rather
+// than a method so it stays out of the public alias of ServiceContext: a
+// service reaches the response through the entries built on it.
+func HTTPResponse(sc *ServiceContext) (http.ResponseWriter, *http.Request, bool) {
+	if sc == nil || sc.ginCtx == nil {
+		sc.recordHTTPOnlyMethodCall()
+		return nil, nil, false
+	}
+	return sc.ginCtx.Writer, sc.ginCtx.Request, true
 }
 
 // RequestUserID reports the authenticated subject of the request ctx descends

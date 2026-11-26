@@ -74,7 +74,7 @@ type Service[M Model, REQ Request, RSP Response] interface {
 	Export(*ServiceContext, ...M) ([]byte, error)
 
 	// SSE streams Server-Sent Events for the route: the implementation opens
-	// the stream via ServiceContext.SSE and blocks until it is over. Query
+	// the stream via sse.Serve and blocks until it is over. Query
 	// parameters are read from ServiceContext.Query(). The action never binds
 	// Payload or Result types, so the method carries no REQ or RSP.
 	SSE(*ServiceContext) error

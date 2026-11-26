@@ -22,17 +22,17 @@ import (
 // what both transports provide.
 var GRPCServiceContext = Check{
 	Name: "gRPC service context",
-	Rule: "the services of models declaring GRPC() must not call the ServiceContext methods only HTTP serves: " + strings.Join(gst.HTTPOnlyMethods, ", ") + "; the services of their Import, Export and SSE actions, served over HTTP alone, may",
+	Rule: "the services of models declaring GRPC() must not call the ServiceContext methods only HTTP serves, " + strings.Join(gst.HTTPOnlyMethods, ", ") + ", nor sse.Serve; the services of their Import, Export and SSE actions, served over HTTP alone, may",
 	run:  checkGRPCServiceContext,
 }
 
 // checkGRPCServiceContext reports, for every model declaring GRPC(), each
 // call of a method gst.HTTPOnlyMethods names on a parameter declared
-// *gst.ServiceContext that a gRPC call of the model reaches: over gRPC the
-// call has no request to read or response to write, so a service serving
-// both transports must do without it. A gRPC call enters the service type
-// the service file of an action gRPC serves declares (see
-// modelsource.ServiceTarget): every method of that type, the hooks in
+// *gst.ServiceContext, and each call of sse.Serve, that a gRPC call of the
+// model reaches: over gRPC the call has no request to read or response to
+// write, so a service serving both transports must do without it. A gRPC call
+// enters the service type the service file of an action gRPC serves declares
+// (see modelsource.ServiceTarget): every method of that type, the hooks in
 // whatever file declares them included, and the functions of that file;
 // from there it reaches every function of the project they call, in the
 // package or another, each call resolved the way the Go compiler reads it
@@ -152,10 +152,10 @@ type violationAt struct {
 }
 
 // httpOnlyCalls lists the calls of the HTTP-only methods on the
-// *gst.ServiceContext parameters of the function of scope, each as a
-// violation naming the model whose call reaches the function, in source
-// order; a call reported already, by an earlier model reaching the
-// function, is left out, reported tracking them by position.
+// *gst.ServiceContext parameters of the function of scope and its calls of
+// sse.Serve, each as a violation naming the model whose call reaches the
+// function, in source order; a call reported already, by an earlier model
+// reaching the function, is left out, reported tracking them by position.
 func httpOnlyCalls(scope *errDiscFuncScope, model string, reported map[string]bool) []violationAt {
 	if len(scope.ctxParams) == 0 {
 		return nil
@@ -171,7 +171,13 @@ func httpOnlyCalls(scope *errDiscFuncScope, model string, reported map[string]bo
 			return true
 		}
 		ident, ok := sel.X.(*ast.Ident)
-		if !ok || !scope.ctxParams[declObj(ident)] || !slices.Contains(gst.HTTPOnlyMethods, sel.Sel.Name) {
+		if !ok {
+			return true
+		}
+		obj := declObj(ident)
+		method := scope.ctxParams[obj] && slices.Contains(gst.HTTPOnlyMethods, sel.Sel.Name)
+		stream := !scope.declaresLocally(obj) && scope.file.sse.Refers(sel, "Serve")
+		if !method && !stream {
 			return true
 		}
 		pos := scope.file.analysis.fset.Position(call.Pos())

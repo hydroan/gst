@@ -71,7 +71,7 @@ var getVerbActionMethodNames = map[string]bool{
 // controller handles an HTTP GET request, reads filters from query
 // parameters, and writes the returned bytes as a file attachment; the SSE
 // controller handles an HTTP GET request whose response is the event stream
-// the service opens through ServiceContext.SSE.
+// the service opens through sse.Serve.
 var fixedContractActionSignatures = map[string]string{
 	apiaction.Import.Name(): "Import(ctx, io.Reader) ([]M, error)",
 	apiaction.Export.Name(): "Export(ctx, ...M) ([]byte, error)",
