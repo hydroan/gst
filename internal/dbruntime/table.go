@@ -3,6 +3,7 @@ package dbruntime
 import (
 	"context"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -102,9 +103,13 @@ func preparationFailed() error {
 //
 // With database.auto_migrate enabled it runs gorm AutoMigrate and creates
 // custom indexes, which suits local development and tests. With the option
-// disabled (the default) it only verifies that the table already exists via
-// the dialect-aware gorm Migrator, so schema changes in shared environments
-// stay an explicit "gg migrate" decision instead of a startup side effect.
+// disabled (the default) it changes nothing and verifies, through the
+// dialect-aware gorm Migrator, that the table exists and holds every column
+// the model reads and writes, so schema changes in shared environments stay
+// an explicit "gg migrate" decision instead of a startup side effect, and a
+// release deployed ahead of its migration fails the start rather than its
+// first write. Columns the table holds beyond the model's, and the types and
+// indexes of the ones it shares, are not compared.
 //
 // An in-memory sqlite database, whichever way the configuration selects it (see
 // SQLiteInMemory), is exempt from that check: it is created empty in every
@@ -141,6 +146,33 @@ func ensureTable(handler *gorm.DB, m gst.Model) error {
 	}
 	if !handler.Migrator().HasTable(tableName) {
 		return errors.Newf("table %q does not exist: run \"gg migrate\" to apply the schema, or enable database.auto_migrate for local development", tableName)
+	}
+	// The table has to hold every column the model reads and writes, or the
+	// first write of the model fails where the start could have. A column it
+	// holds beyond them is left alone: a release that migrates before it
+	// deploys, and a rollback to older code, both run on a table ahead of
+	// the model. Names are compared the way MySQL compares them, whatever
+	// their case.
+	columns, err := modelschema.Columns(reflect.TypeOf(m))
+	if err != nil {
+		return err
+	}
+	existing, err := handler.Migrator().ColumnTypes(tableName)
+	if err != nil {
+		return errors.Wrapf(err, "reading the columns of table %q", tableName)
+	}
+	var missing []string
+	for _, column := range columns {
+		if !slices.ContainsFunc(existing, func(held gorm.ColumnType) bool { return strings.EqualFold(held.Name(), column.DBName) }) {
+			missing = append(missing, column.DBName)
+		}
+	}
+	if len(missing) > 0 {
+		noun := "column"
+		if len(missing) > 1 {
+			noun = "columns"
+		}
+		return errors.Newf("table %q lacks the %s %s the model reads and writes: run \"gg migrate\" to apply the schema, or enable database.auto_migrate for local development", tableName, noun, strings.Join(missing, ", "))
 	}
 	return nil
 }

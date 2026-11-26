@@ -89,13 +89,27 @@ func TestEnsureTableMigratesInMemorySqliteWhenDisabled(t *testing.T) {
 	}
 }
 
-func TestEnsureTablePassesWhenDisabledAndTableExists(t *testing.T) {
+// TestEnsureTableHoldsAnExistingTableToTheColumnsOfTheModelWhenDisabled pins
+// what the start checks of a table with auto_migrate off: the table passes
+// while it holds every column the model reads and writes, a column it holds
+// beyond them included — the state a release migrating before it deploys, or
+// a rollback to older code, runs in — and fails the start, naming the table,
+// the column and the fix, once a column of the model is missing.
+func TestEnsureTableHoldsAnExistingTableToTheColumnsOfTheModelWhenDisabled(t *testing.T) {
 	db := newSQLiteDB(t)
 	withAutoMigrate(t, true)
 	require.NoError(t, ensureTable(db, &plainRecord{}))
 
 	withAutoMigrate(t, false)
+	withSqlite(t, config.Sqlite{Path: "data.db"})
 	require.NoError(t, ensureTable(db, &plainRecord{}))
+
+	require.NoError(t, db.Exec("ALTER TABLE plain_records ADD COLUMN remark text").Error)
+	require.NoError(t, ensureTable(db, &plainRecord{}), "a column the model does not declare is left alone")
+
+	require.NoError(t, db.Exec("ALTER TABLE plain_records DROP COLUMN name").Error)
+	err := ensureTable(db, &plainRecord{})
+	require.EqualError(t, err, `table "plain_records" lacks the column name the model reads and writes: run "gg migrate" to apply the schema, or enable database.auto_migrate for local development`)
 }
 
 // undeclaredRecord omits an explicit table name; table preparation must
@@ -508,17 +522,19 @@ func (*heldRecord) TableName() string { return "held_records" }
 
 // TestPrepareTableParsesTheModelWithoutAutoMigrate pins that preparation
 // parses every model in the handle's schema cache even where it only checks
-// that the table exists: parsing a model that holds another writes into the
-// held model's cached schema, and done here those writes come before the
-// server's first statement instead of beside one.
+// that the table and its columns exist: parsing a model that holds another
+// writes into the held model's cached schema, and done here those writes
+// come before the server's first statement instead of beside one.
 func TestPrepareTableParsesTheModelWithoutAutoMigrate(t *testing.T) {
 	forgetPreparationFailure(t)
 	db := newSQLiteDB(t)
 	withAutoMigrate(t, false)
 	withSqlite(t, config.Sqlite{Path: "data.db"})
-	// The tables exist, made around gorm so that nothing is parsed yet.
-	require.NoError(t, db.Exec("CREATE TABLE held_records (id TEXT PRIMARY KEY)").Error)
-	require.NoError(t, db.Exec("CREATE TABLE holder_records (id TEXT PRIMARY KEY)").Error)
+	// The tables exist with the columns of the models, made around gorm so
+	// that nothing is parsed yet.
+	base := "id TEXT PRIMARY KEY, created_at DATETIME, updated_at DATETIME, deleted_at DATETIME, created_by TEXT, updated_by TEXT"
+	require.NoError(t, db.Exec("CREATE TABLE held_records ("+base+", holder_id TEXT)").Error)
+	require.NoError(t, db.Exec("CREATE TABLE holder_records ("+base+")").Error)
 
 	model.Register[*heldRecord]()
 	<-model.TableChan
