@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hydroan/gst/internal/ggcheck"
 	"github.com/hydroan/gst/internal/ggnew"
 	"github.com/stretchr/testify/require"
 )
@@ -65,6 +66,21 @@ func TestNewListsWhatItCreatesAndWhatToDoNext(t *testing.T) {
 	require.NotContains(t, output, "go: creating new go.mod")
 	require.NotContains(t, output, "hint:")
 	require.Regexp(t, `\n✔ Created sampleapp \([0-9.]+m?s\)\n\n▶ Next Steps\n  \$ cd sampleapp\n  → Declare the first model in a file under model/, its routes in Design\(\)\n  \$ gg gen\n  \$ go run \.\n$`, output)
+}
+
+// TestNewLeavesTheGeneratedFilesCheckNothingToReport pins that a project
+// fresh from gg new holds what gg gen writes for a project without a model,
+// so the Generated files check passes it before its first run of gg gen.
+func TestNewLeavesTheGeneratedFilesCheckNothingToReport(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	stubGoModTidy(t)
+	var err error
+	output := captureOutput(t, func() { _, err = executeRootCommand(t, "new", "example.com/sampleapp") })
+	require.NoError(t, err, output)
+
+	t.Chdir(filepath.Join(root, "sampleapp"))
+	require.Empty(t, ggcheck.Run([]ggcheck.Check{ggcheck.GeneratedFiles})[0].Violations)
 }
 
 // TestNewFillsAnExistingDirectoryWithoutConflicts pins that an existing

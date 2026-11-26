@@ -15,6 +15,7 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/dsl"
+	"github.com/hydroan/gst/internal/ggcheck"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen/ts"
 	"github.com/hydroan/gst/internal/gghelper"
@@ -57,11 +58,11 @@ func init() {
 }
 
 // genTypeScriptRun generates the TypeScript declarations. It runs the project
-// checks and reads the models the way gg gen does, so the declarations cover
-// exactly the routes the generated router registers, and reads the project's
-// module package for the routes registered at run time (see
-// typeScriptModuleRoots). It ends on what it changed under the output
-// directory.
+// checks, all but Generated files, and reads the models the way gg gen does,
+// so the declarations cover exactly the routes gg gen registers for the
+// models as they are, and reads the project's module package for the routes
+// registered at run time (see typeScriptModuleRoots). It ends on what it
+// changed under the output directory.
 func genTypeScriptRun() error {
 	started := time.Now()
 	if len(module) == 0 {
@@ -70,7 +71,9 @@ func genTypeScriptRun() error {
 			return err
 		}
 	}
-	if err := runProjectChecks(projectChecks, false, nil); err != nil {
+	// The declarations come from the models, whether or not gg gen has
+	// written the Go files of the project since they changed.
+	if err := runProjectChecks(projectChecksWithout(ggcheck.GeneratedFiles.Name), false, nil); err != nil {
 		return errors.Wrap(err, "nothing was generated")
 	}
 	// The declarations mirror the models. A project with no model directory

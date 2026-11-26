@@ -97,7 +97,8 @@ git init
    `go.mod` 和 `go.sum`（项目在 go.work 工作区里时不跑，见下文工作区一段）。
 3. 在生成的 `service/**` 文件中实现业务逻辑或 hook，并把同名 `_test.go` 里的骨架换成接口测试
    （骨架被换掉之前 `go test` 会失败）。
-4. 使用 `gg check` 检查项目结构和依赖边界。
+4. 使用 `gg check` 检查项目结构和依赖边界；模型改了而生成文件没跟上（忘了运行 `gg gen`）
+   也会被它拦下。
 5. 删除 model 或关闭 action 后，运行 `gg prune` 清理 model 不再需要的文件；它只动
    `service/`、`middleware/`、`interceptor/` 和 `pb/`。
 
@@ -1246,9 +1247,12 @@ system root、网关头、gRPC、请求之外、工具链。
 `gg check` 会检查依赖边界、model/service 文件边界、命名规范、`json` tag、
 REQ/RSP 命名、业务项目根目录结构、框架字段的列名，以及声明了 `GRPC()` 的 model 的 protobuf
 定义（pb tag、撞名、与 `pb/` 下已提交契约的兼容）和它们的 service 有没有调用
-只有 HTTP 才有的 ServiceContext 方法或 `sse.Serve`。`gg gen` 生成前也会执行这些检查（protobuf
-定义那条由生成本身完成，不重复跑；索引声明和框架字段列名两条要先编译项目，生成前
-项目未必编得过，不在生成前跑）；检查失败会停止生成。
+只有 HTTP 才有的 ServiceContext 方法或 `sse.Serve`。它还会核对 `gg gen` 每次都重写的文件
+（`main.go`、各 `.gen.go` 登记文件与列引用文件、`pb/` 下的文件）是不是当前模型该有的内容，
+不是就点名文件并提示运行 `gg gen`：把 `gg check` 放进 CI，就能拦住「改了模型没重新生成」。
+`gg gen` 生成前也会执行这些检查（protobuf 定义和生成文件这两条由生成本身完成，不重复跑；
+索引声明和框架字段列名两条要先编译项目，生成前项目未必编得过，不在生成前跑）；检查失败会
+停止生成。
 
 `gg check`、`gg gen`（含 `gg gen ts`）和 `gg routes` 读项目
 代码时，跳过项目 Git 忽略规则排除的路径，也跳过 Go 工具链内置忽略的路径。

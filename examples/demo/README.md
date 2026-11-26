@@ -24,7 +24,7 @@ gst 的入门示例：一个用 `gg new` 生成、按框架推荐写法补齐的
 3. 执行 `gg gen`：生成注册文件、`.proto`、声明了 `Service()` 的 service 文件和它们的测试骨架。
 4. 把 service 文件里的方法和 hook 填上，把测试骨架的第一行 `t.Fatal` 删掉、补成真正的用例。
 5. `go test ./...`：需要 Docker，testutil 会起 redis、minio 容器（数据库用 sqlite，不起容器）。
-6. `gg check`：检查目录、命名、tag、REQ/RSP、protobuf 契约等约定。
+6. `gg check`：检查目录、命名、tag、REQ/RSP、protobuf 契约等约定，以及生成文件有没有跟上模型（改了模型忘了 `gg gen` 会被拦下）。
 7. 数据库字段有变化时 `gg migrate --dry-run` 看计划，再 `gg migrate` 执行；本地开发在 `config.ini` 里开了 `auto_migrate`，启动时会自动建表。
 8. `go run .` 启动，HTTP 在 8090、gRPC 在 8091，接口文档在 http://localhost:8090/docs/index.html 。
 9. 前端要类型时 `gg gen ts`：按 model 里的声明生成 TypeScript 类型。

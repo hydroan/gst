@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/bufbuild/protocompile"
+	"github.com/hydroan/gst/internal/ggcheck"
 	"github.com/hydroan/gst/internal/ggconst"
 	"github.com/hydroan/gst/internal/gggen/pb"
 	"github.com/hydroan/gst/internal/pbschema"
@@ -281,6 +282,37 @@ func TestGenRunImportsThePBPackageWhileServingGRPC(t *testing.T) {
 	require.NotContains(t, string(mainCode), "tmpapp/pb", "without a model served over gRPC main.go must not import the package")
 	require.NoFileExists(t, filepath.Join(projectDir, ggconst.DirPB, ggconst.FilePBGen), "the Go files go with the last model served over gRPC")
 	require.FileExists(t, filepath.Join(projectDir, ggconst.DirPB, "note.proto"), "the definition stays, with what it reserves, until pruned")
+}
+
+// TestGenRunLeavesTheGeneratedFilesCheckNothingToReport pins that gg gen and
+// the Generated files check agree, on a project with a table, routes and a
+// model served over gRPC: a run leaves the check nothing to report; a field
+// added to the model without another run has the check name the files the
+// run would rewrite, the column references and the files under pb/ holding
+// the field; and the next run settles them.
+func TestGenRunLeavesTheGeneratedFilesCheckNothingToReport(t *testing.T) {
+	projectDir, ok := newGenProject(t)
+	if !ok {
+		return
+	}
+	behind := func() []string { return ggcheck.Run([]ggcheck.Check{ggcheck.GeneratedFiles})[0].Violations }
+	writeProtobufProject(t, projectDir, map[string]string{"model/note.go": protobufNoteModel})
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+	require.Empty(t, behind())
+
+	withBody := strings.Replace(protobufNoteModel, "\tTags  []string", "\tBody  string   'json:\"body\" pb:\"13\"'\n\tTags  []string", 1)
+	require.NotEqual(t, protobufNoteModel, withBody)
+	writeProtobufProject(t, projectDir, map[string]string{"model/note.go": withBody})
+	rewritten := func(path string) string { return filepath.FromSlash(path) + ": gg gen would rewrite it; run gg gen" }
+	require.Equal(t, []string{
+		rewritten("model/note.gen.go"),
+		rewritten("pb/note.gen.go"),
+		rewritten("pb/note.pb.go"),
+		rewritten("pb/note.proto"),
+	}, behind())
+
+	require.NoError(t, genRunWithOptions(genRunOptions{Quiet: true}))
+	require.Empty(t, behind())
 }
 
 // TestGenRunRemovesTheGoFilesOfAModelNoLongerServedOverGRPC pins that gg gen

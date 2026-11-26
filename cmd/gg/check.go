@@ -24,9 +24,9 @@ var checkCmd = &cobra.Command{
 }
 
 // projectChecks lists the checks gg check runs, in the order it runs them,
-// prints their results and numbers them in its help. gg gen ts runs it whole as
-// well; gg gen and gg module copy run subsets of it (see generationChecks and
-// moduleCopyChecks).
+// prints their results and numbers them in its help. gg gen ts runs every
+// one but Generated files; gg gen and gg module copy run subsets of it (see
+// generationChecks and moduleCopyChecks).
 var projectChecks = []ggcheck.Check{
 	ggcheck.ArchitectureDependencies,
 	ggcheck.ModelSingularNaming,
@@ -63,20 +63,23 @@ var projectChecks = []ggcheck.Check{
 	ggcheck.ColumnReferenceMinting,
 	ggcheck.GRPCServiceContext,
 	ggcheck.ProtobufDefinitions,
+	ggcheck.GeneratedFiles,
 }
 
 // generationChecks are the project checks gg gen runs before generating:
-// every one but eight. Protobuf definitions and TestMain imports are work
-// the run does itself, the definitions derived right before (see fillPBTags)
-// once instead of twice and the imports synced once main.go is written (see
-// syncTestMainImports). Index declarations, Framework columns, Tenant unique
-// indexes, Column types, Query names and ID accessors ask the compiled
-// models, while a project need not compile until the run has written its
-// files: model code may read column references not generated yet, and the
-// column file of a deleted model still names it. The six stay with gg check,
-// and what they report is refused again before a table is created.
+// every one but nine. Protobuf definitions, TestMain imports and Generated
+// files are work the run does itself: the definitions derived right before
+// (see fillPBTags) once instead of twice, the imports synced once main.go is
+// written (see syncTestMainImports), and the files the last of the three
+// compares written by the run, which a project behind its models is running
+// for. Index declarations, Framework columns, Tenant unique indexes, Column
+// types, Query names and ID accessors ask the compiled models, while a
+// project need not compile until the run has written its files: model code
+// may read column references not generated yet, and the column file of a
+// deleted model still names it. The six stay with gg check, and what they
+// report is refused again before a table is created.
 func generationChecks() []ggcheck.Check {
-	return projectChecksWithout(ggcheck.ProtobufDefinitions.Name, ggcheck.TestMainImports.Name, ggcheck.IndexDeclarations.Name, ggcheck.FrameworkColumns.Name, ggcheck.TenantUniqueIndexes.Name, ggcheck.ColumnTypes.Name, ggcheck.QueryNames.Name, ggcheck.IDAccessors.Name)
+	return projectChecksWithout(ggcheck.ProtobufDefinitions.Name, ggcheck.TestMainImports.Name, ggcheck.GeneratedFiles.Name, ggcheck.IndexDeclarations.Name, ggcheck.FrameworkColumns.Name, ggcheck.TenantUniqueIndexes.Name, ggcheck.ColumnTypes.Name, ggcheck.QueryNames.Name, ggcheck.IDAccessors.Name)
 }
 
 // moduleCopyChecks are the project checks the gg gen run of gg module copy
