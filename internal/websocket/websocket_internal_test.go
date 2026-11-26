@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -16,9 +17,16 @@ import (
 // no message is not left silent: the server pings its client on every beat
 // of the heartbeat, played out here in milliseconds.
 func TestHeartbeatPingsAnIdleConnection(t *testing.T) {
-	beatEvery(t, 20*time.Millisecond)
+	// A beat is also the time a ping has to be written in, and a ping still
+	// being written when it runs out closes the connection: the beat leaves
+	// room for a test binary a busy machine keeps waiting.
+	beatEvery(t, 100*time.Millisecond)
 
-	release := make(chan struct{})
+	held := make(chan struct{})
+	// The handler is let go whatever the test ends on: a connection it
+	// leaves open is one the Drain of every later test waits for.
+	release := sync.OnceFunc(func() { close(held) })
+	t.Cleanup(release)
 	served := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer close(served)
@@ -27,7 +35,7 @@ func TestHeartbeatPingsAnIdleConnection(t *testing.T) {
 			return
 		}
 		defer conn.Close(nil)
-		<-release
+		<-held
 	}))
 	t.Cleanup(srv.Close)
 
@@ -44,7 +52,7 @@ func TestHeartbeatPingsAnIdleConnection(t *testing.T) {
 	go func() { _, _, _ = client.Read(context.WithoutCancel(t.Context())) }()
 
 	require.Eventually(t, func() bool { return pings.Load() >= 3 }, 5*time.Second, 10*time.Millisecond)
-	close(release)
+	release()
 	<-served
 }
 

@@ -642,16 +642,20 @@ func TestSendFailsWhenTheClientStopsReading(t *testing.T) {
 // TestDrainWaitsForTheConnectionsAccepted proves Drain returns once every
 // accepted connection has closed, and not before.
 func TestDrainWaitsForTheConnectionsAccepted(t *testing.T) {
-	accepted, release := make(chan struct{}, 1), make(chan struct{})
+	accepted, held := make(chan struct{}, 1), make(chan struct{})
+	release := sync.OnceFunc(func() { close(held) })
 	url := serve(t, func(w http.ResponseWriter, r *http.Request) {
 		conn, err := websocket.Accept(w, r, nil, time.Second)
 		if err != nil {
 			return
 		}
 		accepted <- struct{}{}
-		<-release
+		<-held
 		conn.Close(nil)
 	})
+	// The handler is let go whatever the test ends on: a connection it
+	// leaves open is one the Drain of the next test waits for.
+	t.Cleanup(release)
 	conn := dial(t, url, nil)
 	// The client sees the connection open a moment before Accept returns it.
 	await(t, accepted)
@@ -664,7 +668,7 @@ func TestDrainWaitsForTheConnectionsAccepted(t *testing.T) {
 	case <-time.After(100 * time.Millisecond):
 	}
 
-	close(release)
+	release()
 	require.Zero(t, await(t, drained), "no connection is left to cut")
 	_, err := recv(t, conn)
 	require.ErrorIs(t, err, io.EOF)
