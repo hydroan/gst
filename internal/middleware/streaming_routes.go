@@ -12,9 +12,9 @@ import (
 // Stream action. Request-scoped response treatment is wrong for those:
 // capturing the response body would tee an unbounded stream, a circuit
 // breaker would count a healthy connection as one never-returning request
-// and starve its half-open probe budget, and a request timeout would tear
-// the stream down mid-flight. The middlewares concerned consult the registry
-// and leave streaming requests alone.
+// and starve its half-open probe budget, and the deadline of a request would
+// tear the stream down mid-flight. The middlewares concerned consult the
+// registry and leave streaming requests alone.
 //
 // Routes are marked as they register — the router marks every route
 // registered with the SSE or the Stream phase; tests mark theirs by hand —
@@ -46,11 +46,10 @@ func IsStreamingRoute(method, path string) bool {
 	return ok
 }
 
-// IsStreamingRequest reports whether the request resolved to a streaming
+// isStreamingRequest reports whether the request resolved to a streaming
 // route. Requests gin matched to no route have an empty FullPath and are
-// never streaming. The public middleware package asks it too, for the
-// request timeout it ships.
-func IsStreamingRequest(c *gin.Context) bool {
+// never streaming.
+func isStreamingRequest(c *gin.Context) bool {
 	if c == nil || c.Request == nil {
 		return false
 	}

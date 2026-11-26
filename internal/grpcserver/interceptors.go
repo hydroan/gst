@@ -7,6 +7,7 @@ import (
 	"github.com/cockroachdb/errors"
 	grpcprom "github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/recovery"
+	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/tracing"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
@@ -31,15 +32,18 @@ var (
 // so every call downstream carries a trace id and leaves an access-log
 // entry; the metrics next, which then count what the recovery inside them
 // turns a panic into; recovery, which covers the handler and everything
-// after it; then the interceptors the project registered (see Use and
-// UseAuth), closest to the handler, the way the HTTP listener mounts the
-// project's middleware behind its own. The stream chain runs the same
-// stages on a stream, the rpcs of the Stream actions and the health and
-// reflection services' among them: the scope and the project's
-// interceptors run once ahead of the first message (see requestScopeStream
-// and streamOf); innermost, the stream gets the context that ends when the
-// server begins to stop, stopping, and the stop's answer (see
-// streamShutdown).
+// after it; the deadline of a unary call (see deadline), which holds what
+// follows to server.write_timeout, mounted for a write timeout above zero
+// alone, the way the HTTP listener mounts its own; then the interceptors
+// the project registered (see Use and UseAuth), closest to the handler, the
+// way the HTTP listener mounts the project's middleware behind its own. The
+// stream chain runs the same stages but the deadline on a stream, which
+// outlives the time a request is given, the rpcs of the Stream actions and
+// the health and reflection services' among them: the scope and the
+// project's interceptors run once ahead of the first message (see
+// requestScopeStream and streamOf); innermost, the stream gets the context
+// that ends when the server begins to stop, stopping, and the stop's answer
+// (see streamShutdown).
 //
 // With OpenTelemetry enabled the server also carries otelgrpc's stats
 // handler, the counterpart of the HTTP listener's tracing middleware: it
@@ -54,6 +58,9 @@ var (
 func chains(stopping context.Context) []grpc.ServerOption {
 	onPanic := recovery.WithRecoveryHandlerContext(recovered)
 	unary := []grpc.UnaryServerInterceptor{requestScope, serverMetrics.UnaryServerInterceptor(), recovery.UnaryServerInterceptor(onPanic)}
+	if timeout := config.App.Server.WriteTimeout; timeout > 0 {
+		unary = append(unary, deadline(timeout))
+	}
 	unary = append(unary, projectUnaryInterceptors()...)
 	stream := []grpc.StreamServerInterceptor{requestScopeStream, serverMetrics.StreamServerInterceptor(), recovery.StreamServerInterceptor(onPanic)}
 	stream = append(stream, projectStreamInterceptors()...)

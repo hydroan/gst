@@ -7,16 +7,11 @@
 // caller it establishes.
 package middleware
 
-import (
-	"time"
-
-	"github.com/hydroan/gst/middleware"
-)
+import "github.com/hydroan/gst/middleware"
 
 func init() {
 	middleware.Register(
 		middleware.RequestSizeLimit(1<<20), // a body over 1 MiB is refused before any handler reads it
-		middleware.Timeout(10*time.Second), // a handler still running after that answers 504; streams are left alone
 		middleware.SecurityHeaders(nil),    // the usual browser headers, with the defaults
 		noStore,
 	)

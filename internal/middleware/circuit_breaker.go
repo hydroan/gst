@@ -23,7 +23,7 @@ func CircuitBreaker() gin.HandlerFunc {
 		// client listens; counted as an in-flight request it would sit in the
 		// breaker's counts forever and, worse, occupy the half-open probe
 		// budget so the breaker never closes again.
-		if IsStreamingRequest(c) {
+		if isStreamingRequest(c) {
 			return
 		}
 

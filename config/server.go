@@ -94,7 +94,15 @@ type Server struct {
 	// stop once its lease is lost — skips it.
 	ShutdownDelay time.Duration `json:"shutdown_delay" mapstructure:"shutdown_delay" ini:"shutdown_delay" yaml:"shutdown_delay"`
 
-	ReadTimeout  time.Duration `json:"read_timeout" mapstructure:"read_timeout" ini:"read_timeout" yaml:"read_timeout"`
+	ReadTimeout time.Duration `json:"read_timeout" mapstructure:"read_timeout" ini:"read_timeout" yaml:"read_timeout"`
+	// WriteTimeout is the time a request is given to be answered in, on both
+	// listeners, 15 seconds by default: the context of the request ends
+	// then, stopping the work that honors it, and an HTTP request whose
+	// response has not started is answered 504, a unary gRPC call
+	// DeadlineExceeded. The HTTP connection is given a tenth more for its
+	// writes, the room that 504 goes out in. A stream is held to no such
+	// time, Server-Sent Events, a WebSocket connection and a streaming rpc
+	// alike, and zero or less holds no request to any.
 	WriteTimeout time.Duration `json:"write_timeout" mapstructure:"write_timeout" ini:"write_timeout" yaml:"write_timeout"`
 	IdleTimeout  time.Duration `json:"idle_timeout" mapstructure:"idle_timeout" ini:"idle_timeout" yaml:"idle_timeout"`
 

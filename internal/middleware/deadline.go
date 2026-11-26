@@ -11,14 +11,14 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/gst"
-	"github.com/hydroan/gst/internal/logfield"
-	"github.com/hydroan/gst/internal/middleware"
 	"github.com/hydroan/gst/internal/response"
-	"go.uber.org/zap"
 )
 
-// Timeout returns a middleware that puts a deadline on the request context and
-// answers 504 when the rest of the chain has not started its response by then.
+// deadline returns the middleware holding a request to timeout, the time the
+// server gives a request to be answered in, which Builtin takes from
+// server.write_timeout: it puts the deadline on the request context and
+// answers 504, with gst.TimeoutMsg, when the rest of the chain has not
+// started its response by then. timeout is positive.
 //
 // The deadline is cooperative. The chain runs to completion on the request
 // goroutine, and code that honors the request context (database, cache and
@@ -31,21 +31,11 @@ import (
 // next request as soon as this one returns, and a chain still running on it
 // would read and write another request.
 //
-// Streaming routes are left alone, since a stream legitimately outlives any
-// request timeout.
-//
-// Example, from an init function (see Register):
-//
-//	// Set a 30 second timeout on every API route
-//	middleware.Register(middleware.Timeout(30 * time.Second))
-//
-//	// Set a 5 second timeout
-//	middleware.Register(middleware.Timeout(5 * time.Second))
-func Timeout(timeout time.Duration) gin.HandlerFunc {
+// A streaming route is left alone (see isStreamingRequest): a stream
+// legitimately outlives the time a request is given.
+func deadline(timeout time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// A streaming response legitimately outlives any request timeout;
-		// cutting it down here would end every stream at the deadline.
-		if middleware.IsStreamingRequest(c) {
+		if isStreamingRequest(c) {
 			return
 		}
 
@@ -56,7 +46,8 @@ func Timeout(timeout time.Duration) gin.HandlerFunc {
 		header := c.Writer.Header().Clone()
 		writer := &deadlineWriter{ResponseWriter: c.Writer, ctx: ctx}
 		func() {
-			// Restored on a panic too, so Recovery answers on the real writer.
+			// Restored on a panic too, so the recovery ahead of the deadline
+			// answers on the real writer.
 			defer func() { c.Writer = writer.ResponseWriter }()
 			c.Writer = writer
 			c.Next()
@@ -69,19 +60,13 @@ func Timeout(timeout time.Duration) gin.HandlerFunc {
 		// it set along with what it wrote, and answer 504 instead.
 		clear(c.Writer.Header())
 		maps.Copy(c.Writer.Header(), header)
-		zap.L().Warn(
-			"request timeout",
-			logfield.Path(c.Request.URL.Path),
-			logfield.Method(c.Request.Method),
-			zap.Duration("timeout", timeout),
-		)
-		response.Abort(c, gst.NewError(http.StatusGatewayTimeout, timeoutMsg))
+		response.Abort(c, gst.NewError(http.StatusGatewayTimeout, gst.TimeoutMsg))
 	}
 }
 
 // deadlineWriter settles a response on its first write: a response that
 // starts before the deadline goes through to the client, and one that would
-// only start after it is dropped, so Timeout can answer 504 in its place.
+// only start after it is dropped, so deadline can answer 504 in its place.
 type deadlineWriter struct {
 	gin.ResponseWriter
 

@@ -10,11 +10,28 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
+	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/sse"
 	"github.com/hydroan/gst/internal/websocket"
 	"github.com/stretchr/testify/require"
 )
+
+// TestNewServerGivesTheConnectionATenthMoreThanTheRequest pins the write
+// timeout of the server against server.write_timeout, the time a request is
+// given to be answered in: the connection gets a tenth more, the room the
+// 504 of a request out of time is written in, and none when the setting
+// gives a request no limit.
+func TestNewServerGivesTheConnectionATenthMoreThanTheRequest(t *testing.T) {
+	original := config.App.Server.WriteTimeout
+	t.Cleanup(func() { config.App.Server.WriteTimeout = original })
+
+	config.App.Server.WriteTimeout = 10 * time.Second
+	require.Equal(t, 11*time.Second, newServer("", nil).WriteTimeout)
+
+	config.App.Server.WriteTimeout = 0
+	require.Zero(t, newServer("", nil).WriteTimeout)
+}
 
 // TestShutdownEndsOpenStreams proves an open Server-Sent Events stream does
 // not hold the server's shutdown. Shutdown waits for every active request and

@@ -48,12 +48,13 @@ func TestAPanicAnswersInternalAndIsLoggedWithItsStack(t *testing.T) {
 	require.Equal(t, traceID, entries[0].ContextMap()[execctx.KeyTraceID])
 }
 
-// TestAPanicAndTheStopAnswerInTheLanguageOfTheProcess pins the language of
-// the two answers the server words itself rather than through StatusError: a
-// panic is answered Internal, and a stream the stop ended Unavailable, each
-// with its sentence in the language the process answers in, the one the HTTP
-// listener answers the same case in.
-func TestAPanicAndTheStopAnswerInTheLanguageOfTheProcess(t *testing.T) {
+// TestAPanicTheStopAndTheDeadlineAnswerInTheLanguageOfTheProcess pins the
+// language of the three answers the server words itself rather than through
+// StatusError: a panic is answered Internal, a stream the stop ended
+// Unavailable and a unary call out of time DeadlineExceeded, each with its
+// sentence in the language the process answers in, the one the HTTP listener
+// answers the same case in.
+func TestAPanicTheStopAndTheDeadlineAnswerInTheLanguageOfTheProcess(t *testing.T) {
 	require.NoError(t, i18n.SetLanguage(i18n.Chinese))
 	t.Cleanup(func() { require.NoError(t, i18n.SetLanguage(i18n.English)) })
 
@@ -72,6 +73,13 @@ func TestAPanicAndTheStopAnswerInTheLanguageOfTheProcess(t *testing.T) {
 		})
 	require.Equal(t, codes.Unavailable, status.Code(stopped))
 	require.Equal(t, "服务器正在关闭", status.Convert(stopped).Message())
+
+	_, late := deadline(time.Millisecond)(context.Background(), nil, &grpc.UnaryServerInfo{}, func(ctx context.Context, _ any) (any, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	})
+	require.Equal(t, codes.DeadlineExceeded, status.Code(late))
+	require.Equal(t, "请求超时", status.Convert(late).Message())
 }
 
 // contextStream is a server stream that only answers its context.
