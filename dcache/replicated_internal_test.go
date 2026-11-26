@@ -136,7 +136,9 @@ func TestWriteRejectsInvalidUTF8Key(t *testing.T) {
 	badKey := "a\xff\xfeb"
 	require.Error(t, dc.Set(ctx, badKey, 1, time.Minute))
 	require.Error(t, dc.Delete(ctx, badKey))
-	require.False(t, dc.Exists(ctx, badKey), "the rejected write must not reach the store")
+	exists, err := dc.Exists(ctx, badKey)
+	require.NoError(t, err)
+	require.False(t, exists, "the rejected write must not reach the store")
 }
 
 // TestWatermarkCoversLocalWrites is the regression guard for the write-path
@@ -170,7 +172,9 @@ func TestWatermarkCoversLocalWrites(t *testing.T) {
 	stale, err = dc.applyPeerSet(&event{TS: time.Now().Add(-time.Second).UnixNano(), Op: opSet, Key: "watermark-key", Typ: dc.typ, CacheID: "peer"}, 3)
 	require.NoError(t, err)
 	require.True(t, stale, "a stale peer set must not resurrect a locally deleted key")
-	require.False(t, dc.Exists(ctx, "watermark-key"))
+	exists, err := dc.Exists(ctx, "watermark-key")
+	require.NoError(t, err)
+	require.False(t, exists)
 }
 
 // TestSetReturnsMarshalFailure asserts that a value the event pipeline
@@ -186,7 +190,9 @@ func TestSetReturnsMarshalFailure(t *testing.T) {
 	require.Error(t, err, "a JSON-unmarshalable value must fail the publication")
 
 	// The local tier holds the value regardless, as documented.
-	require.True(t, dc.Exists(ctx, "unmarshalable-key"))
+	exists, err := dc.Exists(ctx, "unmarshalable-key")
+	require.NoError(t, err)
+	require.True(t, exists)
 }
 
 // TestWatermarkAdvancesOnlyOnApply asserts that a failed store application
@@ -267,9 +273,9 @@ func (s *fakeStore[T]) Delete(_ context.Context, key string) error {
 	return nil
 }
 
-func (s *fakeStore[T]) Exists(_ context.Context, key string) bool {
+func (s *fakeStore[T]) Exists(_ context.Context, key string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	_, ok := s.m[key]
-	return ok
+	return ok, nil
 }

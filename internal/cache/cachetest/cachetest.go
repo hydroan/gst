@@ -174,8 +174,8 @@ func Run(t *testing.T, cache gst.Cache[string], caps Capabilities) {
 		if _, err := cache.Get(nilCtx, "conformance-nil-ctx"); !errors.Is(err, gst.ErrEntryNotFound) {
 			t.Fatalf("want ErrEntryNotFound, got %v", err)
 		}
-		if cache.Exists(nilCtx, "conformance-nil-ctx") {
-			t.Fatal("want false for missing key")
+		if exists, err := cache.Exists(nilCtx, "conformance-nil-ctx"); err != nil || exists {
+			t.Fatalf("want false and no error for missing key, got %v, %v", exists, err)
 		}
 		if err := cache.Delete(nilCtx, "conformance-nil-ctx"); err != nil {
 			t.Fatalf("delete with nil ctx: %v", err)
@@ -183,8 +183,8 @@ func Run(t *testing.T, cache gst.Cache[string], caps Capabilities) {
 	})
 
 	t.Run("ExistsMissingIsFalse", func(t *testing.T) {
-		if cache.Exists(ctx, "conformance-missing") {
-			t.Fatal("want false for missing key")
+		if exists, err := cache.Exists(ctx, "conformance-missing"); err != nil || exists {
+			t.Fatalf("want false and no error for missing key, got %v, %v", exists, err)
 		}
 	})
 
@@ -228,8 +228,8 @@ func Run(t *testing.T, cache gst.Cache[string], caps Capabilities) {
 		if err := cache.Set(ctx, "conformance-exists", "value", storeTTL); err != nil {
 			t.Fatalf("set: %v", err)
 		}
-		if !cache.Exists(ctx, "conformance-exists") {
-			t.Fatal("want true for stored key")
+		if exists, err := cache.Exists(ctx, "conformance-exists"); err != nil || !exists {
+			t.Fatalf("want true and no error for stored key, got %v, %v", exists, err)
 		}
 	})
 
@@ -312,7 +312,11 @@ func Run(t *testing.T, cache gst.Cache[string], caps Capabilities) {
 		}
 		var resident int
 		for i := range limit {
-			if cache.Exists(ctx, "bound-"+strconv.Itoa(i)) {
+			exists, err := cache.Exists(ctx, "bound-"+strconv.Itoa(i))
+			if err != nil {
+				t.Fatalf("exists: %v", err)
+			}
+			if exists {
 				resident++
 			}
 		}
@@ -339,7 +343,7 @@ func Run(t *testing.T, cache gst.Cache[string], caps Capabilities) {
 					case 1:
 						_, _ = cache.Get(ctx, key)
 					case 2:
-						cache.Exists(ctx, key)
+						_, _ = cache.Exists(ctx, key)
 					default:
 						_ = cache.Delete(ctx, key)
 					}

@@ -35,9 +35,9 @@ func (c *totpBindChallengeTestCache) Delete(_ context.Context, key string) error
 	return nil
 }
 
-func (c *totpBindChallengeTestCache) Exists(_ context.Context, key string) bool {
+func (c *totpBindChallengeTestCache) Exists(_ context.Context, key string) (bool, error) {
 	_, ok := c.items[key]
-	return ok
+	return ok, nil
 }
 
 func TestIssueTOTPBindChallengeUsesOpaqueRandomToken(t *testing.T) {

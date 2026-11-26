@@ -89,7 +89,9 @@ func TestCacheBasicOperations(t *testing.T) {
 	require.NoError(t, err)
 
 	// it must be gone
-	require.False(t, dc.Exists(t.Context(), "test-key"))
+	exists, err := dc.Exists(t.Context(), "test-key")
+	require.NoError(t, err)
+	require.False(t, exists)
 
 	// a key that does not exist
 	_, err = dc.Get(t.Context(), "non-existent")
@@ -234,7 +236,9 @@ func TestCacheDifferentTypes(t *testing.T) {
 	// remove the word entry.
 	require.NoError(t, strCache.Delete(t.Context(), "shared-key"))
 	time.Sleep(time.Second)
-	require.False(t, strCache.Exists(t.Context(), "shared-key"))
+	exists, err := strCache.Exists(t.Context(), "shared-key")
+	require.NoError(t, err)
+	require.False(t, exists)
 	wordVal, err = wordCache.Get(t.Context(), "shared-key")
 	require.NoError(t, err)
 	require.Equal(t, Word("word-value"), wordVal)

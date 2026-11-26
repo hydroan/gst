@@ -472,7 +472,7 @@ func (dc *replicatedCache[T]) Delete(ctx context.Context, key string) (err error
 	})
 }
 
-func (dc *replicatedCache[T]) Exists(ctx context.Context, key string) bool {
+func (dc *replicatedCache[T]) Exists(ctx context.Context, key string) (bool, error) {
 	return dc.store.Exists(ctx, key)
 }
 

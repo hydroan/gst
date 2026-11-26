@@ -24,7 +24,7 @@ func TestCacheWithoutClientFailsClosed(t *testing.T) {
 	if err := c.Delete(ctx, "uninitialized"); err == nil {
 		t.Fatal("want error from Delete without a client")
 	}
-	if c.Exists(ctx, "uninitialized") {
-		t.Fatal("want false from Exists without a client")
+	if _, err := c.Exists(ctx, "uninitialized"); err == nil {
+		t.Fatal("want error from Exists without a client")
 	}
 }

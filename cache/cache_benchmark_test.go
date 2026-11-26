@@ -397,7 +397,7 @@ func benchCache[T any](b *testing.B, cache gst.Cache[T], values []T) {
 		fill(ctx, cache, keys, values)
 		b.ResetTimer()
 		for i := 0; b.Loop(); i++ {
-			cache.Exists(ctx, keys[i%benchKeyCount])
+			_, _ = cache.Exists(ctx, keys[i%benchKeyCount])
 		}
 	})
 	b.Run("Delete", func(b *testing.B) {

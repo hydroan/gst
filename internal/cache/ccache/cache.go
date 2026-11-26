@@ -78,10 +78,10 @@ func (c *cache[T]) Delete(_ context.Context, key string) error {
 	return nil
 }
 
-func (c *cache[T]) Exists(_ context.Context, key string) bool {
+func (c *cache[T]) Exists(_ context.Context, key string) (bool, error) {
 	val := c.c.Get(key)
 	if val == nil {
-		return false
+		return false, nil
 	}
-	return !val.Expired()
+	return !val.Expired(), nil
 }

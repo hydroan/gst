@@ -63,7 +63,11 @@ func TestSizedValueDoesNotShrinkCapacity(t *testing.T) {
 	}
 	var resident int
 	for i := range writes {
-		if c.Exists(ctx, "sized-"+strconv.Itoa(i)) {
+		exists, err := c.Exists(ctx, "sized-"+strconv.Itoa(i))
+		if err != nil {
+			t.Fatalf("exists: %v", err)
+		}
+		if exists {
 			resident++
 		}
 	}

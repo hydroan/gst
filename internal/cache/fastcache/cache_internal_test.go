@@ -22,7 +22,7 @@ func TestGetDropsAnEntryItCannotDecode(t *testing.T) {
 	if _, err := c.Get(ctx, "unreadable-entry"); !errors.Is(err, gst.ErrEntryNotFound) {
 		t.Fatalf("want ErrEntryNotFound for an entry that cannot be decoded, got %v", err)
 	}
-	if c.Exists(ctx, "unreadable-entry") {
+	if exists, err := c.Exists(ctx, "unreadable-entry"); err != nil || exists {
 		t.Fatal("want the unreadable entry dropped")
 	}
 }

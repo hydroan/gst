@@ -27,6 +27,7 @@ type recordingCache struct {
 	setErr    error
 	deleteErr error
 	exists    bool
+	existsErr error
 }
 
 func (c *recordingCache) Get(ctx context.Context, key string) (string, error) {
@@ -44,9 +45,9 @@ func (c *recordingCache) Delete(ctx context.Context, key string) error {
 	return c.deleteErr
 }
 
-func (c *recordingCache) Exists(ctx context.Context, key string) bool {
+func (c *recordingCache) Exists(ctx context.Context, key string) (bool, error) {
 	c.lastCtx, c.lastKey = ctx, key
-	return c.exists
+	return c.exists, c.existsErr
 }
 
 // TestWrapperForwardsWhenTracingDisabled asserts the fast path: with tracing
@@ -82,8 +83,8 @@ func TestWrapperForwardsWhenTracingDisabled(t *testing.T) {
 		t.Fatalf("delete key not forwarded: %q", inner.lastKey)
 	}
 
-	if !wrapped.Exists(ctx, "key-exists") {
-		t.Fatal("want true from wrapped Exists")
+	if exists, err := wrapped.Exists(ctx, "key-exists"); err != nil || !exists {
+		t.Fatalf("want true and no error from wrapped Exists, got %v, %v", exists, err)
 	}
 	if inner.lastKey != "key-exists" {
 		t.Fatalf("exists key not forwarded: %q", inner.lastKey)
@@ -141,8 +142,8 @@ func TestWrapperLeavesTheStatusOfACompletedOperationUnset(t *testing.T) {
 	if err := wrapped.Delete(ctx, "key-delete"); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	if !wrapped.Exists(ctx, "key-exists") {
-		t.Fatal("want true from wrapped Exists")
+	if exists, err := wrapped.Exists(ctx, "key-exists"); err != nil || !exists {
+		t.Fatalf("want true and no error from wrapped Exists, got %v, %v", exists, err)
 	}
 	inner.getErr = errors.New("backend down")
 	if _, err := wrapped.Get(ctx, "key-failed"); err == nil {
@@ -166,16 +167,16 @@ func TestWrapperLeavesTheStatusOfACompletedOperationUnset(t *testing.T) {
 	}
 }
 
-// TestWrapperRecordsABackendFailure asserts what the span of a failed
-// operation carries, the same for a get, a set and a delete: the error of the
-// backend as the status description, and one exception event with the stack
-// of where the error was created, the way the framework records a failure on
-// every span of its own.
+// TestWrapperRecordsABackendFailure asserts what the span of a failed operation
+// carries, the same for a get, a set, a delete and an existence check: the
+// error of the backend as the status description, and one exception event with
+// the stack of where the error was created, the way the framework records a
+// failure on every span of its own.
 func TestWrapperRecordsABackendFailure(t *testing.T) {
 	tracingtest.Enable(t)
 	recorder := tracingtest.Record(t)
 	failure := errors.New("backend down")
-	inner := &recordingCache{getErr: failure, setErr: failure, deleteErr: failure}
+	inner := &recordingCache{getErr: failure, setErr: failure, deleteErr: failure, existsErr: failure}
 	wrapped := tracing.NewWrapper[string](inner, "sample")
 	ctx := context.Background()
 
@@ -188,10 +189,13 @@ func TestWrapperRecordsABackendFailure(t *testing.T) {
 	if err := wrapped.Delete(ctx, "key-delete"); !errors.Is(err, failure) {
 		t.Fatalf("delete: want the backend error, got %v", err)
 	}
+	if _, err := wrapped.Exists(ctx, "key-exists"); !errors.Is(err, failure) {
+		t.Fatalf("exists: want the backend error, got %v", err)
+	}
 
 	ended := recorder.Ended()
-	if len(ended) != 3 {
-		t.Fatalf("want 3 spans, got %d: %v", len(ended), tracingtest.EndedNames(recorder))
+	if len(ended) != 4 {
+		t.Fatalf("want 4 spans, got %d: %v", len(ended), tracingtest.EndedNames(recorder))
 	}
 	for _, span := range ended {
 		if status := span.Status(); status.Code != codes.Error || status.Description != failure.Error() {

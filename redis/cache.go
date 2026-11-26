@@ -97,16 +97,16 @@ func (cache[T]) Delete(ctx context.Context, key string) error {
 	return errors.WithStack(client.Del(ctx, Key(key)).Err())
 }
 
-// Exists reports whether key exists. It has no error channel, so a
-// disabled client and a Redis failure both answer false.
-func (cache[T]) Exists(ctx context.Context, key string) bool {
+// Exists reports whether key exists. A disabled client and a Redis failure
+// are errors, which the caller tells from a key that is not there.
+func (cache[T]) Exists(ctx context.Context, key string) (bool, error) {
 	client, err := Client()
 	if err != nil {
-		return false
+		return false, err
 	}
 	res, err := client.Exists(ctx, Key(key)).Result()
 	if err != nil {
-		return false
+		return false, errors.WithStack(err)
 	}
-	return res > 0
+	return res > 0, nil
 }

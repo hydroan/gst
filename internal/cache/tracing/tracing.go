@@ -110,7 +110,7 @@ func (tw *Wrapper[T]) Delete(ctx context.Context, key string) error {
 }
 
 // Exists checks if a key exists in the cache with tracing.
-func (tw *Wrapper[T]) Exists(ctx context.Context, key string) bool {
+func (tw *Wrapper[T]) Exists(ctx context.Context, key string) (bool, error) {
 	ctx = orBackground(ctx)
 	if !tracing.IsEnabled() {
 		return tw.cache.Exists(ctx, key)
@@ -119,11 +119,14 @@ func (tw *Wrapper[T]) Exists(ctx context.Context, key string) bool {
 	defer span.End()
 	recording := tracing.IsSpanRecording(span)
 
-	exists := tw.cache.Exists(spanCtx, key)
+	exists, err := tw.cache.Exists(spanCtx, key)
 	if recording {
 		span.SetAttributes(append(tw.attributes("exists", key), attribute.Bool("cache.exists", exists))...)
 	}
-	return exists
+	if err != nil {
+		tracing.RecordError(span, err)
+	}
+	return exists, err
 }
 
 // attributes builds the span attributes for one cache operation. Every span

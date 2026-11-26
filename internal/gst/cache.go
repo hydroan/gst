@@ -52,7 +52,9 @@ type Cache[T any] interface {
 	// Deleting a key that does not exist is not an error.
 	Delete(ctx context.Context, key string) error
 
-	// Exists checks if a key exists in the cache.
-	// Returns true if the key exists, false otherwise.
-	Exists(ctx context.Context, key string) bool
+	// Exists reports whether a key exists in the cache. The error is the
+	// backend failing to answer, which a caller tells from a key that is
+	// not there: a check that refuses on "exists" must not read a backend
+	// that is down as "does not".
+	Exists(ctx context.Context, key string) (bool, error)
 }

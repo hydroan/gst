@@ -196,8 +196,8 @@ func (failingLimiterCache) Delete(context.Context, string) error {
 	return errLimiterCacheDown
 }
 
-func (failingLimiterCache) Exists(context.Context, string) bool {
-	return false
+func (failingLimiterCache) Exists(context.Context, string) (bool, error) {
+	return false, errLimiterCacheDown
 }
 
 // recordingLimiterCache is a limiter cache held in a map that records the
@@ -226,7 +226,7 @@ func (c *recordingLimiterCache) Delete(_ context.Context, key string) error {
 	return nil
 }
 
-func (c *recordingLimiterCache) Exists(_ context.Context, key string) bool {
+func (c *recordingLimiterCache) Exists(_ context.Context, key string) (bool, error) {
 	_, ok := c.limiters[key]
-	return ok
+	return ok, nil
 }

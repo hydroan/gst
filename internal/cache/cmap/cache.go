@@ -55,6 +55,6 @@ func (c *cache[T]) Delete(_ context.Context, key string) error {
 	return nil
 }
 
-func (c *cache[T]) Exists(_ context.Context, key string) bool {
-	return c.c.Has(key)
+func (c *cache[T]) Exists(_ context.Context, key string) (bool, error) {
+	return c.c.Has(key), nil
 }

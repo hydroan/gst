@@ -87,9 +87,9 @@ func (c *cache[T]) Delete(_ context.Context, key string) error {
 	return nil
 }
 
-func (c *cache[T]) Exists(_ context.Context, key string) bool {
+func (c *cache[T]) Exists(_ context.Context, key string) (bool, error) {
 	_, err := c.c.Get(key)
-	return err == nil
+	return err == nil, nil
 }
 
 func buildConfig() bigcache.Config {

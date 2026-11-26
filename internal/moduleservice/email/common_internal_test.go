@@ -67,9 +67,9 @@ func (c *testCache[T]) Delete(_ context.Context, key string) error {
 	return nil
 }
 
-func (c *testCache[T]) Exists(ctx context.Context, key string) bool {
+func (c *testCache[T]) Exists(ctx context.Context, key string) (bool, error) {
 	_, err := c.Get(ctx, key)
-	return err == nil
+	return err == nil, nil
 }
 
 // Len reports the number of stored entries. It is a test-only helper on the

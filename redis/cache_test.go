@@ -146,7 +146,7 @@ func TestCacheDropsAnEntryItCannotDecode(t *testing.T) {
 	if !errors.Is(err, gst.ErrEntryNotFound) {
 		t.Fatalf("want ErrEntryNotFound for an entry that cannot be decoded, got %v", err)
 	}
-	if gstredis.Cache[string]().Exists(ctx, "cache-test:unreadable") {
+	if exists, err := gstredis.Cache[string]().Exists(ctx, "cache-test:unreadable"); err != nil || exists {
 		t.Fatal("want the unreadable entry dropped from the shared keyspace")
 	}
 	if entries := logs.FilterField(zap.String("key", "cache-test:unreadable")).All(); len(entries) != 1 {

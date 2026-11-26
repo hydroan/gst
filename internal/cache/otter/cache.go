@@ -109,7 +109,7 @@ func (c *cache[T]) Delete(_ context.Context, key string) error {
 // Exists probes through the read path because the backend keeps its
 // containment check unexported. The probe counts as a read, which is
 // harmless: statistics are off and write-based expiry ignores reads.
-func (c *cache[T]) Exists(_ context.Context, key string) bool {
+func (c *cache[T]) Exists(_ context.Context, key string) (bool, error) {
 	_, exists := c.c.GetIfPresent(key)
-	return exists
+	return exists, nil
 }

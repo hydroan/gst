@@ -68,9 +68,9 @@ func (c *cache[T]) Delete(_ context.Context, key string) error {
 	return nil
 }
 
-func (c *cache[T]) Exists(_ context.Context, key string) bool {
+func (c *cache[T]) Exists(_ context.Context, key string) (bool, error) {
 	_, exists := c.c.Get(key)
-	return exists
+	return exists, nil
 }
 
 // buildConf sizes the cache following the backend's own guidance: MaxCost
