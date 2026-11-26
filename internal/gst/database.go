@@ -81,7 +81,8 @@ type Database[M Model] interface {
 	// naming the caller the context carries as updater. Assignments come from
 	// column references, such as SampleCols.Status.Set(v); at least one is
 	// required, and empty columns, nil values and a column assigned twice are
-	// rejected.
+	// rejected. A record that is missing, soft deleted or left out by the
+	// conditions the chain carries fails with database.ErrRecordNotFound.
 	UpdateByID(id string, assignments ...Assignment) error
 	// List retrieves multiple records matching the query conditions.
 	// dest must be a non-nil pointer to a slice; the slice value itself may be

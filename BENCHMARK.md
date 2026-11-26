@@ -423,7 +423,7 @@ hey -z 30s -c 50 -m DELETE "$BENCH_BASE_URL/api/bench/delete/bench-missing?dry_r
 
 ### updatebyid
 
-updatebyid 压测 database.UpdateByID 写路径（PATCH + JSON body）：无钩子、无事务包装，是框架最轻的写路径，可与 update 对比出钩子判定与事务分流的开销。接口对**不存在的主键**执行一条真实 UPDATE，命中 0 行、不写任何数据（UpdateByID 对不存在的记录返回 nil）。URL 里的 `:id` 只是路由占位，service 内固定使用不存在的主键。因此无需播种、无需清表，表内容不影响口径。
+updatebyid 压测 database.UpdateByID 写路径（PATCH + JSON body）：无钩子、无事务包装，是框架最轻的写路径，可与 update 对比出钩子判定与事务分流的开销。接口对**不存在的主键**执行一条真实 UPDATE，命中 0 行、不写任何数据；框架返回的 ErrRecordNotFound 由接口吞掉视为成功。URL 里的 `:id` 只是路由占位，service 内固定使用不存在的主键。因此无需播种、无需清表，表内容不影响口径。
 
 ```bash
 # 启动被测服务（仅本地）

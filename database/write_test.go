@@ -1457,8 +1457,8 @@ func TestDatabaseUpdateByID(t *testing.T) {
 	require.Equal(t, newEmail, u.Email, "email should be updated")
 	require.NotEqual(t, previousUpdatedAt, u.UpdatedAt, "updated_at should be updated again")
 
-	// Test UpdateByID with non-existent ID - should not return error
-	require.NoError(t, database.Database[*TestUser](context.Background()).UpdateByID("non-existent-id", colName.Set("test")))
+	// A record that is not there fails the call, the way it fails Update.
+	require.ErrorIs(t, database.Database[*TestUser](context.Background()).UpdateByID("non-existent-id", colName.Set("test")), database.ErrRecordNotFound)
 
 	// Test UpdateByID with empty parameters - should return errors
 	err := database.Database[*TestUser](context.Background()).UpdateByID("", colName.Set("value"))
@@ -1493,6 +1493,36 @@ func TestDatabaseUpdateByID(t *testing.T) {
 	// Test UpdateByID with a duplicated column - should return error
 	err = database.Database[*TestUser](context.Background()).UpdateByID("id", colName.Set("a"), colName.Set("b"))
 	require.ErrorIs(t, err, database.ErrDuplicateColumn, "error should be ErrDuplicateColumn")
+}
+
+// TestDatabaseUpdateByIDFailsWhenNoRowMatches pins what the caller of an
+// UpdateByID that changed no row is told: a record the conditions of the
+// chain leave out, and one soft deleted, fail with ErrRecordNotFound the way
+// a missing one does, the row left as it was. An update guarded by a
+// condition thereby tells its caller whether it took effect.
+func TestDatabaseUpdateByIDFailsWhenNoRowMatches(t *testing.T) {
+	defer cleanupTestData()
+	ctx := context.Background()
+
+	require.NoError(t, database.Database[*TestUser](ctx).Create(u1))
+	storedAge := func() int {
+		u := new(TestUser)
+		require.NoError(t, database.Database[*TestUser](ctx).Get(u, u1.ID))
+		return u.Age
+	}
+
+	// A condition the record does not meet leaves it out.
+	err := database.Database[*TestUser](ctx).WithQuery(&TestUser{Name: "someone-else"}).UpdateByID(u1.ID, colAge.Set(99))
+	require.ErrorIs(t, err, database.ErrRecordNotFound)
+	require.Equal(t, 18, storedAge())
+
+	// The condition met, the update takes effect.
+	require.NoError(t, database.Database[*TestUser](ctx).WithQuery(&TestUser{Name: u1.Name}).UpdateByID(u1.ID, colAge.Set(19)))
+	require.Equal(t, 19, storedAge())
+
+	// A soft-deleted record is gone to an update.
+	require.NoError(t, database.Database[*TestUser](ctx).Delete(u1))
+	require.ErrorIs(t, database.Database[*TestUser](ctx).UpdateByID(u1.ID, colAge.Set(20)), database.ErrRecordNotFound)
 }
 
 // TestDatabaseUpdateByIDNormalizesID mirrors Get's id normalization: an id the

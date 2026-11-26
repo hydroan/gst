@@ -861,13 +861,18 @@ func normalizeTimes[M gst.Model](objs []M) error {
 //   - Returns ErrDuplicateColumn if one column is assigned twice
 //   - Returns ErrColumnTable if an assignment was built from another model's
 //     column reference, even when this model has a column of the same name
-//   - Returns nil (no error) if the record with the given ID does not exist
+//   - Returns ErrRecordNotFound if no live record has the given ID, a soft
+//     deleted one being gone to it, or if the record does not meet the
+//     conditions the chain carries: an update guarded by a condition tells
+//     its caller whether it took effect. Detection relies on matched-rows
+//     semantics, as Update's does
 //   - On a versioned model (model.Version) the version check is waived — the
 //     caller holds no object to compare — but the statement still bumps the
 //     version column so every carried version out there expires; an explicit
 //     version assignment takes the bump over
 //   - On a ClickHouse instance the statement is an asynchronous ALTER TABLE
-//     ... UPDATE mutation: a nil error means accepted, not rewritten; a
+//     ... UPDATE mutation: a nil error means accepted, not rewritten, and a
+//     missing record passes silently instead of ErrRecordNotFound; a
 //     versioned model answers ErrUnsupportedOnDialect there
 //
 // Example:
@@ -962,8 +967,16 @@ func (db *database[M]) UpdateByID(id string, assignments ...gst.Assignment) (err
 	// contract, so GORM's default per-statement transaction is pure overhead.
 	// Inside an ambient transaction db.ins is already that transaction's
 	// handle and the flag changes nothing.
-	if err = db.ins.Session(&gorm.Session{SkipDefaultTransaction: true}).Model(*new(M)).Where("id = ?", id).Updates(updates).Error; err != nil {
-		return errors.WithStack(err)
+	res := db.ins.Session(&gorm.Session{SkipDefaultTransaction: true}).Model(*new(M)).Where("id = ?", id).Updates(updates)
+	if res.Error != nil {
+		return errors.WithStack(res.Error)
+	}
+	// Zero matched rows means no live row has the id and meets the
+	// conditions the chain carries; matched-rows semantics make this
+	// reliable even when the assignments change nothing (see Update). A
+	// ClickHouse mutation reports no matched rows, so there the miss passes.
+	if res.RowsAffected == 0 && db.dialect() != dialectClickHouse {
+		return errors.Wrapf(ErrRecordNotFound, "update %s id=%s", db.outerTableName(), id)
 	}
 	return nil
 }
