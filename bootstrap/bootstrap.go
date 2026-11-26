@@ -77,6 +77,10 @@ func Bootstrap() error {
 
 	startup.Register(
 		config.Init,
+		// A project registers its sections from init functions, which have
+		// all run by now, so a section of the file nothing claims is a
+		// mistake, reported before anything acts on the configuration.
+		config.CheckUnknownSections,
 		// The language the process answers its clients in, set before
 		// anything can answer: a configuration naming one the framework does
 		// not speak ends the boot here.

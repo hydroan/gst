@@ -22,18 +22,14 @@ password = "npass"
 enabled = true
 `
 
-func TestRegisterReadsTheFileOverTheDefaultTags(t *testing.T) {
+func TestRegisteredSectionReadsTheFileOverTheDefaultTags(t *testing.T) {
 	filename := filepath.Join(t.TempDir(), "config.ini")
 	requireWriteConfigFile(t, filename, configData)
 
-	// Register config before Init
-	config.Register[Sample]()
 	config.SetConfigFile(filename)
 	if err := config.Init(); err != nil {
 		t.Fatal(err)
 	}
-	// Register config after Init
-	config.Register[Relay]()
 
 	sample := config.Get[*Sample]()
 	assert.Equal(t, "wx123456789", sample.AppID)
@@ -48,33 +44,7 @@ func TestRegisterReadsTheFileOverTheDefaultTags(t *testing.T) {
 	assert.True(t, relay.Enabled)
 }
 
-func TestRegisterTakesAPointerType(t *testing.T) {
-	filename := filepath.Join(t.TempDir(), "config.ini")
-	requireWriteConfigFile(t, filename, configData)
-
-	// Register config before Init
-	config.Register[*Sample]()
-	config.SetConfigFile(filename)
-	if err := config.Init(); err != nil {
-		t.Fatal(err)
-	}
-	// Register config after Init
-	config.Register[*Relay]()
-	sample := config.Get[*Sample]()
-
-	assert.Equal(t, "wx123456789", sample.AppID)
-	assert.Equal(t, "myappsecret", sample.AppSecret)
-	assert.False(t, sample.Enabled)
-
-	relay := config.Get[Relay]()
-	assert.Equal(t, "tcp://127.0.0.1:4222", relay.URL)
-	assert.Equal(t, "nuser", relay.Username)
-	assert.Equal(t, "npass", relay.Password)
-	assert.Equal(t, 5*time.Second, relay.Timeout)
-	assert.True(t, relay.Enabled)
-}
-
-func TestRegisterReadsTheEnvironmentOverTheFile(t *testing.T) {
+func TestRegisteredSectionReadsTheEnvironmentOverTheFile(t *testing.T) {
 	filename := filepath.Join(t.TempDir(), "config.ini")
 	requireWriteConfigFile(t, filename, configData)
 
@@ -83,14 +53,10 @@ func TestRegisterReadsTheEnvironmentOverTheFile(t *testing.T) {
 	t.Setenv("RELAY_PASSWORD", "pass_from_env")
 	t.Setenv("RELAY_TIMEOUT", "60s")
 
-	// Register config before Init
-	config.Register[Sample]()
 	config.SetConfigFile(filename)
 	if err := config.Init(); err != nil {
 		t.Fatal(err)
 	}
-	// Register config after Init
-	config.Register[Relay]()
 
 	sample := config.Get[*Sample]()
 
@@ -319,13 +285,20 @@ type Sample struct {
 	Enabled   bool   `json:"enabled" mapstructure:"enabled"`
 }
 
-// Relay is a registered section read after Init.
+// Relay is a second registered section, a duration among its default tags.
 type Relay struct {
 	URL      string        `json:"url" mapstructure:"url" default:"tcp://127.0.0.1:4222"`
 	Username string        `json:"username" mapstructure:"username" default:"relay"`
 	Password string        `json:"password" mapstructure:"password" default:"relay"`
 	Timeout  time.Duration `json:"timeout" mapstructure:"timeout" default:"5s"`
 	Enabled  bool          `json:"enabled" mapstructure:"enabled"`
+}
+
+// The sections the tests of this package read are registered the way a
+// project registers its own: from an init function, before any Init.
+func init() {
+	config.Register[Sample]()
+	config.Register[Relay]()
 }
 
 func requireWriteConfigFile(t *testing.T, filename, content string) {
@@ -385,8 +358,9 @@ func clearConfigEnvForTest(t *testing.T) {
 // framework's own sections does not have — misspelled, or under a nested
 // group — fails Init naming the section and the key, every such key at once
 // in sorted order, instead of being ignored while the value it meant to set
-// stays at its default; a section the framework does not know is left alone,
-// for a project to register before or after Init.
+// stays at its default; a section the framework does not know is left alone
+// by Init, for CheckUnknownSections to refuse in a program holding every
+// registration of its project.
 func TestInitRefusesAKeyTheFrameworkSectionLacks(t *testing.T) {
 	for _, tc := range []struct {
 		name, content, want string

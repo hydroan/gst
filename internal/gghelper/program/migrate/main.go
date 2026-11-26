@@ -142,6 +142,12 @@ func initConfigRouterAndModules() {
 	if err = config.Init(); err != nil {
 		exitWithError(err)
 	}
+	// The program links the packages the service does, so a section of the
+	// file nothing claims is a mistake here as it is there: a misspelled
+	// one would leave the database it configures at its defaults.
+	if err = config.CheckUnknownSections(); err != nil {
+		exitWithError(err)
+	}
 	// Every step below works on the database the configuration names, and it
 	// names none by default.
 	if config.App.Database.Type == "" {

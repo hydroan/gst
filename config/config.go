@@ -34,24 +34,31 @@
 //     names the variable, its value and the key, such as a SERVER_PORT of
 //     "tcp://10.0.0.1:8080" injected by a Kubernetes service link. A
 //     duration or a map has no empty form, so an empty value fails too.
-//   - A key in the file under a section of the framework's own configuration
-//     that the section does not have, such as leve under logger. The error
-//     names the section and the key. A section the framework does not know
-//     is not checked: a project registers its own sections before Init or
-//     after it.
+//   - A key in the file under a section of the framework's own configuration,
+//     or under a registered section, that the section does not have, such as
+//     leve under logger. The error names the section and the key.
 //   - A registered section named like a section of the framework's own
 //     configuration, such as a type named Mysql.
 //   - Two types registering the same section. Registering the same type again
 //     is no conflict.
 //   - A malformed "default" struct tag in a registered section.
+//   - A registered section the Validate method of its type refuses, see
+//     Register.
 //
-// Init checks the registrations made before it and reports each refused one
-// once; a registration made after Init that cannot be honored panics.
+// Sections are registered before Init, from init functions: Init reports each
+// registration it refuses once, and Register panics after Init, which has
+// loaded every section it will.
+//
+// A section of the file that is neither one of the framework's own nor
+// registered is not Init's to refuse: a tool reading a project's
+// configuration links only part of the project. CheckUnknownSections refuses
+// it, for a service to run right after Init.
 package config
 
 import (
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"reflect"
 	"slices"
@@ -61,6 +68,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/creasty/defaults"
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/viper"
 	"github.com/stoewer/go-strcase"
 	"go.uber.org/zap"
@@ -201,14 +209,48 @@ func Init() (err error) {
 		err, errRegister = errRegister, nil
 		return err
 	}
-	for name, typ := range registeredTypes {
-		if err = loadSection(name, typ); err != nil {
-			return err
-		}
+	// Every section loads, in the order of the sections' names, so that one
+	// Init names the mistakes of all of them.
+	for _, name := range slices.Sorted(maps.Keys(registeredTypes)) {
+		err = errors.Join(err, loadSection(name, registeredTypes[name]))
+	}
+	if err != nil {
+		return err
 	}
 	initialized = true
 
 	return nil
+}
+
+// CheckUnknownSections refuses a configuration whose file carries a section
+// that is neither one of the framework's own nor registered: a misspelled
+// section name, such as reids for redis, would otherwise leave every key
+// under it at its default with nothing reporting it. The error names every
+// such section, in sorted order.
+//
+// It is for a program holding every registration of its project, a service
+// above all, to run right after Init and before anything acts on the
+// configuration. Init does not run it: a program linking only part of the
+// project, such as gg reading the application's name, loads the same file
+// without the registrations that claim its sections.
+func CheckUnknownSections() error {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	if cv == nil {
+		return errors.New("config: CheckUnknownSections before Init has loaded the configuration")
+	}
+	var unknown []string
+	for name := range cv.AllSettings() {
+		if _, registered := registeredTypes[name]; !registered && !builtinSections()[name] {
+			unknown = append(unknown, fmt.Sprintf("section %q is neither the framework's nor registered", name))
+		}
+	}
+	if len(unknown) == 0 {
+		return nil
+	}
+	slices.Sort(unknown)
+	return errors.Newf("config: %s", strings.Join(unknown, "; "))
 }
 
 // SetConfigFile sets an explicit config file path.
@@ -271,8 +313,8 @@ var (
 	// errRegister collects the registrations made before Init that Init must
 	// refuse; Init reports them.
 	errRegister error
-	// initialized reports whether Init has run, after which a registration
-	// loads its section at once.
+	// initialized reports whether Init has loaded the configuration, after
+	// which Register accepts no new section.
 	initialized bool
 )
 
@@ -287,13 +329,12 @@ var builtinSections = sync.OnceValue(func() map[string]bool {
 	return sections
 })
 
-// Register registers a custom configuration into the config system.
-// The type parameter T can be either struct type or pointer to struct type.
-// Registering any other type is a declaration error, reported the way a
-// taken section is: Init reports one registered before it, and registering
-// one after Init panics.
-// The registered type will be used to create and initialize the configuration
-// instance when loading configuration from file or environment variables.
+// Register registers a custom configuration into the config system. The type
+// parameter T can be either struct type or pointer to struct type. Registering
+// any other type is a declaration error, reported the way a taken section is:
+// by Init. The registered type will be used to create and initialize the
+// configuration instance when loading configuration from file or environment
+// variables.
 //
 // The type's section is its name in snake case: SampleConfig reads the
 // [sample_config] section, and a field reads the environment variable of its
@@ -303,10 +344,24 @@ var builtinSections = sync.OnceValue(func() map[string]bool {
 // The struct tag "default" can be used to set default values for fields.
 // For time.Duration fields, you can use duration strings like "5s", "1m", etc.
 //
-// Register can be called before or after `Init`. If called before `Init`,
-// the registration will be processed during initialization, where Init fails
-// on one it cannot honor; a registration after Init that cannot be honored
-// panics. The package documentation lists what cannot be honored.
+// A key the file carries under the section that no field of the type reads
+// cannot be honored, the way one under a section of the framework's own
+// cannot.
+//
+// A type checks the values it loaded by declaring, on the struct or on a
+// pointer to it,
+//
+//	func (c SampleConfig) Validate() error
+//
+// The method is called once the section has resolved, and an error it returns
+// — for a required key left empty, or two keys that contradict each other —
+// cannot be honored either; it is reported with the section's name.
+//
+// Register is called from an init function, before Init, which loads the
+// registered sections and fails on a registration it cannot honor; the
+// package documentation lists what cannot be honored. After Init, Register
+// panics: a section registered then would never be read. Registering the same
+// type again is no conflict, before Init or after it.
 //
 // Example usage:
 //
@@ -339,33 +394,27 @@ func Register[T any]() {
 	mu.Lock()
 	defer mu.Unlock()
 
-	var t T
-	typ := reflect.TypeOf(t)
+	typ := reflect.TypeFor[T]()
 	if typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
-
-	var err error
-	section := ""
-	if typ.Kind() != reflect.Struct {
-		err = errors.Newf("config: Register takes a struct type, or a pointer to one, not %s", typ)
-	} else {
-		section = sectionName(typ)
-		err = checkSection(section, typ)
-	}
-	if err == nil {
-		registeredTypes[section] = typ
-		if initialized {
-			err = loadSection(section, typ)
+	if initialized {
+		if typ.Kind() == reflect.Struct && registeredTypes[sectionName(typ)] == typ {
+			return
 		}
+		panic(errors.Newf("config: Register[%s] after Init: register a section from an init function, before the configuration is loaded", typ))
 	}
-	switch {
-	case err == nil:
-	case initialized:
-		panic(err)
-	default:
+
+	if typ.Kind() != reflect.Struct {
+		errRegister = errors.Join(errRegister, errors.Newf("config: Register takes a struct type, or a pointer to one, not %s", typ))
+		return
+	}
+	section := sectionName(typ)
+	if err := checkSection(section, typ); err != nil {
 		errRegister = errors.Join(errRegister, err)
+		return
 	}
+	registeredTypes[section] = typ
 }
 
 // Get returns the registered custom configuration.
@@ -391,7 +440,7 @@ func Get[T any]() (t T) {
 	mu.RLock()
 	defer mu.RUnlock()
 
-	typ := reflect.TypeOf(t)
+	typ := reflect.TypeFor[T]()
 	if typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
@@ -408,7 +457,7 @@ func Get[T any]() (t T) {
 
 	storedVal := reflect.ValueOf(stored)
 	storedTyp := storedVal.Elem().Type()
-	destTyp := reflect.TypeOf(t)
+	destTyp := reflect.TypeFor[T]()
 
 	if storedTyp == destTyp {
 		return storedVal.Elem().Interface().(T) //nolint:errcheck
@@ -482,7 +531,10 @@ func envName(key string) string {
 
 // loadSection loads a registered section: its default tags make the section's
 // default values, every field reads its environment variable, and the section
-// resolves from the environment, the file and the defaults in that order.
+// resolves from the environment, the file and the defaults in that order. A
+// key under the section that no field reads fails the load, see
+// checkUnusedKeys, and so does the Validate method of the section's type,
+// when it has one, on the values loaded.
 func loadSection(name string, typ reflect.Type) error {
 	defaultCfg := reflect.New(typ)
 	// The default tags are applied to what exists: a nested struct behind a
@@ -509,12 +561,22 @@ func loadSection(name string, typ reflect.Type) error {
 		Type: typ,
 		Tag:  reflect.StructTag(`mapstructure:"` + name + `"`),
 	}}))
-	if err := cv.Unmarshal(holder.Interface(), decodeHooks()); err != nil {
+	var md mapstructure.Metadata
+	if err := cv.Unmarshal(holder.Interface(), decodeHooks(), func(dc *mapstructure.DecoderConfig) { dc.Metadata = &md }); err != nil {
 		return errors.Wrapf(err, "config: section %q of %s: failed to decode", name, typ)
+	}
+	if err := checkUnusedKeys(md.Unused, func(section string) bool { return section == name }); err != nil {
+		return errors.Wrap(err, "config")
 	}
 	section := holder.Elem().Field(0)
 	keepUnkeyedDefaults(section, defaultCfg.Elem())
-	registeredConfigs[name] = section.Addr().Interface()
+	loaded := section.Addr().Interface()
+	if checked, ok := loaded.(interface{ Validate() error }); ok {
+		if err := checked.Validate(); err != nil {
+			return errors.Wrapf(err, "config: section %q of %s", name, typ)
+		}
+	}
+	registeredConfigs[name] = loaded
 	return nil
 }
 

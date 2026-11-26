@@ -58,7 +58,7 @@ gst 的入门示例：一个用 `gg new` 生成、按框架推荐写法补齐的
 
 ## 扩展点
 
-- 配置：`configx/notice.go`、`configx/cleanup.go` 各声明一节，`configx.go` 注册；每个键有对应的环境变量常量。
+- 配置：`configx/notice.go`、`configx/cleanup.go` 各声明一节，`configx.go` 注册；每个键有对应的环境变量常量。`Cleanup` 带 `Validate()` 方法检查自己的值，保留天数或每批行数小于 1 时启动直接失败。
 - 定时任务：`cronjob/purge_audits.go`、`cronjob/report_audits.go` 全部署每个时刻只跑一次；`cronjob/count_tickets.go` 用 `RegisterPerInstance`，每个副本各刷新自己进程里的工单计数（计数放在 `dao/ticket_count.go`）。函数和它的调度、名字放在一起，`cronjob.go` 注册。
 - 常驻组件：`component/notice_watch.go` 是订阅 Redis 频道 `demo:notices` 的消费循环，`component/runtime_report.go` 定期记录本进程的运行指标；每个副本各跑一份，直到进程退出。
 - 中间件：`middleware/no_store.go` 挂在所有接口上，`middleware/actor.go` 只挂在需要认证的接口上；框架自带的 `RequestSizeLimit`、`Timeout`、`SecurityHeaders` 在 `middleware.go` 里直接挂；iam 模块的会话检查也在那里挂，排在读用户的中间件之前。

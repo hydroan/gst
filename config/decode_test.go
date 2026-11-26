@@ -63,6 +63,12 @@ type nestedRetry struct {
 	Interval time.Duration `json:"interval" mapstructure:"interval" default:"2s"`
 }
 
+// nestedDefaults is registered the way a project registers a section: from an
+// init function, before any Init.
+func init() {
+	config.Register[nestedDefaults]()
+}
+
 // TestSectionDefaultsReachBehindNilPointers pins that a default tag means the
 // same wherever the field sits. Skipping the tags behind a nil pointer would
 // bring a section declaring values up with zeros, and the project would only
@@ -73,7 +79,6 @@ func TestSectionDefaultsReachBehindNilPointers(t *testing.T) {
 	config.SetConfigFile(filename)
 	require.NoError(t, config.Init())
 
-	config.Register[nestedDefaults]()
 	section := config.Get[*nestedDefaults]()
 	require.Equal(t, "127.0.0.1:9000", section.Endpoint)
 	require.NotNil(t, section.TLS, "a nil pointer is filled in, not left for the reader to check")
@@ -82,29 +87,6 @@ func TestSectionDefaultsReachBehindNilPointers(t *testing.T) {
 	require.NotNil(t, section.Retry)
 	require.Equal(t, 3, section.Retry.Attempts)
 	require.Equal(t, 2*time.Second, section.Retry.Interval)
-}
-
-// LoggerHTTP is a section whose name and key together spell
-// LOGGER_HTTP_BODY_ENABLED, the variable the framework's own
-// logger.http_body.enabled key reads.
-type LoggerHTTP struct {
-	BodyEnabled bool `json:"body_enabled" mapstructure:"body_enabled"`
-}
-
-// TestSectionRefusesAKeySharingAVariable pins the refusal: one environment
-// variable setting two keys is a deployment that cannot say which it meant,
-// and the value would land in both. The clash is in the variable, not in the
-// section name — "logger_http" is free, and its key still collides.
-func TestSectionRefusesAKeySharingAVariable(t *testing.T) {
-	filename := filepath.Join(t.TempDir(), "config.ini")
-	requireWriteConfigFile(t, filename, "[app]\nname = \"sample\"\n")
-	config.SetConfigFile(filename)
-	require.NoError(t, config.Init())
-
-	require.PanicsWithError(t,
-		`config: config_test.LoggerHTTP registers key "logger_http.body_enabled", which reads the same environment variable LOGGER_HTTP_BODY_ENABLED as "logger.http_body.enabled"`,
-		func() { config.Register[LoggerHTTP]() },
-		"a section registered after Init reports the clash by panicking, the way every other registration failure does")
 }
 
 // TestDurationWrittenAsANumberIsRefused pins that a duration needs its unit in

@@ -14,25 +14,37 @@ import (
 
 // unmarshalConfig decodes the configuration v holds into c, the framework's
 // own, and refuses a key under one of the framework's sections that no field
-// of the section reads: a misspelled key, such as leve under logger, would
-// otherwise leave the value it meant to set at its default with nothing
-// reporting it. A key outside the framework's sections passes: it is under a
-// section a project registers, before Init or after it, whose own decode
-// reads it. The decoder lists the keys it leaves unused in its metadata; its
-// ErrorUnused option would refuse those sections too.
+// of the section reads, see checkUnusedKeys. A key outside the framework's
+// sections passes here: a registered section's own load reads it, and
+// CheckUnknownSections refuses a section nothing claims.
 func unmarshalConfig(v *viper.Viper, c *Config) error {
 	var md mapstructure.Metadata
 	if err := v.Unmarshal(c, decodeHooks(), func(dc *mapstructure.DecoderConfig) { dc.Metadata = &md }); err != nil {
 		return err
 	}
+	if err := checkUnusedKeys(md.Unused, func(section string) bool { return builtinSections()[section] }); err != nil {
+		return err
+	}
+	return c.validate()
+}
+
+// checkUnusedKeys refuses the keys in unused, those a decode found in the
+// configuration and read into no field, that lie under a section owned names:
+// a misspelled key, such as leve under logger, would otherwise leave the value
+// it meant to set at its default with nothing reporting it. The error names
+// the section and the key, every such key at once in sorted order. The decoder
+// lists the keys it leaves unused in its metadata; its ErrorUnused option
+// would refuse the keys of every other section too, which another decode
+// reads.
+func checkUnusedKeys(unused []string, owned func(section string) bool) error {
 	var unknown []string
-	for _, key := range md.Unused {
-		if section, rest, ok := strings.Cut(key, "."); ok && builtinSections()[section] {
+	for _, key := range unused {
+		if section, rest, ok := strings.Cut(key, "."); ok && owned(section) {
 			unknown = append(unknown, fmt.Sprintf("section %q has no key %q", section, rest))
 		}
 	}
 	if len(unknown) == 0 {
-		return c.validate()
+		return nil
 	}
 	slices.Sort(unknown)
 	return errors.New(strings.Join(unknown, "; "))

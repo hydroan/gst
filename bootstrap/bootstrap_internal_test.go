@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"slices"
@@ -278,6 +279,32 @@ func TestBootstrapEndsOnALanguageTheFrameworkDoesNotSpeak(t *testing.T) {
 
 	require.NoError(t, err, "%s", out)
 	require.Contains(t, string(out), `bootstrap: app.language: "ja" is no language the framework speaks: it speaks `+strings.Join(i18n.Languages(), ", "))
+}
+
+// unknownSectionHelper names the environment variable that turns
+// TestBootstrapEndsOnASectionNothingClaims into the child process it starts.
+const unknownSectionHelper = "GST_TEST_UNKNOWN_SECTION_CHILD"
+
+// TestBootstrapEndsOnASectionNothingClaims runs Bootstrap in a child process
+// of the test binary, in a directory whose configuration file misspells the
+// name of a section: the boot ends on an error naming the section, before
+// anything acts on a configuration that left the keys under it at their
+// defaults.
+func TestBootstrapEndsOnASectionNothingClaims(t *testing.T) {
+	if os.Getenv(unknownSectionHelper) == "1" {
+		fmt.Println("bootstrap:", Bootstrap())
+		return
+	}
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "config.ini"), []byte("[reids]\naddr = 127.0.0.1:6379\n"), 0o600))
+	cmd := exec.Command(os.Args[0], "-test.run=^TestBootstrapEndsOnASectionNothingClaims$")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), unknownSectionHelper+"=1", "TMPDIR="+t.TempDir())
+	out, err := cmd.CombinedOutput()
+
+	require.NoError(t, err, "%s", out)
+	require.Contains(t, string(out), `bootstrap: config: section "reids" is neither the framework's nor registered`)
 }
 
 // TestLogFatalFailure pins the entry logFatalFailure records before the
