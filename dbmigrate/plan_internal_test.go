@@ -37,10 +37,10 @@ func TestPlanMigrationRefusesAnEmptyPlanBesideAMissingTable(t *testing.T) {
 	desired := "CREATE TABLE `samples` (`id` char(36) NOT NULL, PRIMARY KEY (`id`));"
 	sqlParser := database.NewParser(parser.ParserModeMysql)
 
-	plan, err := planMigration(schema.GeneratorModeMysql, &exportedDatabase{}, sqlParser, desired)
+	plan, err := planMigration(schema.GeneratorModeMysql, &exportedDatabase{}, sqlParser, desired, nil)
 	require.NoError(t, err)
 	require.Len(t, plan.Statements, 1, "under the names MySQL knows its tables by, the table is planned")
 
-	_, err = planMigration(schema.GeneratorModeMysql, &exportedDatabase{defaultSchema: "elsewhere"}, sqlParser, desired)
+	_, err = planMigration(schema.GeneratorModeMysql, &exportedDatabase{defaultSchema: "elsewhere"}, sqlParser, desired, nil)
 	require.ErrorContains(t, err, `planned nothing while the database lacks the table "samples"`)
 }

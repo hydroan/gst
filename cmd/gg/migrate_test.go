@@ -45,7 +45,7 @@ func TestMigrateProgramLinksWhatMainLinks(t *testing.T) {
 	}
 	t.Chdir(projectDir)
 
-	program, err := buildMigrateProgramForMode("sample", false, "", nil)
+	program, err := buildMigrateProgramForMode("sample", false, "", nil, []string{"samples.idx_samples_note", "archives.ft_archives_body"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,10 +81,10 @@ import (
 			t.Fatalf("expected the migration program's %s to parse, got %v", name, err)
 		}
 	}
-	// The mode travels as flags, and so does whether the terminal takes
-	// colors, which the pipe a test runs under does not, so the sources stay
-	// the same between runs.
-	if !slices.Equal(program.Args, []string{"-module", "sample", "-dry-run=false", "-yes=false", "-accept-data-loss=false", "-schema-only=false", "-schema-source", "", "-color=false"}) {
+	// The mode travels as flags, and so do the indexes gst.yaml has the
+	// migration keep and whether the terminal takes colors, which the pipe a
+	// test runs under does not, so the sources stay the same between runs.
+	if !slices.Equal(program.Args, []string{"-module", "sample", "-dry-run=false", "-yes=false", "-accept-data-loss=false", "-schema-only=false", "-schema-source", "", "-color=false", "-ignore-index", "samples.idx_samples_note", "-ignore-index", "archives.ft_archives_body"}) {
 		t.Fatalf("unexpected migration program arguments: %q", program.Args)
 	}
 }
@@ -224,6 +224,41 @@ func TestMigrateProgramLeavesTheTablesNoModelDeclares(t *testing.T) {
 	}
 }
 
+// TestMigrateCommandKeepsTheIndexesGstYAMLLists pins the way of
+// migrate.indexes.ignore from gst.yaml into the plan: gg migrate, in dry-run
+// mode, over a sqlite file whose samples table holds two indexes made by
+// hand, plans the drop of the one gst.yaml does not list and reports the one
+// it lists as kept, whatever case the entry spells it in.
+func TestMigrateCommandKeepsTheIndexesGstYAMLLists(t *testing.T) {
+	if !newMigrateSampleProject(t) {
+		return
+	}
+	t.Setenv(config.SQLITE_IS_MEMORY, "false")
+	t.Setenv(config.SQLITE_PATH, "./data.db")
+	runMigrateProgramForTest(t, false, true)
+	execMigrateSampleDatabase(t, "CREATE INDEX `idx_samples_name_lower` ON `samples` (lower(`name`))")
+	execMigrateSampleDatabase(t, "CREATE INDEX `idx_samples_name_by_hand` ON `samples` (`name`)")
+	writeProjectFile(t, "gst.yaml", "migrate:\n  indexes:\n    ignore:\n      - samples.IDX_SAMPLES_NAME_LOWER\n")
+	oldDryRun := migrateDryRun
+	migrateDryRun = true
+	defer func() { migrateDryRun = oldDryRun }()
+
+	var err error
+	out := captureOutput(t, func() { err = migrateCmd.RunE(migrateCmd, nil) })
+	if err != nil {
+		t.Fatalf("gg migrate --dry-run: %v\n%s", err, out)
+	}
+	for _, want := range []string{
+		"idx_samples_name_by_hand",
+		"1 statement: 1 DROP INDEX",
+		"→ Kept, the indexes migrate.indexes.ignore of gst.yaml lists: samples.idx_samples_name_lower",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected the migration output to contain %q, got:\n%s", want, out)
+		}
+	}
+}
+
 // TestMigrateProgramDropsAColumnOnlyOnceTheDataLossIsAccepted pins what the
 // migration program makes of a column the model does not declare: the plan
 // drops it and says so, and the column goes only once the loss is accepted. A
@@ -349,7 +384,7 @@ func TestMigrateProgramLeavesNoTemporaryDirectoryBehind(t *testing.T) {
 	oldDryRun := migrateDryRun
 	migrateDryRun = true
 	defer func() { migrateDryRun = oldDryRun }()
-	program, err := buildMigrateProgramForMode("tmpapp", false, "", nil)
+	program, err := buildMigrateProgramForMode("tmpapp", false, "", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -513,7 +548,7 @@ func runMigrateProgram(t *testing.T, dryRun, yes, acceptDataLoss bool, answers s
 	migrateDryRun, migrateYes, migrateAcceptDataLoss = dryRun, yes, acceptDataLoss
 	defer func() { migrateDryRun, migrateYes, migrateAcceptDataLoss = oldDryRun, oldYes, oldAccept }()
 
-	program, err := buildMigrateProgramForMode("tmpapp", false, "", nil)
+	program, err := buildMigrateProgramForMode("tmpapp", false, "", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -35,7 +35,8 @@ import (
 
 // The flags gg passes: the project's module path, the mode, for a schema
 // dump of part of the models its source and the Go files under it, as gg
-// listed them, and whether the terminal takes colors.
+// listed them, the indexes the migration keeps although no model declares
+// them, each as table.index, and whether the terminal takes colors.
 var (
 	migrateModule            string
 	migrateDryRun            bool
@@ -43,16 +44,17 @@ var (
 	migrateAcceptDataLoss    bool
 	migrateSchemaOnly        bool
 	migrateSchemaSource      string
-	migrateSchemaSourceFiles fileList
+	migrateSchemaSourceFiles valueList
+	migrateIgnoreIndexes     valueList
 	migrateColor             bool
 )
 
-// fileList collects the values of a flag given more than once.
-type fileList []string
+// valueList collects the values of a flag given more than once.
+type valueList []string
 
-func (l *fileList) String() string { return strings.Join(*l, ", ") }
+func (l *valueList) String() string { return strings.Join(*l, ", ") }
 
-func (l *fileList) Set(value string) error {
+func (l *valueList) Set(value string) error {
 	*l = append(*l, value)
 	return nil
 }
@@ -65,6 +67,7 @@ func main() {
 	flag.BoolVar(&migrateSchemaOnly, "schema-only", false, "dump the schema and stop")
 	flag.StringVar(&migrateSchemaSource, "schema-source", "", "the model source the schema dump covers; empty covers every registered model")
 	flag.Var(&migrateSchemaSourceFiles, "schema-source-file", "a Go file under schema-source; repeat for each")
+	flag.Var(&migrateIgnoreIndexes, "ignore-index", "an index the migration keeps although no model declares it, as table.index; repeat for each")
 	flag.BoolVar(&migrateColor, "color", false, "color the output, for a terminal that takes colors")
 	flag.Parse()
 
@@ -429,7 +432,7 @@ func performMigration(schema string, cfg *dbmigrate.DatabaseConfig) error {
 	// again to execute would plan against whatever the database has by then,
 	// which is not what was approved.
 	planned := func() (dbmigrate.Plan, error) {
-		return dbmigrate.Migrate([]string{schema}, dbtyp, cfg, &dbmigrate.MigrateOptions{DryRun: true})
+		return dbmigrate.Migrate([]string{schema}, dbtyp, cfg, &dbmigrate.MigrateOptions{DryRun: true, IgnoreIndexes: migrateIgnoreIndexes})
 	}
 	plan, err := planned()
 	if err != nil {
@@ -457,9 +460,9 @@ func performMigration(schema string, cfg *dbmigrate.DatabaseConfig) error {
 	}
 
 	if !plan.Changed() {
-		if len(plan.UndeclaredTables) > 0 {
+		if len(plan.UndeclaredTables)+len(plan.KeptIndexes)+len(plan.RedundantIgnores) > 0 {
 			section("Plan")
-			item("Left as they are, the tables no model declares: %s", strings.Join(plan.UndeclaredTables, ", "))
+			printLeftAlone(plan)
 		}
 		done("Nothing to migrate: the database matches the models")
 		return nil
@@ -476,9 +479,7 @@ func performMigration(schema string, cfg *dbmigrate.DatabaseConfig) error {
 	if plan.CreatesDatabase {
 		item("The target database file does not exist yet: the plan starts from an empty database, and applying it creates the file.")
 	}
-	if len(plan.UndeclaredTables) > 0 {
-		item("Left as they are, the tables no model declares: %s", strings.Join(plan.UndeclaredTables, ", "))
-	}
+	printLeftAlone(plan)
 
 	// The renames no one was asked about stay visible beside the plan that
 	// drops and adds in their place.
@@ -558,6 +559,25 @@ func performMigration(schema string, cfg *dbmigrate.DatabaseConfig) error {
 	}
 	done("Applied %s (%s)", counted(len(plan.Statements), "statement"), elapsed(time.Since(started)))
 	return nil
+}
+
+// printLeftAlone prints what the plan leaves as the database holds it: the
+// tables no model declares, the indexes gst.yaml has it keep, and the
+// entries of that list the models overrule.
+//
+//	→ Left as they are, the tables no model declares: archives
+//	→ Kept, the indexes migrate.indexes.ignore of gst.yaml lists: samples.ft_samples_note
+//	→ Listed under migrate.indexes.ignore to no effect, a model declaring the index: samples.idx_samples_title
+func printLeftAlone(plan dbmigrate.Plan) {
+	if len(plan.UndeclaredTables) > 0 {
+		item("Left as they are, the tables no model declares: %s", strings.Join(plan.UndeclaredTables, ", "))
+	}
+	if len(plan.KeptIndexes) > 0 {
+		item("Kept, the indexes migrate.indexes.ignore of gst.yaml lists: %s", strings.Join(plan.KeptIndexes, ", "))
+	}
+	if len(plan.RedundantIgnores) > 0 {
+		item("Listed under migrate.indexes.ignore to no effect, a model declaring the index: %s", strings.Join(plan.RedundantIgnores, ", "))
+	}
 }
 
 // statementKinds are the openings planSummary counts the statements of a

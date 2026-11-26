@@ -66,6 +66,16 @@ type MigrateOptions struct {
 	// AcceptDataLoss lets the run apply a plan that drops columns, and with
 	// them the data they hold. Without it such a plan is refused whole.
 	AcceptDataLoss bool
+	// IgnoreIndexes names the indexes the plan keeps although no model
+	// declares them, each as table.index, in whatever case: an index made by
+	// hand for what a model's Indexes cannot declare, a full-text index, one
+	// over an expression. The plan leaves such an index as the database
+	// holds it and lists it under Plan.KeptIndexes. The models come first:
+	// an entry naming an index a model declares changes nothing of what the
+	// plan makes of that index, and is listed under Plan.RedundantIgnores.
+	// An entry naming an index the database lacks, or a table no model
+	// declares, names nothing to keep.
+	IgnoreIndexes []string
 }
 
 // Plan is what a migration would do to the database: the statements it would
@@ -90,6 +100,14 @@ type Plan struct {
 	// UndeclaredTables are the tables of the database no model declares. The
 	// plan leaves them as they are.
 	UndeclaredTables []string
+	// KeptIndexes are the indexes no model declares that the plan leaves as
+	// they are because MigrateOptions.IgnoreIndexes names them, each as
+	// table.index.
+	KeptIndexes []string
+	// RedundantIgnores are the entries of MigrateOptions.IgnoreIndexes naming
+	// an index a model declares, each as table.index: the model decides what
+	// becomes of that index, and the entry keeps nothing.
+	RedundantIgnores []string
 	// CreatesDatabase reports that the plan starts from a sqlite database file
 	// that does not exist yet: applying its statements creates the file.
 	// MySQL and PostgreSQL databases must exist, so it is always false there.
@@ -108,10 +126,12 @@ func (p Plan) Changed() bool { return len(p.Statements) > 0 }
 // The plan stays inside the tables the models declare. A table of the
 // database no model declares is never dropped nor changed: the plan lists it
 // under UndeclaredTables. Inside a table the models declare, a column and an
-// index the models do not declare are dropped. Dropping an index loses no
-// data; dropping a column does, so the plan lists the column under
-// DroppedColumns, and a run that is no dry run refuses the whole plan unless
-// the option accepts the data loss.
+// index the models do not declare are dropped, but for the indexes the
+// option names under IgnoreIndexes, which the plan leaves as they are and
+// lists under KeptIndexes. Dropping an index loses no data; dropping a
+// column does, so the plan lists the column under DroppedColumns, and a run
+// that is no dry run refuses the whole plan unless the option accepts the
+// data loss.
 //
 // A dry run creates nothing. A sqlite database file that does not exist yet
 // is planned against as the empty database it would be, and the plan reports
@@ -175,7 +195,7 @@ func Migrate(schemas []string, dbtyp config.DBType, cfg *DatabaseConfig, opt *Mi
 	}
 	defer db.Close()
 
-	if plan, err = planMigration(genMode, db, database.NewParser(parseMode), strings.Join(schemas, ";\n")); err != nil {
+	if plan, err = planMigration(genMode, db, database.NewParser(parseMode), strings.Join(schemas, ";\n"), opt.IgnoreIndexes); err != nil {
 		return Plan{}, err
 	}
 	plan.CreatesDatabase = missing && plan.Changed()
@@ -323,8 +343,9 @@ func registerMySQLTLS(cfg config.MySQL) error {
 // statements sqldef generates inside the tables the models declare, and what
 // the two schemas tell beside them, read by name off sqldef's own parser,
 // the columns the statements drop, the tables no model declares and the
-// renames the plan suspects. Nothing is executed.
-func planMigration(mode schema.GeneratorMode, db database.Database, sqlParser database.Parser, desiredDDLs string) (Plan, error) {
+// renames the plan suspects. The indexes ignoreIndexes names are kept (see
+// keepIndexes). Nothing is executed.
+func planMigration(mode schema.GeneratorMode, db database.Database, sqlParser database.Parser, desiredDDLs string, ignoreIndexes []string) (Plan, error) {
 	// The generator configuration goes through the database, which fills in
 	// what the server decides: MySQL reports how it compares table names.
 	// Drops are planned, the plan being the whole difference; what they lose
@@ -345,6 +366,22 @@ func planMigration(mode schema.GeneratorMode, db database.Database, sqlParser da
 	current, err := readShape(sqlParser, currentDDLs)
 	if err != nil {
 		return Plan{}, errors.Wrap(err, "failed to parse the current schema")
+	}
+	// A kept index is taken out of what the database is planned from, so
+	// everything below finds it on neither side and plans nothing for it:
+	// no drop, and no rename into an index of the same definition a model
+	// declares under another name.
+	kept, redundant, err := keepIndexes(current, desired, ignoreIndexes)
+	if err != nil {
+		return Plan{}, err
+	}
+	if len(kept) > 0 {
+		if currentDDLs, err = withoutIndexes(sqlParser, currentDDLs, kept); err != nil {
+			return Plan{}, err
+		}
+		if current, err = readShape(sqlParser, currentDDLs); err != nil {
+			return Plan{}, errors.Wrap(err, "failed to parse the current schema without the indexes kept")
+		}
 	}
 
 	// sqldef confines the plan to the tables named here, and matches a table
@@ -384,7 +421,21 @@ func planMigration(mode schema.GeneratorMode, db database.Database, sqlParser da
 		return Plan{}, errors.Newf("the migration planned nothing while the database lacks the table %q of the models", missing[0].name)
 	}
 
-	plan := Plan{Statements: statements}
+	// The statements are held to what the plan says of the kept indexes: one
+	// the generator still plans a change for is an index it reads otherwise
+	// off the statement kept than off the database, and a plan dropping or
+	// rebuilding what it lists as kept must not pass.
+	for _, name := range kept {
+		_, index, _ := strings.Cut(name, ".")
+		mentions := regexp.MustCompile(`(?i)(^|[^A-Za-z0-9_$])` + regexp.QuoteMeta(index) + `($|[^A-Za-z0-9_$])`)
+		for _, statement := range statements {
+			if mentions.MatchString(statement) {
+				return Plan{}, errors.Newf("the migration cannot keep the index %s: the plan would still run %q; drop the entry and declare the index in its model, or migrate it by hand", name, statement)
+			}
+		}
+	}
+
+	plan := Plan{Statements: statements, KeptIndexes: kept, RedundantIgnores: redundant}
 	for _, table := range tablesOnlyIn(current, desired) {
 		plan.UndeclaredTables = append(plan.UndeclaredTables, table.name)
 	}

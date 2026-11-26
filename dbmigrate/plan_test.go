@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -183,6 +184,68 @@ func TestMigrateLeavesTheTablesNoModelDeclares(t *testing.T) {
 			require.Equal(t, []string{"archives"}, plan.UndeclaredTables)
 			require.NoError(t, dbmigrate.Apply(plan, target.typ, target.cfg, nil))
 			require.Equal(t, []string{"a,kept"}, target.rows("SELECT "+target.quote("id")+", "+target.quote("note")+" FROM "+target.quote("archives")))
+		})
+	}
+}
+
+// TestMigrateKeepsTheIndexesItIsToldToIgnore pins, on each dialect, what a
+// plan makes of the indexes MigrateOptions.IgnoreIndexes names. An index of
+// a model's table no model declares is dropped by a plan told nothing; told
+// to ignore it, whatever case the entry spells it in, the plan keeps it and
+// says so, an index only a statement written by hand can declare among
+// them: a full-text one on MySQL, one over an expression of the rows a
+// condition picks on PostgreSQL and SQLite. An entry naming an index the
+// models declare changes nothing of that index and is reported as redundant;
+// one naming an index the database lacks, or a table no model declares, is
+// neither. A kept index is left alone altogether: a model declaring an index
+// of the same definition under another name gets one of its own, where the
+// plan would otherwise rename the one the database holds. An entry that is no
+// table.index fails the migration.
+func TestMigrateKeepsTheIndexesItIsToldToIgnore(t *testing.T) {
+	byHand := map[string][2]string{
+		"mysql":    {"ft_samples_note", "CREATE FULLTEXT INDEX `ft_samples_note` ON `samples` (`note`)"},
+		"postgres": {"idx_samples_note_lower", `CREATE INDEX "idx_samples_note_lower" ON "samples" (lower("note")) WHERE "note" <> ''`},
+		"sqlite":   {"idx_samples_note_lower", "CREATE INDEX `idx_samples_note_lower` ON `samples` (lower(`note`)) WHERE `note` <> ''"},
+	}
+	for _, target := range migrationTargets(t) {
+		t.Run(target.name, func(t *testing.T) {
+			declared := []string{target.table("samples", "title", "note"), target.index(false, "idx_samples_title", "samples", "title")}
+			target.migrate(t, declared...)
+			target.exec(strings.TrimSuffix(target.index(false, "idx_samples_note_by_hand", "samples", "note"), ";"))
+			target.exec(strings.TrimSuffix(target.index(true, "uniq_samples_note_by_hand", "samples", "note"), ";"))
+			special := byHand[target.name]
+			target.exec(special[1])
+			ignoring := func(schema []string, entries ...string) dbmigrate.Plan {
+				plan, err := dbmigrate.Migrate([]string{strings.Join(schema, "\n")}, target.typ, target.cfg, &dbmigrate.MigrateOptions{DryRun: true, IgnoreIndexes: entries})
+				require.NoError(t, err)
+				return plan
+			}
+
+			plan := target.plan(t, declared...)
+			require.Len(t, plan.Statements, 3, "told nothing, the plan drops the three indexes made by hand: %v", plan.Statements)
+			require.Empty(t, plan.KeptIndexes)
+			require.Empty(t, plan.RedundantIgnores)
+
+			plan = ignoring(declared, "samples.IDX_SAMPLES_NOTE_BY_HAND", "samples."+special[0], "samples.idx_samples_title", "samples.idx_samples_gone", "archives.idx_archives_note")
+			require.Len(t, plan.Statements, 1, "%v", plan.Statements)
+			require.Contains(t, plan.Statements[0], "uniq_samples_note_by_hand")
+			require.Equal(t, []string{"samples.idx_samples_note_by_hand", "samples." + special[0]}, plan.KeptIndexes)
+			require.Equal(t, []string{"samples.idx_samples_title"}, plan.RedundantIgnores)
+
+			require.NoError(t, dbmigrate.Apply(plan, target.typ, target.cfg, nil))
+			settled := ignoring(declared, "samples.idx_samples_note_by_hand", "samples."+special[0])
+			require.False(t, settled.Changed(), "%v", settled.Statements)
+			require.Equal(t, []string{"samples.idx_samples_note_by_hand", "samples." + special[0]}, settled.KeptIndexes)
+
+			again := append(slices.Clone(declared), target.index(false, "idx_samples_note", "samples", "note"))
+			plan = ignoring(again, "samples.idx_samples_note_by_hand", "samples."+special[0])
+			require.Len(t, plan.Statements, 1, "%v", plan.Statements)
+			require.Contains(t, strings.ToUpper(plan.Statements[0]), "CREATE INDEX")
+			require.NotContains(t, plan.Statements[0], "idx_samples_note_by_hand")
+
+			_, err := dbmigrate.Migrate([]string{strings.Join(declared, "\n")}, target.typ, target.cfg, &dbmigrate.MigrateOptions{DryRun: true, IgnoreIndexes: []string{"idx_samples_note_by_hand"}})
+			require.ErrorContains(t, err, `"idx_samples_note_by_hand"`)
+			require.ErrorContains(t, err, "table.index")
 		})
 	}
 }

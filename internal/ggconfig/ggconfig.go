@@ -27,6 +27,9 @@ type Config struct {
 
 	// Prune configures gg prune.
 	Prune PruneConfig `yaml:"prune"`
+
+	// Migrate configures gg migrate.
+	Migrate MigrateConfig `yaml:"migrate"`
 }
 
 // GenConfig configures gg gen behavior.
@@ -75,6 +78,26 @@ type PruneConfig struct {
 	Ignore []string `yaml:"ignore"`
 }
 
+// MigrateConfig configures gg migrate.
+type MigrateConfig struct {
+	// Indexes configures what gg migrate makes of the indexes of the
+	// database.
+	Indexes MigrateIndexesConfig `yaml:"indexes"`
+}
+
+// MigrateIndexesConfig configures what gg migrate makes of the indexes of
+// the database.
+type MigrateIndexesConfig struct {
+	// Ignore lists the indexes gg migrate keeps although no model declares
+	// them. A migration drops the indexes of a model's table the models do
+	// not declare; an index made by hand for what a model's Indexes cannot
+	// declare, a full-text index, one over an expression, is listed here to
+	// stay. Each entry is table.index, "samples.ft_samples_note", matched
+	// whatever the case. The models come first: an entry naming an index a
+	// model declares keeps nothing, and the plan says so.
+	Ignore []string `yaml:"ignore"`
+}
+
 // Ignores reports whether path is an Ignore entry or lies below one. With
 // the entry "service/iam", "service/iam" and "service/iam/user/list.go" are
 // ignored, while "service/iamx/list.go" is not.
@@ -111,7 +134,32 @@ func Load(dir string) (*Config, error) {
 	if err := validatePruneIgnore(&cfg.Prune); err != nil {
 		return nil, errors.Wrapf(err, "%s: prune.ignore", path)
 	}
+	if err := validateMigrateIndexIgnore(&cfg.Migrate.Indexes); err != nil {
+		return nil, errors.Wrapf(err, "%s: migrate.indexes.ignore", path)
+	}
 	return cfg, nil
+}
+
+// validateMigrateIndexIgnore trims every migrate.indexes.ignore entry in
+// place and rejects an entry that is no table.index, a table and an index
+// either side of the first dot, or that names an index another entry names,
+// whatever the case of either.
+func validateMigrateIndexIgnore(c *MigrateIndexesConfig) error {
+	seen := make(map[string]bool, len(c.Ignore))
+	for i, entry := range c.Ignore {
+		trimmed := strings.TrimSpace(entry)
+		table, index, ok := strings.Cut(trimmed, ".")
+		if !ok || table == "" || index == "" {
+			return errors.Newf("entry %q: want an index as table.index, like \"samples.ft_samples_note\"", entry)
+		}
+		key := strings.ToLower(trimmed)
+		if seen[key] {
+			return errors.Newf("entry %q is listed twice", entry)
+		}
+		seen[key] = true
+		c.Ignore[i] = trimmed
+	}
+	return nil
 }
 
 // validatePruneIgnore cleans every prune.ignore entry in place and rejects an

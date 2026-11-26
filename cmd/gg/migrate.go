@@ -24,17 +24,18 @@ var migrateCmd = &cobra.Command{
 	Long: `Generate and execute database migration code based on current models.
 
 The migration stays inside the tables the models declare: a table of the
-database no model declares is listed and left as it is. A plan that drops a
-column, and the data it holds, says so, and the confirmation before it is
-applied names the loss; --yes, which skips the confirmation, accepts no data
-loss and applies such a plan only with --accept-data-loss. Where a table or a
-column looks renamed, the command asks before renaming it, and under --dry-run
-or --yes lists the rename with its statement instead.
+database no model declares is listed and left as it is. Inside those tables an
+index no model declares is dropped, unless gst.yaml lists it under
+migrate.indexes.ignore, as table.index: the plan then keeps it and says so. A
+plan that drops a column, and the data it holds, says so, and the confirmation
+before it is applied names the loss; --yes, which skips the confirmation,
+accepts no data loss and applies such a plan only with --accept-data-loss.
+Where a table or a column looks renamed, the command asks before renaming it,
+and under --dry-run or --yes lists the rename with its statement instead.
 
 On SQLite the migration targets the database file sqlite.path names. An
-in-memory database, which sqlite.is_memory selects by default, has nothing to
-migrate: the application creates its tables from the models every time it
-starts.`,
+in-memory database, which sqlite.is_memory selects, has nothing to migrate:
+the application creates its tables from the models every time it starts.`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// 1. Get module name
@@ -43,7 +44,11 @@ starts.`,
 			return err
 		}
 
-		program, err := buildMigrateProgramForMode(moduleName, false, "", nil)
+		projectCfg, err := loadProjectConfig()
+		if err != nil {
+			return err
+		}
+		program, err := buildMigrateProgramForMode(moduleName, false, "", nil, projectCfg.Migrate.Indexes.Ignore)
 		if err != nil {
 			return err
 		}
@@ -104,14 +109,16 @@ func init() {
 const migrateProjectFileName = "project.go"
 
 func buildMigrateSchemaProgram(moduleName string, source string, sourceFiles []string) (gghelper.ProjectProgram, error) {
-	return buildMigrateProgramForMode(moduleName, true, source, sourceFiles)
+	return buildMigrateProgramForMode(moduleName, true, source, sourceFiles, nil)
 }
 
 // buildMigrateProgramForMode assembles the migration program for the project:
 // the embedded sources, the generated project.go, and the flags that select
-// the mode and tell whether the terminal takes colors, so that the sources,
-// and with them the build Go caches, stay the same between runs.
-func buildMigrateProgramForMode(moduleName string, schemaOnly bool, schemaSource string, schemaSourceFiles []string) (gghelper.ProjectProgram, error) {
+// the mode, name the indexes the migration keeps (ignoreIndexes, the
+// migrate.indexes.ignore entries of gst.yaml) and tell whether the terminal
+// takes colors, so that the sources, and with them the build Go caches,
+// stay the same between runs.
+func buildMigrateProgramForMode(moduleName string, schemaOnly bool, schemaSource string, schemaSourceFiles, ignoreIndexes []string) (gghelper.ProjectProgram, error) {
 	files := gghelper.MigrateProgram()
 	project, err := buildMigrateProjectFile(moduleName)
 	if err != nil {
@@ -129,6 +136,9 @@ func buildMigrateProgramForMode(moduleName string, schemaOnly bool, schemaSource
 	}
 	for _, file := range schemaSourceFiles {
 		args = append(args, "-schema-source-file", file)
+	}
+	for _, index := range ignoreIndexes {
+		args = append(args, "-ignore-index", index)
 	}
 	return gghelper.ProjectProgram{Files: files, Args: args}, nil
 }

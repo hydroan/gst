@@ -77,6 +77,37 @@ func TestLoad(t *testing.T) {
 		}
 	})
 
+	t.Run("migrate index ignore entries are trimmed", func(t *testing.T) {
+		dir := writeConfig(t, "migrate:\n  indexes:\n    ignore:\n      - samples.idx_samples_note\n      - \" archives.ft_archives_body \"\n")
+		cfg, err := ggconfig.Load(dir)
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		want := []string{"samples.idx_samples_note", "archives.ft_archives_body"}
+		if !slices.Equal(cfg.Migrate.Indexes.Ignore, want) {
+			t.Fatalf("Load().Migrate.Indexes.Ignore = %q, want %q", cfg.Migrate.Indexes.Ignore, want)
+		}
+	})
+
+	t.Run("invalid migrate index ignore entries are rejected", func(t *testing.T) {
+		for name, entries := range map[string]string{
+			"an index without its table":     "      - idx_samples_note\n",
+			"a table without an index":       "      - samples.\n",
+			"an index of no table":           "      - .idx_samples_note\n",
+			"empty":                          "      - \"\"\n",
+			"listed twice":                   "      - samples.idx_samples_note\n      - samples.idx_samples_note\n",
+			"listed twice in another case":   "      - samples.idx_samples_note\n      - Samples.IDX_SAMPLES_NOTE\n",
+			"a misspelled key under migrate": "      - samples.idx_samples_note\n    ignroe: []\n",
+		} {
+			t.Run(name, func(t *testing.T) {
+				dir := writeConfig(t, "migrate:\n  indexes:\n    ignore:\n"+entries)
+				if _, err := ggconfig.Load(dir); err == nil {
+					t.Fatal("Load() expected error, got nil")
+				}
+			})
+		}
+	})
+
 	t.Run("unknown prune field is rejected", func(t *testing.T) {
 		dir := writeConfig(t, "prune:\n  orphan_ignore:\n    - service/iam\n")
 		if _, err := ggconfig.Load(dir); err == nil {
