@@ -107,6 +107,33 @@ message Item {
 	require.Contains(t, contents["pb/record/item.pb.go"], "type Item struct {")
 }
 
+// TestFilesFollowsTheRenderedFilesWithTheCompiledOnes pins the example of
+// the doc comment of Files: handed pb/record/item.proto and the Go file
+// rendered beside it, it returns the two as they are, followed by the Go
+// file Compile makes of the definition.
+func TestFilesFollowsTheRenderedFilesWithTheCompiledOnes(t *testing.T) {
+	rendered := []File{
+		{Path: "pb/record/item.gen.go", Content: "package record\n"},
+		{Path: "pb/record/item.proto", Content: `syntax = "proto3";
+
+package tmpapp.record;
+
+option go_package = "tmpapp/pb/record;record";
+
+message Item {
+  string id = 1;
+}
+`},
+	}
+	got, err := Files("tmpapp", rendered)
+	require.NoError(t, err)
+
+	require.Len(t, got, 3)
+	require.Equal(t, rendered, got[:2])
+	require.Equal(t, "pb/record/item.pb.go", got[2].Path)
+	require.Contains(t, got[2].Content, "type Item struct {")
+}
+
 // TestCompileReportsWhatTheCompilerRefuses pins that a definition the
 // protobuf compiler refuses fails Compile with the file and the problem
 // named, and no Go file comes back.

@@ -39,6 +39,25 @@ const (
 	protocGenGoGRPCVersion = "v1.6.2"
 )
 
+// Files returns the files gg gen writes under pb/ for rendered, the files
+// Generate rendered: rendered itself, then the Go files Compile makes of the
+// definitions among them. For pb/record/item.proto and the
+// pb/record/item.gen.go rendered beside it, it returns the two followed by
+// pb/record/item.pb.go.
+func Files(modulePath string, rendered []File) ([]File, error) {
+	var definitions []File
+	for _, f := range rendered {
+		if f.Definition() {
+			definitions = append(definitions, f)
+		}
+	}
+	compiled, err := Compile(modulePath, definitions)
+	if err != nil {
+		return nil, err
+	}
+	return slices.Concat(rendered, compiled), nil
+}
+
 // Compile compiles the .proto files Generate produced into the Go files the
 // protobuf plugins write for them, each beside its definition: for
 // pb/sample.proto, pb/sample.pb.go with its messages and, when the file

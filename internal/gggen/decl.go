@@ -50,10 +50,7 @@ func serviceScaffoldImports(phase apiaction.Phase) []string {
 func serviceModelQualifier(info *modelsource.Model, phase apiaction.Phase) string {
 	importPath := info.ImportPath()
 	aliases := ResolveImportConflicts(map[string]string{importPath: info.ModelPkgName}, importNames(serviceScaffoldImports(phase))...)
-	if alias := aliases[importPath]; alias != "" {
-		return alias
-	}
-	return info.ModelPkgName
+	return importQualifier(aliases, importPath, info.ModelPkgName)
 }
 
 // modelImportSpec builds the import of the model package at importPath that a

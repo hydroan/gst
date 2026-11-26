@@ -1,11 +1,12 @@
 package main
 
 import (
-	"go/ast"
 	"go/parser"
 	"go/token"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -153,123 +154,20 @@ func genRunWithOptions(opts genRunOptions) error {
 	reportIgnoreWarnings(scanned)
 	allModels := scanned.models
 
-	modelStmts := make([]ast.Stmt, 0)
-	serviceStmts := make([]ast.Stmt, 0)
-	routerStmts := make([]ast.Stmt, 0)
-	// The packages each registration file imports, every import path mapped
-	// to the name of the package it declares.
-	modelPkgs := make(map[string]string)
-	routerPkgs := make(map[string]string)
-	servicePkgs := make(map[string]string)
 	writeGenFile := func(filename string, content string) error {
 		return writeGeneratedFile(filename, content, log)
 	}
 
-	for _, m := range allModels {
-		// The model registration file belongs to the root model package; a
-		// model anywhere else is registered through an import of its package.
-		if m.Design.Migrate && !m.InModelRoot(ggconst.DirModel) {
-			modelPkgs[m.ImportPath()] = m.ModelPkgName
+	// Generate the registration files of the models, the routes and the
+	// services (see gggen.RegistrationFiles).
+	registration, err := gggen.RegistrationFiles(module, allModels, ignore)
+	if err != nil {
+		return err
+	}
+	for _, path := range slices.Sorted(maps.Keys(registration)) {
+		if err = writeGenFile(path, registration[path]); err != nil {
+			return err
 		}
-
-		m.Design.Range(func(s string, a *dsl.Action) {
-			if a.Service {
-				target := modelsource.ServiceTarget(m, a, ggconst.DirModel, ggconst.DirService)
-				servicePkgs[target.ImportPath] = target.PackageName
-			}
-			routerPkgs[m.ImportPath()] = m.ModelPkgName
-		})
-	}
-
-	// A dsl.PayloadEmpty side is emitted as *model.Empty (or *gstmodel.Empty
-	// when a routed business model package is itself named "model"), so the
-	// qualifier and the import are decided once per router file.
-	gstModelPkg, gstModelNeeded := gggen.RouterGstModelUse(allModels)
-	routerGstModelPkg := ""
-	if gstModelNeeded {
-		routerGstModelPkg = gstModelPkg
-	}
-	// A package whose name another import or a framework import of the same
-	// file already takes is imported under an alias, and its registrations
-	// refer to it through the alias.
-	modelAliases := gggen.ModelFileAliases(modelPkgs)
-	serviceAliases := gggen.ServiceFileAliases(servicePkgs)
-	routerAliases := gggen.RouterFileAliases(routerPkgs, routerGstModelPkg)
-
-	for _, m := range allModels {
-		if !m.Design.Migrate {
-			continue
-		}
-		// A model in the root model package registers unqualified, as in
-		// "Register[*Record]()"; any other is qualified by the name its
-		// package is imported under, as in "Register[*sample.Record]()".
-		if m.InModelRoot(ggconst.DirModel) {
-			modelStmts = append(modelStmts, gggen.StmtModelRegister(m.ModelName))
-		} else {
-			modelStmts = append(modelStmts, gggen.StmtModelRegister(importQualifier(modelAliases, m.ImportPath(), m.ModelPkgName)+"."+m.ModelName))
-		}
-	}
-	for _, m := range allModels {
-		m.Design.Range(func(route string, act *dsl.Action) {
-			// Both registrations below must carry this exact route string:
-			// the service registry keys services by route and phase, so the
-			// service side and the router side share one route value.
-			route, paramName := modelsource.RouterTargetForAction(route, m.Design, act)
-
-			if act.Service {
-				target := modelsource.ServiceTarget(m, act, ggconst.DirModel, ggconst.DirService)
-				serviceStmts = append(serviceStmts, gggen.StmtServiceRegister(importQualifier(serviceAliases, target.ImportPath, target.PackageName)+"."+act.RoleName(), act.Phase, route))
-			}
-			base := ggconst.RouterAuth
-			if act.Public {
-				base = ggconst.RouterPublic
-			}
-			routerStmts = append(routerStmts, gggen.StmtRouterRegister(importQualifier(routerAliases, m.ImportPath(), m.ModelPkgName), m.ModelName, act.Payload, act.Result, gstModelPkg, base, route, paramName, act.Phase.Name()))
-		})
-	}
-
-	// ============================================================
-	// Generate model/service/router/main files
-	// ============================================================
-	modelCode, err := gggen.BuildModelFile(module, ggconst.PkgModel, modelAliases, modelStmts...)
-	if err != nil {
-		return errors.Wrap(err, "build model/model.gen.go")
-	}
-	if writeErr := writeGenFile(filepath.Join(ggconst.DirModel, ggconst.FileModelGen), modelCode); writeErr != nil {
-		return writeErr
-	}
-
-	// generate model/apidoc.gen.go, which registers struct and field doc
-	// comments so the OpenAPI document keeps schema descriptions in binaries
-	// deployed without Go source files.
-	docEntries, err := modelsource.ExtractAPIDocs(module, ggconst.DirModel, ignore, nil)
-	if err != nil {
-		return errors.Wrap(err, "extract api docs")
-	}
-	apidocCode, err := gggen.BuildAPIDocFile(module, ggconst.PkgModel, ggconst.ImportPathAPIDoc, docEntries)
-	if err != nil {
-		return errors.Wrap(err, "build model/apidoc.gen.go")
-	}
-	if writeErr := writeGenFile(filepath.Join(ggconst.DirModel, ggconst.FileAPIDocGen), apidocCode); writeErr != nil {
-		return writeErr
-	}
-
-	// generate service/service.gen.go
-	serviceCode, err := gggen.BuildServiceFile(module, ggconst.PkgService, serviceAliases, serviceStmts...)
-	if err != nil {
-		return errors.Wrap(err, "build service/service.gen.go")
-	}
-	if writeErr := writeGenFile(filepath.Join(ggconst.DirService, ggconst.FileServiceGen), serviceCode); writeErr != nil {
-		return writeErr
-	}
-
-	// generate router/router.gen.go
-	routerCode, err := gggen.BuildRouterFile(module, ggconst.PkgRouter, routerGstModelPkg, routerAliases, routerStmts...)
-	if err != nil {
-		return errors.Wrap(err, "build router/router.gen.go")
-	}
-	if writeErr := writeGenFile(filepath.Join(ggconst.DirRouter, ggconst.FileRouterGen), routerCode); writeErr != nil {
-		return writeErr
 	}
 
 	// Generate the typed column references of every model, so filters can
@@ -294,7 +192,13 @@ func genRunWithOptions(opts genRunOptions) error {
 	// type-checked for it, so this runs once their registration files above
 	// are current; the whole set is built before any of it is written, so a
 	// definition the compiler refuses leaves the files on disk as they were.
-	pbFiles, err := protobufFiles(allModels, pbDerived, ignore)
+	rendered := pbDerived
+	if rendered == nil {
+		if rendered, err = protobufDefinitions(allModels, ignore); err != nil {
+			return err
+		}
+	}
+	pbFiles, err := pb.Files(module, rendered)
 	if err != nil {
 		return err
 	}
@@ -530,37 +434,6 @@ type scannedModels struct {
 	modelIgnores modelsource.ModelIgnoreResult
 }
 
-// protobufFiles renders the .proto files of the models declaring GRPC() and
-// the Go files serving them (see protobufDefinitions), unless derived holds
-// the ones fillPBTags rendered, and compiles the Go files of the
-// definitions (see pb.Compile), the set gg gen writes, the rendered files
-// first.
-func protobufFiles(models []*modelsource.Model, derived []pb.File, ignore gghelper.ProjectIgnore) ([]pb.File, error) {
-	generated := derived
-	if generated == nil {
-		var err error
-		if generated, err = protobufDefinitions(models, ignore); err != nil {
-			return nil, err
-		}
-	}
-	compiled, err := pb.Compile(module, definitionsOf(generated))
-	if err != nil {
-		return nil, err
-	}
-	return append(generated, compiled...), nil
-}
-
-// definitionsOf picks the .proto files out of the files pb.Generate wrote.
-func definitionsOf(files []pb.File) []pb.File {
-	var definitions []pb.File
-	for _, f := range files {
-		if f.Definition() {
-			definitions = append(definitions, f)
-		}
-	}
-	return definitions
-}
-
 // protobufConfig describes a derivation of the protobuf definitions of
 // models: the model packages are type-checked through the overlay the column
 // inspection compiles them with, the generated files of the previous run
@@ -678,14 +551,4 @@ func reportIgnoreWarnings(scanned scannedModels) {
 	for _, match := range scanned.modelIgnores.LiveActionModels {
 		clioutput.Warn("gst.yaml ignores registration of model %s (%s) but its routes stay enabled; add gen.routes.ignore entries or ensure another model owns its table", match.Model, match.File)
 	}
-}
-
-// importQualifier returns the name a generated registration file refers to
-// the package at importPath by: the alias aliases maps it to, or its package
-// name pkgName when it was imported without one.
-func importQualifier(aliases map[string]string, importPath, pkgName string) string {
-	if alias := aliases[importPath]; alias != "" {
-		return alias
-	}
-	return pkgName
 }

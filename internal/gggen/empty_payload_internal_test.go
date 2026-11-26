@@ -1,11 +1,10 @@
-package gggen_test
+package gggen
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/hydroan/gst/internal/gggen"
 	"github.com/hydroan/gst/internal/gghelper"
 	"github.com/hydroan/gst/internal/modelsource"
 )
@@ -159,12 +158,12 @@ type Snapshot struct {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotPkg, gotNeeded := gggen.RouterGstModelUse(tt.models)
+			gotPkg, gotNeeded := routerGstModelUse(tt.models)
 			if gotPkg != tt.wantPkg {
-				t.Errorf("RouterGstModelUse() pkgName = %q, want %q", gotPkg, tt.wantPkg)
+				t.Errorf("routerGstModelUse() pkgName = %q, want %q", gotPkg, tt.wantPkg)
 			}
 			if gotNeeded != tt.wantNeeded {
-				t.Errorf("RouterGstModelUse() needed = %v, want %v", gotNeeded, tt.wantNeeded)
+				t.Errorf("routerGstModelUse() needed = %v, want %v", gotNeeded, tt.wantNeeded)
 			}
 		})
 	}
@@ -189,8 +188,8 @@ func TestGstModelImportEntry(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := gggen.GstModelImportEntry(tt.pkgName); got != tt.want {
-				t.Errorf("GstModelImportEntry(%q) = %q, want %q", tt.pkgName, got, tt.want)
+			if got := gstModelImportEntry(tt.pkgName); got != tt.want {
+				t.Errorf("gstModelImportEntry(%q) = %q, want %q", tt.pkgName, got, tt.want)
 			}
 		})
 	}

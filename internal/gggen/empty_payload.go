@@ -18,7 +18,7 @@ const (
 	gstModelPkgAlias = "gstmodel"
 )
 
-// RouterGstModelUse resolves how the generated router file references the
+// routerGstModelUse resolves how the generated router file references the
 // gst model package. pkgName is the qualifier emitted for model.Empty: the
 // plain package name by default, falling back to the gstmodel alias when a
 // routed business model package is itself named "model" (two imports cannot
@@ -29,7 +29,7 @@ const (
 // its result yields ("gstmodel", true), and routed models in package sample
 // declaring both sides of every action yield ("model", false). Call it after
 // the route/model ignore passes so disabled actions no longer count as routed.
-func RouterGstModelUse(models []*modelsource.Model) (pkgName string, needed bool) {
+func routerGstModelUse(models []*modelsource.Model) (pkgName string, needed bool) {
 	pkgName = ggconst.PkgModel
 	for _, m := range models {
 		if m.Design == nil {
@@ -49,12 +49,12 @@ func RouterGstModelUse(models []*modelsource.Model) (pkgName string, needed bool
 	return pkgName, needed
 }
 
-// GstModelImportEntry returns the import entry ("path" or "alias path") that
+// gstModelImportEntry returns the import entry ("path" or "alias path") that
 // makes the given gst model package qualifier resolvable in a generated file:
 // a service file takes it through imports(), the router file through
 // BuildRouterFile. It returns "gstmodel github.com/hydroan/gst/model" for
 // gstmodel and "github.com/hydroan/gst/model" for model.
-func GstModelImportEntry(pkgName string) string {
+func gstModelImportEntry(pkgName string) string {
 	if pkgName == gstModelPkgAlias {
 		return gstModelPkgAlias + " " + ggconst.ImportPathModel
 	}

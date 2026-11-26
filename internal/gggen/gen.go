@@ -69,10 +69,10 @@ func serviceFilterLogQuoted(modelName string, phase apiaction.Phase, action *dsl
 func genServiceMethod1(info *modelsource.Model, modelQualifier string, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod1(
 		info.ModelVarName, info.ModelName, modelQualifier, phase, roleName,
-		StmtLogWithContext(info.ModelVarName),
-		StmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
-		EmptyLine(),
-		Returns(ast.NewIdent("nil")),
+		stmtLogWithContext(info.ModelVarName),
+		stmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
+		emptyLine(),
+		returns(ast.NewIdent("nil")),
 	)
 }
 
@@ -89,10 +89,10 @@ func genServiceMethod1(info *modelsource.Model, modelQualifier string, action *d
 func genServiceMethod2(info *modelsource.Model, modelQualifier string, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod2(
 		info.ModelVarName, info.ModelName, modelQualifier, phase, roleName,
-		StmtLogWithContext(info.ModelVarName),
-		StmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
-		EmptyLine(),
-		Returns(ast.NewIdent("nil")),
+		stmtLogWithContext(info.ModelVarName),
+		stmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
+		emptyLine(),
+		returns(ast.NewIdent("nil")),
 	)
 }
 
@@ -111,10 +111,10 @@ func genServiceMethod2(info *modelsource.Model, modelQualifier string, action *d
 func genServiceMethod3(info *modelsource.Model, modelQualifier string, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod3(
 		info.ModelVarName, info.ModelName, modelQualifier, phase, roleName,
-		StmtLogWithContext(info.ModelVarName),
-		StmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
-		EmptyLine(),
-		Returns(ast.NewIdent("nil")),
+		stmtLogWithContext(info.ModelVarName),
+		stmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
+		emptyLine(),
+		returns(ast.NewIdent("nil")),
 	)
 }
 
@@ -132,10 +132,10 @@ func genServiceMethod3(info *modelsource.Model, modelQualifier string, action *d
 func genServiceMethod4(info *modelsource.Model, modelQualifier string, action *dsl.Action, reqName, rspName string, phase apiaction.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod4(
 		info.ModelVarName, modelQualifier, emptyReqPkgName(modelQualifier), reqName, rspName, phase, roleName,
-		StmtLogWithContext(info.ModelVarName),
-		StmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
-		EmptyLine(),
-		Returns(
+		stmtLogWithContext(info.ModelVarName),
+		stmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
+		emptyLine(),
+		returns(
 			ast.NewIdent("rsp"),
 			ast.NewIdent("nil"),
 		),
@@ -157,10 +157,10 @@ func genServiceMethod4(info *modelsource.Model, modelQualifier string, action *d
 func genServiceMethod5(info *modelsource.Model, modelQualifier string, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod5(
 		info.ModelVarName, info.ModelName, modelQualifier, roleName,
-		StmtLogWithContext(info.ModelVarName),
-		StmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
-		EmptyLine(),
-		Returns(ast.NewIdent(pluralizeCli.Plural(strings.ToLower(info.ModelName))), ast.NewIdent("nil")),
+		stmtLogWithContext(info.ModelVarName),
+		stmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
+		emptyLine(),
+		returns(ast.NewIdent(pluralizeCli.Plural(strings.ToLower(info.ModelName))), ast.NewIdent("nil")),
 	)
 }
 
@@ -178,10 +178,10 @@ func genServiceMethod5(info *modelsource.Model, modelQualifier string, action *d
 func genServiceMethod6(info *modelsource.Model, modelQualifier string, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod6(
 		info.ModelVarName, info.ModelName, modelQualifier, roleName,
-		StmtLogWithContext(info.ModelVarName),
-		StmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
-		EmptyLine(),
-		Returns(ast.NewIdent("data"), ast.NewIdent("nil")),
+		stmtLogWithContext(info.ModelVarName),
+		stmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
+		emptyLine(),
+		returns(ast.NewIdent("data"), ast.NewIdent("nil")),
 	)
 }
 
@@ -199,10 +199,10 @@ func genServiceMethod6(info *modelsource.Model, modelQualifier string, action *d
 func genServiceMethod7(info *modelsource.Model, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod7(
 		info.ModelVarName, roleName,
-		StmtLogWithContext(info.ModelVarName),
-		StmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
-		EmptyLine(),
-		Returns(ast.NewIdent("nil")),
+		stmtLogWithContext(info.ModelVarName),
+		stmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
+		emptyLine(),
+		returns(ast.NewIdent("nil")),
 	)
 }
 
@@ -220,10 +220,10 @@ func genServiceMethod7(info *modelsource.Model, action *dsl.Action, phase apiact
 func genServiceMethod8(info *modelsource.Model, modelQualifier string, action *dsl.Action, phase apiaction.Phase, roleName string) *ast.FuncDecl {
 	return serviceMethod8(
 		info.ModelVarName, info.ModelName, modelQualifier, roleName,
-		StmtLogWithContext(info.ModelVarName),
-		StmtLogInfo(serviceFilterLogQuoted(info.ModelName, phase, action)),
-		EmptyLine(),
-		Returns(ast.NewIdent(strings.ToLower(info.ModelName)), ast.NewIdent("opts"), ast.NewIdent("nil")),
+		stmtLogWithContext(info.ModelVarName),
+		stmtLogInfo(serviceFilterLogQuoted(info.ModelName, phase, action)),
+		emptyLine(),
+		returns(ast.NewIdent(strings.ToLower(info.ModelName)), ast.NewIdent("opts"), ast.NewIdent("nil")),
 	)
 }
 
@@ -259,10 +259,10 @@ func genServiceMethod9(info *modelsource.Model, modelQualifier string, action *d
 	}
 	return serviceMethod9(
 		info.ModelVarName, modelQualifier, emptyReqPkgName(modelQualifier), action.Payload, action.Result, action.StreamingPayload, action.StreamingResult, roleName,
-		StmtLogWithContext(info.ModelVarName),
-		StmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
-		EmptyLine(),
-		Returns(results...),
+		stmtLogWithContext(info.ModelVarName),
+		stmtLogInfo(serviceActionLogQuoted(info.ModelName, phase, action)),
+		emptyLine(),
+		returns(results...),
 	)
 }
 
@@ -404,7 +404,7 @@ func generateService(info *modelsource.Model, action *dsl.Action, phase apiactio
 	// refers to the business model package as "model" and the bare path
 	// otherwise (see emptyReqPkgName).
 	if isEmptyPayload(action.Payload) || isEmptyPayload(action.Result) {
-		otherPkgs = append(otherPkgs, GstModelImportEntry(emptyReqPkgName(qualifier)))
+		otherPkgs = append(otherPkgs, gstModelImportEntry(emptyReqPkgName(qualifier)))
 	}
 
 	decls := []ast.Decl{

@@ -1,4 +1,4 @@
-package gggen_test
+package gggen
 
 import (
 	"bytes"
@@ -9,7 +9,6 @@ import (
 
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/dsl"
-	"github.com/hydroan/gst/internal/gggen"
 	"github.com/hydroan/gst/internal/gghelper"
 )
 
@@ -23,7 +22,7 @@ func TestStmtLogInfo(t *testing.T) {
 		want string
 	}{
 		{
-			// The example of the StmtLogInfo doc comment.
+			// The example of the stmtLogInfo doc comment.
 			name: "item_create",
 			str:  `"item create"`,
 			want: `log.Info("item create")`,
@@ -32,29 +31,29 @@ func TestStmtLogInfo(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			buf.Reset()
-			res := gggen.StmtLogInfo(tt.str)
+			res := stmtLogInfo(tt.str)
 			if err := format.Node(&buf, fset, res); err != nil {
 				t.Error(err)
 				return
 			}
 			got := buf.String()
 			if got != tt.want {
-				t.Errorf("StmtLogInfo() = %v, want %v", got, tt.want)
+				t.Errorf("stmtLogInfo() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-// TestEmptyLine prints the body of the example of the EmptyLine doc comment,
+// TestEmptyLine prints the body of the example of the emptyLine doc comment,
 // which leaves an empty line before the return statement.
 func TestEmptyLine(t *testing.T) {
 	fn := &ast.FuncDecl{
 		Name: ast.NewIdent("f"),
 		Type: &ast.FuncType{},
 		Body: &ast.BlockStmt{List: []ast.Stmt{
-			gggen.StmtLogInfo(`"item create"`),
-			gggen.EmptyLine(),
-			gggen.Returns(ast.NewIdent("nil")),
+			stmtLogInfo(`"item create"`),
+			emptyLine(),
+			returns(ast.NewIdent("nil")),
 		}},
 	}
 	got, err := gghelper.FormatNode(fn)
@@ -108,14 +107,14 @@ func TestReturns(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res := gggen.Returns(tt.exprs...)
+			res := returns(tt.exprs...)
 			got, err := gghelper.FormatNode(res)
 			if err != nil {
 				t.Error(err)
 				return
 			}
 			if got != tt.want {
-				t.Errorf("Returns() = %v, want %v", got, tt.want)
+				t.Errorf("returns() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -140,14 +139,14 @@ func TestStmtLogWithContext(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res := gggen.StmtLogWithContext(tt.modelVarName)
+			res := stmtLogWithContext(tt.modelVarName)
 			got, err := gghelper.FormatNode(res)
 			if err != nil {
 				t.Error(err)
 				return
 			}
 			if got != tt.want {
-				t.Errorf("StmtLogWithContext() = %v, want %v", got, tt.want)
+				t.Errorf("stmtLogWithContext() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -159,7 +158,7 @@ func TestStmtModelRegister(t *testing.T) {
 		structName string
 		want       string
 	}{
-		// The examples of the StmtModelRegister doc comment.
+		// The examples of the stmtModelRegister doc comment.
 		{
 			name:       "User",
 			structName: "User",
@@ -173,7 +172,7 @@ func TestStmtModelRegister(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := gggen.StmtModelRegister(tt.structName)
+			got := stmtModelRegister(tt.structName)
 			var buf bytes.Buffer
 			fset := token.NewFileSet()
 			if err := format.Node(&buf, fset, got); err != nil {
@@ -181,7 +180,7 @@ func TestStmtModelRegister(t *testing.T) {
 				return
 			}
 			if buf.String() != tt.want {
-				t.Errorf("StmtModelRegister() = %v, want %v", buf.String(), tt.want)
+				t.Errorf("stmtModelRegister() = %v, want %v", buf.String(), tt.want)
 			}
 		})
 	}
@@ -196,7 +195,7 @@ func TestStmtServiceRegister(t *testing.T) {
 		want       string
 	}{
 		{
-			// The example of the StmtServiceRegister doc comment.
+			// The example of the stmtServiceRegister doc comment.
 			name:       "user",
 			structName: "user.Creator",
 			route:      "/api/users",
@@ -213,14 +212,14 @@ func TestStmtServiceRegister(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res := gggen.StmtServiceRegister(tt.structName, tt.phase, tt.route)
+			res := stmtServiceRegister(tt.structName, tt.phase, tt.route)
 			got, err := gghelper.FormatNode(res)
 			if err != nil {
 				t.Error(err)
 				return
 			}
 			if got != tt.want {
-				t.Errorf("StmtServiceRegister() = %v, want %v", got, tt.want)
+				t.Errorf("stmtServiceRegister() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -241,7 +240,7 @@ func TestStmtRouterRegister(t *testing.T) {
 		want         string
 	}{
 		{
-			// An example of the StmtRouterRegister doc comment.
+			// An example of the stmtRouterRegister doc comment.
 			name:         "model_as_payload_and_result",
 			modelPkgName: "model",
 			modelName:    "Record",
@@ -306,7 +305,7 @@ func TestStmtRouterRegister(t *testing.T) {
 		{
 			// A project routing a root model package keeps the gstmodel
 			// alias so the Empty qualifier cannot clash with the business
-			// "model" import. An example of the StmtRouterRegister doc
+			// "model" import. An example of the stmtRouterRegister doc
 			// comment.
 			name:         "empty_payload_in_root_model_package_keeps_gstmodel_alias",
 			modelPkgName: "model",
@@ -321,7 +320,7 @@ func TestStmtRouterRegister(t *testing.T) {
 		},
 		{
 			// A route ending in a path parameter names it in the controller
-			// config. An example of the StmtRouterRegister doc comment.
+			// config. An example of the stmtRouterRegister doc comment.
 			name:         "route_param_named_in_controller_config",
 			modelPkgName: "box",
 			modelName:    "Record",
@@ -337,14 +336,14 @@ func TestStmtRouterRegister(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res := gggen.StmtRouterRegister(tt.modelPkgName, tt.modelName, tt.reqName, tt.rspName, tt.gstModelPkg, tt.routerGroup, tt.route, tt.paramName, tt.phase)
+			res := stmtRouterRegister(tt.modelPkgName, tt.modelName, tt.reqName, tt.rspName, tt.gstModelPkg, tt.routerGroup, tt.route, tt.paramName, tt.phase)
 			got, err := gghelper.FormatNode(res)
 			if err != nil {
 				t.Error(err)
 				return
 			}
 			if got != tt.want {
-				t.Errorf("StmtRouterRegister() = %v, want %v", got, tt.want)
+				t.Errorf("stmtRouterRegister() = %v, want %v", got, tt.want)
 			}
 		})
 	}

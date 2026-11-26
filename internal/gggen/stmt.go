@@ -9,11 +9,11 @@ import (
 	"github.com/hydroan/gst/internal/ggconst"
 )
 
-// StmtLogInfo builds the statement that logs str, a quoted Go string
+// stmtLogInfo builds the statement that logs str, a quoted Go string
 // literal: for str `"item create"` it builds
 //
 //	log.Info("item create")
-func StmtLogInfo(str string) *ast.ExprStmt {
+func stmtLogInfo(str string) *ast.ExprStmt {
 	return &ast.ExprStmt{
 		X: &ast.CallExpr{
 			// log.Info
@@ -32,10 +32,10 @@ func StmtLogInfo(str string) *ast.ExprStmt {
 	}
 }
 
-// EmptyLine builds a statement that prints as an empty line, which the
+// emptyLine builds a statement that prints as an empty line, which the
 // generated service methods place before their return statement: a body
-// built from StmtLogInfo(`"item create"`), EmptyLine() and
-// Returns(ast.NewIdent("nil")) prints as
+// built from stmtLogInfo(`"item create"`), emptyLine() and
+// returns(ast.NewIdent("nil")) prints as
 //
 //	log.Info("item create")
 //
@@ -43,26 +43,26 @@ func StmtLogInfo(str string) *ast.ExprStmt {
 //
 // It is an expression statement of an empty identifier: go/printer drops an
 // *ast.EmptyStmt from a statement list without leaving a line for it.
-func EmptyLine() ast.Stmt {
+func emptyLine() ast.Stmt {
 	return &ast.ExprStmt{X: ast.NewIdent("")}
 }
 
-// Returns builds the return statement of exprs: for ast.NewIdent("rsp") and
+// returns builds the return statement of exprs: for ast.NewIdent("rsp") and
 // ast.NewIdent("nil") it builds
 //
 //	return rsp, nil
-func Returns(exprs ...ast.Expr) *ast.ReturnStmt {
+func returns(exprs ...ast.Expr) *ast.ReturnStmt {
 	return &ast.ReturnStmt{
 		Results: exprs,
 	}
 }
 
-// StmtLogWithContext builds the statement that opens a generated service
+// stmtLogWithContext builds the statement that opens a generated service
 // method, taking the logger of the phase from the receiver named
 // modelVarName: for u it builds
 //
 //	log := u.WithContext(ctx, ctx.Phase())
-func StmtLogWithContext(modelVarName string) *ast.AssignStmt {
+func stmtLogWithContext(modelVarName string) *ast.AssignStmt {
 	return &ast.AssignStmt{
 		Lhs: []ast.Expr{
 			ast.NewIdent("log"),
@@ -88,14 +88,14 @@ func StmtLogWithContext(modelVarName string) *ast.AssignStmt {
 	}
 }
 
-// StmtModelRegister builds the registration of a model in model.gen.go.
+// stmtModelRegister builds the registration of a model in model.gen.go.
 // modelName is the model type as the file refers to it, qualified when the
 // model is declared outside the root model package: for User and
 // sample.Record it builds
 //
 //	model.Register[*User]()
 //	model.Register[*sample.Record]()
-func StmtModelRegister(modelName string) *ast.ExprStmt {
+func stmtModelRegister(modelName string) *ast.ExprStmt {
 	return &ast.ExprStmt{
 		X: &ast.CallExpr{
 			Fun: &ast.IndexExpr{
@@ -111,16 +111,16 @@ func StmtModelRegister(modelName string) *ast.ExprStmt {
 	}
 }
 
-// StmtServiceRegister builds the registration of a service in
-// service.gen.go. serviceImport is the service type as the file refers to
-// it: for user.Creator, apiaction.Create and /api/users it builds
+// stmtServiceRegister builds the registration of a service in service.gen.go.
+// serviceImport is the service type as the file refers to it: for user.Creator,
+// apiaction.Create and /api/users it builds
 //
 //	service.Register[*user.Creator](service.Create, "/api/users")
 //
 // The route argument is the path the route is served at, the same string
-// the matching StmtRouterRegister statement carries, because the service
+// the matching stmtRouterRegister statement carries, because the service
 // registry keys services by path and phase.
-func StmtServiceRegister(serviceImport string, phase apiaction.Phase, route string) *ast.ExprStmt {
+func stmtServiceRegister(serviceImport string, phase apiaction.Phase, route string) *ast.ExprStmt {
 	return &ast.ExprStmt{
 		X: &ast.CallExpr{
 			Fun: &ast.IndexExpr{
@@ -146,7 +146,7 @@ func StmtServiceRegister(serviceImport string, phase apiaction.Phase, route stri
 	}
 }
 
-// StmtRouterRegister builds the registration of an action in router.gen.go:
+// stmtRouterRegister builds the registration of an action in router.gen.go:
 // the model type, then the action's request and result types, reqName and
 // rspName qualified by modelPkgName, the qualifier the file refers to the
 // model package by. For example, it builds
@@ -157,15 +157,15 @@ func StmtServiceRegister(serviceImport string, phase apiaction.Phase, route stri
 //
 // A dsl.PayloadEmpty side becomes *model.Empty under gstModelPkg, the
 // qualifier the router file uses for model.Empty, resolved once per file by
-// RouterGstModelUse. routerGroup names the router group accessor ("Auth" or
+// routerGstModelUse. routerGroup names the router group accessor ("Auth" or
 // "Public"), route is the path the route is served at, shared verbatim with the
-// matching StmtServiceRegister statement, paramName is the route parameter the
+// matching stmtServiceRegister statement, paramName is the route parameter the
 // controller reads the resource id from, "" for none, and phase names the
 // phase of the action as the service package spells it, such as Create.
-func StmtRouterRegister(modelPkgName, modelName, reqName, rspName, gstModelPkg string, routerGroup string, route string, paramName string, phase string) *ast.ExprStmt {
+func stmtRouterRegister(modelPkgName, modelName, reqName, rspName, gstModelPkg string, routerGroup string, route string, paramName string, phase string) *ast.ExprStmt {
 	// The dsl.PayloadEmpty sentinel on either side resolves to
 	// *<gstModelPkg>.Empty. gstModelPkg is the file-level qualifier decided
-	// once per router file by RouterGstModelUse: plain "model" by default,
+	// once per router file by routerGstModelUse: plain "model" by default,
 	// the gstmodel alias when a routed business model package is itself
 	// named "model". Any other action type is emitted in its declared
 	// form.

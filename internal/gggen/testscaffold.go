@@ -142,10 +142,10 @@ func GenerateServiceTest(info *modelsource.Model, target modelsource.ServiceTarg
 	example := newServiceTestExample(info, action, route)
 	body := []ast.Stmt{
 		exprStmt(call(sel(ident("t"), "Fatal"), strLit(name+" is a scaffold: delete this line and finish the test below"))),
-		EmptyLine(),
+		emptyLine(),
 	}
 	body = append(body, example.setup...)
-	body = append(body, EmptyLine())
+	body = append(body, emptyLine())
 	body = append(body, example.stmts...)
 
 	file := &ast.File{
@@ -517,7 +517,7 @@ func GenerateServiceTestMain(modulePath, servicePkgName string, extraDirs ...str
 			// is positioned on the line of its key.
 			keyValue("Seed", &ast.FuncLit{
 				Type: &ast.FuncType{Func: seedPos, Params: &ast.FieldList{}, Results: &ast.FieldList{List: []*ast.Field{{Type: ident("error")}}}},
-				Body: &ast.BlockStmt{List: []ast.Stmt{Returns(ident("nil"))}},
+				Body: &ast.BlockStmt{List: []ast.Stmt{returns(ident("nil"))}},
 			}, seedPos),
 		},
 		Rbrace: rbrace,
