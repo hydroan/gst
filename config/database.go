@@ -33,6 +33,10 @@ const (
 	DATABASE_CONN_MAX_IDLE_TIME   = "DATABASE_CONN_MAX_IDLE_TIME"
 )
 
+// Database configures the primary database. Type selects its dialect, alone:
+// the section of that dialect holds how to reach it. Type has no default, so
+// a deployment names its database, in the file or through DATABASE_TYPE; a
+// program whose models keep tables does not start without one.
 type Database struct {
 	Type               DBType        `json:"type" mapstructure:"type" ini:"type" yaml:"type"`
 	AutoMigrate        bool          `json:"auto_migrate" mapstructure:"auto_migrate" ini:"auto_migrate" yaml:"auto_migrate"`
@@ -44,7 +48,6 @@ type Database struct {
 }
 
 func (*Database) setDefaults(v *viper.Viper) {
-	v.SetDefault("database.type", DBSqlite)
 	v.SetDefault("database.auto_migrate", false)
 	v.SetDefault("database.slow_query_threshold", 500*time.Millisecond)
 	v.SetDefault("database.max_idle_conns", 100)

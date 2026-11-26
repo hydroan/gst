@@ -440,6 +440,25 @@ func TestWaitReturnsOnceTheQueueDrains(t *testing.T) {
 	}
 }
 
+// TestWaitFailsTheStartWhenModelsHaveNoDatabase proves what a deployment
+// naming no database learns at its start: with a model waiting for its table
+// and no database opened, Wait fails naming the key and the environment
+// variable that select one; with no model waiting there is nothing to wait
+// for, and a program that keeps no table starts without a database.
+func TestWaitFailsTheStartWhenModelsHaveNoDatabase(t *testing.T) {
+	require.Zero(t, tablePreparationStarted.Load(), "no database is opened in this test")
+	require.NoError(t, WaitTables(), "no model waits for a table")
+
+	// Queued and taken off, so it counts as pending until its TableDone lands.
+	model.Register[*plainRecord]()
+	<-model.TableChan
+	t.Cleanup(model.TableDone)
+
+	err := WaitTables()
+	require.ErrorContains(t, err, "database.type")
+	require.ErrorContains(t, err, config.DATABASE_TYPE)
+}
+
 // TestWaitReportsATableThePreparationCouldNotGet proves where a table the
 // deployment could not get reaches the caller. Preparation runs on a
 // goroutine of its own, so failing there cannot end the start where it

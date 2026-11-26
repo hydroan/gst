@@ -18,14 +18,13 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// Init opens the default SQLite connection when SQLite is enabled and selected
-// as the default database, and makes it the default database that
-// database.Database and database.DB use; otherwise it does nothing. Before
-// that it runs PRAGMA optimize, which gathers statistics for the query
-// planner; a failure there is logged, not returned.
+// Init opens the default SQLite connection when database.type selects SQLite,
+// and makes it the default database that database.Database and database.DB use;
+// otherwise it does nothing. Before that it runs PRAGMA optimize, which gathers
+// statistics for the query planner; a failure there is logged, not returned.
 func Init() error {
 	cfg := config.App.Sqlite
-	if !cfg.Enabled || config.App.Database.Type != config.DBSqlite {
+	if config.App.Database.Type != config.DBSqlite {
 		return nil
 	}
 

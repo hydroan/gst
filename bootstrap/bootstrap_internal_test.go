@@ -173,7 +173,7 @@ var (
 )
 
 // bootstrapProcess bootstraps the test process — on the scratch log
-// directory TestMain made, a free port and the default in-memory database —
+// directory TestMain made, a free port and an in-memory SQLite database —
 // and fails the test when that failed. Bootstrap is single-shot, so every
 // test that needs a bootstrapped process shares the one bootstrap.
 func bootstrapProcess(t *testing.T) {
@@ -185,6 +185,8 @@ func bootstrapProcess(t *testing.T) {
 			errBootstrap = err
 			return
 		}
+		t.Setenv(config.DATABASE_TYPE, string(config.DBSqlite))
+		t.Setenv(config.SQLITE_IS_MEMORY, "true")
 		t.Setenv(config.DATABASE_AUTO_MIGRATE, "true")
 		t.Setenv(config.SERVER_LISTEN, "127.0.0.1")
 		t.Setenv(config.SERVER_PORT, strconv.Itoa(port))

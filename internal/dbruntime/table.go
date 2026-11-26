@@ -106,12 +106,12 @@ func preparationFailed() error {
 // the dialect-aware gorm Migrator, so schema changes in shared environments
 // stay an explicit "gg migrate" decision instead of a startup side effect.
 //
-// An in-memory sqlite database, whichever way the configuration selects it
-// (see SQLiteInMemory), is exempt from that check: it is created empty in
-// every process and dies with it, so no earlier "gg migrate" run can have
-// populated it and there is no shared schema to protect. Migrating it anyway
-// keeps the zero-config defaults (sqlite, in-memory, auto_migrate off) bootable
-// instead of failing the start on the first registered model.
+// An in-memory sqlite database, whichever way the configuration selects it (see
+// SQLiteInMemory), is exempt from that check: it is created empty in every
+// process and dies with it, so no earlier "gg migrate" run can have populated
+// it and there is no shared schema to protect. Migrating it anyway keeps a
+// configuration selecting one bootable with auto_migrate off, instead of
+// failing the start on the first registered model.
 func ensureTable(handler *gorm.DB, m gst.Model) error {
 	tableName, err := requireTableName(m)
 	if err != nil {
@@ -210,16 +210,20 @@ const tableProgressLogInterval = 500 * time.Millisecond
 // not get reaches the caller, in time to end the start through its ordinary
 // exit.
 //
-// Called before InitDatabase it returns straight away with a warning, because
-// nothing is preparing tables yet and there is no end to wait for.
+// With no database opened, InitDatabase never called, nothing prepares a table:
+// a model waiting for one fails the start, naming the key that selects the
+// database, and with none waiting it returns straight away, a program that
+// keeps no table needing no database.
 //
 // WaitTables only observes work already queued. If another subsystem, such as
 // module registration, can still call model.Register, drain that subsystem
 // first and then call WaitTables so its tables are visible.
 func WaitTables() error {
 	if tablePreparationStarted.Load() == 0 {
-		zap.S().Warnw("WaitTables() called before InitDatabase(), returning immediately",
-			"reason", "processing goroutine not started")
+		if pending := model.TablesPending(); pending > 0 {
+			return errors.Newf("no database is configured, and the models keep tables (%d waiting): set database.type, or the %s environment variable, to %s, %s, %s or %s",
+				pending, config.DATABASE_TYPE, config.DBSqlite, config.DBPostgres, config.DBMySQL, config.DBClickHouse)
+		}
 		return nil
 	}
 

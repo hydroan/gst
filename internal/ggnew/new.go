@@ -60,10 +60,12 @@ type ProjectFile struct {
 	Content string
 }
 
-// ProjectFiles returns the files gg new writes into a new project, in the
-// order it writes them: the scaffold sorted by path, then main.go, .gitignore
-// and config.ini.example. projectName is the module path the project is
-// created under; its last element names the application in the example
+// ProjectFiles returns the files gg new writes into a new project, in the order
+// it writes them: the scaffold sorted by path, then main.go, .gitignore,
+// config.ini and config.ini.example. The two configuration files hold the same
+// content: config.ini is the one the project starts with, config.ini.example
+// the template its repository keeps beside it. projectName is the module path
+// the project is created under; its last element names the application in the
 // configuration, as sampleapp does for example.com/sampleapp.
 func ProjectFiles(projectName string) ([]ProjectFile, error) {
 	scaffold, err := scaffoldFiles(projectName)
@@ -74,7 +76,7 @@ func ProjectFiles(projectName string) ([]ProjectFile, error) {
 	// restores it: it is a project file, not part of the scaffold.
 	scaffold[".golangci.yml"] = golangciLintContent
 	paths := slices.Sorted(maps.Keys(scaffold))
-	files := make([]ProjectFile, 0, len(paths)+3)
+	files := make([]ProjectFile, 0, len(paths)+4)
 	for _, path := range paths {
 		files = append(files, ProjectFile{Path: path, Content: scaffold[path]})
 	}
@@ -86,10 +88,12 @@ func ProjectFiles(projectName string) ([]ProjectFile, error) {
 		return nil, err
 	}
 	appName := filepath.Base(projectName)
+	config := fmt.Sprintf(configTemplate, appName, appName)
 	return append(files,
 		ProjectFile{Path: ggconst.FileMain, Content: mainFile},
 		ProjectFile{Path: ".gitignore", Content: gitignoreContent},
-		ProjectFile{Path: "config.ini.example", Content: fmt.Sprintf(configTemplate, appName, appName)},
+		ProjectFile{Path: "config.ini", Content: config},
+		ProjectFile{Path: "config.ini.example", Content: config},
 	), nil
 }
 
@@ -122,8 +126,11 @@ func EnsureFileExists() ([]string, error) {
 	return created, nil
 }
 
-// configTemplate is the config.ini.example of a new project, its application
-// name filled in twice: as the [app] name and as the redis namespace.
+// configTemplate is the configuration of a new project, written both as the
+// config.ini it starts with and as the config.ini.example its repository keeps,
+// its application name filled in twice: as the [app] name and as the redis
+// namespace. It selects the SQLite file beside the project, so the project
+// starts as generated.
 const configTemplate = `[app]
 name = %s
 description = A Go application built with gst framework
@@ -150,8 +157,6 @@ auto_migrate = true
 
 [sqlite]
 path = ./data.db
-is_memory = true
-enabled = true
 
 [mysql]
 host = 127.0.0.1
@@ -159,7 +164,6 @@ port = 3306
 database =
 username = root
 password =
-enabled = true
 
 [postgres]
 host = 127.0.0.1
@@ -168,7 +172,6 @@ database =
 username = postgres
 password =
 sslmode = disable
-enabled = true
 
 [redis]
 enabled = false

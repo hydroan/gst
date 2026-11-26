@@ -21,12 +21,12 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 )
 
-// Init opens the default MySQL connection when MySQL is enabled and selected as
-// the default database, and makes it the default database that
-// database.Database and database.DB use; otherwise it does nothing.
+// Init opens the default MySQL connection when database.type selects MySQL,
+// and makes it the default database that database.Database and database.DB
+// use; otherwise it does nothing.
 func Init() error {
 	cfg := config.App.MySQL
-	if !cfg.Enabled || config.App.Database.Type != config.DBMySQL {
+	if config.App.Database.Type != config.DBMySQL {
 		return nil
 	}
 

@@ -142,6 +142,11 @@ func initConfigRouterAndModules() {
 	if err = config.Init(); err != nil {
 		exitWithError(err)
 	}
+	// Every step below works on the database the configuration names, and it
+	// names none by default.
+	if config.App.Database.Type == "" {
+		exitWithError(errors.Newf("no database is configured: set database.type, or the %s environment variable, to the database to migrate", config.DATABASE_TYPE))
+	}
 	if err = bootstrap.InitRouterAndModules(); err != nil {
 		exitWithError(err)
 	}

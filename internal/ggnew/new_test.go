@@ -10,9 +10,9 @@ import (
 )
 
 // TestProjectFilesListsTheScaffoldThenTheProjectFiles pins the order gg new
-// writes a project in: the scaffold sorted by path, then main.go, .gitignore
-// and config.ini.example, whose application is named after the last element
-// of the module path.
+// writes a project in: the scaffold sorted by path, then main.go, .gitignore,
+// config.ini and config.ini.example, the two configuration files alike and
+// their application named after the last element of the module path.
 func TestProjectFilesListsTheScaffoldThenTheProjectFiles(t *testing.T) {
 	files, err := ggnew.ProjectFiles("example.com/sampleapp")
 	if err != nil {
@@ -23,14 +23,14 @@ func TestProjectFilesListsTheScaffoldThenTheProjectFiles(t *testing.T) {
 	for _, file := range files {
 		paths = append(paths, file.Path)
 	}
-	if len(paths) < 4 {
-		t.Fatalf("paths = %v, want the scaffold and the three project files", paths)
+	if len(paths) < 5 {
+		t.Fatalf("paths = %v, want the scaffold and the four project files", paths)
 	}
-	scaffold, last := paths[:len(paths)-3], paths[len(paths)-3:]
+	scaffold, last := paths[:len(paths)-4], paths[len(paths)-4:]
 	if !slices.IsSorted(scaffold) {
 		t.Fatalf("scaffold paths = %v, want them sorted", scaffold)
 	}
-	if want := []string{ggconst.FileMain, ".gitignore", "config.ini.example"}; !slices.Equal(last, want) {
+	if want := []string{ggconst.FileMain, ".gitignore", "config.ini", "config.ini.example"}; !slices.Equal(last, want) {
 		t.Fatalf("last paths = %v, want %v", last, want)
 	}
 	for _, dir := range ggconst.ProjectImportDirs {
@@ -38,10 +38,14 @@ func TestProjectFilesListsTheScaffoldThenTheProjectFiles(t *testing.T) {
 			t.Fatalf("scaffold lacks a file for the imported directory %q: %v", dir, scaffold)
 		}
 	}
-	if config := files[len(files)-1].Content; !strings.Contains(config, "name = sampleapp\n") {
-		t.Fatalf("config.ini.example does not name the application sampleapp:\n%s", config)
+	config := files[len(files)-2].Content
+	if !strings.Contains(config, "name = sampleapp\n") {
+		t.Fatalf("config.ini does not name the application sampleapp:\n%s", config)
 	}
-	if main := files[len(files)-3].Content; !strings.Contains(main, "example.com/sampleapp/") {
+	if example := files[len(files)-1].Content; example != config {
+		t.Fatalf("config.ini.example differs from config.ini:\n%s", example)
+	}
+	if main := files[len(files)-4].Content; !strings.Contains(main, "example.com/sampleapp/") {
 		t.Fatalf("main.go does not import the project packages of example.com/sampleapp:\n%s", main)
 	}
 }

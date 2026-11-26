@@ -15,8 +15,11 @@ func TestLoadAppliesFrameworkDefaults(t *testing.T) {
 	c, err := config.Load(writeLoadFile(t, "config.ini", ""))
 	require.NoError(t, err)
 
-	require.Equal(t, config.DBSqlite, c.Database.Type)
-	require.True(t, c.Sqlite.Enabled)
+	// A deployment names its database: no dialect is selected by default,
+	// and the SQLite one, once selected, is the file, not a database held in
+	// memory.
+	require.Empty(t, c.Database.Type)
+	require.False(t, c.Sqlite.IsMemory)
 	// -1 keeps the NATS client reconnecting forever; see config.Nats.MaxReconnects.
 	require.Equal(t, -1, c.Nats.MaxReconnects)
 	// Dial is bounded by default, per-connection I/O deadlines are not; see
@@ -33,11 +36,11 @@ func TestLoadAppliesFrameworkDefaults(t *testing.T) {
 }
 
 func TestLoadReadsFileContent(t *testing.T) {
-	c, err := config.Load(writeLoadFile(t, "config.ini", "[database]\ntype = mysql\n\n[mysql]\nenabled = false\n"))
+	c, err := config.Load(writeLoadFile(t, "config.ini", "[database]\ntype = mysql\n\n[mysql]\nhost = db.internal\n"))
 	require.NoError(t, err)
 
 	require.Equal(t, config.DBMySQL, c.Database.Type)
-	require.False(t, c.MySQL.Enabled)
+	require.Equal(t, "db.internal", c.MySQL.Host)
 }
 
 func TestLoadIgnoresEnvironment(t *testing.T) {

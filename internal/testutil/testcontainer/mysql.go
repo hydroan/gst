@@ -220,7 +220,6 @@ func SetupStandaloneMySQL(database, username, password string) (config.MySQL, fu
 		CAFile:   filepath.Join(tlsDir, mysqlTLSAuthorityFile),
 		CertFile: filepath.Join(tlsDir, mysqlTLSClientCertFile),
 		KeyFile:  filepath.Join(tlsDir, mysqlTLSClientKeyFile),
-		Enabled:  true,
 	}
 	reportServiceReady("mysql-standalone", fmt.Sprintf("%s:%d/%s", host, port, database))
 	return cfg, terminate, nil

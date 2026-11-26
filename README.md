@@ -32,11 +32,10 @@ make install
 ```bash
 gg new github.com/example/myapp
 cd myapp
-cp config.ini.example config.ini
 ```
 
 `gg new` 会使用 module path 的最后一段创建项目目录，例如上面的目录名是
-`myapp`。它会生成基础目录、`main.go`、`config.ini.example` 和各注册文件的空版本
+`myapp`。它会生成基础目录、`main.go`、`config.ini`、`config.ini.example` 和各注册文件的空版本
 （与在空项目上执行一次 `gg gen` 的结果相同，因此第一次 `gg gen` 留到写下第一个
 model 之后），并执行 `go mod tidy` 和 `git init`；项目已经在某个 git 仓库里（例如
 克隆下来的仓库，或大仓库里的子目录）时跳过 `git init`，不建嵌套仓库。
@@ -1006,8 +1005,9 @@ rsp, err := cli.Post[model.SampleSealRsp](ctx, "/api/samples/seal", &model.Sampl
 
 ## 配置和迁移
 
-`config.ini.example` 是新项目的默认配置模板。复制为 `config.ini` 后按环境修改。
-默认模板会开启 sqlite，适合本地快速启动。SQLite 驱动依赖 cgo：用 `CGO_ENABLED=0` 构建的静态二进制照常编译，
+`gg new` 生成的 `config.ini` 可以直接启动：数据库是项目目录下的 SQLite 文件 `./data.db`（已写进 `.gitignore`）。
+`config.ini.example` 是同一份内容的模板，另起一份环境配置时从它复制再修改。
+`database.type` 没有默认值：项目里有落库的模型，而配置文件和环境变量 `DATABASE_TYPE` 都没指定它时，启动会报错。SQLite 驱动依赖 cgo：用 `CGO_ENABLED=0` 构建的静态二进制照常编译，
 但启用 SQLite 会在启动时报错，这类部署要换成 MySQL 或 PostgreSQL。
 
 每个配置键都按"环境变量 > 配置文件 > 默认值"取值，配置文件里没写的键、`configx` 里 `config.Register`
@@ -1089,7 +1089,7 @@ gg migrate
 gg migrate --yes --accept-data-loss
 ```
 
-用 SQLite 时迁移的是 `sqlite.path` 指向的库文件；内存库（`sqlite.is_memory = true`，默认值）每次启动都按模型建表，
+用 SQLite 时迁移的是 `sqlite.path` 指向的库文件；内存库（`sqlite.is_memory = true`）每次启动都按模型建表，
 `gg migrate` 提示没有可迁移的内容后直接退出。
 SQLite 的 `ALTER TABLE` 改不了已有列的类型、非空、默认值和 CHECK，sqldef 也不会为这类变化生成语句：`gg migrate`
 发现库里的列定义与模型不一致时直接报错，点名表和列并给出 SQLite 官方的重建步骤（按模型新建一张表、拷贝数据、

@@ -23,12 +23,12 @@ import (
 	"gorm.io/gorm"
 )
 
-// Init opens the default PostgreSQL connection when PostgreSQL is enabled and
-// selected as the default database, and makes it the default database that
-// database.Database and database.DB use; otherwise it does nothing.
+// Init opens the default PostgreSQL connection when database.type selects
+// PostgreSQL, and makes it the default database that database.Database and
+// database.DB use; otherwise it does nothing.
 func Init() error {
 	cfg := config.App.Postgres
-	if !cfg.Enabled || config.App.Database.Type != config.DBPostgres {
+	if config.App.Database.Type != config.DBPostgres {
 		return nil
 	}
 

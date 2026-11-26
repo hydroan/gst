@@ -25,7 +25,6 @@ auto_migrate = true
 [sqlite]
 path = ./data.db
 is_memory = true
-enabled = true
 
 [mysql]
 host = 127.0.0.1
@@ -33,7 +32,6 @@ port = 3306
 database =
 username = root
 password =
-enabled = true
 
 [postgres]
 host = 127.0.0.1
@@ -42,7 +40,6 @@ database =
 username = postgres
 password =
 sslmode = disable
-enabled = true
 
 [redis]
 enabled = false

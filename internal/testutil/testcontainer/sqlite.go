@@ -25,7 +25,8 @@ func setupSqlite() (func() error, error) {
 
 	ApplyConfigToEnv(config.Sqlite{Path: path})
 	// File mode is the zero value of IsMemory and ApplyConfigToEnv skips zero
-	// values, while the framework defaults the field to true.
+	// values, so it is named outright, over an in-memory setting the
+	// environment may already carry.
 	os.Setenv(config.SQLITE_IS_MEMORY, "false")
 	useDatabase(config.DBSqlite)
 	reportServiceReady(string(config.DBSqlite), path)

@@ -236,10 +236,12 @@ mode = "prod"
 	assert.Equal(t, config.Mode("prod"), config.App.Server.Mode)
 }
 
-// TestInitDefaultsToInMemorySqliteWithoutConfigFile pins the defaults a missing
-// config file falls back to. Table preparation exempts this combination from
-// the "gg migrate" requirement, so the two packages must agree on it.
-func TestInitDefaultsToInMemorySqliteWithoutConfigFile(t *testing.T) {
+// TestInitSelectsNoDatabaseWithoutConfigFile pins what a missing config file
+// leaves the database at: no dialect selected, for the start to refuse a
+// program whose models keep tables (see dbruntime.WaitTables) rather than run
+// them on a database nobody named, and a SQLite one, once selected, the file
+// and not a database held in memory.
+func TestInitSelectsNoDatabaseWithoutConfigFile(t *testing.T) {
 	clearConfigEnvForTest(t)
 	t.Chdir(t.TempDir())
 
@@ -248,8 +250,8 @@ func TestInitDefaultsToInMemorySqliteWithoutConfigFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	assert.Equal(t, config.DBSqlite, config.App.Database.Type)
-	assert.True(t, config.App.Sqlite.IsMemory)
+	assert.Empty(t, config.App.Database.Type)
+	assert.False(t, config.App.Sqlite.IsMemory)
 	assert.False(t, config.App.Database.AutoMigrate)
 }
 

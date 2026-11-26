@@ -20,8 +20,9 @@ func TestSetupSqlite(t *testing.T) {
 	path := os.Getenv(config.SQLITE_PATH)
 	require.NotEmpty(t, path)
 	require.DirExists(t, filepath.Dir(path))
-	// The framework defaults sqlite to an in-memory database shared by the
-	// whole process, which would defeat the isolation this setup provides.
+	// An in-memory database is shared by the whole process, which would defeat
+	// the isolation this setup provides: the setup names the file mode
+	// outright.
 	require.Equal(t, "false", os.Getenv(config.SQLITE_IS_MEMORY))
 	require.Equal(t, string(config.DBSqlite), os.Getenv(config.DATABASE_TYPE))
 	require.Equal(t, "true", os.Getenv(config.DATABASE_AUTO_MIGRATE))

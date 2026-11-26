@@ -10,7 +10,6 @@ const (
 	POSTGRES_PASSWORD = "POSTGRES_PASSWORD"
 	POSTGRES_SSLMODE  = "POSTGRES_SSLMODE"
 	POSTGRES_REPLICAS = "POSTGRES_REPLICAS"
-	POSTGRES_ENABLED  = "POSTGRES_ENABLED"
 )
 
 type Postgres struct {
@@ -28,8 +27,6 @@ type Postgres struct {
 	// call sites; replication, health, and failover belong to the
 	// infrastructure.
 	Replicas []string `json:"replicas" mapstructure:"replicas" ini:"replicas" yaml:"replicas"`
-
-	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
 func (*Postgres) setDefaults(v *viper.Viper) {
@@ -39,5 +36,4 @@ func (*Postgres) setDefaults(v *viper.Viper) {
 	v.SetDefault("postgres.username", "postgres")
 	v.SetDefault("postgres.password", "")
 	v.SetDefault("postgres.sslmode", "disable")
-	v.SetDefault("postgres.enabled", true)
 }

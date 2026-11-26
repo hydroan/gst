@@ -26,7 +26,7 @@ func newInstance(t *testing.T, name string) *gorm.DB {
 	// A directory of its own per test, so instances never collide and nothing
 	// is left behind on the machine running the tests.
 	path := filepath.Join(t.TempDir(), name)
-	ins, err := gstsqlite.New(config.Sqlite{Path: path, Enabled: true})
+	ins, err := gstsqlite.New(config.Sqlite{Path: path})
 	require.NoError(t, err)
 	require.NoError(t, ins.AutoMigrate(&TestUser{}))
 	return ins

@@ -5,17 +5,17 @@ import "github.com/spf13/viper"
 const (
 	SQLITE_PATH      = "SQLITE_PATH"
 	SQLITE_IS_MEMORY = "SQLITE_IS_MEMORY"
-	SQLITE_ENABLED   = "SQLITE_ENABLED"
 )
 
+// Sqlite configures the SQLite database database.type selects: the file at
+// Path, or, when IsMemory is set, a database held in memory that every
+// process starts empty and loses when it exits.
 type Sqlite struct {
 	Path     string `json:"path" mapstructure:"path" ini:"path" yaml:"path"`
 	IsMemory bool   `json:"is_memory" mapstructure:"is_memory" ini:"is_memory" yaml:"is_memory"`
-	Enabled  bool   `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
 func (*Sqlite) setDefaults(v *viper.Viper) {
 	v.SetDefault("sqlite.path", "./data.db")
-	v.SetDefault("sqlite.is_memory", true)
-	v.SetDefault("sqlite.enabled", true)
+	v.SetDefault("sqlite.is_memory", false)
 }

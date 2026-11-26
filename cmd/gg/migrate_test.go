@@ -130,12 +130,12 @@ func TestMigrateSchemaProgramReadsTheModelsItsSourceDeclares(t *testing.T) {
 	}
 }
 
-// TestMigrateProgramHasNothingToMigrateOnAnInMemorySqliteDatabase pins that
-// on an in-memory sqlite database, the default configuration, the migration
-// program has nothing to migrate: the application creates the tables from the
-// models every time it starts, and the program, running in a process of its
-// own, cannot reach that database. It says so, and opens no database file:
-// the one file it writes is the schema snapshot.
+// TestMigrateProgramHasNothingToMigrateOnAnInMemorySqliteDatabase pins that on
+// an in-memory sqlite database the migration program has nothing to migrate:
+// the application creates the tables from the models every time it starts, and
+// the program, running in a process of its own, cannot reach that database. It
+// says so, and opens no database file: the one file it writes is the schema
+// snapshot.
 func TestMigrateProgramHasNothingToMigrateOnAnInMemorySqliteDatabase(t *testing.T) {
 	if !newMigrateSampleProject(t) {
 		return
@@ -642,16 +642,16 @@ func TestMigrateProgramRunsInsideAWorkspace(t *testing.T) {
 	}
 }
 
-// useInMemorySqlite clears the sqlite settings of the environment for the
-// test, so the migration program targets the in-memory database.
+// useInMemorySqlite selects an in-memory sqlite database through the
+// environment for the test, so the migration program targets it.
 func useInMemorySqlite(t *testing.T) {
 	t.Helper()
 
-	for _, key := range []string{config.SQLITE_IS_MEMORY, config.SQLITE_PATH} {
-		t.Setenv(key, "")
-		if err := os.Unsetenv(key); err != nil {
-			t.Fatal(err)
-		}
+	t.Setenv(config.DATABASE_TYPE, string(config.DBSqlite))
+	t.Setenv(config.SQLITE_IS_MEMORY, "true")
+	t.Setenv(config.SQLITE_PATH, "")
+	if err := os.Unsetenv(config.SQLITE_PATH); err != nil {
+		t.Fatal(err)
 	}
 }
 

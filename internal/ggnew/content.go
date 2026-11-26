@@ -602,4 +602,7 @@ Thumbs.db
 
 # Generated files
 /generated/
+
+# The SQLite file the generated configuration points at
+/data.db
 `

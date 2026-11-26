@@ -26,8 +26,6 @@ const (
 	MYSQL_KEY_FILE             = "MYSQL_KEY_FILE"
 	MYSQL_CA_FILE              = "MYSQL_CA_FILE"
 	MYSQL_INSECURE_SKIP_VERIFY = "MYSQL_INSECURE_SKIP_VERIFY"
-
-	MYSQL_ENABLED = "MYSQL_ENABLED"
 )
 
 type MySQL struct {
@@ -85,8 +83,6 @@ type MySQL struct {
 	KeyFile            string `json:"key_file" mapstructure:"key_file" ini:"key_file" yaml:"key_file"`
 	CAFile             string `json:"ca_file" mapstructure:"ca_file" ini:"ca_file" yaml:"ca_file"`
 	InsecureSkipVerify bool   `json:"insecure_skip_verify" mapstructure:"insecure_skip_verify" ini:"insecure_skip_verify" yaml:"insecure_skip_verify"`
-
-	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`
 }
 
 func (*MySQL) setDefaults(v *viper.Viper) {
@@ -107,6 +103,4 @@ func (*MySQL) setDefaults(v *viper.Viper) {
 	v.SetDefault("mysql.key_file", "")
 	v.SetDefault("mysql.ca_file", "")
 	v.SetDefault("mysql.insecure_skip_verify", false)
-
-	v.SetDefault("mysql.enabled", true)
 }
