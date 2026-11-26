@@ -294,10 +294,10 @@ func (*document) Search(ctx context.Context, indexName string, req *SearchReques
 
 // parseSearchResult parses Elasticsearch response into SearchResult.
 // It safely extracts and validates:
-// - total hits count and how exact it is
-// - max score
-// - hits array with their IDs, sources and scores
-// - aggregation results
+//   - total hits count and how exact it is
+//   - max score
+//   - hits array with their IDs, sources and scores
+//   - aggregation results
 func parseSearchResult(esRes map[string]any) (*SearchResult, error) {
 	var (
 		ok       bool

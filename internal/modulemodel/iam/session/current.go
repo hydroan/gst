@@ -9,7 +9,8 @@ type Current struct {
 	model.Empty
 }
 
-// CurrentGetRsp returns the current session together with the latest principal snapshot.
+// CurrentGetRsp returns the current session together with the latest principal
+// snapshot.
 type CurrentGetRsp = AuthenticatedSessionRsp
 
 // CurrentDeleteReq is the request payload for deleting the current session.

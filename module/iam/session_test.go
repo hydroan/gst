@@ -392,9 +392,9 @@ func TestSessionStoreFailures(t *testing.T) {
 
 // TestInvalidateUserSessions covers the revocation entry point user lifecycle
 // operations reach for. Those operations live wherever a project models its
-// users, which is regularly outside the IAM service package, so this asserts the
-// guarantee they depend on: once revocation returns, the cookie is dead, without
-// waiting for the user-state cache to expire.
+// users, which is regularly outside the IAM service package, so this asserts
+// the guarantee they depend on: once revocation returns, the cookie is dead,
+// without waiting for the user-state cache to expire.
 func TestInvalidateUserSessions(t *testing.T) {
 	clearSessionsAfterTest(t)
 
@@ -1170,11 +1170,12 @@ type requestMetadataProbeRsp struct {
 	RawQuery string `json:"raw_query"`
 }
 
-// registerRequestMetadataProbe registers the route TestSessionMiddlewareCarriesRequestMetadata
-// reads the middleware's context through. It is registered on the authenticated
-// group, which is where the session middleware runs, and it is the suite's own
-// route rather than a module route so that the assertions describe the
-// middleware alone instead of whatever a real endpoint does with the context.
+// registerRequestMetadataProbe registers the route
+// TestSessionMiddlewareCarriesRequestMetadata reads the middleware's context
+// through. It is registered on the authenticated group, which is where the
+// session middleware runs, and it is the suite's own route rather than a module
+// route so that the assertions describe the middleware alone instead of
+// whatever a real endpoint does with the context.
 func registerRequestMetadataProbe() error {
 	router.Auth().GET(requestMetadataProbeRoute, func(c *gin.Context) {
 		meta := requestctx.FromContext(c.Request.Context())

@@ -2,7 +2,8 @@ package modeliamsession
 
 import "time"
 
-// Session stores the authenticated session snapshot used by IAM middleware and session APIs.
+// Session stores the authenticated session snapshot used by IAM middleware and
+// session APIs.
 //
 // A stored snapshot is a usable session. Revocation deletes the snapshot and
 // expiry lets Redis drop it, so neither has a state left to name: the key is
@@ -28,14 +29,16 @@ type Session struct {
 	ExpiresAt  time.Time `json:"expires_at"`
 }
 
-// AuthenticatedSessionRsp returns the authenticated session timing contract and principal snapshot.
+// AuthenticatedSessionRsp returns the authenticated session timing contract and
+// principal snapshot.
 type AuthenticatedSessionRsp struct {
 	ServerTime time.Time                `json:"server_time"`
 	Session    AuthenticatedSessionView `json:"session"`
 	Principal  PrincipalView            `json:"principal"`
 }
 
-// AuthenticatedSessionView describes the current authenticated session without exposing its bearer session id.
+// AuthenticatedSessionView describes the current authenticated session without
+// exposing its bearer session id.
 type AuthenticatedSessionView struct {
 	TenantID         string    `json:"tenant_id,omitempty"`
 	IssuedAt         time.Time `json:"issued_at"`

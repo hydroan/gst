@@ -11,7 +11,8 @@ func WithSafe[T any]() Option[T] {
 	}
 }
 
-// WithDrop returns an Option that configures the buffer to drop elements when full.
+// WithDrop returns an Option that configures the buffer to drop elements when
+// full.
 func WithDrop[T any]() Option[T] {
 	return func(cb *Buffer[T]) error {
 		cb.drop = true

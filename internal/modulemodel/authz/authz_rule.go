@@ -57,8 +57,8 @@ func (AuthzRule) Design() {
 	dsl.Migrate()
 }
 
-// Indexes declares the uniqueness the policy adapter assumes, and the one access
-// path that uniqueness cannot serve.
+// Indexes declares the uniqueness the policy adapter assumes, and the one
+// access path that uniqueness cannot serve.
 //
 // The unique index is what every policy insert conflicts against: the adapter
 // issues them with an on-conflict-do-nothing clause, which needs a matching

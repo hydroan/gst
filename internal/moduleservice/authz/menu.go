@@ -82,10 +82,12 @@ func (m *MenuService) ListAfter(ctx *gst.ServiceContext, data *[]*modelauthz.Men
 
 // visibleMenuIDs resolves the menu IDs the current subject may see. The flow
 // deliberately mirrors the RBAC data model:
-//   - system_root is a system-level role and bypasses menu filtering completely.
+//   - system_root is a system-level role and bypasses menu filtering
+//     completely.
 //   - the built-in tenant administrator reaches every route of the request
 //     tenant without a policy, so it sees the whole catalog there.
-//   - RoleBinding maps the current subject ID to role IDs inside the request tenant.
+//   - RoleBinding maps the current subject ID to role IDs inside the request
+//     tenant.
 //   - Role.MenuIDs is the only source of visible menus. The same set grants the
 //     backend route permissions; this service is only shaping the frontend menu
 //     tree.
@@ -171,9 +173,9 @@ func requestTenant(ctx *gst.ServiceContext) string {
 }
 
 // filterChildren narrows preloaded children by the same rule as the top level,
-// dropping every subtree the visible set does not name. Children are loaded by a
-// separate preload, so the condition Filter pushed down never applies to them.
-// Callers that are not narrowing at all skip this entirely.
+// dropping every subtree the visible set does not name. Children are loaded by
+// a separate preload, so the condition Filter pushed down never applies to
+// them. Callers that are not narrowing at all skip this entirely.
 func filterChildren(menu *modelauthz.Menu, visible map[string]struct{}) {
 	if len(menu.Children) == 0 {
 		return

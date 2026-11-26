@@ -21,7 +21,8 @@ var ModelFileBoundaries = Check{
 	run:  checkModelFileBoundaries,
 }
 
-// checkModelFileBoundaries checks that each model file contains at most one model struct.
+// checkModelFileBoundaries checks that each model file contains at most one
+// model struct.
 func checkModelFileBoundaries(ignore gghelper.ProjectIgnore) []string {
 	var violations []string
 

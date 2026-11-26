@@ -18,9 +18,9 @@
 //	paging, model.Query, model.Cursor     WithPage/WithSortBy/WithExpand/WithCursor
 //	envelope (msg/data/trace_id)          Envelope on success, *Error on rejection
 //
-// Evolution rule: whenever the DSL grows a new HTTP action or protocol shape, this
-// package must grow the matching entry in the same change; a DSL capability
-// without a client counterpart is an incomplete feature.
+// Evolution rule: whenever the DSL grows a new HTTP action or protocol shape,
+// this package must grow the matching entry in the same change; a DSL
+// capability without a client counterpart is an incomplete feature.
 //
 // API shape: every entry is a method on Client and takes the context of the
 // call first — in a service, the service context itself — whose deadline and

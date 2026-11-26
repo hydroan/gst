@@ -86,8 +86,9 @@ func checkServiceTestCoverage(ignore gghelper.ProjectIgnore) []string {
 	return violations
 }
 
-// serviceTestFileExists reports whether a service file has a matching test
-// file in its directory: <stem>_test.go or its internal form <stem>_internal_test.go.
+// serviceTestFileExists reports whether a service file has a matching test file
+// in its directory: <stem>_test.go or its internal form
+// <stem>_internal_test.go.
 func serviceTestFileExists(servicePath string) bool {
 	stem := strings.TrimSuffix(servicePath, ggconst.ExtensionGo)
 	return gghelper.FileExists(stem+ggconst.SuffixTestFile) || gghelper.FileExists(stem+ggconst.SuffixInternalTestFile)

@@ -8,12 +8,14 @@ import (
 	"github.com/hydroan/gst/service"
 )
 
-// CurrentDeleteService handles invalidation of the current authenticated session.
+// CurrentDeleteService handles invalidation of the current authenticated
+// session.
 type CurrentDeleteService struct {
 	service.Base[*modeliamsession.Current, *modeliamsession.CurrentDeleteReq, *modeliamsession.CurrentDeleteRsp]
 }
 
-// Delete invalidates the current authenticated session and clears the session cookie.
+// Delete invalidates the current authenticated session and clears the session
+// cookie.
 func (c *CurrentDeleteService) Delete(ctx *gst.ServiceContext, req *modeliamsession.CurrentDeleteReq) (rsp *modeliamsession.CurrentDeleteRsp, err error) {
 	sessionID, err := CookieSessionID(ctx)
 	if err != nil {

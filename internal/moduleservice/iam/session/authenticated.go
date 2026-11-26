@@ -7,7 +7,8 @@ import (
 	modeliamuser "github.com/hydroan/gst/internal/modulemodel/iam/user"
 )
 
-// BuildAuthenticatedSessionRsp builds the shared login/current response contract.
+// BuildAuthenticatedSessionRsp builds the shared login/current response
+// contract.
 //
 // systemRoot is taken as an argument rather than resolved here. This builder
 // runs once the response is already decided — for login, after the session is
@@ -31,7 +32,8 @@ func BuildAuthenticatedSessionRsp(
 	}
 }
 
-// buildAuthenticatedSessionView builds a session timing view without exposing the bearer session id.
+// buildAuthenticatedSessionView builds a session timing view without exposing
+// the bearer session id.
 func buildAuthenticatedSessionView(sessionData modeliamsession.Session, now time.Time) modeliamsession.AuthenticatedSessionView {
 	if now.IsZero() {
 		now = time.Now()

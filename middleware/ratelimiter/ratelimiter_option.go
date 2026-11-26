@@ -68,9 +68,9 @@ func WithKeyFunc(keyFunc func(c *gin.Context) string) Option {
 	}
 }
 
-// WithSkipFunc sets a function that determines whether to skip rate limiting for a request.
-// Returns true to bypass rate limiting (e.g. health check endpoints, internal IPs).
-// A nil skipFunc is ignored.
+// WithSkipFunc sets a function that determines whether to skip rate limiting
+// for a request. Returns true to bypass rate limiting (e.g. health check
+// endpoints, internal IPs). A nil skipFunc is ignored.
 func WithSkipFunc(skipFunc func(c *gin.Context) bool) Option {
 	return func(conf *config) {
 		if conf == nil || skipFunc == nil {

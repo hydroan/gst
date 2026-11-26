@@ -77,12 +77,11 @@ func removeFiltered(ptype string, fieldIndex int, fieldValues ...string) policyM
 //
 // An empty value does not narrow a request, it widens it. Storage and the
 // in-memory set agree that an empty filter field matches anything, so a
-// filtered delete built
-// from an empty argument removes every rule of its kind in the deployment
-// instead of none — revoking a role for one subject would revoke it for all of
-// them. An empty value inside a rule is the mirror image: the row stores fewer
-// meaningful columns than its kind declares, and the next load of the policy set
-// rejects it and takes the whole set down with it.
+// filtered delete built from an empty argument removes every rule of its kind
+// in the deployment instead of none — revoking a role for one subject would
+// revoke it for all of them. An empty value inside a rule is the mirror image:
+// the row stores fewer meaningful columns than its kind declares, and the next
+// load of the policy set rejects it and takes the whole set down with it.
 //
 // Neither outcome can be recovered by guessing what was meant, and both are
 // silent at the call site, so a mutation carrying an empty value is refused
@@ -94,9 +93,9 @@ var ErrEmptyPolicyValue = errors.New("rbac: policy mutation carries an empty val
 //
 // Every rule kind the framework writes is fully populated: a permission is
 // (tenant, role, object, action, effect), an assignment is (subject, role,
-// tenant), and a system assignment is (subject, role). None of them has a column
-// that is meaningfully empty, so an empty value always means the caller passed
-// one in.
+// tenant), and a system assignment is (subject, role). None of them has a
+// column that is meaningfully empty, so an empty value always means the caller
+// passed one in.
 func (m policyMutation) validate() error {
 	switch m.op {
 	case policyAdd, policyRemove:
@@ -126,9 +125,9 @@ func (m policyMutation) validate() error {
 // Splitting the two is what makes a policy change roll back with the write that
 // caused it. The database half joins the caller's transaction through the
 // adapter, so a rollback takes it with it. The in-memory half is registered to
-// run after the commit, so a rollback leaves it having never happened — there is
-// no compensating update to get wrong, and no window in which memory describes a
-// transaction that did not survive.
+// run after the commit, so a rollback leaves it having never happened — there
+// is no compensating update to get wrong, and no window in which memory
+// describes a transaction that did not survive.
 //
 // The database half runs without the policy lock. Holding it across database
 // I/O would put a Go mutex and InnoDB row locks in one wait cycle, which
@@ -139,10 +138,10 @@ func (m policyMutation) validate() error {
 // It opens a transaction of its own when the caller has none, rather than
 // leaving the caller to remember one. A mutation set is one logical change —
 // replacing a role's permissions is a delete and an insert — and separately
-// autocommitting its parts lets a failed insert leave the role stripped of every
-// permission while the memory half, which never ran, keeps serving the old set.
-// That divergence outlives the process that caused it and is invisible to a
-// comparison of stored state, so the correct call has to be the only call.
+// autocommitting its parts lets a failed insert leave the role stripped of
+// every permission while the memory half, which never ran, keeps serving the
+// old set. That divergence outlives the process that caused it and is invisible
+// to a comparison of stored state, so the correct call has to be the only call.
 // Joining an existing transaction costs nothing, which is what makes requiring
 // one here affordable.
 func (r *rbac) mutate(ctx context.Context, mutations ...policyMutation) error {

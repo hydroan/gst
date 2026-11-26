@@ -10,7 +10,8 @@ import (
 	"github.com/hydroan/gst/service"
 )
 
-// AdminSessionGetService handles retrieval of a specified session for privileged administrators.
+// AdminSessionGetService handles retrieval of a specified session for
+// privileged administrators.
 type AdminSessionGetService struct {
 	service.Base[*modeliamsession.AdminSession, *model.Empty, *modeliamsession.AdminSessionGetRsp]
 }

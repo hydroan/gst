@@ -8,8 +8,9 @@ import (
 	"github.com/hydroan/gst/internal/response"
 )
 
-// RequestSizeLimit returns a middleware that limits the size of incoming request bodies.
-// This helps prevent DoS attacks by limiting the amount of data that can be sent in a single request.
+// RequestSizeLimit returns a middleware that limits the size of incoming
+// request bodies. This helps prevent DoS attacks by limiting the amount of data
+// that can be sent in a single request.
 //
 // Parameters:
 //   - maxSize: Maximum allowed size in bytes for the request body

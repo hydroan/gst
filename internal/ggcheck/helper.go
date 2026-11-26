@@ -175,7 +175,8 @@ func fieldDisplayName(field *ast.Field) string {
 	return "(embedded)"
 }
 
-// dslActionTypeCall returns the kind and type argument for DSL Payload/Result calls.
+// dslActionTypeCall returns the kind and type argument for DSL Payload/Result
+// calls.
 func dslActionTypeCall(expr ast.Expr) (string, ast.Expr, bool) {
 	switch x := expr.(type) {
 	case *ast.IndexExpr:

@@ -202,9 +202,9 @@ func verifyLoginSecondFactor(ctx *gst.ServiceContext, userID string, factor auth
 	return gst.NewErrorWithCause(http.StatusInternalServerError, failedToVerifySecondFactorMsg, err)
 }
 
-// ensureLoginTenantMembership refuses a login that names a tenant the user holds
-// no role in. The system root exemption is applied by the caller, which resolves
-// that fact for the response anyway.
+// ensureLoginTenantMembership refuses a login that names a tenant the user
+// holds no role in. The system root exemption is applied by the caller, which
+// resolves that fact for the response anyway.
 func ensureLoginTenantMembership(ctx *gst.ServiceContext, userID string, tenantID string) error {
 	roles, err := rbac.RBAC().RolesForSubject(ctx, tenantID, userID)
 	if err != nil {

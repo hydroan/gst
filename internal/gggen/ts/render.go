@@ -139,8 +139,8 @@ func (g *generator) writeInterface(b *strings.Builder, name string, fields []jso
 //
 //	Format: date-time
 //
-// and the field Due datatypes.Date, without a comment, the doc "Format: date". A
-// pointer to such a type gets the line of the type.
+// and the field Due datatypes.Date, without a comment, the doc "Format: date".
+// A pointer to such a type gets the line of the type.
 func (g *generator) propertyDoc(f jsonshape.Field) string {
 	doc := g.project.FieldDoc(f.Var)
 	t := types.Unalias(f.Var.Type())

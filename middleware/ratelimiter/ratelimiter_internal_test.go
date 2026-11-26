@@ -116,11 +116,12 @@ func TestRateLimiterRefusesWhenCacheFails(t *testing.T) {
 	require.Contains(t, refused.Body.String(), "rate limiter unavailable")
 }
 
-// TestRateLimiterRestartsBucketLifetimeOnEveryRequest pins how a bucket expires:
-// it is kept for capacity × refill interval of idle time, long enough to refill
-// completely so that dropping it loses nothing, and every request restarts that
-// time, the refused one included. A lifetime counted from creation would hand a
-// client hammering an empty bucket a full one each time it ran out.
+// TestRateLimiterRestartsBucketLifetimeOnEveryRequest pins how a bucket
+// expires: it is kept for capacity × refill interval of idle time, long enough
+// to refill completely so that dropping it loses nothing, and every request
+// restarts that time, the refused one included. A lifetime counted from
+// creation would hand a client hammering an empty bucket a full one each time
+// it ran out.
 func TestRateLimiterRestartsBucketLifetimeOnEveryRequest(t *testing.T) {
 	store := &recordingLimiterCache{limiters: make(map[string]*rate.Limiter)}
 	useLimiterCache(t, store)

@@ -12,8 +12,9 @@ import (
 	"github.com/hydroan/gst/ds/container"
 )
 
-// Heap is a generic binary heap implementation that supports both max-heap and min-heap.
-// By default, it operates as a min-heap where the smallest element has the highest priority.
+// Heap is a generic binary heap implementation that supports both max-heap and
+// min-heap. By default, it operates as a min-heap where the smallest element
+// has the highest priority.
 //
 // To create a max-heap where the largest element has the highest priority,
 // use the "WithMaxHeap" option in the NewXXX function.
@@ -27,8 +28,8 @@ type Heap[E any] struct {
 	maxHeap bool
 }
 
-// New creates and returns a min-heap with the given comparison function and options configurations.
-// The comparison function cmp should return:
+// New creates and returns a min-heap with the given comparison function and
+// options configurations. The comparison function cmp should return:
 //   - zero value if a = b
 //   - negative value if a < b
 //   - positive value if a > b
@@ -351,7 +352,8 @@ func output[E any](idx int, prefix string, isTail bool, sb *strings.Builder, dat
 	}
 }
 
-// upMinHeap will bubble up the element at index "i" until the min-heap property is restored.
+// upMinHeap will bubble up the element at index "i" until the min-heap property
+// is restored.
 func (h *Heap[E]) upMinHeap(i int) {
 	for {
 		p := (i - 1) / 2 // parent index
@@ -363,7 +365,8 @@ func (h *Heap[E]) upMinHeap(i int) {
 	}
 }
 
-// upMaxHeap will bubble up the element at index "i" until the max-heap property is restored.
+// upMaxHeap will bubble up the element at index "i" until the max-heap property
+// is restored.
 func (h *Heap[E]) upMaxHeap(i int) {
 	for {
 		p := (i - 1) / 2 // parent index
@@ -375,7 +378,8 @@ func (h *Heap[E]) upMaxHeap(i int) {
 	}
 }
 
-// downMinHeap will sink down the given element at index "i" until the min-heap property is restored.
+// downMinHeap will sink down the given element at index "i" until the min-heap
+// property is restored.
 func (h *Heap[E]) downMinHeap(i int) {
 	for {
 		l, r := 2*i+1, 2*i+2
@@ -398,7 +402,8 @@ func (h *Heap[E]) downMinHeap(i int) {
 	}
 }
 
-// downMaxHeap will sink down the given element at index "i" until the max-heap property is restored.
+// downMaxHeap will sink down the given element at index "i" until the max-heap
+// property is restored.
 func (h *Heap[E]) downMaxHeap(i int) {
 	for {
 		l, r := 2*i+1, 2*i+2

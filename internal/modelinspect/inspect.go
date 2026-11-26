@@ -53,18 +53,17 @@ type ModelColumns struct {
 // (see buildProgram) is built into the project's module and reports every
 // model's columns, what model.ValidateIndexes refused in its index declarations
 // on MySQL, what modelschema.ValidateTenantIndexes refused in its unique
-// indexes, what modelschema.ValidateColumnTypes refused in the types of its columns,
-// what modelschema.ValidateFrameworkColumns refused in its columns,
+// indexes, what modelschema.ValidateColumnTypes refused in the types of its
+// columns, what modelschema.ValidateFrameworkColumns refused in its columns,
 // what urlquery.ValidateQueryNames refused in its query tags and what
-// model.ValidateIDAccessors refused in its ID accessors. The result
-// comes from the cache when every input of the inspection is unchanged,
-// otherwise from a build and run of the program. The build takes the files
-// overlay returns in place of the project's own, which gg gen uses to stub out
-// the column files it is about to rewrite; a nil overlay builds the project as
-// it is. A project that does not depend on the framework yet cannot be
-// inspected and reports inspected false: the program imports the project's
-// models against the framework, and such a project cannot hold column
-// references either.
+// model.ValidateIDAccessors refused in its ID accessors. The result comes from
+// the cache when every input of the inspection is unchanged, otherwise from a
+// build and run of the program. The build takes the files overlay returns in
+// place of the project's own, which gg gen uses to stub out the column files it
+// is about to rewrite; a nil overlay builds the project as it is. A project
+// that does not depend on the framework yet cannot be inspected and reports
+// inspected false: the program imports the project's models against the
+// framework, and such a project cannot hold column references either.
 func Inspect(module string, modelDir string, models []*modelsource.Model, ignore gghelper.ProjectIgnore, overlay func() (map[string]string, error)) ([]ModelColumns, bool, error) {
 	dependsOnGst, err := gghelper.RequiresFramework(".")
 	if err != nil || !dependsOnGst {

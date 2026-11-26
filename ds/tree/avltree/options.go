@@ -15,8 +15,8 @@ func WithSafe[K comparable, V any]() Option[K, V] {
 	}
 }
 
-// WithNodeFormatter creates an Option that sets the node formatter when tree.String() is called.
-// Example usage:
+// WithNodeFormatter creates an Option that sets the node formatter when
+// tree.String() is called. Example usage:
 //
 //	tree, _ := avltree.NewOrdered(avltree.WithNodeFormatter(func(k string, v int) string {
 //		return fmt.Sprintf("%s:%d ", k, v)

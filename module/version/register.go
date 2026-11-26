@@ -1,5 +1,5 @@
-// Package versionmod provides the version API module; the name avoids conflicting
-// with the standard library "runtime/version" package.
+// Package versionmod provides the version API module; the name avoids
+// conflicting with the standard library "runtime/version" package.
 package versionmod
 
 import (

@@ -17,9 +17,9 @@ import (
 // downstream can tell that apart from a change that landed, because the records
 // the rules are derived from were written either way.
 //
-// Reads are answered instead of refused. A denial and an empty role set are both
-// true of a process deciding from no policies, so answering them states the
-// situation rather than hiding it.
+// Reads are answered instead of refused. A denial and an empty role set are
+// both true of a process deciding from no policies, so answering them states
+// the situation rather than hiding it.
 var ErrDisabled = errors.New("rbac: authorization is not initialized")
 
 // noop implements RBAC behavior before a policy set is installed. It answers

@@ -37,9 +37,9 @@ func LoadActor(ctx *gst.ServiceContext) (*modeliamuser.User, error) {
 // LoadActorAndTarget resolves the actor and target users used by admin actions.
 //
 // It intentionally does not authorize the relationship between the two users.
-// Callers must pass both users to adminauth.EnsureTenantAdmin so target-specific
-// rules, such as tenant membership and system-root protection, are evaluated in
-// one place.
+// Callers must pass both users to adminauth.EnsureTenantAdmin so
+// target-specific rules, such as tenant membership and system-root protection,
+// are evaluated in one place.
 func LoadActorAndTarget(ctx *gst.ServiceContext, targetUserID string) (*modeliamuser.User, *modeliamuser.User, error) {
 	actor, err := LoadActor(ctx)
 	if err != nil {

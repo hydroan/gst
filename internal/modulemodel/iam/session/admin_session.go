@@ -10,22 +10,26 @@ type AdminSession struct {
 	model.Empty
 }
 
-// AdminSessionListRsp returns all active sessions grouped by user for privileged administrators.
+// AdminSessionListRsp returns all active sessions grouped by user for
+// privileged administrators.
 type AdminSessionListRsp struct {
 	Items        []AdminSessionOwnerView `json:"items"`
 	Total        int                     `json:"total"`
 	SessionTotal int                     `json:"session_total"`
 }
 
-// AdminSessionGetRsp returns the detail of a specified session for a privileged administrator.
+// AdminSessionGetRsp returns the detail of a specified session for a privileged
+// administrator.
 type AdminSessionGetRsp struct {
 	Session SessionView `json:"session"`
 }
 
-// AdminSessionDeleteReq is the request payload for deleting a specified session as a privileged administrator.
+// AdminSessionDeleteReq is the request payload for deleting a specified session
+// as a privileged administrator.
 type AdminSessionDeleteReq struct{}
 
-// AdminSessionDeleteRsp returns the result of deleting a specified session for a privileged administrator.
+// AdminSessionDeleteRsp returns the result of deleting a specified session for
+// a privileged administrator.
 type AdminSessionDeleteRsp struct{}
 
 func (AdminSession) Design() {

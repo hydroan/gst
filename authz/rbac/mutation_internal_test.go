@@ -17,8 +17,8 @@ import (
 // than one, and it has to be refused before it reaches either.
 //
 // A permission missing its object or its action is the same fault reached
-// through a whole-set replacement, and refusing it there matters twice over: the
-// replacement deletes the role's current permissions before writing the new
+// through a whole-set replacement, and refusing it there matters twice over:
+// the replacement deletes the role's current permissions before writing the new
 // ones, so an entry passed over instead of refused would leave a caller whose
 // entries are all empty having revoked everything and been told it succeeded.
 func TestMutateRejectsEmptyValues(t *testing.T) {
@@ -162,9 +162,9 @@ func (a *failAfterAdapter) removeFilteredPolicyCount(
 //
 // Replacing a permission set is a delete and an insert. Left to autocommit
 // separately, a failed insert commits the delete on its own and strips the role
-// of every permission, while the in-memory half never runs and keeps serving the
-// old set — a divergence that outlives the process and that comparing stored
-// rules against their records cannot see.
+// of every permission, while the in-memory half never runs and keeps serving
+// the old set — a divergence that outlives the process and that comparing
+// stored rules against their records cannot see.
 func TestMutateIsAtomicWithoutACallerTransaction(t *testing.T) {
 	r, store := storedRBAC(t, "policy_atomic_write")
 	ctx := context.Background()

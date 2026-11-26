@@ -171,7 +171,8 @@ func (s *Session) Close() error {
 // Parameters:
 //   - conn: The connection to create session from, which must not be nil
 //   - appSide: Indicates whether this is server or client side (Server/Client)
-//   - cid: Optional client ID, only used on server side. If provided, will be used as the connection key
+//   - cid: Optional client ID, only used on server side. If provided, will be
+//     used as the connection key
 //
 // The connection key is the client ID on the server side when one is given,
 // and otherwise the connection's local and remote addresses, such as

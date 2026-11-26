@@ -46,7 +46,8 @@ func Get(ctx context.Context, key string) (cache []byte, err error) {
 	return cache, nil
 }
 
-// SetNX sets key to value with expiration only when the key does not already exist.
+// SetNX sets key to value with expiration only when the key does not already
+// exist.
 func SetNX(ctx context.Context, key, value string, expiration time.Duration) (bool, error) {
 	client, err := Client()
 	if err != nil {

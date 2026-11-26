@@ -74,7 +74,8 @@ func checkJSONTagNaming(ignore gghelper.ProjectIgnore) []string {
 	return violations
 }
 
-// checkFileModelJSONTagNaming checks json tags of the model structs in one file.
+// checkFileModelJSONTagNaming checks json tags of the model structs in one
+// file.
 func checkFileModelJSONTagNaming(filePath string) []string {
 	var violations []string
 

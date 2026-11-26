@@ -134,9 +134,10 @@ func traceAuthorize(ctx context.Context, tenant string) func(gst.Decision, error
 	}
 }
 
-// rbacTraceFields keeps RBAC span attributes low-cardinality enough for tracing.
-// Subject identifiers are intentionally excluded because they are identity data
-// and would make Jaeger labels noisy for role-binding write paths.
+// rbacTraceFields keeps RBAC span attributes low-cardinality enough for
+// tracing. Subject identifiers are intentionally excluded because they are
+// identity data and would make Jaeger labels noisy for role-binding write
+// paths.
 func rbacTraceFields(tenant string, role string) []attribute.KeyValue {
 	fields := make([]attribute.KeyValue, 0, rbacTraceFieldCap)
 	if tenant = strings.TrimSpace(tenant); tenant != "" {

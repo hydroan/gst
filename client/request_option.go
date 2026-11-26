@@ -94,7 +94,8 @@ func WithSortBy(sortBy string) RequestOption {
 	}
 }
 
-// WithExpand sets the framework association expansion parameters (_expand, _depth).
+// WithExpand sets the framework association expansion parameters (_expand,
+// _depth).
 func WithExpand(expand string, depth uint) RequestOption {
 	return func(c *requestConfig) {
 		if expand = strings.TrimSpace(expand); expand == "" {

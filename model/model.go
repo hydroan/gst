@@ -44,7 +44,8 @@ type (
 	// in place of pages.
 	Cursor = model.Cursor
 
-	// Empty marks a model as an action-only type that does not map to a database table.
+	// Empty marks a model as an action-only type that does not map to a
+	// database table.
 	Empty = model.Empty
 
 	// Index declares one secondary index on a model's table, the single way

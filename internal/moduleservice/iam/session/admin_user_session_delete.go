@@ -11,12 +11,14 @@ import (
 	"github.com/hydroan/gst/service"
 )
 
-// AdminUserSessionDeleteService handles invalidation of all sessions owned by a specified user for privileged administrators.
+// AdminUserSessionDeleteService handles invalidation of all sessions owned by a
+// specified user for privileged administrators.
 type AdminUserSessionDeleteService struct {
 	service.Base[*modeliamsession.AdminUserSession, *modeliamsession.AdminUserSessionDeleteReq, *modeliamsession.AdminUserSessionDeleteRsp]
 }
 
-// Delete invalidates all indexed sessions of a specified user for a privileged administrator.
+// Delete invalidates all indexed sessions of a specified user for a privileged
+// administrator.
 func (a *AdminUserSessionDeleteService) Delete(ctx *gst.ServiceContext, req *modeliamsession.AdminUserSessionDeleteReq) (rsp *modeliamsession.AdminUserSessionDeleteRsp, err error) {
 	_, currentSession, err := CurrentSession(ctx)
 	if err != nil {

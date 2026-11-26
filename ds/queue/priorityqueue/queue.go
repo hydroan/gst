@@ -25,11 +25,12 @@ type Queue[E any] struct {
 	maxPriority bool
 }
 
-// New creates and returns a priority queue with the given comparison function and options.
-// The provided options configure the properties of the priority queue.
-// For example:
+// New creates and returns a priority queue with the given comparison function
+// and options. The provided options configure the properties of the priority
+// queue. For example:
 //   - WithSafe(): creates a thread-safe priority queue.
-//   - WithMaxPriority(): creates a priority queue where higher value has higher priority.
+//   - WithMaxPriority(): creates a priority queue where higher value has higher
+//     priority.
 //
 // By default, it creates a non-thread-safe priority queue that uses min-heap
 // ordering (smaller values have higher priority).

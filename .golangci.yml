@@ -456,6 +456,12 @@ linters:
         - start-with-name
         # Check deprecated symbols have proper deprecation notice.
         - deprecated
+        # Hold every line of a godoc to the rule's default length, 77
+        # characters past the comment marker: with the marker a line ends by
+        # column 80, the width go/doc/comment prints a doc comment's text at.
+        # Code blocks and link definitions are not measured, and test files
+        # are held to it too.
+        - max-len
       options:
         start-with-name:
           # A doc comment that opens with another declaration's name was
@@ -628,6 +634,12 @@ linters:
       - linters:
           - bodyclose
         source: 'websocket\.Dial\('
+      # A line of a godoc that carries a URL is as long as the URL makes it:
+      # the URL is one word, and a break inside it breaks the link.
+      - linters:
+          - godoclint
+        text: "godoc line is too long"
+        source: 'https?://'
 
 formatters:
   # goimports holds every file to the imports gopls organizes on save: grouped

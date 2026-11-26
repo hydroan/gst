@@ -139,8 +139,9 @@ func NewProducer(cfg config.RocketMQ) (rocketmq.Producer, error) {
 	return p, nil
 }
 
-// NewPushConsumer returns a new RocketMQ push consumer with given configuration.
-// It's the caller's responsibility to start and shutdown the consumer.
+// NewPushConsumer returns a new RocketMQ push consumer with given
+// configuration. It's the caller's responsibility to start and shutdown the
+// consumer.
 func NewPushConsumer(cfg config.RocketMQ, consumerGroup string) (rocketmq.PushConsumer, error) {
 	if consumerGroup == "" {
 		consumerGroup = cfg.GroupName
@@ -202,8 +203,8 @@ func NewPushConsumer(cfg config.RocketMQ, consumerGroup string) (rocketmq.PushCo
 	return c, nil
 }
 
-// NewAdmin returns a new RocketMQ admin with given configuration.
-// It's the caller's responsibility to close the admin when it's no longer needed.
+// NewAdmin returns a new RocketMQ admin with given configuration. It's the
+// caller's responsibility to close the admin when it's no longer needed.
 func NewAdmin(cfg config.RocketMQ) (admin.Admin, error) {
 	var opts []admin.AdminOption
 

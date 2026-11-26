@@ -61,8 +61,8 @@ func (p *CopyPlan) collectActions(models []*modelsource.Model) ([]moduleCopyActi
 //
 // BuildCopyPlan always fills FrameworkRoot, and both paths then come from gg
 // gen's own ServiceTarget so a copied file lands exactly where a later gg gen
-// would regenerate it. The empty case is the plan a test builds by hand: it maps
-// an action straight onto <service dir>/<ServiceFilename()>, without the
+// would regenerate it. The empty case is the plan a test builds by hand: it
+// maps an action straight onto <service dir>/<ServiceFilename()>, without the
 // per-model subdirectory ServiceTarget adds for non-flattened actions.
 func (p *CopyPlan) actionServicePaths(sourceModel *modelsource.Model, targetModel *modelsource.Model, action *dsl.Action) (sourcePath string, targetPath string) {
 	if p.FrameworkRoot == "" {

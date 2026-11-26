@@ -153,8 +153,8 @@ func (t *Trie[K, V]) Get(keys []K) (v V, ok bool) {
 	return curr.value, curr.hasValue
 }
 
-// Delete removes the key and its associated value from the trie.
-// Returns the deleted value and true if it exists, zero value and false otherwise.
+// Delete removes the key and its associated value from the trie. Returns the
+// deleted value and true if it exists, zero value and false otherwise.
 func (t *Trie[K, V]) Delete(key []K) (v V, ok bool) {
 	if len(key) == 0 {
 		return v, false
@@ -513,9 +513,9 @@ func (t *Trie[K, V]) PrefixValues(prefix []K) []V {
 	return values
 }
 
-// PrefixKeysValues returns the keys and values that start with the given prefix.
-// It will returns empty slice(not nil) if the trie is empty
-// or no keys-value pairs start with the given prefix.
+// PrefixKeysValues returns the keys and values that start with the given
+// prefix. It will returns empty slice(not nil) if the trie is empty or no
+// keys-value pairs start with the given prefix.
 func (t *Trie[K, V]) PrefixKeysValues(prefix []K) []KeysValue[K, V] {
 	if len(prefix) == 0 {
 		return nil
@@ -614,8 +614,9 @@ func (t *Trie[K, V]) _range(node *Node[K, V], path []K, fn func([]K, V) bool) bo
 	return true
 }
 
-// LongestPrefix returns the longest prefix of the given keys that exists in the trie,
-// along with its associated value and a boolean indicating if such a prefix was found.
+// LongestPrefix returns the longest prefix of the given keys that exists in the
+// trie, along with its associated value and a boolean indicating if such a
+// prefix was found.
 //
 // For example, if the trie contains the following key-value pairs:
 //   - "internal" -> "A"
@@ -665,9 +666,10 @@ func (t *Trie[K, V]) LongestPrefix(keys []K) ([]K, V, bool) {
 	return longestPrefix, longestValue, found
 }
 
-// PathAncestors returns all ancestor nodes (including the target node) from root to the given path.
-// This is useful for collecting parameters from all levels in a hierarchical structure.
-// Returns a slice of KeysValue where each entry represents an ancestor node with its path and value.
+// PathAncestors returns all ancestor nodes (including the target node) from
+// root to the given path. This is useful for collecting parameters from all
+// levels in a hierarchical structure. Returns a slice of KeysValue where each
+// entry represents an ancestor node with its path and value.
 func (t *Trie[K, V]) PathAncestors(keys []K) []KeysValue[K, V] {
 	if len(keys) == 0 {
 		return nil

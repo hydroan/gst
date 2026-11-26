@@ -10,11 +10,13 @@ import (
 const (
 	// OTEL_ENABLED enables OpenTelemetry tracing.
 	OTEL_ENABLED = "OTEL_ENABLED"
-	// OTEL_SERVICE_NAME configures the OpenTelemetry service.name resource attribute.
+	// OTEL_SERVICE_NAME configures the OpenTelemetry service.name resource
+	// attribute.
 	OTEL_SERVICE_NAME = "OTEL_SERVICE_NAME"
 	// OTEL_EXPORTER_OTLP_PROTOCOL configures the OTLP traces transport protocol.
 	OTEL_EXPORTER_OTLP_PROTOCOL = "OTEL_EXPORTER_OTLP_PROTOCOL"
-	// OTEL_EXPORTER_OTLP_TRACES_ENDPOINT configures the trace-specific OTLP endpoint.
+	// OTEL_EXPORTER_OTLP_TRACES_ENDPOINT configures the trace-specific OTLP
+	// endpoint.
 	OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"
 	// OTEL_EXPORTER_OTLP_HEADERS configures headers sent with OTLP trace exports.
 	OTEL_EXPORTER_OTLP_HEADERS = "OTEL_EXPORTER_OTLP_HEADERS"
@@ -26,7 +28,8 @@ const (
 	OTEL_TRACES_SAMPLER_ARG = "OTEL_TRACES_SAMPLER_ARG"
 	// OTEL_BSP_MAX_QUEUE_SIZE configures the BatchSpanProcessor queue capacity.
 	OTEL_BSP_MAX_QUEUE_SIZE = "OTEL_BSP_MAX_QUEUE_SIZE"
-	// OTEL_BSP_MAX_EXPORT_BATCH_SIZE configures the BatchSpanProcessor export batch limit.
+	// OTEL_BSP_MAX_EXPORT_BATCH_SIZE configures the BatchSpanProcessor export
+	// batch limit.
 	OTEL_BSP_MAX_EXPORT_BATCH_SIZE = "OTEL_BSP_MAX_EXPORT_BATCH_SIZE"
 	// OTEL_BSP_SCHEDULE_DELAY configures the BatchSpanProcessor schedule delay.
 	OTEL_BSP_SCHEDULE_DELAY = "OTEL_BSP_SCHEDULE_DELAY"
@@ -40,7 +43,8 @@ type OTLPProtocol string
 const (
 	// OTLPProtocolGRPC exports traces with OTLP over gRPC.
 	OTLPProtocolGRPC OTLPProtocol = "grpc"
-	// OTLPProtocolHTTPProtobuf exports traces with OTLP over HTTP using protobuf payloads.
+	// OTLPProtocolHTTPProtobuf exports traces with OTLP over HTTP using
+	// protobuf payloads.
 	OTLPProtocolHTTPProtobuf OTLPProtocol = "http/protobuf"
 )
 
@@ -78,11 +82,14 @@ const (
 	TracesSamplerAlwaysOff TracesSampler = "always_off"
 	// TracesSamplerTraceIDRatio samples root traces by trace ID ratio.
 	TracesSamplerTraceIDRatio TracesSampler = "traceidratio"
-	// TracesSamplerParentBasedAlwaysOn samples roots and honors upstream parent decisions.
+	// TracesSamplerParentBasedAlwaysOn samples roots and honors upstream parent
+	// decisions.
 	TracesSamplerParentBasedAlwaysOn TracesSampler = "parentbased_always_on"
-	// TracesSamplerParentBasedAlwaysOff drops roots and honors upstream parent decisions.
+	// TracesSamplerParentBasedAlwaysOff drops roots and honors upstream parent
+	// decisions.
 	TracesSamplerParentBasedAlwaysOff TracesSampler = "parentbased_always_off"
-	// TracesSamplerParentBasedTraceIDRatio samples roots by ratio and honors upstream parent decisions.
+	// TracesSamplerParentBasedTraceIDRatio samples roots by ratio and honors
+	// upstream parent decisions.
 	TracesSamplerParentBasedTraceIDRatio TracesSampler = "parentbased_traceidratio"
 )
 
@@ -95,7 +102,8 @@ func (s *TracesSampler) UnmarshalText(text []byte) (err error) {
 }
 
 // OTEL represents OpenTelemetry tracing configuration using OTLP exporters.
-// This configuration supports sending traces to Jaeger, Uptrace, or other OTLP-compatible backends.
+// This configuration supports sending traces to Jaeger, Uptrace, or other
+// OTLP-compatible backends.
 type OTEL struct {
 	// Enabled controls whether OpenTelemetry tracing is enabled.
 	Enabled bool `json:"enabled" mapstructure:"enabled" ini:"enabled" yaml:"enabled"`

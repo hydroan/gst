@@ -5,8 +5,9 @@ import (
 	"github.com/hydroan/gst/model"
 )
 
-// ChangeCancelReq is the payload for POST /api/iam/email/change-cancel.
-// It carries the cancellation token from the notification sent to the old email address.
+// ChangeCancelReq is the payload for POST /api/iam/email/change-cancel. It
+// carries the cancellation token from the notification sent to the old email
+// address.
 type ChangeCancelReq struct {
 	Token string `json:"token" binding:"required"`
 }

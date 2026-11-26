@@ -111,8 +111,8 @@ const (
 )
 
 // BuildCopyPlan is the copy-ready preflight. It resolves framework source
-// paths, parses source DSL through the same codegen model parser used by gg gen,
-// computes final rewritten file contents, and checks target conflicts.
+// paths, parses source DSL through the same codegen model parser used by gg
+// gen, computes final rewritten file contents, and checks target conflicts.
 func BuildCopyPlan(name string, opts CopyOptions) (*CopyPlan, error) {
 	// Module copy addresses a top-level framework module by name, such as
 	// "copytest"; nested paths such as "<module>/<subpackage>" are outside the
@@ -427,12 +427,14 @@ func (p *CopyPlan) ModelTargets() []string {
 	return p.targetsByKind(moduleCopyFileModel)
 }
 
-// ServiceTargets returns current-project action service files that copy will merge.
+// ServiceTargets returns current-project action service files that copy will
+// merge.
 func (p *CopyPlan) ServiceTargets() []string {
 	return p.targetsByKind(moduleCopyFileService)
 }
 
-// HelperTargets returns current-project helper service files that copy will write.
+// HelperTargets returns current-project helper service files that copy will
+// write.
 func (p *CopyPlan) HelperTargets() []string {
 	return p.targetsByKind(moduleCopyFileHelper)
 }

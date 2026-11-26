@@ -57,13 +57,16 @@ func List(func()) {}
 // Get is the Get keyword; the public dsl.Get forwards to it.
 func Get(func()) {}
 
-// CreateMany is the CreateMany keyword; the public dsl.CreateMany forwards to it.
+// CreateMany is the CreateMany keyword; the public dsl.CreateMany forwards to
+// it.
 func CreateMany(func()) {}
 
-// DeleteMany is the DeleteMany keyword; the public dsl.DeleteMany forwards to it.
+// DeleteMany is the DeleteMany keyword; the public dsl.DeleteMany forwards to
+// it.
 func DeleteMany(func()) {}
 
-// UpdateMany is the UpdateMany keyword; the public dsl.UpdateMany forwards to it.
+// UpdateMany is the UpdateMany keyword; the public dsl.UpdateMany forwards to
+// it.
 func UpdateMany(func()) {}
 
 // PatchMany is the PatchMany keyword; the public dsl.PatchMany forwards to it.
@@ -81,8 +84,10 @@ func SSE(func()) {}
 // Stream is the Stream keyword; the public dsl.Stream forwards to it.
 func Stream(func()) {}
 
-// StreamingPayload is the StreamingPayload keyword; the public dsl.StreamingPayload forwards to it.
+// StreamingPayload is the StreamingPayload keyword; the public
+// dsl.StreamingPayload forwards to it.
 func StreamingPayload[T any]() {}
 
-// StreamingResult is the StreamingResult keyword; the public dsl.StreamingResult forwards to it.
+// StreamingResult is the StreamingResult keyword; the public
+// dsl.StreamingResult forwards to it.
 func StreamingResult[T any]() {}

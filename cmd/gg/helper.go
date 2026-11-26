@@ -134,14 +134,14 @@ func writeGeneratedFile(filename string, content string, log *changes) error {
 	return nil
 }
 
-// tidyModule tidies the module in the working directory once gg new, gg gen,
-// gg module copy or gg upgrade has written its files, so that go.mod and
-// go.sum hold what the written sources import (see goModTidy), and records
-// in log which of the two it changed. In a Go workspace it runs no go mod tidy and says
-// why: the command reads no go.work, so it would look up a module the
-// workspace provides, or settle on a version the workspace does not build
-// with, while the workspace resolves the versions itself and adds no
-// requirement to any go.mod.
+// tidyModule tidies the module in the working directory once gg new, gg gen, gg
+// module copy or gg upgrade has written its files, so that go.mod and go.sum
+// hold what the written sources import (see goModTidy), and records in log
+// which of the two it changed. In a Go workspace it runs no go mod tidy and
+// says why: the command reads no go.work, so it would look up a module the
+// workspace provides, or settle on a version the workspace does not build with,
+// while the workspace resolves the versions itself and adds no requirement to
+// any go.mod.
 func tidyModule(log *changes) error {
 	inWorkspace, err := gghelper.InWorkspace()
 	if err != nil {

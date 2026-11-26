@@ -41,9 +41,9 @@ type Event struct {
 
 // DecodePayload decodes the payload into the provided value v of type T.
 // It handles three cases:
-// 1. If the payload is nil, v remains unchanged
-// 2. If the payload is already type T, assigns directly to v
-// 3. Otherwise, uses msgpack marshal/unmarshal to decode into v
+//  1. If the payload is nil, v remains unchanged
+//  2. If the payload is already type T, assigns directly to v
+//  3. Otherwise, uses msgpack marshal/unmarshal to decode into v
 func DecodePayload[T any](payload any, v *T) error {
 	// Check nil payload
 	if payload == nil {

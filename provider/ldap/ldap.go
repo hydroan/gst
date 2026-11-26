@@ -40,9 +40,9 @@ func init() {
 	})
 }
 
-// start initializes the global LDAP connection.
-// It reads LDAP configuration from config.App.Ldap.
-// The function is thread-safe and ensures the connection is initialized only once.
+// start initializes the global LDAP connection. It reads LDAP configuration
+// from config.App.Ldap. The function is thread-safe and ensures the connection
+// is initialized only once.
 func start(_ context.Context) (err error) {
 	cfg := config.App.Ldap
 	mu.Lock()

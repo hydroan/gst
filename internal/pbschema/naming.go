@@ -95,13 +95,13 @@ func rpcBase(action *dsl.Action) string {
 	return action.Phase.Name()
 }
 
-// rpcSuffix distinguishes the rpcs of one action declared on several routes
-// by the path parameters a route adds to the model's own, those of its
-// endpoint and its item parameter (see modelsource.ItemParam): "" for a route adding
+// rpcSuffix distinguishes the rpcs of one action declared on several routes by
+// the path parameters a route adds to the model's own, those of its endpoint
+// and its item parameter (see modelsource.ItemParam): "" for a route adding
 // none, such as items/:id/seal on a model whose endpoint is
 // records/:record/items, ByBox for archive/boxes/:box/documents on a model
-// whose own route is archive/documents/:document, and ByBoxAndShelf for a
-// route adding box and shelf.
+// whose own route is archive/documents/:document, and ByBoxAndShelf for a route
+// adding box and shelf.
 func rpcSuffix(m *modelsource.Model, route string) string {
 	own := append(routeParams(m.Design.Endpoint), strings.TrimPrefix(modelsource.ItemParam(m.Design), ":"))
 	var extra []string

@@ -8,7 +8,8 @@ import (
 	"github.com/hydroan/gst/module"
 )
 
-// Register registers email verification, password reset, and email change routes.
+// Register registers email verification, password reset, and email change
+// routes.
 //
 // Routes:
 //   - POST /api/iam/email/verification-request

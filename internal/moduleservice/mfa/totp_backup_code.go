@@ -34,7 +34,8 @@ var (
 
 var errTOTPBackupCodeInvalid = errors.New("invalid backup code")
 
-// GenerateTOTPBackupCodes creates one-time recovery codes for a new TOTP device.
+// GenerateTOTPBackupCodes creates one-time recovery codes for a new TOTP
+// device.
 //
 // Each code is 16 characters drawn from an unambiguous Base32 alphabet,
 // formatted in groups of four for manual entry. Callers return these raw codes
@@ -102,7 +103,8 @@ func consumeTOTPBackupCode(ctx *gst.ServiceContext, userID, code string) error {
 // transaction. The caller passes a transaction-carrying context created by
 // database.Transaction so backup-code consumption and any surrounding writes
 // commit or roll back together; the timestamp is supplied by the caller so all
-// updates in the higher-level transaction share the same logical operation time.
+// updates in the higher-level transaction share the same logical operation
+// time.
 func consumeTOTPBackupCodeInTx(ctx context.Context, userID, code string, now time.Time) error {
 	normalizedCode, err := normalizeTOTPBackupCode(code)
 	if err != nil {
@@ -156,7 +158,8 @@ func generateTOTPBackupCode() (string, error) {
 // normalizeTOTPBackupCode prepares user input for hash comparison.
 //
 // The normalizer trims surrounding whitespace, removes hyphens, uppercases the
-// code, and rejects anything outside the configured unambiguous Base32 alphabet.
+// code, and rejects anything outside the configured unambiguous Base32
+// alphabet.
 func normalizeTOTPBackupCode(code string) (string, error) {
 	code = strings.TrimSpace(code)
 	code = strings.ReplaceAll(code, "-", "")

@@ -18,9 +18,9 @@ const ruleColumnCount = 6
 
 // policyRow is the row shape the adapter reads and writes.
 //
-// It describes how a rule maps onto columns, not what the table looks like:
-// the schema belongs to the registered AuthzRule model, which is what creates
-// the table and its unique index. Keep the column names in step with that model.
+// It describes how a rule maps onto columns, not what the table looks like: the
+// schema belongs to the registered AuthzRule model, which is what creates the
+// table and its unique index. Keep the column names in step with that model.
 type policyRow struct {
 	// ID is read-only so that it can name a row in an error without ever being
 	// written: rules are inserted without one and the table assigns it.

@@ -161,12 +161,13 @@ func TestCallerOutsideReportsMissWhenEveryFrameSkipped(t *testing.T) {
 	require.False(t, ok)
 }
 
-// TestCallerOutsideFollowsConfiguredPrefixesAcrossCalls pins the boundary of the
-// caller path cache: only the formatting of a resolved position is remembered,
-// never which frame the walk stops at. Configuring another prefix must move the
-// answer to the next frame out on the very next call, so an operator adding a
-// helper package to logger.sql_caller_skip_prefixes still sees the caller they
-// asked for rather than a position cached before the change.
+// TestCallerOutsideFollowsConfiguredPrefixesAcrossCalls pins the boundary of
+// the caller path cache: only the formatting of a resolved position is
+// remembered, never which frame the walk stops at. Configuring another prefix
+// must move the answer to the next frame out on the very next call, so an
+// operator adding a helper package to logger.sql_caller_skip_prefixes still
+// sees the caller they asked for rather than a position cached before the
+// change.
 func TestCallerOutsideFollowsConfiguredPrefixesAcrossCalls(t *testing.T) {
 	// Every frame from here up to the test runner belongs to the framework, so
 	// the walk lands on testing while nothing extra is configured.

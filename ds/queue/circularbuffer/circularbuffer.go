@@ -11,9 +11,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Buffer represents a generic circular buffer implementation.
-// It supports thread-safe operations and can be configured to either drop new data
-// or overwrite old data when the buffer is full.
+// Buffer represents a generic circular buffer implementation. It supports
+// thread-safe operations and can be configured to either drop new data or
+// overwrite old data when the buffer is full.
 type Buffer[E any] struct {
 	buf     []E
 	head    int
@@ -88,8 +88,8 @@ func (cb *Buffer[E]) enqueue(e E) bool {
 	return true
 }
 
-// Dequeue removes an element from the buffer.
-// Returns zero value and false if the buffer is empty, otherwise the element and true.
+// Dequeue removes an element from the buffer. Returns zero value and false if
+// the buffer is empty, otherwise the element and true.
 func (cb *Buffer[E]) Dequeue() (E, bool) {
 	if cb.safe {
 		cb.mu.Lock()
@@ -108,8 +108,8 @@ func (cb *Buffer[E]) Dequeue() (E, bool) {
 	return d, true
 }
 
-// Peek returns the first element in the buffer without removing it.
-// Returns zero value and false if the buffer is empty, otherwise the element and true.
+// Peek returns the first element in the buffer without removing it. Returns
+// zero value and false if the buffer is empty, otherwise the element and true.
 func (cb *Buffer[E]) Peek() (E, bool) {
 	if cb.safe {
 		cb.mu.RLock()

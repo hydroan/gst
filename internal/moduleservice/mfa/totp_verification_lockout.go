@@ -66,7 +66,8 @@ func clearTOTPVerificationFailures(ctx context.Context, userID string, purposes 
 	_ = gstredis.Del(ctx, keys...)
 }
 
-// totpVerificationFailureKey builds the attempt counter key for one user and purpose.
+// totpVerificationFailureKey builds the attempt counter key for one user and
+// purpose.
 func totpVerificationFailureKey(purpose totpVerificationPurpose, userID string) string {
 	return strings.Join([]string{"mfa:totp:failure", string(purpose), strings.TrimSpace(userID)}, ":")
 }

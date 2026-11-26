@@ -15,7 +15,8 @@ type ProfilePatchService struct {
 	service.Base[*modeliamprofile.Profile, *modeliamprofile.ProfilePatchReq, *modeliamprofile.ProfilePatchRsp]
 }
 
-// Patch creates or updates the current user's profile with only the requested fields.
+// Patch creates or updates the current user's profile with only the requested
+// fields.
 func (p *ProfilePatchService) Patch(ctx *gst.ServiceContext, req *modeliamprofile.ProfilePatchReq) (rsp *modeliamprofile.ProfilePatchRsp, err error) {
 	_, session, err := serviceiamsession.CurrentSession(ctx)
 	if err != nil {

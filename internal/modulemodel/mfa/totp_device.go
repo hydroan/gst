@@ -10,14 +10,14 @@ import (
 
 // TOTPDevice stores a registered TOTP authenticator for an IAM user.
 //
-// The model is registered for storage only. Device management is exposed through
-// dedicated MFA actions instead of default CRUD routes so sensitive fields stay
-// behind service-level checks.
+// The model is registered for storage only. Device management is exposed
+// through dedicated MFA actions instead of default CRUD routes so sensitive
+// fields stay behind service-level checks.
 //
 // IsActive carries no column default on purpose: GORM substitutes a declared
 // default for every zero value at insert time, which would turn a device staged
-// before code verification into an already verified one. Every caller states the
-// value it wants.
+// before code verification into an already verified one. Every caller states
+// the value it wants.
 //
 // The (user_id, secret) unique index is the authoritative guard against binding
 // the same secret twice for one user, and its leftmost prefix serves every

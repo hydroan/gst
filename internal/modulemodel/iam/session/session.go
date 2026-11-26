@@ -17,21 +17,26 @@ type SessionListRsp struct {
 	Total int           `json:"total"`
 }
 
-// SessionGetRsp returns the detail of a specified session of the current authenticated user.
+// SessionGetRsp returns the detail of a specified session of the current
+// authenticated user.
 type SessionGetRsp struct {
 	Session SessionView `json:"session"`
 }
 
-// SessionDeleteReq is the request payload for deleting a specified session of the current user.
+// SessionDeleteReq is the request payload for deleting a specified session of
+// the current user.
 type SessionDeleteReq struct{}
 
-// SessionDeleteRsp returns the delete result for a specified session of the current user.
+// SessionDeleteRsp returns the delete result for a specified session of the
+// current user.
 type SessionDeleteRsp struct{}
 
-// SessionDeleteAllReq is the request payload for deleting all sessions of the current user.
+// SessionDeleteAllReq is the request payload for deleting all sessions of the
+// current user.
 type SessionDeleteAllReq struct{}
 
-// SessionDeleteAllRsp returns the delete result for all sessions of the current user.
+// SessionDeleteAllRsp returns the delete result for all sessions of the current
+// user.
 type SessionDeleteAllRsp struct{}
 
 func (SelfSession) Design() {

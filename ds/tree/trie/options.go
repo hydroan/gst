@@ -15,8 +15,8 @@ func WithSafe[K comparable, V any]() Option[K, V] {
 	}
 }
 
-// WithNodeFormatter creates an Option that sets the node formatter when trie.String() is called.
-// Example usage:
+// WithNodeFormatter creates an Option that sets the node formatter when
+// trie.String() is called. Example usage:
 //
 //	trie.WithNodeFormatter(func(v int, c count) string {
 //	    return fmt.Sprintf("value: %v, count: %d", v, c)
@@ -31,8 +31,8 @@ func WithNodeFormatter[K comparable, V any](fn func(V, int, bool) string) Option
 	}
 }
 
-// WithKeyFormatter creates an Option that sets the key formatter when trie.String() is called.
-// Example usage:
+// WithKeyFormatter creates an Option that sets the key formatter when
+// trie.String() is called. Example usage:
 //
 //	trie.WithKeyFormatter(func(k string, n *Node[string, int]) string {
 //	    return fmt.Sprintf("[%s]", k)

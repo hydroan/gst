@@ -10,8 +10,8 @@ import (
 	"github.com/hydroan/gst/ds/container"
 )
 
-// MultiMap represents a map that can store multiple values for each key.
-// Call New with the `WithSafe` option to make the MultiMap safe for concurrent use.
+// MultiMap represents a map that can store multiple values for each key. Call
+// New with the `WithSafe` option to make the MultiMap safe for concurrent use.
 type MultiMap[K comparable, V any] struct {
 	data map[K][]V
 	cmp  func(V, V) int
@@ -120,9 +120,9 @@ func (m *MultiMap[K, V]) Delete(key K) {
 	delete(m.data, key)
 }
 
-// DeleteValue removes all occurrences of val from the values associated with the key.
-// If all values are removed, the key is also removed.
-// Returns the number of values deleted.
+// DeleteValue removes all occurrences of val from the values associated with
+// the key. If all values are removed, the key is also removed. Returns the
+// number of values deleted.
 func (m *MultiMap[K, V]) DeleteValue(key K, val V) int {
 	if m.safe {
 		m.mu.Lock()
@@ -198,7 +198,8 @@ func (m *MultiMap[K, V]) Has(key K) bool {
 	return exists
 }
 
-// Contains reports whether the MultiMap contains the specified value for the given key.
+// Contains reports whether the MultiMap contains the specified value for the
+// given key.
 func (m *MultiMap[K, V]) Contains(key K, val V) bool {
 	if m.safe {
 		m.mu.RLock()
@@ -273,9 +274,9 @@ func (m *MultiMap[K, V]) Clear() {
 	clear(m.data)
 }
 
-// Range iterates over the MultiMap and calls function fn for each key and its values.
-// If fn returns false, iteration stops immediately.
-// If fn is nil, Range returns without doing anything.
+// Range iterates over the MultiMap and calls function fn for each key and its
+// values. If fn returns false, iteration stops immediately. If fn is nil, Range
+// returns without doing anything.
 func (m *MultiMap[K, V]) Range(fn func(key K, values []V) bool) {
 	if m.safe {
 		m.mu.RLock()

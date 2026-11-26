@@ -106,7 +106,8 @@ func loadAdminUserEmailMap(ctx context.Context, userIDs []string) (map[string]*m
 	return items, nil
 }
 
-// loadAdminUserCredentialMap returns password credential metadata keyed by user ID.
+// loadAdminUserCredentialMap returns password credential metadata keyed by user
+// ID.
 //
 // The admin user view needs the must_change_password flag only. Password hashes
 // and other credential internals remain inside the account model and are never

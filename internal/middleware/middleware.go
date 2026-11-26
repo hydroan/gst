@@ -85,8 +85,9 @@ func RegisterAuth(middlewares ...gin.HandlerFunc) {
 	}
 }
 
-// SetApplyHandlers installs the handlers used to attach registered middlewares to router groups.
-// Existing registered middlewares are applied immediately in registration order.
+// SetApplyHandlers installs the handlers used to attach registered middlewares
+// to router groups. Existing registered middlewares are applied immediately in
+// registration order.
 func SetApplyHandlers(commonHandler, authHandler func(gin.HandlerFunc)) {
 	middlewareMu.Lock()
 	defer middlewareMu.Unlock()
@@ -159,7 +160,8 @@ func Init() (err error) {
 	return nil
 }
 
-// getFunctionName extracts the function name from a gin.HandlerFunc using reflection
+// getFunctionName extracts the function name from a gin.HandlerFunc using
+// reflection
 func getFunctionName(fn gin.HandlerFunc) string {
 	if fn == nil {
 		return "unknown"

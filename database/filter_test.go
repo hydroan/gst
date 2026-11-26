@@ -886,12 +886,12 @@ func TestDatabaseFiltersOnDateColumns(t *testing.T) {
 	})
 }
 
-// TestDatabaseFiltersFollowTheStoredType pins that the filters read a column
-// by the type gorm stores, not by its Go shape, alike on every dialect: the
-// time sql.NullTime holds compares as a time, the integer sql.NullInt64
-// holds and a string its type tag declares a JSON column match a pattern by
-// their text form, and a time of day compares in the spelling datatypes.TimeOfDay
-// stores, the bound the URL parser hands over.
+// TestDatabaseFiltersFollowTheStoredType pins that the filters read a column by
+// the type gorm stores, not by its Go shape, alike on every dialect: the time
+// sql.NullTime holds compares as a time, the integer sql.NullInt64 holds and a
+// string its type tag declares a JSON column match a pattern by their text
+// form, and a time of day compares in the spelling datatypes.TimeOfDay stores,
+// the bound the URL parser hands over.
 func TestDatabaseFiltersFollowTheStoredType(t *testing.T) {
 	ctx := context.Background()
 	t.Cleanup(func() { _ = database.DB().Exec("DELETE FROM test_typed_records").Error })

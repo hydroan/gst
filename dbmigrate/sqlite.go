@@ -25,8 +25,8 @@ type sqliteDatabase struct {
 	generatorConfig database.GeneratorConfig
 }
 
-// newSQLiteDatabase uses the sqlite3 driver to avoid importing sqldef's SQLite adapter,
-// which registers the "sqlite" driver through modernc.org/sqlite.
+// newSQLiteDatabase uses the sqlite3 driver to avoid importing sqldef's SQLite
+// adapter, which registers the "sqlite" driver through modernc.org/sqlite.
 func newSQLiteDatabase(config database.Config) (database.Database, error) {
 	db, err := sql.Open("sqlite3", config.DbName)
 	if err != nil {

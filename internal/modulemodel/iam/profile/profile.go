@@ -25,7 +25,8 @@ type Profile struct {
 // ProfileGetRsp returns the current user's profile.
 type ProfileGetRsp = Profile
 
-// ProfilePatchReq is the request payload for patching the current user's profile.
+// ProfilePatchReq is the request payload for patching the current user's
+// profile.
 type ProfilePatchReq struct {
 	DisplayName *string           `json:"display_name,omitempty"`
 	Avatar      *string           `json:"avatar,omitempty"`

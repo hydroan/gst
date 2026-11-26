@@ -6,7 +6,8 @@ import (
 	"github.com/hydroan/gst/service"
 )
 
-// SessionDeleteAllService handles invalidation of all sessions for the current authenticated user.
+// SessionDeleteAllService handles invalidation of all sessions for the current
+// authenticated user.
 type SessionDeleteAllService struct {
 	service.Base[*modeliamsession.SelfSession, *modeliamsession.SessionDeleteAllReq, *modeliamsession.SessionDeleteAllRsp]
 }

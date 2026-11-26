@@ -13,9 +13,9 @@ import (
 // reads as its own default.
 type ByteSize uint64
 
-// UnmarshalText reads text as a size, parsed with github.com/dustin/go-humanize;
-// text that is not one, a negative size among it, is a configuration error
-// naming the key.
+// UnmarshalText reads text as a size, parsed with
+// github.com/dustin/go-humanize; text that is not one, a negative size among
+// it, is a configuration error naming the key.
 func (s *ByteSize) UnmarshalText(text []byte) error {
 	value := strings.TrimSpace(string(text))
 	if value == "" {

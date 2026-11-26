@@ -24,10 +24,12 @@ type IPFilterConfig struct {
 	Blacklist []string
 }
 
-// IPWhitelist returns a middleware that only allows requests from IP addresses in the whitelist.
+// IPWhitelist returns a middleware that only allows requests from IP addresses
+// in the whitelist.
 //
 // Parameters:
-//   - whitelist: List of allowed IP addresses or CIDR ranges (e.g., "192.168.1.1", "10.0.0.0/8")
+//   - whitelist: List of allowed IP addresses or CIDR ranges (e.g.,
+//     "192.168.1.1", "10.0.0.0/8")
 //
 // Returns:
 //   - A gin.HandlerFunc that enforces IP whitelist
@@ -47,10 +49,12 @@ func IPWhitelist(whitelist []string) gin.HandlerFunc {
 	return IPFilter(config)
 }
 
-// IPBlacklist returns a middleware that blocks requests from IP addresses in the blacklist.
+// IPBlacklist returns a middleware that blocks requests from IP addresses in
+// the blacklist.
 //
 // Parameters:
-//   - blacklist: List of blocked IP addresses or CIDR ranges (e.g., "192.168.1.100", "10.0.0.0/8")
+//   - blacklist: List of blocked IP addresses or CIDR ranges (e.g.,
+//     "192.168.1.100", "10.0.0.0/8")
 //
 // Returns:
 //   - A gin.HandlerFunc that enforces IP blacklist
@@ -71,8 +75,8 @@ func IPBlacklist(blacklist []string) gin.HandlerFunc {
 	return IPFilter(config)
 }
 
-// IPFilter returns a middleware that filters requests based on IP whitelist and blacklist.
-// Blacklist takes precedence over whitelist.
+// IPFilter returns a middleware that filters requests based on IP whitelist and
+// blacklist. Blacklist takes precedence over whitelist.
 //
 // The address filtered on is the one the engine reports: the peer of the
 // connection, or the address a trusted proxy forwarded. Which proxies count is

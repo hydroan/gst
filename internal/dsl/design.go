@@ -120,17 +120,19 @@ type Design struct {
 	Stream *Action // Stream operation configuration, over WebSocket and gRPC (see Stream)
 }
 
-// Range iterates over the actions the Design declares and calls the provided function
-// for each one, with the route the action is registered under. Nothing is called for a
-// nil Design or a nil function.
+// Range iterates over the actions the Design declares and calls the provided
+// function for each one, with the route the action is registered under. Nothing
+// is called for a nil Design or a nil function.
 //
 // Parameters:
-//   - fn: Callback function that receives (route, action) for each declared action
+//   - fn: Callback function that receives (route, action) for each declared
+//     action
 //
-// The Design's own actions come first, under its endpoint, in a fixed order: Create,
-// Delete, Update, Patch, List, Import, Export, SSE, Stream, Get, CreateMany,
-// DeleteMany, UpdateMany, PatchMany. The actions declared with Route follow, route
-// by route in sorted order, each route's actions in that same order.
+// The Design's own actions come first, under its endpoint, in a fixed order:
+// Create, Delete, Update, Patch, List, Import, Export, SSE, Stream, Get,
+// CreateMany, DeleteMany, UpdateMany, PatchMany. The actions declared with
+// Route follow, route by route in sorted order, each route's actions in that
+// same order.
 //
 // Example:
 //
@@ -186,8 +188,8 @@ func (d *Design) Drop(target *Action) {
 	}
 }
 
-// Action represents the configuration for a specific API operation.
-// Each operation (Create, Update, Delete, etc.) has its own Action configuration.
+// Action represents the configuration for a specific API operation. Each
+// operation (Create, Update, Delete, etc.) has its own Action configuration.
 type Action struct {
 	// Service indicates whether custom service code should be generated and
 	// registered for this action. It is true only when the action's DSL block

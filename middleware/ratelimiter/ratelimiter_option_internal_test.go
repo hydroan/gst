@@ -37,8 +37,9 @@ func TestOptionsApplyValidValues(t *testing.T) {
 	require.True(t, conf.skipFunc(nil))
 }
 
-// TestWithBucketPanicsOnInvalidValues pins that a bucket which cannot be honored
-// fails where it is written, while the longest refill time allowed still builds.
+// TestWithBucketPanicsOnInvalidValues pins that a bucket which cannot be
+// honored fails where it is written, while the longest refill time allowed
+// still builds.
 func TestWithBucketPanicsOnInvalidValues(t *testing.T) {
 	invalid := map[string]func(){
 		"zero capacity":              func() { WithBucket(0, time.Second) },

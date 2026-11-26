@@ -4,7 +4,8 @@ import (
 	"time"
 )
 
-// AdminSessionOwnerView describes a session owner together with all indexed sessions owned by that user.
+// AdminSessionOwnerView describes a session owner together with all indexed
+// sessions owned by that user.
 type AdminSessionOwnerView struct {
 	UserID             string        `json:"user_id"`
 	Username           string        `json:"username"`
@@ -28,7 +29,8 @@ type SessionView struct {
 	IsCurrent   bool      `json:"is_current"`
 }
 
-// PrincipalView describes the authenticated principal bound to the current session.
+// PrincipalView describes the authenticated principal bound to the current
+// session.
 type PrincipalView struct {
 	UserID             string `json:"user_id"`
 	Username           string `json:"username"`

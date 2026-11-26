@@ -27,7 +27,8 @@ type AdminTOTPResetService struct {
 	service.Base[*modelmfa.AdminTOTP, *model.Empty, *modelmfa.AdminTOTPResetRsp]
 }
 
-// Delete removes every TOTP device of the target user on behalf of an administrator.
+// Delete removes every TOTP device of the target user on behalf of an
+// administrator.
 func (a *AdminTOTPResetService) Delete(ctx *gst.ServiceContext, req *model.Empty) (rsp *modelmfa.AdminTOTPResetRsp, err error) {
 	log := a.WithContext(ctx, ctx.Phase())
 

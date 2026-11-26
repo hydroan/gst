@@ -23,10 +23,11 @@ type moduleServiceMergeInput struct {
 	Rewrite           moduleCopyRewriteConfig
 }
 
-// mergeModuleServiceSource overlays the framework service source onto a generated
-// current-project service shell. The target shell owns package naming, imports,
-// service struct identity, and generated action signatures. The source file owns
-// business logic, hooks, receiver helper methods, ordinary declarations, and comments.
+// mergeModuleServiceSource overlays the framework service source onto a
+// generated current-project service shell. The target shell owns package
+// naming, imports, service struct identity, and generated action signatures.
+// The source file owns business logic, hooks, receiver helper methods, ordinary
+// declarations, and comments.
 func mergeModuleServiceSource(input moduleServiceMergeInput) ([]byte, error) {
 	fset := token.NewFileSet()
 	targetFile, err := parser.ParseFile(fset, input.TargetPath, input.Target, parser.ParseComments)
@@ -90,12 +91,12 @@ func mergeModuleServiceSource(input moduleServiceMergeInput) ([]byte, error) {
 	return []byte(code), nil
 }
 
-// requireUniqueSourceMethods rejects a source file that declares the same method
-// name on more than one service struct. Every source service struct is merged
-// onto the single generated target struct, so two same-named methods would
-// either overwrite each other or emit a duplicate declaration that stops the
-// copied project from compiling. Failing here keeps the copy a preflight error
-// instead of a broken project.
+// requireUniqueSourceMethods rejects a source file that declares the same
+// method name on more than one service struct. Every source service struct is
+// merged onto the single generated target struct, so two same-named methods
+// would either overwrite each other or emit a duplicate declaration that stops
+// the copied project from compiling. Failing here keeps the copy a preflight
+// error instead of a broken project.
 func requireUniqueSourceMethods(file *ast.File, sourceStructs []string, sourcePath string) error {
 	sourceStructSet := make(map[string]bool, len(sourceStructs))
 	for _, sourceStruct := range sourceStructs {

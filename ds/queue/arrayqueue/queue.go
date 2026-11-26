@@ -16,8 +16,8 @@ type Queue[E any] struct {
 	safe     bool
 }
 
-// New creates and initializes an empty queue.
-// Options can be provided to customize the queue's properties (e.g., thread safety).
+// New creates and initializes an empty queue. Options can be provided to
+// customize the queue's properties (e.g., thread safety).
 func New[E any](ops ...Option[E]) (*Queue[E], error) {
 	q := &Queue[E]{elements: make([]E, 0)}
 	for _, op := range ops {
@@ -31,8 +31,8 @@ func New[E any](ops ...Option[E]) (*Queue[E], error) {
 	return q, nil
 }
 
-// NewFromSlice creates and initializes a queue from the provided slice.
-// Options can be provided to customize the queue's properties (e.g., thread safety).
+// NewFromSlice creates and initializes a queue from the provided slice. Options
+// can be provided to customize the queue's properties (e.g., thread safety).
 func NewFromSlice[E any](slice []E, ops ...Option[E]) (*Queue[E], error) {
 	q, err := New(ops...)
 	if err != nil {
@@ -43,7 +43,8 @@ func NewFromSlice[E any](slice []E, ops ...Option[E]) (*Queue[E], error) {
 }
 
 // NewFromMapKeys creates and initializes a queue from the provided map keys.
-// Options can be provided to customize the queue's properties (e.g., thread safety).
+// Options can be provided to customize the queue's properties (e.g., thread
+// safety).
 func NewFromMapKeys[K comparable, V any](m map[K]V, ops ...Option[K]) (*Queue[K], error) {
 	q, err := New(ops...)
 	if err != nil {
@@ -55,8 +56,9 @@ func NewFromMapKeys[K comparable, V any](m map[K]V, ops ...Option[K]) (*Queue[K]
 	return q, nil
 }
 
-// NewFromMapValues creates and initializes a queue from the provided map values.
-// Options can be provided to customize the queue's properties (e.g., thread safety).
+// NewFromMapValues creates and initializes a queue from the provided map
+// values. Options can be provided to customize the queue's properties (e.g.,
+// thread safety).
 func NewFromMapValues[K comparable, V any](m map[K]V, ops ...Option[V]) (*Queue[V], error) {
 	q, err := New(ops...)
 	if err != nil {

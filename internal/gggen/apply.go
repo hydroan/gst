@@ -19,14 +19,16 @@ import (
 	"github.com/hydroan/gst/internal/modelsource"
 )
 
-// applyServiceRoleName renames the service struct type and all associated receiver
-// types and variable names to match the action's RoleName.
-// This is needed when the action names its service, causing the struct name to differ from the
-// default Phase-based name (e.g., "Creator" → "Archive").
+// applyServiceRoleName renames the service struct type and all associated
+// receiver types and variable names to match the action's RoleName. This is
+// needed when the action names its service, causing the struct name to differ
+// from the default Phase-based name (e.g., "Creator" → "Archive").
 //
 // It performs three updates:
-//  1. Renames the struct type declaration (e.g., type Creator struct → type Archive struct)
-//  2. Renames receiver types in all methods (e.g., func (c *Creator) → func (a *Archive))
+//  1. Renames the struct type declaration (e.g., type Creator struct → type
+//     Archive struct)
+//  2. Renames receiver types in all methods (e.g., func (c *Creator) → func (a
+//     *Archive))
 //  3. Renames receiver variable names and all references in method bodies
 //     (e.g., "c" → "a", c.WithContext → a.WithContext)
 //
@@ -250,33 +252,38 @@ func applyServiceFile(file *ast.File, action *dsl.Action, servicePkgName, correc
 	return changed, nil
 }
 
-// applyServiceMethod1 updates functions that match the ServiceMethod1 shape according to DSL.
-// Currently ServiceMethod1 does not rely on DSL configuration; keep empty for future extension.
+// applyServiceMethod1 updates functions that match the ServiceMethod1 shape
+// according to DSL. Currently ServiceMethod1 does not rely on DSL
+// configuration; keep empty for future extension.
 func applyServiceMethod1(fn *ast.FuncDecl, action *dsl.Action) bool { return false }
 
-// applyServiceMethod2 updates functions that match the ServiceMethod2 shape according to DSL.
-// Currently ServiceMethod2 does not rely on DSL configuration; keep empty for future extension.
+// applyServiceMethod2 updates functions that match the ServiceMethod2 shape
+// according to DSL. Currently ServiceMethod2 does not rely on DSL
+// configuration; keep empty for future extension.
 func applyServiceMethod2(fn *ast.FuncDecl, action *dsl.Action) bool { return false }
 
-// applyServiceMethod3 updates functions that match the ServiceMethod3 shape according to DSL.
-// Currently ServiceMethod3 does not rely on DSL configuration; keep empty for future extension.
+// applyServiceMethod3 updates functions that match the ServiceMethod3 shape
+// according to DSL. Currently ServiceMethod3 does not rely on DSL
+// configuration; keep empty for future extension.
 func applyServiceMethod3(fn *ast.FuncDecl, action *dsl.Action) bool { return false }
 
-// applyServiceMethod4 updates functions that match the ServiceMethod4 shape based on the DSL.
-// It only updates the shape of *ast.FuncDecl (param/return types) and never touches the method body logic.
-// Shape: func (r *recv) Method(ctx *gst.ServiceContext, req *<pkg>.<Req>) (*<pkg>.<Rsp>, error)
+// applyServiceMethod4 updates functions that match the ServiceMethod4 shape
+// based on the DSL. It only updates the shape of *ast.FuncDecl (param/return
+// types) and never touches the method body logic. Shape: func (r *recv)
+// Method(ctx *gst.ServiceContext, req *<pkg>.<Req>) (*<pkg>.<Rsp>, error)
 //
 //	func (r *recv) Method(ctx *gst.ServiceContext, req <pkg>.<Req>) (<pkg>.<Rsp>, error)
 //
-// isServiceMethod4 only recognizes the parameter/result shape, not the function name, so a
-// hand-written helper that happens to match the same shape as the real action method must not
-// be rewritten: once a Patch action's Payload/Result change to RecordPatchReq/RecordPatchRsp,
-// Patcher.validate, a plain validation helper with the same
-// (ctx *gst.ServiceContext, req *pkg.Req) (*pkg.X, error) shape as Patch, would otherwise be
-// taken for the action method and have its return type rewritten to *sample.RecordPatchRsp,
-// corrupting the function body and breaking the build. Requiring fn.Name to equal
-// action.Phase.Name() (e.g. "Patch") ensures only the actual action method for the current
-// DSL phase is ever rewritten.
+// isServiceMethod4 only recognizes the parameter/result shape, not the function
+// name, so a hand-written helper that happens to match the same shape as the
+// real action method must not be rewritten: once a Patch action's
+// Payload/Result change to RecordPatchReq/RecordPatchRsp, Patcher.validate, a
+// plain validation helper with the same (ctx *gst.ServiceContext, req *pkg.Req)
+// (*pkg.X, error) shape as Patch, would otherwise be taken for the action
+// method and have its return type rewritten to *sample.RecordPatchRsp,
+// corrupting the function body and breaking the build. Requiring fn.Name to
+// equal action.Phase.Name() (e.g. "Patch") ensures only the actual action
+// method for the current DSL phase is ever rewritten.
 func applyServiceMethod4(fn *ast.FuncDecl, action *dsl.Action, modelPkg, gstModelPkg string) bool {
 	if fn == nil || action == nil || fn.Name == nil {
 		return false
@@ -472,9 +479,15 @@ func applyTypeRef(expr ast.Expr, targetPkg, actionType string) (ast.Expr, bool) 
 	return sel, true
 }
 
-// applyServiceType updates a service struct type to match the generated service generics.
-// It transforms: type Creator struct { service.Base[*model.User, *model.User, *model.User] }
-// into:          type Creator struct { service.Base[*model.User, *model.UserReq, *model.UserRsp] }
+// applyServiceType updates a service struct type to match the generated
+// service generics. It transforms:
+//
+//	type Creator struct { service.Base[*model.User, *model.User, *model.User] }
+//
+// into:
+//
+//	type Creator struct { service.Base[*model.User, *model.UserReq, *model.UserRsp] }
+//
 // transcribing the declared form of the action's Payload/Result. When
 // correctModelName is provided, it also corrects the first generic parameter
 // to the current model. file is the file declaring spec, whose imports name
@@ -526,9 +539,9 @@ func applyServiceType(file *ast.File, spec *ast.TypeSpec, action *dsl.Action, co
 	return changed
 }
 
-// applyServiceTypeParam updates a specific type parameter in service.Base[T1, T2, T3]
-// to reference targetPkg and actionType, transcribing the declared form; an
-// empty targetPkg keeps the current package qualifier.
+// applyServiceTypeParam updates a specific type parameter in service.Base[T1,
+// T2, T3] to reference targetPkg and actionType, transcribing the declared
+// form; an empty targetPkg keeps the current package qualifier.
 func applyServiceTypeParam(indexListExpr *ast.IndexListExpr, paramIndex int, targetPkg, actionType string) bool {
 	if paramIndex >= len(indexListExpr.Indices) || actionType == "" {
 		return false
@@ -793,18 +806,21 @@ func ensureModelImportSpec(file *ast.File, importPath, modelQualifier string) {
 	goast.InsertImportSpec(file, modelImportSpec(importPath, modelQualifier))
 }
 
-// ApplyServiceFileWithModelSync extends ApplyServiceFile to handle import path and package name updates.
-// It will update import statements and package references when model packages are renamed.
+// ApplyServiceFileWithModelSync extends ApplyServiceFile to handle import path
+// and package name updates. It will update import statements and package
+// references when model packages are renamed.
 //
 // Design Philosophy:
-// This function uses AST manipulation instead of regenerating files to preserve user's code formatting
-// and custom modifications. Different developers have different code formatting preferences, and we
-// should not force our formatting on their existing code. We only update the necessary parts
-// (imports and type references) while keeping everything else intact.
+// This function uses AST manipulation instead of regenerating files to preserve
+// user's code formatting and custom modifications. Different developers have
+// different code formatting preferences, and we should not force our formatting
+// on their existing code. We only update the necessary parts (imports and type
+// references) while keeping everything else intact.
 //
 // Example transformation when "model/oldpkg" is renamed to "model/newpkg":
-// - Import statement: "myproject/model/oldpkg" -> "myproject/model/newpkg"
-// - Type references: oldpkg.User -> newpkg.User, oldpkg.UserReq -> newpkg.UserReq, oldpkg.UserRsp -> newpkg.UserRsp
+//   - Import statement: "myproject/model/oldpkg" -> "myproject/model/newpkg"
+//   - Type references: oldpkg.User -> newpkg.User, oldpkg.UserReq ->
+//     newpkg.UserReq, oldpkg.UserRsp -> newpkg.UserRsp
 //
 // A model package named like a framework package the file imports is referred
 // to through an alias (see serviceModelQualifier), so renaming "model/sample"
@@ -841,11 +857,11 @@ func ensureModelImportSpec(file *ast.File, importPath, modelQualifier string) {
 // package named v2 builds, and is synced like any other.
 //
 // Parameters:
-// - file: The AST file to process
-// - action: The DSL action configuration
-// - servicePkgName: The expected service package name
-// - modelDir: The root model directory, such as model
-// - modelInfo: The correct model generation context
+//   - file: The AST file to process
+//   - action: The DSL action configuration
+//   - servicePkgName: The expected service package name
+//   - modelDir: The root model directory, such as model
+//   - modelInfo: The correct model generation context
 //
 // It returns whether any changes were made to the file, and the error of a
 // file it rejects.
@@ -1069,10 +1085,10 @@ func syncModelImports(file *ast.File, modelRoot, correctModelImportPath, importN
 }
 
 // modelImportName returns the name a file refers to the model package it
-// imports through spec by: the name the import declares, or else the name
-// the package declares, which gg check pins to its directory name (see
-// modelsource.ModelPackageName). It returns "" for an import of any package outside
-// modelRoot, or one that gives the file no name to refer to it by:
+// imports through spec by: the name the import declares, or else the name the
+// package declares, which gg check pins to its directory name (see
+// modelsource.ModelPackageName). It returns "" for an import of any package
+// outside modelRoot, or one that gives the file no name to refer to it by:
 //
 //	"myproject/model/sample"                 // sample
 //	"myproject/model/record_item"            // recorditem
@@ -1092,9 +1108,10 @@ func modelImportName(spec *ast.ImportSpec, modelRoot string) string {
 	return modelsource.ModelPackageName(path.Base(importPath))
 }
 
-// syncModelPackageReferences updates package references in the code.
-// This function walks the AST and updates only the package identifier names in selector expressions,
-// preserving all other code structure, formatting, and logic.
+// syncModelPackageReferences updates package references in the code. This
+// function walks the AST and updates only the package identifier names in
+// selector expressions, preserving all other code structure, formatting, and
+// logic.
 //
 // Example: oldpkg.User -> newpkg.User, oldpkg.UserReq -> newpkg.UserReq
 // Returns true if any references were updated.

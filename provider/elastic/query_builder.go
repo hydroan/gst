@@ -197,7 +197,8 @@ func (qb *QueryBuilder) MatchPhraseOptions(field string, opts MatchPhraseOptions
 	})
 }
 
-// MatchPhraseOptionsNot adds a match_phrase query with options to must_not clauses
+// MatchPhraseOptionsNot adds a match_phrase query with options to must_not
+// clauses
 func (qb *QueryBuilder) MatchPhraseOptionsNot(field string, opts MatchPhraseOptions) *QueryBuilder {
 	return qb.MustNot(map[string]any{
 		"match_phrase": map[string]any{
@@ -206,7 +207,8 @@ func (qb *QueryBuilder) MatchPhraseOptionsNot(field string, opts MatchPhraseOpti
 	})
 }
 
-// MatchPhraseOptionsShould adds a match_phrase query with options to should clauses
+// MatchPhraseOptionsShould adds a match_phrase query with options to should
+// clauses
 func (qb *QueryBuilder) MatchPhraseOptionsShould(field string, opts MatchPhraseOptions) *QueryBuilder {
 	return qb.Should(map[string]any{
 		"match_phrase": map[string]any{

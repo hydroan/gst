@@ -76,9 +76,10 @@ func NewFromMap[K comparable, V any](m map[K]V, cmp func(K, K) int, ops ...Optio
 	return t, nil
 }
 
-// NewFromOrderedMap creates and returns a red-black tree from a given map.
-// It uses cmp.Compare[K] as the default comparison function,
-// which is suitable for types that implement the cmp.Ordered interface, such as int, float64, and string.
+// NewFromOrderedMap creates and returns a red-black tree from a given map. It
+// uses cmp.Compare[K] as the default comparison function, which is suitable for
+// types that implement the cmp.Ordered interface, such as int, float64, and
+// string.
 func NewFromOrderedMap[K cmp.Ordered, V any](m map[K]V, ops ...Option[K, V]) (*Tree[K, V], error) {
 	t, err := NewOrdered(ops...)
 	if err != nil {
@@ -304,8 +305,9 @@ func (t *Tree[K, V]) Max() (K, V, bool) {
 	return curr.Key, curr.Value, true
 }
 
-// Floor returns the largest node with a key less than or equal to the given key.
-// If such a node exists, its key and value are returned along with true; otherwise, zero values and false are returned.
+// Floor returns the largest node with a key less than or equal to the given
+// key. If such a node exists, its key and value are returned along with true;
+// otherwise, zero values and false are returned.
 func (t *Tree[K, V]) Floor(key K) (K, V, bool) {
 	if t.safe {
 		t.mu.RLock()
@@ -341,8 +343,9 @@ func (t *Tree[K, V]) Floor(key K) (K, V, bool) {
 	return k, v, false
 }
 
-// Ceiling returns the smallest node with a key greater than or equal to the given key.
-// If such a node exists, its key and value are returned along with true; otherwise, zero values and false are returned.
+// Ceiling returns the smallest node with a key greater than or equal to the
+// given key. If such a node exists, its key and value are returned along with
+// true; otherwise, zero values and false are returned.
 func (t *Tree[K, V]) Ceiling(key K) (K, V, bool) {
 	if t.safe {
 		t.mu.RLock()

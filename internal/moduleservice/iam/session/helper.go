@@ -14,7 +14,8 @@ import (
 	modeliamuser "github.com/hydroan/gst/internal/modulemodel/iam/user"
 )
 
-// ensureSessionUserActive verifies that the authenticated user can keep using an existing session.
+// ensureSessionUserActive verifies that the authenticated user can keep using
+// an existing session.
 func ensureSessionUserActive(targetUser *modeliamuser.User) error {
 	switch targetUser.Status {
 	case modeliamuser.UserStatusInactive:
@@ -26,7 +27,8 @@ func ensureSessionUserActive(targetUser *modeliamuser.User) error {
 	}
 }
 
-// buildSessionView builds the shared response snapshot for session query endpoints.
+// buildSessionView builds the shared response snapshot for session query
+// endpoints.
 func buildSessionView(sessionData modeliamsession.Session, currentSessionID string) modeliamsession.SessionView {
 	sessionID := sessionData.ID
 	if sessionID == "" {
@@ -63,8 +65,8 @@ func NewSessionID() (string, error) {
 	return hex.EncodeToString(buf), nil
 }
 
-// GetSessionExpiration returns the configured session expiration time.
-// If not configured, it reads IAM_SESSION_EXPIRATION before falling back to 8 hours.
+// GetSessionExpiration returns the configured session expiration time. If not
+// configured, it reads IAM_SESSION_EXPIRATION before falling back to 8 hours.
 func GetSessionExpiration() time.Duration {
 	sessionExpirationMu.RLock()
 	expiration := sessionExpiration
@@ -74,7 +76,8 @@ func GetSessionExpiration() time.Duration {
 }
 
 // GetSessionUserStateTTL returns the configured mutable user-state cache TTL.
-// If not configured, it reads IAM_SESSION_USER_STATE_TTL before falling back to 30 seconds.
+// If not configured, it reads IAM_SESSION_USER_STATE_TTL before falling back to
+// 30 seconds.
 func GetSessionUserStateTTL() time.Duration {
 	raw := strings.TrimSpace(os.Getenv(sessionUserStateTTLEnv))
 	if raw == "" {

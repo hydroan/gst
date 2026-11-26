@@ -9,7 +9,8 @@ import (
 	"github.com/hydroan/gst/service"
 )
 
-// AdminSessionDeleteService handles invalidation of a specified session for privileged administrators.
+// AdminSessionDeleteService handles invalidation of a specified session for
+// privileged administrators.
 type AdminSessionDeleteService struct {
 	service.Base[*modeliamsession.AdminSession, *modeliamsession.AdminSessionDeleteReq, *modeliamsession.AdminSessionDeleteRsp]
 }

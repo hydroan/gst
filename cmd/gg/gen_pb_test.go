@@ -23,31 +23,30 @@ import (
 
 var update = flag.Bool("update", false, "rewrite the golden files under testdata")
 
-// TestGenRunWritesTheProtobufDefinitionsOfGRPCModels holds the .proto files
-// gg gen writes for the models declaring GRPC(), and the Go files it writes
-// beside them, against testdata/pb/golden; run it with -update to rewrite
-// them. There is one .proto per model file under pb/, mirroring the model
-// directory, with the model's message, the messages of its standard
-// actions, the Go types of its custom actions and its service; beside it a
-// .gen.go with the type serving the service, the calls of its actions, the
-// handlers of its rpcs and the conversions of its messages; and, in every
-// package under pb/, a pb.gen.go registering its services, the root one
-// importing the packages below it. A model without GRPC() gets no file. A
-// model filed under tenants, Folder, gets the tenant key at the framework's
-// fixed number, which its FromProto leaves out. A model referring to a type
-// of another directory, Pin's Link of model/record/item.go, gets a
-// definition importing the other's by its registered path,
-// tmpapp/record/item.proto, and conversions calling the other package's.
-// The definitions are compiled the way protoc compiles them as well. The
-// files are where the examples in the doc comments of the pbschema and pb
+// TestGenRunWritesTheProtobufDefinitionsOfGRPCModels holds the .proto files gg
+// gen writes for the models declaring GRPC(), and the Go files it writes beside
+// them, against testdata/pb/golden; run it with -update to rewrite them. There
+// is one .proto per model file under pb/, mirroring the model directory, with
+// the model's message, the messages of its standard actions, the Go types of
+// its custom actions and its service; beside it a .gen.go with the type serving
+// the service, the calls of its actions, the handlers of its rpcs and the
+// conversions of its messages; and, in every package under pb/, a pb.gen.go
+// registering its services, the root one importing the packages below it. A
+// model without GRPC() gets no file. A model filed under tenants, Folder, gets
+// the tenant key at the framework's fixed number, which its FromProto leaves
+// out. A model referring to a type of another directory, Pin's Link of
+// model/record/item.go, gets a definition importing the other's by its
+// registered path, tmpapp/record/item.proto, and conversions calling the other
+// package's. The definitions are compiled the way protoc compiles them as well.
+// The files are where the examples in the doc comments of the pbschema and pb
 // packages come from: pb.Generate's whole note.proto, the excerpts of
 // buildMessage, declareService, rpcMessages, customRequest, customResponse,
-// queryFields and fileDescriptor; the whole report.gen.go of handlerFile,
-// the excerpts of serviceType, actionCalls, handler, streamHandler, toProto,
-// dateOf, fromProto, elementFromProto and conversionFuncs; and the two pb.gen.go of
-// registrationFiles. TestPBDocExamplesComeFromTheGoldenFiles holds the two
-// together: every code block of those doc comments must be a passage of a
-// file here, or of the model sources this test writes.
+// queryFields and fileDescriptor; the whole report.gen.go of handlerFile, the
+// excerpts of serviceType, actionCalls, handler, streamHandler, toProto,
+// dateOf, fromProto, elementFromProto and conversionFuncs; and the two
+// pb.gen.go of registrationFiles. TestPBDocExamplesComeFromTheGoldenFiles holds
+// the two together: every code block of those doc comments must be a passage of
+// a file here, or of the model sources this test writes.
 //
 // Beside every .proto the run writes the Go files the protobuf plugins
 // compile from it (see pb.Compile): the messages in note.pb.go and the
@@ -1889,16 +1888,15 @@ func (Clash) Design() {
 
 // protobufShapeModel carries one field of every kind the handlers convert
 // beyond the ones of the Record model: a calendar day, a time of day, a JSON
-// document, a JSON map and a JSON wrapper, a soft-delete time, a JSON number, an
-// integer enum, an optional integer, a pointer to a struct, a slice of
+// document, a JSON map and a JSON wrapper, a soft-delete time, a JSON number,
+// an integer enum, an optional integer, a pointer to a struct, a slice of
 // pointers, an array, maps of scalars, of structs and of unnamed structs, a
 // slice of and a pointer to an unnamed struct, an optional time, any value,
-// bytes, a named slice, the framework's version type, an alias of an
-// internal type, JSON slices of structs and of strings, pointers to
-// a slice of strings, to a slice of structs, to a map and to bytes, a
-// second JSON wrapper, a map keyed by a narrow integer, an optional JSON
-// number, a slice of times, a map of pointers to structs, an optional day and
-// a slice of days.
+// bytes, a named slice, the framework's version type, an alias of an internal
+// type, JSON slices of structs and of strings, pointers to a slice of strings,
+// to a slice of structs, to a map and to bytes, a second JSON wrapper, a map
+// keyed by a narrow integer, an optional JSON number, a slice of times, a map
+// of pointers to structs, an optional day and a slice of days.
 const protobufShapeModel = `package model
 
 import (

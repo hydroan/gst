@@ -1,9 +1,11 @@
-// Package dsl provides a Domain Specific Language (DSL) for defining REST API designs for Go models.
+// Package dsl provides a Domain Specific Language (DSL) for defining REST API
+// designs for Go models.
 //
-// The DSL allows developers to declaratively specify API configurations for their data models,
-// including CRUD operations, endpoints, payload/result types, and various behavioral settings.
-// It supports automatic code generation for services, controllers, and API routes based on
-// the defined specifications.
+// The DSL allows developers to declaratively specify API configurations for
+// their data models, including CRUD operations, endpoints, payload/result
+// types, and various behavioral settings. It supports automatic code generation
+// for services, controllers, and API routes based on the defined
+// specifications.
 //
 // Basic Usage:
 //
@@ -57,8 +59,9 @@
 //
 // Naming a service:
 //
-// When multiple Route definitions share the same operation type (e.g., both use Create),
-// give Service a name, which names the service file, its type and its rpc:
+// When multiple Route definitions share the same operation type (e.g., both use
+// Create), give Service a name, which names the service file, its type and its
+// rpc:
 //
 //	Route("/items/archive", func() {
 //		Create(func() {
@@ -91,22 +94,22 @@ import (
 	"github.com/hydroan/gst/internal/dsl"
 )
 
-// Endpoint sets the path segment the model takes in its API routes.
-// If not specified, defaults to the pluralized snake_case form of the model name,
-// e.g. "sample_records" for a SampleRecord model.
-// Leading slashes are removed, so Endpoint("users") and Endpoint("/users")
-// both declare users for a User model; a path of several segments is declared
-// with Route.
+// Endpoint sets the path segment the model takes in its API routes. If not
+// specified, defaults to the pluralized snake_case form of the model name, e.g.
+// "sample_records" for a SampleRecord model. Leading slashes are removed, so
+// Endpoint("users") and Endpoint("/users") both declare users for a User model;
+// a path of several segments is declared with Route.
 //
 // gg refuses a Design() that declares Endpoint twice, gives it anything but a
 // string literal, gives it a segment that trims to nothing, Endpoint("/"), or
 // gives it more than one segment, Endpoint("iam/users").
 func Endpoint(segment string) { dsl.Endpoint(segment) }
 
-// Param defines a path parameter for dynamic routing in RESTful APIs.
-// It adds a URL parameter segment to the endpoint, enabling hierarchical resource access.
-// The parameter is automatically propagated to child resources in nested structures,
-// allowing parent resource parameters to be inherited by child endpoints.
+// Param defines a path parameter for dynamic routing in RESTful APIs. It adds a
+// URL parameter segment to the endpoint, enabling hierarchical resource access.
+// The parameter is automatically propagated to child resources in nested
+// structures, allowing parent resource parameters to be inherited by child
+// endpoints.
 //
 // Parameter Format:
 //   - Simple name: Param("user") creates ":user" parameter
@@ -115,42 +118,51 @@ func Endpoint(segment string) { dsl.Endpoint(segment) }
 // Route Generation Examples:
 //   - Param("user") transforms /api/users to /api/users/:user
 //   - Param("item") transforms /api/samples/items to /api/samples/items/:item
-//   - Param("entry") transforms /api/samples/items/entries to /api/samples/items/entries/:entry
+//   - Param("entry") transforms /api/samples/items/entries to
+//     /api/samples/items/entries/:entry
 //
 // Parameter Propagation:
-// When using hierarchical models (sample -> item -> entry), parent parameters are
-// automatically propagated to child resources:
+// When using hierarchical models (sample -> item -> entry), parent parameters
+// are automatically propagated to child resources:
 //   - /api/samples/:sample/items/:item/entries/:entry
 //   - Child resources inherit all parent path parameters
 //
-// The parameter creates RESTful nested resource patterns, enabling hierarchical API designs
-// where child resources are scoped under parent resources through URL path parameters.
+// The parameter creates RESTful nested resource patterns, enabling hierarchical
+// API designs where child resources are scoped under parent resources through
+// URL path parameters.
 //
 // gg refuses a Design() that declares Param twice, gives it anything but a
 // string literal, or gives it a name that trims to nothing, Param("") or
 // Param(":").
 func Param(name string) { dsl.Param(name) }
 
-// Route defines an alternative API route for the model beyond the default hierarchical route.
-// This allows a resource to be accessible through multiple API endpoints, providing flexibility
-// for different access patterns and use cases.
+// Route defines an alternative API route for the model beyond the default
+// hierarchical route. This allows a resource to be accessible through multiple
+// API endpoints, providing flexibility for different access patterns and use
+// cases.
 //
 // The function accepts two parameters:
-//   - path: The route path string (e.g., "items", "archive/items"). Leading slashes are automatically removed.
-//   - config: A function that defines which operations are enabled for this route
+//   - path: The route path string (e.g., "items", "archive/items"). Leading
+//     slashes are automatically removed.
+//   - config: A function that defines which operations are enabled for this
+//     route
 //
-// The function can be called multiple times within a Design() method to add multiple alternative routes.
-// Each call adds a new route to the model's API endpoints without overriding existing ones.
+// The function can be called multiple times within a Design() method to add
+// multiple alternative routes. Each call adds a new route to the model's API
+// endpoints without overriding existing ones.
 //
 // Route Format:
 //   - Simple path: Route("items", func() {...}) creates /api/items
-//   - Nested path: Route("archive/items", func() {...}) creates /api/archive/items
+//   - Nested path: Route("archive/items", func() {...}) creates
+//     /api/archive/items
 //   - Custom path: Route("admin/items", func() {...}) creates /api/admin/items
-//   - Leading slash removed: Route("/archive/items", func() {...}) becomes "archive/items"
+//   - Leading slash removed: Route("/archive/items", func() {...}) becomes
+//     "archive/items"
 //
 // Configuration Function:
-// The second parameter is a function that defines which operations are available for this route.
-// You can configure List, Get, Create, Update, Delete, Patch operations within this function:
+// The second parameter is a function that defines which operations are
+// available for this route. You can configure List, Get, Create, Update,
+// Delete, Patch operations within this function:
 //
 //	Route("/archive/items", func() {
 //	    List(func() {
@@ -162,7 +174,8 @@ func Param(name string) { dsl.Param(name) }
 //	})
 //
 // Route Generation:
-// For a route path like "/archive/items" with Param("item"), the following routes are generated:
+// For a route path like "/archive/items" with Param("item"), the following
+// routes are generated:
 //   - /api/archive/items (for List operations)
 //   - /api/archive/items/:item (for Get, Update, Delete, Patch operations)
 //
@@ -198,15 +211,16 @@ func Param(name string) { dsl.Param(name) }
 // This creates multiple API endpoints for the same model:
 //   - /api/samples/:sample/items (default hierarchical route)
 //   - /api/items and /api/items/:item (additional global route)
-//   - /api/archive/items and /api/archive/items/:item (additional archive route)
+//   - /api/archive/items and /api/archive/items/:item (additional archive
+//     route)
 //
 // gg refuses a Route given anything but a string literal for its path, or a
 // path that trims to nothing, Route("/", ...).
 func Route(path string, fn func()) { dsl.Route(path, fn) }
 
 // Migrate marks the model as a database model that requires schema migration.
-// When declared, the model's table structure will be created/updated in the database.
-// Migration is disabled by default; declaring Migrate() enables it.
+// When declared, the model's table structure will be created/updated in the
+// database. Migration is disabled by default; declaring Migrate() enables it.
 func Migrate() { dsl.Migrate() }
 
 // GRPC serves the model over gRPC as well as HTTP: gg gen derives the model's
@@ -220,11 +234,11 @@ func GRPC() { dsl.GRPC() }
 // Service marks the current action as requiring custom service code, and
 // names it.
 //
-// Service is an action-scoped marker and must be used inside an action block such
-// as Create, List, or Get. Calling Service() tells gg gen to generate and
-// register a service implementation for that action, named after the
-// action: Create generates create.go declaring Creator, List generates
-// list.go declaring Lister.
+// Service is an action-scoped marker and must be used inside an action block
+// such as Create, List, or Get. Calling Service() tells gg gen to generate and
+// register a service implementation for that action, named after the action:
+// Create generates create.go declaring Creator, List generates list.go
+// declaring Lister.
 //
 // Service("name") names the service instead: a bare name of letters, digits
 // and underscores, starting with a letter, which names the generated file
@@ -270,34 +284,36 @@ func Service(name ...string) { dsl.Service(name...) }
 //	  -> service/authz/role/role.go
 //	  -> package role
 //
-// Flatten removes the final model-file segment from the generated service path, so the
-// action service is generated in the service package that mirrors the current model
-// package:
+// Flatten removes the final model-file segment from the generated service path,
+// so the action service is generated in the service package that mirrors the
+// current model package:
 //
 //	model/authz/role.go + Service("role") + Flatten()
 //	  -> service/authz/role.go
 //	  -> package authz
 //
-// Flatten never accepts a directory name and cannot redirect output to another domain.
-// The target directory and package are derived from the current model file's package.
-// For example, model/authz/role.go cannot generate into service/mfa or service/authz2.
+// Flatten never accepts a directory name and cannot redirect output to another
+// domain. The target directory and package are derived from the current model
+// file's package. For example, model/authz/role.go cannot generate into
+// service/mfa or service/authz2.
 //
-// Flatten only affects service generation. It does not change routes, model registration,
-// payload/result types, or the service's name, which still controls only the generated
-// file basename and service struct name. gg requires Flatten to be used with a named
-// Service("name") in the same action.
+// Flatten only affects service generation. It does not change routes, model
+// registration, payload/result types, or the service's name, which still
+// controls only the generated file basename and service struct name. gg
+// requires Flatten to be used with a named Service("name") in the same action.
 //
-// Flatten is only valid for model files under model/<package>/<file>.go. Root model files
-// such as model/user.go cannot be flattened because service/ is reserved for generated
-// registration code and should not contain business service files.
+// Flatten is only valid for model files under model/<package>/<file>.go. Root
+// model files such as model/user.go cannot be flattened because service/ is
+// reserved for generated registration code and should not contain business
+// service files.
 func Flatten() { dsl.Flatten() }
 
 // Public marks the current action as publicly accessible.
 //
-// Public is an action-scoped marker and must be used inside an action block such
-// as Create, List, or Get. Calling Public() registers the generated route on the
-// public router, so authentication and authorization middleware are not required
-// for that action.
+// Public is an action-scoped marker and must be used inside an action block
+// such as Create, List, or Get. Calling Public() registers the generated route
+// on the public router, so authentication and authorization middleware are not
+// required for that action.
 //
 // Omit Public() for authenticated APIs. The default is intentionally protected:
 // actions are registered on the authenticated router unless they explicitly opt

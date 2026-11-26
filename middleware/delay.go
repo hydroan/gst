@@ -7,8 +7,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Delay returns a middleware that adds a fixed delay before processing the request.
-// This is primarily used for testing purposes to simulate network latency or slow responses.
+// Delay returns a middleware that adds a fixed delay before processing the
+// request. This is primarily used for testing purposes to simulate network
+// latency or slow responses.
 //
 // Parameters:
 //   - duration: The delay duration to add before processing the request
@@ -29,15 +30,17 @@ func Delay(duration time.Duration) gin.HandlerFunc {
 	}
 }
 
-// DelayRandom returns a middleware that adds a random delay within the specified range before processing the request.
-// This is primarily used for testing purposes to simulate variable network latency or slow responses.
+// DelayRandom returns a middleware that adds a random delay within the
+// specified range before processing the request. This is primarily used for
+// testing purposes to simulate variable network latency or slow responses.
 //
 // Parameters:
 //   - minDuration: The minimum delay duration
 //   - maxDuration: The maximum delay duration
 //
 // Returns:
-//   - A gin.HandlerFunc that adds a random delay between minDuration and maxDuration
+//   - A gin.HandlerFunc that adds a random delay between minDuration and
+//     maxDuration
 //
 // Example, from an init function (see Register):
 //
@@ -67,11 +70,13 @@ func DelayRandom(minDuration, maxDuration time.Duration) gin.HandlerFunc {
 	}
 }
 
-// DelayWithConfig returns a middleware that adds a configurable delay based on request properties.
-// This allows for more flexible testing scenarios, such as different delays for different paths or methods.
+// DelayWithConfig returns a middleware that adds a configurable delay based on
+// request properties. This allows for more flexible testing scenarios, such as
+// different delays for different paths or methods.
 //
 // Parameters:
-//   - delayFunc: A function that determines the delay duration based on the request context
+//   - delayFunc: A function that determines the delay duration based on the
+//     request context
 //
 // Returns:
 //   - A gin.HandlerFunc that adds the delay determined by delayFunc

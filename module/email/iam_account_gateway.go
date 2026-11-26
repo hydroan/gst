@@ -31,7 +31,8 @@ var (
 
 // iamAccountGateway adapts the framework IAM user model for the built-in email
 // module. It lives under module/email so copied email service code does not
-// import the framework IAM user model, password hashing policy, or session store.
+// import the framework IAM user model, password hashing policy, or session
+// store.
 type iamAccountGateway struct{}
 
 func (iamAccountGateway) FindByEmail(ctx *gst.ServiceContext, email string) (*serviceemail.AccountSnapshot, error) {

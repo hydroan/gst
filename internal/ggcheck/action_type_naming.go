@@ -49,7 +49,8 @@ func checkActionTypeNaming(ignore gghelper.ProjectIgnore) []string {
 	return violations
 }
 
-// checkFileActionTypeNaming checks explicit Payload and Result types in Design methods.
+// checkFileActionTypeNaming checks explicit Payload and Result types in Design
+// methods.
 func checkFileActionTypeNaming(filePath string) []string {
 	var violations []string
 

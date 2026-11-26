@@ -25,7 +25,8 @@ func (*VersionModule) Route() string { return "version" }
 func (*VersionModule) Param() string { return "" }
 func (*VersionModule) Public() bool  { return true }
 
-// Version represents the backend version information for frontend update detection
+// Version represents the backend version information for frontend update
+// detection
 type Version struct {
 	model.Empty
 }

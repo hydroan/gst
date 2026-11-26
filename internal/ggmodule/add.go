@@ -10,7 +10,8 @@ import (
 	"golang.org/x/tools/go/ast/astutil"
 )
 
-// AddModule registers a built-in framework module in the current project's module/module.go.
+// AddModule registers a built-in framework module in the current project's
+// module/module.go.
 //
 // This is the framework-module registration mode. It does not copy model or
 // service source into the project. Keeping it separate from Copy keeps the two
@@ -69,9 +70,9 @@ func AddModule(projectDir string, name string) (ChangeResult, error) {
 }
 
 // checkNoLocalSource prevents mixing the two ownership modes for the same
-// module. If model/copytest or service/copytest already exists locally, registering the
-// framework's copytest module would create two competing implementations with the
-// same conceptual name.
+// module. If model/copytest or service/copytest already exists locally,
+// registering the framework's copytest module would create two competing
+// implementations with the same conceptual name.
 func checkNoLocalSource(projectDir string, name string) error {
 	for _, dir := range []string{
 		filepath.Join(projectDir, ggconst.DirModel, name),

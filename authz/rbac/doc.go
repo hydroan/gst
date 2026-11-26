@@ -1,20 +1,20 @@
 // Package rbac decides authorization from stored policy rules and keeps those
 // rules in step with the records they are derived from.
 //
-// Three rule kinds carry everything the package stores. A permission,
-// (tenant, role, object, action, effect), is what a role may reach. An
-// assignment, (subject, role, tenant), is who holds a role in one tenant. A
-// system assignment, (subject, role), is who holds a role above every tenant,
-// which is how the built-in root subject stays reachable in a deployment with no
-// tenants configured at all.
+// Three rule kinds carry everything the package stores. A permission, (tenant,
+// role, object, action, effect), is what a role may reach. An assignment,
+// (subject, role, tenant), is who holds a role in one tenant. A system
+// assignment, (subject, role), is who holds a role above every tenant, which is
+// how the built-in root subject stays reachable in a deployment with no tenants
+// configured at all.
 //
 // Reads answer from memory: the two role branches from the role graph, and
 // everything a policy decides from the decision index, which is rebuilt from
 // the in-memory policy set whenever that set changes. Writes do not: they go
 // through mutate, which drives storage and memory as two halves so that a
-// policy change rolls back with the transaction that caused it. Every write is a mutation of
-// the one in-memory set, so nothing can change what is decided from behind
-// mutate's back.
+// policy change rolls back with the transaction that caused it. Every write is
+// a mutation of the one in-memory set, so nothing can change what is decided
+// from behind mutate's back.
 //
 // # One process decides from its own memory
 //

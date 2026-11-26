@@ -21,14 +21,15 @@ type Set[E comparable] struct {
 	sorted bool
 }
 
-// New creates a new set without pre-allocating space.
-// Options can be provided to customize the set's properties (e.g., thread safety).
+// New creates a new set without pre-allocating space. Options can be provided
+// to customize the set's properties (e.g., thread safety).
 func New[E comparable](ops ...Option[E]) (*Set[E], error) {
 	return NewWithSize(0, ops...)
 }
 
 // NewWithSize creates a new set and pre-allocates space for the given size.
-// Options can be provided to customize the set's properties (e.g., thread safety).
+// Options can be provided to customize the set's properties (e.g., thread
+// safety).
 func NewWithSize[T comparable](size int, ops ...Option[T]) (*Set[T], error) {
 	s := &Set[T]{
 		set: make(map[T]struct{}, size),
@@ -44,9 +45,9 @@ func NewWithSize[T comparable](size int, ops ...Option[T]) (*Set[T], error) {
 	return s, nil
 }
 
-// NewFromSlice creates a new set from the provided slice.
-// If the provided slice is nil or empty, creates an empty set.
-// Options can be provided to customize the set's properties (e.g., thread safety).
+// NewFromSlice creates a new set from the provided slice. If the provided slice
+// is nil or empty, creates an empty set. Options can be provided to customize
+// the set's properties (e.g., thread safety).
 func NewFromSlice[E comparable](slice []E, ops ...Option[E]) (*Set[E], error) {
 	if len(slice) == 0 {
 		return New(ops...)
@@ -61,9 +62,9 @@ func NewFromSlice[E comparable](slice []E, ops ...Option[E]) (*Set[E], error) {
 	return s, nil
 }
 
-// NewFromMapKeys creates a new set from the provided map of keys.
-// If map "m" is nil or empty, creates an empty set.
-// Options can be provided to customize the set's properties (e.g., thread safety).
+// NewFromMapKeys creates a new set from the provided map of keys. If map "m" is
+// nil or empty, creates an empty set. Options can be provided to customize the
+// set's properties (e.g., thread safety).
 func NewFromMapKeys[K comparable, V any](m map[K]V, ops ...Option[K]) (*Set[K], error) {
 	if len(m) == 0 {
 		return New(ops...)
@@ -78,9 +79,9 @@ func NewFromMapKeys[K comparable, V any](m map[K]V, ops ...Option[K]) (*Set[K], 
 	return s, nil
 }
 
-// NewFromMapValues creates a new set from the provided map of values.
-// If map "m" is nil or empty, creates an empty set.
-// Options can be provided to customize the set's properties (e.g., thread safety).
+// NewFromMapValues creates a new set from the provided map of values. If map
+// "m" is nil or empty, creates an empty set. Options can be provided to
+// customize the set's properties (e.g., thread safety).
 func NewFromMapValues[K comparable, V comparable](m map[K]V, ops ...Option[V]) (*Set[V], error) {
 	if len(m) == 0 {
 		return New(ops...)
@@ -163,7 +164,8 @@ func (s *Set[E]) Len() int {
 // Clone creates and returns a deep copy of the set.
 //
 // The property of the cloned set is the same as the original set.
-// - If the original set is concurrent safe, the cloned set is concurrent safe.
+//   - If the original set is concurrent safe, the cloned set is concurrent
+//     safe.
 func (s *Set[E]) Clone() *Set[E] {
 	if s.safe {
 		s.mu.RLock()
@@ -225,8 +227,8 @@ func (s *Set[E]) ContainsAny(el ...E) bool {
 	return false
 }
 
-// ContainsAnyElement reports whether the set contains any element of the given set.
-// If the given set is nil or empty, it returns false.
+// ContainsAnyElement reports whether the set contains any element of the given
+// set. If the given set is nil or empty, it returns false.
 func (s *Set[E]) ContainsAnyElement(other *Set[E]) bool {
 	if other == nil {
 		return false
@@ -314,9 +316,9 @@ func (s *Set[E]) IsEmpty() bool {
 // Iter returns a channel of elements that caller can range over.
 //
 // The set is snapshotted under the read lock before streaming, so the lock is
-// not held while sending on the channel. Prefer "Seq" or "Range" when the caller
-// may stop early: an "Iter" channel that is abandoned before being fully drained
-// leaks the sending goroutine.
+// not held while sending on the channel. Prefer "Seq" or "Range" when the
+// caller may stop early: an "Iter" channel that is abandoned before being fully
+// drained leaks the sending goroutine.
 func (s *Set[E]) Iter() <-chan E {
 	if s.safe {
 		s.mu.RLock()
@@ -396,8 +398,9 @@ func (s *Set[E]) IsSuperset(other *Set[E]) bool {
 }
 
 // IsProperSuperset checks if the current set is a proper superset of given set.
-// A proper superset means all elements of the given set are present in the current set,
-// and the current set has additional elements not present in the given set.
+// A proper superset means all elements of the given set are present in the
+// current set, and the current set has additional elements not present in the
+// given set.
 func (s *Set[E]) IsProperSuperset(other *Set[E]) bool {
 	if other == nil {
 		// Every non-empty set is a proper superset of the empty (nil) set; the
@@ -434,8 +437,8 @@ func (s *Set[E]) Difference(other *Set[E]) *Set[E] {
 }
 
 // SymmetricDifference computes the symmetric difference between the current set
-// and the given set.
-// The symmetric difference includes elements present in either set but not in both.
+// and the given set. The symmetric difference includes elements present in
+// either set but not in both.
 //
 // The returned set inherits the properties of the current set.
 // For example, if the current set is concurrent-safe, the returned set is also
@@ -491,8 +494,9 @@ func (s *Set[E]) Union(other *Set[E]) *Set[E] {
 	return union
 }
 
-// Intersect computes the intersection of the current set and the given set.
-// The resulting set contains elements that are present in both the current set and the given set.
+// Intersect computes the intersection of the current set and the given set. The
+// resulting set contains elements that are present in both the current set and
+// the given set.
 //
 // If the given set is nil or empty, returns an empty set.
 // The returned set inherits the properties of the current set.
@@ -566,7 +570,8 @@ func (s *Set[E]) clone() *Set[E] {
 	return cloned
 }
 
-// options rebuilds the option list that reproduces the set's current properties.
+// options rebuilds the option list that reproduces the set's current
+// properties.
 func (s *Set[E]) options() []Option[E] {
 	ops := []Option[E]{}
 	if s.safe {
@@ -620,7 +625,8 @@ func (s *Set[E]) isSubset(other *Set[E]) bool {
 	return true
 }
 
-// isSuperset reports whether s is a superset of other. Callers must hold the locks.
+// isSuperset reports whether s is a superset of other. Callers must hold the
+// locks.
 func (s *Set[E]) isSuperset(other *Set[E]) bool {
 	if len(other.set) == 0 {
 		return true
@@ -635,10 +641,10 @@ func (s *Set[E]) isSuperset(other *Set[E]) bool {
 }
 
 // lockBothRead read-locks s and other in a stable, address-ordered sequence and
-// returns a function that releases the same locks. Ordering acquisition by mutex
-// address prevents AB-BA deadlocks between concurrent binary operations (for
-// example a.Union(b) racing b.Union(a)). Sets that are not concurrent-safe are
-// skipped, and the one mutex of a set combined with itself is locked once.
+// returns a function that releases the same locks. Ordering acquisition by
+// mutex address prevents AB-BA deadlocks between concurrent binary operations
+// (for example a.Union(b) racing b.Union(a)). Sets that are not concurrent-safe
+// are skipped, and the one mutex of a set combined with itself is locked once.
 func (s *Set[E]) lockBothRead(other *Set[E]) func() {
 	var first, second *sync.RWMutex
 	if s.safe {

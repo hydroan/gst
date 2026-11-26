@@ -25,7 +25,8 @@ type TOTPStatusService struct {
 
 // List loads the current user's TOTP devices and builds the status response
 // used by clients to render MFA settings. It requires an authenticated request,
-// returns active devices only, and derives Enabled from the active device count.
+// returns active devices only, and derives Enabled from the active device
+// count.
 func (t *TOTPStatusService) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *modelmfa.TOTPStatusRsp, err error) {
 	log := t.WithContext(ctx, ctx.Phase())
 

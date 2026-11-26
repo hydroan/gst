@@ -19,8 +19,8 @@ import (
 // The service validates the current user and session, generates a new TOTP
 // secret, renders the provisioning URL as a QR code, and stores the secret in a
 // short-lived binding challenge tied to the current user and session. The
-// response returns only the challenge ID and authenticator setup data, never the
-// raw secret as a standalone field.
+// response returns only the challenge ID and authenticator setup data, never
+// the raw secret as a standalone field.
 type TOTPBindService struct {
 	service.Base[*modelmfa.TOTPBind, *model.Empty, *modelmfa.TOTPBindRsp]
 }

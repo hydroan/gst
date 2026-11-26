@@ -189,8 +189,8 @@ func (store) DeleteSession(ctx context.Context, sessionID string) (modeliamsessi
 // Pruning keeps each index's contents honest and the ttl keeps the key itself
 // from outliving every session it names. The two are not interchangeable: Redis
 // expires whole keys and never individual sorted-set members, so without the
-// sweep an index accumulates ids that resolve to nothing, and without the ttl an
-// index nobody reads is never reclaimed at all.
+// sweep an index accumulates ids that resolve to nothing, and without the ttl
+// an index nobody reads is never reclaimed at all.
 //
 // Every index is a shared key, so its lifetime is a property of the module and
 // not of the session being written: it comes from the configured session
@@ -271,8 +271,8 @@ func (store) DropSessionIndexes(ctx context.Context, userID, sessionID string) e
 // touching the global ones.
 //
 // It exists for a member that is wrong rather than spent: an id indexed under a
-// user the snapshot says it does not belong to. The global indexes still name it
-// correctly, so they are left alone.
+// user the snapshot says it does not belong to. The global indexes still name
+// it correctly, so they are left alone.
 func (store) DropUserSessionIndexMember(ctx context.Context, userID, sessionID string) error {
 	if userID == "" || sessionID == "" {
 		return nil
@@ -304,7 +304,8 @@ func (store) ListUserSessionIDs(ctx context.Context, userID string) ([]string, e
 	return sessionIDs, nil
 }
 
-// ListAllSessionIDs returns every indexed session id, spent members swept first.
+// ListAllSessionIDs returns every indexed session id, spent members swept
+// first.
 func (store) ListAllSessionIDs(ctx context.Context) ([]string, error) {
 	if err := pruneIndex(ctx, sessionIndexAllKey(), time.Now()); err != nil {
 		return nil, err
@@ -373,16 +374,16 @@ func seenIndexRetention() time.Duration {
 
 // seenIndexCutoff returns the activity timestamp before which a member of the
 // seen index cannot belong to a live session. It is the member-level
-// counterpart of seenIndexRetention, and both read the same span so a member and
-// the key holding it cannot disagree about staleness.
+// counterpart of seenIndexRetention, and both read the same span so a member
+// and the key holding it cannot disagree about staleness.
 func seenIndexCutoff(now time.Time) time.Time {
 	return now.Add(-seenIndexRetention())
 }
 
 // ---------- activity ----------
 
-// TouchSession refreshes LastSeenAt for a session at most once per touch interval,
-// and only while the session is still stored.
+// TouchSession refreshes LastSeenAt for a session at most once per touch
+// interval, and only while the session is still stored.
 //
 // The interval is enforced against the snapshot the caller already holds, so a
 // request inside the interval costs nothing: the comparison happens before any
@@ -448,7 +449,8 @@ func touchSessionError(err error) error {
 //
 // A snapshot the index names but Redis no longer has is a stale member, not a
 // failure: it is swept and the remaining sessions are still deleted, which is
-// what keeps the operation idempotent for a caller retrying after a partial run.
+// what keeps the operation idempotent for a caller retrying after a partial
+// run.
 func (store) DeleteUserSessions(ctx context.Context, userID string) error {
 	if userID == "" {
 		return nil

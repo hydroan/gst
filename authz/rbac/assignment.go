@@ -72,7 +72,8 @@ func (r *rbac) RolesForSubject(ctx context.Context, tenant string, subject strin
 	return roles, nil
 }
 
-// SubjectsInTenant returns subjects with at least one role assignment inside tenant.
+// SubjectsInTenant returns subjects with at least one role assignment inside
+// tenant.
 //
 // It is used by IAM admin user list because IAM users do not store tenant_id.
 // The tenant-visible user set is therefore derived from role bindings first and

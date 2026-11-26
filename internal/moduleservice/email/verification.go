@@ -31,7 +31,8 @@ func verificationDelivery(token string, flow iamEmailFlowState) emailDelivery {
 	}
 }
 
-// accountEmailVerified safely returns the email verification flag for an account snapshot.
+// accountEmailVerified safely returns the email verification flag for an
+// account snapshot.
 func accountEmailVerified(user *AccountSnapshot) bool {
 	return user != nil && user.EmailVerified
 }

@@ -10,7 +10,8 @@ type TOTPBind struct {
 	model.Empty
 }
 
-// TOTPBindRsp returns the pending binding challenge and authenticator setup data.
+// TOTPBindRsp returns the pending binding challenge and authenticator setup
+// data.
 type TOTPBindRsp struct {
 	ChallengeID        string `json:"challenge_id,omitempty"`
 	OtpauthURL         string `json:"otpauth_url,omitempty"`            // TOTP provisioning URL

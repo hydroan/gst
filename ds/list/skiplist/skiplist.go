@@ -19,7 +19,8 @@ const (
 	defaultProbability = 0.25
 )
 
-// Node represents an element in the list, storing a key-value pair and multiple level pointers.
+// Node represents an element in the list, storing a key-value pair and multiple
+// level pointers.
 type Node[K comparable, V any] struct {
 	Key   K // Key of the node
 	Value V // Associated value of the node
@@ -47,8 +48,9 @@ type Node[K comparable, V any] struct {
 	next []*Node[K, V] // Pointers to the next nodes at different levels
 }
 
-// List represents a probabilistic balanced data structure for fast lookups, insertions, and deletions.
-// It maintains multiple levels of linked lists, allowing logarithmic time complexity (O(log n)) for operations.
+// List represents a probabilistic balanced data structure for fast lookups,
+// insertions, and deletions. It maintains multiple levels of linked lists,
+// allowing logarithmic time complexity (O(log n)) for operations.
 type List[K comparable, V any] struct {
 	head *Node[K, V] // Sentinel head node, does not hold any key-value pair
 
@@ -75,7 +77,8 @@ type List[K comparable, V any] struct {
 	nodeFormatter func(K, V) string
 }
 
-// New creates a new skiplist with the given comparison function and optional parameters.
+// New creates a new skiplist with the given comparison function and optional
+// parameters.
 func New[K comparable, V any](cmp func(K, K) int, ops ...Option[K, V]) (*List[K, V], error) {
 	if cmp == nil {
 		return nil, container.ErrComparisonNil
@@ -99,7 +102,8 @@ func New[K comparable, V any](cmp func(K, K) int, ops ...Option[K, V]) (*List[K,
 	return sl, nil
 }
 
-// NewOrdered is a convenience function of New that uses cmp.Compare as the comparison function.
+// NewOrdered is a convenience function of New that uses cmp.Compare as the
+// comparison function.
 func NewOrdered[K cmp.Ordered, V any](ops ...Option[K, V]) (*List[K, V], error) {
 	return New(cmp.Compare, ops...)
 }
@@ -116,7 +120,8 @@ func NewFromMap[K comparable, V any](cmp func(K, K) int, m map[K]V, ops ...Optio
 	return sl, nil
 }
 
-// NewFromOrderedMap is a convenience function of NewFromMap that uses cmp.Compare as the comparison function.
+// NewFromOrderedMap is a convenience function of NewFromMap that uses
+// cmp.Compare as the comparison function.
 func NewFromOrderedMap[K cmp.Ordered, V any](m map[K]V, ops ...Option[K, V]) (*List[K, V], error) {
 	return NewFromMap(cmp.Compare, m, ops...)
 }
@@ -176,8 +181,9 @@ func (sl *List[K, V]) put(key K, value V) {
 	sl.size++
 }
 
-// Get searches for a key in the list and returns its associated value.
-// If the key is found, it returns the value and true; otherwise, it returns the zero value and false.
+// Get searches for a key in the list and returns its associated value. If the
+// key is found, it returns the value and true; otherwise, it returns the zero
+// value and false.
 func (sl *List[K, V]) Get(key K) (v V, found bool) {
 	if sl.safe {
 		sl.mu.RLock()
@@ -204,8 +210,8 @@ func (sl *List[K, V]) Get(key K) (v V, found bool) {
 	return v, false
 }
 
-// Delete removes a key-value pair from the skiplist.
-// Returns the deleted value and true if it exists, zero value and false otherwise.
+// Delete removes a key-value pair from the skiplist. Returns the deleted value
+// and true if it exists, zero value and false otherwise.
 func (sl *List[K, V]) Delete(key K) (v V, found bool) {
 	if sl.safe {
 		sl.mu.Lock()
@@ -328,8 +334,8 @@ func (sl *List[K, V]) Max() (k K, v V, found bool) {
 	return curr.Key, curr.Value, true
 }
 
-// Floor finds the largest key less than or equal to the given key.
-// Returns the key-value pair and true if found, zero value and false if not found.
+// Floor finds the largest key less than or equal to the given key. Returns the
+// key-value pair and true if found, zero value and false if not found.
 func (sl *List[K, V]) Floor(key K) (k K, v V, found bool) {
 	if sl.safe {
 		sl.mu.RLock()
@@ -352,7 +358,8 @@ func (sl *List[K, V]) Floor(key K) (k K, v V, found bool) {
 }
 
 // Ceiling finds the smallest key greater than or equal to the given key.
-// Returns the key-value pair and true if found, zero value and false if not found.
+// Returns the key-value pair and true if found, zero value and false if not
+// found.
 func (sl *List[K, V]) Ceiling(key K) (k K, v V, found bool) {
 	if sl.safe {
 		sl.mu.RLock()

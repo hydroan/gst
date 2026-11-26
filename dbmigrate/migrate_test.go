@@ -454,7 +454,8 @@ func TestMigrateReachesAMySQLTargetUnderTheTLSKeysOfTheApplication(t *testing.T)
 	require.False(t, plan.Changed(), "the table the plan created is there")
 }
 
-// newDatabaseConfig reads back the connection the test container was prepared on.
+// newDatabaseConfig reads back the connection the test container was prepared
+// on.
 func newDatabaseConfig(hostKey, portKey, userKey, passwordKey, database string) *dbmigrate.DatabaseConfig {
 	port, err := strconv.Atoi(os.Getenv(portKey))
 	if err != nil {

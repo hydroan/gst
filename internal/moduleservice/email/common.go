@@ -240,7 +240,8 @@ func normalizeEmailScope(scope string) string {
 	return strings.ToLower(strings.TrimSpace(scope))
 }
 
-// normalizeAccountEmail normalizes an email address loaded from the host user store.
+// normalizeAccountEmail normalizes an email address loaded from the host user
+// store.
 func normalizeAccountEmail(email string) string {
 	return normalizeEmailScope(email)
 }

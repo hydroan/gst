@@ -45,11 +45,11 @@ func goFilesInDir(root string) ([]string, error) {
 	return files, err
 }
 
-// skipModuleSourceDir reports whether a directory reached while walking a module
-// source tree must not be descended into. vendor and testdata hold files that
-// are not part of the module's own source, so model discovery and file copy must
-// agree on skipping them; consuming this single decision keeps the two walks
-// from disagreeing about what counts as module code.
+// skipModuleSourceDir reports whether a directory reached while walking a
+// module source tree must not be descended into. vendor and testdata hold files
+// that are not part of the module's own source, so model discovery and file
+// copy must agree on skipping them; consuming this single decision keeps the
+// two walks from disagreeing about what counts as module code.
 func skipModuleSourceDir(root string, path string, name string) bool {
 	return path != root && (name == ggconst.DirVendor || name == ggconst.DirTestData)
 }

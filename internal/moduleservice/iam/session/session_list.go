@@ -11,7 +11,8 @@ import (
 	"github.com/hydroan/gst/service"
 )
 
-// SessionListService handles retrieval of all active sessions for the current authenticated user.
+// SessionListService handles retrieval of all active sessions for the current
+// authenticated user.
 type SessionListService struct {
 	service.Base[*modeliamsession.SelfSession, *model.Empty, *modeliamsession.SessionListRsp]
 }

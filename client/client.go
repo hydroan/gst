@@ -31,10 +31,10 @@ type Client struct {
 	logger gst.Logger
 }
 
-// New creates a new client instance with given service base address and options.
-// The address must start with "http://" or "https://". The client owns an
-// isolated http.Client with its own cookie jar, so a login response cookie is
-// carried on every later request automatically.
+// New creates a new client instance with given service base address and
+// options. The address must start with "http://" or "https://". The client owns
+// an isolated http.Client with its own cookie jar, so a login response cookie
+// is carried on every later request automatically.
 func New(addr string, opts ...Option) (*Client, error) {
 	addr = strings.TrimRight(addr, "/")
 	if !strings.HasPrefix(addr, "http://") && !strings.HasPrefix(addr, "https://") {

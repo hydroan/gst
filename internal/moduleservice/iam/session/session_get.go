@@ -10,12 +10,14 @@ import (
 	"github.com/hydroan/gst/service"
 )
 
-// SessionGetService handles retrieval of a specified session for the current authenticated user.
+// SessionGetService handles retrieval of a specified session for the current
+// authenticated user.
 type SessionGetService struct {
 	service.Base[*modeliamsession.SelfSession, *model.Empty, *modeliamsession.SessionGetRsp]
 }
 
-// Get returns the detail of a specified session for the current authenticated user.
+// Get returns the detail of a specified session for the current authenticated
+// user.
 func (s *SessionGetService) Get(ctx *gst.ServiceContext, req *model.Empty) (rsp *modeliamsession.SessionGetRsp, err error) {
 	currentSessionID, currentSession, err := CurrentSession(ctx)
 	if err != nil {

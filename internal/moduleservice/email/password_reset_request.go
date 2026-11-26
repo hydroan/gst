@@ -16,12 +16,12 @@ type PasswordResetRequestService struct {
 	service.Base[*modelemail.PasswordResetRequest, *modelemail.PasswordResetRequestReq, *modelemail.PasswordResetRequestRsp]
 }
 
-// Create starts the password reset flow for the provided email address.
-// It always returns the same public-facing message for accepted requests so the
-// caller cannot infer whether the account exists, while still enforcing throttle
-// limits before any token is created or email is sent. An address that is no
-// email address (see isEmailAddress) is refused before any of it: the refusal
-// reads the request alone and tells nothing of an account.
+// Create starts the password reset flow for the provided email address. It
+// always returns the same public-facing message for accepted requests so the
+// caller cannot infer whether the account exists, while still enforcing
+// throttle limits before any token is created or email is sent. An address that
+// is no email address (see isEmailAddress) is refused before any of it: the
+// refusal reads the request alone and tells nothing of an account.
 func (s *PasswordResetRequestService) Create(ctx *gst.ServiceContext, req *modelemail.PasswordResetRequestReq) (rsp *modelemail.PasswordResetRequestRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 	rsp = &modelemail.PasswordResetRequestRsp{Msg: publicAcceptedMessage(iamEmailFlowKindPasswordReset)}
@@ -68,8 +68,9 @@ func (s *PasswordResetRequestService) Create(ctx *gst.ServiceContext, req *model
 	return rsp, nil
 }
 
-// eligiblePasswordResetAccount ensures the reset flow is only issued for an active
-// account whose persisted email still matches the normalized request email.
+// eligiblePasswordResetAccount ensures the reset flow is only issued for an
+// active account whose persisted email still matches the normalized request
+// email.
 func eligiblePasswordResetAccount(user *AccountSnapshot, email string) bool {
 	if user == nil || user.ID == "" {
 		return false
@@ -81,8 +82,8 @@ func eligiblePasswordResetAccount(user *AccountSnapshot, email string) bool {
 }
 
 // passwordResetDelivery builds the delivery payload consumed by the configured
-// email sender. The template data mirrors the flow state so downstream renderers
-// can build reset links or customized message bodies.
+// email sender. The template data mirrors the flow state so downstream
+// renderers can build reset links or customized message bodies.
 func passwordResetDelivery(token string, flow iamEmailFlowState) emailDelivery {
 	return emailDelivery{
 		To:       flow.Email,

@@ -27,7 +27,8 @@ func NewEmailIdentity(userID, email string) (*modeliamaccount.EmailIdentity, err
 	return identity, nil
 }
 
-// LoadEmailIdentity loads the primary email identity owned by the given IAM user.
+// LoadEmailIdentity loads the primary email identity owned by the given IAM
+// user.
 func LoadEmailIdentity(ctx context.Context, userID string) (*modeliamaccount.EmailIdentity, error) {
 	if userID == "" {
 		return nil, gst.NewError(http.StatusBadRequest, userIDRequiredMsg)
@@ -46,7 +47,8 @@ func LoadEmailIdentity(ctx context.Context, userID string) (*modeliamaccount.Ema
 	return identities[0], nil
 }
 
-// LoadEmailIdentityByEmail loads the primary email identity for a normalized email address.
+// LoadEmailIdentityByEmail loads the primary email identity for a normalized
+// email address.
 func LoadEmailIdentityByEmail(ctx context.Context, email string) (*modeliamaccount.EmailIdentity, error) {
 	normalizedEmail := NormalizeEmailIdentity(email)
 	if normalizedEmail == "" {
@@ -76,7 +78,8 @@ func ApplyEmailIdentityVerification(identity *modeliamaccount.EmailIdentity, ver
 	return nil
 }
 
-// ApplyEmailIdentityChange replaces the email address and marks the new address as verified.
+// ApplyEmailIdentityChange replaces the email address and marks the new address
+// as verified.
 func ApplyEmailIdentityChange(identity *modeliamaccount.EmailIdentity, newEmail string, changedAt time.Time) error {
 	if identity == nil {
 		return errors.New("email identity is required")

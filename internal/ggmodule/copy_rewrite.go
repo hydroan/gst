@@ -310,12 +310,13 @@ func moduleCopyPackageName(dir string) string {
 }
 
 // moduleCopySelectors records every selector whose package qualifier carries a
-// copied import's new local name, in source order, flagging the ones the rewrite
-// produced. Copy renames a module's own imports (modeliamsession becomes
-// session), so a qualifier that was unmistakable in the module source can land
-// on a name the file already binds. requireUnshadowed needs both halves to tell
-// those apart: a flagged selector must reach the package, while an unflagged one
-// was already written against a declaration and is none of copy's business.
+// copied import's new local name, in source order, flagging the ones the
+// rewrite produced. Copy renames a module's own imports (modeliamsession
+// becomes session), so a qualifier that was unmistakable in the module source
+// can land on a name the file already binds. requireUnshadowed needs both
+// halves to tell those apart: a flagged selector must reach the package, while
+// an unflagged one was already written against a declaration and is none of
+// copy's business.
 type moduleCopySelectors struct {
 	copiedNames map[string]bool
 	fromRewrite []bool
@@ -352,11 +353,12 @@ func rewriteSelectorPackages(node ast.Node, names map[string]string) moduleCopyS
 
 // requireUnshadowed reports a rewritten package qualifier that a declaration in
 // the same file swallows. go/parser applies the real Go scope rules while it
-// parses, so rendering the rewritten file and reading it back says exactly which
-// qualifiers still reach the package: an identifier resolved to a declaration
-// carries an ast.Object, one left for the linker to bind does not. Rendering the
-// file also keeps the walks in lockstep — the round trip preserves the tree, so
-// the n-th matching selector here is the n-th one rewriteSelectorPackages saw.
+// parses, so rendering the rewritten file and reading it back says exactly
+// which qualifiers still reach the package: an identifier resolved to a
+// declaration carries an ast.Object, one left for the linker to bind does not.
+// Rendering the file also keeps the walks in lockstep — the round trip
+// preserves the tree, so the n-th matching selector here is the n-th one
+// rewriteSelectorPackages saw.
 func (s moduleCopySelectors) requireUnshadowed(filename string, fset *token.FileSet, file *ast.File) error {
 	if len(s.fromRewrite) == 0 {
 		return nil

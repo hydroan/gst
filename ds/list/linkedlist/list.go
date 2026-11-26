@@ -4,10 +4,10 @@
 // remove one, while the links between them stay the list's own, see Node.
 //
 // Invariants:
-// - the front node has no previous node and the back node no next one
-// - every node between them has both
-// - an empty list has neither a front nor a back node
-// - every node reachable from the front is on this list, and Len counts them
+//   - the front node has no previous node and the back node no next one
+//   - every node between them has both
+//   - an empty list has neither a front nor a back node
+//   - every node reachable from the front is on this list, and Len counts them
 package linkedlist
 
 import (
@@ -269,8 +269,8 @@ func (l *List[V]) Range(fn func(v V) bool) {
 	}
 }
 
-// Find searches for a node with the given value using the provided equality function.
-// Returns nil if not found.
+// Find searches for a node with the given value using the provided equality
+// function. Returns nil if not found.
 func (l *List[V]) Find(v V, equal func(V, V) bool) *Node[V] {
 	if equal == nil {
 		return nil
@@ -346,8 +346,8 @@ func (l *List[V]) Merge(other *List[V]) error {
 	return nil
 }
 
-// MergeSorted merges two lists into one sorted list using the provided cmp function.
-// The compare function should return:
+// MergeSorted merges two lists into one sorted list using the provided cmp
+// function. The compare function should return:
 //   - negative value if a < b.
 //   - zero if a = b.
 //   - positive value if a > b.

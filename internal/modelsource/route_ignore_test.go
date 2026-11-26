@@ -271,7 +271,8 @@ func findModels(t *testing.T, sources map[string]string) []*modelsource.Model {
 	return models
 }
 
-// parseRules builds RouteRules from raw entries, failing the test on parse errors.
+// parseRules builds RouteRules from raw entries, failing the test on parse
+// errors.
 func parseRules(t *testing.T, raws ...string) []ggconfig.RouteRule {
 	t.Helper()
 	rules := make([]ggconfig.RouteRule, 0, len(raws))

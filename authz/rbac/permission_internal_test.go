@@ -108,9 +108,10 @@ func TestSetRolePermissionsDropsDuplicates(t *testing.T) {
 // its new permission set.
 //
 // Revoking the set and then granting it back one policy at a time releases the
-// write lock between rows, which lets a reader in on an empty or partial set and
-// denies a request the role is entitled to. Replacing under a single lock closes
-// that window, so a reader sees either the whole old set or the whole new one.
+// write lock between rows, which lets a reader in on an empty or partial set
+// and denies a request the role is entitled to. Replacing under a single lock
+// closes that window, so a reader sees either the whole old set or the whole
+// new one.
 func TestSetRolePermissionsReplacesAtomically(t *testing.T) {
 	r := newRolePermissionsFixture(t)
 	ctx := context.Background()

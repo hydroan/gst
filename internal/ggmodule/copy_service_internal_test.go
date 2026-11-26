@@ -684,8 +684,8 @@ func encode() ([]byte, error) {
 	}
 }
 
-// TestRequireUsedModuleCopyImportsRejectsUnusedFrameworkImport is the guard that
-// keeps a future rewrite from shipping a service file that cannot compile.
+// TestRequireUsedModuleCopyImportsRejectsUnusedFrameworkImport is the guard
+// that keeps a future rewrite from shipping a service file that cannot compile.
 func TestRequireUsedModuleCopyImportsRejectsUnusedFrameworkImport(t *testing.T) {
 	config := moduleCopyRewriteConfig{ProjectModulePath: "tmpapp"}
 

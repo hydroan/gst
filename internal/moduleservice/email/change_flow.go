@@ -66,7 +66,8 @@ func validateEmailChangeFlow(flow iamEmailFlowState) error {
 	return nil
 }
 
-// changeConfirmDelivery builds the email payload delivered to the new email address.
+// changeConfirmDelivery builds the email payload delivered to the new email
+// address.
 func changeConfirmDelivery(token string, flow iamEmailFlowState) emailDelivery {
 	return emailDelivery{
 		To:       flow.NewEmail,

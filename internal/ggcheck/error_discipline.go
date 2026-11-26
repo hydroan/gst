@@ -46,20 +46,20 @@ var hookMethods = func() map[string]bool {
 // The analysis is purely syntactic, mirroring the other project checks. It
 // summarizes, per project function whose last result is error, where the
 // returned error values come from, then walks the flow from every service
-// method (a method on a struct embedding service.Base) and every lifecycle
-// hook of a model (a struct embedding model.Base or model.AutoBase) and
-// reports each raw source it can reach: framework and third-party calls returned as-is, raw
-// cockroachdb constructors, and identifiers whose origin cannot be resolved.
-// A model hook may return the error of a framework database call or
-// sentinel as it is: the framework answers it by its own mapping, 404 for a
-// record that does not exist, 409 for a duplicate, a stale version or a
-// foreign key, 400 for a value the table refuses or a missing version or
-// id, and 500 for the rest, so a hook that reads or writes records
-// before admitting a write is compliant without wrapping; on a service exit
-// the same error is raw, since a service answers whatever it returns.
-// database.Transaction calls are transparent: their closure exits are
-// treated as exits of the enclosing flow. Unresolvable constructs fail
-// closed, so an exit the checker cannot prove compliant is a violation.
+// method (a method on a struct embedding service.Base) and every lifecycle hook
+// of a model (a struct embedding model.Base or model.AutoBase) and reports each
+// raw source it can reach: framework and third-party calls returned as-is, raw
+// cockroachdb constructors, and identifiers whose origin cannot be resolved. A
+// model hook may return the error of a framework database call or sentinel as
+// it is: the framework answers it by its own mapping, 404 for a record that
+// does not exist, 409 for a duplicate, a stale version or a foreign key, 400
+// for a value the table refuses or a missing version or id, and 500 for the
+// rest, so a hook that reads or writes records before admitting a write is
+// compliant without wrapping; on a service exit the same error is raw, since a
+// service answers whatever it returns. database.Transaction calls are
+// transparent: their closure exits are treated as exits of the enclosing flow.
+// Unresolvable constructs fail closed, so an exit the checker cannot prove
+// compliant is a violation.
 //
 // A method call x.M() is resolved by what x is, and a name the function
 // declares itself — its receiver, a parameter, a local variable — comes

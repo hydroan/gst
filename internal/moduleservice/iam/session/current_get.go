@@ -18,7 +18,8 @@ type CurrentGetService struct {
 	service.Base[*modeliamsession.Current, *model.Empty, *modeliamsession.CurrentGetRsp]
 }
 
-// Get returns the current authenticated session together with the latest user snapshot.
+// Get returns the current authenticated session together with the latest user
+// snapshot.
 func (c *CurrentGetService) Get(ctx *gst.ServiceContext, req *model.Empty) (rsp *modeliamsession.CurrentGetRsp, err error) {
 	_, currentSession, err := CurrentSession(ctx)
 	if err != nil {

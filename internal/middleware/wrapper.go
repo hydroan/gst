@@ -28,8 +28,8 @@ const (
 	middlewareOutcomeAttrCap = 5
 )
 
-// middlewareWrapper wraps any gin middleware with OTEL tracing capabilities.
-// It creates a span for the middleware execution and records performance metrics.
+// middlewareWrapper wraps any gin middleware with OTEL tracing capabilities. It
+// creates a span for the middleware execution and records performance metrics.
 //
 // The span covers exactly what the middleware itself runs. A middleware that
 // only acts before the handler returns without calling c.Next(): gin carries

@@ -22,15 +22,14 @@ var DSLDesignRules = Check{
 	run:  checkDSLDesignRules,
 }
 
-// checkDSLDesignRules runs DSL Design() validation on every model file, so keyword
-// placement and generation-semantic violations fail gg check with the same
-// rules that block gg gen, and then reports the conflicts among the routes
+// checkDSLDesignRules runs DSL Design() validation on every model file, so
+// keyword placement and generation-semantic violations fail gg check with the
+// same rules that block gg gen, and then reports the conflicts among the routes
 // and the services of all the models the way gg gen refuses them (see
 // modelsource.RouteConflicts and modelsource.ServiceConflicts), the models read
-// the way gg gen reads them. A
-// scan the model files stopped adds nothing, the faults being reported file
-// by file above; one gst.yaml or go.mod stopped is reported here, once for
-// every check reading the models (see scanModels).
+// the way gg gen reads them. A scan the model files stopped adds nothing, the
+// faults being reported file by file above; one gst.yaml or go.mod stopped is
+// reported here, once for every check reading the models (see scanModels).
 func checkDSLDesignRules(ignore gghelper.ProjectIgnore) []string {
 	var violations []string
 

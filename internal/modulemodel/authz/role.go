@@ -162,7 +162,8 @@ func (r *Role) validateMenuIDs(ctx context.Context) error {
 	return nil
 }
 
-// CreateAfter syncs the role's permissions after the role row has been persisted.
+// CreateAfter syncs the role's permissions after the role row has been
+// persisted.
 func (r *Role) CreateAfter(ctx context.Context) error {
 	// Get the full role info before syncing permissions.
 	if err := database.Database[*Role](ctx).WithoutHook().Get(r, r.ID); err != nil {
@@ -171,7 +172,8 @@ func (r *Role) CreateAfter(ctx context.Context) error {
 	return syncRolePermissions(ctx, r)
 }
 
-// UpdateBefore validates role updates before database writes. Role ID is immutable.
+// UpdateBefore validates role updates before database writes. Role ID is
+// immutable.
 func (r *Role) UpdateBefore(ctx context.Context) error {
 	if err := r.validate(); err != nil {
 		return err
@@ -189,7 +191,8 @@ func (r *Role) UpdateBefore(ctx context.Context) error {
 	return database.Database[*Role](ctx).Get(current, r.ID)
 }
 
-// UpdateAfter syncs the role's permissions after the role row has been persisted.
+// UpdateAfter syncs the role's permissions after the role row has been
+// persisted.
 func (r *Role) UpdateAfter(ctx context.Context) error {
 	// Get the full role info before syncing permissions.
 	if err := database.Database[*Role](ctx).WithoutHook().Get(r, r.ID); err != nil {
@@ -254,14 +257,16 @@ func (r *Role) DeleteAfter(ctx context.Context) error {
 	return nil
 }
 
-// syncRolePermissions rebuilds the authz policy rows for this role from Menu.Routes.
-// Role.MenuIDs is the authoritative source for backend route grants.
+// syncRolePermissions rebuilds the authz policy rows for this role from
+// Menu.Routes. Role.MenuIDs is the authoritative source for backend route
+// grants.
 //
 // The whole set is replaced rather than diffed. Menu routes can be removed,
-// renamed, or have methods changed, and a diff-based update can leave stale policy
-// rows behind. Rebuilding the role's policy set keeps authz_rules consistent with
-// the current menu bindings, and SetRolePermissions applies it as one step so the
-// role's members are never authorized against a partially rebuilt set.
+// renamed, or have methods changed, and a diff-based update can leave stale
+// policy rows behind. Rebuilding the role's policy set keeps authz_rules
+// consistent with the current menu bindings, and SetRolePermissions applies it
+// as one step so the role's members are never authorized against a partially
+// rebuilt set.
 func syncRolePermissions(ctx context.Context, r *Role) error {
 	// Batch-load bound menus with a typed IN filter. The comma-joined ID
 	// shortcut is avoided on purpose: it breaks on integer AutoBase keys and

@@ -1,11 +1,11 @@
 // Package freelru is a sharded LRU cache that stores live values.
 //
-// It is the backend that meets the selection criteria without giving
-// anything up: writes land and stay, per-entry lifetimes are honored at
-// millisecond granularity, the entry bound evicts, and the read and write paths are
-// allocation-free and sharded rather than funneled through a worker
-// goroutine. Eviction is plain LRU per shard, so it is not scan-resistant —
-// the same trade the forwarded default makes.
+// It is the backend that meets the selection criteria without giving anything
+// up: writes land and stay, per-entry lifetimes are honored at millisecond
+// granularity, the entry bound evicts, and the read and write paths are
+// allocation-free and sharded rather than funneled through a worker goroutine.
+// Eviction is plain LRU per shard, so it is not scan-resistant — the same trade
+// the forwarded default makes.
 package freelru
 
 import (

@@ -19,7 +19,8 @@ var ServiceFileBoundaries = Check{
 	run:  checkServiceFileBoundaries,
 }
 
-// checkServiceFileBoundaries checks that each service file contains at most one service struct.
+// checkServiceFileBoundaries checks that each service file contains at most one
+// service struct.
 func checkServiceFileBoundaries(ignore gghelper.ProjectIgnore) []string {
 	var violations []string
 
@@ -48,7 +49,8 @@ func checkServiceFileBoundaries(ignore gghelper.ProjectIgnore) []string {
 	return violations
 }
 
-// checkFileServiceBoundary checks the number of service structs in one service file.
+// checkFileServiceBoundary checks the number of service structs in one service
+// file.
 func checkFileServiceBoundary(filePath string) []string {
 	violations := make([]string, 0, 1)
 

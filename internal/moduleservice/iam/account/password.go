@@ -69,7 +69,8 @@ func NewPasswordCredential(ctx context.Context, userID, password string, mustCha
 	return credential, nil
 }
 
-// LoadPasswordCredential loads the password credential owned by the given IAM user.
+// LoadPasswordCredential loads the password credential owned by the given IAM
+// user.
 func LoadPasswordCredential(ctx context.Context, userID string) (*modeliamaccount.PasswordCredential, error) {
 	if userID == "" {
 		return nil, gst.NewError(http.StatusBadRequest, userIDRequiredMsg)
@@ -88,12 +89,12 @@ func LoadPasswordCredential(ctx context.Context, userID string) (*modeliamaccoun
 	return credentials[0], nil
 }
 
-// VerifyPasswordCredential verifies a plaintext password against a credential hash.
-// The bcrypt comparison is deliberately slow (tens of milliseconds) to resist
-// brute-force attacks, so it runs inside an iam.VerifyPassword span to keep that
-// cost visible in request traces. A password mismatch is an expected business
-// outcome and never marks the span as failed; only unexpected verification
-// errors are recorded as span errors.
+// VerifyPasswordCredential verifies a plaintext password against a credential
+// hash. The bcrypt comparison is deliberately slow (tens of milliseconds) to
+// resist brute-force attacks, so it runs inside an iam.VerifyPassword span to
+// keep that cost visible in request traces. A password mismatch is an expected
+// business outcome and never marks the span as failed; only unexpected
+// verification errors are recorded as span errors.
 func VerifyPasswordCredential(ctx context.Context, credential *modeliamaccount.PasswordCredential, password string) error {
 	_, span := tracing.StartSpan(ctx, tracing.SpanName("iam", "VerifyPassword"))
 	defer span.End()
@@ -116,7 +117,8 @@ func VerifyPasswordCredential(ctx context.Context, credential *modeliamaccount.P
 	return err
 }
 
-// ApplyPasswordCredentialUpdate replaces the credential hash and password-change state.
+// ApplyPasswordCredentialUpdate replaces the credential hash and
+// password-change state.
 func ApplyPasswordCredentialUpdate(ctx context.Context, credential *modeliamaccount.PasswordCredential, newPassword string, mustChangePassword bool) error {
 	if credential == nil {
 		return gst.NewError(http.StatusInternalServerError, passwordCredentialRequiredMsg)

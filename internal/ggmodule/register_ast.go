@@ -26,10 +26,10 @@ func existingModuleAlias(file *ast.File, module Module) (string, bool) {
 }
 
 // registeredModuleAlias requires both sides of registration to be present: an
-// import of the framework module and a matching alias.Register() call in an init
-// function. This makes add idempotent and lets remove fail loudly when a project
-// is only partially edited instead of guessing which stray import or call the
-// user intended to manage.
+// import of the framework module and a matching alias.Register() call in an
+// init function. This makes add idempotent and lets remove fail loudly when a
+// project is only partially edited instead of guessing which stray import or
+// call the user intended to manage.
 //
 // It looks only inside init functions, because that is the only place gg module
 // add writes to. checkModuleNotRegistered answers a similar question with a
@@ -149,10 +149,10 @@ func ensureRegisterCall(file *ast.File, alias string) bool {
 		func(pos token.Pos) ast.Stmt { return registerCallStmt(alias, pos) })
 }
 
-// ensureInitCall appends the statement stmt builds to an existing init function,
-// creating one when the file has no init yet. Calls are appended rather than
-// inserted so existing framework/project setup keeps its order, and stmt is
-// anchored at the init block's closing brace.
+// ensureInitCall appends the statement stmt builds to an existing init
+// function, creating one when the file has no init yet. Calls are appended
+// rather than inserted so existing framework/project setup keeps its order, and
+// stmt is anchored at the init block's closing brace.
 func ensureInitCall(file *ast.File, exists func(*ast.FuncDecl) bool, stmt func(pos token.Pos) ast.Stmt) bool {
 	initFn := ensureInitFunc(file)
 	if exists(initFn) {

@@ -36,7 +36,8 @@ type TOTPUnbindService struct {
 	service.Base[*modelmfa.TOTPUnbind, *modelmfa.TOTPUnbindReq, *modelmfa.TOTPUnbindRsp]
 }
 
-// Create validates fresh authentication, removes the target device, and returns the remaining active count.
+// Create validates fresh authentication, removes the target device, and returns
+// the remaining active count.
 func (t *TOTPUnbindService) Create(ctx *gst.ServiceContext, req *modelmfa.TOTPUnbindReq) (rsp *modelmfa.TOTPUnbindRsp, err error) {
 	log := t.WithContext(ctx, ctx.Phase())
 
@@ -145,7 +146,8 @@ func (t *TOTPUnbindService) Create(ctx *gst.ServiceContext, req *modelmfa.TOTPUn
 	return rsp, nil
 }
 
-// countTOTPUnbindVerificationMethods counts which fresh-auth methods are present.
+// countTOTPUnbindVerificationMethods counts which fresh-auth methods are
+// present.
 func countTOTPUnbindVerificationMethods(req *modelmfa.TOTPUnbindReq) int {
 	count := 0
 	if strings.TrimSpace(req.TOTPCode) != "" {
@@ -208,7 +210,8 @@ func validateTOTPCodeForDevices(ctx context.Context, userID, code string, device
 	return errTOTPCodeInvalid
 }
 
-// findTOTPUnbindDevice selects the target active device from the locked device list.
+// findTOTPUnbindDevice selects the target active device from the locked device
+// list.
 func findTOTPUnbindDevice(devices []*modelmfa.TOTPDevice, deviceID string) *modelmfa.TOTPDevice {
 	deviceID = strings.TrimSpace(deviceID)
 	for _, device := range devices {
@@ -222,7 +225,8 @@ func findTOTPUnbindDevice(devices []*modelmfa.TOTPDevice, deviceID string) *mode
 	return nil
 }
 
-// countRemainingTOTPDevices returns the active-device count after removing one device.
+// countRemainingTOTPDevices returns the active-device count after removing one
+// device.
 func countRemainingTOTPDevices(devices []*modelmfa.TOTPDevice, removedDeviceID string) int {
 	count := 0
 	for _, device := range devices {

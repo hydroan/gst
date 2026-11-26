@@ -29,8 +29,8 @@ func WithMaxLevel[K comparable, V any](maxLevel int) Option[K, V] {
 	}
 }
 
-// WithProbability creates an Option to set the probability factor for the skiplist.
-// The probability must be in the range (0,1).
+// WithProbability creates an Option to set the probability factor for the
+// skiplist. The probability must be in the range (0,1).
 func WithProbability[K comparable, V any](p float64) Option[K, V] {
 	return func(sl *List[K, V]) error {
 		if p < 0.0 || p > 1.0 {
@@ -41,8 +41,8 @@ func WithProbability[K comparable, V any](p float64) Option[K, V] {
 	}
 }
 
-// WithNodeFormatter creates an Option to set the node formatter for the skiplist.
-// Affects method: String().
+// WithNodeFormatter creates an Option to set the node formatter for the
+// skiplist. Affects method: String().
 func WithNodeFormatter[K comparable, V any](fn func(k K, v V) string) Option[K, V] {
 	return func(sl *List[K, V]) error {
 		if fn == nil {

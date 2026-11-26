@@ -17,8 +17,8 @@ type ChangeResendService struct {
 	service.Base[*modelemail.ChangeResend, *modelemail.ChangeResendReq, *modelemail.ChangeResendRsp]
 }
 
-// Create revalidates the current account and reissues the confirmation email for
-// the target new email address.
+// Create revalidates the current account and reissues the confirmation email
+// for the target new email address.
 func (s *ChangeResendService) Create(ctx *gst.ServiceContext, req *modelemail.ChangeResendReq) (rsp *modelemail.ChangeResendRsp, err error) {
 	log := s.WithContext(ctx, ctx.Phase())
 	if ctx == nil || strings.TrimSpace(ctx.UserID()) == "" {

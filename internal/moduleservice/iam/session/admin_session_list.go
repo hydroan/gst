@@ -14,7 +14,8 @@ import (
 	"github.com/hydroan/gst/service"
 )
 
-// AdminSessionListService handles retrieval of all sessions grouped by user for privileged administrators.
+// AdminSessionListService handles retrieval of all sessions grouped by user for
+// privileged administrators.
 type AdminSessionListService struct {
 	service.Base[*modeliamsession.AdminSession, *model.Empty, *modeliamsession.AdminSessionListRsp]
 }
@@ -24,7 +25,8 @@ type adminSessionOwnerItem struct {
 	lastActive time.Time
 }
 
-// List returns all indexed sessions grouped by user for a privileged administrator.
+// List returns all indexed sessions grouped by user for a privileged
+// administrator.
 func (a *AdminSessionListService) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *modeliamsession.AdminSessionListRsp, err error) {
 	if err = ensureAdminSessionActor(ctx); err != nil {
 		return nil, err

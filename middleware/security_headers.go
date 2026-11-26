@@ -39,7 +39,8 @@ type SecurityHeadersConfig struct {
 // This helps protect against various web vulnerabilities.
 //
 // Parameters:
-//   - config: Configuration for security headers. If nil, default secure headers will be used.
+//   - config: Configuration for security headers. If nil, default secure
+//     headers will be used.
 //
 // Returns:
 //   - A gin.HandlerFunc that sets security headers

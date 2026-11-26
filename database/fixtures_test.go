@@ -274,10 +274,9 @@ func (t *sampleToken) Scan(src any) error {
 	return err
 }
 
-// TestTypedRecord holds columns whose Go shape does not tell what gorm
-// stores: a time held in sql.NullTime, an integer held in sql.NullInt64, a
-// string its type tag declares a JSON column, and datatypes.TimeOfDay, a time of
-// day.
+// TestTypedRecord holds columns whose Go shape does not tell what gorm stores:
+// a time held in sql.NullTime, an integer held in sql.NullInt64, a string its
+// type tag declares a JSON column, and datatypes.TimeOfDay, a time of day.
 type TestTypedRecord struct {
 	Label   string              `json:"label" gorm:"size:191"`
 	Settled sql.NullTime        `json:"settled"`

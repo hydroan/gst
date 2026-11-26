@@ -28,8 +28,9 @@ const (
 	LOGGER_SQL_CALLER_SKIP_PREFIXES = "LOGGER_SQL_CALLER_SKIP_PREFIXES"
 )
 
-// Logger represents section "logger" for client-side or server-side configuration,
-// and there is only one copy during the application entire lifetime.
+// Logger represents section "logger" for client-side or server-side
+// configuration, and there is only one copy during the application entire
+// lifetime.
 type Logger struct {
 	// Output selects where every log stream writes (stdout|file), in any
 	// letter case. Any other value is a configuration error at startup.

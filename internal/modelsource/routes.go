@@ -164,7 +164,8 @@ func RouterTargetForAction(route string, design *dsl.Design, action *dsl.Action)
 // For example:
 //   - model/sample.go with Endpoint("samples") -> samples
 //   - model/sample/item.go with Endpoint("items") -> samples/items
-//   - model/sample/item/entry.go with Endpoint("entries") -> samples/items/entries
+//   - model/sample/item/entry.go with Endpoint("entries") ->
+//     samples/items/entries
 func buildHierarchicalEndpoints(allModels []*Model) {
 	// The endpoint each directory is addressed by, keyed by directory.
 	dirEndpointMap := make(map[string]string)

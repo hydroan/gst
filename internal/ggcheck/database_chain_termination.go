@@ -15,8 +15,8 @@ import (
 )
 
 // databaseTerminalMethods lists the gst.Database methods that finish an
-// operation chain. TestDatabaseChainMethodSetsMatchDatabaseInterfaces guards this
-// set against drifting from the interface declaration.
+// operation chain. TestDatabaseChainMethodSetsMatchDatabaseInterfaces guards
+// this set against drifting from the interface declaration.
 var databaseTerminalMethods = map[string]bool{
 	"Create":     true,
 	"Delete":     true,
@@ -31,8 +31,8 @@ var databaseTerminalMethods = map[string]bool{
 	"Count":      true,
 }
 
-// databaseChainMethods lists the gst.DatabaseOption methods that keep the
-// chain open. TestDatabaseChainMethodSetsMatchDatabaseInterfaces guards this set
+// databaseChainMethods lists the gst.DatabaseOption methods that keep the chain
+// open. TestDatabaseChainMethodSetsMatchDatabaseInterfaces guards this set
 // against drifting from the interface declaration.
 var databaseChainMethods = map[string]bool{
 	"WithQuery":        true,

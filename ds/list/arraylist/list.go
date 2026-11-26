@@ -1,4 +1,5 @@
-// Package arraylist provides a generic implementation of a resizable array-backed list.
+// Package arraylist provides a generic implementation of a resizable
+// array-backed list.
 package arraylist
 
 import (
@@ -28,11 +29,11 @@ type List[E any] struct {
 	mu   sync.RWMutex
 }
 
-// New creates and returns a new array-backed list.
-// The provided cmp orders the elements: Sort sorts by it, and Contains,
-// IndexOf and Remove treat two elements as equal when it returns 0. A nil
-// cmp fails with container.ErrComparisonNil.
-// Optional options can be passed to modify the list's behavior, such as enabling concurrent safety.
+// New creates and returns a new array-backed list. The provided cmp orders the
+// elements: Sort sorts by it, and Contains, IndexOf and Remove treat two
+// elements as equal when it returns 0. A nil cmp fails with
+// container.ErrComparisonNil. Optional options can be passed to modify the
+// list's behavior, such as enabling concurrent safety.
 func New[E any](cmp func(E, E) int, ops ...Option[E]) (*List[E], error) {
 	if cmp == nil {
 		return nil, container.ErrComparisonNil
@@ -54,14 +55,15 @@ func New[E any](cmp func(E, E) int, ops ...Option[E]) (*List[E], error) {
 
 // NewOrdered creates and returns a new array-backed list for ordered elements.
 // It uses cmp.Compare[E] as the default comparison function for elements.
-// Optional options can be passed to modify the list's behavior, such as enabling concurrent safety.
+// Optional options can be passed to modify the list's behavior, such as
+// enabling concurrent safety.
 func NewOrdered[E cmp.Ordered](ops ...Option[E]) (*List[E], error) {
 	return New(cmp.Compare[E], ops...)
 }
 
 // NewFromSlice creates a new array-backed list holding a copy of the given
-// slice. The provided cmp orders the elements, as in New.
-// Optional options can be passed to modify the list's behavior, such as enabling concurrent safety.
+// slice. The provided cmp orders the elements, as in New. Optional options can
+// be passed to modify the list's behavior, such as enabling concurrent safety.
 func NewFromSlice[E any](cmp func(E, E) int, elements []E, ops ...Option[E]) (*List[E], error) {
 	l, err := New(cmp, ops...)
 	if err != nil {
@@ -72,9 +74,10 @@ func NewFromSlice[E any](cmp func(E, E) int, elements []E, ops ...Option[E]) (*L
 	return l, nil
 }
 
-// NewFromOrderedSlice creates a new array-backed list from the given slice.
-// It uses cmp.Compare[E] as the default comparison function for elements.
-// Optional options can be passed to modify the list's behavior, such as enabling concurrent safety.
+// NewFromOrderedSlice creates a new array-backed list from the given slice. It
+// uses cmp.Compare[E] as the default comparison function for elements. Optional
+// options can be passed to modify the list's behavior, such as enabling
+// concurrent safety.
 func NewFromOrderedSlice[E cmp.Ordered](elements []E, ops ...Option[E]) (*List[E], error) {
 	return NewFromSlice(cmp.Compare[E], elements, ops...)
 }
@@ -179,8 +182,8 @@ func (l *List[E]) Remove(e E) {
 	}
 }
 
-// RemoveAt removes the element at the given index.
-// If the index out of range, this function is no-op and returns zero value of E.
+// RemoveAt removes the element at the given index. If the index out of range,
+// this function is no-op and returns zero value of E.
 func (l *List[E]) RemoveAt(index int) E {
 	if l.safe {
 		l.mu.Lock()

@@ -7,7 +7,8 @@ import (
 // Option is a functional option type for configuring a red-black tree.
 type Option[K comparable, V any] func(t *Tree[K, V]) error
 
-// WithSafe creates an Option that makes the red-black tree safe for concurrent use.
+// WithSafe creates an Option that makes the red-black tree safe for concurrent
+// use.
 func WithSafe[K comparable, V any]() Option[K, V] {
 	return func(t *Tree[K, V]) error {
 		t.safe = true
@@ -15,8 +16,8 @@ func WithSafe[K comparable, V any]() Option[K, V] {
 	}
 }
 
-// WithNodeFormatter creates an Option that sets the node formatter when tree.String() is called.
-// Example usage:
+// WithNodeFormatter creates an Option that sets the node formatter when
+// tree.String() is called. Example usage:
 //
 //	tree, _ := rbtree.NewOrdered(rbtree.WithNodeFormatter(func(k string, v int) string {
 //		return fmt.Sprintf("%s:%d ", k, v)

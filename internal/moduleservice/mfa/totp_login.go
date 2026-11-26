@@ -66,7 +66,8 @@ func LoginSecondFactorVerifier(ctx *gst.ServiceContext, userID string, factor au
 	return verifyLoginBackupCode(ctx, userID, backupCode)
 }
 
-// listActiveLoginTOTPDevices loads the active devices that make login MFA mandatory.
+// listActiveLoginTOTPDevices loads the active devices that make login MFA
+// mandatory.
 func listActiveLoginTOTPDevices(ctx *gst.ServiceContext, userID string) ([]*modelmfa.TOTPDevice, error) {
 	devices := make([]*modelmfa.TOTPDevice, 0)
 	if err := database.Database[*modelmfa.TOTPDevice](ctx).WithQuery(&modelmfa.TOTPDevice{
@@ -120,7 +121,8 @@ func verifyLoginBackupCode(ctx *gst.ServiceContext, userID, code string) error {
 	return nil
 }
 
-// findLoginTOTPDeviceByCode returns the first active device that accepts the code.
+// findLoginTOTPDeviceByCode returns the first active device that accepts the
+// code.
 func findLoginTOTPDeviceByCode(devices []*modelmfa.TOTPDevice, code string) *modelmfa.TOTPDevice {
 	for _, device := range devices {
 		if device == nil || !device.IsActive {

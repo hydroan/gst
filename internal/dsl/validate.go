@@ -154,14 +154,14 @@ var actionOnlyMethodNames = map[string]bool{
 	"StreamingResult":  true,
 }
 
-// Validate checks DSL keyword placement and generation semantics for one model file.
-// It intentionally validates only model Design() methods for structs embedding
-// model.Base, model.AutoBase or model.Empty, matching Parse's model discovery
-// scope, and rejects the embeddings that scope cannot see: those base types
-// embedded through a pointer (see validatePointerEmbeddings).
-// Do not duplicate Go compiler or type-checker diagnostics here, such as wrong
-// argument counts or incompatible argument types. Keep this validator focused on
-// DSL structure, keyword placement, and generation-specific semantics.
+// Validate checks DSL keyword placement and generation semantics for one model
+// file. It intentionally validates only model Design() methods for structs
+// embedding model.Base, model.AutoBase or model.Empty, matching Parse's model
+// discovery scope, and rejects the embeddings that scope cannot see: those base
+// types embedded through a pointer (see validatePointerEmbeddings). Do not
+// duplicate Go compiler or type-checker diagnostics here, such as wrong
+// argument counts or incompatible argument types. Keep this validator focused
+// on DSL structure, keyword placement, and generation-specific semantics.
 func Validate(file *ast.File, modelDir string, filename string) []error {
 	designBase, designEmpty := parse(file)
 	for name := range designBase {

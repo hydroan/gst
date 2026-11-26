@@ -14,7 +14,8 @@ import (
 	"github.com/hydroan/gst/internal/service"
 )
 
-// Base is the default no-op service implementation exposed to application services.
+// Base is the default no-op service implementation exposed to application
+// services.
 type Base[M gst.Model, REQ gst.Request, RSP gst.Response] = service.Base[M, REQ, RSP]
 
 // Phase is a phase of an action: the action itself, Create and its kind,
@@ -72,8 +73,8 @@ const (
 // Register registers a service type for the phase of the route.
 //
 // Register is the public service registration entry point for application and
-// generated service code. Framework internals handle service lookup and concrete
-// instance registration through an internal registry.
+// generated service code. Framework internals handle service lookup and
+// concrete instance registration through an internal registry.
 //
 // The route names the one the matching router.Register call registers,
 // spelled either way router.APIPath accepts, /api/samples or samples,
@@ -103,7 +104,8 @@ const (
 //   - If Register is called in an "init" function, logger.Service may be nil,
 //     and the service.Logger will be set later, while the framework bootstraps.
 //   - If Register is called after initialization (e.g., in Init function),
-//     logger.Service is already available, and the service.Logger will be set directly.
+//     logger.Service is already available, and the service.Logger will be set
+//     directly.
 func Register[S gst.Service[M, REQ, RSP], M gst.Model, REQ gst.Request, RSP gst.Response](phase apiaction.Phase, route string) {
 	service.Register[S, M, REQ, RSP](phase, route)
 }

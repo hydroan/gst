@@ -41,8 +41,8 @@ func (s *ChangeRequestService) Create(ctx *gst.ServiceContext, req *modelemail.C
 	return rsp, nil
 }
 
-// prepareEmailChangeRequest loads the current account and validates whether the new
-// email can enter the change flow.
+// prepareEmailChangeRequest loads the current account and validates whether the
+// new email can enter the change flow.
 func prepareEmailChangeRequest(ctx *gst.ServiceContext, newEmail string) (*AccountSnapshot, string, *modelemail.ChangeRequestRsp, error) {
 	if ctx == nil || strings.TrimSpace(ctx.UserID()) == "" {
 		return nil, "", nil, gst.NewError(http.StatusUnauthorized, authenticationRequiredMsg)

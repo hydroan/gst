@@ -132,8 +132,8 @@ func (idx *sourceIndex) addConstants(info *types.Info, decl *ast.GenDecl) {
 	}
 }
 
-// usesBitwiseOperator reports whether expr applies a bitwise operator: 1 << iota,
-// read | write and all &^ write do, iota + 1 and first * 10 do not.
+// usesBitwiseOperator reports whether expr applies a bitwise operator: 1 <<
+// iota, read | write and all &^ write do, iota + 1 and first * 10 do not.
 func usesBitwiseOperator(expr ast.Expr) bool {
 	found := false
 	ast.Inspect(expr, func(n ast.Node) bool {

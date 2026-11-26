@@ -12,7 +12,8 @@ import (
 	modeliamuser "github.com/hydroan/gst/internal/modulemodel/iam/user"
 )
 
-// ValidateSessionUserState refreshes the mutable user state required to keep using a session.
+// ValidateSessionUserState refreshes the mutable user state required to keep
+// using a session.
 func ValidateSessionUserState(ctx context.Context, session modeliamsession.Session) (modeliamsession.Session, error) {
 	if session.UserID == "" {
 		return session, gst.NewError(http.StatusUnauthorized, sessionInvalidMsg)

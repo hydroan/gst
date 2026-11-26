@@ -76,9 +76,9 @@ func (r *rbac) SetRolePermissions(
 // reach subjects holding no role at all.
 //
 // It shares its replacement with SetRolePermissions: the implicit role differs
-// from a real one only in the tenant and role the policies are stored under, and
-// keeping one implementation means the atomicity both depend on cannot hold for
-// one of them and not the other.
+// from a real one only in the tenant and role the policies are stored under,
+// and keeping one implementation means the atomicity both depend on cannot hold
+// for one of them and not the other.
 func (r *rbac) SetPermissionsForAuthenticated(ctx context.Context, permissions []gst.Permission) (err error) {
 	ctx, finishSpan := traceRBAC(ctx, "set_permissions_for_authenticated",
 		rbacTraceFields(authenticatedPolicyTenant, RoleAuthenticated))

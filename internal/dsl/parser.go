@@ -15,17 +15,20 @@ import (
 
 var pluralizeCli = pluralize.NewClient()
 
-// Parse analyzes a Go source file and extracts DSL design information from models.
-// It looks for structs that have a Design() method and parses the DSL calls within that method.
+// Parse analyzes a Go source file and extracts DSL design information from
+// models. It looks for structs that have a Design() method and parses the DSL
+// calls within that method.
 //
-// The parser identifies models by finding structs that embed either model.Base or model.Empty,
-// then locates their Design() method and analyzes the DSL function calls to build the Design configuration.
+// The parser identifies models by finding structs that embed either model.Base
+// or model.Empty, then locates their Design() method and analyzes the DSL
+// function calls to build the Design configuration.
 //
 // Parameters:
 //   - file: The parsed AST file node to analyze
 //
 // Returns:
-//   - map[string]*Design: A map where keys are model names and values are their parsed Design configurations
+//   - map[string]*Design: A map where keys are model names and values are their
+//     parsed Design configurations
 //
 // Example usage:
 //
@@ -36,7 +39,8 @@ var pluralizeCli = pluralize.NewClient()
 //
 // The parser supports various DSL patterns:
 //   - Global settings: Endpoint("segment"), Migrate()
-//   - Action configuration: Create(func() { Service(); Payload[Type](); Result[Type]() })
+//   - Action configuration: Create(func() { Service(); Payload[Type]();
+//     Result[Type]() })
 //   - Service and visibility: Service(), Public()
 func Parse(file *ast.File) map[string]*Design {
 	designBase, designEmpty := parse(file)
@@ -82,7 +86,8 @@ func Parse(file *ast.File) map[string]*Design {
 	return m
 }
 
-// initDefaultAction initializes default payload and result values for a declared action.
+// initDefaultAction initializes default payload and result values for a
+// declared action.
 //
 // With neither side declared both default to the pointer type of the model
 // name (e.g., "*User" for model "User"), which keeps the built-in CRUD
@@ -128,19 +133,23 @@ func isFixedContractPhase(phase apiaction.Phase) bool {
 	return phase == apiaction.Import || phase == apiaction.Export
 }
 
-// parse analyzes an AST file to find all models and their Design method declarations.
-// It identifies models by looking for structs that embed model.Base or model.Empty,
-// then searches for their corresponding Design() method declarations.
+// parse analyzes an AST file to find all models and their Design method
+// declarations. It identifies models by looking for structs that embed
+// model.Base or model.Empty, then searches for their corresponding Design()
+// method declarations.
 //
 // Parameters:
 //   - file: The AST file node to analyze
 //
 // Returns:
-//   - First map: Models with model.Base embedding (modelName -> Design method AST node)
-//   - Second map: Models with model.Empty embedding (modelName -> Design method AST node)
+//   - First map: Models with model.Base embedding (modelName -> Design method
+//     AST node)
+//   - Second map: Models with model.Empty embedding (modelName -> Design method
+//     AST node)
 //
-// If a model doesn't have a Design() method, the corresponding value in the map is nil.
-// This allows the caller to generate default design configurations for such models.
+// If a model doesn't have a Design() method, the corresponding value in the map
+// is nil. This allows the caller to generate default design configurations for
+// such models.
 func parse(file *ast.File) (map[string]*ast.FuncDecl, map[string]*ast.FuncDecl) {
 	designBase := make(map[string]*ast.FuncDecl)
 	designEmpty := make(map[string]*ast.FuncDecl)
@@ -197,10 +206,10 @@ func parse(file *ast.File) (map[string]*ast.FuncDecl, map[string]*ast.FuncDecl) 
 	return designBase, designEmpty
 }
 
-// parseDesign parses a Design method's AST declaration and extracts the DSL configuration.
-// It analyzes the function body to find DSL calls like Endpoint(), Migrate(),
-// and action configurations like
-// Create(func() { Service(); Payload[Type](); Result[Type]() }).
+// parseDesign parses a Design method's AST declaration and extracts the DSL
+// configuration. It analyzes the function body to find DSL calls like
+// Endpoint(), Migrate(), and action configurations like Create(func() {
+// Service(); Payload[Type](); Result[Type]() }).
 //
 // Parameters:
 //   - fn: The AST function declaration for the Design() method
@@ -209,7 +218,8 @@ func parse(file *ast.File) (map[string]*ast.FuncDecl, map[string]*ast.FuncDecl) 
 //   - *Design: The parsed design configuration with default values applied
 //
 // If fn is nil or has no body, returns a default Design, with Migrate=false.
-// The parser recognizes various DSL patterns and converts them into the Design structure.
+// The parser recognizes various DSL patterns and converts them into the Design
+// structure.
 func parseDesign(fn *ast.FuncDecl) *Design {
 	defaults := &Design{}
 	// model don't have "Design" method, so returns the default design values.
@@ -420,9 +430,9 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 	return defaults
 }
 
-// parseAction parses DSL configuration from an action function's body.
-// It extracts Payload, Result types and configuration flags (Service, Public)
-// from the function literal passed to action methods like Create(), Update(), etc.
+// parseAction parses DSL configuration from an action function's body. It
+// extracts Payload, Result types and configuration flags (Service, Public) from
+// the function literal passed to action methods like Create(), Update(), etc.
 //
 // Parameters:
 //   - phase: The expected phase to match (e.g., apiaction.Create,
@@ -435,8 +445,8 @@ func parseDesign(fn *ast.FuncDecl) *Design {
 //   - bool: true if parsing was successful, false otherwise
 //
 // The function parses DSL calls within the action function body:
-//   - Service(), Service("name"): Marks the action for custom service generation
-//     and registration, named after the phase or after name
+//   - Service(), Service("name"): Marks the action for custom service
+//     generation and registration, named after the phase or after name
 //   - Public(): Marks the API endpoint as public
 //   - Exact(): Registers the action route exactly as declared
 //   - Payload[Type]: Sets the request payload type
@@ -635,8 +645,8 @@ func parseAction(phase apiaction.Phase, funcName string, expr ast.Expr) (*Action
 // Returns:
 //   - []string: Names of all struct types that embed a database base model
 //
-// This function is used to identify models that should have full database functionality,
-// as opposed to lightweight models that embed model.Empty.
+// This function is used to identify models that should have full database
+// functionality, as opposed to lightweight models that embed model.Empty.
 func FindAllModelBase(file *ast.File) []string {
 	names := make([]string, 0)
 	if file == nil {
@@ -677,8 +687,8 @@ func FindAllModelBase(file *ast.File) []string {
 // Returns:
 //   - []string: Names of all struct types that embed model.Empty
 //
-// This function is used to identify lightweight models that typically don't require
-// database migration and have simplified API generation.
+// This function is used to identify lightweight models that typically don't
+// require database migration and have simplified API generation.
 func FindAllModelEmpty(file *ast.File) []string {
 	names := make([]string, 0)
 	if file == nil {

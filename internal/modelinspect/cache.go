@@ -92,7 +92,8 @@ func inspectionCacheKey(files map[string]string, modelDir string, ignore gghelpe
 	return hex.EncodeToString(digest.Sum(nil)), nil
 }
 
-// readInspectionCache returns a previously stored inspection result for the key.
+// readInspectionCache returns a previously stored inspection result for the
+// key.
 func readInspectionCache(key string) ([]ModelColumns, bool) {
 	dir, err := inspectionCacheDir()
 	if err != nil {
@@ -142,9 +143,9 @@ func writeInspectionCache(key string, resolved []ModelColumns) error {
 	return nil
 }
 
-// inspectionCacheDir returns the per-project cache directory. Results live under
-// the user cache directory rather than in the project, so a generated tree
-// stays free of tooling state.
+// inspectionCacheDir returns the per-project cache directory. Results live
+// under the user cache directory rather than in the project, so a generated
+// tree stays free of tooling state.
 func inspectionCacheDir() (string, error) {
 	base, err := os.UserCacheDir()
 	if err != nil {

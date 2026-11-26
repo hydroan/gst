@@ -11,8 +11,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// PasswordResetConfirmService handles the token confirmation step that finalizes
-// the email-driven password reset flow.
+// PasswordResetConfirmService handles the token confirmation step that
+// finalizes the email-driven password reset flow.
 type PasswordResetConfirmService struct {
 	service.Base[*modelemail.PasswordResetConfirm, *modelemail.PasswordResetConfirmReq, *modelemail.PasswordResetConfirmRsp]
 }

@@ -115,11 +115,10 @@ func setLogger(l gst.Logger) {
 	log = l
 }
 
-// packageLogger returns the package's logger: the bound lock stream, or, until the
-// lifecycle binds it — a try made during Bootstrap, a unit test — a logger
-// that writes to the global log stream. Opening lock.log here instead would
-// put a second rotation instance on the file once the lifecycle opens its
-// own.
+// packageLogger returns the package's logger: the bound lock stream, or, until
+// the lifecycle binds it — a try made during Bootstrap, a unit test — a logger
+// that writes to the global log stream. Opening lock.log here instead would put
+// a second rotation instance on the file once the lifecycle opens its own.
 func packageLogger() gst.Logger {
 	mu.Lock()
 	defer mu.Unlock()

@@ -19,8 +19,8 @@ type Stack[E any] struct {
 	mu   sync.RWMutex
 }
 
-// New creates and initializes an empty stack.
-// Options can be provided to customize the stack's properties (e.g., thread safety).
+// New creates and initializes an empty stack. Options can be provided to
+// customize the stack's properties (e.g., thread safety).
 func New[E any](ops ...Option[E]) (s *Stack[E], err error) {
 	s = &Stack[E]{}
 	for _, op := range ops {
@@ -39,8 +39,8 @@ func New[E any](ops ...Option[E]) (s *Stack[E], err error) {
 	return s, nil
 }
 
-// NewFromSlice creates and initializes a stack from the provided slice.
-// Options can be provided to customize the stack's properties (e.g., thread safety).
+// NewFromSlice creates and initializes a stack from the provided slice. Options
+// can be provided to customize the stack's properties (e.g., thread safety).
 func NewFromSlice[E any](slice []E, ops ...Option[E]) (*Stack[E], error) {
 	s, err := New(ops...)
 	if err != nil {
@@ -55,8 +55,8 @@ func NewFromSlice[E any](slice []E, ops ...Option[E]) (*Stack[E], error) {
 }
 
 // NewFromMapKeys creates and initializes a stack from the provided map keys.
-// Options can be provided to customize the stack's properties (e.g., thread safety).
-// Returns an empty stack if the provided map is nil or empty.
+// Options can be provided to customize the stack's properties (e.g., thread
+// safety). Returns an empty stack if the provided map is nil or empty.
 func NewFromMapKeys[K comparable, V any](m map[K]V, ops ...Option[K]) (*Stack[K], error) {
 	s, err := New(ops...)
 	if err != nil {
@@ -70,9 +70,9 @@ func NewFromMapKeys[K comparable, V any](m map[K]V, ops ...Option[K]) (*Stack[K]
 	return s, nil
 }
 
-// NewFromMapValues creates a stack from the provided map values.
-// Options can be provided to customize the stack's properties (e.g., thread safety).
-// Returns an empty stack if the provided map is nil or empty.
+// NewFromMapValues creates a stack from the provided map values. Options can be
+// provided to customize the stack's properties (e.g., thread safety). Returns
+// an empty stack if the provided map is nil or empty.
 func NewFromMapValues[K comparable, V any](m map[K]V, ops ...Option[V]) (*Stack[V], error) {
 	s, err := New(ops...)
 	if err != nil {

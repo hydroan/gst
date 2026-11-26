@@ -40,7 +40,8 @@ import (
 //   - DELETE /api/iam/sessions/:id
 //
 // Note: DELETE /api/iam/sessions/:id treats id=others as a reserved
-// self-service bulk logout that revokes every other session of the current user.
+// self-service bulk logout that revokes every other session of the current
+// user.
 //
 // Account management routes:
 //   - POST   /api/login

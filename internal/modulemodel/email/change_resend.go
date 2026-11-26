@@ -5,8 +5,9 @@ import (
 	"github.com/hydroan/gst/model"
 )
 
-// ChangeResendReq is the payload for POST /api/iam/email/change-resend.
-// It identifies the pending target email address that should receive a new confirmation message.
+// ChangeResendReq is the payload for POST /api/iam/email/change-resend. It
+// identifies the pending target email address that should receive a new
+// confirmation message.
 type ChangeResendReq struct {
 	NewEmail string `json:"new_email" binding:"required"`
 }

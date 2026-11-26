@@ -18,9 +18,9 @@ type (
 	Response = gst.Response
 )
 
-// Service defines the controller-facing business operation contract for a model.
-// Generated controllers call these methods for CRUD, batch CRUD, lifecycle hooks,
-// import/export, filtering, and logging.
+// Service defines the controller-facing business operation contract for a
+// model. Generated controllers call these methods for CRUD, batch CRUD,
+// lifecycle hooks, import/export, filtering, and logging.
 type Service[M Model, REQ Request, RSP Response] = gst.Service[M, REQ, RSP]
 
 // ServerStream is the response stream of a Stream action declaring a
@@ -42,9 +42,10 @@ type BidiStream[REQ Request, RSP Response] = gst.BidiStream[REQ, RSP]
 // resource parameter name, and the service implementation used by controllers.
 type Module[M Model, REQ Request, RSP Response] = gst.Module[M, REQ, RSP]
 
-// ControllerConfig customizes how router.Register builds an internal handler for
-// a route. It is the public configuration surface for controller behavior; the
-// concrete controller handlers and their runtime state remain framework-owned.
+// ControllerConfig customizes how router.Register builds an internal handler
+// for a route. It is the public configuration surface for controller behavior;
+// the concrete controller handlers and their runtime state remain
+// framework-owned.
 type ControllerConfig[M Model] = gst.ControllerConfig[M]
 
 // Database defines the model-scoped database operation contract.
@@ -52,9 +53,10 @@ type ControllerConfig[M Model] = gst.ControllerConfig[M]
 // for a single Model type.
 type Database[M Model] = gst.Database[M]
 
-// DatabaseOption provides chainable options for a single Database operation chain.
-// Options apply to the next terminal operation and are reset afterward. Start a
-// new chain with database.Database[M](ctx) for each independent operation.
+// DatabaseOption provides chainable options for a single Database operation
+// chain. Options apply to the next terminal operation and are reset afterward.
+// Start a new chain with database.Database[M](ctx) for each independent
+// operation.
 type DatabaseOption[M Model] = gst.DatabaseOption[M]
 
 // QueryOptions tunes how WithQuery turns a model value into WHERE conditions.
@@ -63,7 +65,8 @@ type DatabaseOption[M Model] = gst.DatabaseOption[M]
 // for usage examples.
 type QueryOptions = gst.QueryOptions
 
-// SQLStatement contains a generated SQL statement in executable and rendered forms.
+// SQLStatement contains a generated SQL statement in executable and rendered
+// forms.
 type SQLStatement = gst.SQLStatement
 
 // Selector runs an analytical read over the table of M and scans the result
@@ -93,10 +96,11 @@ type Permission = gst.Permission
 // Decision is the outcome of one authorization check.
 type Decision = gst.Decision
 
-// RBAC provides tenant-scoped role, permission, and subject assignment operations.
-// A process holding no policy set — RBAC disabled, or not initialized — answers
-// reads as the deployment they describe, denying every request and reporting no
-// roles, and refuses every write rather than reporting a change it did not make.
+// RBAC provides tenant-scoped role, permission, and subject assignment
+// operations. A process holding no policy set — RBAC disabled, or not
+// initialized — answers reads as the deployment they describe, denying every
+// request and reporting no roles, and refuses every write rather than reporting
+// a change it did not make.
 type RBAC = gst.RBAC
 
 // Logger is the logger the framework hands to services and modules and keeps

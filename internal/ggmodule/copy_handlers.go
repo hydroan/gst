@@ -296,12 +296,12 @@ func OrphanManagedFiles(dir, modelDir string) ([]OrphanManagedFile, error) {
 	return orphans, nil
 }
 
-// handlersOnDisk collects the top-level function names of the planned
-// targets of items, middleware or interceptors, as they currently exist on
-// disk, before the copy overwrites them. A handler rename would otherwise leave its old register
-// call behind: the new file content no longer proves the old name belonged to
-// this module, so the proof must be taken while the old content is still
-// there. Only files carrying this module's marker count — an unmarked
+// handlersOnDisk collects the top-level function names of the planned targets
+// of items, middleware or interceptors, as they currently exist on disk, before
+// the copy overwrites them. A handler rename would otherwise leave its old
+// register call behind: the new file content no longer proves the old name
+// belonged to this module, so the proof must be taken while the old content is
+// still there. Only files carrying this module's marker count — an unmarked
 // preexisting file is not provably module-owned.
 func (e *CopyExecution) handlersOnDisk(items []moduleCopyHandler) (map[string]bool, error) {
 	handlers := make(map[string]bool)

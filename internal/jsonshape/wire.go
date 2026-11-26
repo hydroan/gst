@@ -215,9 +215,9 @@ func parseJSONTag(tag string) (string, jsonTagOptions, string) {
 }
 
 // validTagName reports whether encoding/json accepts a non-empty name as a key
-// name: letters, digits, spaces and the punctuation !#$%&()*+-./:;<=>?@[]^_{|}~,
-// so trace_id and created at pass while a name holding a quote or a
-// backslash does not.
+// name: letters, digits, spaces and the punctuation
+// !#$%&()*+-./:;<=>?@[]^_{|}~, so trace_id and created at pass while a name
+// holding a quote or a backslash does not.
 func validTagName(name string) bool {
 	for _, c := range name {
 		switch {

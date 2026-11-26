@@ -15,8 +15,8 @@ var (
 	// installs a real AccountGateway for email account operations.
 	ErrAccountGatewayNotConfigured = errors.New("email account gateway is not configured")
 
-	// ErrAccountGatewayInvalidAccount means a gateway returned an account snapshot that
-	// does not satisfy the email module identity contract.
+	// ErrAccountGatewayInvalidAccount means a gateway returned an account
+	// snapshot that does not satisfy the email module identity contract.
 	ErrAccountGatewayInvalidAccount = errors.New("email account gateway returned invalid account")
 
 	// ErrAccountNotFound lets gateways report missing accounts without leaking the
@@ -39,8 +39,9 @@ var _ AccountGateway = (*missingAccountGateway)(nil)
 // system. Implementations own account lookup, password verification, password
 // hashing, account updates, and session invalidation for their account store.
 //
-// The email service intentionally depends only on this gateway and AccountSnapshot
-// so copied email module code does not import a concrete IAM user model.
+// The email service intentionally depends only on this gateway and
+// AccountSnapshot so copied email module code does not import a concrete IAM
+// user model.
 type AccountGateway interface {
 	// FindByEmail resolves the account currently bound to email.
 	FindByEmail(ctx *gst.ServiceContext, email string) (*AccountSnapshot, error)
@@ -68,9 +69,10 @@ type AccountGateway interface {
 	InvalidateSessions(ctx *gst.ServiceContext, userID string)
 }
 
-// AccountSnapshot is the minimal account state required by email flows. ID must be
-// the same stable account identifier stored in email flow state. Active must be true
-// only when the host account is allowed to start or complete email flows.
+// AccountSnapshot is the minimal account state required by email flows. ID must
+// be the same stable account identifier stored in email flow state. Active must
+// be true only when the host account is allowed to start or complete email
+// flows.
 type AccountSnapshot struct {
 	ID            string
 	Email         string
@@ -78,9 +80,9 @@ type AccountSnapshot struct {
 	EmailVerified bool
 }
 
-// SetAccountGateway installs the host application's account gateway. Call it during
-// application/module initialization before serving email routes. Passing nil
-// restores the safe default that fails account-backed email flows with
+// SetAccountGateway installs the host application's account gateway. Call it
+// during application/module initialization before serving email routes. Passing
+// nil restores the safe default that fails account-backed email flows with
 // ErrAccountGatewayNotConfigured.
 func SetAccountGateway(gateway AccountGateway) {
 	accountGatewayMu.Lock()
@@ -122,8 +124,8 @@ func newAccountGatewayInvalidAccountServiceError(err error) *gst.Error {
 }
 
 // missingAccountGateway is the safe default used until the host application
-// installs a real AccountGateway. It keeps copied email code buildable and makes
-// account-backed flows fail with a clear configuration error.
+// installs a real AccountGateway. It keeps copied email code buildable and
+// makes account-backed flows fail with a clear configuration error.
 type missingAccountGateway struct{}
 
 func (missingAccountGateway) FindByEmail(*gst.ServiceContext, string) (*AccountSnapshot, error) {

@@ -7,7 +7,8 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// ZAdd adds one or multiple string members with the same score into a sorted set.
+// ZAdd adds one or multiple string members with the same score into a sorted
+// set.
 func ZAdd(ctx context.Context, key string, score float64, members ...string) error {
 	client, err := Client()
 	if err != nil {
@@ -35,7 +36,8 @@ func ZRange(ctx context.Context, key string, start, stop int64) ([]string, error
 	return members, errors.WithStack(err)
 }
 
-// ZRangeByScore returns sorted set members whose scores are between minScore and maxScore.
+// ZRangeByScore returns sorted set members whose scores are between minScore
+// and maxScore.
 func ZRangeByScore(ctx context.Context, key, minScore, maxScore string) ([]string, error) {
 	client, err := Client()
 	if err != nil {
@@ -67,7 +69,8 @@ func ZRem(ctx context.Context, key string, members ...string) error {
 	return errors.WithStack(client.ZRem(ctx, Key(key), memberArgs...).Err())
 }
 
-// ZRemRangeByScore removes sorted set members whose score is between minScore and maxScore.
+// ZRemRangeByScore removes sorted set members whose score is between minScore
+// and maxScore.
 func ZRemRangeByScore(ctx context.Context, key, minScore, maxScore string) error {
 	client, err := Client()
 	if err != nil {

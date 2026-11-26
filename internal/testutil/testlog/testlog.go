@@ -31,11 +31,11 @@ const globalLogFile = "global.log"
 //
 // The files are not evidence a test can read back: the directory goes away at
 // release, and every file sink buffers its entries (see the buffered writer in
-// the logger package), so a test process that ends within the flush interval leaves
-// most of them empty. A test that needs to assert on log output instead swaps
-// the package logger it cares about for a scratch file logger under its own
-// t.TempDir and flushes that one before reading — see withCronjobLoggerConfig
-// and readLogEntry in the cronjob tests.
+// the logger package), so a test process that ends within the flush interval
+// leaves most of them empty. A test that needs to assert on log output instead
+// swaps the package logger it cares about for a scratch file logger under its
+// own t.TempDir and flushes that one before reading — see
+// withCronjobLoggerConfig and readLogEntry in the cronjob tests.
 //
 // The release stops the log writers before it removes the directory. They hold
 // entries back for up to a second, and a file writer opens its file on its

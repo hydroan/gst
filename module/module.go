@@ -1,5 +1,6 @@
-// Package module provides a unified module registration system that automatically
-// registers models, services, and HTTP routes for CRUD operations.
+// Package module provides a unified module registration system that
+// automatically registers models, services, and HTTP routes for CRUD
+// operations.
 //
 // A module consists of three components:
 //   - Model: Database entity implementing gst.Model
@@ -7,7 +8,8 @@
 //   - Module: Configuration implementing gst.Module
 //
 // Usage:
-//  1. Define model (embedding model.Base), request/response types, and service (embedding service.Base)
+//  1. Define model (embedding model.Base), request/response types, and service
+//     (embedding service.Base)
 //  2. Implement module with gst.Module interface
 //  3. Call module.Use() with desired route options
 //
@@ -98,10 +100,10 @@ func servedPhases(call string, phases []apiaction.Phase) []apiaction.Phase {
 
 // Init releases pending module registrations.
 //
-// Module registration runs asynchronously because module.Use can be called before
-// the framework router and service registries are initialized. Init only opens
-// that gate; callers that need registered models, services, or routes to be
-// visible must call Wait after Init.
+// Module registration runs asynchronously because module.Use can be called
+// before the framework router and service registries are initialized. Init only
+// opens that gate; callers that need registered models, services, or routes to
+// be visible must call Wait after Init.
 func Init() error {
 	if initialized.CompareAndSwap(false, true) {
 		close(notify)
@@ -141,7 +143,8 @@ func Wait() {
 // Routes are registered based on mod.Route() and mod.Param().
 // Authentication is determined by mod.Public().
 //
-// Must be called during application initialization, typically in a Register() function.
+// Must be called during application initialization, typically in a Register()
+// function.
 func Use[M gst.Model, REQ gst.Request, RSP gst.Response](mod gst.Module[M, REQ, RSP], options ...UseOption) {
 	startRegister(func() {
 		<-notify

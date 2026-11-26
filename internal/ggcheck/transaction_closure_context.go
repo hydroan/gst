@@ -200,8 +200,8 @@ func escapingContextIdent(arg ast.Expr, inTransaction map[string]struct{}) (stri
 // escapingContext reports whether arg is a context that does not carry the
 // closure's transaction, naming it as it reads in the source. A derivation
 // written at the call is followed to what it derives from, so
-// context.WithTimeout(ctx, d) passes and context.WithTimeout(context.Background(), d)
-// does not.
+// context.WithTimeout(ctx, d) passes and
+// context.WithTimeout(context.Background(), d) does not.
 func escapingContext(arg ast.Expr, inTransaction map[string]struct{}) (string, bool) {
 	switch expr := arg.(type) {
 	case *ast.Ident:

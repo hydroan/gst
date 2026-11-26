@@ -15,7 +15,8 @@ import (
 
 const adminSessionOnlineWithinQuery = "online_within"
 
-// ensureAdminSessionActor verifies that the current session belongs to a system-root user.
+// ensureAdminSessionActor verifies that the current session belongs to a
+// system-root user.
 func ensureAdminSessionActor(ctx *gst.ServiceContext) error {
 	user, err := loadAdminSessionActor(ctx)
 	if err != nil {
@@ -77,7 +78,8 @@ func parseAdminSessionOnlineSince(ctx *gst.ServiceContext) (time.Time, bool, err
 	return time.Now().Add(-onlineWithin), true, nil
 }
 
-// sessionSeenSince verifies the loaded session snapshot still matches the online window.
+// sessionSeenSince verifies the loaded session snapshot still matches the
+// online window.
 //
 // The Redis last-seen ZSET is only a candidate index. This snapshot check keeps
 // the response correct if the index score and session payload drift apart.

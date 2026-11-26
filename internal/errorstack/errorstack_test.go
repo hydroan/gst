@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// errSampleInitTimeSentinel mirrors a package-level sentinel: its stack trace is
-// captured while the package initializes, so it points at runtime.doInit
+// errSampleInitTimeSentinel mirrors a package-level sentinel: its stack trace
+// is captured while the package initializes, so it points at runtime.doInit
 // instead of any error production site.
 var errSampleInitTimeSentinel = errors.New("sample init-time sentinel")
 

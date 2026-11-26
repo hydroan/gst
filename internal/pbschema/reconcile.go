@@ -217,12 +217,12 @@ func (g *Schema) holdMessage(s jsonshape.Site, msg *descriptorpb.DescriptorProto
 }
 
 // holdServices holds the services of file to the committed ones, old: a
-// committed service must still be declared, and so must every rpc of it,
-// taking the request message, answering the response message and streaming
-// the sides it did, since a client was built against each; every breach is
-// reported with the edit of the committed file that accepts the break. A committed
-// NoteService whose GetNote took GetNoteRequest and answered GetNoteResponse
-// as a unary rpc holds the file to exactly that.
+// committed service must still be declared, and so must every rpc of it, taking
+// the request message, answering the response message and streaming the sides
+// it did, since a client was built against each; every breach is reported with
+// the edit of the committed file that accepts the break. A committed
+// NoteService whose GetNote took GetNoteRequest and answered GetNoteResponse as
+// a unary rpc holds the file to exactly that.
 func (g *Schema) holdServices(s jsonshape.Site, file *ProtoFile, old map[string]*descriptorpb.ServiceDescriptorProto) {
 	services := make(map[string]*descriptorpb.ServiceDescriptorProto, len(file.Services))
 	for _, svc := range file.Services {

@@ -45,7 +45,8 @@ var (
 	totpBindChallengeRandomReader = rand.Reader
 )
 
-// currentTOTPBindSessionID returns the session that owns the current binding flow.
+// currentTOTPBindSessionID returns the session that owns the current binding
+// flow.
 func currentTOTPBindSessionID(ctx *gst.ServiceContext) (string, error) {
 	if ctx == nil {
 		return "", gst.NewError(http.StatusUnauthorized, authenticationRequiredMsg)
@@ -56,7 +57,8 @@ func currentTOTPBindSessionID(ctx *gst.ServiceContext) (string, error) {
 	return "", gst.NewError(http.StatusUnauthorized, authenticationRequiredMsg)
 }
 
-// issueTOTPBindChallenge creates a cache-backed challenge for a pending TOTP binding flow.
+// issueTOTPBindChallenge creates a cache-backed challenge for a pending TOTP
+// binding flow.
 //
 // It validates the user, session, username, and generated secret, records
 // issue/expiry timestamps, and stores the challenge with the same TTL in Redis.
@@ -88,7 +90,8 @@ func issueTOTPBindChallenge(ctx context.Context, challenge totpBindChallenge) (s
 	return challengeID, challenge, nil
 }
 
-// newTOTPBindChallengeID returns an opaque bearer token for a pending bind flow.
+// newTOTPBindChallengeID returns an opaque bearer token for a pending bind
+// flow.
 func newTOTPBindChallengeID() (string, error) {
 	buf := make([]byte, 32)
 	if _, err := io.ReadFull(totpBindChallengeRandomReader, buf); err != nil {
@@ -97,7 +100,8 @@ func newTOTPBindChallengeID() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
-// loadTOTPBindChallenge returns a pending challenge after validating its required fields and expiry.
+// loadTOTPBindChallenge returns a pending challenge after validating its
+// required fields and expiry.
 //
 // Missing, malformed, or expired challenges are mapped to local sentinel errors
 // so public services can expose the same generic "invalid or expired" response.
@@ -128,7 +132,8 @@ func loadTOTPBindChallenge(ctx context.Context, challengeID string) (totpBindCha
 	return challenge, nil
 }
 
-// consumeTOTPBindChallenge deletes a validated challenge so it cannot be reused.
+// consumeTOTPBindChallenge deletes a validated challenge so it cannot be
+// reused.
 //
 // Confirm calls this after code validation and before any storage work: a
 // wrong code keeps the challenge alive for retry, while a consumed challenge
@@ -144,7 +149,8 @@ func consumeTOTPBindChallenge(ctx context.Context, challengeID string) error {
 	return nil
 }
 
-// totpBindChallengeKey builds the cache key for a pending TOTP binding challenge.
+// totpBindChallengeKey builds the cache key for a pending TOTP binding
+// challenge.
 func totpBindChallengeKey(challengeID string) string {
 	return strings.Join([]string{totpBindChallengeKeyBase, strings.TrimSpace(challengeID)}, ":")
 }

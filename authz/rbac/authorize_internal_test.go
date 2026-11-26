@@ -96,9 +96,9 @@ func TestAuthorizeNamesTheGrantingRule(t *testing.T) {
 	}
 }
 
-// TestAuthorizeReportsStrongestSource pins the branch order. A subject
-// holding both a system role and a role policy for the same object is allowed by
-// either one, and only the stronger answers the question the field exists for:
+// TestAuthorizeReportsStrongestSource pins the branch order. A subject holding
+// both a system role and a role policy for the same object is allowed by either
+// one, and only the stronger answers the question the field exists for:
 // revoking the role policy would not take the access away.
 func TestAuthorizeReportsStrongestSource(t *testing.T) {
 	r := newAuthorizeFixture(t)

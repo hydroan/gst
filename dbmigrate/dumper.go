@@ -47,11 +47,11 @@ func NewSchemaDumper() (*SchemaDumper, error) {
 	}, nil
 }
 
-// Dump renders dst as the target schema for driver: one CREATE TABLE per
-// model, laid out a column a line and annotated with the model it came
-// from, each followed by the CREATE INDEX statements of the indexes it
-// declares through its optional Indexes method, a line each. Models are sorted by type name, so the same input always
-// renders the same schema.
+// Dump renders dst as the target schema for driver: one CREATE TABLE per model,
+// laid out a column a line and annotated with the model it came from, each
+// followed by the CREATE INDEX statements of the indexes it declares through
+// its optional Indexes method, a line each. Models are sorted by type name, so
+// the same input always renders the same schema.
 func (s *SchemaDumper) Dump(driver config.DBType, dst ...any) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
