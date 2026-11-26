@@ -1,4 +1,4 @@
-package modelschema_test
+package tenant_test
 
 import (
 	"reflect"
@@ -66,16 +66,16 @@ func (unscopedUniqueSample) Indexes() []modelschema.Index {
 	return []modelschema.Index{{Fields: []string{"Code"}, Unique: true}}
 }
 
-// TestValidateTenantIndexesHoldsUniquenessToTheTenant pins the rule and the
-// error ValidateTenantIndexes documents: a unique index of a model embedding
+// TestValidateIndexesHoldsUniquenessToTheTenant pins the rule and the error
+// ValidateIndexes documents: a unique index of a model embedding
 // tenant.Scope names the tenant, every index leaving it out is reported in
 // one error, and an index that is not unique, or a model without the tenant
 // column, has nothing to report.
-func TestValidateTenantIndexesHoldsUniquenessToTheTenant(t *testing.T) {
+func TestValidateIndexesHoldsUniquenessToTheTenant(t *testing.T) {
 	for _, sample := range []any{&tenantUniqueSample{}, tenantPlainIndexSample{}, &unscopedUniqueSample{}} {
-		require.NoError(t, modelschema.ValidateTenantIndexes(reflect.TypeOf(sample)), "%T", sample)
+		require.NoError(t, tenant.ValidateIndexes(reflect.TypeOf(sample)), "%T", sample)
 	}
 
-	err := modelschema.ValidateTenantIndexes(reflect.TypeFor[*tenantGlobalUniqueSample]())
+	err := tenant.ValidateIndexes(reflect.TypeFor[*tenantGlobalUniqueSample]())
 	require.EqualError(t, err, `model tenantGlobalUniqueSample: unique index (Code) leaves out TenantID; unique index (Name, Code) leaves out TenantID; a model embedding tenant.Scope is unique within a tenant, so every unique index names TenantID among its fields`)
 }

@@ -14,7 +14,6 @@ import (
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
-	"github.com/hydroan/gst/internal/urlquery"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -91,16 +90,15 @@ func preparationFailed() error {
 
 // ensureTable prepares the backing table for a registered model.
 //
-// A model has to declare its table name, keep the columns the framework fixes
-// under their names (see modelschema.ValidateFrameworkColumns), keep its
-// unique indexes within its tenant (see modelschema.ValidateTenantIndexes),
-// declare its columns by the framework's types where it has one for them
-// (see modelschema.ValidateColumnTypes),
-// name its URL query parameters unambiguously (see
-// urlquery.ValidateQueryNames) and, when it declares an ID of its own over
-// its base's, declare the ID accessors that go with it (see
-// model.ValidateIDAccessors); a model failing any of them is refused
-// before anything touches the database, whatever the database.
+// A model has to declare its table name; keep the rules its declaration is
+// held to (see modelschema.Validate), which are the columns the framework
+// fixes under their names, its columns declared by the framework's types
+// where it has one for them, and the checks the packages of the program
+// registered, a unique index within its tenant and URL query parameters
+// named unambiguously among them; and, when it declares an ID of its own
+// over its base's, declare the ID accessors that go with it (see
+// model.ValidateIDAccessors). A model failing any of them is refused before
+// anything touches the database, whatever the database.
 //
 // With database.auto_migrate enabled it runs gorm AutoMigrate and creates
 // custom indexes, which suits local development and tests. With the option
@@ -119,16 +117,7 @@ func ensureTable(handler *gorm.DB, m gst.Model) error {
 	if err != nil {
 		return err
 	}
-	if err = modelschema.ValidateFrameworkColumns(reflect.TypeOf(m)); err != nil {
-		return err
-	}
-	if err = modelschema.ValidateTenantIndexes(reflect.TypeOf(m)); err != nil {
-		return err
-	}
-	if err = modelschema.ValidateColumnTypes(reflect.TypeOf(m)); err != nil {
-		return err
-	}
-	if err = urlquery.ValidateQueryNames(reflect.TypeOf(m)); err != nil {
+	if err = modelschema.Validate(reflect.TypeOf(m)); err != nil {
 		return err
 	}
 	if err = model.ValidateIDAccessors(reflect.TypeOf(m)); err != nil {

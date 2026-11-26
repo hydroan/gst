@@ -11,6 +11,13 @@ import (
 	"github.com/hydroan/gst/internal/modelschema"
 )
 
+// init registers the check of query names with the schema layer, which names
+// no package above it: table preparation runs the check in every program
+// this package is part of, the ones that read a URL query.
+func init() {
+	modelschema.RegisterValidator(ValidateQueryNames)
+}
+
 // frameworkQueryStructs are the structs declaring the framework's own query
 // parameters, the fields alone whose names may take the "_" namespace.
 var frameworkQueryStructs = map[reflect.Type]bool{

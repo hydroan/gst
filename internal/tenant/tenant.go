@@ -1,8 +1,11 @@
 // Package tenant implements the row scoping the public tenant package
 // forwards: the column type whose clauses Gorm applies to every statement of
 // a schema carrying it, the struct a model embeds to carry that column, and
-// the context a statement takes its tenant from. The public package documents
-// how a model opts in; framework code imports this one.
+// the context a statement takes its tenant from. It also declares to the
+// schema layer what the scoping asks of a model's declaration, the column
+// under its fixed name and every unique index within the tenant (see
+// ValidateIndexes). The public package documents how a model opts in;
+// framework code imports this one.
 package tenant
 
 import (

@@ -15,6 +15,12 @@
 // ValidateNumericValue), and an instant compared with a calendar day is taken
 // as its day in UTC (see UTCDay).
 //
+// The rules a model's declaration is held to before its table is prepared
+// are gathered by Validate: this package's own, and the ones the packages
+// above it register for what is theirs to ask of a model (see
+// RegisterValidator and RegisterFixedColumn), none of which this package
+// names.
+//
 // It is the single place where a Go struct field is mapped to a database
 // column: the mapping is delegated to gorm's own schema parser, so column
 // names always match what gorm actually emits, including the column tag,

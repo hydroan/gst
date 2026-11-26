@@ -18,7 +18,7 @@ var TenantUniqueIndexes = Check{
 
 // checkTenantUniqueIndexes reports the tenant-scoped models declaring a unique
 // index without the tenant, which table preparation refuses at startup (see
-// modelschema.ValidateTenantIndexes), whatever database the project names.
+// tenant.ValidateIndexes), whatever database the project names.
 // Which column carries the tenant is gorm's to decide from the structs a
 // model embeds, so the check asks the models themselves through the column
 // inspection (see inspectedModelViolations).

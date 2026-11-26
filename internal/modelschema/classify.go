@@ -79,12 +79,12 @@ func IsTimeColumn(c Column) bool {
 
 // ParseTime reads an instant the one way a filter or a cursor takes it: RFC
 // 3339, fractional seconds up to nanoseconds accepted; a calendar day is
-// read by ParseDate. Its mandatory offset makes the value
-// the same instant no matter what zone the server runs in, and it is the
-// format time.Time speaks in JSON, so query values and body values spell time
-// identically. Zone-less spellings and unix timestamps are refused on
-// purpose: a zone-less value names a different instant per server zone, and
-// guessing is worse than failing.
+// read by ParseDate. Its mandatory offset makes the value the same instant
+// no matter what zone the server runs in, and it is the format time.Time
+// speaks in JSON, so query values and body values spell time identically.
+// Zone-less spellings and unix timestamps are refused on purpose: a
+// zone-less value names a different instant per server zone, and guessing is
+// worse than failing.
 func ParseTime(value string) (time.Time, error) {
 	t, err := time.Parse(time.RFC3339Nano, value)
 	if err != nil {

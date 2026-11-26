@@ -30,7 +30,7 @@ type ColumnInfo struct {
 
 // ModelColumns is one model as the inspection program reports it: its columns,
 // what model.ValidateIndexes refused in its index declarations on MySQL, what
-// modelschema.ValidateTenantIndexes refused in its unique indexes, what
+// tenant.ValidateIndexes refused in its unique indexes, what
 // modelschema.ValidateColumnTypes refused in the types of its columns, what
 // modelschema.ValidateFrameworkColumns refused in its columns, what
 // urlquery.ValidateQueryNames refused in its query tags and what
@@ -52,10 +52,10 @@ type ModelColumns struct {
 // Inspect inspects the project's models by running them: the inspection program
 // (see buildProgram) is built into the project's module and reports every
 // model's columns, what model.ValidateIndexes refused in its index declarations
-// on MySQL, what modelschema.ValidateTenantIndexes refused in its unique
-// indexes, what modelschema.ValidateColumnTypes refused in the types of its
-// columns, what modelschema.ValidateFrameworkColumns refused in its columns,
-// what urlquery.ValidateQueryNames refused in its query tags and what
+// on MySQL, what tenant.ValidateIndexes refused in its unique indexes, what
+// modelschema.ValidateColumnTypes refused in the types of its columns, what
+// modelschema.ValidateFrameworkColumns refused in its columns, what
+// urlquery.ValidateQueryNames refused in its query tags and what
 // model.ValidateIDAccessors refused in its ID accessors. The result comes from
 // the cache when every input of the inspection is unchanged, otherwise from a
 // build and run of the program. The build takes the files overlay returns in

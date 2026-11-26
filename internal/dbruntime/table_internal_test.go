@@ -14,6 +14,10 @@ import (
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/tenant"
+
+	// Linked for the check of query names it registers with modelschema, the
+	// way it is in every program that reads a URL query.
+	_ "github.com/hydroan/gst/internal/urlquery"
 	"github.com/stretchr/testify/require"
 	gormdatatypes "gorm.io/datatypes"
 	"gorm.io/gorm"
