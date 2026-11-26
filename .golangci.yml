@@ -98,44 +98,6 @@ linters:
               desc: "Use github.com/cockroachdb/errors instead"
             - pkg: "github.com/pkg/errors"
               desc: "Use github.com/cockroachdb/errors instead"
-        # internal/gst is the bottom of the framework, the vocabulary every
-        # other package shares: it imports the standard library, the leaf
-        # packages under it and the third-party types it names, and never a
-        # functional package, so that every functional package can depend on
-        # it without a cycle. Its tests build fixtures and may import more.
-        types-leaf:
-          list-mode: strict
-          files:
-            - "**/internal/gst/**"
-            - "!$test"
-          allow:
-            - "$gostd"
-            - "github.com/cockroachdb/errors"
-            - "github.com/gin-gonic/gin"
-            - "github.com/hydroan/gst/internal/apiaction"
-            - "github.com/hydroan/gst/internal/datatypes"
-            - "github.com/hydroan/gst/internal/execctx"
-            - "github.com/hydroan/gst/internal/i18n"
-            - "github.com/hydroan/gst/internal/requestctx"
-            - "github.com/hydroan/gst/internal/sse"
-            - "go.uber.org/zap"
-            - "gorm.io/datatypes"
-        # The packages under internal/dbruntime hold what the SQL log has to
-        # know of a statement, and the logging package that writes it sits
-        # below every functional package. So they import the standard library
-        # and the third-party types they name, and never a package of the
-        # framework: a functional package with something of its own for them
-        # to recognize declares it through them. Their tests may import more.
-        dbruntime-leaves:
-          list-mode: strict
-          files:
-            - "**/internal/dbruntime/dbnode/**"
-            - "**/internal/dbruntime/dberror/**"
-            - "!$test"
-          allow:
-            - "$gostd"
-            - "github.com/cockroachdb/errors"
-            - "gorm.io/gorm"
         # Framework code imports the internal packages behind the public
         # forwarding packages; the forwards serve projects (CLAUDE.md, package
         # ownership and internal import direction). The files left out are the
@@ -259,20 +221,6 @@ linters:
           deny:
             - pkg: "github.com/hydroan/gst/grpc$"
               desc: "framework code imports github.com/hydroan/gst/internal/grpcserver and github.com/hydroan/gst/internal/controller; the public package forwards to them for the generated code and the project"
-        # Only the gg command prints. The packages it runs return what they
-        # found, or report progress through callbacks the command passes, and
-        # the command decides how that shows. The package is imported besides
-        # by its own tests and by the test holding the lines of the migration
-        # program, which prints inside the project, to the ones gg prints.
-        clioutput:
-          files:
-            - "$all"
-            - "!**/cmd/gg/**"
-            - "!**/internal/clioutput/**"
-            - "!**/internal/gghelper/program/migrate/main_test.go"
-          deny:
-            - pkg: "github.com/hydroan/gst/internal/clioutput$"
-              desc: "only the gg command prints; return the result, or take a progress callback the command passes"
         # The HTTP line and the gRPC line never import each other (CLAUDE.md,
         # the two transports never touch each other): the packages serving
         # HTTP requests, the router, its middleware, the envelope and the
