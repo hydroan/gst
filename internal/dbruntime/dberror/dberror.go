@@ -24,6 +24,26 @@ func NewDataIntegrityViolation(msg string) error {
 	return &dataIntegrityViolationError{msg: msg}
 }
 
+// The sentinels gorm declares for the writes a constraint of the table
+// refuses, each translated from the dialect's own error. What the framework
+// means by each is said here once: database forwards them to a project, and
+// a package that cannot import database tells them by these names.
+var (
+	// ErrDuplicatedKey is answered for a write colliding with a primary or
+	// unique key; database.ErrDuplicatedKey forwards it.
+	ErrDuplicatedKey = gorm.ErrDuplicatedKey
+
+	// ErrForeignKeyViolated is answered for a write whose foreign key no
+	// record satisfies, or that would leave a record other records still
+	// refer to; database.ErrForeignKeyViolated forwards it.
+	ErrForeignKeyViolated = gorm.ErrForeignKeyViolated
+
+	// ErrCheckConstraintViolated is answered for a write carrying a value a
+	// check constraint of the table refuses;
+	// database.ErrCheckConstraintViolated forwards it.
+	ErrCheckConstraintViolated = gorm.ErrCheckConstraintViolated
+)
+
 // ErrValueTooLong is answered for a write carrying a value longer than its
 // column holds, translated from the dialect's own error the way gorm
 // translates a duplicated key; database.ErrValueTooLong forwards it.
@@ -43,5 +63,5 @@ var ErrNotNullViolated = NewDataIntegrityViolation("a column the table requires 
 // of the database's failures leaves them out.
 func IsDataIntegrityViolation(err error) bool {
 	return errors.HasType(err, (*dataIntegrityViolationError)(nil)) ||
-		errors.IsAny(err, gorm.ErrDuplicatedKey, gorm.ErrForeignKeyViolated, gorm.ErrCheckConstraintViolated)
+		errors.IsAny(err, ErrDuplicatedKey, ErrForeignKeyViolated, ErrCheckConstraintViolated)
 }

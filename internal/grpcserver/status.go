@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/dbruntime/dberror"
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/i18n"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
@@ -53,13 +53,14 @@ func StatusError(err error) error {
 // A 409 is a conflict with what is stored or under way, and its cause
 // chooses the code: Aborted, a conflict to retry after, the optimistic-lock
 // miss of a versioned model among them, unless err wraps
-// database.ErrDuplicatedKey, the record the request creates being there
+// dberror.ErrDuplicatedKey, the record the request creates being there
 // already, AlreadyExists, the one code a caller may take for the creation
-// done; or wraps database.ErrForeignKeyViolated, a record the request refers
+// done; or wraps dberror.ErrForeignKeyViolated, a record the request refers
 // to missing or still referred to, FailedPrecondition, the code AIP-135
 // gives a delete the records referring to the resource hold up. A service
 // answering 409 for a duplicate it found by reading first carries
-// database.ErrDuplicatedKey as the cause to answer AlreadyExists.
+// database.ErrDuplicatedKey, the same error under the name a project knows
+// it by, as the cause to answer AlreadyExists.
 func codeOf(httpStatus int, err error) codes.Code {
 	switch httpStatus {
 	case http.StatusBadRequest:
@@ -76,9 +77,9 @@ func codeOf(httpStatus int, err error) codes.Code {
 		return codes.Canceled
 	case http.StatusConflict:
 		switch {
-		case errors.Is(err, database.ErrDuplicatedKey):
+		case errors.Is(err, dberror.ErrDuplicatedKey):
 			return codes.AlreadyExists
-		case errors.Is(err, database.ErrForeignKeyViolated):
+		case errors.Is(err, dberror.ErrForeignKeyViolated):
 			return codes.FailedPrecondition
 		}
 		return codes.Aborted
