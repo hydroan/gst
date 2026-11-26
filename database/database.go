@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/errors"
-	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/dbruntime"
 	"github.com/hydroan/gst/internal/dbruntime/dberror"
 	"github.com/hydroan/gst/internal/gst"
@@ -397,9 +396,7 @@ func (db *database[M]) prepare() error {
 
 // Database returns the operation chain of model M on the default database,
 // implementing gst.Database: the writes, the reads and the model hooks
-// around them. The chain runs in GORM's debug mode, logging its statements,
-// when the logger level is debug. The tables it touches must exist before it
-// runs.
+// around them. The tables it touches must exist before it runs.
 //
 // Type Parameters:
 //   - M: Model type that implements gst.Model interface
@@ -414,7 +411,6 @@ func (db *database[M]) prepare() error {
 //
 // Features:
 //   - Generic type safety for model operations
-//   - GORM's debug mode when the logger level is debug
 //   - Context-aware operations for tracing
 //   - A panic when the default database is not initialized
 //   - Transaction inheritance when ctx was produced by database.Transaction or
@@ -515,12 +511,7 @@ func databaseFor[M gst.Model](ctx context.Context, base *gorm.DB) gst.Database[M
 	// connection switches to the context transaction when one exists.
 	running := dbruntime.Handle(gctx, base)
 
-	var ins *gorm.DB
-	if config.App.Logger.Level == config.LogLevelDebug {
-		ins = running.Debug().WithContext(gctx).Limit(defaultLimit)
-	} else {
-		ins = running.WithContext(gctx).Limit(defaultLimit)
-	}
+	ins := running.WithContext(gctx).Limit(defaultLimit)
 	// A model that declared PreferReplica reads from a replica by default;
 	// the clause overrides the handle-level Write pin for this chain, a call
 	// site's WithReplica(false) overrides it back, and inside a transaction
