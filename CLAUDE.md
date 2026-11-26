@@ -111,7 +111,7 @@ gst 是强约定框架（Apple 风格），不是自由框架（Windows 风格�
 ### 结束收尾
 
 1. 修改完 `cmd/gg` 及它编译进去的框架包（如 `internal/dsl`、`internal/modelsource`、`internal/gg*`）的代码后，需要及时安装最新版本的 `gg` 工具
-2. 开发完后：必须并行执行 `make check` 和 `make test`，两者都通过才算完成（`make test` 靠测试缓存只重跑受改动影响的包）。如果没有修改代码，例如只修改了 Makefile、Markdown 等和代码无关的文件则都不需要执行
+2. 开发完后：必须并行执行 `make check` 和 `make test`，两者都通过才算完成（`make test` 靠测试缓存只重跑受改动影响的包）。每个批次只在收尾时执行一次，合并批次也一样；写代码途中只跑动到的包的测试。如果没有修改代码，例如只修改了 Makefile、Markdown 等和代码无关的文件则都不需要执行
 
 
 
