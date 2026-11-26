@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/clioutput"
 	"github.com/hydroan/gst/internal/dsl"
 	"github.com/hydroan/gst/internal/ggcheck"
@@ -39,6 +40,11 @@ A type a model borrows from elsewhere in the project keeps its own path. The
 files hold types only and refer to each other through relative imports, so the
 directory can be copied into any frontend as it is.
 
+paths.ts holds the route table: for every route the models declare that
+exchanges JSON, by path and then by method, the parameters of the path, the
+request body and the responses, laid out like the paths openapi-typescript
+writes. Import, Export, SSE and Stream actions are not in it.
+
 The directory is kept in step with the models: what an earlier run generated for
 a model that is now gone is removed.
 
@@ -46,7 +52,8 @@ The routes registered at run time are covered too, the ones module.Use
 registers from the project's module package and the ones of the framework
 modules that package registers, through gg module add or by hand: the types of
 a framework module go where a copy of the module would put them, iam/account.ts
-for the accounts of the iam module.`,
+for the accounts of the iam module. Their routes are not in the route table:
+a module names its path as the process starts.`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return genTypeScriptRun()
@@ -108,6 +115,7 @@ func genTypeScriptRun() error {
 		DeclaredTrees: typeScriptDeclaredTrees(moduleRoots),
 		AppName:       appName,
 		Roots:         uniqueTypeScriptRoots(append(typeScriptRoots(models), moduleRoots...)),
+		Routes:        typeScriptRoutes(models),
 	})
 	var diagnostics *ts.DiagnosticsError
 	switch {
@@ -165,6 +173,50 @@ func typeScriptRoots(models []*modelsource.Model) []ts.TypeRef {
 		})
 	}
 	return uniqueTypeScriptRoots(roots)
+}
+
+// typeScriptRoutes returns the routes of models the route table lists:
+// every enabled action a JSON request is sent to and answered with a JSON
+// response, on the path gg gen registers it at, with its Payload and Result
+// types, *model.Empty carrying no data. Import and Export move files, SSE
+// streams events and a Stream turns its request into a connection, so the
+// table lists none of them. An action whose Payload and Result are the model
+// itself is the framework's to serve; any other exchanges types of its own
+// (see ts.Route).
+//
+// For a model Sample of the root model package whose design declares, on
+// the route samples, a Get, and a Create with Payload[*SampleReq]() and
+// Result[*SampleRsp](), it returns
+//
+//	{Path: "/api/samples", Phase: apiaction.Create, Payload: SampleReq, Result: SampleRsp, Custom: true}
+//	{Path: "/api/samples/:id", Phase: apiaction.Get, Payload: Sample, Result: Sample}
+//
+// each type as the TypeRef of its name in the model's package.
+func typeScriptRoutes(models []*modelsource.Model) []ts.Route {
+	var routes []ts.Route
+	for _, m := range models {
+		ref := func(typeName string) ts.TypeRef {
+			if typeName == "" || typeName == dsl.PayloadEmpty {
+				return ts.TypeRef{}
+			}
+			return ts.TypeRef{PkgPath: m.ImportPath(), Name: strings.TrimPrefix(typeName, "*")}
+		}
+		own := "*" + m.ModelName
+		m.Design.Range(func(route string, action *dsl.Action) {
+			if dsl.HTTPOnlyAction(action.Phase.Name()) || action.Phase == apiaction.Stream {
+				return
+			}
+			served, _ := modelsource.RouterTargetForAction(route, m.Design, action)
+			routes = append(routes, ts.Route{
+				Path:    served,
+				Phase:   action.Phase,
+				Payload: ref(action.Payload),
+				Result:  ref(action.Result),
+				Custom:  action.Payload != own || action.Result != own,
+			})
+		})
+	}
+	return routes
 }
 
 // uniqueTypeScriptRoots returns roots sorted by package and name, each once.

@@ -58,6 +58,13 @@ func (g *generator) generate() ([]File, error) {
 	for _, ref := range g.cfg.Roots {
 		g.declareRoot(ref)
 	}
+	for _, route := range g.cfg.Routes {
+		for _, ref := range []TypeRef{route.Payload, route.Result} {
+			if ref != (TypeRef{}) {
+				g.declareRoot(ref)
+			}
+		}
+	}
 	for len(g.queue) > 0 {
 		obj := g.queue[0]
 		g.queue = g.queue[1:]

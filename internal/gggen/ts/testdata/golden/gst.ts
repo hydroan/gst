@@ -53,7 +53,10 @@ export interface ListResult<T> {
   has_more: boolean;
 }
 
-/** ItemsPayload is the request body of the default batch create, update and patch actions. */
+/**
+ * ItemsPayload is the request body of the default batch create, update and
+ * patch actions, and the data they answer with.
+ */
 export interface ItemsPayload<T> {
   items: T[];
 }

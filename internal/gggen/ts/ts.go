@@ -1,5 +1,6 @@
 // Package ts generates the TypeScript declarations of the Go types a gst
-// project's API routes send and receive.
+// project's API routes send and receive, and the table of those routes,
+// telling what each takes and answers (see Route).
 //
 // The declarations describe JSON the way encoding/json writes and reads it,
 // the codec the framework's response envelope and request binding use. The
@@ -49,6 +50,10 @@ type Config struct {
 	// Roots are the types the routes send and receive. Generation declares
 	// them and every project type they reach.
 	Roots []TypeRef
+	// Routes are the actions the route table lists, each on the path it is
+	// served at (see Route); their types are declared the way Roots are. A
+	// run without routes writes no table.
+	Routes []Route
 }
 
 // TypeRef names a type declared at package scope, such as
@@ -92,7 +97,8 @@ func (e *DiagnosticsError) Error() string {
 // Generate loads the packages of the root types and renders the TypeScript
 // declarations of every project type the roots reach, one file per Go package,
 // sorted by path. Alongside them comes the prelude, named after the
-// application, declaring the JSON the framework wraps around those types.
+// application, declaring the JSON the framework wraps around those types,
+// and, for a run given routes, the route table (see routeTable).
 // Roots without a single type -- a project with no routes -- produce no file at
 // all, so the output can be kept in step with the models by deleting what a run
 // did not write.
