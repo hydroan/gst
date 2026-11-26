@@ -116,9 +116,9 @@ git init
 
 索引一律通过模型的 `Indexes() []model.Index` 方法集中声明：`Fields` 写 Go 字段名、顺序即列序，`Unique` 声明唯一索引，索引名由框架统一生成（`idx_` 或 `uniq_` 加表名加列名，超过方言上限的截短后带哈希：PostgreSQL 最长 63，MySQL 与 SQLite 64）。唯一的例外是主键——它由 `model.Base`/`model.AutoBase` 内置声明，业务模型不写主键。不要用 gorm tag 的 `index`/`uniqueIndex`/`unique` 配置索引，`gg check` 会拒绝。被索引的字符串字段要写列宽（如 `gorm:"size:36"`）：没有长度的字符串在 MySQL 上是 longtext 列，MySQL 不能给它建索引，配置为 mysql 的项目 `gg check` 会拒绝，启动期与 `gg migrate` 也在建表之前拒绝。
 
-`Unique` 是「没删的记录之间唯一」：软删除的记录不占它的值，删掉之后同样的值可以再建，已删的记录之间可以重复；把已删的记录恢复回来时值已被别的记录占用，返回 409。这种索引在 MySQL 上要求 8.0.13 及以上；在 PostgreSQL 和 SQLite 上它是带条件的索引，自己写 `ON CONFLICT (列)` 点名它当冲突目标时要带上同样的条件 `WHERE deleted_at IS NULL`（gorm 的 `clause.OnConflict` 用 `TargetWhere`），数据库才认得它，不点名目标的 `ON CONFLICT DO NOTHING` 和框架的 `Upsert` 不受影响。
+`Unique` 是「没删的记录之间唯一」：软删除的记录不占它的值，删掉之后同样的值可以再建，已删的记录之间可以重复；把已删的记录恢复回来时值已被别的记录占用，返回 409。单条新建、修改撞上唯一索引或主键时，409 的答复点名撞上的字段（HTTP 在 `error.field_violations` 里，gRPC 在 `BadRequest` 明细里），批量接口不点名。这种索引在 MySQL 上要求 8.0.13 及以上；在 PostgreSQL 和 SQLite 上它是带条件的索引，自己写 `ON CONFLICT (列)` 点名它当冲突目标时要带上同样的条件 `WHERE deleted_at IS NULL`（gorm 的 `clause.OnConflict` 用 `TargetWhere`），数据库才认得它，不点名目标的 `ON CONFLICT DO NOTHING` 和框架的 `Upsert` 不受影响。
 
-字段的四种 tag 各管一件事：`json` 管请求体与响应的序列化，`gorm` 管数据库列，`query` 管前端查询参数，`binding` 管请求值的校验。校验规则只认 `binding` tag（如 `binding:"required,max=64"`，写法同 go-playground/validator），请求不满足时返回 400 并点名是哪个字段；写在 `validate` tag 里的规则不会执行，`gg check` 会拒绝。前端能按哪些字段过滤、排序、做游标翻页，由 `query` tag 声明，参数名就是 tag 的值（下例的 `user_id`、`title`）；没写 `query` tag 的字段不是查询参数，前端传了返回 400。
+字段的四种 tag 各管一件事：`json` 管请求体与响应的序列化，`gorm` 管数据库列，`query` 管前端查询参数，`binding` 管请求值的校验。校验规则只认 `binding` tag（如 `binding:"required,max=64"`，写法同 go-playground/validator），请求不满足时返回 400 并点名是哪个字段；这些规则同时写进接口文档：长度、范围、取值、格式写成对应的约束，没有对应写法的规则原样列在字段说明里；写在 `validate` tag 里的规则不会执行，`gg check` 会拒绝。前端能按哪些字段过滤、排序、做游标翻页，由 `query` tag 声明，参数名就是 tag 的值（下例的 `user_id`、`title`）；没写 `query` tag 的字段不是查询参数，前端传了返回 400。
 
 客户端不该写的字段（由别的动作或后端逻辑写的状态、时间）在 `binding` 里声明 `readonly`，如 `Stage string` 写成 `` `json:"stage" binding:"readonly"` ``。框架默认的新建、全量更新、部分更新（含批量，HTTP 与 gRPC 相同）都不采用客户端给它送的值，也不因此报错：
 
@@ -296,7 +296,9 @@ func (Entry) Design() {
   `Export(ctx, ...M)` 返回附件字节），禁止声明 `Payload[T]()` 和 `Result[T]()`。
 - `Service()` 表示当前 action 需要生成并注册业务 service，默认按动作命名
   （`Create` 生成 `create.go`、类型 `Creator`）；`Service("merge")` 同时给它起名，
-  service 文件和 service 类型用这个名，rpc 名是它加模型名。
+  service 文件和 service 类型用这个名，rpc 名是它加模型名。声明了 `Service()` 的路由在登记时会核对
+  它的 service 有没有登记、类型对不对得上，对不上直接启动报错并点名路由，不会悄悄改走默认流程；
+  生成的两处登记出自同一次 `gg gen`，重新生成即可。
 - 只声明 `Create(func(){})`、`List(func(){})` 等 action 就会启用对应接口；
   不需要的接口不声明即可。
 
@@ -1019,8 +1021,10 @@ rsp, err := cli.Post[model.SampleSealRsp](ctx, "/api/samples/seal", &model.Sampl
 两个类型注册成同一个段；自定义段的 `default` 标签写错（比如 bool 字段写成 `default:"yes"`）；配置文件在框架内置段或自定义段下写了这个段没有的键（比如 `[logger]` 下写成 `leve`），报错点名段和键；配置文件里出现既不是框架内置、也没有注册的段名（比如把 `[redis]` 写成 `[reids]`），服务启动和 `gg migrate` 报错点名这个段；自定义段只能在 `init()` 里注册（`gg new` 生成的 `configx` 就是这样），读完配置之后再调 `config.Register` 会 panic；自定义段的类型带 `Validate() error` 方法时，读完这个段就调用它（检查必填项、互相矛盾的键），返回错误则启动失败并带上段名；取值固定的键写了集合外的值（比如 `logger.output = syslog`、`database.type = oracle`），报错点名键、原值和可选的值，这类键不分大小写；带大小的键（`logger.http_body.max_body_size`、`grpc.max_recv_msg_size`）写带单位的值或裸字节数，其他写法启动失败；有范围的键（`cache.max_entries` 0 到 10,000,000，`ldap.scope` 0 到 2，`ldap.deref` 0 到 3）越界启动失败；端口、容量、大小这类不能为负的键写了负数启动失败。变量名写错、
 或者只写到段名（比如 `SERVER`）都不会报错，也不生效，按上面的规则核对。
 
-服务启动默认不自动建表、不自动迁移（`database.auto_migrate = false`）：启动期只校验注册模型
-的表是否存在，缺表直接报错退出并提示执行 `gg migrate`。`gg new` 生成的配置和 `examples/demo`
+服务启动默认不自动建表、不自动迁移（`database.auto_migrate = false`）：启动期只核对注册模型
+的表在不在、模型要读写的列在不在，缺表或缺列直接报错退出，点名表和列并提示执行 `gg migrate`；
+表里比模型多出来的列不管，列的类型和索引也不比。所以加字段的版本要先 `gg migrate` 再发布，
+回滚到旧代码不受影响。`gg new` 生成的配置和 `examples/demo`
 显式开启 `auto_migrate = true`，本地开发、测试环境按需开启即可；生产环境保持默认关闭，
 schema 变更一律走 `gg migrate`。
 
@@ -1028,6 +1032,11 @@ MySQL 默认明文连接。要加密时在 `[mysql]` 节打开 `tls_enabled`，�
 `ca_file` 是校验服务器证书用的 CA 文件，不写就用系统的根证书；`cert_file`、`key_file` 是服务器要求客户端证书时
 出示的那一对，要么都写、要么都不写，只写一个启动失败；`insecure_skip_verify = true` 只加密、不校验服务器是谁，
 不要用在生产环境。
+
+一个请求最多处理 `server.write_timeout` 这么久（默认 `15s`），HTTP 接口和 gRPC 的一元调用都按它算。到点时请求的 `ctx` 结束，
+照着 `ctx` 写的数据库、缓存和对外调用随之停下，事务回滚；还没开始答复的请求由框架答 `504`（gRPC 答 `DeadlineExceeded`），
+`msg` 是 `request timeout`。导入、导出、报表这类接口要跑得更久，就调大 `server.write_timeout`，它对所有请求一起生效，
+设成 `0` 不限时。SSE、WebSocket 和 gRPC 的流不受这个时限约束。
 
 给客户端的提示默认是英文。用户读中文的项目在 `[app]` 节写 `language = zh`（`zh-CN`、`zh-Hans` 同义）用简体中文，
 写 `language = zh-TW`（`zh-Hant`、`zh-HK`、`zh-MO` 同义）用繁体中文，用词是台湾的习惯：框架、框架自带的中间件和模块
@@ -1081,7 +1090,8 @@ gg migrate
 
 迁移只管模型声明的表。库里没有模型声明的表不删也不改，计划下面会把它们列出来。模型声明的表里，
 模型没有的索引和列都在计划里删。删列会丢数据：计划下面会列出是哪几列，执行前的确认会点明要删
-它们，答 `y` 才执行。想保留某一列，就在模型里把它声明出来。
+它们，答 `y` 才执行。想保留某一列，就在模型里把它声明出来；想保留模型声明不了的手建索引（全文索引、
+表达式索引这类），把它列进 `gst.yaml` 的 `migrate.indexes.ignore`，写法见下面的「项目级配置 gst.yaml」。
 
 `--yes` 只跳过确认，不代表同意丢数据：计划里有删列时要同时带上 `--accept-data-loss`，否则整份
 计划都不执行：
@@ -1306,6 +1316,13 @@ gg migrate --dry-run
 `ErrorEnvelope`、默认列表结果 `ListResult<T>` 和默认批量请求体 `ItemsPayload<T>`、`IDsPayload`。成功还是
 失败只看 HTTP 状态码：200 的响应体按 `Envelope<T>` 读，4xx、5xx 的按 `ErrorEnvelope` 读。
 
+还有一份路由表 `paths.ts`：一个 `paths` 接口，先按路径（路径参数写成 `{id}`）、再按方法，列出每个接口的路径参数、
+请求体和响应，写法与 openapi-typescript 生成的 `paths` 相同，可以直接交给 openapi-fetch 这类按路由表取类型的请求库，
+也可以只拿它查某个接口的类型：`paths["/api/samples/{id}"]["get"]["responses"][200]["content"]["application/json"]`。
+框架自己处理的动作已按动作套好形状：列表的 data 是 `ListResult<T>`，批量是 `ItemsPayload<T>`，局部更新的请求体是
+`Partial<T>`，删除不带 data；列表接口的查询参数只给了宽松的类型。表里只有 model 的 `Design()` 声明、收发 JSON 的接口，
+导入、导出、SSE 和 WebSocket 流不在表里。
+
 产物只有类型，文件之间用相对路径互相引用，不依赖任何 npm 包，也不限定请求库和前端框架：把整个
 目录复制到前端项目即可使用。命令和 `gg gen` 一样先执行项目检查、应用 gst.yaml 的忽略规则；模型
 变化后重新执行，再把目录复制给前端。
@@ -1334,7 +1351,8 @@ channel 与函数字段、键不是字符串或整数的 map，以及 `encoding/
 运行期注册的路由同样在生成范围内：项目 `module` 包里用 `gg module add` 或手写注册的框架模块
 （`iam.Register()` 这类），以及项目自己写的 `module.Use`。框架模块的类型放在把模块 `gg module copy`
 进项目后会在的位置，例如 iam 模块的账号类型在 `iam/account.ts`，所以模块是注册还是复制，前端引用的
-路径相同。`gg module copy` 复制进项目的模块和业务 model 一样会生成。
+路径相同。`gg module copy` 复制进项目的模块和业务 model 一样会生成。运行期注册的路由只生成类型，不进
+`paths.ts`：它们的路径在进程启动时才由模块给出；复制进项目的模块由 `Design()` 声明路由，照常在表里。
 
 ### 项目级配置 gst.yaml
 
@@ -1386,6 +1404,21 @@ gen:
       Profile:
         from: model/iam
 ```
+
+`migrate.indexes.ignore` 列出 `gg migrate` 要保留的索引。迁移会删掉模型的表里模型没声明的索引；手建的、
+模型的 `Indexes()` 声明不了的索引（全文索引、表达式索引、带条件的索引）列在这里就不会被删，计划下面会把它们列出来：
+
+```yaml
+migrate:
+  indexes:
+    ignore:
+      - samples.ft_samples_note   # 表名.索引名，不分大小写
+```
+
+- 模型的声明优先：条目点名的索引模型自己也声明了，就以模型为准，这一条不起作用，计划下面会提示。
+- 库里没有的索引、模型没声明的表上的索引，条目不起作用也不报错：同一份 `gst.yaml` 要对着各个环境的库用。
+- 被保留的索引迁移完全不碰：模型另起名字声明了一个定义相同的索引时，计划是新建一个，不会把保留的那个改名过去。
+- 不是「表名.索引名」写法的条目、重复的条目直接报错。
 
 **`gg prune` 只动 `service/`、`middleware/`、`interceptor/` 和 `pb/` 四个目录**，
 项目其他地方一个文件都不删、不改。它清理停用 action 的 service 文件连同配对的测试
