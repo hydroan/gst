@@ -14,8 +14,8 @@ const sqliteFileName = "test.db"
 // and points the framework at it. The returned function removes that directory.
 //
 // Sqlite needs no container, but a file still gives each call the isolation a
-// container gives: the framework default is an in-memory database shared by
-// every connection in the process.
+// container gives: the in-memory database sqlite.is_memory selects is one every
+// connection in the process shares.
 func setupSqlite() (func() error, error) {
 	dir, err := os.MkdirTemp("", "gst_sqlite_")
 	if err != nil {
