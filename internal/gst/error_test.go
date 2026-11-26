@@ -119,6 +119,23 @@ func TestNewInvalidFieldsJoinsTheViolations(t *testing.T) {
 	require.Empty(t, gst.FieldViolations(gst.NewError(http.StatusBadRequest, "plain")))
 }
 
+// TestNewAlreadyExistsNamesTheFieldsOfTheKey pins the error of a request
+// whose record a stored one holds the key of: 409, the message as given, the
+// fields of the key readable for the answers to list, none when the key
+// could not be told, and the database's error as the cause.
+func TestNewAlreadyExistsNamesTheFieldsOfTheKey(t *testing.T) {
+	cause := errors.New("duplicated key not allowed")
+	violations := []gst.FieldViolation{{Field: "code", Description: "code has already been taken"}}
+
+	err := gst.NewAlreadyExists("The resource already exists.", violations, cause)
+
+	require.Equal(t, http.StatusConflict, err.Status())
+	require.Equal(t, "The resource already exists.", err.Msg())
+	require.Equal(t, violations, gst.FieldViolations(err))
+	require.ErrorIs(t, err, cause)
+	require.Empty(t, gst.FieldViolations(gst.NewAlreadyExists("The resource already exists.", nil, cause)))
+}
+
 // TestNewInvalidValueNamesTheField pins the error of a request whose field
 // carries a value it cannot hold: 400, the message naming the field by its
 // JSON key path, one violation carrying the field and the description for

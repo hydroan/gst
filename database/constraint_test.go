@@ -204,3 +204,36 @@ func TestACommitRefusedOverItsDataAnswersItsSentinel(t *testing.T) {
 	require.ErrorIs(t, err, database.ErrForeignKeyViolated)
 	require.ErrorContains(t, err, says, "the error keeps what the database said")
 }
+
+// TestADuplicatedKeyTellsTheColumnsOfItsKey pins what a write colliding with
+// a key answers beyond ErrDuplicatedKey: the columns of the key, whichever
+// way the dialect's error tells them — sqlite and PostgreSQL by the columns
+// themselves, MySQL by the name of the key, which the framework finds among
+// the keys of the model — for the primary key, for a unique index a gorm tag
+// declares and for one the model's Indexes declare.
+func TestADuplicatedKeyTellsTheColumnsOfItsKey(t *testing.T) {
+	ctx := context.Background()
+	first := &TestMixedUniqueItem{Code: "duplicated-code", Ref: "duplicated-ref", Name: "first"}
+	require.NoError(t, database.Database[*TestMixedUniqueItem](ctx).Create(first))
+	t.Cleanup(func() { _ = database.Database[*TestMixedUniqueItem](ctx).Delete(first) })
+
+	sameID := &TestMixedUniqueItem{Code: "another-code", Ref: "another-ref", Name: "second"}
+	sameID.ID = first.ID
+	for _, tt := range []struct {
+		name    string
+		second  *TestMixedUniqueItem
+		columns []string
+	}{
+		{name: "the primary key", second: sameID, columns: []string{"id"}},
+		{name: "a unique index a gorm tag declares", second: &TestMixedUniqueItem{Code: "duplicated-code", Ref: "a-third-ref", Name: "second"}, columns: []string{"code"}},
+		{name: "a unique index the model declares", second: &TestMixedUniqueItem{Code: "a-third-code", Ref: "duplicated-ref", Name: "second"}, columns: []string{"ref"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			err := database.Database[*TestMixedUniqueItem](ctx).Create(tt.second)
+			require.ErrorIs(t, err, database.ErrDuplicatedKey)
+			var duplicated *dberror.DuplicatedKeyError
+			require.ErrorAs(t, err, &duplicated)
+			require.Equal(t, tt.columns, duplicated.Columns, "the key the database named: %q", duplicated.Constraint)
+		})
+	}
+}

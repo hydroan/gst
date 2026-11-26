@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/hydroan/gst/database"
 	"github.com/hydroan/gst/internal/dbruntime/dberror"
 	"github.com/hydroan/gst/internal/gst"
+	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/testutil/tracingtest"
 	"github.com/hydroan/gst/internal/tracing"
@@ -276,4 +278,82 @@ func TestReportFailureFollowsTheAnswer(t *testing.T) {
 		require.Equal(t, codes.Unset, ended.Status().Code)
 		require.Empty(t, ended.Events())
 	})
+}
+
+// keyedRecord is a model whose columns a duplicated key may name: a field
+// under its json name, one hidden from JSON, one without a json name, the
+// field of a struct stored in columns of its own, the promoted field of an
+// embedded struct, the tenant and the id.
+type keyedRecord struct {
+	Code   string `json:"code"`
+	Hidden string `json:"-"`
+	Plain  string
+	Place  keyedPlace `json:"place" gorm:"embedded;embeddedPrefix:place_"`
+	KeyedAudit
+
+	tenant.Scope
+	model.Base
+}
+
+// keyedPlace is stored in columns of the record's own, each under the prefix
+// of the field.
+type keyedPlace struct {
+	City string `json:"city"`
+}
+
+// KeyedAudit is embedded in a keyed record, its fields promoted.
+type KeyedAudit struct {
+	Reviewer string `json:"reviewer"`
+}
+
+// TestDuplicatedKeyFieldsNamesTheFieldsOfTheKey pins what the conflict of a
+// record under a key a stored one holds names: each column of the key the
+// client sends a field for, by the JSON key path of the field, a key of one
+// such field as taken and each field of a key of several as taken together;
+// the tenant, which scopes the key, and a column hidden from JSON are not
+// named; and nothing is named when the key or its columns are not told, when
+// a column is none of the model's, and when no field is left. The answer of
+// the conflict lists the fields, and a hook's own refusal keeps its answer
+// whatever key stands behind it.
+func TestDuplicatedKeyFieldsNamesTheFieldsOfTheKey(t *testing.T) {
+	taken := func(columns ...string) error {
+		return errors.Wrap(&dberror.DuplicatedKeyError{Constraint: "uk_probe", Columns: columns}, "duplicate entry")
+	}
+	together := func(fields ...string) []gst.FieldViolation {
+		violations := make([]gst.FieldViolation, 0, len(fields))
+		for _, field := range fields {
+			violations = append(violations, gst.FieldViolation{Field: field, Description: "the combination of " + strings.Join(fields, ", ") + " has already been taken"})
+		}
+		return violations
+	}
+	codeTaken := []gst.FieldViolation{{Field: "code", Description: "code has already been taken"}}
+
+	for _, tt := range []struct {
+		name string
+		err  error
+		want []gst.FieldViolation
+	}{
+		{name: "a key of one field", err: taken("code"), want: codeTaken},
+		{name: "the primary key", err: taken("id"), want: []gst.FieldViolation{{Field: "id", Description: "id has already been taken"}}},
+		{name: "a column the database spells in another case", err: taken("CODE"), want: codeTaken},
+		{name: "the tenant scopes the key", err: taken("tenant_id", "code"), want: codeTaken},
+		{name: "a column hidden from JSON", err: taken("hidden", "code"), want: codeTaken},
+		{name: "a key of several fields", err: taken("code", "place_city"), want: together("code", "place.city")},
+		{name: "a promoted field and one without a json name", err: taken("tenant_id", "reviewer", "plain"), want: together("reviewer", "Plain")},
+		{name: "no field left to name", err: taken("tenant_id", "hidden")},
+		{name: "a column that is none of the model's", err: taken("code", "elsewhere")},
+		{name: "a key whose columns the database did not tell", err: taken()},
+		{name: "an error telling no key", err: database.ErrDuplicatedKey},
+	} {
+		require.Equal(t, tt.want, duplicatedKeyFields[*keyedRecord](tt.err), tt.name)
+	}
+
+	var answer *gst.Error
+	require.ErrorAs(t, databaseError(taken("code"), duplicatedKeyFields[*keyedRecord](taken("code"))...), &answer)
+	require.Equal(t, http.StatusConflict, answer.Status())
+	require.Equal(t, alreadyExistsMsg, answer.Msg())
+	require.Equal(t, codeTaken, gst.FieldViolations(answer))
+
+	refused := gst.NewErrorWithCause(http.StatusForbidden, "operation refused", taken("code"))
+	require.Same(t, error(refused), databaseError(refused, duplicatedKeyFields[*keyedRecord](refused)...))
 }

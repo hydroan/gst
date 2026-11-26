@@ -66,6 +66,7 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 	scoped := standardFixture[*scopedSample](scopedRoute, "Scoped")
 	scopedAcross := scoped
 	scopedAcross.across = true
+	keyed := standardFixture[*keyedSample](keyedRoute, "Keyed")
 	staged := standardFixture[*stagedSample](stagedRoute, "Staged")
 	staging := standardFixture[*stagedSample](stagingRoute, "Staging")
 	public := standardFixture[*sampleRecord](publicRoute, publicPrefix)
@@ -87,6 +88,10 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 	// batch at all is worded by what it lacks, a body or the list.
 	noItems := contractWant{status: http.StatusBadRequest, msg: "items is required"}
 	noIDs := contractWant{status: http.StatusBadRequest, msg: "ids is required"}
+	// A record under a key a stored one holds is the one conflict gRPC
+	// answers AlreadyExists; the refusal names the fields of the key the
+	// client sent, here the code.
+	codeTaken := contractWant{status: http.StatusConflict, msg: alreadyExistsMsg, code: codes.AlreadyExists, fields: []gst.FieldViolation{{Field: "code", Description: "code has already been taken"}}}
 	noBatchOfItems := contractWant{status: http.StatusBadRequest, msg: "request body is required", grpc: &grpcAnswer{code: codes.InvalidArgument, msg: "items is required"}}
 	noBatchOfIDs := contractWant{status: http.StatusBadRequest, msg: "request body is required", grpc: &grpcAnswer{code: codes.InvalidArgument, msg: "ids is required"}}
 	// A patch naming no field to apply: HTTP writes the record back as
@@ -136,10 +141,65 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 				t.Helper()
 				return contractInput{record: map[string]any{"id": createSample(t, "contract-create-taken").GetID(), "name": uniqueName("contract-create-twice")}}
 			},
-			want: contractWant{status: http.StatusConflict, msg: alreadyExistsMsg, code: codes.AlreadyExists},
+			want: contractWant{status: http.StatusConflict, msg: alreadyExistsMsg, code: codes.AlreadyExists, fields: []gst.FieldViolation{{Field: "id", Description: "id has already been taken"}}},
 			check: func(t *testing.T, in contractInput, _ contractAnswer) {
 				t.Helper()
 				requireSampleName(t, stringOf(in.record["id"]), "contract-create-taken")
+			},
+		},
+		{
+			// The tenant a record is filed under scopes its keys and is no
+			// part of what the client named: the refusal names the code.
+			name: "Create refuses a code a record of its tenant holds, naming the field", fixture: keyed, phase: apiaction.Create,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				return contractInput{record: map[string]any{"code": createKeyed(t).Code, "kind": uniqueName("contract-keyed-kind"), "label": "a"}}
+			},
+			want: codeTaken,
+		},
+		{
+			// A key of several fields names each of them, as taken together.
+			name: "Create refuses a kind and label a record of its tenant holds together, naming both", fixture: keyed, phase: apiaction.Create,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				taken := createKeyed(t)
+				return contractInput{record: map[string]any{"code": uniqueName("contract-keyed-code"), "kind": taken.Kind, "label": taken.Label}}
+			},
+			want: contractWant{status: http.StatusConflict, msg: alreadyExistsMsg, code: codes.AlreadyExists, fields: []gst.FieldViolation{
+				{Field: "kind", Description: "the combination of kind, label has already been taken"},
+				{Field: "label", Description: "the combination of kind, label has already been taken"},
+			}},
+		},
+		{
+			name: "Update refuses a code another record of its tenant holds, naming the field", fixture: keyed, phase: apiaction.Update,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				taken, own := createKeyed(t), createKeyed(t)
+				return contractInput{id: own.GetID(), record: map[string]any{"code": taken.Code, "kind": own.Kind, "label": own.Label}}
+			},
+			want: codeTaken,
+		},
+		{
+			name: "Patch refuses a code another record of its tenant holds, naming the field", fixture: keyed, phase: apiaction.Patch,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				return contractInput{id: createKeyed(t).GetID(), record: map[string]any{"code": createKeyed(t).Code}}
+			},
+			want: codeTaken,
+		},
+		{
+			// A batch is written in one statement, which does not tell the
+			// item that ran into the key, and a field of a batch is named
+			// under its item: the conflict of a batch names no field.
+			name: "CreateMany refuses a batch holding a code a record of its tenant holds, naming no field", fixture: keyed, phase: apiaction.CreateMany,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				return contractInput{items: []map[string]any{{"code": createKeyed(t).Code, "kind": uniqueName("contract-keyed-kind"), "label": "a"}}}
+			},
+			want: contractWant{status: http.StatusConflict, msg: alreadyExistsMsg, code: codes.AlreadyExists},
+			check: func(t *testing.T, _ contractInput, got contractAnswer) {
+				t.Helper()
+				require.Empty(t, got.violations)
 			},
 		},
 		{
@@ -1802,6 +1862,14 @@ func TestTransportsAnswerTheContractAlike(t *testing.T) {
 			want:  contractWant{status: http.StatusBadRequest, msg: "name为必填字段", fields: []gst.FieldViolation{{Field: "name", Description: "name为必填字段"}}},
 		},
 		{
+			name: "Create names the field of a key a stored record holds in the language of the process", fixture: keyed, phase: apiaction.Create, language: i18n.Chinese,
+			prepare: func(t *testing.T) contractInput {
+				t.Helper()
+				return contractInput{record: map[string]any{"code": createKeyed(t).Code, "kind": uniqueName("contract-keyed-kind"), "label": "a"}}
+			},
+			want: contractWant{status: http.StatusConflict, msg: "资源已存在。", code: codes.AlreadyExists, fields: []gst.FieldViolation{{Field: "code", Description: "code已被使用"}}},
+		},
+		{
 			name: "Create refuses a request carrying no record in the language of the process", fixture: samples, phase: apiaction.Create, language: i18n.Chinese,
 			want: contractWant{status: http.StatusBadRequest, msg: "请求体不能为空", grpc: &grpcAnswer{code: codes.InvalidArgument, msg: "record为必填字段"}},
 		},
@@ -2396,6 +2464,16 @@ func createScoped(t *testing.T, name string) *scopedSample {
 	t.Helper()
 	record := &scopedSample{Name: name}
 	require.NoError(t, database.Database[*scopedSample](context.Background()).Create(record))
+	return record
+}
+
+// createKeyed stores a keyed sample of a code, and of a kind and label, no
+// other record holds, filed under the default tenant, and returns it with
+// its id.
+func createKeyed(t *testing.T) *keyedSample {
+	t.Helper()
+	record := &keyedSample{Code: uniqueName("contract-keyed-code"), Kind: uniqueName("contract-keyed-kind"), Label: "a"}
+	require.NoError(t, database.Database[*keyedSample](context.Background()).Create(record))
 	return record
 }
 

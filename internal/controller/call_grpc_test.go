@@ -512,6 +512,7 @@ func sampleHandlers() map[string]rpcHandler {
 	standardRPCs[*datedSample](handlers, datedRoute, "Dated")
 	standardRPCs[*feedSample](handlers, feedRoute, "Feed")
 	standardRPCs[*scopedSample](handlers, scopedRoute, "Scoped")
+	standardRPCs[*keyedSample](handlers, keyedRoute, "Keyed")
 	standardRPCs[*stagedSample](handlers, stagedRoute, "Staged")
 	standardRPCs[*stagedSample](handlers, stagingRoute, "Staging")
 	standardRPCs[*nestedSample](handlers, nestedRoute, "Nested")

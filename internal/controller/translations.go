@@ -15,6 +15,14 @@ const (
 	foreignKeyMsg      = "The request refers to a record that does not exist or is still in use." // 409
 )
 
+// The descriptions of the fields the conflict of a record under a key a
+// stored one holds names (see duplicatedKeyFields): the one field of a key,
+// by its path, and each field of a key of several, by the paths of them all.
+const (
+	takenMsg         = "%s has already been taken"
+	takenTogetherMsg = "the combination of %s has already been taken"
+)
+
 // The messages a batch carrying none of what its action works on is refused
 // with, 400 on both transports, before any hook runs: a batch acting on
 // nothing would answer success to a request that asked for nothing, which is
@@ -95,6 +103,9 @@ func init() {
 		staleObjectMsg:     "资源已被其他操作修改，请刷新后重试。",
 		foreignKeyMsg:      "请求引用的记录不存在，或仍在使用中。",
 
+		takenMsg:         "%s已被使用",
+		takenTogetherMsg: "%s的组合已被使用",
+
 		missingItemsMsg: "items为必填字段",
 		missingIDsMsg:   "ids为必填字段",
 
@@ -123,6 +134,9 @@ func init() {
 		alreadyExistsMsg:   "資源已存在。",
 		staleObjectMsg:     "資源已被其他操作修改，請重新整理後再試一次。",
 		foreignKeyMsg:      "請求參照的記錄不存在，或仍在使用中。",
+
+		takenMsg:         "%s已被使用",
+		takenTogetherMsg: "%s的組合已被使用",
 
 		missingItemsMsg: "items為必填欄位",
 		missingIDsMsg:   "ids為必填欄位",

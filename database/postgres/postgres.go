@@ -177,14 +177,50 @@ var errCodes = map[string]error{
 	"23502": dberror.ErrNotNullViolated,
 }
 
+// uniqueViolation is the SQLSTATE code of a write colliding with a key,
+// whose detail names the columns of the key: Key (tenant_id, code)=(t1, a)
+// already exists.
+const (
+	uniqueViolation       = "23505"
+	uniqueViolationKeyTag = "Key ("
+)
+
+// uniqueViolationError is what a unique violation is answered with: the key the
+// write collided with and the driver's error, both found behind it by errors.Is
+// and errors.As, worded the way the driver's own translation words the sentinel
+// it answers, the sentinel and then what the database said: duplicated key not
+// allowed: ERROR: duplicate key value violates unique constraint
+// "uniq_records_code" (SQLSTATE 23505).
+type uniqueViolationError struct {
+	key   *dberror.DuplicatedKeyError
+	cause error
+}
+
+// Error returns the message of the sentinel followed by the driver's.
+func (e *uniqueViolationError) Error() string { return e.key.Error() + ": " + e.cause.Error() }
+
+// Unwrap returns the key and the driver's error.
+func (e *uniqueViolationError) Unwrap() []error { return []error{e.key, e.cause} }
+
 // translate translates a driver error whose code errCodes lists to its
-// sentinel, the driver's text kept as the message, and nil for any other
-// error, which goes to the driver's own translation (see
-// dbruntime.InstallErrorTranslation).
+// sentinel, the driver's text kept as the message, and nil for any other error,
+// which goes to the driver's own translation (see
+// dbruntime.InstallErrorTranslation). A unique violation is answered as a
+// uniqueViolationError: a dberror.DuplicatedKeyError naming the constraint and
+// the columns the detail lists, beside the driver's error.
 func translate(err error) error {
 	var driverErr *pgconn.PgError
 	if !errors.As(err, &driverErr) {
 		return nil
+	}
+	if driverErr.Code == uniqueViolation {
+		duplicated := &dberror.DuplicatedKeyError{Constraint: driverErr.ConstraintName}
+		if rest, tagged := strings.CutPrefix(driverErr.Detail, uniqueViolationKeyTag); tagged {
+			if columns, _, closed := strings.Cut(rest, ")="); closed {
+				duplicated.Columns = strings.Split(columns, ", ")
+			}
+		}
+		return &uniqueViolationError{key: duplicated, cause: err}
 	}
 	sentinel, found := errCodes[driverErr.Code]
 	if !found {

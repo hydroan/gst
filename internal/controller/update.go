@@ -55,10 +55,11 @@ func (a *action[M, REQ, RSP]) updateFlow(ctx context.Context, newServiceContext 
 		return failService(ctx, log, err)
 	}
 	// 2.Update resource in database. The database layer answers existence:
-	// ErrRecordNotFound renders 404, ErrDuplicatedKey renders 409. WithSelect
-	// given no column narrows nothing: the write is the full row.
+	// ErrRecordNotFound renders 404, ErrDuplicatedKey renders 409, naming the
+	// fields of the key. WithSelect given no column narrows nothing: the
+	// write is the full row.
 	if err := database.Database[M](ctx).WithSelect(a.writable...).Update(req); err != nil {
-		return failDatabase(ctx, log, err)
+		return failDatabase(ctx, log, err, duplicatedKeyFields[M](err)...)
 	}
 	// The columns the update left alone hold whatever the client sent or a
 	// hook set; they are read back as stored, from the primary, before the

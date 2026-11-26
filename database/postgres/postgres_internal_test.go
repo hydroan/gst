@@ -1,13 +1,17 @@
 package postgres
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/dbruntime/dberror"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 // TestReadTimesInUTCLocatesEveryTimeReadInUTC pins that a connection set up
@@ -81,4 +85,39 @@ func TestBuildDSNCarriesEveryValueThroughTheParser(t *testing.T) {
 	require.Equal(t, cfg.Database, parsed.Database)
 	require.Equal(t, cfg.Username, parsed.User)
 	require.Equal(t, cfg.Password, parsed.Password)
+}
+
+// TestTranslateTellsTheKeyOfAUniqueViolation pins what a unique violation is
+// translated to: the sentinel, with the constraint and the columns the
+// detail lists; the driver's own error still behind it for a caller reading
+// it; and the text the driver's own translation gives the sentinel, so the
+// key is told and nothing else of the error changes. A detail naming no
+// column leaves the columns out.
+func TestTranslateTellsTheKeyOfAUniqueViolation(t *testing.T) {
+	driverErr := &pgconn.PgError{
+		Severity:       "ERROR",
+		Code:           uniqueViolation,
+		Message:        `duplicate key value violates unique constraint "uniq_records_code"`,
+		Detail:         "Key (tenant_id, code)=(t1, a) already exists.",
+		ConstraintName: "uniq_records_code",
+	}
+
+	translated := translate(driverErr)
+
+	require.ErrorIs(t, translated, dberror.ErrDuplicatedKey)
+	var duplicated *dberror.DuplicatedKeyError
+	require.ErrorAs(t, translated, &duplicated)
+	require.Equal(t, "uniq_records_code", duplicated.Constraint)
+	require.Equal(t, []string{"tenant_id", "code"}, duplicated.Columns)
+	var behind *pgconn.PgError
+	require.ErrorAs(t, translated, &behind)
+	require.Same(t, driverErr, behind)
+	require.Equal(t, fmt.Errorf("%w: %w", gorm.ErrDuplicatedKey, driverErr).Error(), translated.Error()) //nolint:forbidigo // the wording of the driver's own translation, which the test holds the text to
+
+	bare := &pgconn.PgError{Code: uniqueViolation, ConstraintName: "records_pkey"}
+	require.ErrorAs(t, translate(bare), &duplicated)
+	require.Equal(t, "records_pkey", duplicated.Constraint)
+	require.Empty(t, duplicated.Columns)
+
+	require.NoError(t, translate(errors.New("connection refused")))
 }

@@ -69,9 +69,10 @@ func (a *action[M, REQ, RSP]) patchFlow(ctx context.Context, newServiceContext s
 	}
 	// 2.Partial update resource in database. The record was loaded above, so
 	// ErrRecordNotFound only fires when it vanished in between; unique-key
-	// collisions from the patched values render 409.
+	// collisions from the patched values render 409, naming the fields of
+	// the key.
 	if err := database.Database[M](ctx).Update(cur); err != nil {
-		return zero, failDatabase(ctx, log, err)
+		return zero, failDatabase(ctx, log, err, duplicatedKeyFields[M](err)...)
 	}
 	// 3.Perform business logic processing after partial update resource.
 	if err := a.traceServiceHook(ctx, apiaction.PatchAfter, svc, newServiceContext, func(sc *gst.ServiceContext) error {

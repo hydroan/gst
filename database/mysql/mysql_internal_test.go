@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/dbruntime/dberror"
 	"github.com/stretchr/testify/require"
 )
 
@@ -106,4 +107,36 @@ func TestNewRefusesHalfOfAKeyPair(t *testing.T) {
 	cfg.CertFile, cfg.KeyFile = "", "client-key.pem"
 	_, err = New(cfg)
 	require.EqualError(t, err, "mysql tls: key_file is set without cert_file: a client certificate takes both")
+}
+
+// TestTranslateTellsTheKeyOfADuplicateEntry pins what a duplicate entry is
+// translated to: the sentinel with the key the message closes with, the
+// table a newer server writes before the key left out, PRIMARY for the
+// primary key, read from the end of the message, since the entry is the
+// client's own value and may hold the very words the key follows; and the
+// driver's text kept in front of the sentinel's.
+func TestTranslateTellsTheKeyOfADuplicateEntry(t *testing.T) {
+	for message, key := range map[string]string{
+		"Duplicate entry 'a' for key 'records.uniq_records_code'":       "uniq_records_code",
+		"Duplicate entry 'a' for key 'uniq_records_code'":               "uniq_records_code",
+		"Duplicate entry '01J' for key 'records.PRIMARY'":               "PRIMARY",
+		"Duplicate entry 'x' for key 'y' for key 'records.uniq_code'":   "uniq_code",
+		"Duplicate entry 'a.b' for key 'records.uniq_records_tenant_c'": "uniq_records_tenant_c",
+	} {
+		driverErr := &mysql.MySQLError{Number: duplicateEntry, Message: message}
+
+		translated := translate(driverErr)
+
+		require.ErrorIs(t, translated, dberror.ErrDuplicatedKey, message)
+		var duplicated *dberror.DuplicatedKeyError
+		require.ErrorAs(t, translated, &duplicated, message)
+		require.Equal(t, key, duplicated.Constraint, message)
+		require.Empty(t, duplicated.Columns, message)
+		require.Equal(t, driverErr.Error()+": "+dberror.ErrDuplicatedKey.Error(), translated.Error(), message)
+	}
+
+	unreadable := translate(&mysql.MySQLError{Number: duplicateEntry, Message: "Duplicate entry"})
+	var duplicated *dberror.DuplicatedKeyError
+	require.ErrorAs(t, unreadable, &duplicated)
+	require.Empty(t, duplicated.Constraint)
 }

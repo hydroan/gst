@@ -35,11 +35,12 @@ type Error struct {
 	msg    string
 	cause  error
 	// violations are the fields the request was refused on, set by
-	// NewInvalidFields, one per field the validator refused, and by
-	// NewInvalidValue, the one field holding a value it cannot hold, and read
-	// through FieldViolations; both answers list them, the gRPC one as its
-	// details and the HTTP one in the error member of its envelope, beside
-	// the msg NewInvalidFields joins from their descriptions.
+	// NewInvalidFields, one per field the validator refused, by
+	// NewInvalidValue, the one field holding a value it cannot hold, and by
+	// NewAlreadyExists, the fields of the key a stored record holds, and
+	// read through FieldViolations; both answers list them, the gRPC one as
+	// its details and the HTTP one in the error member of its envelope,
+	// beside the msg NewInvalidFields joins from their descriptions.
 	violations []FieldViolation
 	// stack holds the program counters captured at the construction site,
 	// exposed through StackTrace so error-stack consumers such as
@@ -81,6 +82,18 @@ func NewInvalidFields(violations []FieldViolation, cause error) *Error {
 func NewInvalidValue(field, description string, cause error) *Error {
 	err := newError(http.StatusBadRequest, "invalid value for field '"+field+"'", cause)
 	err.violations = []FieldViolation{{Field: field, Description: description}}
+	return err
+}
+
+// NewAlreadyExists creates the 409 of a request whose record a stored one
+// holds the key of: msg is the client-safe message, violations name the
+// fields of the key for the answer to list (see FieldViolations), none when
+// the key could not be told, and cause, the database's error, is reported by
+// Error for logs and available through Unwrap. The flows build it from what
+// the database reports of the key.
+func NewAlreadyExists(msg string, violations []FieldViolation, cause error) *Error {
+	err := newError(http.StatusConflict, msg, cause)
+	err.violations = violations
 	return err
 }
 
@@ -168,12 +181,12 @@ func (e *Error) Unwrap() error {
 }
 
 // FieldViolations returns the fields the request err answers for failed on,
-// which only an error NewInvalidFields or NewInvalidValue created carries; nil
-// for any other error, and for nil. It is a package function rather than a
-// method so it stays out of the public alias of Error: only the framework's
-// own answers read the fields, the gRPC one to list them as its details and
-// the HTTP one in the error member of its envelope, and the type they come
-// as is the framework's own.
+// which only an error NewInvalidFields, NewInvalidValue or NewAlreadyExists
+// created carries; nil for any other error, and for nil. It is a package
+// function rather than a method so it stays out of the public alias of Error:
+// only the framework's own answers read the fields, the gRPC one to list them
+// as its details and the HTTP one in the error member of its envelope, and the
+// type they come as is the framework's own.
 func FieldViolations(err *Error) []FieldViolation {
 	if err == nil {
 		return nil

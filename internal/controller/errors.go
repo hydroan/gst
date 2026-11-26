@@ -2,12 +2,19 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"reflect"
+	"slices"
+	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/dbruntime/dberror"
 	"github.com/hydroan/gst/internal/gst"
+	"github.com/hydroan/gst/internal/i18n"
+	"github.com/hydroan/gst/internal/modelschema"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/tracing"
 	"go.opentelemetry.io/otel/trace"
@@ -121,29 +128,31 @@ func failService(ctx context.Context, log gst.Logger, err error) error {
 }
 
 // failDatabase reports a failure of the flow's own database access, answered
-// through databaseError.
-func failDatabase(ctx context.Context, log gst.Logger, err error) error {
-	return failWith(ctx, log, "database operation failed", err, databaseError(err))
+// through databaseError. key is what the write of one record passes of the
+// key a stored record holds (see duplicatedKeyFields), for the conflict to
+// name.
+func failDatabase(ctx context.Context, log gst.Logger, err error, key ...gst.FieldViolation) error {
+	return failWith(ctx, log, "database operation failed", err, databaseError(err, key...))
 }
 
 // databaseError maps a database error to the error the flow answers with: a
 // service-layer error keeps the status and message it was constructed with;
 // database.ErrRecordNotFound answers 404; database.ErrDuplicatedKey,
-// database.ErrStaleObject and database.ErrForeignKeyViolated 409;
-// database.ErrVersionRequired, database.ErrIDRequired,
-// database.ErrCheckConstraintViolated, database.ErrValueTooLong,
-// database.ErrNotNullViolated, tenant.ErrImmutable and
-// tenant.ErrRequired, request defects all, 400, each with its fixed
-// client-safe message and err behind it as the cause; anything else is
-// answered as it is, the server's own failure. Handlers log the full error
-// themselves, so every branch deliberately keeps internal detail out of the
-// response.
+// database.ErrStaleObject and database.ErrForeignKeyViolated 409, the
+// duplicated key's naming key, the fields of the key the caller could tell,
+// none for a caller that could tell none; database.ErrVersionRequired,
+// database.ErrIDRequired, database.ErrCheckConstraintViolated,
+// database.ErrValueTooLong, database.ErrNotNullViolated, tenant.ErrImmutable
+// and tenant.ErrRequired, request defects all, 400, each with its fixed
+// client-safe message and err behind it as the cause; anything else is answered
+// as it is, the server's own failure. Handlers log the full error themselves,
+// so every branch deliberately keeps internal detail out of the response.
 //
 // The service error is honored first, and here as well as in the action path:
 // a model hook refusing an operation states its status deliberately — a guard
 // answering 403 — and flattening that to the server's own failure would
 // misreport a permission boundary as a server fault.
-func databaseError(err error) error {
+func databaseError(err error, key ...gst.FieldViolation) error {
 	var serviceErr *gst.Error
 	switch {
 	case errors.As(err, &serviceErr):
@@ -151,7 +160,7 @@ func databaseError(err error) error {
 	case errors.Is(err, database.ErrRecordNotFound):
 		return notFound(err)
 	case errors.Is(err, database.ErrDuplicatedKey):
-		return gst.NewErrorWithCause(http.StatusConflict, alreadyExistsMsg, err)
+		return gst.NewAlreadyExists(alreadyExistsMsg, key, err)
 	case errors.Is(err, database.ErrStaleObject):
 		// The optimistic-lock miss of a versioned model: modified or deleted
 		// by someone else after this caller read it. 409, reload and retry.
@@ -185,4 +194,58 @@ func databaseError(err error) error {
 		// Any other database error is the server's own failure.
 		return err
 	}
+}
+
+// duplicatedKeyFields returns the fields of the key the write of a record of
+// M ran into, when err tells one (see dberror.DuplicatedKeyError): each
+// column of the key the client sends a field for, named by the JSON key path
+// of the field (see columnJSONPath) and described as taken, in the language
+// the process answers in: "code has already been taken" for a key of one
+// such field, "the combination of kind, label has already been taken" for
+// each field of a key of several. Two kinds of column are no part of what
+// the client named: one hidden from JSON, and the tenant the record is filed
+// under, which scopes the key (see tenant.ValidateIndexes). nil when err
+// tells no key or none of its columns, when a column of the key is none of
+// M's, and when no field is left to name: the conflict is then answered
+// without naming one.
+//
+// It is for the write of one record. A batch is written in one statement,
+// which does not tell the item that ran into the key, and a field of a batch
+// is named under its item (see itemPrefix).
+func duplicatedKeyFields[M gst.Model](err error) []gst.FieldViolation {
+	var duplicated *dberror.DuplicatedKeyError
+	if !errors.As(err, &duplicated) || len(duplicated.Columns) == 0 {
+		return nil
+	}
+	typ := reflect.TypeFor[M]()
+	columns, columnsErr := modelschema.Columns(typ)
+	if columnsErr != nil {
+		return nil
+	}
+	paths := make([]string, 0, len(duplicated.Columns))
+	for _, name := range duplicated.Columns {
+		at := slices.IndexFunc(columns, func(column modelschema.Column) bool { return strings.EqualFold(column.DBName, name) })
+		if at < 0 {
+			return nil
+		}
+		if columns[at].Type == reflect.TypeFor[tenant.ID]() {
+			continue
+		}
+		if path, sent := columnJSONPath(typ, columns[at].Index); sent {
+			paths = append(paths, path)
+		}
+	}
+	if len(paths) == 0 {
+		return nil
+	}
+	description := func(path string) string { return fmt.Sprintf(i18n.Translate(takenMsg), path) }
+	if len(paths) > 1 {
+		together := fmt.Sprintf(i18n.Translate(takenTogetherMsg), strings.Join(paths, ", "))
+		description = func(string) string { return together }
+	}
+	violations := make([]gst.FieldViolation, 0, len(paths))
+	for _, path := range paths {
+		violations = append(violations, gst.FieldViolation{Field: path, Description: description(path)})
+	}
+	return violations
 }

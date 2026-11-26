@@ -44,6 +44,24 @@ var (
 	ErrCheckConstraintViolated = gorm.ErrCheckConstraintViolated
 )
 
+// DuplicatedKeyError is ErrDuplicatedKey telling which key the write collided
+// with, as far as the database's own error tells it: Constraint is the name
+// the database knows the key by and Columns the columns of the key, either
+// left empty where the error does not say it. A dialect answers it wrapped
+// in what the database said, the way it answers a sentinel, and errors.Is
+// finds ErrDuplicatedKey behind it.
+type DuplicatedKeyError struct {
+	Constraint string
+	Columns    []string
+}
+
+// Error returns the message of ErrDuplicatedKey; what the database said of
+// the key travels in the error a dialect wraps around this one.
+func (e *DuplicatedKeyError) Error() string { return ErrDuplicatedKey.Error() }
+
+// Unwrap returns ErrDuplicatedKey, the sentinel the refusal is told by.
+func (e *DuplicatedKeyError) Unwrap() error { return ErrDuplicatedKey }
+
 // ErrValueTooLong is answered for a write carrying a value longer than its
 // column holds, translated from the dialect's own error the way gorm
 // translates a duplicated key; database.ErrValueTooLong forwards it.

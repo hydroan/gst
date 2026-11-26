@@ -96,6 +96,36 @@ func jsonFieldPath(typ reflect.Type, fe validator.FieldError) string {
 	return strings.Join(path, ".")
 }
 
+// columnJSONPath returns the path a client sends the field behind a column
+// under, index being the field index path of the column from typ, a model
+// struct (see modelschema.Column): the JSON name of each field on the way,
+// joined the way the contract spells a path (see pathStep), and nothing for
+// an embedded struct without a name of its own, whose fields JSON promotes
+// to its level, as jsonFieldPath reads one. sent is false for a column a
+// json tag leaves out of what a client sends and reads.
+func columnJSONPath(typ reflect.Type, index []int) (path string, sent bool) {
+	for _, i := range index {
+		for typ.Kind() == reflect.Pointer {
+			typ = typ.Elem()
+		}
+		field := typ.Field(i)
+		typ = field.Type
+		name := jsonTagName(field)
+		if name == "-" {
+			return "", false
+		}
+		embedded := field.Type
+		for embedded.Kind() == reflect.Pointer {
+			embedded = embedded.Elem()
+		}
+		if field.Anonymous && name == "" && embedded.Kind() == reflect.Struct {
+			continue
+		}
+		path = pathStep(path, fieldJSONName(field))
+	}
+	return path, true
+}
+
 // splitOutsideBrackets splits a namespace at the dots outside its brackets,
 // the key of a map field carrying any character: items[a.b].name is the two
 // segments items[a.b] and name.

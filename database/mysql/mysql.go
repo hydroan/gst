@@ -6,6 +6,7 @@ package mysql
 
 import (
 	"fmt"
+	"strings"
 	"sync/atomic"
 
 	"github.com/cockroachdb/errors"
@@ -259,14 +260,35 @@ var errCodes = map[uint16]error{
 	3819: gorm.ErrCheckConstraintViolated,
 }
 
+// duplicateEntry is MySQL's error number for a write colliding with a key,
+// whose message closes with the key: Duplicate entry 'a' for key
+// 'records.uniq_records_code'.
+const (
+	duplicateEntry       = 1062
+	duplicateEntryKeyTag = " for key '"
+)
+
 // translate translates a driver error whose number errCodes lists to its
 // sentinel, the driver's text kept as the message, and nil for any other
 // error, which goes to the driver's own translation (see
-// dbruntime.InstallErrorTranslation).
+// dbruntime.InstallErrorTranslation). A duplicate entry is answered as a
+// dberror.DuplicatedKeyError naming the key the message closes with,
+// PRIMARY for the primary key, the table a newer server writes before it
+// left out; the columns of the key are for the caller to find by that name.
 func translate(err error) error {
 	var driverErr *mysqldriver.MySQLError
 	if !errors.As(err, &driverErr) {
 		return nil
+	}
+	if driverErr.Number == duplicateEntry {
+		duplicated := new(dberror.DuplicatedKeyError)
+		// The entry is the client's own value and may hold anything, the
+		// tag among it, so the key is read from the end of the message.
+		if at := strings.LastIndex(driverErr.Message, duplicateEntryKeyTag); at >= 0 {
+			key := strings.TrimSuffix(driverErr.Message[at+len(duplicateEntryKeyTag):], "'")
+			duplicated.Constraint = key[strings.LastIndex(key, ".")+1:]
+		}
+		return errors.Wrap(duplicated, err.Error())
 	}
 	sentinel, found := errCodes[driverErr.Number]
 	if !found {

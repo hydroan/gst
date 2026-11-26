@@ -30,9 +30,10 @@ func (a *action[M, REQ, RSP]) createFlow(ctx context.Context, newServiceContext 
 	}
 	// 2.Create resource in database. Create is a pure INSERT: a collision on
 	// the primary key, a soft-deleted row's included, or on a unique key
-	// surfaces as ErrDuplicatedKey and renders 409.
+	// surfaces as ErrDuplicatedKey and renders 409, naming the fields of the
+	// key.
 	if err := database.Database[M](ctx).Create(req); err != nil {
-		return failDatabase(ctx, log, err)
+		return failDatabase(ctx, log, err, duplicatedKeyFields[M](err)...)
 	}
 	// 3.Perform business logic processing after create resource
 	if err := a.traceServiceHook(ctx, apiaction.CreateAfter, svc, newServiceContext, func(sc *gst.ServiceContext) error {

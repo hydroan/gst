@@ -1,7 +1,13 @@
 package dbruntime
 
 import (
+	"reflect"
+	"slices"
+	"strings"
+
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/dbruntime/dberror"
+	"github.com/hydroan/gst/internal/modelschema"
 	"gorm.io/gorm"
 )
 
@@ -17,7 +23,10 @@ const translateErrorCallback = "gst:translate_error"
 // does not recognize goes to the driver's own translation (see
 // gorm.ErrorTranslator), and a sentinel the driver answers bare, nothing of
 // the database's error left in it, comes back with that error's text wrapped
-// around it. An error neither recognizes stays as it is.
+// around it. An error neither recognizes stays as it is. A duplicated key
+// the dialect tells by its name alone (see dberror.DuplicatedKeyError) is
+// given its columns from the model the statement writes, which declares the
+// key under that name (see keyColumns).
 //
 // The handle is opened with gorm's TranslateError off: gorm would run the
 // driver's translation as it records the error, before a callback sees it,
@@ -37,6 +46,12 @@ func InstallErrorTranslation(db *gorm.DB, translate func(err error) error) error
 			return
 		}
 		if translated := translate(stmt.Error); translated != nil {
+			// A dialect whose error names the key alone leaves its columns
+			// to the model the statement writes, which declares the key.
+			var duplicated *dberror.DuplicatedKeyError
+			if errors.As(translated, &duplicated) && len(duplicated.Columns) == 0 && duplicated.Constraint != "" && stmt.Statement != nil && stmt.Statement.Schema != nil {
+				duplicated.Columns = keyColumns(stmt, duplicated.Constraint)
+			}
 			stmt.Error = translated
 			return
 		}
@@ -69,6 +84,40 @@ func InstallErrorTranslation(db *gorm.DB, translate func(err error) error) error
 		if err := register(translateErrorCallback, rewrite); err != nil {
 			return errors.Wrap(err, "failed to register the database error translation")
 		}
+	}
+	return nil
+}
+
+// mysqlPrimaryKey is the name MySQL knows the primary key of every table by.
+const mysqlPrimaryKey = "PRIMARY"
+
+// keyColumns returns the columns of the key the database knows as
+// constraint, among the keys of the model stmt writes: the primary key under
+// the name MySQL gives it, an index the model declares through Indexes (see
+// modelschema.ParseIndexPlans) or one its gorm tags declare, found by its
+// name; nil when no key of the model goes by the name.
+func keyColumns(stmt *gorm.DB, constraint string) []string {
+	parsed := stmt.Statement.Schema
+	if strings.EqualFold(constraint, mysqlPrimaryKey) {
+		return slices.Clone(parsed.PrimaryFieldDBNames)
+	}
+	plans, err := modelschema.ParseIndexPlans(stmt.Session(&gorm.Session{NewDB: true}), reflect.New(parsed.ModelType).Interface())
+	if err == nil {
+		for _, plan := range plans {
+			if strings.EqualFold(plan.Name, constraint) {
+				return slices.Clone(plan.Columns)
+			}
+		}
+	}
+	for _, index := range parsed.ParseIndexes() {
+		if !strings.EqualFold(index.Name, constraint) {
+			continue
+		}
+		columns := make([]string, 0, len(index.Fields))
+		for _, field := range index.Fields {
+			columns = append(columns, field.DBName)
+		}
+		return columns
 	}
 	return nil
 }

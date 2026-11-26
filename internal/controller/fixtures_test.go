@@ -164,6 +164,26 @@ type scopedSample struct {
 
 func (scopedSample) TableName() string { return "controller_scoped_samples" }
 
+// keyedSample holds its records to two keys of their tenant beside their id:
+// no two of a tenant share a code, and no two a kind and a label together.
+type keyedSample struct {
+	Code  string `json:"code" gorm:"size:191"`
+	Kind  string `json:"kind" gorm:"size:191"`
+	Label string `json:"label" gorm:"size:191"`
+
+	tenant.Scope
+	model.Base
+}
+
+func (keyedSample) TableName() string { return "controller_keyed_samples" }
+
+func (keyedSample) Indexes() []modelschema.Index {
+	return []modelschema.Index{
+		{Fields: []string{"TenantID", "Code"}, Unique: true},
+		{Fields: []string{"TenantID", "Kind", "Label"}, Unique: true},
+	}
+}
+
 // stagedSample carries what a client may not write beside what it may: the
 // stage and the time it was reached are declared read-only, columns the
 // server writes alone; so is the tally, one field stored in columns of its
@@ -221,6 +241,7 @@ const (
 	datedRoute         = "controller-dated-samples"
 	feedRoute          = "controller-feed-samples"
 	scopedRoute        = "controller-scoped-samples"
+	keyedRoute         = "controller-keyed-samples"
 	stagedRoute        = "controller-staged-samples"
 	stagingRoute       = "controller-staging-samples"
 	publicRoute        = "controller-public-samples"
