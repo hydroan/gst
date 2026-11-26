@@ -2134,3 +2134,214 @@ func (c *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.U
 		})
 	}
 }
+
+// TestApplyServiceFileWithModelSyncAddsTheMethodsTheActionCalls pins what gg
+// gen does to the service file of an action whose types changed after the
+// file was written: the controller calls the Create method of an action with
+// types of its own and the hooks of one exchanging the model itself (see
+// GenerateService), and a file declaring none of what it calls now gets the
+// placeholders, after everything the project wrote, which stays as it is. A
+// file declaring any of them is left alone. The first case is the example in
+// the doc comment of ApplyServiceFileWithModelSync.
+func TestApplyServiceFileWithModelSyncAddsTheMethodsTheActionCalls(t *testing.T) {
+	modelInfo := &modelsource.Model{
+		ModulePath:   "helloworld",
+		ModelFileDir: "model",
+		ModelPkgName: "model",
+		ModelName:    "User",
+		ModelVarName: "u",
+		Design:       &dsl.Design{},
+	}
+	ownTypes := &dsl.Action{Service: true, Payload: "*UserCreateReq", Result: "*UserCreateRsp", Phase: apiaction.Create}
+	modelItself := &dsl.Action{Service: true, Payload: "*User", Result: "*User", Phase: apiaction.Create}
+
+	tests := []struct {
+		name        string
+		action      *dsl.Action
+		code        string
+		wantChanged bool
+		want        string
+	}{
+		{
+			// The file was written while the action exchanged the model: it
+			// holds hooks, which stay, and gets the Create method the
+			// controller calls now.
+			name:   "create_method_beside_the_hooks",
+			action: ownTypes,
+			code: `package user
+
+import (
+	"helloworld/model"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*model.User, *model.User, *model.User]
+}
+
+// CreateBefore refuses a name already taken.
+func (u *Creator) CreateBefore(ctx *gst.ServiceContext, user *model.User) error {
+	return u.check(user)
+}
+
+func (u *Creator) check(user *model.User) error {
+	return nil
+}
+`,
+			wantChanged: true,
+			want: `package user
+
+import (
+	"helloworld/model"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*model.User, *model.UserCreateReq, *model.UserCreateRsp]
+}
+
+// CreateBefore refuses a name already taken.
+func (u *Creator) CreateBefore(ctx *gst.ServiceContext, user *model.User) error {
+	return u.check(user)
+}
+
+func (u *Creator) check(user *model.User) error {
+	return nil
+}
+
+func (u *Creator) Create(ctx *gst.ServiceContext, req *model.UserCreateReq) (rsp *model.UserCreateRsp, err error) {
+	log := u.WithContext(ctx, ctx.Phase())
+	log.Info("user create")
+
+	return rsp, nil
+}
+`,
+		},
+		{
+			// The file was written while the action had types of its own: it
+			// holds the Create method, which stays under the types the
+			// action exchanges now, and gets the hooks the controller calls.
+			name:   "hooks_beside_the_create_method",
+			action: modelItself,
+			code: `package user
+
+import (
+	"helloworld/model"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*model.User, *model.UserCreateReq, *model.UserCreateRsp]
+}
+
+// Create stores the user.
+func (u *Creator) Create(ctx *gst.ServiceContext, req *model.UserCreateReq) (rsp *model.UserCreateRsp, err error) {
+	return rsp, u.store(ctx)
+}
+
+func (u *Creator) store(ctx *gst.ServiceContext) error {
+	return nil
+}
+`,
+			wantChanged: true,
+			want: `package user
+
+import (
+	"helloworld/model"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*model.User, *model.User, *model.User]
+}
+
+// Create stores the user.
+func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {
+	return rsp, u.store(ctx)
+}
+
+func (u *Creator) store(ctx *gst.ServiceContext) error {
+	return nil
+}
+
+func (u *Creator) CreateBefore(ctx *gst.ServiceContext, user *model.User) error {
+	log := u.WithContext(ctx, ctx.Phase())
+	log.Info("user create before")
+
+	return nil
+}
+
+func (u *Creator) CreateAfter(ctx *gst.ServiceContext, user *model.User) error {
+	log := u.WithContext(ctx, ctx.Phase())
+	log.Info("user create after")
+
+	return nil
+}
+`,
+		},
+		{
+			// One hook of the two is what the project kept: the other is
+			// not brought back.
+			name:   "file_declaring_one_of_them",
+			action: modelItself,
+			code: `package user
+
+import (
+	"helloworld/model"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*model.User, *model.User, *model.User]
+}
+
+func (u *Creator) CreateAfter(ctx *gst.ServiceContext, user *model.User) error {
+	return nil
+}
+`,
+			want: `package user
+
+import (
+	"helloworld/model"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*model.User, *model.User, *model.User]
+}
+
+func (u *Creator) CreateAfter(ctx *gst.ServiceContext, user *model.User) error {
+	return nil
+}
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fset := token.NewFileSet()
+			file, err := parser.ParseFile(fset, "", tt.code, parser.ParseComments)
+			require.NoError(t, err)
+
+			changed, err := gggen.ApplyServiceFileWithModelSync(file, tt.action, "user", "model", modelInfo)
+			require.NoError(t, err)
+			require.Equal(t, tt.wantChanged, changed)
+
+			got, err := gghelper.FormatFile(file, fset, "helloworld")
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}

@@ -1486,6 +1486,10 @@ action 是自定义动作时再开启 `Service()`。声明了 `Payload[T]()` 或
 `Result[T]()` 绑定当前接口专用的 REQ/RSP，让它成为自定义动作。
 `List`、`Get` 只能通过 `Result[T]()` 触发自定义动作，请求类型固定为 `*model.Empty`。
 
+`gg gen` 新建 service 文件时只生成会被调用的那一套：走内置流程的生成 hook，自定义动作生成 action 主方法。
+之后改了 action 的类型，`gg gen` 会把现在要调用、文件里又没有的方法补成空方法；已经写好的方法原样保留，
+不会被删除，逻辑要不要搬过去由你决定。
+
 ### Route 和 Endpoint 有什么区别？
 
 `Endpoint` 是资源默认路径；`Route` 是额外路径或完全自定义路径。同一个 model 可以

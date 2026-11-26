@@ -481,8 +481,10 @@ func TestGenServiceMethod9(t *testing.T) {
 }
 
 // TestGenerateServiceCreate compares the whole service file GenerateService
-// builds for the example of its doc comment: a Create action on a database
-// model, which gets the before and after hooks.
+// builds for the first example of its doc comment: a Create action that
+// exchanges the database model itself, which the controller runs through its
+// default flow, so the file gets the before and after hooks and no Create
+// method.
 func TestGenerateServiceCreate(t *testing.T) {
 	info := &modelsource.Model{
 		ModulePath:   "helloworld",
@@ -520,13 +522,6 @@ type Creator struct {
 	service.Base[*model.User, *model.User, *model.User]
 }
 
-func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {
-	log := u.WithContext(ctx, ctx.Phase())
-	log.Info("user create")
-
-	return rsp, nil
-}
-
 func (u *Creator) CreateBefore(ctx *gst.ServiceContext, user *model.User) error {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user create before")
@@ -539,6 +534,60 @@ func (u *Creator) CreateAfter(ctx *gst.ServiceContext, user *model.User) error {
 	log.Info("user create after")
 
 	return nil
+}
+`
+	if got != want {
+		t.Errorf("GenerateService() =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// TestGenerateServiceCreateOfItsOwnTypes compares the whole service file
+// GenerateService builds for the second example of its doc comment: a Create
+// action declaring a Payload and a Result of its own on the same model, which
+// the controller hands to the Create method, so the file gets the method and
+// none of the hooks.
+func TestGenerateServiceCreateOfItsOwnTypes(t *testing.T) {
+	info := &modelsource.Model{
+		ModulePath:   "helloworld",
+		ModelPkgName: "model",
+		ModelName:    "User",
+		ModelVarName: "u",
+		ModelFileDir: "model",
+		Design:       &dsl.Design{},
+	}
+	action := &dsl.Action{
+		Service: true,
+		Payload: "*UserCreateReq",
+		Result:  "*UserCreateRsp",
+		Phase:   apiaction.Create,
+	}
+
+	file := GenerateService(info, action, apiaction.Create, "user")
+	if file == nil {
+		t.Fatal("GenerateService returned nil")
+	}
+	got, err := gghelper.FormatFile(file, nil, "helloworld")
+	if err != nil {
+		t.Fatalf("format generated service failed: %v", err)
+	}
+	want := `package user
+
+import (
+	"helloworld/model"
+
+	"github.com/hydroan/gst"
+	"github.com/hydroan/gst/service"
+)
+
+type Creator struct {
+	service.Base[*model.User, *model.UserCreateReq, *model.UserCreateRsp]
+}
+
+func (u *Creator) Create(ctx *gst.ServiceContext, req *model.UserCreateReq) (rsp *model.UserCreateRsp, err error) {
+	log := u.WithContext(ctx, ctx.Phase())
+	log.Info("user create")
+
+	return rsp, nil
 }
 `
 	if got != want {
@@ -600,9 +649,9 @@ func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.U
 }
 
 // TestGenerateServiceList compares the whole service file GenerateService
-// builds for a List action on a database model: the List method, then the
-// hooks in the order the list controller invokes them, ListBefore, Filter
-// and ListAfter.
+// builds for a List action that exchanges the database model itself: the
+// hooks of the default flow in the order the list controller invokes them,
+// ListBefore, Filter and ListAfter, and no List method.
 func TestGenerateServiceList(t *testing.T) {
 	info := &modelsource.Model{
 		ModulePath:   "helloworld",
@@ -640,13 +689,6 @@ type Lister struct {
 	service.Base[*model.User, *model.User, *model.User]
 }
 
-func (u *Lister) List(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {
-	log := u.WithContext(ctx, ctx.Phase())
-	log.Info("user list")
-
-	return rsp, nil
-}
-
 func (u *Lister) ListBefore(ctx *gst.ServiceContext, users *[]*model.User) error {
 	log := u.WithContext(ctx, ctx.Phase())
 	log.Info("user list before")
@@ -673,6 +715,10 @@ func (u *Lister) ListAfter(ctx *gst.ServiceContext, users *[]*model.User) error 
 	}
 }
 
+// TestGenerateServiceListEmptyPayload pins the file of a List action declaring
+// a Result of its own, in a model package of its own and in the root one: the
+// request is model.Empty under the name the file imports the gst model
+// package by, and the List method carries both types.
 func TestGenerateServiceListEmptyPayload(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -680,7 +726,6 @@ func TestGenerateServiceListEmptyPayload(t *testing.T) {
 		wantImport    string
 		wantBase      string
 		wantSignature string
-		wantFilter    string
 	}{
 		{
 			name: "sub_package_model",
@@ -695,7 +740,6 @@ func TestGenerateServiceListEmptyPayload(t *testing.T) {
 			wantImport:    "\"github.com/hydroan/gst/model\"",
 			wantBase:      "service.Base[*box.Box, *model.Empty, *box.BoxListRsp]",
 			wantSignature: "func (b *Lister) List(ctx *gst.ServiceContext, req *model.Empty) (rsp *box.BoxListRsp, err error)",
-			wantFilter:    "func (b *Lister) Filter(ctx *gst.ServiceContext, box *box.Box, opts gst.QueryOptions) (*box.Box, gst.QueryOptions, error)",
 		},
 		{
 			name: "root_model_package",
@@ -710,7 +754,6 @@ func TestGenerateServiceListEmptyPayload(t *testing.T) {
 			wantImport:    "gstmodel \"github.com/hydroan/gst/model\"",
 			wantBase:      "service.Base[*model.Box, *gstmodel.Empty, *model.BoxListRsp]",
 			wantSignature: "func (b *Lister) List(ctx *gst.ServiceContext, req *gstmodel.Empty) (rsp *model.BoxListRsp, err error)",
-			wantFilter:    "func (b *Lister) Filter(ctx *gst.ServiceContext, box *model.Box, opts gst.QueryOptions) (*model.Box, gst.QueryOptions, error)",
 		},
 	}
 	for _, tt := range tests {
@@ -729,7 +772,7 @@ func TestGenerateServiceListEmptyPayload(t *testing.T) {
 			if err != nil {
 				t.Fatalf("format generated service failed: %v", err)
 			}
-			for _, want := range []string{tt.wantImport, tt.wantBase, tt.wantSignature, tt.wantFilter} {
+			for _, want := range []string{tt.wantImport, tt.wantBase, tt.wantSignature} {
 				if !strings.Contains(got, want) {
 					t.Errorf("generated service missing %q, got:\n%s", want, got)
 				}

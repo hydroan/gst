@@ -630,6 +630,70 @@ func forceCanonicalServiceStruct(file *ast.File, action *dsl.Action, modelInfo *
 	return true
 }
 
+// addCalledMethods gives a service file declaring none of the methods the
+// controller calls for the action the placeholders GenerateService scaffolds
+// for it: the action method of an action that took types of its own after the
+// file was written with hooks, the hooks of one that went back to exchanging
+// the model. They are appended after the declarations of the file, all of
+// which stay: a method the controller no longer calls is the project's code,
+// not the generator's to remove. A file declaring any of them is left alone,
+// so a hook the project deleted is not brought back, and so is a file whose
+// service struct is not named after the action's role, the service a module
+// registers by hand. It reports whether it added any. The documentation of
+// ApplyServiceFileWithModelSync shows a file before and after.
+func addCalledMethods(file *ast.File, action *dsl.Action, modelInfo *modelsource.Model) bool {
+	if file == nil || action == nil || modelInfo == nil || modelInfo.Design == nil {
+		return false
+	}
+	roleName := action.RoleName()
+	if goast.FindStructTypeSpec(file, roleName) == nil {
+		return false
+	}
+	scaffold := generateService(modelInfo, action, action.Phase, file.Name.Name, true)
+	if scaffold == nil {
+		return false
+	}
+
+	declared := make(map[string]bool)
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Recv == nil || len(fn.Recv.List) == 0 {
+			continue
+		}
+		recv := fn.Recv.List[0].Type
+		if star, ok := recv.(*ast.StarExpr); ok {
+			recv = star.X
+		}
+		if ident, ok := recv.(*ast.Ident); ok && ident.Name == roleName {
+			declared[fn.Name.Name] = true
+		}
+	}
+	var called []ast.Decl
+	for _, decl := range scaffold.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok {
+			continue
+		}
+		if declared[fn.Name.Name] {
+			return false
+		}
+		called = append(called, fn)
+	}
+	if len(called) == 0 {
+		return false
+	}
+
+	file.Decls = append(file.Decls, called...)
+	// The struct brought the service and model imports; the methods take the
+	// service context from the gst package as well.
+	if goast.FindImportSpec(file, ggconst.ImportPathGst) == nil {
+		goast.InsertImportSpec(file, &ast.ImportSpec{
+			Path: &ast.BasicLit{Kind: token.STRING, Value: fmt.Sprintf("%q", ggconst.ImportPathGst)},
+		})
+	}
+	return true
+}
+
 // pruneImportsOfDroppedFields deletes the imports the dropped fields alone
 // referred to, so a file whose struct body was forced back to the canonical
 // form still builds: for every package the types of the dropped fields
@@ -856,6 +920,64 @@ func ensureModelImportSpec(file *ast.File, importPath, modelQualifier string) {
 // "github.com/cespare/xxhash/v2", a package named xxhash, next to a model
 // package named v2 builds, and is synced like any other.
 //
+// A file declaring none of the methods the controller calls for the action
+// gets their placeholders after its own declarations, all of which stay (see
+// addCalledMethods). Once the Create action of the model User declares
+// Payload[*UserCreateReq]() and Result[*UserCreateRsp](), the file
+//
+//	package user
+//
+//	import (
+//		"helloworld/model"
+//
+//		"github.com/hydroan/gst"
+//		"github.com/hydroan/gst/service"
+//	)
+//
+//	type Creator struct {
+//		service.Base[*model.User, *model.User, *model.User]
+//	}
+//
+//	// CreateBefore refuses a name already taken.
+//	func (u *Creator) CreateBefore(ctx *gst.ServiceContext, user *model.User) error {
+//		return u.check(user)
+//	}
+//
+//	func (u *Creator) check(user *model.User) error {
+//		return nil
+//	}
+//
+// written while the action exchanged the model itself, becomes
+//
+//	package user
+//
+//	import (
+//		"helloworld/model"
+//
+//		"github.com/hydroan/gst"
+//		"github.com/hydroan/gst/service"
+//	)
+//
+//	type Creator struct {
+//		service.Base[*model.User, *model.UserCreateReq, *model.UserCreateRsp]
+//	}
+//
+//	// CreateBefore refuses a name already taken.
+//	func (u *Creator) CreateBefore(ctx *gst.ServiceContext, user *model.User) error {
+//		return u.check(user)
+//	}
+//
+//	func (u *Creator) check(user *model.User) error {
+//		return nil
+//	}
+//
+//	func (u *Creator) Create(ctx *gst.ServiceContext, req *model.UserCreateReq) (rsp *model.UserCreateRsp, err error) {
+//		log := u.WithContext(ctx, ctx.Phase())
+//		log.Info("user create")
+//
+//		return rsp, nil
+//	}
+//
 // Parameters:
 //   - file: The AST file to process
 //   - action: The DSL action configuration
@@ -883,6 +1005,12 @@ func ApplyServiceFileWithModelSync(file *ast.File, action *dsl.Action, servicePk
 	// anything else: the remaining apply steps only recognize service structs
 	// through the direct service.Base embedding.
 	changed := forceCanonicalServiceStruct(file, action, modelInfo)
+
+	// Before the shape rules below, which bring the signatures of the added
+	// methods in line with the file's imports like any other.
+	if addCalledMethods(file, action, modelInfo) {
+		changed = true
+	}
 
 	// First apply the shape rules of applyServiceFile
 	correctModelName := ""

@@ -268,9 +268,14 @@ func genServiceMethod9(info *modelsource.Model, modelQualifier string, action *d
 
 // GenerateService builds the scaffold of the action's service file in package
 // servicePkgName: the service struct named after the action's role and the
-// methods of phase. It returns nil when the action is disabled or declares no
-// service. For a Create action on the model User of the root model package,
-// a database model, the file prints as
+// methods of phase the controller calls. It returns nil when the action is
+// disabled or declares no service.
+//
+// The controller runs a Create, Delete, Update, Patch, List or Get action, and
+// their batch forms, that exchanges the database model itself through its
+// default flow, the hooks around the database operation, and never calls the
+// action method. For such a Create action on the model User of the root model
+// package the file prints as
 //
 //	package user
 //
@@ -283,13 +288,6 @@ func genServiceMethod9(info *modelsource.Model, modelQualifier string, action *d
 //
 //	type Creator struct {
 //		service.Base[*model.User, *model.User, *model.User]
-//	}
-//
-//	func (u *Creator) Create(ctx *gst.ServiceContext, req *model.User) (rsp *model.User, err error) {
-//		log := u.WithContext(ctx, ctx.Phase())
-//		log.Info("user create")
-//
-//		return rsp, nil
 //	}
 //
 //	func (u *Creator) CreateBefore(ctx *gst.ServiceContext, user *model.User) error {
@@ -306,17 +304,45 @@ func genServiceMethod9(info *modelsource.Model, modelQualifier string, action *d
 //		return nil
 //	}
 //
-// A List or Export action on a database model gets the Filter hook as well,
-// between ListBefore and ListAfter, the order the controllers invoke them
-// in. A model without a database table, one embedding model.Empty, gets no
-// hooks at all. GenerateServiceShell returns the same file without the hooks.
+// A List action gets the Filter hook as well, between ListBefore and
+// ListAfter, the order the controller invokes them in.
+//
+// An action declaring a Payload or a Result of its own, and every action of a
+// model without a database table, one embedding model.Empty, is handed to the
+// action method instead, and none of the hooks is called. With
+// Payload[*UserCreateReq]() and Result[*UserCreateRsp]() the same action
+// prints as
+//
+//	package user
+//
+//	import (
+//		"helloworld/model"
+//
+//		"github.com/hydroan/gst"
+//		"github.com/hydroan/gst/service"
+//	)
+//
+//	type Creator struct {
+//		service.Base[*model.User, *model.UserCreateReq, *model.UserCreateRsp]
+//	}
+//
+//	func (u *Creator) Create(ctx *gst.ServiceContext, req *model.UserCreateReq) (rsp *model.UserCreateRsp, err error) {
+//		log := u.WithContext(ctx, ctx.Phase())
+//		log.Info("user create")
+//
+//		return rsp, nil
+//	}
+//
+// An Export action holds both: the list hooks the export controller runs
+// before it, on a database model, and the Export method. GenerateServiceShell
+// returns the struct and the action method whatever the action exchanges.
 func GenerateService(info *modelsource.Model, action *dsl.Action, phase apiaction.Phase, servicePkgName string) *ast.File {
 	return generateService(info, action, phase, servicePkgName, true)
 }
 
-// GenerateServiceShell returns the file GenerateService returns for the same
-// action without the hook placeholders: the struct and the action method,
-// the shell gg module copy merges the module's service source onto. The
+// GenerateServiceShell returns the shell gg module copy merges the module's
+// service source onto: the struct and the action method, whatever the action
+// exchanges, and none of the hook placeholders GenerateService scaffolds. The
 // shell owns the signatures the source's bodies are grafted onto and the
 // source owns the hooks it defines; a placeholder the source does not define
 // would stay in the copy as a hook that runs. For the Create action of the
@@ -345,9 +371,10 @@ func GenerateServiceShell(info *modelsource.Model, action *dsl.Action, phase api
 	return generateService(info, action, phase, servicePkgName, false)
 }
 
-// generateService builds the service file of the action: the struct, the
-// action method and, when hooks is set and the model has a database table,
-// the hook placeholders of the phase.
+// generateService builds the service file of the action: the struct and,
+// when hooks is set, the methods the controller calls for it, the hooks of
+// an action exchanging a database model itself and the action method of any
+// other; without hooks, the struct and the action method.
 func generateService(info *modelsource.Model, action *dsl.Action, phase apiaction.Phase, servicePkgName string, hooks bool) *ast.File {
 	if !action.Service {
 		return nil
@@ -385,69 +412,31 @@ func generateService(info *modelsource.Model, action *dsl.Action, phase apiactio
 		types(qualifier, emptyReqPkgName(qualifier), info.ModelName, action.Payload, action.Result, roleName),
 	}
 
-	// add methods
+	// The controller runs a CRUD action that exchanges the model itself
+	// through its default flow, the hooks around the database operation, and
+	// hands any other to the action method (see model.AreTypesEqual), so
+	// only what it calls is scaffolded: a method it never calls would hold
+	// logic that never runs.
+	defaultFlow := hooks && action.Payload == "*"+info.ModelName && action.Result == "*"+info.ModelName
+	calledMethods := func(hook func(*modelsource.Model, string, *dsl.Action, apiaction.Phase, string) *ast.FuncDecl) []ast.Decl {
+		if !defaultFlow {
+			return []ast.Decl{genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName)}
+		}
+		return []ast.Decl{hook(info, qualifier, action, phase.Before(), roleName), hook(info, qualifier, action, phase.After(), roleName)}
+	}
 	switch phase {
-	case apiaction.Create:
-		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
-		if hooks {
-			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.Before(), roleName)) // generate create before hook
-			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.After(), roleName))  // generate create after hook
-		}
-	case apiaction.Delete:
-		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
-		if hooks {
-			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.Before(), roleName)) // generate delete before hook
-			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.After(), roleName))  // generate delete after hook
-		}
-	case apiaction.Update:
-		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
-		if hooks {
-			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.Before(), roleName)) // generate update before hook
-			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.After(), roleName))  // generate update after hook
-		}
-	case apiaction.Patch:
-		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
-		if hooks {
-			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.Before(), roleName)) // generate patch before hook
-			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.After(), roleName))  // generate patch after hook
-		}
+	case apiaction.Create, apiaction.Delete, apiaction.Update, apiaction.Patch, apiaction.Get:
+		decls = append(decls, calledMethods(genServiceMethod1)...)
 	case apiaction.List: // List hooks use genServiceMethod2, Filter genServiceMethod8
-		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
-		if hooks {
-			decls = append(decls, genServiceMethod2(info, qualifier, action, phase.Before(), roleName)) // generate list before hook
-			decls = append(decls, genServiceMethod8(info, qualifier, action, phase, roleName))          // generate filter hook
-			decls = append(decls, genServiceMethod2(info, qualifier, action, phase.After(), roleName))  // generate list after hook
+		called := calledMethods(genServiceMethod2)
+		if defaultFlow {
+			// Filter sits between the hooks, the order the list controller
+			// invokes them in.
+			called = []ast.Decl{called[0], genServiceMethod8(info, qualifier, action, phase, roleName), called[1]}
 		}
-	case apiaction.Get:
-		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
-		if hooks {
-			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.Before(), roleName)) // generate get before hook
-			decls = append(decls, genServiceMethod1(info, qualifier, action, phase.After(), roleName))  // generate get after hook
-		}
-	case apiaction.CreateMany: // XXXMany hooks use genServiceMethod3
-		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
-		if hooks {
-			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.Before(), roleName)) // generate create many before hook
-			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.After(), roleName))  // generate create many after hook
-		}
-	case apiaction.DeleteMany:
-		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
-		if hooks {
-			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.Before(), roleName)) // generate delete many before hook
-			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.After(), roleName))  // generate delete many after hook
-		}
-	case apiaction.UpdateMany:
-		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
-		if hooks {
-			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.Before(), roleName)) // generate update many before hook
-			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.After(), roleName))  // generate update many after hook
-		}
-	case apiaction.PatchMany:
-		decls = append(decls, genServiceMethod4(info, qualifier, action, action.Payload, action.Result, phase, roleName))
-		if hooks {
-			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.Before(), roleName)) // generate patch many before hook
-			decls = append(decls, genServiceMethod3(info, qualifier, action, phase.After(), roleName))  // generate patch many after hook
-		}
+		decls = append(decls, called...)
+	case apiaction.CreateMany, apiaction.DeleteMany, apiaction.UpdateMany, apiaction.PatchMany: // XXXMany hooks use genServiceMethod3
+		decls = append(decls, calledMethods(genServiceMethod3)...)
 	case apiaction.Import:
 		decls = append(decls, genServiceMethod5(info, qualifier, action, phase, roleName))
 	case apiaction.SSE:
