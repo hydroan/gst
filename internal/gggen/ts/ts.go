@@ -25,7 +25,7 @@ import (
 // Config describes one generation run.
 type Config struct {
 	// Dir is the directory the Go packages are loaded from, normally the root
-	// of the project module. Diagnostic file names are relative to it.
+	// of the project module. jsonshape.Diagnostic file names are relative to it.
 	Dir string
 	// ModulePath is the import path prefix of the packages whose types get
 	// declarations of their own.
@@ -68,15 +68,11 @@ type File struct {
 	Content string
 }
 
-// Diagnostic reports a Go type or field whose JSON shape the generator cannot
-// describe, as jsonshape reports it.
-type Diagnostic = jsonshape.Diagnostic
-
 // DiagnosticsError is the error Generate returns when any diagnostic was
 // reported. No file is generated then: a partial set would hand the frontend
 // declarations that refer to missing ones.
 type DiagnosticsError struct {
-	Diagnostics []Diagnostic
+	Diagnostics []jsonshape.Diagnostic
 }
 
 // Error lists every diagnostic on a line of its own, under a line counting

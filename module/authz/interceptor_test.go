@@ -240,7 +240,7 @@ func grpcAuthzProbe(t *testing.T) *grpc.ClientConn {
 			grpcserver.Method{Name: "/gst.test.Probe/Look", HTTPMethod: http.MethodGet, Route: grantedRoute},
 			grpcserver.Method{Name: "/gst.test.Probe/Deny", HTTPMethod: http.MethodGet, Route: deniedRoute},
 			grpcserver.Method{Name: "/gst.test.Probe/Peek", HTTPMethod: http.MethodGet, Route: probeThingRoute},
-			grpcserver.Method{Name: "/gst.test.Probe/Tail", HTTPMethod: grpcserver.MethodStream, Route: probeTailRoute},
+			grpcserver.Method{Name: "/gst.test.Probe/Tail", HTTPMethod: apiaction.MethodStream, Route: probeTailRoute},
 			grpcserver.Method{Name: "/gst.test.Probe/ListUsers", HTTPMethod: http.MethodGet, Route: userAdminPath},
 		)
 		listener, err := net.Listen("tcp", "127.0.0.1:0")

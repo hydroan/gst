@@ -36,7 +36,7 @@ var (
 	ErrMissingSigningKey = errors.New("auth.jwt_secret is not configured")
 )
 
-var issuer = gst.FrameworkName
+const issuer = gst.FrameworkName
 
 // signingKey returns the key this package signs every token it issues with, and
 // verifies every token it parses against. It is the package's one point of

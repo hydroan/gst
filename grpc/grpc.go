@@ -13,6 +13,7 @@
 package grpc
 
 import (
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/grpcserver"
 	"google.golang.org/grpc"
 )
@@ -34,7 +35,7 @@ type Interceptor = grpcserver.Interceptor
 // call, and so the action word an authorization policy grants a stream by,
 // on both listeners: router.Route answers it for the request opening the
 // connection of the same action over HTTP.
-const MethodStream = grpcserver.MethodStream
+const MethodStream = apiaction.MethodStream
 
 // Method describes one rpc of a registered service the way the generated
 // registration file declares it: its full name, whether its action declares

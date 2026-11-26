@@ -9,6 +9,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/logfield"
@@ -119,7 +120,7 @@ func TestCallsCarryTheRequestMetadataAndTraceID(t *testing.T) {
 // reads whichever listener served the action; the path and request URI
 // stay the full method, the call's target on the wire; and the access-log
 // entry names the route and method the same way. The rpc of a Stream action,
-// described with MethodStream, carries STREAM as its method.
+// described with apiaction.MethodStream, carries STREAM as its method.
 func TestCallsDescribedByAnActionCarryItsRouteAndMethod(t *testing.T) {
 	reset(t)
 	seen := make(chan observed, 1)
@@ -129,7 +130,7 @@ func TestCallsDescribedByAnActionCarryItsRouteAndMethod(t *testing.T) {
 	}
 	serve(map[string]func(context.Context) error{"Look": report, "Tail": report},
 		Method{Name: "/gst.test.Echo/Look", HTTPMethod: http.MethodGet, Route: "/api/records/:id"},
-		Method{Name: "/gst.test.Echo/Tail", HTTPMethod: MethodStream, Route: "/api/records/:id/tail"})
+		Method{Name: "/gst.test.Echo/Tail", HTTPMethod: apiaction.MethodStream, Route: "/api/records/:id/tail"})
 	conn := dial(t, start(t), nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -149,10 +150,10 @@ func TestCallsDescribedByAnActionCarryItsRouteAndMethod(t *testing.T) {
 	require.Equal(t, "/gst.test.Echo/Look", fields[requestctx.KeyPath])
 
 	require.NoError(t, call(ctx, conn, "Tail"))
-	require.Equal(t, MethodStream, (<-seen).meta.Method())
+	require.Equal(t, apiaction.MethodStream, (<-seen).meta.Method())
 	entries = accessLog.All()
 	require.Len(t, entries, 2)
-	require.Equal(t, MethodStream, entries[1].ContextMap()[requestctx.KeyMethod])
+	require.Equal(t, apiaction.MethodStream, entries[1].ContextMap()[requestctx.KeyMethod])
 }
 
 // TestCallsCarryWhetherTheirMethodRequiresAuth pins the RequiresAuth of the

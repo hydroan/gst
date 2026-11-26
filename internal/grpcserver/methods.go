@@ -3,7 +3,6 @@ package grpcserver
 import (
 	"slices"
 
-	"github.com/hydroan/gst/internal/apiaction"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection/grpc_reflection_v1"
 	"google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
@@ -18,7 +17,7 @@ type Method struct {
 	Name string
 	// HTTPMethod and Route are the HTTP method and the route pattern of the
 	// same action, "GET" and "/api/records/:id"; for the rpc of a Stream
-	// action HTTPMethod is MethodStream and Route the path its connection
+	// action HTTPMethod is apiaction.MethodStream and Route the path its connection
 	// is opened at over HTTP, "/api/feeds/watch".
 	HTTPMethod string
 	Route      string
@@ -26,13 +25,6 @@ type Method struct {
 	// UseAuth queued leave the method alone.
 	Public bool
 }
-
-// MethodStream is what the registration describes the rpc of a Stream
-// action with in place of an HTTP method, apiaction.MethodStream: the word
-// a stream is listed and authorized by on both listeners, so a policy
-// written for GET or POST lets no stream through. The public
-// grpc.MethodStream forwards to it.
-const MethodStream = apiaction.MethodStream
 
 // methods are the rpcs Register described, keyed by their full name.
 var methods map[string]Method

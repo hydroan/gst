@@ -23,14 +23,12 @@ import (
 // SuccessMsg is the msg of the success envelope, the one JSON writes.
 const SuccessMsg = "success"
 
-// The answer of the server's own failure: an error that is not a service
-// error, one no status and client-safe message were chosen for, which is the
-// server failing to serve the request and not the client's doing. Its text
-// stays out of the envelope.
-const (
-	failureStatus = http.StatusInternalServerError
-	failureMsg    = gst.FailureMsg
-)
+// failureStatus is the status the server's own failure is answered with: an
+// error that is not a service error, one no status and client-safe message
+// were chosen for, which is the server failing to serve the request and not
+// the client's doing. Its text stays out of the envelope, whose msg is
+// gst.FailureMsg.
+const failureStatus = http.StatusInternalServerError
 
 // JSON writes data in the success envelope: status 200, SuccessMsg, data
 // (null when none is given) and the trace id.
@@ -53,7 +51,7 @@ func JSON(c *gin.Context, data ...any) {
 //
 // The data of a failure is null, a failure carrying no details has no error
 // member, and any other error is the server's own failure and answers 500
-// with failureMsg. The message is answered in the language the process
+// with gst.FailureMsg. The message is answered in the language the process
 // answers in (see i18n.Translate), the one a gRPC status carries it in.
 // Internal error text — database drivers naming tables and columns,
 // third-party client output — never reaches the envelope; callers log the
@@ -68,7 +66,7 @@ func Error(c *gin.Context, err error) {
 		envelope(c, serviceErr.Status(), i18n.Translate(serviceErr.Msg()), nil, details)
 		return
 	}
-	envelope(c, failureStatus, i18n.Translate(failureMsg), nil, nil)
+	envelope(c, failureStatus, i18n.Translate(gst.FailureMsg), nil, nil)
 }
 
 // Abort refuses the request with err, written in the failure envelope the
@@ -106,7 +104,7 @@ var envelopeBuffers = sync.Pool{
 // encoding/json/v2 under the options json.DefaultOptionsV1 names. It is
 // encoded before anything is written: a data no JSON holds, a NaN or a
 // channel a service put there, is the server's own failure, answered 500
-// with failureMsg, translated the way Error translates it, and recorded on
+// with gst.FailureMsg, translated the way Error translates it, and recorded on
 // the context for the access log, the handler chain stopped, where an
 // encoding failing under gin's render would leave the status already
 // written, a 200 with an empty body that reads as a success with nothing in
@@ -126,7 +124,7 @@ func envelope(c *gin.Context, status int, msg string, data any, details *errorDe
 		c.Abort()
 		status = failureStatus
 		body.Reset()
-		_ = jsonv2.MarshalWrite(body, apiEnvelope{Msg: i18n.Translate(failureMsg), TraceID: traceID}, json.DefaultOptionsV1()) // strings and a null: nothing in it fails to encode
+		_ = jsonv2.MarshalWrite(body, apiEnvelope{Msg: i18n.Translate(gst.FailureMsg), TraceID: traceID}, json.DefaultOptionsV1()) // strings and a null: nothing in it fails to encode
 	}
 	c.Render(status, jsonRender{body: body.Bytes()})
 

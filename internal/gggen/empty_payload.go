@@ -13,8 +13,6 @@ import (
 )
 
 const (
-	// gstModelPkgName is the package name of the gst model package.
-	gstModelPkgName = ggconst.PkgModel
 	// gstModelPkgAlias is the import alias used when the plain "model"
 	// qualifier would clash with another import in the generated file.
 	gstModelPkgAlias = "gstmodel"
@@ -32,7 +30,7 @@ const (
 // declaring both sides of every action yield ("model", false). Call it after
 // the route/model ignore passes so disabled actions no longer count as routed.
 func RouterGstModelUse(models []*modelsource.Model) (pkgName string, needed bool) {
-	pkgName = gstModelPkgName
+	pkgName = ggconst.PkgModel
 	for _, m := range models {
 		if m.Design == nil {
 			continue
@@ -44,7 +42,7 @@ func RouterGstModelUse(models []*modelsource.Model) (pkgName string, needed bool
 				needed = true
 			}
 		})
-		if routed && m.ModelPkgName == gstModelPkgName {
+		if routed && m.ModelPkgName == ggconst.PkgModel {
 			pkgName = gstModelPkgAlias
 		}
 	}
@@ -69,10 +67,10 @@ func GstModelImportEntry(pkgName string) string {
 // model package is imported under the gstmodel alias to avoid the name clash:
 // it returns gstmodel for model and model for sample.
 func emptyReqPkgName(modelQualifier string) string {
-	if modelQualifier == gstModelPkgName {
+	if modelQualifier == ggconst.PkgModel {
 		return gstModelPkgAlias
 	}
-	return gstModelPkgName
+	return ggconst.PkgModel
 }
 
 // gstModelQualifier returns the qualifier a service file being rewritten
@@ -91,9 +89,9 @@ func gstModelQualifier(file *ast.File, modelPkg string) string {
 		if spec.Name != nil {
 			return spec.Name.Name
 		}
-		return gstModelPkgName
+		return ggconst.PkgModel
 	}
-	if modelPkg == gstModelPkgName {
+	if modelPkg == ggconst.PkgModel {
 		return gstModelPkgAlias
 	}
 	for _, spec := range file.Imports {
@@ -101,11 +99,11 @@ func gstModelQualifier(file *ast.File, modelPkg string) string {
 		if err != nil {
 			continue
 		}
-		if importedAs(spec, importPath) == gstModelPkgName {
+		if importedAs(spec, importPath) == ggconst.PkgModel {
 			return gstModelPkgAlias
 		}
 	}
-	return gstModelPkgName
+	return ggconst.PkgModel
 }
 
 // emptyReqExpr builds the *<pkgName>.Empty type expression that generated
@@ -158,7 +156,7 @@ func ensureEmptyReqImportSpec(file *ast.File, gstModelPkg string) bool {
 			Value: fmt.Sprintf("%q", ggconst.ImportPathModel),
 		},
 	}
-	if gstModelPkg != gstModelPkgName {
+	if gstModelPkg != ggconst.PkgModel {
 		spec.Name = ast.NewIdent(gstModelPkg)
 	}
 	goast.InsertImportSpec(file, spec)
@@ -176,7 +174,7 @@ func pruneGstModelImportSpec(file *ast.File) bool {
 		return false
 	}
 
-	localName := gstModelPkgName
+	localName := ggconst.PkgModel
 	if spec.Name != nil {
 		localName = spec.Name.Name
 	}

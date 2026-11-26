@@ -19,7 +19,6 @@ import (
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/controller"
-	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/logger"
 	"github.com/hydroan/gst/internal/middleware"
@@ -402,7 +401,7 @@ func TestTransportsCarryAStreamAlike(t *testing.T) {
 						break
 					}
 					notes = append(notes, fmt.Sprint(rsp["Note"]))
-					require.Equal(t, grpcserver.MethodStream, rsp["Method"])
+					require.Equal(t, apiaction.MethodStream, rsp["Method"])
 				}
 				require.Equal(t, s.notes, notes)
 			})

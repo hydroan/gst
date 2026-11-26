@@ -444,7 +444,7 @@ func sampleServer(t *testing.T) *grpc.ClientConn {
 			methods = append(methods, grpcserver.Method{Name: fullMethod, Public: public, HTTPMethod: httpMethod, Route: "/api/controller-sample-" + strings.ToLower(name)})
 		}
 		for _, name := range []string{"Watch", "Upload", "Chat", "Fork", "Silence"} {
-			methods = append(methods, grpcserver.Method{Name: "/gst.test.Samples/" + name, HTTPMethod: grpcserver.MethodStream, Route: "/api/controller-sample-" + strings.ToLower(name)})
+			methods = append(methods, grpcserver.Method{Name: "/gst.test.Samples/" + name, HTTPMethod: apiaction.MethodStream, Route: "/api/controller-sample-" + strings.ToLower(name)})
 		}
 		grpcserver.Register(func(r grpc.ServiceRegistrar) {
 			r.RegisterService(&grpc.ServiceDesc{

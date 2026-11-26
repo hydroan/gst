@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hydroan/gst/internal/apiaction"
 	"github.com/hydroan/gst/internal/controller"
-	"github.com/hydroan/gst/internal/grpcserver"
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/i18n"
 	"github.com/stretchr/testify/require"
@@ -165,7 +165,7 @@ func TestServerStreamCallStreamsTheResponses(t *testing.T) {
 		require.Equal(t, "alice", rsp["Username"])
 		require.Equal(t, "b-3", rsp["Box"])
 		require.Equal(t, "/api/controller-sample-watch", rsp["Route"], "the route of the action, not the full method")
-		require.Equal(t, grpcserver.MethodStream, rsp["Method"])
+		require.Equal(t, apiaction.MethodStream, rsp["Method"])
 		require.Equal(t, true, rsp["RequiresAuth"])
 	}
 	_, err := recvResponse(stream)
