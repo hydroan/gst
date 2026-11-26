@@ -7,13 +7,25 @@
 // signal the base of every request context through WithServerShutdown, and a
 // stream runs on the context New derives from its request, which ends with
 // the request or with the shutdown, whichever comes first.
+//
+// It also holds what the streams of every kind keep alike, the pause between
+// their keep-alives (see DefaultHeartbeatInterval).
 package streamctx
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/errors"
 )
+
+// DefaultHeartbeatInterval is the pause a stream keeps between the
+// keep-alives it sends its client while nothing else travels: the comment
+// frames of a Server-Sent Events stream, the pings of a WebSocket
+// connection. It stays well below the idle timeouts commonly configured on
+// reverse proxies (nginx defaults to 60s), so a quiet stream is never
+// mistaken for a dead one.
+const DefaultHeartbeatInterval = 15 * time.Second
 
 // ErrServerShutdown is the cause a stream's context ends with when the server
 // the request arrived on begins to shut down, as opposed to the client going

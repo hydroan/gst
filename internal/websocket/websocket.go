@@ -27,7 +27,6 @@ import (
 	coderwebsocket "github.com/coder/websocket"
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/i18n"
-	"github.com/hydroan/gst/internal/sse"
 	"github.com/hydroan/gst/internal/streamctx"
 )
 
@@ -56,9 +55,9 @@ const (
 )
 
 // heartbeatInterval is the pause between the pings an accepted connection
-// sends, the pause a Server-Sent Events stream keeps between its keep-alive
-// frames. A variable so a test can play it out in milliseconds.
-var heartbeatInterval = sse.DefaultHeartbeatInterval
+// sends, the pause a stream of any kind keeps between its keep-alives. A
+// variable so a test can play it out in milliseconds.
+var heartbeatInterval = streamctx.DefaultHeartbeatInterval
 
 // The endings of a connection its own side decides, each the cause its
 // context ends with.
@@ -299,6 +298,11 @@ func (c *Conn) read() {
 // for Recv, when read reads nothing. A ping left unanswered is no verdict on
 // the peer: its pong is read by read, which waits on Recv while a message is
 // undelivered.
+//
+// A ping has one interval to be written and answered in. The library closes
+// a connection on a write that outlasts its context, so a ping still being
+// written then is one that cannot be sent: the next beat finds the
+// connection closed and ends the context.
 func (c *Conn) beat(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
