@@ -132,4 +132,10 @@ type ControllerConfig[M Model] struct {
 	// registers under. router.Register fills it in; an empty route resolves
 	// no service and the handler falls back to the no-op default service.
 	Route string
+	// Service says the action the route serves declares a service of its
+	// own, Service() in its Design: router.Register then requires that
+	// service registered under the route, for the types of the route, and
+	// panics as the process starts when it is missing or registered for
+	// other types. The routes gg gen writes set it.
+	Service bool
 }

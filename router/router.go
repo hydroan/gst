@@ -49,10 +49,14 @@ func APIPath(route string) string {
 // code writes it, or as records/:rec. A handler finds its service by that
 // path and the phase, so the matching service.Register call names the same
 // route; generated code derives both from one design. cfg may be nil, and it
-// is copied, so one config can serve several routes. A blank route, no
-// phases, or a phase no HTTP route serves, a hook phase such as
-// CreateBefore, panics: the mistake stops the start instead of leaving an
-// endpoint that answers 404 or registering nothing in silence.
+// is copied, so one config can serve several routes. A cfg whose Service is
+// set, the way generated code sets it for an action declaring a service of
+// its own, requires that service registered under the route for the types
+// of the route. A blank route, no phases, a phase no HTTP route serves, a
+// hook phase such as CreateBefore, or a declared service that is missing or
+// registered for other types, panics: the mistake stops the start instead of
+// leaving an endpoint that answers 404, answers without its service, or
+// registering nothing in silence.
 func Register[M gst.Model, REQ gst.Request, RSP gst.Response](group *gin.RouterGroup, route string, cfg *gst.ControllerConfig[M], phases ...apiaction.Phase) {
 	router.Register[M, REQ, RSP](group, route, cfg, phases...)
 }

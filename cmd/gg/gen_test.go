@@ -538,7 +538,7 @@ import (
 )
 
 func Init() error {
-	router.Register[*tmpapp_model.Record, *gstmodel.Empty, *tmpapp_model.RecordListRsp](router.Auth(), "/api/records", &gst.ControllerConfig[*tmpapp_model.Record]{}, service.List)
+	router.Register[*tmpapp_model.Record, *gstmodel.Empty, *tmpapp_model.RecordListRsp](router.Auth(), "/api/records", &gst.ControllerConfig[*tmpapp_model.Record]{Service: true}, service.List)
 	router.Register[*sample.Entry, *sample.Entry, *sample.Entry](router.Auth(), "/api/sample/entries", &gst.ControllerConfig[*sample.Entry]{}, service.Create)
 	router.Register[*sample_model.Item, *sample_model.Item, *sample_model.Item](router.Auth(), "/api/sample/model/items", &gst.ControllerConfig[*sample_model.Item]{}, service.Create)
 	return nil

@@ -191,11 +191,11 @@ func TestGenRunServesStreamActionsOverBothTransports(t *testing.T) {
 	router, err := os.ReadFile(filepath.Join(projectDir, ggconst.DirRouter, ggconst.FileRouterGen))
 	require.NoError(t, err)
 	for _, registration := range []string{
-		`router.Register[*model.Feed, *model.FeedWatchReq, *model.FeedWatchRsp](router.Auth(), "/api/feeds/watch", &gst.ControllerConfig[*model.Feed]{}, service.Stream)`,
-		`router.Register[*model.Feed, *gstmodel.Empty, *model.FeedTailRsp](router.Auth(), "/api/feeds/:feed/tail", &gst.ControllerConfig[*model.Feed]{}, service.Stream)`,
-		`router.Register[*model.Feed, *model.FeedUploadReq, *model.FeedUploadRsp](router.Auth(), "/api/feeds/:feed/upload", &gst.ControllerConfig[*model.Feed]{}, service.Stream)`,
-		`router.Register[*model.Feed, *model.FeedChatReq, *model.FeedChatRsp](router.Auth(), "/api/feeds/chat", &gst.ControllerConfig[*model.Feed]{}, service.Stream)`,
-		`router.Register[*model.Feed, *model.FeedIngestReq, *gstmodel.Empty](router.Auth(), "/api/feeds/ingest", &gst.ControllerConfig[*model.Feed]{}, service.Stream)`,
+		`router.Register[*model.Feed, *model.FeedWatchReq, *model.FeedWatchRsp](router.Auth(), "/api/feeds/watch", &gst.ControllerConfig[*model.Feed]{Service: true}, service.Stream)`,
+		`router.Register[*model.Feed, *gstmodel.Empty, *model.FeedTailRsp](router.Auth(), "/api/feeds/:feed/tail", &gst.ControllerConfig[*model.Feed]{Service: true}, service.Stream)`,
+		`router.Register[*model.Feed, *model.FeedUploadReq, *model.FeedUploadRsp](router.Auth(), "/api/feeds/:feed/upload", &gst.ControllerConfig[*model.Feed]{Service: true}, service.Stream)`,
+		`router.Register[*model.Feed, *model.FeedChatReq, *model.FeedChatRsp](router.Auth(), "/api/feeds/chat", &gst.ControllerConfig[*model.Feed]{Service: true}, service.Stream)`,
+		`router.Register[*model.Feed, *model.FeedIngestReq, *gstmodel.Empty](router.Auth(), "/api/feeds/ingest", &gst.ControllerConfig[*model.Feed]{Service: true}, service.Stream)`,
 	} {
 		require.Contains(t, string(router), registration)
 	}
@@ -242,7 +242,7 @@ func TestGenRunServesTheStreamActionsOfAModelWithoutGRPCOverHTTP(t *testing.T) {
 
 	router, err := os.ReadFile(filepath.Join(projectDir, ggconst.DirRouter, ggconst.FileRouterGen))
 	require.NoError(t, err)
-	require.Contains(t, string(router), `router.Register[*model.Feed, *model.FeedChatReq, *model.FeedChatRsp](router.Auth(), "/api/feeds/chat", &gst.ControllerConfig[*model.Feed]{}, service.Stream)`)
+	require.Contains(t, string(router), `router.Register[*model.Feed, *model.FeedChatReq, *model.FeedChatRsp](router.Auth(), "/api/feeds/chat", &gst.ControllerConfig[*model.Feed]{Service: true}, service.Stream)`)
 	for name, call := range map[string]string{
 		"watch":  `stream, err := cli.ServerStream[model.FeedWatchRsp](t.Context(), "/api/feeds/watch", &model.FeedWatchReq{})`,
 		"tail":   `stream, err := cli.ServerStream[model.FeedTailRsp](t.Context(), "/api/feeds/"+id+"/tail", nil)`,

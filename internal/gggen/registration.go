@@ -83,7 +83,7 @@ import (
 //	)
 //
 //	func Init() error {
-//		router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records", &gst.ControllerConfig[*model.Record]{}, service.Create)
+//		router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records", &gst.ControllerConfig[*model.Record]{Service: true}, service.Create)
 //		return nil
 //	}
 func RegistrationFiles(module string, models []*modelsource.Model, ignore gghelper.ProjectIgnore) (map[string]string, error) {
@@ -154,7 +154,7 @@ func RegistrationFiles(module string, models []*modelsource.Model, ignore gghelp
 			if act.Public {
 				base = ggconst.RouterPublic
 			}
-			routerStmts = append(routerStmts, stmtRouterRegister(importQualifier(routerAliases, m.ImportPath(), m.ModelPkgName), m.ModelName, act.Payload, act.Result, gstModelPkg, base, route, paramName, act.Phase.Name()))
+			routerStmts = append(routerStmts, stmtRouterRegister(importQualifier(routerAliases, m.ImportPath(), m.ModelPkgName), m.ModelName, act.Payload, act.Result, gstModelPkg, base, route, paramName, act.Service, act.Phase.Name()))
 		})
 	}
 

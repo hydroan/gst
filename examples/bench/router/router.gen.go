@@ -12,13 +12,13 @@ import (
 )
 
 func Init() error {
-	router.Register[*bench.Bench, *bench.CreateReq, *bench.CreateRsp](router.Public(), "/api/bench/create", &gst.ControllerConfig[*bench.Bench]{}, service.Create)
-	router.Register[*bench.Bench, *model.Empty, *bench.DeleteRsp](router.Public(), "/api/bench/delete/:id", &gst.ControllerConfig[*bench.Bench]{ParamName: "id"}, service.Delete)
-	router.Register[*bench.Bench, *model.Empty, *bench.GetRsp](router.Public(), "/api/bench/get", &gst.ControllerConfig[*bench.Bench]{}, service.Get)
-	router.Register[*bench.Bench, *bench.Bench, *bench.Bench](router.Public(), "/api/bench/list", &gst.ControllerConfig[*bench.Bench]{}, service.List)
-	router.Register[*bench.Bench, *model.Empty, *bench.ListRsp](router.Public(), "/api/bench/list2", &gst.ControllerConfig[*bench.Bench]{}, service.List)
-	router.Register[*bench.Bench, *model.Empty, *bench.PingRsp](router.Public(), "/api/bench/ping", &gst.ControllerConfig[*bench.Bench]{}, service.List)
-	router.Register[*bench.Bench, *bench.UpdateReq, *bench.UpdateRsp](router.Public(), "/api/bench/update/:id", &gst.ControllerConfig[*bench.Bench]{ParamName: "id"}, service.Update)
-	router.Register[*bench.Bench, *bench.UpdateByIDReq, *bench.UpdateByIDRsp](router.Public(), "/api/bench/updatebyid/:id", &gst.ControllerConfig[*bench.Bench]{ParamName: "id"}, service.Patch)
+	router.Register[*bench.Bench, *bench.CreateReq, *bench.CreateRsp](router.Public(), "/api/bench/create", &gst.ControllerConfig[*bench.Bench]{Service: true}, service.Create)
+	router.Register[*bench.Bench, *model.Empty, *bench.DeleteRsp](router.Public(), "/api/bench/delete/:id", &gst.ControllerConfig[*bench.Bench]{ParamName: "id", Service: true}, service.Delete)
+	router.Register[*bench.Bench, *model.Empty, *bench.GetRsp](router.Public(), "/api/bench/get", &gst.ControllerConfig[*bench.Bench]{Service: true}, service.Get)
+	router.Register[*bench.Bench, *bench.Bench, *bench.Bench](router.Public(), "/api/bench/list", &gst.ControllerConfig[*bench.Bench]{Service: true}, service.List)
+	router.Register[*bench.Bench, *model.Empty, *bench.ListRsp](router.Public(), "/api/bench/list2", &gst.ControllerConfig[*bench.Bench]{Service: true}, service.List)
+	router.Register[*bench.Bench, *model.Empty, *bench.PingRsp](router.Public(), "/api/bench/ping", &gst.ControllerConfig[*bench.Bench]{Service: true}, service.List)
+	router.Register[*bench.Bench, *bench.UpdateReq, *bench.UpdateRsp](router.Public(), "/api/bench/update/:id", &gst.ControllerConfig[*bench.Bench]{ParamName: "id", Service: true}, service.Update)
+	router.Register[*bench.Bench, *bench.UpdateByIDReq, *bench.UpdateByIDRsp](router.Public(), "/api/bench/updatebyid/:id", &gst.ControllerConfig[*bench.Bench]{ParamName: "id", Service: true}, service.Patch)
 	return nil
 }

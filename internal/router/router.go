@@ -32,6 +32,7 @@ import (
 	"github.com/hydroan/gst/internal/openapigen"
 	"github.com/hydroan/gst/internal/requestctx"
 	"github.com/hydroan/gst/internal/response"
+	"github.com/hydroan/gst/internal/service"
 	"github.com/hydroan/gst/internal/streamctx"
 	"github.com/hydroan/gst/internal/websocket"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -274,6 +275,18 @@ func Register[M gst.Model, REQ gst.Request, RSP gst.Response](router *gin.Router
 		panic(fmt.Sprintf("router: register of route %q: no HTTP route serves the phase %s; a hook phase runs inside its action", apiaction.APIPath(route), strings.Join(unserved, ", ")))
 	}
 	routed.Route = apiaction.APIPath(route)
+	// A route whose action declares a service is served by that service and
+	// by nothing else. Left unchecked, one missing from the registry, or
+	// registered for other types, has its requests answered by the default
+	// flow as though the action declared none, so the declaration is held
+	// to it here, as the process starts.
+	if routed.Service {
+		for _, phase := range phases {
+			if _, err := service.Lookup[M, REQ, RSP](service.Key(phase, routed.Route)); err != nil {
+				panic(fmt.Sprintf("router: register of route %q: the %s action declares a service, and %v; run gg gen, which writes the two registrations together", routed.Route, phase.Name(), err))
+			}
+		}
+	}
 	set := make(map[apiaction.Phase]bool, len(phases))
 	for _, phase := range phases {
 		set[phase] = true
@@ -571,13 +584,18 @@ func warnUnguardedRoutes(log *zap.SugaredLogger) {
 // as long as its client stays, up to the bound Stop gives it. Every request
 // context carries the server's shutdown signal for the stream to watch, see
 // streamctx.New; ordinary requests do not watch it and run to completion.
+//
+// The connection is given a tenth more time for its writes than
+// server.write_timeout, the time a request is given to be answered in (see
+// middleware.Builtin), so that the 504 of a request out of that time still
+// reaches its client.
 func newServer(addr string, handler http.Handler) *http.Server {
 	shutdown, beginShutdown := context.WithCancel(context.Background())
 	srv := &http.Server{
 		Addr:           addr,
 		Handler:        handler,
 		ReadTimeout:    config.App.Server.ReadTimeout,
-		WriteTimeout:   config.App.Server.WriteTimeout,
+		WriteTimeout:   11 * config.App.Server.WriteTimeout / 10,
 		IdleTimeout:    config.App.IdleTimeout,
 		MaxHeaderBytes: 1 << 20, // 1 MB
 		BaseContext: func(net.Listener) context.Context {

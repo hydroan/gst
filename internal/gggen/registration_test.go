@@ -107,7 +107,7 @@ import (
 )
 
 func Init() error {
-	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records", &gst.ControllerConfig[*model.Record]{}, service.Create)
+	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records", &gst.ControllerConfig[*model.Record]{Service: true}, service.Create)
 	return nil
 }
 `,

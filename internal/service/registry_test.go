@@ -151,6 +151,31 @@ func TestResolveReturnsBaseOnTypeMismatch(t *testing.T) {
 	require.True(t, ok, "type mismatch should degrade to the no-op Base")
 }
 
+// TestLookupAnswersWhatIsRegisteredForTheTypes pins Lookup: the service
+// registered under the key when it serves the types asked for, and an error
+// telling which of the two went wrong otherwise, none registered or one
+// registered for other types.
+func TestLookupAnswersWhatIsRegisteredForTheTypes(t *testing.T) {
+	type svc struct {
+		service.Base[*testUser, *testUser, *testUser]
+	}
+
+	phase := newPhase("test_lookup")
+	registered := &svc{}
+	service.RegisterInstance[*testUser, *testUser, *testUser](phase, "samples", registered)
+
+	found, err := service.Lookup[*testUser, *testUser, *testUser](service.Key(phase, "samples"))
+	require.NoError(t, err)
+	require.Same(t, registered, found)
+
+	_, err = service.Lookup[*testUser, *testUser, *testUser](service.Key(phase, "others"))
+	require.EqualError(t, err, "no service is registered for it")
+
+	_, err = service.Lookup[*testRecord, *testRecord, *testRecord](service.Key(phase, "samples"))
+	require.ErrorContains(t, err, "the one registered, *service_test.svc")
+	require.ErrorContains(t, err, "serves other types than the route's")
+}
+
 // phaseSeq numbers the phases the tests register under. The registry refuses
 // a second registration of one route and phase and lives as long as the
 // process, so a repeated run (go test -count) registers under phases of its

@@ -7,8 +7,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"github.com/hydroan/gst/internal/router"
+	"github.com/hydroan/gst/internal/service"
 	"github.com/stretchr/testify/require"
 )
 
@@ -36,6 +38,42 @@ func TestRegisterPanicsOnDeclarationMistakes(t *testing.T) {
 	})
 	require.PanicsWithValue(t, `controller: route "/api/samples/:id/bind": request type *router_test.sampleBinder is an interface with methods or a pointer to one, which no request body decodes into; declare a concrete type, or any`, func() {
 		router.Register[*model.Empty, *sampleBinder, *model.Empty](group, "samples/:id/bind", nil, apiaction.Create)
+	})
+}
+
+// routedSample is a model whose route declares a service of its own.
+type routedSample struct {
+	model.Base
+}
+
+// routedSampleCreator serves the Create action of routedSample.
+type routedSampleCreator struct {
+	service.Base[*routedSample, *routedSample, *routedSample]
+}
+
+// TestRegisterRequiresTheServiceARouteDeclares pins what Register checks of
+// a route whose config says its action declares a service: the service is
+// registered under the route and the phase, for the types of the route, or
+// the registration panics, naming the route, the action and which of the
+// two is wrong. A route declaring none registers without one.
+func TestRegisterRequiresTheServiceARouteDeclares(t *testing.T) {
+	group := gin.New().Group("")
+	declared := &gst.ControllerConfig[*routedSample]{Service: true}
+
+	require.PanicsWithValue(t, `router: register of route "/api/routed-samples": the Create action declares a service, and no service is registered for it; run gg gen, which writes the two registrations together`, func() {
+		router.Register[*routedSample, *routedSample, *routedSample](group, "routed-samples", declared, apiaction.Create)
+	})
+
+	service.RegisterInstance[*routedSample, *routedSample, *routedSample](apiaction.Create, "routed-samples", &routedSampleCreator{})
+	require.NotPanics(t, func() {
+		router.Register[*routedSample, *routedSample, *routedSample](group, "routed-samples", declared, apiaction.Create)
+	})
+	require.PanicsWithValue(t, `router: register of route "/api/routed-samples": the Create action declares a service, and the one registered, *router_test.routedSampleCreator, serves other types than the route's; run gg gen, which writes the two registrations together`, func() {
+		router.Register[*routedSample, *model.Empty, *routedSample](gin.New().Group(""), "routed-samples", &gst.ControllerConfig[*routedSample]{Service: true}, apiaction.Create)
+	})
+
+	require.NotPanics(t, func() {
+		router.Register[*routedSample, *routedSample, *routedSample](gin.New().Group(""), "routed-samples/plain", &gst.ControllerConfig[*routedSample]{}, apiaction.List)
 	})
 }
 

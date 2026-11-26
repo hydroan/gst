@@ -146,23 +146,34 @@ func stmtServiceRegister(serviceImport string, phase apiaction.Phase, route stri
 	}
 }
 
+// controllerConfigService is the field of gst.ControllerConfig a generated
+// route sets for an action declaring a service of its own.
+const controllerConfigService = "Service"
+
 // stmtRouterRegister builds the registration of an action in router.gen.go:
 // the model type, then the action's request and result types, reqName and
 // rspName qualified by modelPkgName, the qualifier the file refers to the
-// model package by. For example, it builds
+// model package by, and the controller config of the route, which names the
+// route parameter of a route ending in one and marks an action declaring a
+// service of its own. For example, for an action of the model's own types,
+// one answering a result type of its own, which declares its service, one
+// reading a record by the route parameter, and one doing both, it builds
 //
 //	router.Register[*model.Record, *model.Record, *model.Record](router.Auth(), "/api/records", &gst.ControllerConfig[*model.Record]{}, service.Create)
-//	router.Register[*model.Record, *gstmodel.Empty, *model.BoxListRsp](router.Auth(), "/api/boxes", &gst.ControllerConfig[*model.Record]{}, service.List)
+//	router.Register[*model.Record, *gstmodel.Empty, *model.BoxListRsp](router.Auth(), "/api/boxes", &gst.ControllerConfig[*model.Record]{Service: true}, service.List)
 //	router.Register[*box.Record, *box.Record, *box.Record](router.Auth(), "/api/boxes/:id", &gst.ControllerConfig[*box.Record]{ParamName: "id"}, service.Get)
+//	router.Register[*box.Record, *box.SealReq, *box.SealRsp](router.Auth(), "/api/boxes/:id/seal", &gst.ControllerConfig[*box.Record]{ParamName: "id", Service: true}, service.Create)
 //
 // A dsl.PayloadEmpty side becomes *model.Empty under gstModelPkg, the
 // qualifier the router file uses for model.Empty, resolved once per file by
 // routerGstModelUse. routerGroup names the router group accessor ("Auth" or
 // "Public"), route is the path the route is served at, shared verbatim with the
 // matching stmtServiceRegister statement, paramName is the route parameter the
-// controller reads the resource id from, "" for none, and phase names the
-// phase of the action as the service package spells it, such as Create.
-func stmtRouterRegister(modelPkgName, modelName, reqName, rspName, gstModelPkg string, routerGroup string, route string, paramName string, phase string) *ast.ExprStmt {
+// controller reads the resource id from, "" for none, declaresService says
+// the action declares a service of its own, which the route is then held to
+// as it registers (see controllerConfigService), and phase names the phase
+// of the action as the service package spells it, such as Create.
+func stmtRouterRegister(modelPkgName, modelName, reqName, rspName, gstModelPkg string, routerGroup string, route string, paramName string, declaresService bool, phase string) *ast.ExprStmt {
 	// The dsl.PayloadEmpty sentinel on either side resolves to
 	// *<gstModelPkg>.Empty. gstModelPkg is the file-level qualifier decided
 	// once per router file by routerGstModelUse: plain "model" by default,
@@ -182,9 +193,18 @@ func stmtRouterRegister(modelPkgName, modelName, reqName, rspName, gstModelPkg s
 		rspExpr = actionTypeExpr(modelPkgName, rspName)
 	}
 
-	var paramExpr ast.Expr
-	// expr like: &gst.ControllerConfig[*sample.Record]{}
-	paramExpr = &ast.UnaryExpr{
+	// expr like: &gst.ControllerConfig[*sample.Record]{ParamName: "id", Service: true}
+	var fields []ast.Expr
+	if len(paramName) > 0 {
+		fields = append(fields, &ast.KeyValueExpr{
+			Key:   ast.NewIdent(ggconst.GstControllerConfigParamName),
+			Value: &ast.BasicLit{Kind: token.STRING, Value: fmt.Sprintf("%q", paramName)},
+		})
+	}
+	if declaresService {
+		fields = append(fields, &ast.KeyValueExpr{Key: ast.NewIdent(controllerConfigService), Value: ast.NewIdent("true")})
+	}
+	paramExpr := &ast.UnaryExpr{
 		Op: token.AND,
 		X: &ast.CompositeLit{
 			Type: &ast.IndexExpr{
@@ -199,37 +219,8 @@ func stmtRouterRegister(modelPkgName, modelName, reqName, rspName, gstModelPkg s
 					},
 				},
 			},
-			Elts: []ast.Expr{},
+			Elts: fields,
 		},
-	}
-	// expr like: &gst.ControllerConfig[*sample.Record]{ParamName: "id"}
-	if len(paramName) > 0 {
-		paramExpr = &ast.UnaryExpr{
-			Op: token.AND,
-			X: &ast.CompositeLit{
-				Type: &ast.IndexExpr{
-					X: &ast.SelectorExpr{
-						X:   ast.NewIdent(ggconst.PkgGst),
-						Sel: ast.NewIdent(ggconst.GstControllerConfig),
-					},
-					Index: &ast.StarExpr{
-						X: &ast.SelectorExpr{
-							X:   ast.NewIdent(modelPkgName),
-							Sel: ast.NewIdent(modelName),
-						},
-					},
-				},
-				Elts: []ast.Expr{
-					&ast.KeyValueExpr{
-						Key: ast.NewIdent(ggconst.GstControllerConfigParamName),
-						Value: &ast.BasicLit{
-							Kind:  token.STRING,
-							Value: fmt.Sprintf("%q", paramName),
-						},
-					},
-				},
-			},
-		}
 	}
 
 	return &ast.ExprStmt{
