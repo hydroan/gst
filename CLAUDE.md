@@ -96,7 +96,7 @@ gst 是强约定框架（Apple 风格），不是自由框架（Windows 风格�
 - 只给项目用、或主要给项目用的能力，是顶层公开包，实现就写在包里，如 `bootstrap`、`database`、`controller`、`cronjob`、`leader`。
 - 只有框架自己用的包一律放 `internal`：项目开发者看不到，就不必理解这些细节。
 - 项目和框架都大量使用的能力，实现下沉到与公开包同名的 internal 包，再由顶层包做 alias 转发，只转发项目用得到的那部分，框架私用的符号不暴露。下沉只为把框架要用、却不该让项目看到的导出符号挡在公开面之外；它不是新包的默认形态：包里没有这样的符号、也指不出哪处代码已经需要它，就按第一条把实现写在公开包里，不为转发拆成两个包。转发是唯一形状，符号只是空函数、常量或类型也一样，公开包自己不声明任何东西；定义不在同名 internal 包里的，公开包直接转发定义所在的包，同名 internal 包不为它留一层只转手的名字：根包 `gst` 转发 `internal/gst`，`datatypes` 转发 `internal/datatypes`，`model` 转发 `internal/model` 与 `internal/modelschema`，`service` 转发 `internal/service` 与 `internal/apiaction`，`sse` 转发 `internal/sse`，`router` 转发 `internal/router` 与 `internal/apiaction` 的 `APIPath`，`middleware` 转发 `internal/middleware`，`dsl` 转发 `internal/dsl`，`tenant` 转发 `internal/tenant`，`i18n` 转发 `internal/i18n`，`apidoc` 转发 `internal/apidoc`，`tracing` 转发 `internal/tracing`，`logger` 转发 `internal/logger`。`grpc` 是混合形态：生成代码和项目用到的调用函数、拦截器与调用者类型转发 `internal/controller`、`internal/grpcserver`，`MethodStream` 转发 `internal/apiaction`，只有生成代码用的转换帮手（Narrow、UTF8、Value 等）按第一条实现就写在包里。
-- middleware 与 interceptor 是例外：中间件和拦截器大多是给项目用的，所以这两个包按谁挂载分家，而不是像 router、dsl 那样全部在 internal 实现、公开包只转发。框架内建链上的中间件与拦截器是框架逻辑，只有它们算核心，放 internal/middleware 与 internal/grpcserver，由 internal/router、internal/grpcserver 装配；项目经 Register、RegisterAuth 自己挂的（如 Timeout、JWTAuth）是项目能力，同模块一样是业务侧，实现直接写在公开包里，不进 internal，也不得改动内建链与监听器的逻辑；随 gg module copy 复制的中间件同样在公开包，只引用公开包。公开包对 Register、RegisterAuth 这类挂载入口只做转发。框架自己构建、交给项目挂载的中间件（如 CircuitBreaker）实现在 internal/middleware，公开包只转发它的构造函数。
+- middleware 与 interceptor 是例外：中间件和拦截器大多是给项目用的，所以这两个包按谁挂载分家，而不是像 router、dsl 那样全部在 internal 实现、公开包只转发。框架内建链上的中间件与拦截器是框架逻辑，只有它们算核心，放 internal/middleware 与 internal/grpcserver，由 internal/router、internal/grpcserver 装配；项目经 Register、RegisterAuth 自己挂的（如 RequestSizeLimit、JWTAuth）是项目能力，同模块一样是业务侧，实现直接写在公开包里，不进 internal，也不得改动内建链与监听器的逻辑；随 gg module copy 复制的中间件同样在公开包，只引用公开包。公开包对 Register、RegisterAuth 这类挂载入口只做转发。框架自己构建、交给项目挂载的中间件（如 CircuitBreaker）实现在 internal/middleware，公开包只转发它的构造函数。
 
 引用方向随之固定：internal 包（含测试）需要这些能力时直接引用对应的 internal 包，禁止反向 import 公开包，避免 internal → 公开 → internal 的依赖绕行和潜在 import 环；框架自身代码（含公开包）使用 internal 能力时同样直接引用 internal 实现包，公开转发包只服务业务项目。如果所需符号只存在于公开的转发包，把实现下沉到它转发的 internal 包、公开包照旧只转发，而不是让 internal 反向引用；实现就写在公开包里的（第一条），internal 包直接引用它，不为此另建同名 internal 包。包与包之间只许功能包引用底层包：被多处共用的底层包不引用功能包；底层包要识别功能包自己的东西时，由功能包经底层包提供的入口声明。
 
@@ -262,10 +262,10 @@ stress 是压测项目，只回答一个问题：框架在真实项目形态（�
 #### 后端项目使用注意事项
 
 - 修改 model 的 DSL、接口路径、REQ/RSP、service 开关后，需要重新执行 `gg gen`，并检查生成的 router 和 service 注册是否符合预期。
-- 修改声明了 `Migrate()` 的数据库模型字段后，需要执行 `gg migrate --dry-run` 检查 `generated/migrate/<dbtype>/schema.sql` 和迁移计划，再用 `gg migrate` 按确认处理 schema 变化。
+- 修改声明了 `Migrate()` 的数据库模型字段后，需要执行 `gg migrate --dry-run` 检查 `generated/migrate/<dbtype>/schema.sql` 和迁移计划，再用 `gg migrate` 按确认处理 schema 变化。加字段要先 `gg migrate` 再发布：关闭 auto_migrate 的环境启动时会核对模型读写的列在不在，缺列直接报错退出。
 - 改索引名必须"先 `gg migrate` 后发布"：开启 auto_migrate 的环境先发布，启动期会发现同定义的索引还挂在旧名下，直接报错退出并给出改名语句（启动期不 DROP 任何索引）；关闭 auto_migrate 的环境先发布不报错，但模型与库会一直漂移到执行 `gg migrate` 为止；`gg migrate` 的计划对这种索引直接是改名语句（MySQL `RENAME INDEX`，PostgreSQL `ALTER INDEX ... RENAME TO`），SQLite 不能给索引改名，计划是删掉再建。
 - 改表名、改列名：只对比模型和库分不出改名，照计划执行会新建一张空表（数据留在旧表）或删掉旧列连同数据；`gg migrate` 在一对一对得上、定义相同时把它当成疑似改名提出来，交互运行时逐个询问，答 `y` 就先执行改名语句再重新出计划，带 `--dry-run` 或 `--yes` 时只列出语句、不改名。SQLite 库里已有列的类型、非空、默认值或 CHECK 与模型不一致时，`gg migrate` 直接报错并给出重建步骤，不会当成无变化。
-- `gg migrate` 只管模型声明的表：库里别的表不删不改、只列出来；计划里有删列时，执行前的确认会点明要删的列，答 `y` 才执行；带 `--yes` 跳过确认时要同时带 `--accept-data-loss`，`--yes` 不代表同意丢数据。
+- `gg migrate` 只管模型声明的表：库里别的表不删不改、只列出来；模型的表里模型没声明的索引会被删，要保留的手建索引写进 `gst.yaml` 的 `migrate.indexes.ignore`（每项「表名.索引名」）；计划里有删列时，执行前的确认会点明要删的列，答 `y` 才执行；带 `--yes` 跳过确认时要同时带 `--accept-data-loss`，`--yes` 不代表同意丢数据。
 - 不要手写覆盖生成文件；如果生成结果不符合预期，优先修正 model DSL 或框架生成逻辑。
 - 后端服务启动后，通过 `/docs/index.html` 检查生成的 Swagger 文档和接口路径。
 - 后端项目自身如果已有测试，修改业务逻辑后需要运行对应测试；涉及框架仓库改动时仍按 gst 仓库要求执行 `make check`。
