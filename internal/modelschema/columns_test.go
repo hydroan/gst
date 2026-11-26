@@ -19,6 +19,19 @@ func TestBindingRules(t *testing.T) {
 	require.Nil(t, modelschema.BindingRules(``))
 }
 
+// TestElementBindingRules pins the examples of ElementBindingRules: the
+// rules a tag declares after its first dive, as it declares them, the block
+// for the keys of a map and a second dive included, and none for a tag
+// without a dive.
+func TestElementBindingRules(t *testing.T) {
+	require.Equal(t, []string{"required", "max=16"}, modelschema.ElementBindingRules(`binding:"max=5,dive,required,max=16"`))
+	require.Equal(t, []string{"keys", "max=8", "endkeys", "max=32"}, modelschema.ElementBindingRules(`binding:"dive,keys,max=8,endkeys,max=32"`))
+	require.Equal(t, []string{"dive", "required"}, modelschema.ElementBindingRules(`binding:"dive,dive,required"`))
+	require.Empty(t, modelschema.ElementBindingRules(`binding:"required,dive"`))
+	require.Nil(t, modelschema.ElementBindingRules(`binding:"required,max=8"`))
+	require.Nil(t, modelschema.ElementBindingRules(`json:"name"`))
+}
+
 // TestIsReadOnly pins which struct tags declare a field read-only to
 // clients: the ones whose own binding rules hold readonly, the rules after a
 // dive being the elements' of a slice or a map, and no other tag, whatever

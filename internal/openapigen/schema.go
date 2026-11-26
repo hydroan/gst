@@ -145,13 +145,15 @@ func jsonWriteOf(t reflect.Type) (jsonWrite, bool) {
 // values registered for typ, and marks required the properties whose field's
 // own binding rules hold required, binding:"required,max=8" among them, as a
 // request without one is refused; binding:"dive,required" requires the
-// elements, not the field. Field comments become descriptions without
-// being copied into titles, so documentation renderers do not display the
-// same text twice and independent schema titles remain intact. It walks the
-// generated schema tree and the Go type tree in parallel, so nested request
-// and response structs are decorated at every depth. visiting holds the
-// struct types on the current descent path so self-referential types
-// terminate; callers pass nil.
+// elements, not the field. The other binding rules of a field are written into
+// its schema as well (see documentBindingRules), the document stating the
+// constraints a request is held to. Field comments become descriptions without
+// being copied into titles, so documentation renderers do not display the same
+// text twice and independent schema titles remain intact. It walks the
+// generated schema tree and the Go type tree in parallel, so nested request and
+// response structs are decorated at every depth. visiting holds the struct
+// types on the current descent path so self-referential types terminate;
+// callers pass nil.
 func addSchemaDocsForType(typ reflect.Type, schemaRef *openapi3.SchemaRef, visiting map[reflect.Type]bool) {
 	if typ == nil || schemaRef == nil || schemaRef.Value == nil {
 		return
@@ -191,7 +193,8 @@ func addSchemaDocsForType(typ reflect.Type, schemaRef *openapi3.SchemaRef, visit
 		if !hasField {
 			continue
 		}
-		if slices.Contains(modelschema.BindingRules(docField.field.Tag), "required") && !slices.Contains(schemaRef.Value.Required, propName) {
+		rules := modelschema.BindingRules(docField.field.Tag)
+		if slices.Contains(rules, ruleRequired) && !slices.Contains(schemaRef.Value.Required, propName) {
 			schemaRef.Value.Required = append(schemaRef.Value.Required, propName)
 		}
 
@@ -209,16 +212,25 @@ func addSchemaDocsForType(typ reflect.Type, schemaRef *openapi3.SchemaRef, visit
 		}
 
 		enumDoc, enumOnItems, hasEnum := fieldEnumDoc(fieldType)
-		if (description != "" || hasEnum) && propRef.Value != nil {
-			// Copy the schema so shared schema instances keep their own docs.
+		if propRef.Value != nil {
+			// Decorate a copy, so shared schema instances keep their own docs,
+			// and put it in place only once something was written to it.
 			newSchema := *propRef.Value
-			newSchema.Description = description
+			wrote := description != "" || hasEnum
+			if wrote {
+				newSchema.Description = description
+			}
 			if hasEnum {
 				applyEnum(&newSchema, enumOnItems, enumDoc)
 				newSchema.Description = enumDescription(description, enumDoc)
 			}
-			propRef = &openapi3.SchemaRef{Value: &newSchema}
-			schemaRef.Value.Properties[propName] = propRef
+			if documentBindingRules(&newSchema, fieldType, rules, modelschema.ElementBindingRules(docField.field.Tag)) {
+				wrote = true
+			}
+			if wrote {
+				propRef = &openapi3.SchemaRef{Value: &newSchema}
+				schemaRef.Value.Properties[propName] = propRef
+			}
 		}
 
 		addSchemaDocsForType(fieldType, propRef, visiting)

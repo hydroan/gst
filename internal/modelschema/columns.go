@@ -27,6 +27,11 @@ const (
 // not refused for it (see IsReadOnly).
 const RuleReadOnly = "readonly"
 
+// ruleDive is the binding rule a field's own rules end at: the ones after it
+// are its elements', a slice's or the values of a map (see BindingRules and
+// ElementBindingRules).
+const ruleDive = "dive"
+
 // BindingRules returns the binding rules of a field's own, as tag, its
 // struct tag, declares them, in order: those before a dive, the rules after
 // which are the elements' of a slice or a map; nil for a tag declaring none.
@@ -38,10 +43,26 @@ func BindingRules(tag reflect.StructTag) []string {
 		return nil
 	}
 	rules := strings.Split(declared, ",")
-	if dive := slices.Index(rules, "dive"); dive >= 0 {
+	if dive := slices.Index(rules, ruleDive); dive >= 0 {
 		rules = rules[:dive]
 	}
 	return rules
+}
+
+// ElementBindingRules returns the binding rules tag, the struct tag of a
+// field, declares for the elements of the field, a slice's or the values of
+// a map: those after its first dive, as it declares them, the block a map
+// holds its keys to and a second dive among them; nil for a tag without a
+// dive. For `binding:"max=5,dive,required,max=16"` it returns required and
+// max=16, and for `binding:"dive,keys,max=8,endkeys,max=32"` keys, max=8,
+// endkeys and max=32.
+func ElementBindingRules(tag reflect.StructTag) []string {
+	rules := strings.Split(tag.Get(TagBinding), ",")
+	dive := slices.Index(rules, ruleDive)
+	if dive < 0 {
+		return nil
+	}
+	return rules[dive+1:]
 }
 
 // IsReadOnly reports whether tag, the struct tag of a field, declares the

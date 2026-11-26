@@ -12,6 +12,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3gen"
 	"github.com/hydroan/gst/internal/apidoc"
 	"github.com/hydroan/gst/internal/datatypes"
+	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
 
@@ -48,6 +49,9 @@ func init() {
 	})
 	registerFixtureDoc("cyclicCategory", "", map[string]string{
 		"Title": "Title is the category title.",
+	})
+	registerFixtureDoc("bindingRulesModel", "", map[string]string{
+		"Peer": "Peer is the address of the other side.",
 	})
 }
 
@@ -592,4 +596,100 @@ func TestNewSchemaRefWithDocsDocumentsWhatEncodingMethodsWrite(t *testing.T) {
 	if addr == nil || addr.Value == nil || !addr.Value.Type.Is("string") {
 		t.Fatalf("options addr schema = %#v, want a string inside the JSON type as well", addr)
 	}
+}
+
+// bindingRulesModel carries the binding rules the document states in schema
+// keywords — the bounds of a string, a number, a list and a map, the values
+// a field is one of, a format, and the rules the elements of a list or a map
+// are held to after dive — beside rules no keyword states.
+type bindingRulesModel struct {
+	Name   string            `json:"name" binding:"required,min=2,max=64"`
+	Code   string            `json:"code" binding:"len=8,alphanum"`
+	Age    int               `json:"age" binding:"gte=0,lt=150"`
+	Ratio  float64           `json:"ratio" binding:"gt=0,max=1.5"`
+	Kind   string            `json:"kind" binding:"omitempty,oneof=draft 'in review' done"`
+	Level  int               `json:"level" binding:"oneof=1 2 3"`
+	Email  string            `json:"email" binding:"required,email"`
+	Tags   []string          `json:"tags" binding:"min=1,max=5,dive,required,max=16"`
+	Scores []int             `json:"scores" binding:"dive,required,gte=1"`
+	Labels map[string]string `json:"labels" binding:"max=3,dive,keys,max=8,endkeys,max=32"`
+	Peer   string            `json:"peer" binding:"required_without=Email,ipv4|ipv6"`
+	Note   string            `json:"note"`
+}
+
+// TestAddSchemaDocsForTypeDocumentsTheBindingRules pins what the document
+// says of a field's binding rules: the ones a schema keyword states are
+// written as that keyword, on the field or, after dive, on its elements, a
+// required string being one of at least a character; the others are written
+// into the field's description as declared, after its comment, and a field
+// without rules is left as it was.
+func TestAddSchemaDocsForTypeDocumentsTheBindingRules(t *testing.T) {
+	schemaRef := newSchemaRefWithDocs(bindingRulesModel{})
+	require.NotNil(t, schemaRef.Value)
+	property := func(name string) *openapi3.Schema {
+		t.Helper()
+		ref := schemaRef.Value.Properties[name]
+		require.NotNil(t, ref, name)
+		require.NotNil(t, ref.Value, name)
+		return ref.Value
+	}
+	bound := func(v float64) *float64 { return &v }
+	count := func(v uint64) *uint64 { return &v }
+
+	require.Equal(t, []string{"email", "name"}, schemaRef.Value.Required)
+
+	name := property("name")
+	require.Equal(t, uint64(2), name.MinLength)
+	require.Equal(t, count(64), name.MaxLength)
+	require.Empty(t, name.Description)
+
+	code := property("code")
+	require.Equal(t, uint64(8), code.MinLength)
+	require.Equal(t, count(8), code.MaxLength)
+	require.Equal(t, "Validation: alphanum", code.Description)
+
+	age := property("age")
+	require.Equal(t, bound(0), age.Min)
+	require.False(t, age.ExclusiveMin.IsSet())
+	require.Equal(t, bound(150), age.Max)
+	require.True(t, age.ExclusiveMax.IsTrue())
+
+	ratio := property("ratio")
+	require.Equal(t, bound(0), ratio.Min)
+	require.True(t, ratio.ExclusiveMin.IsTrue())
+	require.Equal(t, bound(1.5), ratio.Max)
+	require.False(t, ratio.ExclusiveMax.IsSet())
+
+	require.Equal(t, []any{"draft", "in review", "done"}, property("kind").Enum)
+	require.Empty(t, property("kind").Description, "omitempty states nothing a document says")
+	require.Equal(t, []any{int64(1), int64(2), int64(3)}, property("level").Enum)
+
+	email := property("email")
+	require.Equal(t, "email", email.Format)
+	require.Equal(t, uint64(1), email.MinLength, "a required string holds at least a character")
+
+	tags := property("tags")
+	require.Equal(t, uint64(1), tags.MinItems)
+	require.Equal(t, count(5), tags.MaxItems)
+	require.NotNil(t, tags.Items)
+	require.Equal(t, uint64(1), tags.Items.Value.MinLength)
+	require.Equal(t, count(16), tags.Items.Value.MaxLength)
+	require.Empty(t, tags.Description)
+
+	scores := property("scores")
+	require.Equal(t, bound(1), scores.Items.Value.Min)
+	require.Equal(t, "Validation of each element: required", scores.Description)
+
+	labels := property("labels")
+	require.Equal(t, count(3), labels.MaxProps)
+	require.NotNil(t, labels.AdditionalProperties.Schema)
+	require.Equal(t, count(32), labels.AdditionalProperties.Schema.Value.MaxLength)
+	require.Equal(t, "Validation of each key: max=8", labels.Description)
+
+	require.Equal(t, "The address of the other side.\n\nValidation: required_without=Email, ipv4|ipv6", property("peer").Description)
+
+	note := property("note")
+	require.Zero(t, note.MinLength)
+	require.Nil(t, note.MaxLength)
+	require.Empty(t, note.Description)
 }
