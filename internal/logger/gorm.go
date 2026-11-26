@@ -6,6 +6,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/dbruntime/dberror"
 	"github.com/hydroan/gst/internal/dbruntime/dbnode"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/gst"
@@ -32,10 +33,10 @@ func (g *GormLogger) Error(_ context.Context, str string, args ...any) { g.l.Err
 
 // traceFieldCap is the most fields one Trace entry carries: caller, the
 // eight base fields, cronjob or leader (an identity carries at most one of
-// them), db_role, record_not_found, and the one field the error/slow branches
-// append (mutually exclusive in the switch). Trace sizes its field slice to
-// it once, so the hot path never regrows; a field added to Trace bumps it,
-// which the worst-case test enforces.
+// them), db_role, record_not_found, and the one field the refused, error and
+// slow branches append (mutually exclusive in the switch). Trace sizes its
+// field slice to it once, so the hot path never regrows; a field added to
+// Trace bumps it, which the worst-case test enforces.
 const traceFieldCap = 13
 
 // Trace logs one executed statement with the request identity, timing, the
@@ -48,8 +49,13 @@ const traceFieldCap = 13
 // whoever canceled it — a client gone, a shutdown, a holder that stopped
 // renewing its lease — ended it, and nothing failed in the database; a
 // statement past its deadline is a failure, the database having taken too
-// long. Statements over the configured threshold log as slow queries; real
-// errors log at error level with the same field set.
+// long. A statement refused over the data it carries (see
+// dberror.IsDataIntegrityViolation) logs at info level as refused, the error
+// with it: the data brought the refusal on, whoever answers the client
+// reports it at the level of the answer, and an error here would be one any
+// client writes into the log at will. Statements over the configured
+// threshold log as slow queries; real errors log at error level with the
+// same field set.
 func (g *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
 	meta := requestctx.FromContext(ctx)
 	username := meta.Username()
@@ -95,7 +101,13 @@ func (g *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 	case errors.Is(err, context.Canceled):
 		g.l.Infoz("sql canceled", fields...)
 	case err != nil && !notFound:
-		g.l.Errorz("sql failed", append(fields, zap.Error(err))...)
+		// Asked of a statement that failed alone, so one that ran pays
+		// nothing for the question.
+		if dberror.IsDataIntegrityViolation(err) {
+			g.l.Infoz("sql refused", append(fields, zap.Error(err))...)
+		} else {
+			g.l.Errorz("sql failed", append(fields, zap.Error(err))...)
+		}
 	case elapsed > config.App.Database.SlowQueryThreshold:
 		g.l.Warnz("slow sql detected", append(fields, logfield.Threshold(config.App.Database.SlowQueryThreshold))...)
 	default:

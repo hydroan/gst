@@ -8,6 +8,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
+	"github.com/hydroan/gst/internal/dbruntime/dberror"
 	"github.com/hydroan/gst/internal/dbruntime/dbnode"
 	"github.com/hydroan/gst/internal/execctx"
 	"github.com/hydroan/gst/internal/requestctx"
@@ -15,6 +16,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
+	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 )
 
@@ -105,6 +107,48 @@ func TestGormLoggerTraceLogsCanceledStatementAtInfo(t *testing.T) {
 		entry := requireSingleEntry(t, logs)
 		require.Equal(t, zapcore.ErrorLevel, entry.Level)
 		require.Equal(t, "sql failed", entry.Message)
+	})
+}
+
+// TestGormLoggerTraceLogsARefusedStatementAtInfo proves a statement refused
+// over the data it carries logs at info level as refused, the error with it:
+// the data brought the refusal on, nothing failed in the database, and
+// whoever answers the client reports it. A refused statement that ran past
+// the slow threshold as well is still logged as refused.
+func TestGormLoggerTraceLogsARefusedStatementAtInfo(t *testing.T) {
+	refusals := map[string]error{
+		"a key another row holds":           errors.Wrap(gorm.ErrDuplicatedKey, "duplicate entry 'sample' for key 'idx_samples_code'"),
+		"a foreign key no row satisfies":    gorm.ErrForeignKeyViolated,
+		"a value the table's check refuses": errors.Wrap(gorm.ErrCheckConstraintViolated, "check constraint 'chk_samples_level' is violated"),
+		"a value longer than its column":    errors.Wrap(dberror.ErrValueTooLong, "data too long for column 'code' at row 1"),
+		"a column the table requires":       errors.Wrap(dberror.ErrNotNullViolated, "column 'label' cannot be null"),
+		"a rule a package declared":         dberror.NewDataIntegrityViolation("sample: a rule the data breaks"),
+	}
+	for name, err := range refusals {
+		t.Run(name, func(t *testing.T) {
+			stubSlowQueryThreshold(t, time.Hour)
+			g, logs := newObservedGormLogger()
+
+			g.Trace(context.Background(), time.Now(), func() (string, int64) { return "INSERT INTO samples", 0 }, err)
+
+			entry := requireSingleEntry(t, logs)
+			require.Equal(t, zapcore.InfoLevel, entry.Level)
+			require.Equal(t, "sql refused", entry.Message)
+			fields := entry.ContextMap()
+			require.Equal(t, err.Error(), fields["error"], "the entry says what refused the statement")
+			require.Equal(t, "INSERT INTO samples", fields["sql"])
+		})
+	}
+
+	t.Run("past the slow threshold", func(t *testing.T) {
+		stubSlowQueryThreshold(t, time.Nanosecond)
+		g, logs := newObservedGormLogger()
+
+		g.Trace(context.Background(), time.Now().Add(-time.Second), func() (string, int64) { return "INSERT INTO samples", 0 }, gorm.ErrDuplicatedKey)
+
+		entry := requireSingleEntry(t, logs)
+		require.Equal(t, zapcore.InfoLevel, entry.Level)
+		require.Equal(t, "sql refused", entry.Message)
 	})
 }
 

@@ -58,7 +58,7 @@ func New(cfg config.Clickhouse) (*gorm.DB, error) {
 	// PrepareStmt stays off on purpose: clickhouse-go implements Prepare as
 	// its batch-INSERT mechanism only, so routing ordinary statements through
 	// a statement cache would break every SELECT.
-	db, err := gorm.Open(clickhouse.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
+	db, err := gorm.Open(clickhouse.Open(buildDSN(cfg)), &gorm.Config{Logger: logger.Gorm, NowFunc: dbruntime.NowUTC})
 	if err != nil {
 		return nil, err
 	}

@@ -12,6 +12,7 @@ import (
 	mysqldriver "github.com/go-sql-driver/mysql"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/hydroan/gst/internal/dbruntime/dberror"
 	"github.com/hydroan/gst/internal/logger"
 	"github.com/hydroan/gst/internal/tlsconfig"
 	"go.uber.org/zap"
@@ -51,14 +52,15 @@ func New(cfg config.MySQL) (*gorm.DB, error) {
 		return nil, err
 	}
 
-	// TranslateError maps dialect-specific write failures to portable gorm
-	// sentinels (gorm.ErrDuplicatedKey, gorm.ErrForeignKeyViolated) that
-	// database.Create/Update surface to callers; the framework's own table
-	// (see translate) runs over what the driver's leaves as it is. Statements
-	// run over the text protocol with client-side parameter interpolation —
-	// no gorm PrepareStmt, no server-side prepared statements; buildDSN
-	// explains why.
-	db, err := gorm.Open(mysql.Open(buildDSN(cfg, tlsName)), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
+	// The write failures a client's data brings on come back as portable
+	// sentinels (gorm.ErrDuplicatedKey, gorm.ErrForeignKeyViolated and the
+	// rest) through the translation installed below, the framework's own
+	// table (see translate) first and the driver's after it; gorm's
+	// TranslateError stays off, dbruntime.InstallErrorTranslation says why.
+	// Statements run over the text protocol with client-side parameter
+	// interpolation — no gorm PrepareStmt, no server-side prepared
+	// statements; buildDSN explains why.
+	db, err := gorm.Open(mysql.Open(buildDSN(cfg, tlsName)), &gorm.Config{Logger: logger.Gorm, NowFunc: dbruntime.NowUTC})
 	if err != nil {
 		return nil, err
 	}
@@ -248,18 +250,18 @@ func registerTLS(cfg config.MySQL) (string, error) {
 // driver's translation leaves as they are, keyed by MySQL's error number: a
 // value too long for its column (1406), a check constraint the row fails
 // (3819), and a column the table requires a value for left NULL (1048) or
-// left out of a strict-mode insert (1364); the driver translates the
-// duplicated and the foreign keys itself.
+// left out of a strict-mode insert (1364); the driver's own table holds the
+// duplicated and the foreign keys.
 var errCodes = map[uint16]error{
-	1048: dbruntime.ErrNotNullViolated,
-	1364: dbruntime.ErrNotNullViolated,
-	1406: dbruntime.ErrValueTooLong,
+	1048: dberror.ErrNotNullViolated,
+	1364: dberror.ErrNotNullViolated,
+	1406: dberror.ErrValueTooLong,
 	3819: gorm.ErrCheckConstraintViolated,
 }
 
 // translate translates a driver error whose number errCodes lists to its
 // sentinel, the driver's text kept as the message, and nil for any other
-// error, which stays as the driver's translation left it (see
+// error, which goes to the driver's own translation (see
 // dbruntime.InstallErrorTranslation).
 func translate(err error) error {
 	var driverErr *mysqldriver.MySQLError

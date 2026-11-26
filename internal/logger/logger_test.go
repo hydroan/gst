@@ -117,15 +117,15 @@ func benchmarkRequestContext() context.Context {
 }
 
 // BenchmarkWithContextDiscardedDebug measures deriving a request logger and
-// writing a debug entry on it at the default info level: the shape of every
-// database operation's outcome entry, which the level discards.
+// writing a debug entry on it at the default info level, which discards the
+// entry: the cost of a derivation nothing is written through.
 func BenchmarkWithContextDiscardedDebug(b *testing.B) {
 	l := createLogger(b, "test.log")
 	ctx := benchmarkRequestContext()
 
 	b.ReportAllocs()
 	for b.Loop() {
-		l.WithContext(ctx, apiaction.List).Debugz("database operation completed", zap.String("model", "Sample"))
+		l.WithContext(ctx, apiaction.List).Debugz("sample entry", zap.String("model", "Sample"))
 	}
 }
 

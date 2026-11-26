@@ -55,14 +55,16 @@ func TestTraceModelHookSpansOnlyOverriddenHooks(t *testing.T) {
 	})
 }
 
-// TestTraceSpanReadsOutcomeLikeTheLog pins that the operation span reads an
-// outcome the way the log does: a completed operation, a missing row and a
-// stale object are normal outcomes, which leave the span's status unset the
-// way instrumentation does, the missing row carrying
-// database.record_not_found, the stale object database.stale_object, and
-// neither a recorded error, while a real failure records the error and marks
-// the span failed.
-func TestTraceSpanReadsOutcomeLikeTheLog(t *testing.T) {
+// TestTraceSpanReadsTheOutcome pins how the operation span reads an outcome.
+// A completed operation, a missing row and a stale object are outcomes an
+// operation completes with, which leave the span's status unset the way
+// instrumentation does, the missing row carrying database.record_not_found
+// and the stale object database.stale_object. An operation its context
+// canceled and a write refused over its data are no failure either, and
+// carry database.canceled and database.refused. None of them records an
+// error, while a real failure, an operation past its deadline here, records
+// the error and marks the span failed.
+func TestTraceSpanReadsTheOutcome(t *testing.T) {
 	tracingtest.Enable(t)
 	recorder := tracingtest.Record(t)
 	defer cleanupTestData()
@@ -123,7 +125,7 @@ func TestTraceSpanReadsOutcomeLikeTheLog(t *testing.T) {
 		require.NotContains(t, attrs, "error")
 	})
 
-	t.Run("a real failure records the error and marks the span failed", func(t *testing.T) {
+	t.Run("a write refused over its data leaves the span's status unset and marks it refused", func(t *testing.T) {
 		code := "trace-dup-" + strconv.FormatInt(time.Now().UnixNano(), 36)
 		first := &TestUniqueItem{UniqueCode: code, Name: "first"}
 		require.NoError(t, database.Database[*TestUniqueItem](context.Background()).Create(first))
@@ -131,12 +133,28 @@ func TestTraceSpanReadsOutcomeLikeTheLog(t *testing.T) {
 		require.ErrorIs(t, database.Database[*TestUniqueItem](context.Background()).Create(second), database.ErrDuplicatedKey)
 
 		span := lastEndedNamed(t, recorder, "database.TestUniqueItem.Create")
+		require.Equal(t, codes.Unset, span.Status().Code)
+		require.Empty(t, span.Events(), "a refusal must not be recorded as an exception")
+		attrs := spanAttributes(span)
+		refused, ok := attrs["database.refused"].(bool)
+		require.True(t, ok && refused, "the span must carry database.refused")
+		require.NotContains(t, attrs, "error")
+	})
+
+	t.Run("a real failure records the error and marks the span failed", func(t *testing.T) {
+		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+		defer cancel()
+		items := make([]*TestItem, 0)
+		err := database.Database[*TestItem](ctx).List(&items)
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+
+		span := lastEndedNamed(t, recorder, "database.TestItem.List")
 		require.Equal(t, codes.Error, span.Status().Code)
 		require.NotEmpty(t, span.Events(), "a real failure must be recorded on the span")
 		attrs := spanAttributes(span)
 		failed, ok := attrs["error"].(bool)
 		require.True(t, ok && failed, "the span must carry the error marker")
-		require.NotContains(t, attrs, "database.record_not_found")
+		require.NotContains(t, attrs, "database.refused")
 	})
 }
 

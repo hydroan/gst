@@ -9,6 +9,7 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/dbruntime/dberror"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	gormschema "gorm.io/gorm/schema"
@@ -22,7 +23,11 @@ import (
 // only safe answer — defaulting would file the row under whichever tenant the
 // framework picked, silently and in the one situation where the caller had the
 // reach to mean any of them.
-var ErrRequired = errors.New("tenant: a cross-tenant insert must name the tenant the row belongs to")
+//
+// It is declared a data integrity violation, as ErrImmutable is: the data of
+// the write brought the refusal on, which the SQL log and the database layer
+// record as no failure of the database.
+var ErrRequired = dberror.NewDataIntegrityViolation("tenant: a cross-tenant insert must name the tenant the row belongs to")
 
 // ErrImmutable reports an update carrying a tenant other than the one the
 // caller is acting in.
@@ -31,7 +36,7 @@ var ErrRequired = errors.New("tenant: a cross-tenant insert must name the tenant
 // it said. Refusing is what keeps that from being a silent no-op: a client that
 // believed it moved a row and received a success would be wrong about where its
 // data is, and nothing in the response would say so.
-var ErrImmutable = errors.New("tenant: a row cannot be moved to another tenant")
+var ErrImmutable = dberror.NewDataIntegrityViolation("tenant: a row cannot be moved to another tenant")
 
 // ID is the tenant column's type, and the whole of the row scoping.
 //

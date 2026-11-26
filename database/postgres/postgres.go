@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/hydroan/gst/internal/dbruntime/dberror"
 	"github.com/hydroan/gst/internal/logger"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -49,14 +50,15 @@ func New(cfg config.Postgres) (*gorm.DB, error) {
 	// Statements run over pgx's simple protocol — no gorm PrepareStmt, no
 	// pgx statement cache, no server-side statement state; buildDSN explains
 	// why.
-	// TranslateError maps the write failures to the gorm sentinels; the
-	// framework's own table (see translate) runs over what the driver's
-	// leaves as it is.
+	// The write failures a client's data brings on come back as the gorm
+	// sentinels through the translation installed below, the framework's own
+	// table (see translate) first and the driver's after it; gorm's
+	// TranslateError stays off, dbruntime.InstallErrorTranslation says why.
 	dialector, err := open(cfg)
 	if err != nil {
 		return nil, err
 	}
-	db, err := gorm.Open(dialector, &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
+	db, err := gorm.Open(dialector, &gorm.Config{Logger: logger.Gorm, NowFunc: dbruntime.NowUTC})
 	if err != nil {
 		return nil, err
 	}
@@ -168,16 +170,16 @@ func dsnValue(s string) string {
 // errCodes are the errors of the constraints a client's data breaks that the
 // driver's translation leaves as they are, keyed by the SQLSTATE code: a
 // value too long for its column (22001) and a column the table requires a
-// value for left NULL (23502); the driver translates the duplicated key,
-// the foreign key and the check constraint itself.
+// value for left NULL (23502); the driver's own table holds the duplicated
+// key, the foreign key and the check constraint.
 var errCodes = map[string]error{
-	"22001": dbruntime.ErrValueTooLong,
-	"23502": dbruntime.ErrNotNullViolated,
+	"22001": dberror.ErrValueTooLong,
+	"23502": dberror.ErrNotNullViolated,
 }
 
 // translate translates a driver error whose code errCodes lists to its
 // sentinel, the driver's text kept as the message, and nil for any other
-// error, which stays as the driver's translation left it (see
+// error, which goes to the driver's own translation (see
 // dbruntime.InstallErrorTranslation).
 func translate(err error) error {
 	var driverErr *pgconn.PgError

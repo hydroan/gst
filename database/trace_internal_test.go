@@ -11,6 +11,7 @@ import (
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/logger"
 	"github.com/hydroan/gst/internal/model"
+	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/testutil/tracingtest"
 	"github.com/hydroan/gst/internal/tracing"
 	"github.com/stretchr/testify/require"
@@ -59,7 +60,7 @@ func TestOperationSpanAttributesFitTheCapacityInTheWorstCase(t *testing.T) {
 // TestOperationLogFieldsFitTheCapacityInTheWorstCase pins operationLogFieldCap
 // to the entry of a batched dry run that failed — every optional field
 // present — so a field added without bumping the capacity fails here instead
-// of regrowing the slice on every operation.
+// of regrowing the slice.
 func TestOperationLogFieldsFitTheCapacityInTheWorstCase(t *testing.T) {
 	fields := operationLogFields("TraceSample", 3, time.Millisecond, true, errors.New("sample failure"))
 
@@ -67,66 +68,47 @@ func TestOperationLogFieldsFitTheCapacityInTheWorstCase(t *testing.T) {
 	require.Equal(t, operationLogFieldCap, cap(fields), "the slice must not have regrown")
 }
 
-// TestOperationLogFieldsReadTheOutcome pins the outcome field of an
-// operation's log entry: record_not_found for a missing row, stale_object
-// for a versioned write that matched none, canceled for an operation its
-// context canceled, refused for one a model hook refused, and the error for
-// a failure alone.
-func TestOperationLogFieldsReadTheOutcome(t *testing.T) {
-	keys := func(err error) map[string]bool {
-		got := make(map[string]bool)
-		for _, field := range operationLogFields("TraceSample", 0, time.Millisecond, false, err) {
-			got[field.Key] = true
-		}
-		return got
-	}
-
-	require.True(t, keys(ErrRecordNotFound)["record_not_found"])
-	stale := keys(errors.Wrap(ErrStaleObject, "update sample"))
-	require.True(t, stale["stale_object"])
-	require.False(t, stale["error"], "a stale object carries no error")
-	canceled := keys(errors.Wrap(context.Canceled, "sample"))
-	require.True(t, canceled["canceled"])
-	require.False(t, canceled["error"], "a canceled operation carries no error")
-	refused := keys(gst.NewError(http.StatusForbidden, "not yours"))
-	require.True(t, refused["refused"])
-	require.False(t, refused["error"], "an operation a hook refused carries no error")
-	require.True(t, keys(errors.New("sample failure"))["error"])
-}
-
-// loggedOutcome is the level and message of one entry an operation logged.
-type loggedOutcome struct {
+// loggedEntry is the level and message of one entry an operation logged.
+type loggedEntry struct {
 	level zapcore.Level
 	msg   string
 }
 
-// outcomeLogger stands in for the database stream's logger and records the
+// entryLogger stands in for the database stream's logger and records the
 // level and message of each entry an operation logs through it.
-type outcomeLogger struct {
+type entryLogger struct {
 	gst.Logger
-	logged *[]loggedOutcome
+	logged *[]loggedEntry
 }
 
-func (l outcomeLogger) WithContext(context.Context, apiaction.Phase) gst.Logger { return l }
+func (l entryLogger) WithContext(context.Context, apiaction.Phase) gst.Logger { return l }
 
-func (l outcomeLogger) Debugz(msg string, _ ...zap.Field) {
-	*l.logged = append(*l.logged, loggedOutcome{zapcore.DebugLevel, msg})
+func (l entryLogger) Debugz(msg string, _ ...zap.Field) {
+	*l.logged = append(*l.logged, loggedEntry{zapcore.DebugLevel, msg})
 }
 
-func (l outcomeLogger) Errorz(msg string, _ ...zap.Field) {
-	*l.logged = append(*l.logged, loggedOutcome{zapcore.ErrorLevel, msg})
+func (l entryLogger) Infoz(msg string, _ ...zap.Field) {
+	*l.logged = append(*l.logged, loggedEntry{zapcore.InfoLevel, msg})
 }
 
-// TestOperationLogLevelFollowsTheOutcome pins the level an operation's entry
-// is logged at: debug for an operation that completed, the missing row and
-// the stale object among the outcomes it completes with, for one its context
-// canceled, and for one a model hook refused, a service error answering
-// below 500; error for a failure alone, a hook's service error of 500 or
-// above among them.
-func TestOperationLogLevelFollowsTheOutcome(t *testing.T) {
-	var logged []loggedOutcome
+func (l entryLogger) Warnz(msg string, _ ...zap.Field) {
+	*l.logged = append(*l.logged, loggedEntry{zapcore.WarnLevel, msg})
+}
+
+func (l entryLogger) Errorz(msg string, _ ...zap.Field) {
+	*l.logged = append(*l.logged, loggedEntry{zapcore.ErrorLevel, msg})
+}
+
+// TestAnOperationLogsItsFailureAlone pins what an operation writes to the
+// database stream. Nothing when it completed, the missing row and the stale
+// object among the outcomes it completes with, when its context canceled it,
+// or when it was refused, by a model hook with a service error answering
+// below 500 or over the data it carries. One entry at error level when it
+// failed, a hook's service error of 500 or above among the failures.
+func TestAnOperationLogsItsFailureAlone(t *testing.T) {
+	var logged []loggedEntry
 	original := logger.Database
-	logger.Database = outcomeLogger{Logger: original, logged: &logged}
+	logger.Database = entryLogger{Logger: original, logged: &logged}
 	t.Cleanup(func() { logger.Database = original })
 
 	for _, err := range []error{
@@ -135,6 +117,13 @@ func TestOperationLogLevelFollowsTheOutcome(t *testing.T) {
 		errors.Wrap(ErrStaleObject, "update sample"),
 		errors.Wrap(context.Canceled, "list samples"),
 		gst.NewError(http.StatusForbidden, "not yours"),
+		errors.Wrap(ErrDuplicatedKey, "create sample"),
+		errors.Wrap(ErrForeignKeyViolated, "create sample"),
+		errors.Wrap(ErrCheckConstraintViolated, "create sample"),
+		errors.Wrap(ErrValueTooLong, "create sample"),
+		errors.Wrap(ErrNotNullViolated, "create sample"),
+		errors.Wrap(tenant.ErrImmutable, "update sample"),
+		errors.Wrap(tenant.ErrRequired, "create sample"),
 		gst.NewError(http.StatusInternalServerError, "broken"),
 		errors.New("sample failure"),
 	} {
@@ -143,25 +132,21 @@ func TestOperationLogLevelFollowsTheOutcome(t *testing.T) {
 		done(err)
 	}
 
-	require.Equal(t, []loggedOutcome{
-		{zapcore.DebugLevel, "database operation completed"},
-		{zapcore.DebugLevel, "database operation completed"},
-		{zapcore.DebugLevel, "database operation completed"},
-		{zapcore.DebugLevel, "database operation canceled"},
-		{zapcore.DebugLevel, "database operation refused"},
+	require.Equal(t, []loggedEntry{
 		{zapcore.ErrorLevel, "database operation failed"},
 		{zapcore.ErrorLevel, "database operation failed"},
 	}, logged)
 }
 
-// TestAnOperationAHookRefusedIsNoFailureOfTheDatabase pins what the spans of
-// the database layer make of a model hook's error. A refusal, a service
-// error answering below 500 that the hook chose for the client, marks
-// neither the operation's span nor the hook's failed and records no error
-// on them: the operation's carries database.refused, and the hook's reports
-// the hook unsuccessful. An error that is the server's own failure is
-// recorded on both and marks both failed.
-func TestAnOperationAHookRefusedIsNoFailureOfTheDatabase(t *testing.T) {
+// TestARefusedOperationIsNoFailureOfTheDatabase pins what the spans of the
+// database layer make of the error a model hook hands an operation. A
+// refusal, a service error answering below 500 that the hook chose for the
+// client or a write refused over the data it carries, marks neither the
+// operation's span nor the hook's failed and records no error on them: the
+// operation's carries database.refused, and the hook's reports the hook
+// unsuccessful. An error that is the server's own failure is recorded on
+// both and marks both failed.
+func TestARefusedOperationIsNoFailureOfTheDatabase(t *testing.T) {
 	attributes := func(span trace.ReadOnlySpan) map[attribute.Key]attribute.Value {
 		attrs := make(map[attribute.Key]attribute.Value, len(span.Attributes()))
 		for _, attr := range span.Attributes() {
@@ -183,19 +168,26 @@ func TestAnOperationAHookRefusedIsNoFailureOfTheDatabase(t *testing.T) {
 		return tracingtest.EndedNamed(t, recorder, "database.TraceSample.Create"), tracingtest.EndedNamed(t, recorder, "model.TraceSample.CreateBefore")
 	}
 
-	t.Run("a refusal leaves both spans unset", func(t *testing.T) {
-		operation, hook := run(t, gst.NewError(http.StatusForbidden, "not yours"))
+	for name, refusal := range map[string]error{
+		"a hook's refusal":                  gst.NewError(http.StatusForbidden, "not yours"),
+		"a key another row holds":           errors.Wrap(ErrDuplicatedKey, "create sample"),
+		"a value the table's check refuses": errors.Wrap(ErrCheckConstraintViolated, "create sample"),
+		"a tenant the row cannot have":      errors.Wrap(tenant.ErrImmutable, "update sample"),
+	} {
+		t.Run(name+" leaves both spans unset", func(t *testing.T) {
+			operation, hook := run(t, refusal)
 
-		require.Equal(t, codes.Unset, operation.Status().Code)
-		require.Empty(t, operation.Events(), "a refusal must not be recorded as an exception")
-		require.True(t, attributes(operation)["database.refused"].AsBool())
-		require.NotContains(t, attributes(operation), attribute.Key("error"))
+			require.Equal(t, codes.Unset, operation.Status().Code)
+			require.Empty(t, operation.Events(), "a refusal must not be recorded as an exception")
+			require.True(t, attributes(operation)["database.refused"].AsBool())
+			require.NotContains(t, attributes(operation), attribute.Key("error"))
 
-		require.Equal(t, codes.Unset, hook.Status().Code)
-		require.Empty(t, hook.Events(), "a refusal must not be recorded as an exception")
-		require.False(t, attributes(hook)["model.success"].AsBool(), "a hook that refused did not succeed")
-		require.NotContains(t, attributes(hook), attribute.Key("error"))
-	})
+			require.Equal(t, codes.Unset, hook.Status().Code)
+			require.Empty(t, hook.Events(), "a refusal must not be recorded as an exception")
+			require.False(t, attributes(hook)["model.success"].AsBool(), "a hook that refused did not succeed")
+			require.NotContains(t, attributes(hook), attribute.Key("error"))
+		})
+	}
 
 	t.Run("the server's own failure marks both spans failed", func(t *testing.T) {
 		operation, hook := run(t, errors.New("sample hook failure"))

@@ -8,6 +8,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/database"
+	"github.com/hydroan/gst/internal/dbruntime/dberror"
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/hydroan/gst/internal/testutil/tracingtest"
@@ -23,7 +24,11 @@ import (
 // message, the database sentinels answer their fixed status and message with
 // the error behind them as the cause, the constraints a client's data breaks
 // and the tenants a write may not name among them, and everything else is
-// answered as it is, the server's own failure carrying no service error.
+// answered as it is, the server's own failure carrying no service error. It
+// pins the two readings of a write refused over its data to each other as
+// well: the errors the SQL log and the database layer record as a refusal
+// (see dberror.IsDataIntegrityViolation) are the constraints and the tenants
+// above and no other, each answered here as the client's doing.
 func TestDatabaseErrorMapsEachDatabaseErrorToItsAnswer(t *testing.T) {
 	serviceErr := gst.NewError(http.StatusForbidden, "operation refused")
 
@@ -32,19 +37,20 @@ func TestDatabaseErrorMapsEachDatabaseErrorToItsAnswer(t *testing.T) {
 		err        error
 		wantStatus int
 		wantMsg    string
+		violation  bool
 	}{
-		{"service_error_keeps_status_and_message", serviceErr, http.StatusForbidden, "operation refused"},
-		{"record_not_found_answers_404", errors.Wrap(database.ErrRecordNotFound, "get sample"), http.StatusNotFound, "The requested resource was not found."},
-		{"duplicated_key_answers_409", errors.Wrap(database.ErrDuplicatedKey, "create sample"), http.StatusConflict, "The resource already exists."},
-		{"stale_object_answers_409", errors.Wrap(database.ErrStaleObject, "update sample"), http.StatusConflict, "The resource was modified by another operation. Reload and retry."},
-		{"missing_version_answers_400", errors.Wrap(database.ErrVersionRequired, "update sample"), http.StatusBadRequest, "The request contains invalid parameters."},
-		{"missing_id_answers_400", errors.Wrap(database.ErrIDRequired, "update sample"), http.StatusBadRequest, "The request contains invalid parameters."},
-		{"foreign_key_answers_409", errors.Wrap(database.ErrForeignKeyViolated, "create sample"), http.StatusConflict, "The request refers to a record that does not exist or is still in use."},
-		{"check_constraint_answers_400", errors.Wrap(database.ErrCheckConstraintViolated, "create sample"), http.StatusBadRequest, "The request contains invalid parameters."},
-		{"value_too_long_answers_400", errors.Wrap(database.ErrValueTooLong, "create sample"), http.StatusBadRequest, "The request contains invalid parameters."},
-		{"not_null_answers_400", errors.Wrap(database.ErrNotNullViolated, "create sample"), http.StatusBadRequest, "The request contains invalid parameters."},
-		{"another_tenant_answers_400", errors.Wrapf(tenant.ErrImmutable, "named %q while acting in %q", "other", tenant.Default), http.StatusBadRequest, "The request contains invalid parameters."},
-		{"no_tenant_answers_400", errors.Wrap(tenant.ErrRequired, "create sample"), http.StatusBadRequest, "The request contains invalid parameters."},
+		{"service_error_keeps_status_and_message", serviceErr, http.StatusForbidden, "operation refused", false},
+		{"record_not_found_answers_404", errors.Wrap(database.ErrRecordNotFound, "get sample"), http.StatusNotFound, "The requested resource was not found.", false},
+		{"duplicated_key_answers_409", errors.Wrap(database.ErrDuplicatedKey, "create sample"), http.StatusConflict, "The resource already exists.", true},
+		{"stale_object_answers_409", errors.Wrap(database.ErrStaleObject, "update sample"), http.StatusConflict, "The resource was modified by another operation. Reload and retry.", false},
+		{"missing_version_answers_400", errors.Wrap(database.ErrVersionRequired, "update sample"), http.StatusBadRequest, "The request contains invalid parameters.", false},
+		{"missing_id_answers_400", errors.Wrap(database.ErrIDRequired, "update sample"), http.StatusBadRequest, "The request contains invalid parameters.", false},
+		{"foreign_key_answers_409", errors.Wrap(database.ErrForeignKeyViolated, "create sample"), http.StatusConflict, "The request refers to a record that does not exist or is still in use.", true},
+		{"check_constraint_answers_400", errors.Wrap(database.ErrCheckConstraintViolated, "create sample"), http.StatusBadRequest, "The request contains invalid parameters.", true},
+		{"value_too_long_answers_400", errors.Wrap(database.ErrValueTooLong, "create sample"), http.StatusBadRequest, "The request contains invalid parameters.", true},
+		{"not_null_answers_400", errors.Wrap(database.ErrNotNullViolated, "create sample"), http.StatusBadRequest, "The request contains invalid parameters.", true},
+		{"another_tenant_answers_400", errors.Wrapf(tenant.ErrImmutable, "named %q while acting in %q", "other", tenant.Default), http.StatusBadRequest, "The request contains invalid parameters.", true},
+		{"no_tenant_answers_400", errors.Wrap(tenant.ErrRequired, "create sample"), http.StatusBadRequest, "The request contains invalid parameters.", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -55,6 +61,10 @@ func TestDatabaseErrorMapsEachDatabaseErrorToItsAnswer(t *testing.T) {
 			require.Equal(t, tt.wantStatus, answered.Status())
 			require.Equal(t, tt.wantMsg, answered.Msg())
 			require.ErrorIs(t, answer, tt.err, "the error behind travels as the cause")
+			require.Equal(t, tt.violation, dberror.IsDataIntegrityViolation(tt.err))
+			if tt.violation {
+				require.False(t, gst.ServerFailure(answer), "a refusal the database layer leaves out of its failures is answered as the server's own")
+			}
 		})
 	}
 

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/errors"
+	"github.com/hydroan/gst/internal/dbruntime/dberror"
 	"github.com/hydroan/gst/internal/tenant"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -245,4 +246,16 @@ func TestScopeSurvivesASubqueryAndAPreload(t *testing.T) {
 
 func TestErrRequiredIsMatchable(t *testing.T) {
 	assert.True(t, errors.Is(tenant.ErrRequired, tenant.ErrRequired))
+}
+
+// TestTheRefusalsAreDataIntegrityViolations pins how the two refusals are
+// declared: each a data integrity violation, which the SQL log and the
+// database layer record as no failure of the database, and each matching
+// itself alone, so a caller still tells one from the other.
+func TestTheRefusalsAreDataIntegrityViolations(t *testing.T) {
+	for _, refusal := range []error{tenant.ErrRequired, tenant.ErrImmutable} {
+		assert.True(t, dberror.IsDataIntegrityViolation(errors.Wrap(refusal, "write sample")), "%v", refusal)
+	}
+	require.NotErrorIs(t, tenant.ErrRequired, tenant.ErrImmutable)
+	require.NotErrorIs(t, tenant.ErrImmutable, tenant.ErrRequired)
 }

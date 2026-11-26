@@ -70,7 +70,7 @@ func newMySQLDB(t *testing.T) *gorm.DB {
 		os.Getenv(config.MYSQL_USERNAME), os.Getenv(config.MYSQL_PASSWORD),
 		os.Getenv(config.MYSQL_HOST), port, os.Getenv(config.MYSQL_DATABASE))
 
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{Logger: gormlogger.Discard, TranslateError: true})
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{Logger: gormlogger.Discard})
 	require.NoError(t, err)
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
@@ -95,7 +95,7 @@ func newPostgresDB(t *testing.T) *gorm.DB {
 		os.Getenv(config.POSTGRES_HOST), port, os.Getenv(config.POSTGRES_USERNAME),
 		os.Getenv(config.POSTGRES_PASSWORD), os.Getenv(config.POSTGRES_DATABASE))
 
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: gormlogger.Discard, TranslateError: true})
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: gormlogger.Discard})
 	require.NoError(t, err)
 	sqlDB, err := db.DB()
 	require.NoError(t, err)

@@ -7,6 +7,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/internal/apiaction"
+	"github.com/hydroan/gst/internal/dbruntime/dberror"
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/logfield"
 	"github.com/hydroan/gst/internal/logger"
@@ -57,9 +58,10 @@ const (
 //   - Automatic timing measurement from call to completion
 //   - OTEL distributed tracing integration with OpenTelemetry spans
 //   - Comprehensive span attributes including operation metadata
-//   - Error-aware logging and span status management, with a missing row and
-//     a stale object treated as normal outcomes by both, and an operation its
-//     context canceled or a model hook refused as no failure
+//   - A log entry for a failure alone and span status management to match:
+//     a missing row and a stale object are outcomes an operation completes
+//     with, and an operation its context canceled or one refused, by a model
+//     hook or over the data it carries, is no failure (see operationOutcome)
 //   - Batch operation support with size tracking
 //   - Dry-run mode status recording
 //   - Smart duration formatting for readability
@@ -110,9 +112,8 @@ const (
 	// outcome batch carries: the duration and one of record_not_found,
 	// stale_object, canceled, refused or error.
 	operationOutcomeAttrCap = 2
-	// operationLogFieldCap is the most fields the operation's log entry
-	// carries: model, batch_size, the duration pair, dry_run and one of
-	// record_not_found, stale_object, canceled, refused or error.
+	// operationLogFieldCap is the most fields the entry of a failed operation
+	// carries: model, batch_size, the duration pair, dry_run and the error.
 	operationLogFieldCap = 5
 	// hookOutcomeAttrCap is the most attributes a hook span's outcome batch
 	// carries: the duration, success and error.
@@ -172,76 +173,74 @@ func (db *database[M]) traceAs(modelName string, phase apiaction.Phase, batch ..
 		// Record duration
 		duration := time.Since(begin)
 
-		// Update span with results if available; keep this a single batched
-		// SetAttributes call (see the performance note above). The span and
-		// the log below read the outcome the same way: success, a missing
-		// row and a stale object are normal outcomes, so none sets a status,
-		// instrumentation leaving a completed operation unset — a missing
-		// row carries database.record_not_found and a versioned write that
-		// matched no row database.stale_object, the counterparts of the
-		// log's record_not_found and stale_object fields — an operation its
-		// context canceled carries database.canceled beside the log's
-		// canceled field, one a model hook refused database.refused beside
-		// the log's refused field, and only a real failure records the error
-		// and sets the error status.
+		// The span and the log read the outcome once, the same way (see
+		// operationOutcome). The span's results stay a single batched
+		// SetAttributes call (see the performance note above): the duration
+		// and the mark of the outcome, an operation that completed carrying
+		// none. Only a failure records the error and sets the error status;
+		// every other outcome leaves the status unset, as instrumentation
+		// leaves an operation that completed.
+		mark, failed := operationOutcome(err)
 		if tracing.IsSpanRecording(span) {
 			attrs := make([]attribute.KeyValue, 0, operationOutcomeAttrCap)
 			attrs = append(attrs, attribute.Int64("database.duration_ms", duration.Milliseconds()))
-
-			switch {
-			case err == nil:
-				// Completed: the status stays unset.
-			case errors.Is(err, ErrRecordNotFound):
-				attrs = append(attrs, attribute.Bool("database.record_not_found", true))
-			case errors.Is(err, ErrStaleObject):
-				attrs = append(attrs, attribute.Bool("database.stale_object", true))
-			case errors.Is(err, context.Canceled):
-				// Left unset: the operation did not complete, and did not fail
-				// either — whoever canceled its context ended it.
-				attrs = append(attrs, attribute.Bool("database.canceled", true))
-			case !gst.ServerFailure(err):
-				// Left unset as well: a model hook refused the operation with
-				// a status of its choosing, which is the client's doing and no
-				// failure of the database.
-				attrs = append(attrs, attribute.Bool("database.refused", true))
-			default:
+			if failed {
 				tracing.RecordError(span, err)
-				attrs = append(attrs, attribute.Bool("error", true))
+			}
+			if len(mark) > 0 {
+				attrs = append(attrs, attribute.Bool(mark, true))
 			}
 			span.SetAttributes(attrs...)
 		}
 
-		// Log operation results. Success, a missing row and a stale object
-		// stay at debug level: all are normal outcomes whose timing the SQL
-		// log and the operation span already cover, so they only matter when
-		// tracing an operation end to end — a statement that ran and matched
-		// no row, which the caller is told of to reload or to answer not
-		// found, is no failure of the database. An operation its context
-		// canceled stays at debug level too, since whoever canceled it ended
-		// it, and so does one a model hook refused with a status of its
-		// choosing (see gst.ServerFailure): the hook answered the client,
-		// and whoever reports that answer logs it. Real failures log at
-		// error level.
-		fields := operationLogFields(modelName, _batch, duration, db.dryRun, err)
-		switch {
-		case err == nil || errors.Is(err, ErrRecordNotFound) || errors.Is(err, ErrStaleObject):
-			logger.Database.WithContext(db.ctx, phase).Debugz("database operation completed", fields...)
-		case errors.Is(err, context.Canceled):
-			logger.Database.WithContext(db.ctx, phase).Debugz("database operation canceled", fields...)
-		case !gst.ServerFailure(err):
-			logger.Database.WithContext(db.ctx, phase).Debugz("database operation refused", fields...)
-		default:
-			logger.Database.WithContext(db.ctx, phase).Errorz("database operation failed", fields...)
+		// The log records a failure alone, at error level. Every other
+		// outcome is one the SQL log and the operation span already cover,
+		// and none of them is the database layer's to report: an operation
+		// that completed, one its context canceled, and one refused, which
+		// whoever answers the client reports at the level of the answer.
+		if failed {
+			logger.Database.WithContext(db.ctx, phase).Errorz("database operation failed", operationLogFields(modelName, _batch, duration, db.dryRun, err)...)
 		}
 	}, span
 }
 
-// operationLogFields builds the fields of one operation's log entry: the
-// model, the constant markers batch_size and dry_run only when meaningful,
-// the duration pair, and the outcome — record_not_found for a missing row,
-// stale_object for a versioned write that matched no row, canceled for an
-// operation its context canceled, refused for one a model hook refused, the
-// error for a failure, nothing for success.
+// operationOutcome reads how an operation ended, the one reading its span
+// and its log share: the attribute that marks the outcome on the span, none
+// for an operation that completed, and whether the operation failed. A
+// missing row and a versioned write that matched no row are outcomes an
+// operation completes with, which the caller is told of to answer not found
+// or to reload; an operation its context canceled did not complete and did
+// not fail either, whoever canceled it having ended it; one refused (see
+// refused) is no failure of the database; anything else is.
+func operationOutcome(err error) (mark string, failed bool) {
+	switch {
+	case err == nil:
+		return "", false
+	case errors.Is(err, ErrRecordNotFound):
+		return "database.record_not_found", false
+	case errors.Is(err, ErrStaleObject):
+		return "database.stale_object", false
+	case errors.Is(err, context.Canceled):
+		return "database.canceled", false
+	case refused(err):
+		return "database.refused", false
+	default:
+		return "error", true
+	}
+}
+
+// refused reports whether err, what an operation or a model hook ended with,
+// is a refusal rather than a failure of the database: a model hook refusing
+// with a status of its choosing (see gst.ServerFailure), or a write refused
+// over the data it carries (see dberror.IsDataIntegrityViolation). Whoever
+// answers the client reports a refusal, at the level of the answer.
+func refused(err error) bool {
+	return !gst.ServerFailure(err) || dberror.IsDataIntegrityViolation(err)
+}
+
+// operationLogFields builds the fields of the entry a failed operation logs:
+// the model, the constant markers batch_size and dry_run only when
+// meaningful, the duration pair, and the error.
 func operationLogFields(modelName string, batch int, duration time.Duration, dryRun bool, err error) []zap.Field {
 	fields := make([]zap.Field, 0, operationLogFieldCap)
 	fields = append(fields, zap.String("model", modelName))
@@ -252,27 +251,13 @@ func operationLogFields(modelName string, batch int, duration time.Duration, dry
 	if dryRun {
 		fields = append(fields, zap.Bool("dry_run", true))
 	}
-	switch {
-	case err == nil:
-	case errors.Is(err, ErrRecordNotFound):
-		fields = append(fields, zap.Bool("record_not_found", true))
-	case errors.Is(err, ErrStaleObject):
-		fields = append(fields, zap.Bool("stale_object", true))
-	case errors.Is(err, context.Canceled):
-		fields = append(fields, zap.Bool("canceled", true))
-	case !gst.ServerFailure(err):
-		fields = append(fields, zap.Bool("refused", true))
-	default:
-		fields = append(fields, zap.Error(err))
-	}
-	return fields
+	return append(fields, zap.Error(err))
 }
 
 // traceModelHook runs one model hook under a span of its own, nested under
 // the database operation span, and records its timing and outcome on it: the
-// span is marked failed, the error recorded on it, for a failure of the
-// server's own alone (see gst.ServerFailure), a hook refusing the
-// operation with a status of its choosing leaving it unset.
+// span is marked failed, the error recorded on it, for a failure alone, a
+// refusal (see refused) leaving it unset.
 //
 // The span is skipped and fn runs directly when tracing is disabled, when
 // there is no parent span to nest under, or when the model does not override
@@ -340,10 +325,10 @@ func traceModelHook[M gst.Model](ctx context.Context, phase apiaction.Phase, par
 			attribute.Bool("model.success", err == nil),
 		)
 
-		// Marked failed for the server's failures alone: a hook refusing
-		// the operation with a status of its choosing answered the client,
-		// which is no failure of the hook.
-		if err != nil && gst.ServerFailure(err) {
+		// Marked failed for a failure alone: a refusal, the hook's own with
+		// a status of its choosing or that of a write the hook made, is no
+		// failure of the hook.
+		if err != nil && !refused(err) {
 			tracing.RecordError(span, err)
 			attrs = append(attrs, attribute.Bool("error", true))
 		}

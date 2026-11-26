@@ -98,6 +98,9 @@ func withTransactionBoundary(
 	fn func(txCtx context.Context, tx *gorm.DB) error,
 ) error {
 	boundary := new(transactionBoundary)
+	// fnErr is what fn ended with, which tells an error of the transaction's
+	// own, its begin's or its commit's, from one fn returned.
+	var fnErr error
 	// The transaction opens on the primary whatever the chain reads from: a
 	// chain of a PreferReplica model carries the replica as its read side,
 	// and dbresolver routes a statement back to the primary only outside a
@@ -118,7 +121,8 @@ func withTransactionBoundary(
 		fresh := tx.Session(&gorm.Session{NewDB: true, Initialized: true}).Session(&gorm.Session{NewDB: true})
 		txCtx := dbruntime.WithTx(ctx, fresh, base)
 		txCtx = context.WithValue(txCtx, boundaryContextKey{}, boundary)
-		return fn(txCtx, tx)
+		fnErr = fn(txCtx, tx)
+		return fnErr
 	}); err != nil {
 		// A context that ends while its transaction is open has the standard
 		// library roll the transaction back, and the commit after that
@@ -128,6 +132,12 @@ func withTransactionBoundary(
 		// its context's ending from a failure of its own.
 		if ctx.Err() != nil && errors.Is(err, sql.ErrTxDone) {
 			err = ctx.Err()
+		}
+		// An error of the transaction's own is one no statement carried, so
+		// no statement's translation saw it: a constraint checked at commit
+		// fails there, and is translated here like one a statement broke.
+		if fnErr == nil {
+			err = dbruntime.TranslateError(ins, err)
 		}
 		// The stack embedded here covers BEGIN/COMMIT failures, which GORM
 		// hands back without one. An error from fn usually already carries a

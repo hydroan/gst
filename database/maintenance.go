@@ -187,16 +187,8 @@ func healthOn(ctx context.Context, instance *gorm.DB) error {
 		return errors.Wrap(err, "database ping failed")
 	}
 
-	// A passing check is the expected outcome; probes may run it on a tight
-	// interval, so success stays at debug level while failures log above.
-	logger.Database.WithContext(ctx, phaseHealth).Debugz(
-		"database health check passed",
-		zap.Int("open", stats.OpenConnections),
-		zap.Int("max", stats.MaxOpenConnections),
-		zap.Int("in_use", stats.InUse),
-		zap.Int("idle", stats.Idle),
-		logfield.Duration(time.Since(begin)),
-	)
-
+	// A passing check is the expected outcome and probes may run it on a
+	// tight interval, so it logs nothing; the failures and the full pool log
+	// above.
 	return nil
 }

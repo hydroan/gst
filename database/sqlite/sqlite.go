@@ -34,7 +34,7 @@ func Init() error {
 		return errors.Wrap(err, "failed to connect to sqlite")
 	}
 	// PRAGMA optimize gathers statistics for the query planner.
-	if err = optimizeDatabase(db); err != nil {
+	if err = errors.Wrap(db.Exec("PRAGMA optimize").Error, "failed to execute PRAGMA optimize"); err != nil {
 		zap.S().Warnw("failed to optimize sqlite database", "error", err)
 	}
 
@@ -67,10 +67,11 @@ func New(cfg config.Sqlite) (*gorm.DB, error) {
 	// request-unique, so a text-keyed statement cache would hold one dead
 	// entry per request. Sqlite compiles statements in-process at
 	// microsecond cost, so each run simply compiles its statement.
-	// TranslateError maps the write failures to the gorm sentinels; the
-	// framework's own table (see translate) runs over what the driver's
-	// leaves as it is.
-	db, err := gorm.Open(sqlite.New(sqlite.Config{DriverName: driverName, DSN: dsn}), &gorm.Config{Logger: logger.Gorm, TranslateError: true, NowFunc: dbruntime.NowUTC})
+	// The write failures a client's data brings on come back as the gorm
+	// sentinels through the translation installed below, the framework's own
+	// table (see translate) first and the driver's after it; gorm's
+	// TranslateError stays off, dbruntime.InstallErrorTranslation says why.
+	db, err := gorm.Open(sqlite.New(sqlite.Config{DriverName: driverName, DSN: dsn}), &gorm.Config{Logger: logger.Gorm, NowFunc: dbruntime.NowUTC})
 	if err != nil {
 		return nil, err
 	}
@@ -155,18 +156,6 @@ func anchorMemoryDatabase() error {
 // handles the modifier the same way.
 func restoreInsertClauseContract(db *gorm.DB) {
 	delete(db.ClauseBuilders, clause.Insert{}.Name())
-}
-
-// optimizeDatabase runs PRAGMA optimize on db, which gathers statistics for
-// the query planner.
-func optimizeDatabase(db *gorm.DB) error {
-	// Execute PRAGMA optimize to collect statistics for better query planning
-	if err := db.Exec("PRAGMA optimize").Error; err != nil {
-		return errors.Wrap(err, "failed to execute PRAGMA optimize")
-	}
-
-	zap.S().Debug("sqlite database optimization completed")
-	return nil
 }
 
 // buildDSN renders the connection string of the configured database: the

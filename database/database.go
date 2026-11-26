@@ -8,6 +8,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/hydroan/gst/config"
 	"github.com/hydroan/gst/internal/dbruntime"
+	"github.com/hydroan/gst/internal/dbruntime/dberror"
 	"github.com/hydroan/gst/internal/gst"
 	"github.com/hydroan/gst/internal/model"
 	"gorm.io/gorm"
@@ -83,12 +84,12 @@ var (
 
 	// ErrValueTooLong is the sentinel for a write carrying a value longer
 	// than its column holds, translated from the dialect's own error.
-	ErrValueTooLong = dbruntime.ErrValueTooLong
+	ErrValueTooLong = dberror.ErrValueTooLong
 
 	// ErrNotNullViolated is the sentinel for a write leaving a column the
 	// table requires a value for NULL, translated from the dialect's own
 	// error.
-	ErrNotNullViolated = dbruntime.ErrNotNullViolated
+	ErrNotNullViolated = dberror.ErrNotNullViolated
 
 	// ErrNilSQLBuilder is returned when WithDryRun is handed an explicitly nil
 	// statement collector: the caller asked for statements it could never
