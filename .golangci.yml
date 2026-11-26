@@ -120,6 +120,22 @@ linters:
             - "github.com/hydroan/gst/internal/sse"
             - "go.uber.org/zap"
             - "gorm.io/datatypes"
+        # The packages under internal/dbruntime hold what the SQL log has to
+        # know of a statement, and the logging package that writes it sits
+        # below every functional package. So they import the standard library
+        # and the third-party types they name, and never a package of the
+        # framework: a functional package with something of its own for them
+        # to recognize declares it through them. Their tests may import more.
+        dbruntime-leaves:
+          list-mode: strict
+          files:
+            - "**/internal/dbruntime/dbnode/**"
+            - "**/internal/dbruntime/dberror/**"
+            - "!$test"
+          allow:
+            - "$gostd"
+            - "github.com/cockroachdb/errors"
+            - "gorm.io/gorm"
         # Framework code imports the internal packages behind the public
         # forwarding packages; the forwards serve projects (CLAUDE.md, package
         # ownership and internal import direction). The files left out are the
